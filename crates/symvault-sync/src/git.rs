@@ -1,6 +1,7 @@
 use crate::offline::{NETWORK_MESSAGE, PushError, is_offline_error};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeSet,
     fs::{self, OpenOptions},
     io::{self, Read},
     path::{Path, PathBuf},
@@ -267,11 +268,10 @@ impl GitRepository {
         }
     }
 
-    /// Fetches and hard-resets a clean worktree to the remote branch.
+    /// Fetches and hard-resets the worktree to the remote branch.
     ///
-    /// Go's `sync --force` preserves dirty files as conflict copies before
-    /// resetting.  The Rust adapter refuses a dirty worktree until that
-    /// preservation path is available, so callers cannot lose local data.
+    /// Files changed locally and by the remote are captured as conflict copies
+    /// before resetting, matching Go's `sync --force` data-preservation path.
     pub fn force_pull(&self, name: &str) -> PullResult {
         let remote_url = self.remote_url(name).ok().flatten();
         if remote_url.is_none() {
@@ -280,17 +280,9 @@ impl GitRepository {
                 ..Default::default()
             };
         }
-        match self.status() {
-            Ok(status) if !status.is_empty() => {
-                return PullResult {
-                    remote_url,
-                    error: Some(
-                        "force pull refused: local changes must be preserved before reset"
-                            .to_owned(),
-                    ),
-                    ..Default::default()
-                };
-            }
+        let before = self.head().ok();
+        let status = match self.status() {
+            Ok(status) => status,
             Err(error) => {
                 return PullResult {
                     remote_url,
@@ -300,10 +292,8 @@ impl GitRepository {
                     ..Default::default()
                 };
             }
-            Ok(_) => {}
-        }
+        };
 
-        let before = self.head().ok();
         if let Err(error) = self.command(&["fetch", name]) {
             return PullResult {
                 remote_url,
@@ -329,6 +319,38 @@ impl GitRepository {
             };
         }
         let remote_branch = format!("{name}/{branch}");
+        let mut paths = BTreeSet::new();
+        paths.extend(status.into_iter().map(|entry| entry.path));
+        if before.is_some() {
+            match self.changed_paths("HEAD", &remote_branch) {
+                Ok(changed) => paths.extend(changed),
+                Err(error) => {
+                    return PullResult {
+                        remote_url,
+                        error: Some(format!("cannot inspect force-pull changes: {error}")),
+                        ..Default::default()
+                    };
+                }
+            }
+        }
+        let device = self.device_identity();
+        let mut backups = Vec::new();
+        for path in paths {
+            if !is_conflict_candidate(&path) {
+                continue;
+            }
+            let full_path = self.root.join(&path);
+            let Ok(data) = fs::read(&full_path) else {
+                continue;
+            };
+            if self
+                .file_at_ref(&remote_branch, &path)
+                .is_ok_and(|remote| remote == data)
+            {
+                continue;
+            }
+            backups.push((path, data));
+        }
         if let Err(error) = self.command(&["reset", "--hard", &remote_branch]) {
             return PullResult {
                 remote_url,
@@ -336,12 +358,62 @@ impl GitRepository {
                 ..Default::default()
             };
         }
+        for (path, data) in backups {
+            let conflict = conflict_copy_path(&path, &device);
+            if let Err(error) = write_conflict_copy(&self.root, &conflict, &data) {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!(
+                        "reset succeeded but failed to back up discarded local changes: {error}"
+                    )),
+                    ..Default::default()
+                };
+            }
+        }
         PullResult {
             success: true,
             updated: before != self.head().ok(),
             remote_url,
             ..Default::default()
         }
+    }
+
+    fn changed_paths(&self, left: &str, right: &str) -> Result<Vec<String>, GitError> {
+        let output = self.command(&["diff", "--name-only", left, right])?;
+        let text =
+            String::from_utf8(output.stdout).map_err(|error| GitError::Parse(error.to_string()))?;
+        Ok(text
+            .lines()
+            .filter(|path| !path.is_empty())
+            .map(str::to_owned)
+            .collect())
+    }
+
+    fn file_at_ref(&self, revision: &str, path: &str) -> Result<Vec<u8>, GitError> {
+        let spec = format!("{revision}:{path}");
+        Ok(self.command(&["show", &spec])?.stdout)
+    }
+
+    fn device_identity(&self) -> String {
+        let path = self.root.join(".device-id");
+        if let Ok(contents) = fs::read_to_string(&path) {
+            let identity = normalize_device_name(&contents);
+            if !identity.is_empty() {
+                return identity;
+            }
+        }
+        let hostname = std::env::var_os("HOSTNAME")
+            .or_else(|| std::env::var_os("COMPUTERNAME"))
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let identity = normalize_device_name(&hostname);
+        let identity = if identity.is_empty() {
+            "unknown".to_owned()
+        } else {
+            identity
+        };
+        let _ = fs::write(path, &identity);
+        identity
     }
 
     /// Records a successful sync in the repository's private git metadata.
@@ -428,6 +500,61 @@ impl GitRepository {
             })
         }
     }
+}
+
+fn is_conflict_candidate(path: &str) -> bool {
+    (path == "config.yaml" || path.ends_with(".age"))
+        && path != "identity.age"
+        && !path.contains(".conflict-")
+        && !is_protected_runtime_path(path)
+}
+
+fn is_protected_runtime_path(path: &str) -> bool {
+    let path = path.replace('\\', "/");
+    [
+        ".device-id",
+        "mcp-token",
+        "mcp-tokens.json",
+        ".runtime-port",
+    ]
+    .iter()
+    .any(|protected| path == *protected || path.starts_with(&format!("{protected}.")))
+}
+
+fn conflict_copy_path(path: &str, device: &str) -> String {
+    let path = Path::new(path);
+    let extension = path
+        .extension()
+        .map(|extension| format!(".{}", extension.to_string_lossy()))
+        .unwrap_or_default();
+    let path_string = path.to_string_lossy();
+    let base = path_string
+        .strip_suffix(&extension)
+        .unwrap_or(path_string.as_ref());
+    format!("{base}.conflict-{device}{extension}")
+}
+
+fn write_conflict_copy(root: &Path, relative_path: &str, data: &[u8]) -> Result<(), GitError> {
+    let destination = root.join(relative_path);
+    if fs::read(&destination).is_ok_and(|existing| existing == data) {
+        return Ok(());
+    }
+    crate::safeio::write_atomic(&destination, data)
+        .map_err(|error| GitError::Parse(format!("{}: {error}", destination.display())))
+}
+
+fn normalize_device_name(value: &str) -> String {
+    let mut value = value.trim().to_ascii_lowercase();
+    while value.ends_with('.') {
+        value.pop();
+    }
+    for suffix in [".local", ".home", ".lan", ".internal", ".home.arpa"] {
+        if let Some(stripped) = value.strip_suffix(suffix) {
+            value = stripped.to_owned();
+            break;
+        }
+    }
+    value
 }
 
 fn is_up_to_date_output(output: &Output) -> bool {

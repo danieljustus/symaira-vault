@@ -228,7 +228,7 @@ fn sync_matches_go_for_no_remote_pull_push_and_offline_local_remote() {
 }
 
 #[test]
-fn force_sync_refuses_dirty_worktree_before_reset() {
+fn force_sync_preserves_dirty_config_like_go() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
@@ -238,6 +238,9 @@ fn force_sync_refuses_dirty_worktree_before_reset() {
     let home = temporary_root("force-home");
     let vault = temporary_root("force-vault");
     let bare = temporary_root("force-bare");
+    let go_vault = temporary_root("force-go-vault");
+    let rust_vault = temporary_root("force-rust-vault");
+    let remote_work = temporary_root("force-remote-work");
     fs::create_dir_all(&home).expect("home");
     let init = run(
         &rust_binary,
@@ -257,7 +260,7 @@ fn force_sync_refuses_dirty_worktree_before_reset() {
         &vault,
         &["config", "user.email", "symvault-test@example.invalid"],
     );
-    git(&vault, &["add", ".gitignore"]);
+    git(&vault, &["add", ".gitignore", "config.yaml"]);
     git(&vault, &["commit", "--quiet", "-m", "base"]);
     fs::create_dir_all(&bare).expect("force bare parent");
     git(&bare, &["init", "--bare", "--quiet"]);
@@ -269,19 +272,68 @@ fn force_sync_refuses_dirty_worktree_before_reset() {
         &vault,
         &["push", "--quiet", "--set-upstream", "origin", "HEAD"],
     );
-    fs::write(vault.join("uncommitted.txt"), b"keep me\n").expect("dirty file");
-    let force = sync_args(&vault, false, true);
-    let force = arg_refs(&force);
-    let result = run(&rust_binary, &force, &vault, &home);
-    assert!(
-        !result.status.success(),
-        "dirty force sync unexpectedly succeeded"
+
+    for clone_path in [&go_vault, &rust_vault, &remote_work] {
+        let clone = Command::new("git")
+            .args(["clone", "--quiet", bare.to_str().expect("bare path")])
+            .arg(clone_path)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("clone force fixture");
+        assert_success(&clone, "clone force fixture");
+    }
+    git(
+        &remote_work,
+        &["config", "user.name", "Symaira Remote Test"],
+    );
+    git(
+        &remote_work,
+        &["config", "user.email", "symvault-remote@example.invalid"],
+    );
+    let base_config = fs::read(remote_work.join("config.yaml")).expect("base config");
+    let mut remote_config = base_config.clone();
+    remote_config.extend_from_slice(b"remote_marker: remote\n");
+    fs::write(remote_work.join("config.yaml"), remote_config).expect("remote config");
+    git(&remote_work, &["add", "config.yaml"]);
+    git(&remote_work, &["commit", "--quiet", "-m", "remote-config"]);
+    git(&remote_work, &["push", "--quiet", "origin", "HEAD"]);
+
+    for local_path in [&go_vault, &rust_vault] {
+        let mut local_config = base_config.clone();
+        local_config.extend_from_slice(b"local_marker: local\n");
+        fs::write(local_path.join("config.yaml"), local_config).expect("local config");
+        fs::write(local_path.join(".device-id"), b"test-device\n").expect("device identity");
+    }
+    let go_force_args = sync_args(&go_vault, false, true);
+    let rust_force_args = sync_args(&rust_vault, false, true);
+    let go_force_refs = arg_refs(&go_force_args);
+    let rust_force_refs = arg_refs(&rust_force_args);
+    let go_force = run(&go_binary, &go_force_refs, &go_vault, &home);
+    let rust_force = run(&rust_binary, &rust_force_refs, &rust_vault, &home);
+    assert_success(&go_force, "Go dirty force sync");
+    assert_success(&rust_force, "Rust dirty force sync");
+    assert_same(&go_force, &rust_force, "dirty force sync");
+    assert_eq!(
+        fs::read(go_vault.join("config.yaml")).expect("Go remote config"),
+        fs::read(rust_vault.join("config.yaml")).expect("Rust remote config")
     );
     assert_eq!(
-        fs::read(vault.join("uncommitted.txt")).expect("dirty file preserved"),
-        b"keep me\n"
+        fs::read(go_vault.join("config.conflict-test-device.yaml")).expect("Go conflict config"),
+        fs::read(rust_vault.join("config.conflict-test-device.yaml"))
+            .expect("Rust conflict config")
+    );
+    assert_eq!(
+        fs::read(rust_vault.join("config.conflict-test-device.yaml")).expect("Rust local config"),
+        {
+            let mut expected = base_config.clone();
+            expected.extend_from_slice(b"local_marker: local\n");
+            expected
+        }
     );
     let _ = fs::remove_dir_all(&home);
     let _ = fs::remove_dir_all(&vault);
     let _ = fs::remove_dir_all(&bare);
+    let _ = fs::remove_dir_all(&go_vault);
+    let _ = fs::remove_dir_all(&rust_vault);
+    let _ = fs::remove_dir_all(&remote_work);
 }

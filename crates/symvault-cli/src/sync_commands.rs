@@ -42,19 +42,21 @@ pub(crate) fn sync(
         return Ok(());
     }
     if let Some(error) = pull.error {
-        if !quiet && is_offline_error(&error) {
-            writeln!(stdout, "Warning: could not reach remote — offline")
-                .map_err(|write_error| write_error.to_string())?;
+        if is_offline_error(&error) {
+            if !quiet {
+                writeln!(stdout, "Warning: could not reach remote — offline")
+                    .map_err(|write_error| write_error.to_string())?;
+            }
             return Ok(());
         }
         return Err(format!("sync failed: {error}"));
     }
 
-    if let Err(error) = repo.record_last_sync() {
-        if !quiet {
-            writeln!(stderr, "Warning: could not record sync time: {error}")
-                .map_err(|write_error| write_error.to_string())?;
-        }
+    if let Err(error) = repo.record_last_sync()
+        && !quiet
+    {
+        writeln!(stderr, "Warning: could not record sync time: {error}")
+            .map_err(|write_error| write_error.to_string())?;
     }
     if !quiet {
         if pull.updated {
