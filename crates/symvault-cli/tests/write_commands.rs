@@ -88,6 +88,20 @@ fn writes_preserve_other_fields_reject_corruption_and_delete() {
         )
         .is_err()
     );
+    let before = store.get("example", &identity).unwrap();
+    assert!(
+        write_commands::replace_fields(
+            &root,
+            &identity,
+            "example",
+            std::collections::BTreeMap::from([(
+                "password".into(),
+                serde_json::json!("x".repeat(4097))
+            )])
+        )
+        .is_err()
+    );
+    assert_eq!(store.get("example", &identity).unwrap(), before);
     let path = store.configured_entry_path("example", &identity).unwrap();
     fs::write(&path, b"corrupt ciphertext").unwrap();
     assert!(

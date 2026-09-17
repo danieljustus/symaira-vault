@@ -49,6 +49,35 @@ pub fn set_fields(
     path: &str,
     data: BTreeMap<String, Value>,
 ) -> Result<(), String> {
+    write_fields(root, identity, path, data, false, "set")
+}
+
+pub fn import_fields(
+    root: &Path,
+    identity: &Identity,
+    path: &str,
+    data: BTreeMap<String, Value>,
+) -> Result<(), String> {
+    write_fields(root, identity, path, data, false, "import")
+}
+
+pub fn replace_fields(
+    root: &Path,
+    identity: &Identity,
+    path: &str,
+    data: BTreeMap<String, Value>,
+) -> Result<(), String> {
+    write_fields(root, identity, path, data, true, "import")
+}
+
+fn write_fields(
+    root: &Path,
+    identity: &Identity,
+    path: &str,
+    data: BTreeMap<String, Value>,
+    replace: bool,
+    action: &str,
+) -> Result<(), String> {
     fn validate(key: &str, value: &Value) -> Result<(), String> {
         match value {
             Value::String(text) if text.len() > 4096 => {
@@ -69,10 +98,14 @@ pub fn set_fields(
         validate(key, value)?;
     }
     let store = Store::open(root, identity).map_err(|error| error.to_string())?;
-    let (mut entry, new) = match store.get(path, identity) {
-        Ok(entry) => (entry, false),
-        Err(StoreError::EntryNotFound(_)) => (Entry::default(), true),
-        Err(error) => return Err(format!("cannot read entry {path}: {error}")),
+    let (mut entry, new) = if replace {
+        (Entry::default(), true)
+    } else {
+        match store.get(path, identity) {
+            Ok(entry) => (entry, false),
+            Err(StoreError::EntryNotFound(_)) => (Entry::default(), true),
+            Err(error) => return Err(format!("cannot read entry {path}: {error}")),
+        }
     };
     if let Some(Value::String(value)) = data.get("password") {
         entry.metadata.tags.retain(|tag| tag != "weak-password");
@@ -91,7 +124,7 @@ pub fn set_fields(
         }
     }
     let record = WriteRecord {
-        action: "set".into(),
+        action: action.into(),
         field: if data.len() == 1 {
             data.keys().next().unwrap().clone()
         } else {
