@@ -26,6 +26,7 @@ const ROTATED_MARKER: &str = ".rotated.";
 
 /// A structured audit event. Its JSON field names and omission rules match Go.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+#[serde(default)]
 pub struct LogEntry {
     #[serde(rename = "ts")]
     pub timestamp: String,
