@@ -687,7 +687,11 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             let wrapped = wrap_data_field(&field, value)?;
             let checked = match wrapped {
                 Value::String(text) => {
-                    match apply_semantic_injection_check(text, &self.config.prompt_injection_mode) {
+                    match apply_semantic_injection_check(
+                        text,
+                        &self.config.prompt_injection_mode,
+                        &self.config.agent_name,
+                    ) {
                         Ok(text) => Value::String(text),
                         Err(error) => return Ok(ToolCallResult::error(error)),
                     }
@@ -877,7 +881,11 @@ const SEMANTIC_INJECTION_PATTERNS: &[&str] = &[
     "you are now",
 ];
 
-fn apply_semantic_injection_check(text: String, mode: &str) -> Result<String, String> {
+fn apply_semantic_injection_check(
+    text: String,
+    mode: &str,
+    agent_name: &str,
+) -> Result<String, String> {
     if mode.is_empty() || mode == "off" {
         return Ok(text);
     }
@@ -889,9 +897,12 @@ fn apply_semantic_injection_check(text: String, mode: &str) -> Result<String, St
         return Ok(text);
     };
     match mode {
-        // Go emits a warning through slog; stdio MCP must stay protocol-clean,
-        // so the externally visible response remains unchanged here.
-        "log-only" => Ok(text),
+        // Match Go's slog warning on stderr. Keep the vault content out of
+        // the diagnostic so logging cannot disclose the value being checked.
+        "log-only" => {
+            eprintln!("{}", semantic_injection_warning(pattern, agent_name));
+            Ok(text)
+        }
         "wrap" => Ok(format!(
             "[SECURITY WARNING: potential prompt injection detected (pattern: \"{pattern}\")]\n{text}"
         )),
@@ -901,6 +912,12 @@ fn apply_semantic_injection_check(text: String, mode: &str) -> Result<String, St
         // Match Go's forward-compatible behavior for unknown modes.
         _ => Ok(text),
     }
+}
+
+fn semantic_injection_warning(pattern: &str, agent_name: &str) -> String {
+    format!(
+        "level=WARN msg=\"semantic prompt injection detected\" pattern={pattern:?} agent={agent_name:?}"
+    )
 }
 
 fn collect_field_matches(
@@ -1060,4 +1077,18 @@ pub(crate) fn payload(result: ToolCallResult) -> Value {
         payload.insert("structuredContent".to_string(), structured);
     }
     Value::Object(payload)
+}
+
+#[cfg(test)]
+mod semantic_injection_tests {
+    use super::semantic_injection_warning;
+
+    #[test]
+    fn log_only_warning_has_no_vault_content() {
+        let warning = semantic_injection_warning("ignore previous instructions", "fixture");
+        assert!(warning.contains("semantic prompt injection detected"));
+        assert!(warning.contains("pattern=\"ignore previous instructions\""));
+        assert!(warning.contains("agent=\"fixture\""));
+        assert!(!warning.contains("synthetic-secret-value"));
+    }
 }
