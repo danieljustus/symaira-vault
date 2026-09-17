@@ -302,15 +302,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+      # Clippy checks the same targets; cargo test already includes doctests.
       - name: Check and lint
-        run: |
-          cargo check --workspace --all-targets --all-features --locked
-          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Test including doctests
-        run: |
-          cargo test --workspace --all-features --locked
-          cargo test --workspace --doc --all-features --locked
+        run: cargo test --workspace --all-features --locked
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
