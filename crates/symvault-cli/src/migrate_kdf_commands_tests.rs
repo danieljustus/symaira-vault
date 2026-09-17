@@ -20,7 +20,7 @@ fn fixture() -> (PathBuf, Identity, SecretBytes, Vec<u8>) {
     fs::write(root.join("identity.age"), &original).expect("identity");
     fs::write(
         root.join("config.yaml"),
-        b"vault:\n  format_version: 1\n  scrypt_work_factor: 18\ncustom: retained\n",
+        b"vault:\n  format_version: 1\n  scrypt_work_factor: 18\n  auto_migrate_kdf: false\ncustom: retained\n",
     )
     .expect("config");
     (root, identity, passphrase, original)
@@ -48,6 +48,7 @@ fn migrates_and_retains_backup_and_config_fields() {
     let config = String::from_utf8(fs::read(root.join("config.yaml")).expect("config")).unwrap();
     assert!(config.contains("format_version: 2"));
     assert!(!config.contains("scrypt_work_factor"));
+    assert!(config.contains("auto_migrate_kdf: false"));
     assert!(config.contains("custom: retained"));
     let _ = fs::remove_dir_all(root);
 }

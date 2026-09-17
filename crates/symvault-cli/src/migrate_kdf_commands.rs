@@ -159,13 +159,13 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
             params,
         });
     }
-    document
-        .try_set_path("vault.format_version", yaml_edit::ScalarValue::from(2))
-        .map_err(|error| format!("set vault.format_version: {error}"))?;
     // The Go writer omits this field after migration.  A missing path is
     // already the desired result, so only propagate errors for malformed
     // parent paths.
     let _ = document.try_remove_path("vault.scrypt_work_factor");
+    document
+        .try_set_path("vault.format_version", yaml_edit::ScalarValue::from(2))
+        .map_err(|error| format!("set vault.format_version: {error}"))?;
     let mut rendered = document.to_string();
     if !rendered.ends_with('\n') {
         rendered.push('\n');
