@@ -81,6 +81,12 @@ pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
 
+    /// Delete one entry when the injected store supports writes. Read-only
+    /// test stores retain the default fail-closed implementation.
+    fn delete_entry(&self, _path: &str) -> Result<(), String> {
+        Err("store does not support deletes".into())
+    }
+
     /// Persist one field mutation when the injected store supports writes.
     /// Read-only test stores retain the default fail-closed implementation.
     fn set_field(
@@ -200,6 +206,16 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"set_entry_field\" requires tier \"standard\"",
             ));
         }
+        if self.config.tier == "read-only" && name == "delete_entry" {
+            return Err(ToolCallResult::error(
+                "Tool \"delete_entry\" requires tier \"standard\"",
+            ));
+        }
+        if self.config.tier == "standard" && name == "delete_entry" {
+            return Err(ToolCallResult::error(
+                "Tool \"delete_entry\" requires tier \"admin\"",
+            ));
+        }
         if self.config.available_tools.iter().any(|tool| tool == name) {
             let approval_mode =
                 if self.config.approval_mode.is_empty() && self.config.require_approval {
@@ -239,6 +255,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "generate_password" => self.generate_password(arguments),
             "generate_totp" => self.generate_totp(arguments),
             "set_entry_field" => self.set_entry_field(arguments),
+            "delete_entry" => self.delete_entry(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -412,6 +429,52 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             .set_field(path, field, stored, &now)
             .map_err(|error| format!("vault operation failed: {error}"))?;
         Ok(ToolCallResult::text(format!("Set {path}.{field} = ***")))
+    }
+
+    fn delete_entry(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        if !self.config.can_write {
+            return Err("delete operations not permitted for this agent".into());
+        }
+        let path = match required_string(arguments, "path") {
+            Ok(path) => path,
+            Err(result) => return Ok(result),
+        };
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        match approval_mode {
+            "deny" => {
+                return Ok(ToolCallResult::error(
+                    "delete_entry denied: approval mode is 'deny'",
+                ));
+            }
+            "prompt" => {
+                return Ok(ToolCallResult::error(
+                    "delete_entry requires approval but no TTY or GUI dialog available",
+                ));
+            }
+            _ => {}
+        }
+        match self.store.delete_entry(path) {
+            Ok(()) => Ok(ToolCallResult::text(format!(
+                "Successfully deleted entry: {path}"
+            ))),
+            Err(error) if error.starts_with("entry not found: ") => {
+                Ok(ToolCallResult::error(error))
+            }
+            Err(error) => Err(format!("vault operation failed: {error}")),
+        }
     }
 
     fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {

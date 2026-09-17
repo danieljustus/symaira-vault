@@ -324,7 +324,7 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         fixture.oracle.source_hash.as_deref(),
         Some("8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9")
     );
-    assert_eq!(read_only_tool_names().len(), 10);
+    assert_eq!(read_only_tool_names().len(), 11);
     let case = fixture
         .cases
         .iter()

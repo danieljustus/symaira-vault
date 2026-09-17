@@ -75,6 +75,12 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
         }
     }
 
+    fn delete_entry(&self, path: &str) -> Result<(), String> {
+        self.store
+            .delete_entry_with_identity(path, &self.identity)
+            .map_err(store_error)
+    }
+
     fn set_field(&self, path: &str, field: &str, value: Value, now: &str) -> Result<(), String> {
         let (mut entry, existing) = match self.store.get(path, &self.identity) {
             Ok(entry) => (entry, true),
@@ -295,6 +301,7 @@ impl StoreReadOnlyRuntime {
             "find_entries" => "find",
             "get_entry" | "get_entry_metadata" => "get",
             "set_entry_field" => "set",
+            "delete_entry" => "delete",
             _ => "read",
         };
         let result = policy.evaluate(EvalContext {
@@ -358,6 +365,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("set", path, ok);
             }
+            "delete_entry" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("delete", path, ok);
+            }
             "list_entries" => {
                 let prefix = arguments
                     .get("prefix")
@@ -408,7 +423,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The ten handlers in this bounded runtime. The catalog remains owned by
+/// The eleven handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -419,6 +434,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "generate_password",
         "generate_totp",
         "set_entry_field",
+        "delete_entry",
         "find_entries",
         "get_entry",
         "get_entry_value",
