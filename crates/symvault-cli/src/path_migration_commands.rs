@@ -64,6 +64,7 @@ pub(crate) fn preview(
         append_entry(
             &legacy.join(relative),
             &destination,
+            Path::new(relative),
             &mut plan,
             &mut total_bytes,
         )?;
@@ -112,6 +113,7 @@ fn xdg_root(value: Option<&Path>, home: &Path, fallback: &str) -> PathBuf {
 fn append_entry(
     source: &Path,
     destination: &Path,
+    relative: &Path,
     items: &mut Vec<MigrationItem>,
     total_bytes: &mut u64,
 ) -> Result<(), String> {
@@ -121,7 +123,7 @@ fn append_entry(
         Err(error) => return Err(error.to_string()),
     };
     if metadata.file_type().is_symlink() {
-        return Err(format!("refusing symlink: {}", display(source)));
+        return Err(format!("refusing symlink: {}", display(relative)));
     }
     if metadata.is_dir() {
         add_item(items, total_bytes, source, destination, 0)?;
@@ -138,7 +140,13 @@ fn append_entry(
             let name = child
                 .file_name()
                 .ok_or_else(|| format!("cannot determine relative path: {}", display(&child)))?;
-            append_entry(&child, &destination.join(name), items, total_bytes)?;
+            append_entry(
+                &child,
+                &destination.join(name),
+                &relative.join(name),
+                items,
+                total_bytes,
+            )?;
         }
         return Ok(());
     }

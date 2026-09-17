@@ -1,18 +1,14 @@
-#[path = "../src/path_migration_commands.rs"]
-mod path_migration_commands;
-
 use std::{
     env, fs,
-    io::Cursor,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
 
 use tempfile::TempDir;
 
-fn run_go(binary: &Path, home: &Path, xdg: (&Path, &Path, &Path)) -> Output {
+fn run(binary: &Path, args: &[&str], home: &Path, xdg: (&Path, &Path, &Path)) -> Output {
     Command::new(binary)
-        .args(["migrate", "paths"])
+        .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", xdg.0)
         .env("XDG_DATA_HOME", xdg.1)
@@ -21,19 +17,6 @@ fn run_go(binary: &Path, home: &Path, xdg: (&Path, &Path, &Path)) -> Output {
         .env("NO_COLOR", "1")
         .output()
         .expect("run Go migration preview")
-}
-
-fn rust_preview(home: &Path, xdg: (&Path, &Path, &Path)) -> Result<Vec<u8>, String> {
-    let mut output = Cursor::new(Vec::new());
-    path_migration_commands::preview(
-        home,
-        Some(xdg.0),
-        Some(xdg.1),
-        Some(xdg.2),
-        false,
-        &mut output,
-    )?;
-    Ok(output.into_inner())
 }
 
 fn fixture(name: &str) -> (TempDir, PathBuf, (PathBuf, PathBuf, PathBuf)) {
@@ -46,6 +29,12 @@ fn fixture(name: &str) -> (TempDir, PathBuf, (PathBuf, PathBuf, PathBuf)) {
     (root, home, (config, data, cache))
 }
 
+fn assert_same(go: &Output, rust: &Output, case: &str) {
+    assert_eq!(rust.status, go.status, "{case}: status differs");
+    assert_eq!(rust.stdout, go.stdout, "{case}: stdout differs");
+    assert_eq!(rust.stderr, go.stderr, "{case}: stderr differs");
+}
+
 #[test]
 fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -53,10 +42,19 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
         return;
     };
     let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let (_empty_root, empty_home, empty_xdg) = fixture("empty");
-    let go_empty = run_go(
+    let args = ["migrate", "paths"];
+    let go_empty = run(
         &go_binary,
+        &args,
+        &empty_home,
+        (&empty_xdg.0, &empty_xdg.1, &empty_xdg.2),
+    );
+    let rust_empty = run(
+        &rust_binary,
+        &args,
         &empty_home,
         (&empty_xdg.0, &empty_xdg.1, &empty_xdg.2),
     );
@@ -67,11 +65,22 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
         go_empty.stdout,
         go_empty.stderr
     );
-    assert_eq!(
-        rust_preview(&empty_home, (&empty_xdg.0, &empty_xdg.1, &empty_xdg.2)).unwrap(),
-        go_empty.stdout,
-        "empty preview stdout"
+    assert_same(&go_empty, &rust_empty, "empty preview");
+
+    let quiet_args = ["--quiet", "migrate", "xdg"];
+    let go_quiet = run(
+        &go_binary,
+        &quiet_args,
+        &empty_home,
+        (&empty_xdg.0, &empty_xdg.1, &empty_xdg.2),
     );
+    let rust_quiet = run(
+        &rust_binary,
+        &quiet_args,
+        &empty_home,
+        (&empty_xdg.0, &empty_xdg.1, &empty_xdg.2),
+    );
+    assert_same(&go_quiet, &rust_quiet, "quiet xdg alias");
 
     let (_tree_root, tree_home, tree_xdg) = fixture("tree");
     let legacy = tree_home.join(".symvault");
@@ -86,8 +95,15 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
     fs::write(legacy.join("pairing/invite.json"), b"invite").expect("pairing");
     fs::write(legacy.join("update-cache.json"), b"{}\n").expect("cache");
 
-    let go_tree = run_go(
+    let go_tree = run(
         &go_binary,
+        &args,
+        &tree_home,
+        (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2),
+    );
+    let rust_tree = run(
+        &rust_binary,
+        &args,
         &tree_home,
         (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2),
     );
@@ -98,26 +114,51 @@ fn migration_preview_matches_go_for_empty_marker_and_complete_tree() {
         go_tree.stdout,
         go_tree.stderr
     );
-    assert_eq!(
-        rust_preview(&tree_home, (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2)).unwrap(),
-        go_tree.stdout,
-        "complete tree preview stdout"
-    );
+    assert_same(&go_tree, &rust_tree, "complete tree preview");
     assert!(
         tree_home.join(".symvault/config.yaml").is_file(),
         "preview must not remove legacy files"
     );
 
     fs::write(legacy.join(".migrated"), b"migration complete\n").expect("marker");
-    let go_marker = run_go(
+    let go_marker = run(
         &go_binary,
+        &args,
+        &tree_home,
+        (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2),
+    );
+    let rust_marker = run(
+        &rust_binary,
+        &args,
         &tree_home,
         (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2),
     );
     assert!(go_marker.status.success(), "Go marker preview failed");
-    assert_eq!(
-        rust_preview(&tree_home, (&tree_xdg.0, &tree_xdg.1, &tree_xdg.2)).unwrap(),
-        go_marker.stdout,
-        "marker preview stdout"
-    );
+    assert_same(&go_marker, &rust_marker, "marker preview");
+}
+
+#[cfg(unix)]
+#[test]
+fn migration_preview_matches_go_for_legacy_symlink_errors() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let (_root, home, xdg) = fixture("symlink");
+    let target = home.join("real-legacy");
+    fs::create_dir_all(&target).expect("target legacy directory");
+    std::os::unix::fs::symlink(&target, home.join(".symvault")).expect("legacy symlink");
+
+    for args in [
+        ["migrate", "paths"],
+        ["migrate", "xdg"],
+        ["--quiet", "migrate", "paths"],
+    ] {
+        let go = run(&go_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
+        let rust = run(&rust_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
+        assert_same(&go, &rust, &format!("legacy symlink {args:?}"));
+        assert!(!go.status.success(), "Go must reject legacy symlink");
+    }
 }
