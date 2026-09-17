@@ -16,83 +16,95 @@ const LOGIN_CATEGORY: &str = "001";
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Export {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     accounts: Vec<Account>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Account {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     vaults: Vec<Vault>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Vault {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     items: Vec<Item>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Item {
-    #[serde(rename = "categoryUuid", default)]
+    #[serde(
+        rename = "categoryUuid",
+        default,
+        deserialize_with = "super::null_default"
+    )]
     category: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     trashed: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     details: Details,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     overview: Overview,
 }
 
 #[derive(Default, Deserialize)]
 struct Details {
-    #[serde(rename = "loginFields", default)]
+    #[serde(
+        rename = "loginFields",
+        default,
+        deserialize_with = "super::null_default"
+    )]
     login: Vec<LoginField>,
-    #[serde(rename = "notesPlain", default)]
+    #[serde(
+        rename = "notesPlain",
+        default,
+        deserialize_with = "super::null_default"
+    )]
     notes: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     sections: Vec<Section>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct LoginField {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     designation: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     value: String,
 }
 
 #[derive(Default, Deserialize)]
 struct Overview {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     urls: Vec<Url>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     tags: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Url {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     url: String,
 }
 
 #[derive(Default, Deserialize)]
 struct Section {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     fields: Vec<Field>,
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Field {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     n: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     t: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
     #[serde(default)]
     v: Value,
@@ -130,7 +142,12 @@ fn parse_1pux_with_limits(
         break;
     }
     let raw = raw.ok_or_else(|| ImportError::Parse("export.json not found in 1pux zip".into()))?;
-    let export: Export = serde_json::from_slice(&raw)
+    let mut decoder = serde_json::Deserializer::from_slice(&raw);
+    let export = Option::<Export>::deserialize(&mut decoder)
+        .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?
+        .unwrap_or_default();
+    decoder
+        .end()
         .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?;
 
     let mut entries = Vec::new();

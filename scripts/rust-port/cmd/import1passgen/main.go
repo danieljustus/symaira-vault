@@ -65,8 +65,12 @@ func main() {
 	cases := []importCase{
 		onePuxCase(),
 		onePuxInvalidFirstTOTPCase(),
+		onePuxNullCase(),
+		onePuxDuplicateExportCase(),
 		onePuxMissingExportCase(),
 		onePuxMalformedCase(),
+		onePuxSuffixBoundaryCase(),
+		onePuxTrailingJSONCase(),
 	}
 	pass, err := passCase()
 	must(err)
@@ -138,7 +142,7 @@ func onePuxMissingExportCase() importCase {
 func onePuxInvalidFirstTOTPCase() importCase {
 	payload := []byte(`{"accounts":[{"vaults":[{"items":[
 {"categoryUuid":"001","title":"Invalid OTP","details":{"sections":[{"fields":[
-{"n":"totp","v":"bad"},
+{"n":"totp","v":"!"},
 {"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}}
 ]}]}]}`)
 	input := zipBytes("export.json", payload)
@@ -149,21 +153,66 @@ func onePuxInvalidFirstTOTPCase() importCase {
 	return importCase{Name: "onepux_first_invalid_totp", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
 }
 
+func onePuxNullCase() importCase {
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[
+{"categoryUuid":"001","title":"Null Fields","details":null,"overview":null},
+{"categoryUuid":"001","title":"Null Members","details":{"loginFields":null,"notesPlain":null,"sections":null},"overview":{"urls":null,"tags":null}}
+]}]}]}`)
+	input := zipBytes("export.json", payload)
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_null_fields", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxDuplicateExportCase() importCase {
+	first := []byte(`{"accounts":[{"vaults":[{"items":[{"categoryUuid":"001","title":"first"}]}]}]}`)
+	second := []byte(`{"accounts":[{"vaults":[{"items":[{"categoryUuid":"001","title":"second"}]}]}]}`)
+	input := zipBytesMultiple([]zipEntry{{"export.json", first}, {"nested/export.json", second}})
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_duplicate_export_uses_first", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
 func onePuxMalformedCase() importCase {
 	input := []byte("not a zip archive")
+	return onePuxErrorCase("onepux_malformed_zip", input)
+}
+
+func onePuxSuffixBoundaryCase() importCase {
+	return onePuxErrorCase("onepux_suffix_boundary", zipBytes("fooexport.json", []byte(`{}`)))
+}
+
+func onePuxTrailingJSONCase() importCase {
+	return onePuxErrorCase("onepux_trailing_json", zipBytes("export.json", []byte(`{} {}`)))
+}
+
+func onePuxErrorCase(name string, input []byte) importCase {
 	parser, err := importer.New(importer.Format1Password)
 	must(err)
 	_, err = parser.Parse(bytes.NewReader(input))
 	if err == nil {
 		must(fmt.Errorf("malformed zip case unexpectedly succeeded"))
 	}
+	errorContains := err.Error()
+	switch name {
+	case "onepux_malformed_zip":
+		errorContains = "zip"
+	case "onepux_trailing_json":
+		errorContains = "parse export.json"
+	case "onepux_suffix_boundary":
+		errorContains = "export.json not found"
+	}
 	return importCase{
-		Name:          "onepux_malformed_zip",
+		Name:          name,
 		Kind:          "onepux",
 		InputBase64:   base64.StdEncoding.EncodeToString(input),
 		Expected:      []entry{},
 		Failed:        true,
-		ErrorContains: err.Error(),
+		ErrorContains: errorContains,
 	}
 }
 
@@ -200,7 +249,7 @@ EOF2
 *invalid.gpg)
 cat <<'EOF2'
 invalid-secret
-otpauth://totp/example?secret=bad
+otpauth://totp/example?secret=!
 EOF2
 ;;
 esac
@@ -225,13 +274,24 @@ esac
 	}, nil
 }
 
+type zipEntry struct {
+	name    string
+	payload []byte
+}
+
 func zipBytes(name string, payload []byte) []byte {
+	return zipBytesMultiple([]zipEntry{{name, payload}})
+}
+
+func zipBytesMultiple(entries []zipEntry) []byte {
 	var out bytes.Buffer
 	writer := zip.NewWriter(&out)
-	file, err := writer.Create(name)
-	must(err)
-	_, err = io.Copy(file, bytes.NewReader(payload))
-	must(err)
+	for _, entry := range entries {
+		file, err := writer.Create(entry.name)
+		must(err)
+		_, err = io.Copy(file, bytes.NewReader(entry.payload))
+		must(err)
+	}
 	must(writer.Close())
 	return out.Bytes()
 }

@@ -101,12 +101,7 @@ fn decrypt_pass_file(gpg: &Path, path: &Path) -> Result<String, ImportError> {
     let mut command = Command::new(gpg);
     command.args(["--decrypt", "--batch", "--yes"]);
     command.arg(path);
-    command.env_clear();
-    for name in GPG_ENV {
-        if let Some(value) = env::var_os(name) {
-            command.env(name, value);
-        }
-    }
+    prepare_gpg_command(&mut command);
     let output = command.output().map_err(|error| {
         ImportError::Parse(format!("decrypt pass entry {}: {error}", path.display()))
     })?;
@@ -123,6 +118,15 @@ fn decrypt_pass_file(gpg: &Path, path: &Path) -> Result<String, ImportError> {
         )));
     }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn prepare_gpg_command(command: &mut Command) {
+    command.env_clear();
+    for name in GPG_ENV {
+        if let Some(value) = env::var_os(name) {
+            command.env(name, value);
+        }
+    }
 }
 
 /// Parse one decrypted pass entry. The first line is the password; recognized
@@ -159,12 +163,23 @@ pub fn parse_pass_entry(path: &Path, content: &str) -> ImportedEntry {
     }
     let raw_path = path.to_string_lossy();
     let raw_path = raw_path.strip_suffix(".gpg").unwrap_or(&raw_path);
-    let raw_path = raw_path.replace('\\', "/");
+    let raw_path = to_slash(raw_path);
     ImportedEntry {
         path: normalize_path(&raw_path),
         data,
         warnings,
         secret_type: None,
+    }
+}
+
+fn to_slash(path: &str) -> String {
+    #[cfg(windows)]
+    {
+        path.replace('\\', "/")
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_owned()
     }
 }
 
@@ -196,6 +211,18 @@ mod tests {
         assert_eq!(entry.warnings.as_deref().unwrap().len(), 1);
     }
 
+    #[test]
+    fn gpg_environment_is_reduced_to_the_go_allowlist() {
+        let mut command = Command::new("gpg");
+        command.env("SYMVAULT_TEST_SECRET", "must-not-pass");
+        prepare_gpg_command(&mut command);
+        assert!(
+            command
+                .get_envs()
+                .all(|(name, _)| name != std::ffi::OsStr::new("SYMVAULT_TEST_SECRET"))
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn adapter_runs_isolated_fake_gpg_process() {
@@ -206,25 +233,43 @@ mod tests {
         let root =
             env::temp_dir().join(format!("symvault-pass-test-{}-{nonce}", std::process::id()));
         fs::create_dir_all(root.join("nested")).unwrap();
+        fs::create_dir_all(root.join("nested/deeper")).unwrap();
         fs::write(root.join("nested/example.gpg"), b"ciphertext").unwrap();
+        fs::write(root.join("nested/deeper/second.gpg"), b"ciphertext").unwrap();
         let gpg = root.join("gpg");
         let mut script = fs::File::create(&gpg).unwrap();
-        script
-            .write_all(
-                b"#!/bin/sh\nprintf 'secret\\nusername: test\\nurl: https://example.test\\n'\n",
-            )
-            .unwrap();
+        script.write_all(b"#!/bin/sh\ncase \"$4\" in\n*failure.gpg) printf 'decrypt failed\\n' >&2; exit 7 ;;\nesac\nprintf 'secret\\nusername: test\\nurl: https://example.test\\n'\n").unwrap();
         drop(script);
         let mut permissions = fs::metadata(&gpg).unwrap().permissions();
         use std::os::unix::fs::PermissionsExt;
         permissions.set_mode(0o700);
         fs::set_permissions(&gpg, permissions).unwrap();
 
+        std::os::unix::fs::symlink(root.join("nested"), root.join("linked")).unwrap();
+        std::os::unix::fs::symlink(
+            root.join("nested/example.gpg"),
+            root.join("linked-entry.gpg"),
+        )
+        .unwrap();
+
         let entries = import_pass_with_gpg(&root, &gpg).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].path, "nested/example");
-        assert_eq!(entries[0].data["password"], "secret");
-        assert_eq!(entries[0].data["username"], "test");
+        assert_eq!(entries.len(), 3);
+        assert!(entries.iter().any(|entry| entry.path == "nested/example"));
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.path == "nested/deeper/second")
+        );
+        assert!(entries.iter().any(|entry| entry.path == "linked-entry"));
+        assert!(
+            entries
+                .iter()
+                .all(|entry| entry.data["password"] == "secret")
+        );
+
+        fs::write(root.join("nested/failure.gpg"), b"ciphertext").unwrap();
+        let error = import_pass_with_gpg(&root, &gpg).unwrap_err();
+        assert!(error.to_string().contains("decrypt failed"));
         let _ = fs::remove_dir_all(root);
     }
 }
