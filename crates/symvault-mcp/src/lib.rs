@@ -27,7 +27,8 @@ pub use call::{
     ToolCallResult, ToolCallRuntime,
 };
 pub use store_adapter::{
-    StoreReadOnlyAdapter, StoreReadOnlyRuntime, read_only_tool_names, unavailable_tool,
+    SharedAuditLogger, StoreReadOnlyAdapter, StoreReadOnlyRuntime, read_only_tool_names,
+    unavailable_tool,
 };
 pub use tools::ToolListConfig;
 
@@ -453,9 +454,35 @@ impl ProtocolHandler {
         identity: symvault_crypto::Identity,
         config: ReadOnlyRuntimeConfig,
         policy: Option<symvault_core::policy::Engine>,
-        quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
+        _quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
     ) -> Result<Self, String> {
-        let runtime = StoreReadOnlyRuntime::open(root, identity, config, policy, quota)?;
+        Self::with_store_read_only_runtime_and_audit(
+            server_name,
+            server_version,
+            root,
+            identity,
+            config,
+            policy,
+            _quota,
+            None,
+        )
+    }
+
+    /// Opens the concrete encrypted-store runtime with an already-open audit
+    /// logger. The logger is supplied by the owning CLI/session boundary so
+    /// this protocol crate performs no keyring discovery.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_store_read_only_runtime_and_audit(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        root: impl AsRef<std::path::Path>,
+        identity: symvault_crypto::Identity,
+        config: ReadOnlyRuntimeConfig,
+        policy: Option<symvault_core::policy::Engine>,
+        _quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
+        audit: Option<SharedAuditLogger>,
+    ) -> Result<Self, String> {
+        let runtime = StoreReadOnlyRuntime::open_with_audit(root, identity, config, policy, audit)?;
         Ok(Self::with_tool_call_runtime(
             server_name,
             server_version,

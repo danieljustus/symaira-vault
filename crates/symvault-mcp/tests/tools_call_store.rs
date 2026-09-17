@@ -2,7 +2,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
+use std::sync::{Arc, Mutex};
 use symvault_core::policy::{Action, Conditions, Engine, Policy, Rule};
+use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, ReadOnlyUnavailableTool, StoreReadOnlyRuntime,
@@ -337,4 +339,76 @@ fn authorization_matches_go_path_policy_and_quota_order() {
         .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
         .expect_err("metadata outside scope must not reach storage");
     assert!(error.contains("outside allowed scope"));
+}
+
+#[test]
+fn injected_audit_logger_records_go_event_boundaries() {
+    let (root, identity) = write_synthetic_vault();
+    let keyring = MemoryKeyring::new();
+    let logger = symvault_store::audit::open_with_keyring(
+        "fixture",
+        root.path(),
+        &keyring,
+        symvault_store::audit::RotationConfig::default(),
+    )
+    .expect("open synthetic keyring-backed audit logger");
+    let log_path = logger.path().to_owned();
+    let audit = Arc::new(Mutex::new(logger));
+    let mut config = fixture_config();
+    config.allowed_paths = vec!["allowed/*".into()];
+    config.available_tools = read_only_tool_names();
+    let runtime = StoreReadOnlyRuntime::open_with_audit(
+        root.path(),
+        identity,
+        config,
+        Some(Engine::new([Policy {
+            version: "1".into(),
+            description: "audit policy fixture".into(),
+            rules: vec![Rule {
+                name: "deny github".into(),
+                priority: 10,
+                conditions: Conditions {
+                    agent_id: "fixture".into(),
+                    path: "github".into(),
+                    ..Conditions::default()
+                },
+                action: Action::Deny,
+            }],
+        }])),
+        Some(audit),
+    )
+    .expect("construct audit runtime");
+
+    runtime
+        .call("find_entries", &serde_json::json!({"query": "github"}))
+        .expect("find call");
+    runtime
+        .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect_err("scope denial is returned by metadata handler");
+    runtime
+        .authorize("generate_totp", &serde_json::json!({}))
+        .expect_err("unsupported tool is denied before storage");
+    runtime
+        .authorize("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect_err("policy denial is returned before storage");
+
+    let events = fs::read_to_string(log_path)
+        .expect("read synthetic audit log")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("audit JSON object"))
+        .collect::<Vec<_>>();
+    assert!(events.iter().any(|event| {
+        event["action"] == "find" && event["path"] == "github" && event["ok"] == true
+    }));
+    assert!(events.iter().any(|event| {
+        event["action"] == "get_metadata" && event["path"] == "github" && event["ok"] == false
+    }));
+    assert!(
+        events
+            .iter()
+            .any(|event| { event["action"] == "tool_denied" && event["ok"] == false })
+    );
+    assert!(events.iter().any(|event| {
+        event["action"] == "policy_denied" && event["path"] == "github" && event["ok"] == false
+    }));
 }

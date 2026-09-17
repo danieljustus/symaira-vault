@@ -8,24 +8,31 @@ use std::{
     fs,
     io::{self, BufReader},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 use symvault_core::{
     config::{AgentProfile, Config},
     policy::{Engine, Policy},
+    session::Keyring,
 };
 use symvault_crypto::Identity;
 use symvault_mcp::{
-    ProtocolHandler, ReadOnlyRuntimeConfig, ToolListConfig, read_only_tool_names, run_stdio,
-    unavailable_tool,
+    ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, ToolListConfig,
+    read_only_tool_names, run_stdio, unavailable_tool,
 };
 
 /// Starts the bounded native MCP stdio server for an already unlocked vault.
 ///
-/// The caller supplies the identity obtained through the CLI/session boundary.
-/// This function never reads a keychain, prompts for credentials, or discovers
-/// a vault from the environment.
-pub fn run(vault: impl AsRef<Path>, agent: &str, identity: Identity) -> Result<(), String> {
+/// The caller supplies the identity and keyring obtained through the
+/// CLI/session boundary. This function never reads a platform keychain,
+/// prompts for credentials, or discovers a vault from the environment.
+pub fn run(
+    vault: impl AsRef<Path>,
+    agent: &str,
+    identity: Identity,
+    keyring: &dyn Keyring,
+) -> Result<(), String> {
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
@@ -38,9 +45,17 @@ pub fn run(vault: impl AsRef<Path>, agent: &str, identity: Identity) -> Result<(
         .agents
         .get(agent_name)
         .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
+    let audit = symvault_store::audit::open_with_keyring(
+        agent_name,
+        root,
+        keyring,
+        symvault_store::audit::RotationConfig::default(),
+    )
+    .map_err(|error| format!("open audit logger: {error}"))?;
+    let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
     let policy = load_policy_engine(root)?;
     let runtime_config = runtime_config(root, profile, agent_name);
-    let mut handler = ProtocolHandler::with_store_read_only_runtime(
+    let mut handler = ProtocolHandler::with_store_read_only_runtime_and_audit(
         "symaira",
         "1.0.0",
         root,
@@ -48,6 +63,7 @@ pub fn run(vault: impl AsRef<Path>, agent: &str, identity: Identity) -> Result<(
         runtime_config,
         policy,
         None,
+        Some(audit),
     )
     .map_err(|error| format!("create MCP runtime: {error}"))?;
     handler.set_tool_list_config(tool_list_config(profile));

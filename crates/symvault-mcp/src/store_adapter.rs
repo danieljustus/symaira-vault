@@ -4,10 +4,13 @@ use crate::call::{
 };
 use serde_json::Value;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
 /// A store-backed projection for the portable read-only MCP tools.
 ///
@@ -76,16 +79,28 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
     policy: Option<Engine>,
+    audit: Option<SharedAuditLogger>,
     agent_name: String,
+    transport: String,
 }
 
 impl StoreReadOnlyRuntime {
     pub fn open(
         root: impl AsRef<Path>,
         identity: Identity,
-        mut config: ReadOnlyRuntimeConfig,
+        config: ReadOnlyRuntimeConfig,
         policy: Option<Engine>,
         _quota: Option<Arc<symvault_core::persistent_quota::QuotaCounter>>,
+    ) -> Result<Self, String> {
+        Self::open_with_audit(root, identity, config, policy, None)
+    }
+
+    pub fn open_with_audit(
+        root: impl AsRef<Path>,
+        identity: Identity,
+        mut config: ReadOnlyRuntimeConfig,
+        policy: Option<Engine>,
+        audit: Option<SharedAuditLogger>,
     ) -> Result<Self, String> {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
@@ -95,19 +110,32 @@ impl StoreReadOnlyRuntime {
         config.vault_dir = root.to_string_lossy().into_owned();
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
+        let transport = config.transport.clone();
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
+            audit,
             agent_name,
+            transport,
         })
     }
 
     pub fn from_store(
         store: Store,
         identity: Identity,
-        mut config: ReadOnlyRuntimeConfig,
+        config: ReadOnlyRuntimeConfig,
         policy: Option<Engine>,
         _quota: Option<Arc<symvault_core::persistent_quota::QuotaCounter>>,
+    ) -> Result<Self, String> {
+        Self::from_store_with_audit(store, identity, config, policy, None)
+    }
+
+    pub fn from_store_with_audit(
+        store: Store,
+        identity: Identity,
+        mut config: ReadOnlyRuntimeConfig,
+        policy: Option<Engine>,
+        audit: Option<SharedAuditLogger>,
     ) -> Result<Self, String> {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
@@ -116,11 +144,36 @@ impl StoreReadOnlyRuntime {
         config.vault_dir = adapter.root().to_string_lossy().into_owned();
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
+        let transport = config.transport.clone();
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
+            audit,
             agent_name,
+            transport,
         })
+    }
+
+    fn append_audit(&self, action: &str, path: &str, ok: bool) {
+        let Some(audit) = &self.audit else {
+            return;
+        };
+        let timestamp = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+        let entry = symvault_store::audit::LogEntry {
+            timestamp,
+            agent: self.agent_name.clone(),
+            action: action.into(),
+            path: path.into(),
+            transport: self.transport.clone(),
+            reason: if !ok { action.into() } else { String::new() },
+            ok,
+            ..symvault_store::audit::LogEntry::default()
+        };
+        if let Ok(mut logger) = audit.lock() {
+            let _ = logger.append(entry);
+        }
     }
 
     fn authorize_policy(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
@@ -153,6 +206,7 @@ impl StoreReadOnlyRuntime {
         if result.matched && result.action == Action::Allow {
             return Ok(());
         }
+        self.append_audit("policy_denied", path, false);
         Err(ToolCallResult::error(format!(
             "policy denied tool {name:?}{}",
             if result.rule_name.is_empty() {
@@ -166,13 +220,40 @@ impl StoreReadOnlyRuntime {
 
 impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
-        self.inner.authorize(name, arguments)?;
+        if let Err(error) = self.inner.authorize(name, arguments) {
+            let path = arguments
+                .get("path")
+                .and_then(Value::as_str)
+                .unwrap_or(name);
+            self.append_audit("tool_denied", path, false);
+            return Err(error);
+        }
         self.authorize_policy(name, arguments)?;
         Ok(())
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
-        self.inner.call(name, arguments)
+        let result = self.inner.call(name, arguments);
+        match name {
+            "find_entries" => {
+                let path = arguments
+                    .get("query")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("find", path, ok);
+            }
+            "get_entry_metadata" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("get_metadata", path, ok);
+            }
+            _ => {}
+        }
+        result
     }
 }
 
