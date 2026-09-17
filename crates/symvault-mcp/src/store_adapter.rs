@@ -6,17 +6,17 @@ use serde_json::Value;
 use std::{
     collections::VecDeque,
     io::{BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
 use symvault_store::{
+    sharing::{ShareFilter, ShareStore, SHARE_STORE_FILE},
     Entry, Store, StoreError, WriteRecord,
-    sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
 };
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
@@ -221,13 +221,15 @@ fn merge_json_objects(
 /// A concrete `tools/call` runtime over the encrypted Rust store.
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
-    share_store: ShareStore,
+    share_store: Mutex<ShareStore>,
+    share_root: PathBuf,
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
     agent_name: String,
     transport: String,
     unavailable_tools: Vec<String>,
+    now_unix: Option<i64>,
 }
 
 impl StoreReadOnlyRuntime {
@@ -259,6 +261,7 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let now_unix = config.now_unix;
         let unavailable_tools = config
             .unavailable_tools
             .iter()
@@ -269,13 +272,15 @@ impl StoreReadOnlyRuntime {
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
-            share_store,
+            share_store: Mutex::new(share_store),
+            share_root: root,
             policy,
             audit,
             rate_limiter: Mutex::new(None),
             agent_name,
             transport,
             unavailable_tools,
+            now_unix,
         })
     }
 
@@ -306,6 +311,8 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let share_root = adapter.root().to_path_buf();
+        let now_unix = config.now_unix;
         let unavailable_tools = config
             .unavailable_tools
             .iter()
@@ -316,13 +323,15 @@ impl StoreReadOnlyRuntime {
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
-            share_store,
+            share_store: Mutex::new(share_store),
+            share_root,
             policy,
             audit,
             rate_limiter: Mutex::new(None),
             agent_name,
             transport,
             unavailable_tools,
+            now_unix,
         })
     }
 
@@ -372,7 +381,63 @@ impl StoreReadOnlyRuntime {
     }
 
     fn list_shares(&self, arguments: &Value) -> Result<ToolCallResult, String> {
-        render_list_shares(&self.share_store, &self.agent_name, arguments)
+        let share_store = self
+            .share_store
+            .lock()
+            .map_err(|_| "share store lock poisoned".to_owned())?;
+        render_list_shares(&share_store, &self.agent_name, arguments)
+    }
+
+    fn revoke_share(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let grant_id = match arguments.get("grant_id") {
+            None => {
+                self.append_audit("share_revoke", "<invalid>", false);
+                return Ok(ToolCallResult::error(
+                    "missing string argument \"grant_id\"",
+                ));
+            }
+            Some(Value::String(value)) => value,
+            Some(_) => {
+                self.append_audit("share_revoke", "<invalid>", false);
+                return Ok(ToolCallResult::error(
+                    "argument \"grant_id\" is not a string",
+                ));
+            }
+        };
+        let now = self
+            .now_unix
+            .and_then(|unix| OffsetDateTime::from_unix_timestamp(unix).ok())
+            .unwrap_or_else(OffsetDateTime::now_utc)
+            .format(&Rfc3339)
+            .map_err(|error| format!("format revoke clock: {error}"))?;
+        let mut share_store = self
+            .share_store
+            .lock()
+            .map_err(|_| "share store lock poisoned".to_owned())?;
+        match share_store.revoke_at_for_agent(&self.share_root, grant_id, &self.agent_name, &now) {
+            Ok(grant) => {
+                self.append_audit("share_revoke", &grant.secret_path, true);
+                Ok(ToolCallResult::text(format!(
+                    "Share grant {grant_id} revoked"
+                )))
+            }
+            Err(StoreError::Config(message)) if message.starts_with("only the source agent ") => {
+                Ok(ToolCallResult::error(message))
+            }
+            Err(StoreError::Config(message))
+                if message == format!("share grant {grant_id} not found") =>
+            {
+                self.append_audit("share_revoke", grant_id, false);
+                let quoted =
+                    serde_json::to_string(grant_id).unwrap_or_else(|_| format!("\"{grant_id}\""));
+                Ok(ToolCallResult::error(format!(
+                    "share grant {quoted} not found"
+                )))
+            }
+            Err(error) => Ok(ToolCallResult::error(format!(
+                "failed to revoke share grant: {error}"
+            ))),
+        }
     }
 
     fn audit_target<'a>(name: &'a str, arguments: &'a Value) -> &'a str {
@@ -707,6 +772,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.audit_self(arguments)
         } else if name == "list_shares" {
             self.list_shares(arguments)
+        } else if name == "revoke_share" {
+            self.revoke_share(arguments)
         } else {
             self.inner.call(name, arguments)
         };
@@ -893,6 +960,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry_value",
         "get_entry_metadata",
         "list_shares",
+        "revoke_share",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -913,7 +981,7 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, render_list_shares};
+    use super::{render_list_shares, MinuteRateLimiter, MCP_RATE_LIMIT_WINDOW};
     use serde_json::json;
     use std::fs;
     use std::time::{Duration, Instant};
@@ -948,13 +1016,11 @@ mod tests {
         let all = render_list_shares(&shares, "alice", &json!({})).expect("list shares");
         let all_json: serde_json::Value = serde_json::from_str(&all.text).expect("JSON result");
         assert_eq!(all_json.as_array().expect("array").len(), 2);
-        assert!(
-            all_json
-                .as_array()
-                .expect("array")
-                .iter()
-                .all(|grant| grant["from_agent"] == "alice")
-        );
+        assert!(all_json
+            .as_array()
+            .expect("array")
+            .iter()
+            .all(|grant| grant["from_agent"] == "alice"));
 
         let filtered = render_list_shares(
             &shares,

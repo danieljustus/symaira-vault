@@ -5,11 +5,21 @@ use std::{
 };
 use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
-use symvault_mcp::{ProtocolHandler, ReadOnlyRuntimeConfig, read_only_tool_names, run_stream};
-use symvault_store::{Store, audit::RotationConfig};
+use symvault_mcp::{read_only_tool_names, run_stream, ProtocolHandler, ReadOnlyRuntimeConfig};
+use symvault_store::{audit::RotationConfig, Store};
 use tempfile::TempDir;
 
 fn fixture_runtime() -> (
+    TempDir,
+    ProtocolHandler,
+    Arc<Mutex<symvault_store::audit::Logger>>,
+) {
+    fixture_runtime_for_agent("fixture")
+}
+
+fn fixture_runtime_for_agent(
+    agent_name: &str,
+) -> (
     TempDir,
     ProtocolHandler,
     Arc<Mutex<symvault_store::audit::Logger>>,
@@ -48,7 +58,7 @@ fn fixture_runtime() -> (
         server_name: "Symaira Vault MCP".into(),
         server_version: "1.0.0".into(),
         transport: "stdio".into(),
-        agent_name: "fixture".into(),
+        agent_name: agent_name.into(),
         approval_mode: "none".into(),
         allowed_paths: vec!["*".into()],
         available_tools: read_only_tool_names(),
@@ -76,11 +86,12 @@ fn protocol_list_shares_scopes_filters_and_audits_empty_path() {
     // sharing_store.go at Go oracle fca3f894. This test exercises Rust's
     // concrete encrypted-store protocol wiring; it does not claim Go stdio
     // execution because the current Go New path leaves shareStore unattached.
-    assert!(
-        read_only_tool_names()
-            .iter()
-            .any(|name| name == "list_shares")
-    );
+    assert!(read_only_tool_names()
+        .iter()
+        .any(|name| name == "list_shares"));
+    assert!(read_only_tool_names()
+        .iter()
+        .any(|name| name == "revoke_share"));
     let (_root, mut handler, audit) = fixture_runtime();
     let output = run_stream(
         r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}
@@ -100,13 +111,11 @@ fn protocol_list_shares_scopes_filters_and_audits_empty_path() {
         .expect("list result text");
     let all_grants: Value = serde_json::from_str(all_text).expect("all grants JSON");
     assert_eq!(all_grants.as_array().expect("grant array").len(), 2);
-    assert!(
-        all_grants
-            .as_array()
-            .expect("grant array")
-            .iter()
-            .all(|grant| grant["from_agent"] == "fixture" || grant["to_agent"] == "fixture")
-    );
+    assert!(all_grants
+        .as_array()
+        .expect("grant array")
+        .iter()
+        .all(|grant| grant["from_agent"] == "fixture" || grant["to_agent"] == "fixture"));
     assert!(
         !all_text.contains("private"),
         "cross-agent grant must stay hidden"
@@ -138,4 +147,158 @@ fn protocol_list_shares_scopes_filters_and_audits_empty_path() {
                 .expect("audit object")
                 .contains_key("path")
     }));
+}
+
+fn revoke_stream(arguments: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize"}}
+{{"jsonrpc":"2.0","method":"notifications/initialized"}}
+{{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{{"name":"revoke_share","arguments":{arguments}}}}}
+"#
+    )
+}
+
+fn call_response(output: &[String]) -> Value {
+    serde_json::from_str(output.last().expect("call response line")).expect("call response JSON")
+}
+
+fn audit_events(audit: &Arc<Mutex<symvault_store::audit::Logger>>) -> Vec<Value> {
+    let path = audit.lock().expect("audit logger lock").path().to_owned();
+    fs::read_to_string(path)
+        .expect("read audit events")
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("audit JSON"))
+        .collect()
+}
+
+#[test]
+fn protocol_revoke_share_rejects_invalid_and_missing_ids_with_go_audit() {
+    let (_root, mut handler, audit) = fixture_runtime();
+    let output = run_stream(&revoke_stream("{}"), &mut handler).expect("missing grant_id");
+    let response = call_response(&output);
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(
+        response["result"]["content"][0]["text"],
+        "missing string argument \"grant_id\""
+    );
+    let event = audit_events(&audit)
+        .into_iter()
+        .find(|event| event["action"] == "share_revoke")
+        .expect("invalid argument audit");
+    assert_eq!(event["path"], "<invalid>");
+    assert_eq!(event["ok"], false);
+
+    let (_root, mut handler, audit) = fixture_runtime();
+    let output = run_stream(&revoke_stream(r#"{"grant_id":true}"#), &mut handler)
+        .expect("wrong grant_id type");
+    let response = call_response(&output);
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(
+        response["result"]["content"][0]["text"],
+        "argument \"grant_id\" is not a string"
+    );
+    let event = audit_events(&audit)
+        .into_iter()
+        .find(|event| event["action"] == "share_revoke")
+        .expect("wrong type audit");
+    assert_eq!(event["path"], "<invalid>");
+    assert_eq!(event["ok"], false);
+
+    let (_root, mut handler, audit) = fixture_runtime();
+    let output = run_stream(&revoke_stream(r#"{"grant_id":"missing"}"#), &mut handler)
+        .expect("missing grant");
+    let response = call_response(&output);
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(
+        response["result"]["content"][0]["text"],
+        "share grant \"missing\" not found"
+    );
+    let event = audit_events(&audit)
+        .into_iter()
+        .find(|event| event["action"] == "share_revoke")
+        .expect("not-found audit");
+    assert_eq!(event["path"], "missing");
+    assert_eq!(event["ok"], false);
+}
+
+#[test]
+fn protocol_revoke_share_denies_recipient_and_cross_agent_without_file_change() {
+    for (agent, grant_id, expected) in [
+        (
+            "bob",
+            "pending",
+            "only the source agent \"fixture\" can revoke this share",
+        ),
+        (
+            "fixture",
+            "private",
+            "only the source agent \"mallory\" can revoke this share",
+        ),
+    ] {
+        let (root, mut handler, _audit) = fixture_runtime_for_agent(agent);
+        let path = root.path().join("mcp-shares.json");
+        let before = fs::read(&path).expect("read original share store");
+        let output = run_stream(
+            &revoke_stream(&format!(r#"{{"grant_id":"{grant_id}"}}"#)),
+            &mut handler,
+        )
+        .expect("dispatch unauthorized revoke");
+        let response = call_response(&output);
+        assert_eq!(response["result"]["isError"], true);
+        assert_eq!(response["result"]["content"][0]["text"], expected);
+        assert_eq!(fs::read(&path).expect("read unchanged share store"), before);
+    }
+}
+
+#[test]
+fn protocol_revoke_share_source_persists_relist_and_audits_success() {
+    let (root, mut handler, audit) = fixture_runtime();
+    let input = format!(
+        "{}\n{{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"list_shares\",\"arguments\":{{\"status\":\"revoked\"}}}}}}\n",
+        revoke_stream(r#"{"grant_id":"pending"}"#).trim_end(),
+    );
+    let output = run_stream(&input, &mut handler).expect("dispatch authorized revoke and relist");
+    assert_eq!(
+        output.len(),
+        3,
+        "initialize plus revoke and relist responses"
+    );
+    let revoked = call_response(&output[..2]);
+    assert_eq!(revoked["result"]["isError"], false);
+    assert_eq!(
+        revoked["result"]["content"][0]["text"],
+        "Share grant pending revoked"
+    );
+    let relist_response: Value = serde_json::from_str(&output[2]).expect("relist response");
+    let relisted: Value = serde_json::from_str(
+        relist_response["result"]["content"][0]["text"]
+            .as_str()
+            .expect("relist JSON text"),
+    )
+    .expect("relisted grants JSON");
+    assert_eq!(relisted.as_array().expect("relisted array").len(), 1);
+    assert_eq!(relisted[0]["id"], "pending");
+    assert_eq!(relisted[0]["status"], "revoked");
+    assert!(relisted[0]["revoked_at"].is_string());
+
+    let persisted: Value = serde_json::from_slice(
+        &fs::read(root.path().join("mcp-shares.json")).expect("persisted share store"),
+    )
+    .expect("persisted JSON");
+    let grant = persisted["grants"]
+        .as_array()
+        .expect("persisted grants")
+        .iter()
+        .find(|grant| grant["id"] == "pending")
+        .expect("persisted pending grant");
+    assert_eq!(grant["status"], "revoked");
+    assert!(grant["revoked_at"].is_string());
+
+    let share_events = audit_events(&audit)
+        .into_iter()
+        .filter(|event| event["action"] == "share_revoke")
+        .collect::<Vec<_>>();
+    assert_eq!(share_events.len(), 1);
+    assert_eq!(share_events[0]["path"], "prod/a");
+    assert_eq!(share_events[0]["ok"], true);
 }
