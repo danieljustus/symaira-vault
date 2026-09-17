@@ -282,6 +282,10 @@ fn force_sync_preserves_dirty_config_like_go() {
             .expect("clone force fixture");
         assert_success(&clone, "clone force fixture");
     }
+    for local_path in [&go_vault, &rust_vault] {
+        fs::copy(vault.join("identity.age"), local_path.join("identity.age"))
+            .expect("clone identity");
+    }
     git(
         &remote_work,
         &["config", "user.name", "Symaira Remote Test"],

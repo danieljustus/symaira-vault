@@ -281,7 +281,7 @@ impl GitRepository {
             };
         }
         let before = self.head().ok();
-        let status = match self.status() {
+        let status = match self.force_status() {
             Ok(status) => status,
             Err(error) => {
                 return PullResult {
@@ -320,7 +320,17 @@ impl GitRepository {
         }
         let remote_branch = format!("{name}/{branch}");
         let mut paths = BTreeSet::new();
-        paths.extend(status.into_iter().map(|entry| entry.path));
+        paths.extend(
+            status
+                .into_iter()
+                // go-git skips untracked and staged-only paths when
+                // collecting force-reset backups. Remote tree differences
+                // below cover tracked files changed by the incoming reset.
+                .filter(|entry| {
+                    entry.index == ' ' && entry.worktree != ' ' && entry.worktree != '?'
+                })
+                .map(|entry| entry.path),
+        );
         if before.is_some() {
             match self.changed_paths("HEAD", &remote_branch) {
                 Ok(changed) => paths.extend(changed),
@@ -340,8 +350,18 @@ impl GitRepository {
                 continue;
             }
             let full_path = self.root.join(&path);
-            let Ok(data) = fs::read(&full_path) else {
-                continue;
+            let data = match crate::safeio::read(&full_path) {
+                Ok(Some(data)) => data,
+                Ok(None) => continue,
+                Err(error) => {
+                    return PullResult {
+                        remote_url,
+                        error: Some(format!(
+                            "cannot read local force-pull change {path}: {error}"
+                        )),
+                        ..Default::default()
+                    };
+                }
             };
             if self
                 .file_at_ref(&remote_branch, &path)
@@ -351,24 +371,39 @@ impl GitRepository {
             }
             backups.push((path, data));
         }
+        // Persist each snapshot before the destructive reset. A reset failure
+        // or process interruption must not discard the only copy of local
+        // encrypted data.
+        for (path, data) in &backups {
+            let conflict = conflict_copy_path(path, &device);
+            // A remote commit containing the generated conflict path would
+            // overwrite a pre-reset snapshot during reset --hard. Refuse
+            // that ambiguous collision instead of silently losing data.
+            if self.file_at_ref(&remote_branch, &conflict).is_ok() {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!(
+                        "cannot preserve local changes: remote already tracks {conflict}"
+                    )),
+                    ..Default::default()
+                };
+            }
+            if let Err(error) = write_conflict_copy(&self.root, &conflict, data) {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!(
+                        "could not preserve local changes before force reset: {error}"
+                    )),
+                    ..Default::default()
+                };
+            }
+        }
         if let Err(error) = self.command(&["reset", "--hard", &remote_branch]) {
             return PullResult {
                 remote_url,
                 error: Some(format!("force reset failed: {error}")),
                 ..Default::default()
             };
-        }
-        for (path, data) in backups {
-            let conflict = conflict_copy_path(&path, &device);
-            if let Err(error) = write_conflict_copy(&self.root, &conflict, &data) {
-                return PullResult {
-                    remote_url,
-                    error: Some(format!(
-                        "reset succeeded but failed to back up discarded local changes: {error}"
-                    )),
-                    ..Default::default()
-                };
-            }
         }
         PullResult {
             success: true,
@@ -389,6 +424,39 @@ impl GitRepository {
             .collect())
     }
 
+    fn force_status(&self) -> Result<Vec<GitStatus>, GitError> {
+        let output = self.command(&["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
+        let mut status = Vec::new();
+        let mut skip_rename_source = false;
+        for record in output.stdout.split(|byte| *byte == 0) {
+            if record.is_empty() {
+                continue;
+            }
+            if skip_rename_source {
+                skip_rename_source = false;
+                continue;
+            }
+            if record.len() < 3 {
+                return Err(GitError::Parse(
+                    "short NUL-delimited status record".to_owned(),
+                ));
+            }
+            let index = record[0] as char;
+            let worktree = record[1] as char;
+            let path = String::from_utf8(record[3..].to_vec())
+                .map_err(|error| GitError::Parse(error.to_string()))?;
+            if matches!(index, 'R' | 'C') {
+                skip_rename_source = true;
+            }
+            status.push(GitStatus {
+                path,
+                index,
+                worktree,
+            });
+        }
+        Ok(status)
+    }
+
     fn file_at_ref(&self, revision: &str, path: &str) -> Result<Vec<u8>, GitError> {
         let spec = format!("{revision}:{path}");
         Ok(self.command(&["show", &spec])?.stdout)
@@ -396,10 +464,12 @@ impl GitRepository {
 
     fn device_identity(&self) -> String {
         let path = self.root.join(".device-id");
-        if let Ok(contents) = fs::read_to_string(&path) {
-            let identity = normalize_device_name(&contents);
-            if !identity.is_empty() {
-                return identity;
+        if let Ok(Some(contents)) = crate::safeio::read(&path) {
+            if let Ok(contents) = String::from_utf8(contents) {
+                let identity = normalize_device_name(&contents);
+                if identity != "unknown" {
+                    return identity;
+                }
             }
         }
         let hostname = std::env::var_os("HOSTNAME")
@@ -412,7 +482,7 @@ impl GitRepository {
         } else {
             identity
         };
-        let _ = fs::write(path, &identity);
+        let _ = crate::safeio::write_atomic(&path, identity.as_bytes());
         identity
     }
 
@@ -536,8 +606,15 @@ fn conflict_copy_path(path: &str, device: &str) -> String {
 
 fn write_conflict_copy(root: &Path, relative_path: &str, data: &[u8]) -> Result<(), GitError> {
     let destination = root.join(relative_path);
-    if fs::read(&destination).is_ok_and(|existing| existing == data) {
-        return Ok(());
+    match crate::safeio::read(&destination) {
+        Ok(Some(existing)) if existing == data => return Ok(()),
+        Ok(Some(_)) | Ok(None) => {}
+        Err(error) => {
+            return Err(GitError::Parse(format!(
+                "{}: {error}",
+                destination.display()
+            )));
+        }
     }
     crate::safeio::write_atomic(&destination, data)
         .map_err(|error| GitError::Parse(format!("{}: {error}", destination.display())))
@@ -553,6 +630,16 @@ fn normalize_device_name(value: &str) -> String {
             value = stripped.to_owned();
             break;
         }
+    }
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+    {
+        // The persisted value is untrusted input and is embedded into a path.
+        return "unknown".to_owned();
     }
     value
 }

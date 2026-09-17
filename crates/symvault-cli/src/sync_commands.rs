@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use symvault_sync::{GitRepository, is_offline_error};
+use symvault_sync::{GitRepository, NETWORK_MESSAGE};
 
 const REMOTE_NAME: &str = "origin";
 
@@ -42,7 +42,7 @@ pub(crate) fn sync(
         return Ok(());
     }
     if let Some(error) = pull.error {
-        if is_offline_error(&error) {
+        if is_classified_offline_error(&error) {
             if !quiet {
                 writeln!(stdout, "Warning: could not reach remote — offline")
                     .map_err(|write_error| write_error.to_string())?;
@@ -83,6 +83,10 @@ pub(crate) fn sync(
         write_conflict_warnings(root, stderr)?;
     }
     Ok(())
+}
+
+fn is_classified_offline_error(error: &str) -> bool {
+    error == NETWORK_MESSAGE || error.starts_with(&format!("push failed: {NETWORK_MESSAGE}"))
 }
 
 fn write_conflict_warnings(root: &Path, stderr: &mut impl Write) -> Result<(), String> {
