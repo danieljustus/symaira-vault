@@ -3,6 +3,7 @@
 mod config;
 mod device;
 mod export_commands;
+mod mcp_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
@@ -113,6 +114,18 @@ enum Command {
         output: Option<PathBuf>,
         #[arg(short = 'y', long)]
         yes: bool,
+    },
+    /// Start the MCP server for agent access.
+    Mcp {
+        /// Agent profile used by the stdio server.
+        #[arg(long)]
+        agent: Option<String>,
+        /// Run the MCP protocol over stdin/stdout.
+        #[arg(long)]
+        stdio: bool,
+        /// Permit a locked vault (unsupported by the native stdio runtime).
+        #[arg(long)]
+        allow_locked: bool,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -277,6 +290,18 @@ fn main() -> ExitCode {
             &mapping,
             output.as_deref(),
             yes,
+            cli.quiet,
+        ),
+        Some(Command::Mcp {
+            agent,
+            stdio,
+            allow_locked,
+        }) => run_mcp(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            agent.as_deref(),
+            stdio,
+            allow_locked,
             cli.quiet,
         ),
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
@@ -543,16 +568,49 @@ fn run_export(
             &options,
             confirm_export,
             || device::unlock_vault(&vault),
-            |root, entries| export_commands::audit_export(root, entries),
+            |root, _entries| {
+                let runtime = runtime_session_manager();
+                let keyring = runtime
+                    .keyring
+                    .as_deref()
+                    .ok_or_else(|| "audit keyring unavailable".to_owned())?;
+                export_commands::audit_export(root, keyring)
+            },
         )?;
         if !exported.wrote_output {
             if !quiet {
-                eprint!("No entries found in vault.\n");
+                println!("No entries found in vault.");
             }
         } else if !quiet {
-            eprint!("Exported {} entries\n", exported.entries);
+            println!("Exported {} entries", exported.entries);
         }
         Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_mcp(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    agent: Option<&str>,
+    stdio: bool,
+    allow_locked: bool,
+    _quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        if !stdio {
+            return Err("native MCP currently supports only --stdio".to_owned());
+        }
+        if allow_locked {
+            return Err("--allow-locked is not supported by the native MCP runtime".to_owned());
+        }
+        let agent = agent
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| "--agent is required in --stdio mode".to_owned())?;
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        mcp_commands::run(&vault, agent, identity)
     })();
     finish_vault_result(result)
 }
