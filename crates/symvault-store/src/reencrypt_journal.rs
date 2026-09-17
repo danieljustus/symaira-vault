@@ -146,6 +146,11 @@ fn resolve_entry(root: &Path, entry: &JournalEntry) -> Result<ResolvedEntry, Sto
     if temp.is_some() && temp == backup {
         return Err(StoreError::UnsafePath(entry.temp.clone()));
     }
+    if entry.digest.is_empty() && (temp.is_some() || backup.is_some()) {
+        return Err(StoreError::Config(
+            "journal artifact has no ciphertext digest".to_owned(),
+        ));
+    }
     Ok(ResolvedEntry {
         target,
         temp,

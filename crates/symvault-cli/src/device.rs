@@ -624,6 +624,9 @@ fn load_reencrypt_journal(root: &Path) -> Result<ReencryptJournal, String> {
         if !entry.backup.is_empty() {
             journal_artifact(root, &entry.backup, &target, ".backup")?;
         }
+        if entry.digest.is_empty() && (!entry.temp.is_empty() || !entry.backup.is_empty()) {
+            return Err("journal artifact has no ciphertext digest".to_owned());
+        }
     }
     Ok(journal)
 }
@@ -1638,6 +1641,35 @@ mod tests {
         assert!(target.exists());
         assert!(!temp.exists());
         assert!(!backup.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn digestless_artifact_journal_is_rejected_without_cleanup() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
+        fs::write(&target, b"original ciphertext").unwrap();
+        fs::write(&backup, b"backup ciphertext").unwrap();
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: String::new(),
+                backup: journal_string(&root, &backup).unwrap(),
+                digest: String::new(),
+                installed: false,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+
+        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        assert!(error.to_string().contains("no ciphertext digest"));
+        assert!(target.is_file());
+        assert!(backup.is_file());
+        assert!(journal_path(&root).is_file());
         let _ = fs::remove_dir_all(root);
     }
 
