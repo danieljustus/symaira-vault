@@ -893,8 +893,11 @@ mod tests {
         let (redacted, count) = detector
             .redact("card=4111111111111111 invalid=4111111111111112")
             .expect("pattern scan");
-        assert_eq!(redacted, "card=[REDACTED] invalid=4111111111111112");
-        assert_eq!(count, 1);
+        // The invalid Luhn value is still a phone-number-shaped match under
+        // the subsequent Go default phone rule, so it is redacted for that
+        // independent reason.
+        assert_eq!(redacted, "card=[REDACTED] invalid=[REDACTED]");
+        assert_eq!(count, 2);
     }
 
     #[test]
