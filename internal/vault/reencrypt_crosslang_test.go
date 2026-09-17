@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -124,12 +123,12 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 		assertNoReencryptTemps(t, root)
 	})
 
-	t.Run("rust_production_crash_go_open", func(t *testing.T) {
+	t.Run("rust_production_journal_go_open", func(t *testing.T) {
 		// This subtest launches the actual Rust CLI re-encryption command. The
-		// store example above intentionally remains a recovery adapter; it cannot
-		// claim that Rust's production staging path wrote the journal. The binary
-		// is supplied by the explicit cross-language gate so ordinary Go tests do
-		// not build Rust as a side effect.
+		// store example above intentionally remains a recovery adapter; this test
+		// proves only production journal publication followed by Go recovery. The
+		// binary is supplied by the explicit cross-language gate so ordinary Go
+		// tests do not build Rust as a side effect.
 		rawBinary := os.Getenv("SYMVAULT_RUST_BINARY")
 		if rawBinary == "" {
 			t.Fatal("SYMVAULT_RUST_BINARY is required for the production Rust crash gate")
@@ -145,7 +144,7 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 			t.Fatalf("SYMVAULT_RUST_BINARY is not a regular file: %s", rustBinary)
 		}
 
-		root, identity, passphrase := initPassphraseReencryptVault(t)
+		root, identity, passphrase, expectedValue := initPassphraseReencryptVault(t)
 		newIdentity := testutil.TempIdentity(t)
 		cmd := exec.Command(
 			rustBinary,
@@ -169,6 +168,20 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 		}
 		done := make(chan error, 1)
 		go func() { done <- cmd.Wait() }()
+		waited := false
+		wait := func() error {
+			if waited {
+				return nil
+			}
+			waited = true
+			return <-done
+		}
+		defer func() {
+			if !waited {
+				_ = cmd.Process.Kill()
+				_ = <-done
+			}
+		}()
 
 		journal := reencryptJournalPath(root)
 		deadline := time.Now().Add(15 * time.Second)
@@ -185,6 +198,7 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 			}
 			select {
 			case err := <-done:
+				waited = true
 				t.Fatalf("production Rust re-encryption exited before journal kill: %v\nstdout=%s\nstderr=%s", err, stdout.String(), stderr.String())
 			default:
 			}
@@ -192,23 +206,26 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 		}
 		if !killed {
 			_ = cmd.Process.Kill()
-			<-done
+			_ = wait()
 			t.Fatalf("production Rust re-encryption did not publish a journal before deadline\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
 		}
-		if err := <-done; err == nil {
+		if err := wait(); err == nil {
 			t.Fatalf("production Rust re-encryption unexpectedly succeeded after kill")
 		}
 
 		if _, err := Open(root, identity); err != nil {
 			t.Fatalf("Go Open recovery after actual Rust crash: %v", err)
 		}
-		got, err := ReadEntry(root, "cross-language-00", identity)
-		if err != nil {
-			t.Fatalf("read recovered entry after actual Rust crash: %v", err)
-		}
-		value, ok := got.Data["value"].(string)
-		if !ok || !strings.HasPrefix(value, "rust-production-") {
-			t.Fatalf("recovered value = %v, want rust-production", got.Data["value"])
+		for i := 0; i < 8; i++ {
+			path := fmt.Sprintf("cross-language-%02d", i)
+			got, err := ReadEntry(root, path, identity)
+			if err != nil {
+				t.Fatalf("read recovered entry %s after actual Rust crash: %v", path, err)
+			}
+			value, ok := got.Data["value"].(string)
+			if !ok || value != expectedValue {
+				t.Fatalf("recovered value for %s differs from full fixture", path)
+			}
 		}
 		if _, err := os.Stat(journal); !os.IsNotExist(err) {
 			t.Fatalf("production Rust journal remains after Go recovery: %v", err)
@@ -220,7 +237,7 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 // initPassphraseReencryptVault makes a Go vault that the Rust CLI can unlock
 // through its normal passphrase path. Several large entries widen the bounded
 // journal-observation window without adding a production-only pause hook.
-func initPassphraseReencryptVault(t *testing.T) (string, *age.X25519Identity, []byte) {
+func initPassphraseReencryptVault(t *testing.T) (string, *age.X25519Identity, []byte, string) {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "entries"), 0o700); err != nil {
@@ -246,5 +263,5 @@ func initPassphraseReencryptVault(t *testing.T) (string, *age.X25519Identity, []
 		mustWriteEntry(t, root, identity, path, map[string]interface{}{"value": large})
 	}
 	FlushManifestUpdates()
-	return root, identity, passphrase
+	return root, identity, passphrase, large
 }
