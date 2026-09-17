@@ -103,6 +103,18 @@ fn assert_same(go: &Output, rust: &Output, args: &[&str], case: &str) {
     }
 }
 
+fn normalized_revoke_listing(bytes: &[u8]) -> serde_json::Value {
+    let mut value: serde_json::Value = serde_json::from_slice(bytes).expect("share JSON");
+    for grant in value.as_array_mut().expect("share grant array") {
+        if let Some(revoked_at) = grant.get_mut("revoked_at") {
+            if !revoked_at.is_null() {
+                *revoked_at = serde_json::Value::String("<dynamic>".to_owned());
+            }
+        }
+    }
+    value
+}
+
 #[test]
 fn share_list_matches_go_for_formats_and_filters() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -154,4 +166,53 @@ fn share_list_matches_go_for_formats_and_filters() {
     }
     let _ = fs::remove_dir_all(root);
     let _ = fs::remove_dir_all(home);
+}
+
+#[test]
+fn share_revoke_matches_go_and_persists_metadata() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let fixture = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/github","secret_field":"password","nonce":"n1","status":"approved","created_at":"2025-02-03T04:05:06Z","expires_at":"2099-01-01T00:00:00Z","approved_at":"2025-02-03T04:06:00Z","approved_by":"source","ttl":3600000000000},{"id":"grant-b","from_agent":"other","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2024-01-02T03:04:05Z"}]}"#;
+    let go_root = temporary_root("revoke-go");
+    let go_home = temporary_root("revoke-go-home");
+    let rust_root = temporary_root("revoke-rust");
+    let rust_home = temporary_root("revoke-rust-home");
+    for (root, home) in [(&go_root, &go_home), (&rust_root, &rust_home)] {
+        fs::create_dir_all(root).expect("revoke vault root");
+        fs::create_dir_all(home).expect("revoke home");
+        fs::write(root.join("mcp-shares.json"), fixture).expect("revoke share store");
+    }
+
+    let operations: &[&[&str]] = &[
+        &["share", "revoke", "grant-a"],
+        &["share", "revoke", "grant-a"],
+        &["share", "revoke", "missing"],
+        &["--quiet", "share", "revoke", "grant-b"],
+    ];
+    for args in operations {
+        let go = run(&go_binary, args, &go_root, &go_home);
+        let rust = run(&rust_binary, args, &rust_root, &rust_home);
+        let case = format!("share revoke {args:?}");
+        assert_status(&go, &rust, &case);
+        assert_eq!(rust.stdout, go.stdout, "{case}: stdout differs");
+    }
+
+    let list_args = ["--output", "json", "share", "list"];
+    let go = run(&go_binary, &list_args, &go_root, &go_home);
+    let rust = run(&rust_binary, &list_args, &rust_root, &rust_home);
+    assert_status(&go, &rust, "share revoke persisted list");
+    assert_eq!(
+        normalized_revoke_listing(&rust.stdout),
+        normalized_revoke_listing(&go.stdout),
+        "share revoke persisted metadata differs"
+    );
+
+    let _ = fs::remove_dir_all(go_root);
+    let _ = fs::remove_dir_all(go_home);
+    let _ = fs::remove_dir_all(rust_root);
+    let _ = fs::remove_dir_all(rust_home);
 }

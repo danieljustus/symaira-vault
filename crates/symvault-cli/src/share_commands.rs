@@ -10,6 +10,7 @@ use symvault_store::sharing::{SHARE_STORE_FILE, ShareFilter, ShareGrant, ShareSt
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// List share grants with the same exact filters and output formats as Go.
+#[allow(clippy::too_many_arguments)] // Direct projection of the CLI's list flags.
 pub(crate) fn list(
     root: &Path,
     format: &str,
@@ -159,9 +160,102 @@ fn write_yaml(grants: &[ShareGrant], output: &mut impl Write) -> Result<(), Stri
         })
         .collect();
     let encoded = serde_yaml_ng::to_string(&values).map_err(|error| error.to_string())?;
+    let encoded = normalize_go_yaml_scalars(&encoded, &values)?;
     output
         .write_all(encoded.as_bytes())
         .map_err(|error| error.to_string())
+}
+
+struct YamlScalarFix {
+    key: &'static str,
+    serde: String,
+    go: String,
+}
+
+/// `yaml.v3` and `serde_yaml_ng` agree on the document structure but choose
+/// different spellings for a few scalar nodes. Apply corrections only to the
+/// generated field and scalar that produced the mismatch; this keeps embedded
+/// newlines and other scalar content under the dependency's YAML emitter.
+fn normalize_go_yaml_scalars(encoded: &str, grants: &[YamlGrant<'_>]) -> Result<String, String> {
+    let mut fixes = Vec::with_capacity(grants.len() * 12);
+    for grant in grants {
+        push_yaml_fix(&mut fixes, "id", grant.id)?;
+        push_yaml_fix(&mut fixes, "fromagent", grant.fromagent)?;
+        push_yaml_fix(&mut fixes, "toagent", grant.toagent)?;
+        push_yaml_fix(&mut fixes, "secretpath", grant.secretpath)?;
+        push_yaml_fix(&mut fixes, "secretfield", grant.secretfield)?;
+        push_yaml_fix(&mut fixes, "nonce", grant.nonce)?;
+        push_yaml_fix(&mut fixes, "status", grant.status)?;
+        push_yaml_fix(&mut fixes, "createdat", grant.createdat)?;
+        if let Some(value) = grant.expiresat {
+            push_yaml_fix(&mut fixes, "expiresat", value)?;
+        }
+        if let Some(value) = grant.approvedat {
+            push_yaml_fix(&mut fixes, "approvedat", value)?;
+        }
+        if let Some(value) = grant.revokedat {
+            push_yaml_fix(&mut fixes, "revokedat", value)?;
+        }
+        push_yaml_fix(&mut fixes, "approvedby", grant.approvedby)?;
+        push_yaml_fix(&mut fixes, "ttl", &grant.ttl)?;
+    }
+
+    let mut normalized = String::with_capacity(encoded.len());
+    for line in encoded.split_inclusive('\n') {
+        let body = line.strip_suffix('\n').unwrap_or(line);
+        let Some(colon) = body.find(": ") else {
+            normalized.push_str(line);
+            continue;
+        };
+        let key = body[..colon]
+            .trim_start()
+            .strip_prefix("- ")
+            .unwrap_or(body[..colon].trim_start());
+        let scalar = &body[colon + 2..];
+        if let Some(fix) = fixes
+            .iter()
+            .find(|fix| fix.key == key && fix.serde == scalar)
+        {
+            normalized.push_str(&body[..colon + 2]);
+            normalized.push_str(&fix.go);
+            if line.ends_with('\n') {
+                normalized.push('\n');
+            }
+        } else {
+            normalized.push_str(line);
+        }
+    }
+    Ok(normalized)
+}
+
+fn push_yaml_fix(
+    fixes: &mut Vec<YamlScalarFix>,
+    key: &'static str,
+    value: &str,
+) -> Result<(), String> {
+    let serde = serde_yaml_ng::to_string(value)
+        .map_err(|error| error.to_string())?
+        .strip_suffix('\n')
+        .unwrap_or_default()
+        .to_owned();
+    let mut go = serde.clone();
+    if value.is_empty() && go == "''" {
+        go = "\"\"".to_owned();
+    } else if value
+        .chars()
+        .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
+        && go.starts_with('\'')
+        && go.ends_with('\'')
+    {
+        let closing_quote = go.len() - 1;
+        let trimmed = go[..closing_quote].trim_end_matches(' ');
+        go.truncate(trimmed.len());
+        go.push('\'');
+    }
+    if serde != go {
+        fixes.push(YamlScalarFix { key, serde, go });
+    }
+    Ok(())
 }
 
 fn display_status(grant: &ShareGrant) -> String {
