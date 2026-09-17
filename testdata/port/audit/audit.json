@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a57f565a",
+    "commit": "fca3f894",
     "source_files": [
       "internal/audit/audit.go",
       "internal/audit/export.go",
@@ -13,7 +13,7 @@
     "generator_files": [
       "internal/audit/audit_fixture_test.go"
     ],
-    "generator_digest": "a4ed40b1b9e1f9a99bc28470c61aab7e022ce9fd051ed8fbc2d74100bb800d22"
+    "generator_digest": "aadd1ce91693c48a269540e94387171c7755def6388fd0e4be915ca49a58f2df"
   },
   "keys": [
     {
@@ -440,5 +440,14 @@
     "archive_prefix": "audit-hmac-key.rotated.",
     "archive_kid": "9fd316ee",
     "bootstrap": true
+  },
+  "keystore": {
+    "keyring_service": "symaira",
+    "keyring_account_prefix": "audit-hmac-key:",
+    "stored_hex": "61756469742d666978747572652d6f6c642d6b65792d30303030303030303030",
+    "legacy_key_hex": "61756469742d666978747572652d6f6c642d6b65792d30303030303030303030",
+    "migrated_key_hex": "61756469742d666978747572652d6f6c642d6b65792d30303030303030303030",
+    "legacy_file_removed": true,
+    "reopened_matches": true
   }
 }
