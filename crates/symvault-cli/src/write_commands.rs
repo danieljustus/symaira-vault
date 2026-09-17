@@ -70,6 +70,30 @@ pub fn replace_fields(
     write_fields(root, identity, path, data, true, "import")
 }
 
+pub fn set_secret_type(
+    root: &Path,
+    identity: &Identity,
+    path: &str,
+    secret_type: &str,
+) -> Result<(), String> {
+    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let mut entry = store
+        .get(path, identity)
+        .map_err(|error| format!("cannot read entry {path}: {error}"))?;
+    entry.secret_metadata.secret_type = secret_type.to_owned();
+    store
+        .write_entry_with_recipients_at(
+            path,
+            &entry,
+            identity,
+            &GoTime::now().to_rfc3339_nano(),
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+    auto_commit(&store, identity, path, "Update");
+    Ok(())
+}
+
 fn write_fields(
     root: &Path,
     identity: &Identity,

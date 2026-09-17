@@ -8,6 +8,9 @@ mod import_commands;
 #[allow(dead_code)]
 #[path = "../src/vault_commands.rs"]
 mod vault_commands;
+#[allow(dead_code)]
+#[path = "../src/write_commands.rs"]
+mod write_commands;
 
 use std::{
     collections::BTreeMap,
@@ -17,6 +20,30 @@ use std::{
 };
 use symvault_crypto::SecretBytes;
 use symvault_store::{Entry, Store};
+
+fn decode_base64(value: &str) -> Vec<u8> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut output = Vec::new();
+    let mut buffer = 0_u32;
+    let mut bits = 0_u8;
+    for byte in value.bytes().filter(|byte| !byte.is_ascii_whitespace()) {
+        if byte == b'=' {
+            break;
+        }
+        let digit = ALPHABET
+            .iter()
+            .position(|candidate| *candidate == byte)
+            .expect("fixture base64 alphabet") as u32;
+        buffer = (buffer << 6) | digit;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            output.push((buffer >> bits) as u8);
+            buffer &= (1 << bits) - 1;
+        }
+    }
+    output
+}
 
 fn temporary_root() -> PathBuf {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
@@ -64,6 +91,7 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
             Ok(())
         },
         |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect("import");
     assert_eq!(result.format, "csv");
@@ -89,6 +117,7 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
             Ok(())
         },
         |_, _, _, _| Ok(()),
+        |_, _, _, _| panic!("unexpected secret metadata"),
     )
     .expect_err("malformed import must fail");
     assert!(error.contains("parse import source"));
@@ -152,6 +181,7 @@ fn failed_overwrite_keeps_the_existing_entry() {
         &options,
         |_, _, _, _| panic!("overwrite must use replacement callback"),
         |_, _, _, _| Err("injected replacement failure".into()),
+        |_, _, _, _| panic!("metadata must not run after replacement failure"),
     )
     .expect_err("replacement failure must be returned");
     assert!(error.contains("cannot overwrite entry existing"));
@@ -160,5 +190,62 @@ fn failed_overwrite_keeps_the_existing_entry() {
         .get("existing", &identity)
         .unwrap();
     assert_eq!(entry.data["password"], "old");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn cxf_import_preserves_secret_metadata_and_write_version() {
+    let fixture: serde_json::Value =
+        serde_json::from_slice(include_bytes!("../../../testdata/port/import/cxf.json"))
+            .expect("CXF fixture");
+    let input = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["id"] == "CXF-001-features")
+        .and_then(|case| case["input_b64"].as_str())
+        .map(decode_base64)
+        .expect("feature CXF input");
+
+    let root = temporary_root();
+    fs::create_dir_all(&root).expect("root");
+    let identity =
+        vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
+            .expect("initialize");
+    let source = root.join("features.zip");
+    fs::write(&source, input).expect("source");
+    let result = import_commands::run_import(
+        &root,
+        &identity,
+        &import_commands::ImportOptions {
+            source,
+            format: Some("cxf".into()),
+            dry_run: false,
+            prefix: String::new(),
+            skip_existing: false,
+            overwrite: false,
+            mapping: String::new(),
+        },
+        write_commands::import_fields,
+        write_commands::replace_fields,
+        write_commands::set_secret_type,
+    )
+    .expect("CXF import");
+    assert!(result.imported > 0);
+
+    let store = Store::open(&root, &identity).expect("open imported vault");
+    let entries: Vec<_> = store
+        .list(&identity)
+        .unwrap()
+        .into_iter()
+        .map(|path| store.get(&path, &identity).unwrap())
+        .filter(|entry| !entry.secret_metadata.secret_type.is_empty())
+        .collect();
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.secret_metadata.secret_type == "ssh_key")
+    );
+    assert!(entries.iter().all(|entry| entry.metadata.version >= 2));
     let _ = fs::remove_dir_all(root);
 }

@@ -84,16 +84,18 @@ pub fn format_name(format: Format) -> &'static str {
 /// Parses and applies an import. `import_fields` and `replace_fields` are supplied by
 /// the CLI's write boundary so imports use the same encrypted-store and Git
 /// lifecycle as ordinary entry mutations.
-pub fn run_import<ImportFields, ReplaceFields>(
+pub fn run_import<ImportFields, ReplaceFields, SetSecretType>(
     root: &Path,
     identity: &Identity,
     options: &ImportOptions,
     mut import_fields: ImportFields,
     mut replace_fields: ReplaceFields,
+    mut set_secret_type: SetSecretType,
 ) -> Result<ImportResult, String>
 where
     ImportFields: FnMut(&Path, &Identity, &str, BTreeMap<String, Value>) -> Result<(), String>,
     ReplaceFields: FnMut(&Path, &Identity, &str, BTreeMap<String, Value>) -> Result<(), String>,
+    SetSecretType: FnMut(&Path, &Identity, &str, &str) -> Result<(), String>,
 {
     if options.skip_existing && options.overwrite {
         return Err("--skip-existing and --overwrite cannot be used together".into());
@@ -153,6 +155,7 @@ where
             imported += 1;
             continue;
         }
+        let secret_type = entry.secret_type;
         let data = entry.data;
         if exists && options.overwrite {
             replace_fields(root, identity, &path, data)
@@ -160,6 +163,10 @@ where
         } else {
             import_fields(root, identity, &path, data)
                 .map_err(|error| format!("cannot write entry {path}: {error}"))?;
+        }
+        if let Some(secret_type) = secret_type.as_deref() {
+            set_secret_type(root, identity, &path, secret_type)
+                .map_err(|error| format!("cannot set secret metadata {path}: {error}"))?;
         }
         imported += 1;
     }
