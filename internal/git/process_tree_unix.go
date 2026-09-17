@@ -7,13 +7,22 @@ import (
 	"syscall"
 )
 
-func configureProcessTree(cmd *exec.Cmd) {
+func configureProcessTree(cmd *exec.Cmd) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return nil
 }
 
-func killProcessTree(cmd *exec.Cmd) {
+func startProcessTree(cmd *exec.Cmd) error {
+	return cmd.Start()
+}
+
+func killProcessTree(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
-		return
+		return nil
 	}
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+}
+
+func closeProcessTree(*exec.Cmd) error {
+	return nil
 }

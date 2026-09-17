@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
@@ -46,20 +47,18 @@ func pushWithSystemGit(ctx context.Context, vaultDir string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderr
 	cmd.Stdin = os.Stdin
-	configureProcessTree(cmd)
-	if err := cmd.Start(); err != nil {
+	if err := configureProcessTree(cmd); err != nil {
+		return fmt.Errorf("system git push process tree setup failed: %w", err)
+	}
+	cmd.Cancel = func() error { return killProcessTree(cmd) }
+	cmd.WaitDelay = 2 * time.Second
+	if err := startProcessTree(cmd); err != nil {
 		return fmt.Errorf("system git push failed: %w", err)
 	}
-	stopped := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			killProcessTree(cmd)
-		case <-stopped:
-		}
-	}()
 	err := cmd.Wait()
-	close(stopped)
+	if closeErr := closeProcessTree(cmd); closeErr != nil {
+		err = errors.Join(err, closeErr)
+	}
 	if err != nil {
 		return fmt.Errorf("system git push failed: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
