@@ -170,6 +170,133 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(go_get.stdout, b"secret\n");
     assert_eq!(rust_get.stdout, go_get.stdout);
 
+    let go_set_url = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "set",
+            "work/github.url",
+            "--value",
+            "https://github.com/login",
+            "--force",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_set_url, "Go set URL");
+
+    for (name, binary) in [("Go find", &go_binary), ("Rust find", &rust_binary)] {
+        let output = run(
+            binary,
+            &["--vault", rust_root.to_str().unwrap(), "find", "secret"],
+            &rust_root,
+            &home,
+        );
+        assert_success(&output, name);
+        assert_eq!(
+            output.stdout, b"work/github (matches: password)\n",
+            "{name}"
+        );
+    }
+    let go_find_url = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "--url",
+            "github.com",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_find_url = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "--url",
+            "github.com",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_url, "Go find URL");
+    assert_success(&rust_find_url, "Rust find URL");
+    assert_eq!(
+        first_json(&rust_find_url.stdout, "Rust find URL"),
+        first_json(&go_find_url.stdout, "Go find URL")
+    );
+    let go_find_scoped = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "secret",
+            "--url",
+            "github.com",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_find_scoped = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "secret",
+            "--url",
+            "github.com",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_scoped, "Go scoped find");
+    assert_success(&rust_find_scoped, "Rust scoped find");
+    assert_eq!(
+        first_json(&rust_find_scoped.stdout, "Rust scoped find"),
+        first_json(&go_find_scoped.stdout, "Go scoped find")
+    );
+    let go_find_empty = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "no-such-value",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_find_empty = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "find",
+            "no-such-value",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_empty, "Go find empty");
+    assert_success(&rust_find_empty, "Rust find empty");
+    assert_eq!(rust_find_empty.stdout, go_find_empty.stdout);
+    assert!(String::from_utf8_lossy(&go_find_empty.stderr).ends_with("No matches found\n"));
+    assert!(String::from_utf8_lossy(&rust_find_empty.stderr).ends_with("No matches found\n"));
+
     let go_json = run(
         &go_binary,
         &[

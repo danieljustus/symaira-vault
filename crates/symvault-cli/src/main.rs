@@ -5,6 +5,7 @@ mod device;
 mod export_commands;
 mod import_commands;
 mod mcp_commands;
+mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
@@ -105,6 +106,14 @@ enum Command {
         query: String,
         #[arg(short, long)]
         _print: bool,
+    },
+    /// Search entry paths and contents.
+    #[command(alias = "search")]
+    Find {
+        #[arg(value_name = "QUERY")]
+        query: Option<String>,
+        #[arg(long)]
+        url: Option<String>,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -312,6 +321,15 @@ fn main() -> ExitCode {
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             &query,
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Find { query, url }) => run_find(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            query.as_deref(),
+            url.as_deref(),
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
             cli.quiet,
@@ -620,6 +638,57 @@ fn run_get(
         let result = vault_commands::get(&vault, &identity, query)?;
         let format = if json { "json" } else { output };
         vault_commands::write_get(&mut io::stdout().lock(), &result, format, quiet)
+    })();
+    finish_vault_result(result)
+}
+
+fn run_find(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    query: Option<&str>,
+    url_filter: Option<&str>,
+    output: &str,
+    json: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let query = query.unwrap_or("");
+        if query.is_empty() && url_filter.unwrap_or("").is_empty() {
+            return Err("accepts 1 arg(s), received 0".to_owned());
+        }
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        let matches = search_commands::find(&vault, &identity, query, url_filter)?;
+        if matches.is_empty() {
+            eprintln!("No matches found");
+            return Ok::<(), String>(());
+        }
+        if quiet {
+            return Ok(());
+        }
+        if json || output == "json" {
+            let value = serde_json::json!({ "matches": matches });
+            serde_json::to_writer(io::stdout().lock(), &value)
+                .map_err(|error| error.to_string())?;
+            println!();
+            return Ok(());
+        }
+        if output != "text" {
+            return Err(format!(
+                "unknown output format: {output:?} (valid: text, json)"
+            ));
+        }
+        let mut stdout = io::stdout().lock();
+        for item in matches {
+            write!(stdout, "{}", item.path).map_err(|error| error.to_string())?;
+            if !item.fields.is_empty() {
+                write!(stdout, " (matches: {})", item.fields.join(", "))
+                    .map_err(|error| error.to_string())?;
+            }
+            writeln!(stdout).map_err(|error| error.to_string())?;
+        }
+        Ok(())
     })();
     finish_vault_result(result)
 }

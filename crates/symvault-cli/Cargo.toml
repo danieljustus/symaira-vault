@@ -25,4 +25,5 @@ symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-mcp = { path = "../symvault-mcp", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
+url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
