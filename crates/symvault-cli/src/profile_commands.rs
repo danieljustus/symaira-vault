@@ -1,7 +1,7 @@
 use std::{
     env,
     fmt::Write as FmtWrite,
-    fs::{self, OpenOptions},
+    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -163,11 +163,17 @@ fn default_config_path(home: &Path) -> PathBuf {
 
 fn prepare_destination(source: &Path, destination: &Path) -> Result<(), String> {
     if let Some(parent) = destination.parent() {
-        fs::create_dir_all(parent).map_err(|error| format!("cannot save config: {error}"))?;
+        symvault_sync::safeio::create_dir_all(parent)
+            .map_err(|error| format!("cannot save config: {error}"))?;
     }
-    let source_is_valid = Config::load(source).is_ok();
-    if source != destination || !source_is_valid || !destination.exists() {
-        let seed = if source_is_valid {
+    let source_config = Config::load(source);
+    if source.exists() {
+        source_config
+            .as_ref()
+            .map_err(|error| format!("cannot load config: {error}"))?;
+    }
+    if !destination.exists() {
+        let seed = if source_config.is_ok() {
             fs::read(source).map_err(|error| format!("cannot load config: {error}"))?
         } else {
             b"profiles:\n".to_vec()
@@ -178,21 +184,8 @@ fn prepare_destination(source: &Path, destination: &Path) -> Result<(), String> 
 }
 
 fn write_seed(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let mut file = options
-        .open(path)
-        .map_err(|error| format!("cannot save config: {error}"))?;
-    file.write_all(bytes)
-        .map_err(|error| format!("cannot save config: {error}"))?;
-    file.sync_all()
-        .map_err(|error| format!("cannot save config: {error}"))?;
-    Ok(())
+    symvault_sync::safeio::write_atomic(path, bytes)
+        .map_err(|error| format!("cannot save config: {error}"))
 }
 
 fn escaped_path_segment(segment: &str) -> String {

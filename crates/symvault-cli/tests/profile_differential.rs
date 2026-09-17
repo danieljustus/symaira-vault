@@ -105,6 +105,31 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
         &rust_add_home,
     );
     assert_same(&go_add, &rust_add, "profile add");
+    let quiet_go_add = run(
+        &go_binary,
+        &[
+            "--quiet",
+            "profile",
+            "add",
+            "über",
+            "--vault",
+            "/fixture-vault/東京",
+        ],
+        &go_add_home,
+    );
+    let quiet_rust_add = run(
+        &rust_binary,
+        &[
+            "--quiet",
+            "profile",
+            "add",
+            "über",
+            "--vault",
+            "/fixture-vault/東京",
+        ],
+        &rust_add_home,
+    );
+    assert_same(&quiet_go_add, &quiet_rust_add, "quiet profile add");
     let go_generated = go_add_home.join("config/symaira-vault/config.yaml");
     let rust_generated = rust_add_home.join("config/symaira-vault/config.yaml");
     assert!(go_generated.is_file(), "Go profile destination");
@@ -143,4 +168,64 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     let _ = fs::remove_dir_all(profile_home);
     let _ = fs::remove_dir_all(go_add_home);
     let _ = fs::remove_dir_all(rust_add_home);
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_add_keeps_symlink_destination_and_target_unchanged() {
+    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
+        eprintln!("skipping Rust profile safety test: Rust binary is not set");
+        return;
+    };
+    use std::os::unix::fs::symlink;
+
+    let home = temporary_root("symlink");
+    fs::create_dir_all(home.join("config/symaira-vault")).expect("config directory");
+    let target = home.join("sentinel");
+    fs::write(&target, b"keep me").expect("sentinel");
+    let destination = home.join("config/symaira-vault/config.yaml");
+    symlink(&target, &destination).expect("destination symlink");
+
+    let result = run(
+        &PathBuf::from(rust_binary),
+        &["profile", "add", "work", "--vault", "/fixture-vault"],
+        &home,
+    );
+    assert!(!result.status.success(), "symlink destination was accepted");
+    assert_eq!(
+        fs::read(&target).expect("sentinel after failure"),
+        b"keep me"
+    );
+    assert!(
+        fs::symlink_metadata(destination)
+            .expect("destination metadata")
+            .file_type()
+            .is_symlink()
+    );
+    let _ = fs::remove_dir_all(home);
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_add_keeps_invalid_existing_config_unchanged() {
+    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
+        eprintln!("skipping Rust profile safety test: Rust binary is not set");
+        return;
+    };
+    let home = temporary_root("invalid");
+    let config = home.join(".symvault/config.yaml");
+    fs::create_dir_all(config.parent().expect("legacy parent")).expect("legacy directory");
+    fs::write(&config, b"profiles: [\n").expect("invalid config");
+
+    let result = run(
+        &PathBuf::from(rust_binary),
+        &["profile", "add", "work", "--vault", "/fixture-vault"],
+        &home,
+    );
+    assert!(!result.status.success(), "invalid config was overwritten");
+    assert_eq!(
+        fs::read(&config).expect("config after failure"),
+        b"profiles: [\n"
+    );
+    let _ = fs::remove_dir_all(home);
 }
