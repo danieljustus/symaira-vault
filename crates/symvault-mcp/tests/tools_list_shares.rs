@@ -5,7 +5,9 @@ use std::{
 };
 use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
-use symvault_mcp::{ProtocolHandler, ReadOnlyRuntimeConfig, read_only_tool_names, run_stream};
+use symvault_mcp::{
+    ProtocolHandler, ReadOnlyRuntimeConfig, StoreReadOnlyRuntime, read_only_tool_names, run_stream,
+};
 use symvault_store::{Store, audit::RotationConfig};
 use tempfile::TempDir;
 
@@ -60,23 +62,22 @@ fn fixture_runtime_for_agent(
         transport: "stdio".into(),
         agent_name: agent_name.into(),
         approval_mode: "none".into(),
-        allowed_paths: vec!["*".into()],
+        allowed_paths: vec!["prod".into()],
         available_tools: read_only_tool_names(),
         vault_dir: root.path().to_string_lossy().into_owned(),
         vault_unlocked: true,
         ..ReadOnlyRuntimeConfig::default()
     };
-    let handler = ProtocolHandler::with_store_read_only_runtime_and_audit(
-        "symvault",
-        "1.0.0",
+    let runtime = StoreReadOnlyRuntime::open_with_audit(
         root.path(),
         identity,
         config,
         None,
-        None,
         Some(Arc::clone(&audit)),
     )
-    .expect("construct store runtime");
+    .expect("construct store runtime")
+    .with_grant_signing_key(symvault_crypto::SecretBytes::new(&[42; 32]));
+    let handler = ProtocolHandler::with_tool_call_runtime("symvault", "1.0.0", Arc::new(runtime));
     (root, handler, audit)
 }
 
@@ -307,4 +308,58 @@ fn protocol_revoke_share_source_persists_relist_and_audits_success() {
     assert_eq!(share_events.len(), 1);
     assert_eq!(share_events[0]["path"], "prod/a");
     assert_eq!(share_events[0]["ok"], true);
+}
+
+#[test]
+fn protocol_request_share_persists_signed_pending_grant_and_rejects_invalid_ttl() {
+    let (root, mut handler, audit) = fixture_runtime();
+    let output = run_stream(
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}
+{"jsonrpc":"2.0","method":"notifications/initialized"}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"request_share","arguments":{"to_agent":"bob","secret_path":"prod/new","secret_field":"password","ttl":"1h"}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"request_share","arguments":{"to_agent":"bob","secret_path":"prod/new","ttl":"-1s"}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"request_share","arguments":{"secret_path":"prod/new"}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"request_share","arguments":{"to_agent":"bob","secret_path":"other/new"}}}
+"#, &mut handler).unwrap();
+    let success: Value = serde_json::from_str(&output[1]).unwrap();
+    assert_eq!(success["result"]["isError"], false);
+    let grant: Value =
+        serde_json::from_str(success["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(grant["status"], "pending");
+    assert_eq!(grant["from_agent"], "fixture");
+    let stored = symvault_store::sharing::ShareStore::read_verified(
+        root.path().join("mcp-shares.json"),
+        Some(&[42; 32]),
+    )
+    .unwrap();
+    let persisted = stored
+        .grants()
+        .iter()
+        .find(|entry| entry.id == grant["grant_id"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(persisted.secret_field, "password");
+    assert_eq!(persisted.ttl, 3_600_000_000_000);
+    assert_eq!(stored.grants().len(), 4);
+    for response in &output[2..4] {
+        let error: Value = serde_json::from_str(response).unwrap();
+        assert_eq!(error["result"]["isError"], true);
+    }
+    let events = fs::read_to_string(audit.lock().unwrap().path()).unwrap();
+    let events: Vec<Value> = events
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .filter(|event: &Value| event["action"] == "share_request")
+        .collect();
+    let denied: Value = serde_json::from_str(&output[4]).unwrap();
+    assert_eq!(denied["error"]["code"], -32603);
+    assert!(
+        denied["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("outside allowed scope")
+    );
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[2]["ok"], false);
+    assert_eq!(events[0]["ok"], true);
+    assert_eq!(events[1]["ok"], false);
 }

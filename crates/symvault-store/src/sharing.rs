@@ -258,6 +258,7 @@ impl ShareStore {
     /// `ttl_ns` uses Go's `time.Duration` representation. A non-empty signing
     /// key produces the HMAC-bound `nonce:hmac` ID; an absent or empty key
     /// retains Go's legacy random hexadecimal ID format.
+    #[allow(clippy::too_many_arguments)] // Direct Go grant fields plus explicit storage, clock, and key.
     pub fn create_at(
         &mut self,
         root: impl AsRef<Path>,
@@ -290,6 +291,7 @@ impl ShareStore {
     }
 
     #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     fn create_at_with_nonce(
         &mut self,
         root: impl AsRef<Path>,

@@ -1271,7 +1271,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         json_text(response)
     }
 
-    fn scope_allows(&self, path: &str) -> bool {
+    pub(crate) fn scope_allows(&self, path: &str) -> bool {
         if self.config.allowed_paths.is_empty() {
             return false;
         }

@@ -11,7 +11,7 @@ use std::{
     time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
-use symvault_crypto::Identity;
+use symvault_crypto::{Identity, SecretBytes};
 use symvault_store::{
     Entry, Store, StoreError, WriteRecord,
     sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
@@ -223,6 +223,7 @@ pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
     share_store: Mutex<ShareStore>,
     share_root: PathBuf,
+    grant_signing_key: Option<SecretBytes>,
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
@@ -273,6 +274,7 @@ impl StoreReadOnlyRuntime {
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
+            grant_signing_key: None,
             share_root: root,
             policy,
             audit,
@@ -324,6 +326,7 @@ impl StoreReadOnlyRuntime {
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             share_store: Mutex::new(share_store),
+            grant_signing_key: None,
             share_root,
             policy,
             audit,
@@ -378,6 +381,85 @@ impl StoreReadOnlyRuntime {
         if let Ok(mut logger) = audit.lock() {
             let _ = logger.append(entry);
         }
+    }
+
+    /// Supplies the caller-owned key without copying it into public runtime config.
+    pub fn with_grant_signing_key(mut self, key: SecretBytes) -> Self {
+        self.grant_signing_key = Some(key);
+        self
+    }
+
+    fn request_share(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let required = |name| {
+            crate::call::required_string(arguments, name).inspect_err(|_| {
+                self.append_audit("share_request", "<invalid>", false);
+            })
+        };
+        let to_agent = match required("to_agent") {
+            Ok(value) => value,
+            Err(error) => return Ok(error),
+        };
+        let path = match required("secret_path") {
+            Ok(value) => value,
+            Err(error) => return Ok(error),
+        };
+        if !self.inner.scope_allows(path) {
+            self.append_audit("share_request", path, false);
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let field = arguments
+            .get("secret_field")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let ttl_text = arguments.get("ttl").and_then(Value::as_str).unwrap_or("");
+        let ttl = if ttl_text.is_empty() {
+            0
+        } else {
+            match symvault_core::config::parse_go_duration(ttl_text) {
+                Ok(value) => value,
+                Err(error) => {
+                    return Ok(ToolCallResult::error(format!(
+                        "invalid ttl {ttl_text:?}: {error}"
+                    )));
+                }
+            }
+        };
+        if ttl < 0 {
+            return Ok(ToolCallResult::error("ttl must be a positive duration"));
+        }
+        let now = self
+            .now_unix
+            .and_then(|unix| OffsetDateTime::from_unix_timestamp(unix).ok())
+            .unwrap_or_else(OffsetDateTime::now_utc)
+            .format(&Rfc3339)
+            .map_err(|error| format!("format share clock: {error}"))?;
+        let grant = self
+            .share_store
+            .lock()
+            .map_err(|_| "share store lock poisoned".to_owned())?
+            .create_at(
+                &self.share_root,
+                &self.agent_name,
+                to_agent,
+                path,
+                field,
+                ttl,
+                &now,
+                self.grant_signing_key.as_ref().map(SecretBytes::as_bytes),
+            )
+            .map_err(|error| format!("failed to create share grant: {error}"))?;
+        self.append_audit("share_request", path, true);
+        symvault_gojson::to_string(&serde_json::json!({
+            "grant_id": grant.id,
+            "status": grant.status,
+            "from_agent": grant.from_agent,
+            "to_agent": grant.to_agent,
+            "secret_path": grant.secret_path,
+        }))
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
     }
 
     fn list_shares(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -767,6 +849,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.audit_self(arguments)
         } else if name == "list_shares" {
             self.list_shares(arguments)
+        } else if name == "request_share" {
+            self.request_share(arguments)
         } else if name == "revoke_share" {
             self.revoke_share(arguments)
         } else {
@@ -956,6 +1040,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry_metadata",
         "list_shares",
         "revoke_share",
+        "request_share",
     ]
     .into_iter()
     .map(str::to_owned)

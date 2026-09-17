@@ -436,6 +436,9 @@ enum AgentCommand {
 
 #[derive(Debug, Subcommand)]
 enum AgentProfileCommand {
+    Edit {
+        name: String,
+    },
     Export {
         name: String,
         #[arg(short = 'o', long)]
@@ -1105,6 +1108,13 @@ fn main() -> ExitCode {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 let mut output_stream = io::stdout().lock();
                 match command {
+                    AgentProfileCommand::Edit { name } => agent_profile_commands::edit(
+                        &vault,
+                        &name,
+                        None,
+                        &mut output_stream,
+                        &mut io::stderr().lock(),
+                    ),
                     AgentProfileCommand::Show { name, output } => agent_profile_commands::show(
                         &vault,
                         &name,

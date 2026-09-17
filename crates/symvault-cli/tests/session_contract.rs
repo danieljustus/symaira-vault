@@ -65,6 +65,21 @@ fn fixture() -> Fixture {
         .expect("session fixture parses")
 }
 
+// The Go oracle includes angle brackets to exercise JSON HTML escaping.
+// Windows cannot create those filenames; retain ampersand and U+2028 there.
+// Apply this only to synthetic filesystem paths, never to other fixture output.
+fn fixture_path(root: &Path, relative: &str) -> PathBuf {
+    relative
+        .split('/')
+        .fold(root.to_path_buf(), |path, component| {
+            if cfg!(windows) {
+                path.join(component.replace(['<', '>'], ""))
+            } else {
+                path.join(component)
+            }
+        })
+}
+
 fn run_case(case: &Case) -> (std::process::Output, PathBuf) {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -72,11 +87,14 @@ fn run_case(case: &Case) -> (std::process::Output, PathBuf) {
         .as_nanos();
     let root = std::env::temp_dir().join(format!("symvault-session-cli-case-{unique}"));
     fs::create_dir_all(&root).expect("create isolated case root");
-    let vault = root.join(if case.vault_dir.is_empty() {
-        "missing-vault"
-    } else {
-        &case.vault_dir
-    });
+    let vault = fixture_path(
+        &root,
+        if case.vault_dir.is_empty() {
+            "missing-vault"
+        } else {
+            &case.vault_dir
+        },
+    );
     if case.initialized {
         fs::create_dir_all(&vault).expect("create initialized fixture vault");
         fs::write(vault.join("identity.age"), b"fixture identity").expect("write fixture identity");
@@ -186,11 +204,7 @@ fn expand_json_markers(bytes: &[u8], root: &Path, vault: &Path) -> serde_json::R
     let value: serde_json::Value = serde_json::from_slice(bytes)?;
     let original = value["vault"].as_str().unwrap_or_default();
     let expanded = if let Some(relative) = original.strip_prefix("__ROOT__/") {
-        relative
-            .split('/')
-            .fold(root.to_path_buf(), |path, component| path.join(component))
-            .to_string_lossy()
-            .into_owned()
+        fixture_path(root, relative).to_string_lossy().into_owned()
     } else {
         original
             .replace("__ROOT__", &root.to_string_lossy())
@@ -367,11 +381,14 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
         let (output, root) = run_case(case);
         let status = output.status.code().unwrap_or(255);
         let stderr = String::from_utf8_lossy(&output.stderr);
-        let vault = root.join(if case.vault_dir.is_empty() {
-            "missing-vault"
-        } else {
-            &case.vault_dir
-        });
+        let vault = fixture_path(
+            &root,
+            if case.vault_dir.is_empty() {
+                "missing-vault"
+            } else {
+                &case.vault_dir
+            },
+        );
         let expected_stdout = expand_markers(&case.expected.stdout_bytes, &root, &vault);
         let expected_stderr = expand_markers(&case.expected.stderr_bytes, &root, &vault);
         let stdout_matches = if case.name.starts_with("auth_status_")
