@@ -270,7 +270,7 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
         fixture.oracle.commit,
-        "4373522deb8891d850b6028ac7ef5c9b401f3156"
+        "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
     );
     assert_eq!(fixture.oracle.commit_sha, fixture.oracle.commit);
     assert_eq!(fixture.oracle.release, "unreleased");
@@ -281,12 +281,33 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
             "cmd/auth/lock.go",
             "cmd/auth/unlock.go",
             "internal/cli/cli.go",
+            "internal/cli/passphrase_env.go",
+            "internal/cli/terminal.go",
+            "internal/cli/unlock.go",
+            "internal/cli/vault.go",
+            "internal/cli/vaultpath.go",
+            "internal/config/config.go",
+            "internal/config/config_load.go",
+            "internal/config/config_merge.go",
+            "internal/config/config_validate.go",
+            "internal/config/paths.go",
+            "internal/config/schema.go",
+            "internal/session/biometric.go",
+            "internal/session/guisession_darwin.go",
+            "internal/session/guisession_nondarwin.go",
+            "internal/session/keyring.go",
+            "internal/session/memory_init.go",
+            "internal/session/memory_keyring.go",
+            "internal/session/oskeyring.go",
+            "internal/session/oskeyring_unavailable.go",
+            "internal/session/secure_bytes.go",
             "internal/session/session.go",
+            "internal/session/touchid_darwin.go",
         ]
     );
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
-    assert_eq!(fixture.cases.len(), 11);
+    assert_eq!(fixture.cases.len(), 12);
 
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -52,10 +52,14 @@ pub(crate) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, Strin
             .is_some_and(|v| v.use_touch_id || v.auth_method == AuthMethod::Touchid)
     {
         return Err(
-            "Touch ID unlock is not yet integrated in the Rust pairing CLI; use the Go CLI"
+            "Touch ID unlock is not available in device pairing; use the session unlock command"
                 .to_owned(),
         );
     }
+    unlock_passphrase_for_session(bytes)
+}
+
+pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
     let policy: UnlockPolicy =
         serde_yaml_ng::from_slice(bytes).map_err(|e| format!("parse unlock policy: {e}"))?;
     let policy = policy.security.unwrap_or_default();

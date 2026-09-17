@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "4373522deb8891d850b6028ac7ef5c9b401f3156"
+	pinnedOracleCommit  = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 	pinnedOracleRelease = "unreleased"
 	vaultMarker         = "__VAULT__"
 )
@@ -32,7 +32,28 @@ var productionSources = []string{
 	"cmd/auth/lock.go",
 	"cmd/auth/unlock.go",
 	"internal/cli/cli.go",
+	"internal/cli/passphrase_env.go",
+	"internal/cli/terminal.go",
 	"internal/session/session.go",
+	"internal/cli/unlock.go",
+	"internal/cli/vault.go",
+	"internal/cli/vaultpath.go",
+	"internal/config/config.go",
+	"internal/config/config_load.go",
+	"internal/config/config_merge.go",
+	"internal/config/config_validate.go",
+	"internal/config/paths.go",
+	"internal/config/schema.go",
+	"internal/session/biometric.go",
+	"internal/session/guisession_darwin.go",
+	"internal/session/guisession_nondarwin.go",
+	"internal/session/keyring.go",
+	"internal/session/memory_init.go",
+	"internal/session/memory_keyring.go",
+	"internal/session/oskeyring.go",
+	"internal/session/oskeyring_unavailable.go",
+	"internal/session/secure_bytes.go",
+	"internal/session/touchid_darwin.go",
 }
 
 type oracle struct {
@@ -84,6 +105,7 @@ func inputs() []sessionCase {
 		{Name: "auth_status_profile_initialized", Description: "auth status resolves an initialized named profile", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("profiles:\n  fixture:\n    vault: __PROFILE_VAULT__\n")), VaultDir: "profile-vault", DisableVaultEnv: true, Args: []string{"--profile", "fixture", "auth", "status", "--json"}},
 		{Name: "auth_status_default_profile_initialized", Description: "auth status resolves an initialized default profile", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("defaultProfile: fixture\nprofiles:\n  fixture:\n    vault: __PROFILE_VAULT__\n")), VaultDir: "profile-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
 		{Name: "auth_status_default_invalid_config", Description: "default path resolution ignores malformed resolver config and loads the data vault", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("authMethod: [\n")), VaultDir: "home/.local/share/symaira-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
+		{Name: "auth_status_json_escape", Description: "auth status uses Go JSON escaping for a vault path containing HTML-sensitive and line-separator characters", Initialized: true, ConfigBytes: initializedConfig, VaultDir: "special-<&>-\u2028", Args: []string{"--vault", vaultMarker, "auth", "status", "--json"}},
 	}
 }
 
@@ -179,8 +201,8 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		}
 		input.Expected = expected{
 			ExitCode:       exitCode,
-			StdoutBytes:    bytesToInts(bytes.ReplaceAll(bytes.ReplaceAll(stdout.Bytes(), []byte(vault), []byte(vaultMarker)), []byte(profileVault), []byte(vaultMarker))),
-			StderrBytes:    bytesToInts(bytes.ReplaceAll(bytes.ReplaceAll(stderr.Bytes(), []byte(vault), []byte(vaultMarker)), []byte(profileVault), []byte(vaultMarker))),
+			StdoutBytes:    bytesToInts(normalizeOutput(stdout.Bytes(), vault, profileVault)),
+			StderrBytes:    bytesToInts(normalizeOutput(stderr.Bytes(), vault, profileVault)),
 			StderrContains: errorNeedle(stderr.Bytes()),
 		}
 		if input.Name != "lock_initialized" {
@@ -190,6 +212,27 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		_ = os.RemoveAll(tempRoot)
 	}
 	return cases, nil
+}
+
+func normalizeOutput(output []byte, vault, profileVault string) []byte {
+	output = bytes.ReplaceAll(output, []byte(vault), []byte(vaultMarker))
+	output = bytes.ReplaceAll(output, []byte(profileVault), []byte(vaultMarker))
+	// encoding/json escapes HTML-sensitive path bytes. Replace the complete
+	// quoted JSON string as well, otherwise the fixture would retain the
+	// generator's random temporary root and could not be expanded by Rust.
+	for _, path := range []string{vault, profileVault} {
+		encoded, err := json.Marshal(path)
+		if err == nil {
+			// The auth-status printer uses SetEscapeHTML(false), unlike
+			// json.Marshal. Go still escapes U+2028/U+2029, so adjust only
+			// those three HTML escapes before matching the emitted string.
+			encoded = bytes.ReplaceAll(encoded, []byte(`\u003c`), []byte("<"))
+			encoded = bytes.ReplaceAll(encoded, []byte(`\u003e`), []byte(">"))
+			encoded = bytes.ReplaceAll(encoded, []byte(`\u0026`), []byte("&"))
+			output = bytes.ReplaceAll(output, encoded, []byte(`"__VAULT__"`))
+		}
+	}
+	return output
 }
 
 func errorNeedle(stderr []byte) string {
