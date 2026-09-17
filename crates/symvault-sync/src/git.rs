@@ -298,6 +298,8 @@ impl GitRepository {
         (!branch.is_empty()).then_some(branch)
     }
 
+    // ponytail: snapshots scale with vault size; reuse Git objects for clean
+    // files when reducing pull memory and IO cost.
     fn snapshot_candidates(&self) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
         let output = self.command(&["ls-files", "-z", "--"])?;
         let mut snapshots = BTreeMap::new();
@@ -311,13 +313,10 @@ impl GitRepository {
             if !is_conflict_candidate(&path) {
                 continue;
             }
-            match crate::safeio::read(&self.root.join(&path))
+            if let Some(data) = crate::safeio::read(&self.root.join(&path))
                 .map_err(|error| GitError::Parse(error.to_string()))?
             {
-                Some(data) => {
-                    snapshots.insert(path, data);
-                }
-                None => {}
+                snapshots.insert(path, data);
             }
         }
         Ok(snapshots)
