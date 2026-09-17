@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "release": "unreleased",
+    "source_files": [
+      "cmd/admin/config.go",
+      "internal/cli/output/output.go",
+      "internal/config/dottedpath.go"
+    ],
+    "source_digest": "a58702a5f2bd58d7b54ffb480073ffb5fa0f6a9a20c57f192b64251083d73ab0",
+    "generator_digest": "6601ea9f4ca544e870201d3f2567f7d75404221a303af950af367c4a2859742c"
+  },
+  "cases": [
+    {
+      "name": "get_scalar_text",
+      "description": "read a scalar in text mode",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "/fixture/vault\n"
+      }
+    },
+    {
+      "name": "get_nested_bool",
+      "description": "read a nested boolean in text mode",
+      "config": "agents:\n  probe:\n    canWrite: true\n",
+      "args": [
+        "config",
+        "get",
+        "agents.probe.canWrite",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "true\n"
+      }
+    },
+    {
+      "name": "get_complex_sequence",
+      "description": "render a sequence using YAML block text",
+      "config": "allowed:\n  - /fixture/a\n  - /fixture/b\n",
+      "args": [
+        "config",
+        "get",
+        "allowed",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "- /fixture/a\n- /fixture/b\n"
+      }
+    },
+    {
+      "name": "get_scalar_json",
+      "description": "encode a scalar result as a JSON object",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__",
+        "--output",
+        "json"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "{\"vaultDir\":\"/fixture/vault\"}\n"
+      }
+    },
+    {
+      "name": "get_unknown_output_is_text",
+      "description": "unknown output values follow the Go text path",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__",
+        "--output",
+        "wat"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "/fixture/vault\n"
+      }
+    },
+    {
+      "name": "get_quiet",
+      "description": "quiet mode suppresses a successful result",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__",
+        "--quiet"
+      ],
+      "expected": {
+        "exit_code": 0
+      }
+    },
+    {
+      "name": "list_raw",
+      "description": "list prints the original bytes without parsing",
+      "config": "vaultDir: /fixture/vault\nagents:\n  probe:\n    canWrite: true\n",
+      "args": [
+        "config",
+        "list",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "vaultDir: /fixture/vault\nagents:\n  probe:\n    canWrite: true\n"
+      }
+    },
+    {
+      "name": "list_json_still_raw",
+      "description": "list keeps raw output even with JSON requested",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "list",
+        "--file",
+        "__CONFIG__",
+        "--json",
+        "--output",
+        "json"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "vaultDir: /fixture/vault\n"
+      }
+    },
+    {
+      "name": "list_empty",
+      "description": "an empty mapping is printed byte-for-byte",
+      "config": "{}\n",
+      "args": [
+        "config",
+        "list",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout": "{}\n"
+      }
+    },
+    {
+      "name": "missing_key",
+      "description": "a missing dotted key fails with a config error",
+      "config": "vaultDir: /fixture/vault\n",
+      "args": [
+        "config",
+        "get",
+        "missing.key",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 6,
+        "stderr_contains": "key"
+      }
+    },
+    {
+      "name": "missing_file",
+      "description": "a missing config file fails with a config error",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__.missing"
+      ],
+      "expected": {
+        "exit_code": 6,
+        "stderr_contains": "cannot load config"
+      }
+    },
+    {
+      "name": "malformed_yaml",
+      "description": "malformed YAML fails before lookup",
+      "config": "vaultDir: [\n",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 6,
+        "stderr_contains": "cannot load config"
+      }
+    },
+    {
+      "name": "quiet_missing_file",
+      "description": "quiet mode still reads a missing file and fails",
+      "args": [
+        "config",
+        "get",
+        "vaultDir",
+        "--file",
+        "__CONFIG__.missing",
+        "--quiet"
+      ],
+      "expected": {
+        "exit_code": 6,
+        "stderr_contains": "cannot load config"
+      }
+    },
+    {
+      "name": "list_invalid_utf8",
+      "description": "list preserves invalid UTF-8 bytes",
+      "config_bytes": [
+        118,
+        97,
+        117,
+        108,
+        116,
+        68,
+        105,
+        114,
+        58,
+        32,
+        47,
+        102,
+        105,
+        120,
+        116,
+        117,
+        114,
+        101,
+        47,
+        118,
+        97,
+        117,
+        108,
+        116,
+        10,
+        105,
+        110,
+        118,
+        97,
+        108,
+        105,
+        100,
+        58,
+        32,
+        255,
+        10
+      ],
+      "args": [
+        "config",
+        "list",
+        "--file",
+        "__CONFIG__"
+      ],
+      "expected": {
+        "exit_code": 0,
+        "stdout_bytes": [
+          118,
+          97,
+          117,
+          108,
+          116,
+          68,
+          105,
+          114,
+          58,
+          32,
+          47,
+          102,
+          105,
+          120,
+          116,
+          117,
+          114,
+          101,
+          47,
+          118,
+          97,
+          117,
+          108,
+          116,
+          10,
+          105,
+          110,
+          118,
+          97,
+          108,
+          105,
+          100,
+          58,
+          32,
+          255,
+          10
+        ]
+      }
+    }
+  ]
+}

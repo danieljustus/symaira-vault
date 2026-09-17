@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+mod config;
 mod device;
 
 use std::{
@@ -53,6 +54,27 @@ enum Command {
     Device {
         #[command(subcommand)]
         command: DeviceCommand,
+    },
+    /// Inspect the YAML configuration file.
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigCommand {
+    /// Get a value using dotted path notation.
+    Get {
+        #[arg(value_name = "DOTTED.PATH")]
+        key: String,
+        #[arg(long)]
+        file: Option<std::path::PathBuf>,
+    },
+    /// Print the raw configuration file.
+    List {
+        #[arg(long)]
+        file: Option<std::path::PathBuf>,
     },
 }
 
@@ -169,6 +191,32 @@ fn main() -> ExitCode {
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
                     ExitCode::from(1)
+                }
+            }
+        }
+        Some(Command::Config { command }) => {
+            let result = match command {
+                ConfigCommand::Get { key, file } => config::resolve_path(file).and_then(|path| {
+                    config::get(
+                        &path,
+                        &key,
+                        if cli.json { "json" } else { &cli.output },
+                        cli.quiet,
+                    )
+                }),
+                ConfigCommand::List { file } => config::resolve_path(file).and_then(|path| {
+                    config::list(
+                        &path,
+                        if cli.json { "json" } else { &cli.output },
+                        cli.quiet,
+                    )
+                }),
+            };
+            match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(6)
                 }
             }
         }
