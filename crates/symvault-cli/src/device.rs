@@ -2,7 +2,7 @@
 
 use crate::session_input as input;
 use input::read_passphrase;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
     fs,
@@ -211,87 +211,145 @@ pub(crate) fn reencrypt_all_entries(
     identity: &Identity,
     recipients: &[Recipient],
 ) -> Result<(), String> {
-    let entries_dir = vault.join("entries");
-    let files = match fs::symlink_metadata(&entries_dir) {
-        Ok(metadata) => {
-            let file_type = metadata.file_type();
-            if file_type.is_symlink() {
-                Err(format!(
-                    "unsafe symlink entries root {:?}",
-                    entries_dir.display()
-                ))
-            } else if !file_type.is_dir() {
-                Err(format!(
-                    "vault entries root is not a directory: {}",
-                    entries_dir.display()
-                ))
-            } else {
-                collect_reencrypt_files(&entries_dir, identity, recipients).map(Some)
-            }
-        }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(format!("stat {}: {err}", entries_dir.display())),
-    }?;
-    let Some(files) = files else {
-        return Ok(());
-    };
+    let vault = fs::canonicalize(vault).map_err(|e| format!("resolve vault directory: {e}"))?;
+    let store = symvault_store::Store::open(&vault, identity)
+        .map_err(|e| format!("open store for re-encryption: {e}"))?;
 
-    let manifest_path = vault.join("manifest.age");
-    let manifest = snapshot_file(&manifest_path)?;
+    store
+        .with_write_lock(|store| {
+            let result: Result<(), String> = (|| {
+                let manifest = snapshot_file(&vault.join("manifest.age"))?;
+                let entries_dir = vault.join("entries");
+                let files = match fs::symlink_metadata(&entries_dir) {
+                    Ok(metadata) => {
+                        let file_type = metadata.file_type();
+                        if file_type.is_symlink() {
+                            Err(format!(
+                                "unsafe symlink entries root {:?}",
+                                entries_dir.display()
+                            ))
+                        } else if !file_type.is_dir() {
+                            Err(format!(
+                                "vault entries root is not a directory: {}",
+                                entries_dir.display()
+                            ))
+                        } else {
+                            collect_reencrypt_files(&entries_dir, identity, recipients).map(Some)
+                        }
+                    }
+                    Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+                    Err(err) => Err(format!("stat {}: {err}", entries_dir.display())),
+                }?;
+                let Some(files) = files else {
+                    return Ok(());
+                };
+                if files.is_empty() {
+                    return Ok(());
+                }
 
-    // Decrypt and encrypt every entry before publishing any replacement. A
-    // corrupt later entry must not leave earlier entries rotated. This
-    // bounded transaction restores bytes on publication or manifest failure;
-    // durable crash journaling and a cross-process vault lock still need a
-    // shared transaction layer; this helper does not claim that Go parity.
-    let mut published = 0;
-    for file in &files {
-        if let Err(error) = publish_file(file) {
-            return Err(transaction_failure(
-                format!("write {}: {error}", file.path.display()),
-                &files[..=published],
-                manifest.as_ref(),
-            ));
-        }
-        published += 1;
-    }
+                let mut journal = ReencryptJournal::new(&vault, &files)?;
+                persist_reencrypt_journal(&vault, &journal)?;
+                if let Err(error) = stage_and_install_reencrypted(&vault, &files, &mut journal) {
+                    let recovery = store
+                        .recover_reencrypt_journal_locked(identity)
+                        .map_err(|error| error.to_string());
+                    return match recovery {
+                        Ok(_) => Err(error),
+                        Err(recovery_error) => Err(format!(
+                            "{error} (journal recovery failed: {recovery_error})"
+                        )),
+                    };
+                }
 
-    if manifest_path.is_file() {
-        let rebuild = symvault_store::Store::open(vault, identity)
-            .map_err(|e| format!("open store for manifest rebuild: {e}"))
-            .and_then(|store| {
-                store
-                    .rebuild_manifest(identity)
-                    .map_err(|e| format!("rebuild manifest: {e}"))
-            });
-        if let Err(error) = rebuild {
-            return Err(transaction_failure(
-                error,
-                &files[..published],
-                manifest.as_ref(),
-            ));
-        }
-    }
-    Ok(())
+                if manifest.is_some() {
+                    if let Err(error) = store.rebuild_manifest_locked(identity) {
+                        let rollback = rollback_reencrypt_journal_locked(&vault);
+                        let restore_manifest = manifest.as_ref().map(|snapshot| {
+                            restore_file(&snapshot.path, &snapshot.bytes, &snapshot.metadata)
+                        });
+                        let cleanup = if rollback.is_ok()
+                            && restore_manifest.as_ref().is_some_and(Result::is_ok)
+                        {
+                            remove_reencrypt_journal(&vault)
+                        } else {
+                            Ok(())
+                        };
+                        return Err(format_manifest_failure(
+                            error.to_string(),
+                            rollback,
+                            restore_manifest,
+                            cleanup,
+                        ));
+                    }
+                }
+                let current = load_reencrypt_journal(&vault)?;
+                verify_installed_targets(&current)?;
+                remove_reencrypt_journal(&vault)
+            })();
+            result.map_err(symvault_store::StoreError::Config)
+        })
+        .map_err(|e| format!("re-encrypt entries: {e}"))
 }
 
 struct ReencryptFile {
     path: PathBuf,
-    original: Vec<u8>,
     replacement: Vec<u8>,
     metadata: FileMetadata,
 }
 
-struct FileSnapshot {
-    path: PathBuf,
-    bytes: Vec<u8>,
-    metadata: FileMetadata,
+const REENCRYPT_JOURNAL_VERSION: u32 = 1;
+const REENCRYPT_JOURNAL_NAME: &str = ".reencrypt.journal";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReencryptJournal {
+    version: u32,
+    entries: Vec<ReencryptJournalEntry>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ReencryptJournalEntry {
+    path: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    temp: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    backup: String,
+    #[serde(default)]
+    digest: String,
+    #[serde(default)]
+    installed: bool,
+}
+
+impl ReencryptJournal {
+    fn new(root: &Path, files: &[ReencryptFile]) -> Result<Self, String> {
+        let entries = files
+            .iter()
+            .map(|file| {
+                Ok(ReencryptJournalEntry {
+                    path: journal_string(root, &file.path)?,
+                    temp: String::new(),
+                    backup: String::new(),
+                    digest: String::new(),
+                    installed: false,
+                })
+            })
+            .collect::<Result<_, String>>()?;
+        Ok(Self {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries,
+        })
+    }
 }
 
 struct FileMetadata {
     permissions: fs::Permissions,
     accessed: SystemTime,
     modified: SystemTime,
+}
+
+struct FileSnapshot {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    metadata: FileMetadata,
 }
 
 fn collect_reencrypt_files(
@@ -329,13 +387,24 @@ fn collect_reencrypt_files(
             let metadata = file_metadata(&metadata, &path)?;
             files.push(ReencryptFile {
                 path,
-                original: raw,
                 replacement,
                 metadata,
             });
         }
     }
     Ok(files)
+}
+
+fn file_metadata(metadata: &fs::Metadata, path: &Path) -> Result<FileMetadata, String> {
+    Ok(FileMetadata {
+        permissions: metadata.permissions(),
+        accessed: metadata
+            .accessed()
+            .map_err(|e| format!("read access time for {}: {e}", path.display()))?,
+        modified: metadata
+            .modified()
+            .map_err(|e| format!("read modification time for {}: {e}", path.display()))?,
+    })
 }
 
 fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, String> {
@@ -353,34 +422,11 @@ fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, String> {
     let bytes = safeio::read(path)
         .map_err(|e| format!("read {}: {e}", path.display()))?
         .ok_or_else(|| format!("file not found: {}", path.display()))?;
-    let metadata = file_metadata(&metadata, path)?;
     Ok(Some(FileSnapshot {
         path: path.to_owned(),
         bytes,
-        metadata,
+        metadata: file_metadata(&metadata, path)?,
     }))
-}
-
-fn publish_file(file: &ReencryptFile) -> Result<(), String> {
-    safeio::write_atomic(&file.path, &file.replacement).map_err(|e| e.to_string())?;
-    restore_metadata(&file.path, &file.metadata)
-}
-
-fn restore_file(path: &Path, bytes: &[u8], metadata: &FileMetadata) -> Result<(), String> {
-    safeio::write_atomic(path, bytes).map_err(|e| e.to_string())?;
-    restore_metadata(path, metadata)
-}
-
-fn file_metadata(metadata: &fs::Metadata, path: &Path) -> Result<FileMetadata, String> {
-    Ok(FileMetadata {
-        permissions: metadata.permissions(),
-        accessed: metadata
-            .accessed()
-            .map_err(|e| format!("read access time for {}: {e}", path.display()))?,
-        modified: metadata
-            .modified()
-            .map_err(|e| format!("read modification time for {}: {e}", path.display()))?,
-    })
 }
 
 fn restore_metadata(path: &Path, metadata: &FileMetadata) -> Result<(), String> {
@@ -398,30 +444,353 @@ fn restore_metadata(path: &Path, metadata: &FileMetadata) -> Result<(), String> 
     fs::set_permissions(path, metadata.permissions.clone()).map_err(|e| e.to_string())
 }
 
-fn transaction_failure(
-    operation: String,
-    files: &[ReencryptFile],
-    manifest: Option<&FileSnapshot>,
-) -> String {
-    let mut rollback_errors = Vec::new();
-    for file in files.iter().rev() {
-        if let Err(error) = restore_file(&file.path, &file.original, &file.metadata) {
-            rollback_errors.push(format!("restore {}: {error}", file.path.display()));
+fn restore_file(path: &Path, bytes: &[u8], metadata: &FileMetadata) -> Result<(), String> {
+    safeio::write_atomic(path, bytes).map_err(|e| e.to_string())?;
+    restore_metadata(path, metadata)
+}
+
+fn journal_path(root: &Path) -> PathBuf {
+    root.join(REENCRYPT_JOURNAL_NAME)
+}
+
+fn journal_string(root: &Path, path: &Path) -> Result<String, String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| format!("journal path escapes vault: {}", path.display()))?;
+    if relative
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(format!("journal path escapes vault: {}", path.display()));
+    }
+    path.to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("journal path is not valid UTF-8: {}", path.display()))
+}
+
+fn journal_target(root: &Path, value: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| format!("journal path escapes vault: {value}"))?;
+    if !path.is_absolute()
+        || relative
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+        || relative.components().next()
+            != Some(std::path::Component::Normal(std::ffi::OsStr::new(
+                "entries",
+            )))
+        || path.extension().and_then(|ext| ext.to_str()) != Some("age")
+    {
+        return Err(format!("journal path escapes vault: {value}"));
+    }
+    validate_journal_parents(root, relative, &path)?;
+    Ok(path)
+}
+
+fn validate_journal_parents(root: &Path, relative: &Path, display: &Path) -> Result<(), String> {
+    let mut current = root.to_owned();
+    for component in relative.parent().into_iter().flat_map(Path::components) {
+        let std::path::Component::Normal(name) = component else {
+            return Err(format!("journal path escapes vault: {}", display.display()));
+        };
+        current.push(name);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_dir() => {}
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "journal path uses symlinked parent: {}",
+                    current.display()
+                ));
+            }
+            Ok(_) => {
+                return Err(format!(
+                    "journal path parent is not a directory: {}",
+                    current.display()
+                ));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(format!(
+                    "journal path parent is missing: {}",
+                    current.display()
+                ));
+            }
+            Err(error) => return Err(format!("stat journal path parent: {error}")),
         }
     }
-    if let Some(manifest) = manifest
-        && let Err(error) = restore_file(&manifest.path, &manifest.bytes, &manifest.metadata)
+    Ok(())
+}
+
+fn journal_artifact(
+    root: &Path,
+    value: &str,
+    target: &Path,
+    suffix: &str,
+) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| format!("journal artifact escapes vault: {value}"))?;
+    if !path.is_absolute()
+        || path == target
+        || path.parent() != target.parent()
+        || relative
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
     {
-        rollback_errors.push(format!("restore {}: {error}", manifest.path.display()));
+        return Err(format!(
+            "journal artifact escapes target directory: {value}"
+        ));
     }
-    if rollback_errors.is_empty() {
-        operation
-    } else {
-        format!(
-            "{operation} (rollback failed: {})",
-            rollback_errors.join("; ")
-        )
+    let target_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("journal target is not valid UTF-8: {}", target.display()))?;
+    let artifact_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("journal artifact is not valid UTF-8: {value}"))?;
+    if !artifact_name.starts_with(&format!(".{target_name}.reencrypt-"))
+        || !artifact_name.ends_with(suffix)
+    {
+        return Err(format!("journal artifact has invalid name: {value}"));
     }
+    validate_journal_parents(root, relative, &path)?;
+    Ok(path)
+}
+
+fn persist_reencrypt_journal(root: &Path, journal: &ReencryptJournal) -> Result<(), String> {
+    let encoded =
+        serde_json::to_vec(journal).map_err(|e| format!("encode re-encryption journal: {e}"))?;
+    safeio::write_atomic(&journal_path(root), &encoded)
+        .map_err(|e| format!("write re-encryption journal: {e}"))?;
+    sync_directory(root)
+}
+
+fn load_reencrypt_journal(root: &Path) -> Result<ReencryptJournal, String> {
+    let bytes = safeio::read(&journal_path(root))
+        .map_err(|e| format!("read re-encryption journal: {e}"))?
+        .ok_or_else(|| "re-encryption journal is missing".to_owned())?;
+    let journal: ReencryptJournal =
+        serde_json::from_slice(&bytes).map_err(|e| format!("parse re-encryption journal: {e}"))?;
+    if journal.version != REENCRYPT_JOURNAL_VERSION {
+        return Err(format!(
+            "unsupported re-encryption journal version {}",
+            journal.version
+        ));
+    }
+    for entry in &journal.entries {
+        let target = journal_target(root, &entry.path)?;
+        if !entry.temp.is_empty() {
+            journal_artifact(root, &entry.temp, &target, ".tmp")?;
+        }
+        if !entry.backup.is_empty() {
+            journal_artifact(root, &entry.backup, &target, ".backup")?;
+        }
+    }
+    Ok(journal)
+}
+
+fn remove_reencrypt_journal(root: &Path) -> Result<(), String> {
+    match fs::remove_file(journal_path(root)) {
+        Ok(()) => sync_directory(root),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("remove re-encryption journal: {error}")),
+    }
+}
+
+fn artifact_path(path: &Path, suffix: &str, seed: u128, index: usize) -> Result<PathBuf, String> {
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("entry path is not valid UTF-8: {}", path.display()))?;
+    for attempt in 0..100u32 {
+        let candidate = path.with_file_name(format!(
+            ".{name}.reencrypt-{seed}-{index}-{attempt}.{suffix}"
+        ));
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => continue,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
+            Err(error) => return Err(format!("check re-encryption artifact: {error}")),
+        }
+    }
+    Err(format!("could not allocate re-encryption {suffix} file"))
+}
+
+fn stage_reencrypted_file(file: &ReencryptFile, temp: &Path) -> Result<(), String> {
+    safeio::refuse_unsafe_target(&file.path).map_err(|e| format!("check target: {e}"))?;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let mut staged = options
+        .open(temp)
+        .map_err(|e| format!("create staged ciphertext: {e}"))?;
+    staged
+        .write_all(&file.replacement)
+        .map_err(|e| format!("write staged ciphertext: {e}"))?;
+    staged
+        .sync_all()
+        .map_err(|e| format!("sync staged ciphertext: {e}"))?;
+    drop(staged);
+    restore_metadata(temp, &file.metadata)
+}
+
+fn digest(bytes: &[u8]) -> String {
+    symvault_store::sha256_hex(bytes)
+}
+
+fn target_matches(path: &Path, expected: &str) -> Result<bool, String> {
+    let Some(bytes) = safeio::read(path).map_err(|e| format!("read recovery target: {e}"))? else {
+        return Ok(false);
+    };
+    Ok(digest(&bytes).eq_ignore_ascii_case(expected))
+}
+
+fn regular_exists(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+        Ok(_) => Err(format!(
+            "re-encryption artifact is not a regular file: {}",
+            path.display()
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("stat re-encryption artifact: {error}")),
+    }
+}
+
+fn remove_artifact(path: &Path) -> Result<(), String> {
+    if !regular_exists(path)? {
+        return Ok(());
+    }
+    fs::remove_file(path).map_err(|e| format!("remove re-encryption artifact: {e}"))
+}
+
+fn rollback_reencrypt_journal_locked(root: &Path) -> Result<(), String> {
+    let journal = load_reencrypt_journal(root)?;
+    for entry in journal.entries.iter().rev() {
+        let target = journal_target(root, &entry.path)?;
+        let backup = if entry.backup.is_empty() {
+            None
+        } else {
+            Some(journal_artifact(root, &entry.backup, &target, ".backup")?)
+        };
+        let temp = if entry.temp.is_empty() {
+            None
+        } else {
+            Some(journal_artifact(root, &entry.temp, &target, ".tmp")?)
+        };
+        if let Some(temp) = temp {
+            remove_artifact(&temp)?;
+        }
+        let Some(backup) = backup else {
+            continue;
+        };
+        if !regular_exists(&backup)? {
+            continue;
+        }
+        if regular_exists(&target)? {
+            if !entry.digest.is_empty() && !target_matches(&target, &entry.digest)? {
+                return Err(format!(
+                    "refusing to overwrite changed rollback target: {}",
+                    target.display()
+                ));
+            }
+            fs::remove_file(&target).map_err(|e| format!("remove replacement ciphertext: {e}"))?;
+        }
+        fs::rename(&backup, &target).map_err(|e| format!("restore original ciphertext: {e}"))?;
+        sync_directory(target.parent().unwrap_or(root))?;
+    }
+    Ok(())
+}
+
+fn format_manifest_failure(
+    manifest_error: String,
+    rollback: Result<(), String>,
+    restore_manifest: Option<Result<(), String>>,
+    cleanup: Result<(), String>,
+) -> String {
+    let mut details = vec![format!("rebuild manifest: {manifest_error}")];
+    if let Err(error) = rollback {
+        details.push(format!("rollback failed: {error}"));
+    }
+    if let Some(Err(error)) = restore_manifest {
+        details.push(format!("restore manifest failed: {error}"));
+    }
+    if let Err(error) = cleanup {
+        details.push(format!("remove re-encryption journal failed: {error}"));
+    }
+    details.join("; ")
+}
+
+fn stage_and_install_reencrypted(
+    root: &Path,
+    files: &[ReencryptFile],
+    journal: &mut ReencryptJournal,
+) -> Result<(), String> {
+    let seed = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock before Unix epoch: {e}"))?
+        .as_nanos();
+    for (index, file) in files.iter().enumerate() {
+        let temp = artifact_path(&file.path, "tmp", seed, index)?;
+        let backup = artifact_path(&file.path, "backup", seed, index)?;
+        journal.entries[index].temp = journal_string(root, &temp)?;
+        journal.entries[index].backup = journal_string(root, &backup)?;
+        persist_reencrypt_journal(root, journal)?;
+        stage_reencrypted_file(file, &temp)?;
+        journal.entries[index].digest = digest(&file.replacement);
+        persist_reencrypt_journal(root, journal)?;
+    }
+
+    for (index, file) in files.iter().enumerate() {
+        let entry = &mut journal.entries[index];
+        let temp = journal_artifact(root, &entry.temp, &file.path, ".tmp")?;
+        let backup = journal_artifact(root, &entry.backup, &file.path, ".backup")?;
+        fs::rename(&file.path, &backup).map_err(|e| format!("move original to backup: {e}"))?;
+        sync_directory(file.path.parent().unwrap_or(root))?;
+        if let Err(error) = fs::rename(&temp, &file.path) {
+            let _ = fs::rename(&backup, &file.path);
+            return Err(format!("install staged ciphertext: {error}"));
+        }
+        sync_directory(file.path.parent().unwrap_or(root))?;
+        entry.temp.clear();
+        entry.installed = true;
+        persist_reencrypt_journal(root, journal)?;
+    }
+    Ok(())
+}
+
+fn verify_installed_targets(journal: &ReencryptJournal) -> Result<(), String> {
+    for entry in &journal.entries {
+        if !entry.installed {
+            return Err(format!(
+                "re-encryption journal entry is not installed: {}",
+                entry.path
+            ));
+        }
+        let path = Path::new(&entry.path);
+        if !target_matches(path, &entry.digest)? {
+            return Err(format!("installed target changed: {}", path.display()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn sync_directory(path: &Path) -> Result<(), String> {
+    fs::File::open(path)
+        .and_then(|file| file.sync_all())
+        .map_err(|e| format!("sync directory {}: {e}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn sync_directory(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 fn auto_commit_and_push(vault: &Path, message: &str) {
@@ -980,7 +1349,15 @@ pub(super) fn list(vault: &Path, format: &str, json: bool, quiet: bool) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{fs, sync::Arc};
+    use std::{
+        fs,
+        sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+            mpsc,
+        },
+        thread,
+    };
     use symvault_core::session::{MemoryKeyring, SessionManager};
     use symvault_platform::FallbackKeyring;
 
@@ -994,10 +1371,12 @@ mod tests {
     }
 
     fn encrypted_fixture() -> (PathBuf, Identity, String) {
+        static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
         let root = std::env::temp_dir().join(format!(
-            "symvault-device-unlock-{}-{}",
+            "symvault-device-unlock-{}-{}-{}",
             std::process::id(),
-            GoTime::now().to_rfc3339_nano().replace([':', '.', '-'], "")
+            GoTime::now().to_rfc3339_nano().replace([':', '.', '-'], ""),
+            FIXTURE_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir_all(&root).expect("create fixture vault");
         let identity = generate_identity();
@@ -1049,6 +1428,244 @@ mod tests {
             recipient_string(&expected)
         );
         assert!(!passphrase_runtime.manager.is_identity_expired(&vault));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn recovery_fixture(after_install: bool) {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
+        let original = b"original ciphertext";
+        let replacement = b"replacement ciphertext";
+        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        fs::write(&backup, original).unwrap();
+        if after_install {
+            fs::write(&target, replacement).unwrap();
+        }
+        assert!(
+            backup.is_file(),
+            "backup fixture missing: {}",
+            backup.display()
+        );
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: String::new(),
+                backup: journal_string(&root, &backup).unwrap(),
+                digest: digest(replacement),
+                installed: after_install,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        assert!(
+            backup.is_file(),
+            "backup removed while persisting: {}",
+            backup.display()
+        );
+        store
+            .with_write_lock(|store| store.recover_reencrypt_journal_locked(&identity))
+            .unwrap();
+        let expected: &[u8] = if after_install { replacement } else { original };
+        assert_eq!(fs::read(&target).unwrap(), expected);
+        assert!(!backup.exists());
+        assert!(!journal_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reencrypt_journal_recovers_after_backup_before_install() {
+        recovery_fixture(false);
+    }
+
+    #[test]
+    fn reencrypt_journal_recovers_after_install() {
+        recovery_fixture(true);
+    }
+
+    #[test]
+    fn store_open_recovers_journal_before_normal_reads() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
+        let original = b"original ciphertext";
+        let replacement = b"replacement ciphertext";
+        fs::write(root.join("manifest.age"), b"old manifest").unwrap();
+        fs::write(&target, replacement).unwrap();
+        fs::write(&backup, original).unwrap();
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: String::new(),
+                backup: journal_string(&root, &backup).unwrap(),
+                digest: digest(replacement),
+                installed: true,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        let _store = symvault_store::Store::open(&root, &identity).unwrap();
+        assert_eq!(fs::read(&target).unwrap(), replacement);
+        assert!(!backup.exists());
+        assert!(!journal_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn journal_path_validation_precedes_mutation() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let outside = root.join("outside.age");
+        fs::write(&outside, b"outside original").unwrap();
+        let traversal = root.join("entries/../outside.age");
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: traversal.to_string_lossy().into_owned(),
+                temp: String::new(),
+                backup: String::new(),
+                digest: digest(b"replacement"),
+                installed: true,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        assert!(error.to_string().contains("unsafe"));
+        assert_eq!(fs::read(&outside).unwrap(), b"outside original");
+        let _ = fs::remove_dir_all(root);
+
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        fs::write(&target, b"original").unwrap();
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: String::new(),
+                backup: journal_string(&root, &target).unwrap(),
+                digest: digest(b"replacement"),
+                installed: true,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        assert!(error.to_string().contains("unsafe"));
+        assert_eq!(fs::read(&target).unwrap(), b"original");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn journal_parent_symlink_is_rejected_before_mutation() {
+        use std::os::unix::fs::symlink;
+
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        let outside_dir = root.join("outside-dir");
+        fs::create_dir_all(&entries).unwrap();
+        fs::create_dir_all(&outside_dir).unwrap();
+        symlink(&outside_dir, entries.join("linked")).unwrap();
+        let outside = outside_dir.join("a.age");
+        fs::write(&outside, b"outside original").unwrap();
+        let target = entries.join("linked/a.age");
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: target.to_string_lossy().into_owned(),
+                temp: String::new(),
+                backup: String::new(),
+                digest: digest(b"replacement"),
+                installed: true,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        let error = symvault_store::Store::open(&root, &identity).unwrap_err();
+        assert!(error.to_string().contains("symlink"));
+        assert_eq!(fs::read(&outside).unwrap(), b"outside original");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn manifest_failure_rollback_restores_entries_and_manifest() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
+        let original = b"original ciphertext";
+        let replacement = b"replacement ciphertext";
+        let manifest = root.join("manifest.age");
+        let old_manifest = b"old manifest";
+        let store = symvault_store::Store::open(&root, &identity).unwrap();
+        fs::write(&target, replacement).unwrap();
+        fs::write(&backup, original).unwrap();
+        fs::write(&manifest, old_manifest).unwrap();
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: String::new(),
+                backup: journal_string(&root, &backup).unwrap(),
+                digest: digest(replacement),
+                installed: true,
+            }],
+        };
+        persist_reencrypt_journal(&root, &journal).unwrap();
+        let snapshot = snapshot_file(&manifest).unwrap().unwrap();
+        store
+            .with_write_lock(|_| {
+                rollback_reencrypt_journal_locked(&root).unwrap();
+                restore_file(&snapshot.path, &snapshot.bytes, &snapshot.metadata).unwrap();
+                remove_reencrypt_journal(&root).unwrap();
+                Ok::<_, symvault_store::StoreError>(())
+            })
+            .unwrap();
+        assert_eq!(fs::read(&target).unwrap(), original);
+        assert_eq!(fs::read(&manifest).unwrap(), old_manifest);
+        assert!(!backup.exists());
+        assert!(!journal_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn store_write_lock_blocks_concurrent_writer() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let store = Arc::new(symvault_store::Store::open(&root, &identity).unwrap());
+        let (held_tx, held_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let holder_store = Arc::clone(&store);
+        let holder = thread::spawn(move || {
+            holder_store.with_write_lock(|_| {
+                held_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok::<_, symvault_store::StoreError>(())
+            })
+        });
+        held_rx.recv().unwrap();
+
+        let (contender_tx, contender_rx) = mpsc::channel();
+        let contender_store = Arc::clone(&store);
+        let contender = thread::spawn(move || {
+            let result =
+                contender_store.with_write_lock(|_| Ok::<_, symvault_store::StoreError>(()));
+            contender_tx.send(result.is_ok()).unwrap();
+        });
+        assert!(
+            contender_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err()
+        );
+        release_tx.send(()).unwrap();
+        holder.join().unwrap().unwrap();
+        assert!(contender_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        contender.join().unwrap();
         let _ = fs::remove_dir_all(root);
     }
 

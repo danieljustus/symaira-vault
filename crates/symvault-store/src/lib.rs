@@ -33,6 +33,7 @@ pub mod metadata;
 pub mod search_index_store;
 
 mod publication;
+mod reencrypt_journal;
 
 #[cfg(unix)]
 mod rooted;
@@ -354,9 +355,11 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens an existing vault without changing any filesystem state.
-    pub fn open(root: impl AsRef<Path>, _identity: &Identity) -> Result<Self, StoreError> {
-        Self::open_with_root_acquisition(root, |_: &Path| {})
+    /// Opens an existing vault and completes any pending re-encryption journal.
+    pub fn open(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {})?;
+        reencrypt_journal::recover_if_present(&store, identity)?;
+        Ok(store)
     }
 
     fn open_with_root_acquisition(
@@ -581,7 +584,11 @@ impl Store {
         }
     }
 
-    fn with_write_lock<T>(
+    /// Runs an operation while holding the vault's cross-process write lock.
+    ///
+    /// Callers that need to combine several store and filesystem mutations may
+    /// use this boundary to keep the lock held across the complete operation.
+    pub fn with_write_lock<T>(
         &self,
         operation: impl FnOnce(&Self) -> Result<T, StoreError>,
     ) -> Result<T, StoreError> {
@@ -596,6 +603,12 @@ impl Store {
                 source,
             }),
         }
+    }
+
+    /// Completes a pending re-encryption journal while the caller already
+    /// holds this store's write lock.
+    pub fn recover_reencrypt_journal_locked(&self, identity: &Identity) -> Result<(), StoreError> {
+        reencrypt_journal::recover_locked_if_present(self, identity)
     }
 
     fn entry_candidates(&self) -> Result<Vec<Candidate>, StoreError> {
@@ -1626,7 +1639,8 @@ fn mode_bits(_metadata: &fs::Metadata) -> u32 {
     0
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+/// Returns the lowercase hexadecimal SHA-256 digest used by manifest entries.
+pub fn sha256_hex(bytes: &[u8]) -> String {
     let mut digest = Sha256::new();
     digest.update(bytes);
     digest
@@ -2235,10 +2249,11 @@ impl Store {
 
     /// Rebuilds the manifest from regular fresh-layout entry files.
     pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
-        self.with_write_lock(|store| store.rebuild_manifest_unlocked(identity))
+        self.with_write_lock(|store| store.rebuild_manifest_locked(identity))
     }
 
-    fn rebuild_manifest_unlocked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+    /// Rebuilds the manifest while the caller already holds `with_write_lock`.
+    pub fn rebuild_manifest_locked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
             // Go's writeManifest increments a newly rebuilt manifest before
