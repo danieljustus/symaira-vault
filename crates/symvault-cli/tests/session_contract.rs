@@ -127,20 +127,34 @@ fn run_case(case: &Case, root: &Path) -> std::process::Output {
     command.output().expect("run Rust session CLI case")
 }
 
-fn expand_vault_marker(bytes: &[u8], vault: &Path) -> Vec<u8> {
-    const MARKER: &[u8] = b"__VAULT__";
+fn expand_markers(bytes: &[u8], root: &Path, vault: &Path) -> Vec<u8> {
+    let root = root.to_str().expect("UTF-8 fixture root path").as_bytes();
     let vault = vault.to_str().expect("UTF-8 fixture vault path").as_bytes();
     let mut expanded = Vec::with_capacity(bytes.len());
     let mut remaining = bytes;
-    while let Some(offset) = remaining
-        .windows(MARKER.len())
-        .position(|candidate| candidate == MARKER)
-    {
+    while !remaining.is_empty() {
+        let root_offset = remaining
+            .windows(b"__ROOT__".len())
+            .position(|candidate| candidate == b"__ROOT__");
+        let vault_offset = remaining
+            .windows(b"__VAULT__".len())
+            .position(|candidate| candidate == b"__VAULT__");
+        let Some((offset, marker, replacement)) = (match (root_offset, vault_offset) {
+            (None, None) => None,
+            (Some(offset), None) => Some((offset, b"__ROOT__".as_slice(), root)),
+            (None, Some(offset)) => Some((offset, b"__VAULT__".as_slice(), vault)),
+            (Some(root_offset), Some(vault_offset)) if root_offset < vault_offset => {
+                Some((root_offset, b"__ROOT__".as_slice(), root))
+            }
+            (Some(_), Some(vault_offset)) => Some((vault_offset, b"__VAULT__".as_slice(), vault)),
+        }) else {
+            expanded.extend_from_slice(remaining);
+            break;
+        };
         expanded.extend_from_slice(&remaining[..offset]);
-        expanded.extend_from_slice(vault);
-        remaining = &remaining[offset + MARKER.len()..];
+        expanded.extend_from_slice(replacement);
+        remaining = &remaining[offset + marker.len()..];
     }
-    expanded.extend_from_slice(remaining);
     expanded
 }
 
@@ -307,7 +321,7 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
     );
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
-    assert_eq!(fixture.cases.len(), 12);
+    assert_eq!(fixture.cases.len(), 18);
 
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -325,8 +339,8 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
         } else {
             &case.vault_dir
         });
-        let expected_stdout = expand_vault_marker(&case.expected.stdout_bytes, &vault);
-        let expected_stderr = expand_vault_marker(&case.expected.stderr_bytes, &vault);
+        let expected_stdout = expand_markers(&case.expected.stdout_bytes, &root, &vault);
+        let expected_stderr = expand_markers(&case.expected.stderr_bytes, &root, &vault);
         let stdout_matches =
             if case.name.starts_with("auth_status_") && !case.expected.stdout_bytes.is_empty() {
                 // The Go and Rust commands ask the host biometric provider for

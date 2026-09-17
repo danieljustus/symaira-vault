@@ -76,7 +76,10 @@ pub fn render_status(
     if json_flag || output_format == "json" {
         // Go's auth-status printer deliberately calls SetEscapeHTML(false),
         // so this command must preserve literal <, >, and & bytes.
-        let mut rendered = serde_json::to_string(status).map_err(|e| e.to_string())?;
+        let mut rendered = serde_json::to_string(status)
+            .map_err(|e| e.to_string())?
+            .replace('\u{2028}', "\\u2028")
+            .replace('\u{2029}', "\\u2029");
         rendered.push('\n');
         return Ok(rendered);
     }
@@ -166,7 +169,9 @@ pub fn gui_session_available() -> bool {
         std::process::Command::new("/bin/launchctl")
             .arg("managername")
             .output()
-            .map(|output| output.status.success() && output.stdout.as_slice() == b"Aqua\n")
+            .map(|output| {
+                output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "Aqua"
+            })
             .unwrap_or(false)
     }
     #[cfg(not(target_os = "macos"))]
@@ -177,80 +182,21 @@ pub fn gui_session_available() -> bool {
 
 /// Parses the duration syntax accepted by Go's `time.ParseDuration` for CLI
 /// session TTLs. Fractions are preserved without floating point rounding.
+pub fn parse_ttl_override(value: &str) -> Result<Option<Duration>, String> {
+    let nanos = symvault_core::config::parse_duration_nanos(value)
+        .ok_or_else(|| format!("invalid ttl {value:?}"))?;
+    if nanos <= 0 {
+        return Ok(None);
+    }
+    Ok(Some(Duration::from_nanos(nanos as u64)))
+}
+
+/// Compatibility wrapper for the pre-dispatch CLI call site. New dispatchers
+/// should use [`parse_ttl_override`] so Go's non-positive override semantics
+/// remain visible as `None`.
+#[allow(dead_code)]
 pub fn parse_duration(value: &str) -> Result<Duration, String> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err("ttl must be a duration such as 30m or 1h".to_owned());
-    }
-    if value == "0" {
-        return Err("ttl must be greater than zero".to_owned());
-    }
-    let mut rest = value;
-    let negative = rest.starts_with('-');
-    if negative || rest.starts_with('+') {
-        rest = &rest[1..];
-    }
-    if negative || rest.is_empty() {
-        return Err("ttl must be greater than zero".to_owned());
-    }
-    let mut total_nanos = 0u128;
-    while !rest.is_empty() {
-        let number_end = rest
-            .find(|ch: char| !ch.is_ascii_digit() && ch != '.')
-            .ok_or_else(|| "ttl is missing a unit".to_owned())?;
-        let number = &rest[..number_end];
-        if number.is_empty() || number.matches('.').count() > 1 {
-            return Err(format!("invalid ttl {value:?}"));
-        }
-        let unit_start = number_end;
-        let unit_end = rest[unit_start..]
-            .find(|ch: char| ch.is_ascii_digit() || ch == '.')
-            .map_or(rest.len(), |offset| unit_start + offset);
-        let unit = &rest[unit_start..unit_end];
-        let multiplier = match unit {
-            "ns" => 1u128,
-            "us" | "µs" => 1_000,
-            "ms" => 1_000_000,
-            "s" => 1_000_000_000,
-            "m" => 60_000_000_000,
-            "h" => 3_600_000_000_000,
-            _ => return Err(format!("invalid ttl unit {unit:?}")),
-        };
-        let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
-        if number.contains('.') && fraction.is_empty() {
-            return Err(format!("invalid ttl {value:?}"));
-        }
-        let whole = whole
-            .parse::<u128>()
-            .map_err(|_| format!("invalid ttl {value:?}"))?;
-        let whole_nanos = whole
-            .checked_mul(multiplier)
-            .ok_or_else(|| "ttl is too large".to_owned())?;
-        let fraction_nanos = if fraction.is_empty() {
-            0
-        } else if fraction.len() > 18 || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
-            return Err(format!("invalid ttl {value:?}"));
-        } else {
-            let digits = fraction
-                .parse::<u128>()
-                .map_err(|_| format!("invalid ttl {value:?}"))?;
-            let scale = 10u128.pow(fraction.len() as u32);
-            digits
-                .checked_mul(multiplier)
-                .and_then(|nanos| nanos.checked_div(scale))
-                .ok_or_else(|| "ttl is too large".to_owned())?
-        };
-        total_nanos = total_nanos
-            .checked_add(whole_nanos)
-            .and_then(|nanos| nanos.checked_add(fraction_nanos))
-            .ok_or_else(|| "ttl is too large".to_owned())?;
-        rest = &rest[unit_end..];
-    }
-    if total_nanos == 0 {
-        return Err("ttl must be greater than zero".to_owned());
-    }
-    let nanos = u64::try_from(total_nanos).map_err(|_| "ttl is too large".to_owned())?;
-    Ok(Duration::from_nanos(nanos))
+    parse_ttl_override(value)?.ok_or_else(|| "ttl must be greater than zero".to_owned())
 }
 
 #[cfg(test)]
@@ -317,15 +263,33 @@ mod tests {
 
     #[test]
     fn duration_parser_matches_go_common_forms() {
-        assert_eq!(parse_duration("30m").unwrap(), Duration::from_secs(30 * 60));
         assert_eq!(
-            parse_duration("1h30m").unwrap(),
-            Duration::from_secs(90 * 60)
+            parse_ttl_override("30m").unwrap(),
+            Some(Duration::from_secs(30 * 60))
         );
-        assert_eq!(parse_duration("1.5s").unwrap(), Duration::from_millis(1500));
-        assert!(parse_duration("0s").is_err());
-        assert!(parse_duration("-1m").is_err());
-        assert!(parse_duration("1.s").is_err());
-        assert!(parse_duration("15").is_err());
+        assert_eq!(
+            parse_ttl_override("1h30m").unwrap(),
+            Some(Duration::from_secs(90 * 60))
+        );
+        assert_eq!(
+            parse_ttl_override("1.5s").unwrap(),
+            Some(Duration::from_millis(1500))
+        );
+        assert_eq!(
+            parse_ttl_override(".5s").unwrap(),
+            Some(Duration::from_millis(500))
+        );
+        assert_eq!(
+            parse_ttl_override("1.s").unwrap(),
+            Some(Duration::from_secs(1))
+        );
+        assert_eq!(
+            parse_ttl_override("1μs").unwrap(),
+            Some(Duration::from_micros(1))
+        );
+        assert_eq!(parse_ttl_override("0s").unwrap(), None);
+        assert_eq!(parse_ttl_override("-1m").unwrap(), None);
+        assert!(parse_ttl_override("15").is_err());
+        assert!(parse_ttl_override(" 30m").is_err());
     }
 }

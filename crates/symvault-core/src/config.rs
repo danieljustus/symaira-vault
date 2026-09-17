@@ -833,16 +833,12 @@ fn duration_allowing_negative(
             .map_err(|_| ConfigError::Parse(format!("{field} has a negative duration")));
     }
     let text = string(value, field)?;
-    if let Some(rest) = text.trim().strip_prefix('-') {
-        // Only a well-formed magnitude counts as "negative"; anything else is
-        // still a parse error.
-        return parse_duration(rest)
-            .map(|_| None)
-            .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")));
+    let nanos = parse_duration_nanos(&text)
+        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))?;
+    if nanos < 0 {
+        return Ok(None);
     }
-    parse_duration(&text)
-        .map(Some)
-        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))
+    Ok(Some(Duration::from_nanos(nanos as u64)))
 }
 
 fn boolean(value: &serde_yaml_ng::Value, field: &str) -> Result<bool, ConfigError> {
@@ -870,36 +866,106 @@ fn duration(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, Confi
             .map_err(|_| ConfigError::Parse(format!("{field} has a negative duration")));
     }
     let text = string(value, field)?;
-    parse_duration(&text)
-        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))
+    let nanos = parse_duration_nanos(&text)
+        .ok_or_else(|| ConfigError::Parse(format!("{field} has invalid duration {text:?}")))?;
+    if nanos < 0 {
+        return Err(ConfigError::Parse(format!(
+            "{field} has a negative duration"
+        )));
+    }
+    Ok(Duration::from_nanos(nanos as u64))
 }
-fn parse_duration(text: &str) -> Option<Duration> {
-    let mut total = 0u128;
-    let mut number = String::new();
-    for ch in text.trim().chars() {
-        if ch.is_ascii_digit() {
-            number.push(ch);
-            continue;
+/// Parses Go's `time.ParseDuration` grammar and returns nanoseconds.
+///
+/// The signed result is intentional: Go accepts zero and negative durations;
+/// callers decide whether those values are valid for their field. Fractions
+/// are truncated to nanoseconds just as `time.Duration` is.
+pub fn parse_duration_nanos(text: &str) -> Option<i128> {
+    if text.is_empty() {
+        return None;
+    }
+    let (negative, mut rest) = match text.as_bytes()[0] {
+        b'-' => (true, &text[1..]),
+        b'+' => (false, &text[1..]),
+        _ => (false, text),
+    };
+    if rest.is_empty() {
+        return None;
+    }
+    let mut total = 0i128;
+    while !rest.is_empty() {
+        let mut index = 0;
+        while index < rest.len() && rest.as_bytes()[index].is_ascii_digit() {
+            index += 1;
         }
-        if number.is_empty() {
+        let integer = &rest[..index];
+        let mut fraction = "";
+        if rest[index..].starts_with('.') {
+            let fraction_start = index + 1;
+            index = fraction_start;
+            while index < rest.len() && rest.as_bytes()[index].is_ascii_digit() {
+                index += 1;
+            }
+            fraction = &rest[fraction_start..index];
+            if integer.is_empty() && fraction.is_empty() {
+                return None;
+            }
+        } else if integer.is_empty() {
             return None;
         }
-        let n: u128 = number.parse().ok()?;
-        number.clear();
-        let unit = match ch {
-            'h' => 3_600_000_000_000u128,
-            'm' => 60_000_000_000,
-            's' => 1_000_000_000,
-            'u' => 1_000,
-            'n' => 1,
-            _ => return None,
+        if index == rest.len() {
+            return None;
+        }
+        let (unit, multiplier) = if rest[index..].starts_with("ns") {
+            ("ns", 1i128)
+        } else if rest[index..].starts_with("us")
+            || rest[index..].starts_with("µs")
+            || rest[index..].starts_with("μs")
+        {
+            let length = if rest[index..].starts_with("us") {
+                2
+            } else {
+                3
+            };
+            (&rest[index..index + length], 1_000i128)
+        } else if rest[index..].starts_with("ms") {
+            ("ms", 1_000_000i128)
+        } else if rest[index..].starts_with('s') {
+            ("s", 1_000_000_000i128)
+        } else if rest[index..].starts_with('m') {
+            ("m", 60_000_000_000i128)
+        } else if rest[index..].starts_with('h') {
+            ("h", 3_600_000_000_000i128)
+        } else {
+            return None;
         };
-        total = total.checked_add(n.checked_mul(unit)?)?;
+        let unit_len = unit.len();
+        let whole = if integer.is_empty() {
+            0
+        } else {
+            integer.parse::<i128>().ok()?
+        };
+        let whole = whole.checked_mul(multiplier)?;
+        let fraction_nanos = if fraction.is_empty() {
+            0
+        } else {
+            let digits = &fraction[..fraction.len().min(9)];
+            let value = digits.parse::<i128>().ok()?;
+            value.checked_mul(multiplier)? / 10i128.pow(digits.len() as u32)
+        };
+        total = total.checked_add(whole.checked_add(fraction_nanos)?)?;
+        rest = &rest[index + unit_len..];
     }
-    if !number.is_empty() {
-        total = total.checked_add(number.parse::<u128>().ok()?.checked_mul(1_000_000_000)?)?;
+    let total = if negative {
+        total.checked_neg()?
+    } else {
+        total
+    };
+    if total < i128::from(i64::MIN) || total > i128::from(i64::MAX) {
+        None
+    } else {
+        Some(total)
     }
-    u64::try_from(total).ok().map(Duration::from_nanos)
 }
 fn format_duration(value: Duration) -> String {
     let secs = value.as_secs();

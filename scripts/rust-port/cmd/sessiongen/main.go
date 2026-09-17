@@ -25,6 +25,7 @@ const (
 	pinnedOracleCommit  = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 	pinnedOracleRelease = "unreleased"
 	vaultMarker         = "__VAULT__"
+	rootMarker          = "__ROOT__"
 )
 
 var productionSources = []string{
@@ -106,6 +107,12 @@ func inputs() []sessionCase {
 		{Name: "auth_status_default_profile_initialized", Description: "auth status resolves an initialized default profile", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("defaultProfile: fixture\nprofiles:\n  fixture:\n    vault: __PROFILE_VAULT__\n")), VaultDir: "profile-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
 		{Name: "auth_status_default_invalid_config", Description: "default path resolution ignores malformed resolver config and loads the data vault", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("authMethod: [\n")), VaultDir: "home/.local/share/symaira-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
 		{Name: "auth_status_json_escape", Description: "auth status uses Go JSON escaping for a vault path containing HTML-sensitive and line-separator characters", Initialized: true, ConfigBytes: initializedConfig, VaultDir: "special-<&>-\u2028", Args: []string{"--vault", vaultMarker, "auth", "status", "--json"}},
+		{Name: "unlock_check_ttl_fraction", Description: "unlock parses a leading-dot Go duration before checking the session", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl", ".5s"}},
+		{Name: "unlock_check_ttl_trailing_fraction", Description: "unlock accepts a Go duration with a trailing decimal point", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl", "1.s"}},
+		{Name: "unlock_check_ttl_micro_sign", Description: "unlock accepts both Go microsecond spellings", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl", "1μs"}},
+		{Name: "unlock_check_ttl_zero", Description: "unlock treats a zero override as the configured TTL", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl", "0s"}},
+		{Name: "unlock_check_ttl_negative", Description: "unlock treats a negative override as the configured TTL", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl=-1m"}},
+		{Name: "unlock_check_ttl_invalid", Description: "unlock rejects a duration without a unit before checking the vault", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check", "--ttl", "15"}},
 	}
 }
 
@@ -201,8 +208,8 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		}
 		input.Expected = expected{
 			ExitCode:       exitCode,
-			StdoutBytes:    bytesToInts(normalizeOutput(stdout.Bytes(), vault, profileVault)),
-			StderrBytes:    bytesToInts(normalizeOutput(stderr.Bytes(), vault, profileVault)),
+			StdoutBytes:    bytesToInts(normalizeOutput(stdout.Bytes(), tempRoot)),
+			StderrBytes:    bytesToInts(normalizeOutput(stderr.Bytes(), tempRoot)),
 			StderrContains: errorNeedle(stderr.Bytes()),
 		}
 		if input.Name != "lock_initialized" {
@@ -214,29 +221,14 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 	return cases, nil
 }
 
-func normalizeOutput(output []byte, vault, profileVault string) []byte {
-	output = bytes.ReplaceAll(output, []byte(vault), []byte(vaultMarker))
-	output = bytes.ReplaceAll(output, []byte(profileVault), []byte(vaultMarker))
-	// encoding/json escapes HTML-sensitive path bytes. Replace the complete
-	// quoted JSON string as well, otherwise the fixture would retain the
-	// generator's random temporary root and could not be expanded by Rust.
-	for _, path := range []string{vault, profileVault} {
-		encoded, err := json.Marshal(path)
-		if err == nil {
-			// The auth-status printer uses SetEscapeHTML(false), unlike
-			// json.Marshal. Go still escapes U+2028/U+2029, so adjust only
-			// those three HTML escapes before matching the emitted string.
-			encoded = bytes.ReplaceAll(encoded, []byte(`\u003c`), []byte("<"))
-			encoded = bytes.ReplaceAll(encoded, []byte(`\u003e`), []byte(">"))
-			encoded = bytes.ReplaceAll(encoded, []byte(`\u0026`), []byte("&"))
-			output = bytes.ReplaceAll(output, encoded, []byte(`"__VAULT__"`))
-		}
-	}
-	return output
+func normalizeOutput(output []byte, tempRoot string) []byte {
+	// Replace only the random root. Keeping the path suffix in the fixture
+	// proves JSON escaping for hostile bytes such as <&> and U+2028/U+2029.
+	return bytes.ReplaceAll(output, []byte(tempRoot), []byte(rootMarker))
 }
 
 func errorNeedle(stderr []byte) string {
-	for _, needle := range []string{"vault not initialized", "not initialized", "load config"} {
+	for _, needle := range []string{"vault not initialized", "not initialized", "load config", "no active session"} {
 		if bytes.Contains(bytes.ToLower(stderr), []byte(needle)) {
 			return needle
 		}

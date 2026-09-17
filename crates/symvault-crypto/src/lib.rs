@@ -169,6 +169,14 @@ pub fn recipient_string(identity: &Identity) -> String {
     identity.0.to_public().to_string()
 }
 
+/// Returns the private age identity in a zeroizing buffer for session-cache
+/// persistence. Callers should pass the bytes directly to an encrypted cache
+/// and let this value drop immediately; formatting remains redacted.
+#[must_use]
+pub fn identity_string(identity: &Identity) -> SecretBytes {
+    SecretBytes::new(identity.0.to_string().expose_secret().as_bytes())
+}
+
 /// Encrypts an identity with a passphrase using scrypt and returns the ciphertext.
 pub fn encrypt_identity_scrypt(
     identity: &Identity,
