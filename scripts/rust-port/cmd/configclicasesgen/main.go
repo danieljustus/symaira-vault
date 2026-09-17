@@ -198,7 +198,7 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 			args[i] = strings.ReplaceAll(arg, fileMarker, configPath)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		cmd := exec.CommandContext(ctx, goBinary, args...)
+		cmd := exec.CommandContext(ctx, goBinary, args...) // #nosec G204 -- oracle binary build identity verified before fixed synthetic cases
 		cmd.Dir = root
 		env := os.Environ()
 		env = setEnv(env, "HOME", home)

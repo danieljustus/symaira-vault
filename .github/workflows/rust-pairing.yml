@@ -12,6 +12,10 @@ on:
     # untested claim.
     paths:
       - 'crates/symvault-core/**'
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/cmd/nativekeyringinterop/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
@@ -41,6 +45,10 @@ on:
     branches: [ main ]
     paths:
       - 'crates/symvault-core/**'
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/cmd/nativekeyringinterop/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'

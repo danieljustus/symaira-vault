@@ -46,7 +46,7 @@ func reportPath() (string, error) {
 	if path == "" || !filepath.IsAbs(path) {
 		return "", fmt.Errorf("%s must be an absolute path", reportEnv)
 	}
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Stat(path); err == nil { // #nosec G703 -- explicit disposable-CI report destination, checked for overwrite
 		return "", fmt.Errorf("refusing to overwrite existing report %q", path)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("inspect report path: %w", err)
@@ -74,7 +74,7 @@ func asBytes(value []int) ([]byte, error) {
 }
 
 func readReport(path string) (report, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 G703 -- explicit disposable-CI report path, schema validated below
 	if err != nil {
 		return report{}, fmt.Errorf("read interop report: %w", err)
 	}
@@ -132,7 +132,7 @@ func writeStage() (err error) {
 		return fmt.Errorf("encode interop report: %w", err)
 	}
 	data = append(data, '\n')
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- authorized CI report, absolute path, exclusive creation
 	if err != nil {
 		return fmt.Errorf("create interop report: %w", err)
 	}

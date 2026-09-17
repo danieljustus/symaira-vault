@@ -55,7 +55,7 @@ func main() {
 		{Name: "bw_nulls", Format: "bitwarden", Input: `{"folders":null,"items":[{"type":1,"name":"Login","folderId":null,"notes":null,"login":{"username":null,"uris":null},"fields":null}]}`},
 		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},
 		{Name: "bw_card", Format: "bitwarden", Input: `{"items":[{"type":2,"name":"Card","card":{"number":"fixture-123","code":"000"}}]}`},
-		{Name: "bw_totp_precedence", Format: "bitwarden", Input: `{"items":[{"type":1,"name":"Login","login":{"totp":"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&digits=8"},"fields":[{"name":"TOTP","value":"bad"},{"name":"totp","value":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}`},
+		{Name: "bw_totp_precedence", Format: "bitwarden", Input: `{"items":[{"type":1,"name":"Login","login":{"totp":"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&digits=8"},"fields":[{"name":"TOTP","value":"bad"},{"name":"totp","value":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}`}, // #nosec G101 -- public synthetic import fixture, not a real credential
 		{Name: "bw_empty_folder", Format: "bitwarden", Input: `{"folders":[{"id":"","name":"Ignore"}],"items":[{"type":1,"name":"Bare"}]}`},
 		{Name: "bw_trailing_json", Format: "bitwarden", Input: `{"items":[]} {"ignored":true}`},
 		{Name: "bw_null_document", Format: "bitwarden", Input: `null`},
@@ -73,7 +73,7 @@ func main() {
 		{Name: "trailing_cr", Format: "csv", Input: "title,password\nA,p\r"},
 		{Name: "crlf", Format: "csv", Input: "title,password\r\nA,\"a\r\nb\"\r\n"},
 		{Name: "malformed", Format: "csv", Input: "title,password\nA,\"unterminated"},
-		{Name: "chrome_hosts_collisions", Format: "chrome", Input: "name,url,username,password,note\n,https://USER:PASS@EXAMPLE.test:8080/a,u,p,n\n,https://example.test/b,u2,p2,\nexample.test-2,https://other.test,u3,p3,\n"},
+		{Name: "chrome_hosts_collisions", Format: "chrome", Input: "name,url,username,password,note\n,https://USER:PASS@EXAMPLE.test:8080/a,u,p,n\n,https://example.test/b,u2,p2,\nexample.test-2,https://other.test,u3,p3,\n"}, // #nosec G101 -- public synthetic import fixture, not a real credential
 		{Name: "firefox_ipv6", Format: "firefox", Input: "url,username,password,httpRealm\nhttps://[::1]:8000/a,u,p,\n"},
 		{Name: "apple_empty_title", Format: "apple", Input: "Title,URL,Username,Password,Notes,OTPAuth\n,https://example.test,u,p,,\n"},
 		{Name: "profile_case_headers", Format: "chrome", Input: " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n"},
@@ -88,7 +88,7 @@ func main() {
 			cases[i].Entries = append(cases[i].Entries, entry{Path: e.Path, Data: e.Data, Warnings: e.Warnings, SecretType: secretType(e)})
 		}
 	}
-	secret := "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+	secret := "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP" // #nosec G101 -- public synthetic TOTP oracle input, never a credential
 	totps := []totpCase{}
 	inputs := []string{"", "bad", "JBSWY3DPEHPK3PXP", secret, "  " + strings.ToLower(secret) + "  ",
 		"otpauth://totp/Example?secret=" + secret,
