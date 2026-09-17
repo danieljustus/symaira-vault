@@ -82,7 +82,10 @@ pub(crate) fn init(
         if !quiet {
             writeln!(stdout, "Pushing vault to remote...").map_err(|error| error.to_string())?;
         }
-        let result = repository.push(name);
+        // Go's remote init delegates to git.Push(vaultDir), whose implementation
+        // always selects the conventional origin remote after adding the named
+        // remote. Keep that behavior when callers choose a different --name.
+        let result = repository.push(REMOTE_NAME);
         if result.error.is_none() && result.success {
             if !quiet {
                 writeln!(stdout, "Vault pushed successfully.")
@@ -181,11 +184,8 @@ fn parse_ssh_target(
 }
 
 fn build_ssh_url(user: &str, host: &str, repository_path: &str) -> String {
-    let clean_path = repository_path
-        .strip_prefix('~')
-        .unwrap_or(repository_path)
-        .strip_prefix('/')
-        .unwrap_or_else(|| repository_path.strip_prefix('~').unwrap_or(repository_path));
+    let without_tilde = repository_path.strip_prefix('~').unwrap_or(repository_path);
+    let clean_path = without_tilde.strip_prefix('/').unwrap_or(without_tilde);
     if user.is_empty() {
         format!("ssh://{host}/~{clean_path}")
     } else {
