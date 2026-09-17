@@ -374,6 +374,12 @@ jobs:
           -run "TestCommandTimedOutRequiresEffectiveTreeCancellation|TestRunNaturalNonzeroExitIsNotTimedOut|TestRunDeadlineWithoutEffectiveTreeCancellationPreservesNaturalExit|TestRunPreservesWaitDelayWhenTreeIsAlreadyGone|TestRunAssignmentFailureCleansUpSynchronously|TestRunAssignmentFailureKillsUnassignedSuspendedProcess|TestWindowsClassifyAlreadyGoneWaitDelayEINVAL|TestRunTimeoutKillsDescendantJobObject|TestRunTimeoutWaitsForInheritedPipeCleanup|TestWindowsProcessTreeLifecycleAndErrors|TestWindowsProcessTreeKillReportsActiveJob|TestWindowsProcessTreeKillReportsEmptyJob"
           ./scripts/rust-port/internal/diff
 
+      - name: Run production Git Windows process-tree regression
+        run: >-
+          go test -count=1 -v -timeout=5m
+          -run "^Test(ConfigureProcessTree|StartProcessTree|KillProcessTree|PushWithSystemGit|GitPushTimeout)"
+          ./internal/git
+
       - name: Run store004gen Windows job-object regression
         run: >-
           go test -v -timeout=5m

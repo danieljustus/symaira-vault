@@ -24,7 +24,7 @@ git rev-parse --verify --quiet "$main_ref" >/dev/null 2>&1 || main_ref="main"
 # an earlier version of this collector also could not see.
 collect_pins() {
     {
-        grep -rhoE '(pinnedOracleCommit|const revision)[[:space:]]*=[[:space:]]*"[0-9a-f]{7,40}"' \
+        grep -rhoE '(pinnedOracleCommit|oracleCommit|const revision)[[:space:]]*=[[:space:]]*"[0-9a-f]{7,40}"' \
             "$@" 2>/dev/null || true
         grep -rhoE 'commit:[[:space:]]*"[0-9a-f]{7,40}"' "$@" 2>/dev/null || true
     } | grep -oE '[0-9a-f]{7,40}"?$' | tr -d '"' | sort -u
