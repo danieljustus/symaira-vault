@@ -5,6 +5,7 @@
 //! deterministic, adapter-friendly Rust building blocks for the RUST-008 slice.
 
 pub mod archive;
+pub mod autocommit;
 pub mod devices;
 pub mod export;
 pub mod git;
@@ -18,6 +19,7 @@ pub mod safeio;
 pub mod winner;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
+pub use autocommit::auto_commit_entry;
 pub use devices::{Device, DeviceError, DeviceList, DeviceRegistry};
 pub use git::{Commit, CommitOptions, GitError, GitRepository, GitStatus, PullResult, PushResult};
 pub use offline::{NETWORK_MESSAGE, OFFLINE_ERROR_MARKERS, PushError, is_offline_error};

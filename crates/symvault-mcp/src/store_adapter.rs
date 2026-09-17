@@ -78,7 +78,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
     fn delete_entry(&self, path: &str) -> Result<(), String> {
         self.store
             .delete_entry_with_identity(path, &self.identity)
-            .map_err(store_error)
+            .map_err(store_error)?;
+        if let Err(error) =
+            symvault_sync::auto_commit_entry(&self.store, &self.identity, path, "Delete")
+        {
+            eprintln!("Warning: auto-commit failed: {error}");
+        }
+        Ok(())
     }
 
     fn set_field(&self, path: &str, field: &str, value: Value, now: &str) -> Result<(), String> {
@@ -123,7 +129,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
                     })
                     .as_ref(),
             )
-            .map_err(store_error)
+            .map_err(store_error)?;
+        if let Err(error) =
+            symvault_sync::auto_commit_entry(&self.store, &self.identity, path, "Update")
+        {
+            eprintln!("Warning: auto-commit failed: {error}");
+        }
+        Ok(())
     }
 }
 
