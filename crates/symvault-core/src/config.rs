@@ -981,6 +981,112 @@ pub fn parse_duration_nanos(text: &str) -> Option<i128> {
         Some(total)
     }
 }
+
+/// Parses a Go `time.ParseDuration` value for APIs whose wire type is an
+/// `int64` nanosecond duration. The existing parser remains the shared grammar
+/// implementation; this wrapper adds Go's error envelope and range.
+pub fn parse_go_duration(text: &str) -> Result<i64, String> {
+    let unsigned = text
+        .strip_prefix('+')
+        .or_else(|| text.strip_prefix('-'))
+        .unwrap_or(text);
+    if unsigned == "0" {
+        return Ok(0);
+    }
+    parse_duration_nanos(text)
+        .and_then(|nanos| i64::try_from(nanos).ok())
+        .ok_or_else(|| go_duration_error(text))
+}
+
+fn go_duration_error(text: &str) -> String {
+    match duration_failure_kind(text) {
+        Some(DurationFailure::MissingUnit) => {
+            format!("time: missing unit in duration {}", go_duration_quote(text))
+        }
+        Some(DurationFailure::UnknownUnit(unit)) => format!(
+            "time: unknown unit {} in duration {}",
+            go_duration_quote(&unit),
+            go_duration_quote(text)
+        ),
+        None => format!("time: invalid duration {}", go_duration_quote(text)),
+    }
+}
+
+enum DurationFailure {
+    MissingUnit,
+    UnknownUnit(String),
+}
+
+fn duration_failure_kind(text: &str) -> Option<DurationFailure> {
+    let mut rest = text;
+    if matches!(rest.as_bytes().first(), Some(b'+' | b'-')) {
+        rest = &rest[1..];
+    }
+    if rest.is_empty() {
+        return None;
+    }
+    while !rest.is_empty() {
+        let bytes = rest.as_bytes();
+        if !matches!(bytes.first(), Some(b'.' | b'0'..=b'9')) {
+            return None;
+        }
+        let mut index = 0;
+        while index < bytes.len() && bytes[index].is_ascii_digit() {
+            index += 1;
+        }
+        let has_integer = index > 0;
+        let mut has_fraction = false;
+        if bytes.get(index) == Some(&b'.') {
+            index += 1;
+            let fraction_start = index;
+            while index < bytes.len() && bytes[index].is_ascii_digit() {
+                index += 1;
+            }
+            has_fraction = index > fraction_start;
+        }
+        if !has_integer && !has_fraction {
+            return None;
+        }
+        let unit_start = index;
+        while index < bytes.len() {
+            let character = rest[index..].chars().next()?;
+            if character == '.' || character.is_ascii_digit() {
+                break;
+            }
+            index += character.len_utf8();
+        }
+        if index == unit_start {
+            return Some(DurationFailure::MissingUnit);
+        }
+        let unit = &rest[unit_start..index];
+        if !matches!(unit, "ns" | "us" | "µs" | "μs" | "ms" | "s" | "m" | "h") {
+            return Some(DurationFailure::UnknownUnit(unit.to_owned()));
+        }
+        rest = &rest[index..];
+    }
+    None
+}
+
+fn go_duration_quote(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for byte in value.bytes() {
+        if byte >= 0x80 || byte < b' ' {
+            quoted.push_str("\\x");
+            quoted.push(HEX[(byte >> 4) as usize] as char);
+            quoted.push(HEX[(byte & 0x0f) as usize] as char);
+        } else if matches!(byte, b'"' | b'\\') {
+            quoted.push('\\');
+            quoted.push(byte as char);
+        } else {
+            quoted.push(byte as char);
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
 fn format_duration(value: Duration) -> String {
     let secs = value.as_secs();
     let nanos = value.subsec_nanos();
@@ -1736,6 +1842,52 @@ mod tests {
         assert_eq!(c.agents["x"].approval_mode.as_deref(), Some("none"));
         assert_eq!(c.mcp.unwrap().port, 9090);
     }
+
+    #[test]
+    fn parse_go_duration_matches_ttl_wire_contract() {
+        for (text, expected) in [
+            ("1h2m3.5s", 3_723_500_000_000_i64),
+            ("1µs", 1_000_i64),
+            ("1μs", 1_000_i64),
+            ("-5m", -300_000_000_000_i64),
+            ("0s", 0_i64),
+            ("0", 0_i64),
+            ("+0", 0_i64),
+            ("-0", 0_i64),
+        ] {
+            assert_eq!(parse_go_duration(text), Ok(expected), "{text}");
+        }
+        for text in ["", "not-a-duration", ".s", "9223372037s"] {
+            assert_eq!(
+                parse_go_duration(text),
+                Err(format!("time: invalid duration {text:?}")),
+                "{text:?}"
+            );
+        }
+        assert_eq!(
+            parse_go_duration("1"),
+            Err("time: missing unit in duration \"1\"".into())
+        );
+        assert_eq!(
+            parse_go_duration("1fortnight"),
+            Err("time: unknown unit \"fortnight\" in duration \"1fortnight\"".into())
+        );
+        assert_eq!(
+            parse_go_duration("1e3s"),
+            Err("time: unknown unit \"e\" in duration \"1e3s\"".into())
+        );
+        assert_eq!(
+            parse_go_duration("1.2.3s"),
+            Err("time: missing unit in duration \"1.2.3s\"".into())
+        );
+    }
+
+    #[test]
+    fn parse_go_duration_keeps_existing_parser_unmodified() {
+        assert_eq!(parse_duration_nanos("1μs"), Some(1_000));
+        assert_eq!(parse_duration_nanos("-5m"), Some(-300_000_000_000));
+    }
+
     #[test]
     fn payment_exposure_is_opt_in_and_survives_save() {
         for (value, expected) in [("true", true), ("false", false)] {
