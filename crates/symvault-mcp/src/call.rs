@@ -1305,7 +1305,10 @@ fn json_text(value: Value) -> Result<ToolCallResult, String> {
         .map_err(|error| error.to_string())
 }
 
-fn required_string<'a>(arguments: &'a Value, name: &str) -> Result<&'a str, ToolCallResult> {
+pub(crate) fn required_string<'a>(
+    arguments: &'a Value,
+    name: &str,
+) -> Result<&'a str, ToolCallResult> {
     match arguments.get(name) {
         None => Err(ToolCallResult::error(format!(
             "missing string argument \"{name}\""

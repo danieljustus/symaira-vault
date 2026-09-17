@@ -23,7 +23,7 @@ struct WhoamiInfo {
     name: String,
     vault_dir: String,
     tier: String,
-    allowed_paths: Option<Vec<String>>,
+    allowed_paths: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     allowed_tools: Vec<String>,
     can_write: bool,
@@ -66,15 +66,16 @@ pub(crate) fn whoami(
         .ok_or_else(|| format!("agent {agent_name:?} not found in config"))?;
 
     let token_file_path = root.join("mcp-tokens").join(format!("{agent_name}.token"));
-    let token_file = fs::metadata(&token_file_path)
-        .is_ok()
-        .then(|| token_file_path.to_string_lossy().into_owned())
-        .unwrap_or_default();
+    let token_file = if fs::metadata(&token_file_path).is_ok() {
+        token_file_path.to_string_lossy().into_owned()
+    } else {
+        String::new()
+    };
     let info = WhoamiInfo {
         name: agent_name.to_owned(),
         vault_dir: root.to_string_lossy().into_owned(),
         tier: profile.tier.clone().unwrap_or_default(),
-        allowed_paths: Some(profile.allowed_paths.clone()),
+        allowed_paths: profile.allowed_paths.clone(),
         allowed_tools: profile.allowed_tools.clone(),
         can_write: profile.can_write,
         can_read_values: profile.can_read_values,
@@ -107,43 +108,14 @@ fn write_json(info: &WhoamiInfo, output: &mut impl Write) -> Result<(), String> 
     writeln!(output, "{rendered}").map_err(|error| error.to_string())
 }
 
-/// Go's `json.Encoder` escapes HTML-sensitive characters even in indented
-/// output. Apply those escapes only while inside JSON strings.
+// These characters only occur inside strings in serde_json's generated JSON.
 fn escape_go_json_strings(input: &str) -> String {
-    let mut output = String::with_capacity(input.len());
-    let mut in_string = false;
-    let mut escaped = false;
-    for character in input.chars() {
-        if !in_string {
-            output.push(character);
-            if character == '"' {
-                in_string = true;
-            }
-            continue;
-        }
-        if escaped {
-            output.push(character);
-            escaped = false;
-            continue;
-        }
-        match character {
-            '\\' => {
-                output.push(character);
-                escaped = true;
-            }
-            '"' => {
-                output.push(character);
-                in_string = false;
-            }
-            '<' => output.push_str("\\u003c"),
-            '>' => output.push_str("\\u003e"),
-            '&' => output.push_str("\\u0026"),
-            '\u{2028}' => output.push_str("\\u2028"),
-            '\u{2029}' => output.push_str("\\u2029"),
-            _ => output.push(character),
-        }
-    }
-    output
+    input
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
 fn write_text(info: &WhoamiInfo, output: &mut impl Write) -> Result<(), String> {
@@ -152,7 +124,7 @@ fn write_text(info: &WhoamiInfo, output: &mut impl Write) -> Result<(), String> 
     if !info.tier.is_empty() {
         writeln!(output, "Tier:       {}", info.tier).map_err(|error| error.to_string())?;
     }
-    let paths = info.allowed_paths.as_deref().unwrap_or_default().join(", ");
+    let paths = info.allowed_paths.join(", ");
     writeln!(output, "Paths:      {paths}").map_err(|error| error.to_string())?;
     if !info.allowed_tools.is_empty() {
         writeln!(output, "Tools:      {}", info.allowed_tools.join(", "))

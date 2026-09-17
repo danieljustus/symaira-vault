@@ -13,10 +13,10 @@ use std::{
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
 use symvault_store::{
-    sharing::{ShareFilter, ShareStore, SHARE_STORE_FILE},
     Entry, Store, StoreError, WriteRecord,
+    sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
 };
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
@@ -389,19 +389,11 @@ impl StoreReadOnlyRuntime {
     }
 
     fn revoke_share(&self, arguments: &Value) -> Result<ToolCallResult, String> {
-        let grant_id = match arguments.get("grant_id") {
-            None => {
+        let grant_id = match crate::call::required_string(arguments, "grant_id") {
+            Ok(value) => value,
+            Err(error) => {
                 self.append_audit("share_revoke", "<invalid>", false);
-                return Ok(ToolCallResult::error(
-                    "missing string argument \"grant_id\"",
-                ));
-            }
-            Some(Value::String(value)) => value,
-            Some(_) => {
-                self.append_audit("share_revoke", "<invalid>", false);
-                return Ok(ToolCallResult::error(
-                    "argument \"grant_id\" is not a string",
-                ));
+                return Ok(error);
             }
         };
         let now = self
@@ -434,6 +426,9 @@ impl StoreReadOnlyRuntime {
                     "share grant {quoted} not found"
                 )))
             }
+            Err(StoreError::Config(message)) => Ok(ToolCallResult::error(format!(
+                "failed to revoke share grant: {message}"
+            ))),
             Err(error) => Ok(ToolCallResult::error(format!(
                 "failed to revoke share grant: {error}"
             ))),
@@ -981,7 +976,7 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{render_list_shares, MinuteRateLimiter, MCP_RATE_LIMIT_WINDOW};
+    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, render_list_shares};
     use serde_json::json;
     use std::fs;
     use std::time::{Duration, Instant};
@@ -1016,11 +1011,13 @@ mod tests {
         let all = render_list_shares(&shares, "alice", &json!({})).expect("list shares");
         let all_json: serde_json::Value = serde_json::from_str(&all.text).expect("JSON result");
         assert_eq!(all_json.as_array().expect("array").len(), 2);
-        assert!(all_json
-            .as_array()
-            .expect("array")
-            .iter()
-            .all(|grant| grant["from_agent"] == "alice"));
+        assert!(
+            all_json
+                .as_array()
+                .expect("array")
+                .iter()
+                .all(|grant| grant["from_agent"] == "alice")
+        );
 
         let filtered = render_list_shares(
             &shares,

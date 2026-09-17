@@ -80,7 +80,7 @@ pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<St
                 return Err("environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
             }
             eprintln!(
-                "Warning: SYMVAULT_PASSPHRASE is active; environment passphrases may be exposed by process inspection."
+                "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps."
             );
             return Ok(pass);
         }

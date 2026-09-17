@@ -276,7 +276,7 @@ impl ShareStore {
         {
             return Err(StoreError::Config(format!(
                 "only the source agent {} can revoke this share",
-                go_json_string(expected_from_agent)
+                go_json_string(&current.grants[position].from_agent)
             )));
         }
         if matches!(
@@ -895,7 +895,7 @@ mod tests {
             .expect_err("stale source must not revoke");
         assert_eq!(
             error.to_string(),
-            "only the source agent \"old-source\" can revoke this share"
+            "invalid vault config: only the source agent \"new-source\" can revoke this share"
         );
         assert_eq!(snapshot.grants(), before.grants());
         let persisted = ShareStore::read(&path).expect("read unchanged current share");

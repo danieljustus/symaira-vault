@@ -5,8 +5,8 @@ use std::{
 };
 use symvault_core::session::MemoryKeyring;
 use symvault_crypto::generate_identity;
-use symvault_mcp::{read_only_tool_names, run_stream, ProtocolHandler, ReadOnlyRuntimeConfig};
-use symvault_store::{audit::RotationConfig, Store};
+use symvault_mcp::{ProtocolHandler, ReadOnlyRuntimeConfig, read_only_tool_names, run_stream};
+use symvault_store::{Store, audit::RotationConfig};
 use tempfile::TempDir;
 
 fn fixture_runtime() -> (
@@ -86,12 +86,16 @@ fn protocol_list_shares_scopes_filters_and_audits_empty_path() {
     // sharing_store.go at Go oracle fca3f894. This test exercises Rust's
     // concrete encrypted-store protocol wiring; it does not claim Go stdio
     // execution because the current Go New path leaves shareStore unattached.
-    assert!(read_only_tool_names()
-        .iter()
-        .any(|name| name == "list_shares"));
-    assert!(read_only_tool_names()
-        .iter()
-        .any(|name| name == "revoke_share"));
+    assert!(
+        read_only_tool_names()
+            .iter()
+            .any(|name| name == "list_shares")
+    );
+    assert!(
+        read_only_tool_names()
+            .iter()
+            .any(|name| name == "revoke_share")
+    );
     let (_root, mut handler, audit) = fixture_runtime();
     let output = run_stream(
         r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}
@@ -111,11 +115,13 @@ fn protocol_list_shares_scopes_filters_and_audits_empty_path() {
         .expect("list result text");
     let all_grants: Value = serde_json::from_str(all_text).expect("all grants JSON");
     assert_eq!(all_grants.as_array().expect("grant array").len(), 2);
-    assert!(all_grants
-        .as_array()
-        .expect("grant array")
-        .iter()
-        .all(|grant| grant["from_agent"] == "fixture" || grant["to_agent"] == "fixture"));
+    assert!(
+        all_grants
+            .as_array()
+            .expect("grant array")
+            .iter()
+            .all(|grant| grant["from_agent"] == "fixture" || grant["to_agent"] == "fixture")
+    );
     assert!(
         !all_text.contains("private"),
         "cross-agent grant must stay hidden"

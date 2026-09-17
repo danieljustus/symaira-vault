@@ -1,7 +1,9 @@
 #![deny(unsafe_code)]
 
 mod add_commands;
+mod agent_list_commands;
 mod agent_profile_commands;
+mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
@@ -19,10 +21,12 @@ mod policy_commands;
 mod profile_commands;
 mod recipients_commands;
 mod remote_commands;
+mod run_commands;
 mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod share_commands;
 mod sync_commands;
 mod template_commands;
 mod utility_commands;
@@ -109,6 +113,26 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Run a command with secrets injected as environment variables.
+    Run {
+        #[arg(short = 'e', long = "env")]
+        env: Vec<String>,
+        #[arg(short = 'f', long)]
+        env_file: Vec<PathBuf>,
+        #[arg(long)]
+        passthrough: Vec<String>,
+        #[arg(short = 'C', long)]
+        working_dir: Option<PathBuf>,
+        #[arg(short = 't', long)]
+        timeout: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+    /// Manage secret sharing between agents.
+    Share {
+        #[command(subcommand)]
+        command: ShareCommand,
+    },
     /// Inspect declarative policies.
     Policy {
         #[command(subcommand)]
@@ -381,7 +405,29 @@ enum PolicyCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum ShareCommand {
+    /// Revoke a share grant.
+    Revoke { grant_id: String },
+    /// List share grants.
+    List {
+        #[arg(long, default_value = "")]
+        status: String,
+        #[arg(long, default_value = "")]
+        from: String,
+        #[arg(long, default_value = "")]
+        to: String,
+        #[arg(long, default_value = "")]
+        path: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum AgentCommand {
+    List,
+    Whoami {
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
     Profile {
         #[command(subcommand)]
         command: AgentProfileCommand,
@@ -857,6 +903,123 @@ fn main() -> ExitCode {
         Some(Command::Profile { command }) => {
             run_profile(&command, cli.vault.as_deref(), cli.quiet)
         }
+        Some(Command::Run {
+            env,
+            env_file,
+            passthrough,
+            working_dir,
+            timeout,
+            command,
+        }) => {
+            let result = (|| {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&root)?;
+                let identity = device::unlock_vault(&root)?;
+                let environment =
+                    run_commands::build_secret_environment(&env, &env_file, |reference| {
+                        run_commands::resolve_secret_ref(&root, &identity, reference)
+                    })?;
+                let timeout = timeout
+                    .as_deref()
+                    .map(session_commands::parse_ttl_override)
+                    .transpose()?
+                    .flatten();
+                let redactions: Vec<_> = environment
+                    .values
+                    .values()
+                    .map(|value| value.as_bytes().to_vec())
+                    .collect();
+                let result = run_commands::run_process(run_commands::ProcessOptions {
+                    command: &command,
+                    environment: &environment.values,
+                    extra_environment: &[],
+                    generic_redaction: true,
+                    passthrough: &passthrough,
+                    working_directory: working_dir
+                        .as_deref()
+                        .filter(|path| !path.as_os_str().is_empty()),
+                    timeout,
+                    redactions: &redactions,
+                    whitelist: run_commands::RUN_ENV_WHITELIST,
+                })?;
+                if result.timed_out {
+                    return Err(format!(
+                        "command timed out after {}",
+                        run_commands::format_timeout(timeout.unwrap_or_default())
+                    ));
+                }
+                print!("{}", result.stdout);
+                eprint!("{}", result.stderr);
+                if result.exit_code != 0 {
+                    return Err(format!("command exited with code {}", result.exit_code));
+                }
+                Ok(())
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Share {
+            command: ShareCommand::Revoke { grant_id },
+        }) => {
+            let result = (|| {
+                use symvault_store::sharing::{SHARE_STORE_FILE, ShareStore};
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let mut shares = ShareStore::read(root.join(SHARE_STORE_FILE))
+                    .map_err(|error| format!("load share store: {error}"))?;
+                let now = time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .map_err(|error| error.to_string())?;
+                shares.revoke_at(&root, &grant_id, &now).map_err(|error| {
+                    let message = match error {
+                        symvault_store::StoreError::Config(message) => message,
+                        error => error.to_string(),
+                    };
+                    format!("revoke share grant: {message}")
+                })?;
+                if !cli.quiet {
+                    println!("Share grant {grant_id} revoked successfully.");
+                }
+                Ok(())
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Share {
+            command:
+                ShareCommand::List {
+                    status,
+                    from,
+                    to,
+                    path,
+                },
+        }) => {
+            let result = (|| {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let format = if cli.json {
+                    "json"
+                } else {
+                    cli.output.as_deref().unwrap_or("text")
+                };
+                share_commands::list(
+                    &root,
+                    format,
+                    cli.quiet,
+                    &status,
+                    &from,
+                    &to,
+                    &path,
+                    &mut io::stdout().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
         Some(Command::Policy { command }) => {
             let result = (|| {
                 let mut output = io::stderr().lock();
@@ -876,6 +1039,58 @@ fn main() -> ExitCode {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                         policy_commands::list(&root, &mut output)
                     }
+                }
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::Whoami { output },
+        }) => {
+            let result = (|| {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let agent = std::env::var("SYMVAULT_AGENT").unwrap_or_default();
+                agent_whoami_commands::whoami(
+                    &root,
+                    &agent,
+                    output.as_deref().unwrap_or("text"),
+                    &mut io::stdout().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::List,
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let home = cli_home_directory()?;
+                let format = if cli.json {
+                    "json"
+                } else {
+                    cli.output.as_deref().unwrap_or("text")
+                };
+                if matches!(format, "json" | "yaml") {
+                    agent_list_commands::list(
+                        &vault,
+                        &home,
+                        format,
+                        cli.quiet,
+                        &mut io::stdout().lock(),
+                    )
+                } else {
+                    agent_list_commands::list(
+                        &vault,
+                        &home,
+                        format,
+                        cli.quiet,
+                        &mut io::stderr().lock(),
+                    )
                 }
             })();
             if let Err(error) = &result {

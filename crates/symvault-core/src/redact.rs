@@ -234,15 +234,15 @@ impl PatternDetector {
                 PatternValidator::None,
             ),
             (
-                r#"(?-u:\b)api[_-]?key(?-u:\s)*[:=](?-u:\s)*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
+                r#"(?-u:\b)api[_-]?key[\t\n\f\r ]*[:=][\t\n\f\r ]*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
                 PatternValidator::None,
             ),
             (
-                r#"(?-u:\b)secret[_-]?key(?-u:\s)*[:=](?-u:\s)*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
+                r#"(?-u:\b)secret[_-]?key[\t\n\f\r ]*[:=][\t\n\f\r ]*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b)[a-zA-Z]+://[^:]+:[^@]+@[^\s]+(?-u:\b)",
+                r"(?-u:\b)[a-zA-Z]+://[^:]+:[^@]+@[^\t\n\f\r ]+(?-u:\b)",
                 PatternValidator::None,
             ),
             (
@@ -250,7 +250,7 @@ impl PatternDetector {
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b)ssh-rsa(?-u:\s)+[A-Za-z0-9+/=]{100,}(?-u:\b)",
+                r"(?-u:\b)ssh-rsa[\t\n\f\r ]+[A-Za-z0-9+/=]{100,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
@@ -274,7 +274,7 @@ impl PatternDetector {
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b)Bearer(?-u:\s)+[A-Za-z0-9\-._~+/]+={0,2}(?-u:\b)",
+                r"(?-u:\b)Bearer[\t\n\f\r ]+[A-Za-z0-9\-._~+/]+={0,2}(?-u:\b)",
                 PatternValidator::None,
             ),
             (

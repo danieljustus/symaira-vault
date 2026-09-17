@@ -27,6 +27,7 @@ fn run(binary: &Path, args: &[String], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env("RUN_SAFE_MARKER", "ambient-value")
+        .env("RUN_PATTERN_CORPUS", synthetic_pattern_corpus())
         .env("CI", "1")
         .output()
         .expect("run CLI")
@@ -115,6 +116,8 @@ fn synthetic_pattern_corpus() -> String {
         ssn,
         ipv4,
         unicode_adjacent,
+        "Bearer\u{000b}short-fixture".to_owned(),
+        "https://fixture:password@example.invalid/a\u{00a0}tail".to_owned(),
     ]
     .join("|")
 }
@@ -180,25 +183,24 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
         assert_success(&set, "Go set overlap fixture");
     }
 
-    fs::write(&env_file, b"FROM_FILE=run/password\n").expect("env file");
-    let pattern_corpus = synthetic_pattern_corpus();
-    let command = format!(
-        "printf '%s|%s|%s|%s|%s' \"$TOKEN\" \"$FROM_FILE\" \"$RUN_SAFE_MARKER\" '{pattern_corpus}' abcde"
-    );
+    fs::write(&env_file, b"FROM_FILE=run/password.password\n").expect("env file");
+    let command = "printf '%s|%s|%s|%s|%s' \"$TOKEN\" \"$FROM_FILE\" \"$RUN_SAFE_MARKER\" \"$RUN_PATTERN_CORPUS\" abcde".to_owned();
     let mut args = vec![
         "--vault".to_owned(),
         root.to_str().expect("vault path").to_owned(),
         "run".to_owned(),
         "--env".to_owned(),
-        "TOKEN=run/password".to_owned(),
+        "TOKEN=run/password.password".to_owned(),
         "--env".to_owned(),
-        "OVERLAP=run/overlap-short".to_owned(),
+        "OVERLAP=run/overlap-short.password".to_owned(),
         "--env".to_owned(),
-        "OVERLAP_LONG=run/overlap-long".to_owned(),
+        "OVERLAP_LONG=run/overlap-long.password".to_owned(),
         "--env-file".to_owned(),
         env_file.to_str().expect("env path").to_owned(),
         "--passthrough".to_owned(),
         "RUN_SAFE_MARKER".to_owned(),
+        "--passthrough".to_owned(),
+        "RUN_PATTERN_CORPUS".to_owned(),
         "--".to_owned(),
         "sh".to_owned(),
         "-c".to_owned(),
@@ -209,6 +211,10 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
     assert_success(&go_run, "Go run");
     assert_success(&rust_run, "Rust run");
     assert_eq!(rust_run.stdout, go_run.stdout, "run stdout");
+    assert!(
+        rust_run.stdout.ends_with(b"|***"),
+        "overlapping values must be masked as one span"
+    );
     assert_eq!(rust_run.stderr, go_run.stderr, "run stderr");
 
     args = string_args(&[

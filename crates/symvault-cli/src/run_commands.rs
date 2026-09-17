@@ -6,9 +6,9 @@
 
 use std::{
     collections::BTreeMap,
+    ffi::OsString,
     fs,
     io::Read,
-    ffi::OsString,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -16,9 +16,7 @@ use std::{
 };
 
 use serde_json::Value;
-use symvault_core::redact::{
-    PatternDetector, ScanOptions, Scanner, redact_known_values,
-};
+use symvault_core::redact::{PatternDetector, ScanOptions, Scanner, redact_known_values};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
 
@@ -331,11 +329,15 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         .map_err(|error| format!("failed to run command: {error}"))?;
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
-        None => return terminate_after_spawn_failure(&mut child, "failed to capture command stdout"),
+        None => {
+            return terminate_after_spawn_failure(&mut child, "failed to capture command stdout");
+        }
     };
     let stderr = match child.stderr.take() {
         Some(stderr) => stderr,
-        None => return terminate_after_spawn_failure(&mut child, "failed to capture command stderr"),
+        None => {
+            return terminate_after_spawn_failure(&mut child, "failed to capture command stderr");
+        }
     };
     let stdout_reader = thread::spawn(|| read_process_output(stdout));
     let stderr_reader = thread::spawn(|| read_process_output(stderr));
@@ -419,7 +421,10 @@ fn has_system_root_assignment(
             .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
 }
 
-fn terminate_after_spawn_failure<T>(child: &mut std::process::Child, message: &str) -> Result<T, String> {
+fn terminate_after_spawn_failure<T>(
+    child: &mut std::process::Child,
+    message: &str,
+) -> Result<T, String> {
     let _ = child.kill();
     let _ = child.wait();
     Err(message.to_owned())
@@ -496,11 +501,7 @@ fn read_process_output(mut reader: impl Read) -> (Vec<u8>, bool) {
     (captured, truncated)
 }
 
-fn redact_process_output(
-    output: &[u8],
-    redactions: &[Vec<u8>],
-    generic_redaction: bool,
-) -> String {
+fn redact_process_output(output: &[u8], redactions: &[Vec<u8>], generic_redaction: bool) -> String {
     let mut output = output.to_vec();
     if generic_redaction {
         let text = String::from_utf8_lossy(&output).into_owned();
@@ -747,13 +748,10 @@ mod tests {
 
         let env_flags = vec!["TOKEN=value".to_owned()];
         let mut resolve = resolver(&values);
-        let error = build_secret_environment(
-            &env_flags,
-            &[env_file.path().to_path_buf()],
-            &mut resolve,
-        )
-        .err()
-        .expect("duplicate mapping");
+        let error =
+            build_secret_environment(&env_flags, &[env_file.path().to_path_buf()], &mut resolve)
+                .err()
+                .expect("duplicate mapping");
         assert!(error.contains("duplicate env var"));
         assert!(!error.contains("secret-value"));
     }
@@ -894,10 +892,7 @@ mod tests {
     #[test]
     fn generic_process_redaction_merges_overlapping_known_values() {
         let redactions = vec![b"abcd".to_vec(), b"bcde".to_vec()];
-        assert_eq!(
-            redact_process_output(b"abcde", &redactions, true),
-            "***"
-        );
+        assert_eq!(redact_process_output(b"abcde", &redactions, true), "***");
     }
 
     #[test]
