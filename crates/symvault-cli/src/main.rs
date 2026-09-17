@@ -707,7 +707,12 @@ fn run_mcp(
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        mcp_commands::run(&vault, agent, identity)
+        let runtime = runtime_session_manager();
+        let keyring = runtime
+            .keyring
+            .as_deref()
+            .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
+        mcp_commands::run(&vault, agent, identity, keyring)
     })();
     finish_vault_result(result)
 }
@@ -843,6 +848,9 @@ fn run_import(
             },
             |root, identity, path, data| write_commands::import_fields(root, identity, path, data),
             |root, identity, path, data| write_commands::replace_fields(root, identity, path, data),
+            |root, identity, path, secret_type| {
+                write_commands::set_secret_type(root, identity, path, secret_type)
+            },
         )?;
         if !quiet {
             println!(
