@@ -11,7 +11,7 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::{StoreError, open_nofollow, read_open_regular_with_metadata};
+use crate::{StoreError, read_open_regular_with_metadata};
 
 /// The Go share-store file name used below a vault directory.
 pub const SHARE_STORE_FILE: &str = "mcp-shares.json";
@@ -25,7 +25,7 @@ pub type ShareStatus = String;
 /// Go encodes `time.Duration` as an integer number of nanoseconds.  Keeping
 /// timestamps as RFC3339 strings keeps them independent of a platform clock
 /// type while load canonicalizes them like Go's `time.Time` JSON marshaler.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ShareGrant {
     #[serde(default, deserialize_with = "deserialize_null_default")]
     pub id: String,
@@ -64,7 +64,7 @@ pub struct ShareGrant {
     pub status: ShareStatus,
     #[serde(
         rename = "created_at",
-        default,
+        default = "zero_timestamp",
         deserialize_with = "deserialize_go_timestamp"
     )]
     pub created_at: String,
@@ -96,7 +96,11 @@ pub struct ShareGrant {
         skip_serializing_if = "String::is_empty"
     )]
     pub approved_by: String,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_null_default",
+        skip_serializing_if = "is_zero"
+    )]
     pub ttl: i64,
 }
 
@@ -132,7 +136,11 @@ impl ShareStore {
     /// the store's no-follow and `MAX_FILE_BYTES` bounded helper.
     pub fn read(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref();
-        let bytes = match open_nofollow(path) {
+        #[cfg(unix)]
+        let file = crate::open_nofollow_kind(path, false);
+        #[cfg(not(unix))]
+        let file = crate::open_nofollow(path);
+        let bytes = match file {
             Ok(file) => read_open_regular_with_metadata(file, path)?.0,
             Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(Self::default()),
             Err(source) => {
@@ -166,7 +174,7 @@ impl ShareStore {
         let grants = grants_by_id.into_values().collect();
         // This is an opt-in integrity check.  Plain list semantics remain
         // compatible with Go, which loads and lists forged metadata, while
-        // callers requiring a trusted snapshot can use `verified_grants`.
+        // callers checking the signed identity fields can use `verified_grants`.
         let _ = raw.version;
         Ok(Self {
             version: SHARE_STORE_VERSION,
@@ -226,7 +234,9 @@ impl ShareStore {
         &self.grants
     }
 
-    /// Verifies every HMAC-format grant and returns an owned trusted list.
+    /// Verifies HMAC-format IDs over their bound identity fields.
+    /// Go does not include lifecycle status or expiry in this signature;
+    /// this method does not authenticate those fields.
     /// Legacy IDs without `:` retain Go's backwards-compatible behavior and
     /// are included without a cryptographic check.
     pub fn verified_grants(
@@ -305,7 +315,7 @@ impl ShareGrant {
         let expires_at =
             time::OffsetDateTime::parse(expires_at, &time::format_description::well_known::Rfc3339)
                 .map_err(|error| StoreError::Config(format!("invalid expires_at: {error}")))?;
-        Ok(now >= expires_at)
+        Ok(now > expires_at)
     }
 }
 
@@ -325,7 +335,7 @@ fn matches_filter(grant: &ShareGrant, filter: Option<&ShareFilter>) -> bool {
     filter
         .status
         .as_ref()
-        .map_or(true, |status| grant.status == *status)
+        .is_none_or(|status| grant.status == *status)
         && (filter.from_agent.is_empty() || grant.from_agent == filter.from_agent)
         && (filter.to_agent.is_empty() || grant.to_agent == filter.to_agent)
         && (filter.secret_path.is_empty() || grant.secret_path == filter.secret_path)
@@ -404,7 +414,9 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
         return None;
     }
     bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| Some((hex_nibble(chunk[0])? << 4) | hex_nibble(chunk[1])?))
         .collect()
 }
@@ -439,14 +451,19 @@ where
     Option::<Vec<Option<ShareGrant>>>::deserialize(deserializer)
 }
 
+fn zero_timestamp() -> String {
+    "0001-01-01T00:00:00Z".into()
+}
+
 fn deserialize_go_timestamp<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let value = Option::<String>::deserialize(deserializer)?.unwrap_or_default();
-    if !value.is_empty() {
-        validate_timestamp(&value, "created_at").map_err(serde::de::Error::custom)?;
+    let value = Option::<String>::deserialize(deserializer)?.unwrap_or_else(zero_timestamp);
+    if value.is_empty() {
+        return Err(serde::de::Error::custom("empty timestamp"));
     }
+    validate_timestamp(&value, "created_at").map_err(serde::de::Error::custom)?;
     Ok(value)
 }
 
@@ -478,7 +495,7 @@ mod tests {
 
     fn fixture_path() -> (TempDir, PathBuf) {
         let root = tempfile::tempdir().expect("fixture directory");
-        let path = root.path().join(SHARE_STORE_FILE);
+        let path = root.path().canonicalize().unwrap().join(SHARE_STORE_FILE);
         (root, path)
     }
 
@@ -535,6 +552,14 @@ mod tests {
     }
 
     #[test]
+    fn absent_and_null_created_at_use_go_zero_time() {
+        for data in [r#"{"id":"legacy"}"#, r#"{"id":"legacy","created_at":null}"#] {
+            let grant: ShareGrant = serde_json::from_str(data).unwrap();
+            assert_eq!(grant.created_at, "0001-01-01T00:00:00Z");
+        }
+    }
+
+    #[test]
     fn malformed_go_timestamp_is_rejected_at_load() {
         let (_root, path) = fixture_path();
         fs::write(
@@ -583,6 +608,12 @@ mod tests {
         );
         assert!(
             store
+                .check_access("target", "prod/api", Some(GO_KEY), "2026-01-02T04:04:05Z")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            store
                 .check_access("other", "prod/api", Some(GO_KEY), "2026-01-02T03:30:00Z")
                 .expect("scope check")
                 .is_none()
@@ -602,7 +633,7 @@ mod tests {
         fs::write(
             &path,
             format!(
-                r#"{{"version":1,"grants":[{{"id":"{forged_id}","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2026-01-02T03:04:05Z"}},{{"id":"{GO_ID}","from_agent":"source","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2026-01-02T03:04:05Z"}}]}}"#
+                r#"{{"version":1,"grants":[{{"id":"{forged_id}","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2026-01-02T03:04:05Z"}},{{"id":"{GO_ID}","from_agent":"source","to_agent":"target","secret_path":"prod/api","secret_field":"password","status":"approved","created_at":"2026-01-02T03:04:05Z"}}]}}"#
             ),
         )
         .expect("write forged fixture");
@@ -616,7 +647,7 @@ mod tests {
 
         fs::write(
             &path,
-            r#"{"version":1,"grants":[{"id":"é:","created_at":"2026-01-02T03:04:05Z"}]}"#
+            r#"{"version":1,"grants":[{"id":"aéa:","created_at":"2026-01-02T03:04:05Z"}]}"#
                 .as_bytes(),
         )
         .expect("write non-ascii fixture");
