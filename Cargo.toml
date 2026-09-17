@@ -20,3 +20,16 @@ codegen-units = 1
 lto = "thin"
 panic = "abort"
 strip = true
+
+# Keep real KDF parameters in integration tests without debug-mode crypto cost.
+[profile.test.package.scrypt]
+opt-level = 3
+
+[profile.test.package.salsa20]
+opt-level = 3
+
+[profile.test.package.argon2]
+opt-level = 3
+
+[profile.test.package.blake2]
+opt-level = 3
