@@ -2693,7 +2693,7 @@ impl SearchIndex {
             let identity_error = StoreError::Config("search index is not loaded".into());
             return Err(identity_error);
         }
-        let query = needle.to_lowercase();
+        let query = symvault_core::go_to_lower(needle);
         let allowed: BTreeSet<_> = candidates.iter().cloned().collect();
         Ok(self
             .doc
@@ -2760,8 +2760,10 @@ fn collect_index_strings(values: &mut Vec<String>, field: &str, value: &serde_js
             .split('\n')
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .for_each(|value| values.push(value.to_lowercase())),
-        serde_json::Value::String(value) if !value.is_empty() => values.push(value.to_lowercase()),
+            .for_each(|value| values.push(symvault_core::go_to_lower(value))),
+        serde_json::Value::String(value) if !value.is_empty() => {
+            values.push(symvault_core::go_to_lower(value))
+        }
         serde_json::Value::Array(values_array) => values_array
             .iter()
             .for_each(|value| collect_index_strings(values, "", value)),

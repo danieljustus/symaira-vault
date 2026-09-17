@@ -111,6 +111,8 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         approval_mode: profile.approval_mode.clone().unwrap_or_default(),
         can_write: profile.can_write,
         can_read_values: profile.can_read_values,
+        require_approval: profile.require_approval,
+        prompt_injection_mode: profile.prompt_injection_mode.clone(),
         auto_unseal: profile.auto_unseal,
         expose_payment_values: profile.expose_payment_values,
         can_run_commands: profile.can_run_commands,

@@ -7,6 +7,7 @@
 use std::{collections::BTreeSet, path::Path};
 
 use serde::Serialize;
+use symvault_core::go_to_lower;
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, search_index_store::SearchIndexStore};
 use url::Url;
@@ -54,10 +55,10 @@ pub fn find(
             .collect());
     }
 
-    let needle = query.to_lowercase();
+    let needle = go_to_lower(query);
     let path_matches: BTreeSet<_> = paths
         .iter()
-        .filter(|path| path.to_lowercase().contains(&needle))
+        .filter(|path| go_to_lower(path).contains(&needle))
         .cloned()
         .collect();
 
@@ -139,12 +140,12 @@ fn collect_field_matches(
             }
         }
         serde_json::Value::String(text) if !prefix.is_empty() => {
-            if text.to_lowercase().contains(needle) {
+            if go_to_lower(text).contains(needle) {
                 fields.push(prefix.to_owned());
             }
         }
         serde_json::Value::Number(number) if !prefix.is_empty() => {
-            if number.to_string().to_lowercase().contains(needle) {
+            if go_to_lower(&number.to_string()).contains(needle) {
                 fields.push(prefix.to_owned());
             }
         }
