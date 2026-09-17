@@ -57,6 +57,7 @@ func main() {
 		{Name: "csv_invalid_utf8_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title\xe2\x82,username,password\nA,u,p\n"))},
 		{Name: "csv_invalid_utf8_malformed", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title,username,password\n\xc3(,u,p\n"))},
 		{Name: "csv_bom_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("\xef\xbb\xbftitle,password\nA,p\n"))},
+		{Name: "chrome_distinct_invalid_titles", Format: "chrome", InputB64: base64.StdEncoding.EncodeToString([]byte("name,url,username,password,note\n\xff,https://one.test,u,p,n\n\xfe,https://two.test,u2,p2,n2\n"))},
 		{Name: "apple_totp", Format: "apple", Input: "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=sha256&digits=8&period=45\n"},
 		{Name: "bw_nulls", Format: "bitwarden", Input: `{"folders":null,"items":[{"type":1,"name":"Login","folderId":null,"notes":null,"login":{"username":null,"uris":null},"fields":null}]}`},
 		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},

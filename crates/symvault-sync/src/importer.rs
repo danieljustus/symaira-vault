@@ -48,7 +48,7 @@ pub enum Format {
 }
 
 pub fn normalize_path(value: &str) -> String {
-    let mut s = go_trim_space(value).trim_matches('/').replace(' ', "-");
+    let mut s = value.trim().trim_matches('/').replace(' ', "-");
     for c in ['"', '*', '?', '<', '>', '|', ':', '\\'] {
         s = s.replace(c, "");
     }
@@ -142,7 +142,7 @@ pub fn parse_csv_profile(
         } else {
             go_string_from_bytes(column_bytes)
         };
-        let column = go_trim_space(&column);
+        let column = column.trim();
         if !column.is_empty() {
             columns.insert(column.to_owned(), index);
             columns.insert(column.to_lowercase(), index);
@@ -155,8 +155,9 @@ pub fn parse_csv_profile(
         .read_byte_record(&mut row)
         .map_err(|e| ImportError::Parse(format!("read csv row: {e}")))?
     {
+        let raw_row: Vec<Vec<u8>> = row.iter().map(ToOwned::to_owned).collect();
         let row: Vec<String> = row.iter().map(go_string_from_bytes).collect();
-        if row.iter().all(|v| go_trim_space(v).is_empty()) {
+        if row.iter().all(|v| v.trim().is_empty()) {
             continue;
         }
         let get = |column: &str| {
@@ -165,7 +166,14 @@ pub fn parse_csv_profile(
                 .or_else(|| columns.get(&column.to_lowercase()))
                 .and_then(|i| row.get(*i))
         };
+        let get_raw = |column: &str| {
+            columns
+                .get(column)
+                .or_else(|| columns.get(&column.to_lowercase()))
+                .and_then(|i| raw_row.get(*i))
+        };
         let mut path = String::new();
+        let mut path_key = None;
         let mut data = BTreeMap::new();
         let mut warnings = None;
         for (field, col) in mapping {
@@ -173,7 +181,8 @@ pub fn parse_csv_profile(
             match field.as_str() {
                 "title" | "path" => {
                     if path.is_empty() && !val.is_empty() {
-                        path = normalize_path(val)
+                        path = normalize_path(val);
+                        path_key = get_raw(col).map(|raw| normalize_path_key(raw));
                     }
                 }
                 "otp" | "totp.secret" => {
@@ -191,15 +200,21 @@ pub fn parse_csv_profile(
             && let Some(url) = get("url")
         {
             path = normalize_path(&host_from_url(url).to_lowercase());
+            path_key = Some(normalize_path_key(path.as_bytes()));
         }
         if format != Format::Csv && !path.is_empty() {
             let base = path.clone();
+            let base_key = path_key
+                .take()
+                .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
+            let mut candidate_key = base_key.clone();
             let mut suffix = 2;
-            while used.contains(&path) {
+            while used.contains(&candidate_key) {
                 path = format!("{base}-{suffix}");
+                candidate_key = path_key_with_suffix(&base_key, suffix);
                 suffix += 1;
             }
-            used.insert(path.clone());
+            used.insert(candidate_key);
         }
         result.push(ImportedEntry {
             path,
@@ -242,11 +257,116 @@ fn go_string_from_bytes(bytes: &[u8]) -> String {
     result
 }
 
-// Go's strings.TrimSpace follows Unicode White Space and does not remove the
-// UTF-8 BOM (U+FEFF). Rust's str::trim historically treats the BOM as trim
-// material, so keep this boundary explicit for CSV headers and values.
-fn go_trim_space(value: &str) -> &str {
-    value.trim_matches(|character: char| character.is_whitespace() && character != '\u{FEFF}')
+#[derive(Clone, Debug)]
+enum RawPathUnit {
+    Char(char),
+    Invalid(u8),
+}
+
+// Keep a separate identity key for profile path de-duplication. Go performs
+// path normalization on strings that may contain invalid UTF-8, then compares
+// those raw strings. The user-visible ImportedEntry must be valid Rust UTF-8,
+// so comparing only the repaired display path would incorrectly merge values
+// such as 0xFF and 0xFE.
+fn normalize_path_key(bytes: &[u8]) -> Vec<u8> {
+    let mut units = raw_path_units(bytes);
+    while units.first().is_some_and(
+        |unit| matches!(unit, RawPathUnit::Char(character) if character.is_whitespace()),
+    ) {
+        units.remove(0);
+    }
+    while units.last().is_some_and(
+        |unit| matches!(unit, RawPathUnit::Char(character) if character.is_whitespace()),
+    ) {
+        units.pop();
+    }
+    while units
+        .first()
+        .is_some_and(|unit| matches!(unit, RawPathUnit::Char('/')))
+    {
+        units.remove(0);
+    }
+    while units
+        .last()
+        .is_some_and(|unit| matches!(unit, RawPathUnit::Char('/')))
+    {
+        units.pop();
+    }
+
+    let mut normalized = Vec::with_capacity(units.len());
+    let mut index = 0;
+    while index < units.len() {
+        match &units[index] {
+            RawPathUnit::Char('.')
+                if units
+                    .get(index + 1)
+                    .is_some_and(|unit| matches!(unit, RawPathUnit::Char('.'))) =>
+            {
+                normalized.push(RawPathUnit::Char('-'));
+                index += 2;
+            }
+            RawPathUnit::Char(character)
+                if ['"', '*', '?', '<', '>', '|', ':', '\\'].contains(character) =>
+            {
+                index += 1;
+            }
+            RawPathUnit::Char(' ') => {
+                normalized.push(RawPathUnit::Char('-'));
+                index += 1;
+            }
+            unit => {
+                normalized.push(unit.clone());
+                index += 1;
+            }
+        }
+    }
+
+    let mut key = Vec::new();
+    for unit in normalized {
+        match unit {
+            RawPathUnit::Invalid(byte) => key.extend([0, byte]),
+            RawPathUnit::Char(character) => {
+                let mut encoded = [0; 4];
+                let encoded = character.encode_utf8(&mut encoded).as_bytes();
+                key.push(1);
+                key.push(encoded.len() as u8);
+                key.extend_from_slice(encoded);
+            }
+        }
+    }
+    key
+}
+
+fn path_key_with_suffix(base: &[u8], suffix: usize) -> Vec<u8> {
+    let mut key = base.to_vec();
+    key.extend(normalize_path_key(b"-"));
+    key.extend(normalize_path_key(suffix.to_string().as_bytes()));
+    key
+}
+
+fn raw_path_units(bytes: &[u8]) -> Vec<RawPathUnit> {
+    let mut units = Vec::new();
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(valid) => {
+                units.extend(valid.chars().map(RawPathUnit::Char));
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                units.extend(
+                    std::str::from_utf8(&remaining[..valid_len])
+                        .expect("valid UTF-8 prefix reported by from_utf8")
+                        .chars()
+                        .map(RawPathUnit::Char),
+                );
+                units.push(RawPathUnit::Invalid(remaining[valid_len]));
+                remaining = &remaining[valid_len + 1..];
+            }
+        }
+    }
+    units
 }
 
 // csv intentionally accepts malformed quoting; Go's default encoding/csv
@@ -291,7 +411,7 @@ fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
 }
 
 fn host_from_url(raw: &str) -> &str {
-    let mut raw = go_trim_space(raw);
+    let mut raw = raw.trim();
     if let Some((_, tail)) = raw.split_once("://") {
         raw = tail;
     }
@@ -521,10 +641,8 @@ fn default_csv_mapping(format: Format) -> BTreeMap<String, String> {
 
 /// Match built-in profiles in the production Go priority order.
 pub fn detect_csv_profile(header: &[String]) -> Format {
-    let columns: std::collections::BTreeSet<_> = header
-        .iter()
-        .map(|c| go_trim_space(c).to_lowercase())
-        .collect();
+    let columns: std::collections::BTreeSet<_> =
+        header.iter().map(|c| c.trim().to_lowercase()).collect();
     for (format, required) in [
         (
             Format::Apple,

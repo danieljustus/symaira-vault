@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "2395a5c714e0c7986e28eeb05fc14fefbb3d2fd8d5c170ff3e0ed348622d0431",
+  "generator_digest": "d31a430a6181f82406e08604dbdb185a9720d30c9264e52d95c01ac14c06f525",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -140,6 +140,34 @@
           "path": "",
           "data": {
             "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "chrome_distinct_invalid_titles",
+      "format": "chrome",
+      "input_b64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vb25lLnRlc3QsdSxwLG4K/ixodHRwczovL3R3by50ZXN0LHUyLHAyLG4yCg==",
+      "entries": [
+        {
+          "path": "\ufffd",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://one.test",
+            "username": "u"
+          },
+          "warnings": null
+        },
+        {
+          "path": "\ufffd",
+          "data": {
+            "notes": "n2",
+            "password": "p2",
+            "url": "https://two.test",
+            "username": "u2"
           },
           "warnings": null
         }
