@@ -2598,6 +2598,7 @@ dependencies = [
  "symvault-platform",
  "symvault-store",
  "symvault-sync",
+ "tempfile",
  "time",
  "url",
  "yaml-edit",

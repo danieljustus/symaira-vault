@@ -56,7 +56,7 @@ fn remote_status_matches_go_for_local_repository_states() {
         return;
     };
     let go_binary = PathBuf::from(go_binary);
-    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let bare = temporary_root("bare");
@@ -240,12 +240,8 @@ fn remote_init_matches_go_for_target_forms_and_rejects_empty_target() {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
-        return;
-    };
     let go_binary = PathBuf::from(go_binary);
-    let rust_binary = PathBuf::from(rust_binary);
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let (go_home, go_vault) = initialized_remote_fixture("default-go");
     let (rust_home, rust_vault) = initialized_remote_fixture("default-rust");

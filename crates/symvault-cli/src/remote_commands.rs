@@ -16,6 +16,7 @@ const REMOTE_NAME: &str = "origin";
 /// configuration, matching `remote init`. The command only edits the local
 /// repository; `push` is an explicit opt-in and reports a failed initial push
 /// as a warning, as the Go command does.
+#[allow(clippy::too_many_arguments)] // Direct CLI arguments plus isolated output streams.
 pub(crate) fn init(
     root: &Path,
     home: &Path,
@@ -56,14 +57,14 @@ pub(crate) fn init(
         .add_remote(name, &remote_url)
         .map_err(|error| format!("cannot add remote: {error}"))?;
 
-    if let Err(error) = enable_auto_push(home) {
-        if !quiet {
-            writeln!(
-                stderr,
-                "Warning: remote added but could not enable auto_push in config: {error}"
-            )
-            .map_err(|error| error.to_string())?;
-        }
+    if let Err(error) = enable_auto_push(home)
+        && !quiet
+    {
+        writeln!(
+            stderr,
+            "Warning: remote added but could not enable auto_push in config: {error}"
+        )
+        .map_err(|error| error.to_string())?;
     }
 
     if !quiet {

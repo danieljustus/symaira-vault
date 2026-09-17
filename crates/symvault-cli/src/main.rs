@@ -374,6 +374,8 @@ enum Command {
 #[derive(Debug, Subcommand)]
 enum PolicyCommand {
     Validate { file: PathBuf },
+    Apply { file: PathBuf },
+    Remove { name: String },
     List,
 }
 
@@ -419,6 +421,15 @@ enum AuditCommand {
 
 #[derive(Debug, Subcommand)]
 enum RemoteCommand {
+    Init {
+        target: String,
+        #[arg(short = 'n', long, default_value = "origin")]
+        name: String,
+        #[arg(short = 'p', long)]
+        path: Option<String>,
+        #[arg(long)]
+        push: bool,
+    },
     Status,
 }
 
@@ -793,6 +804,36 @@ fn main() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Remote {
+            command:
+                RemoteCommand::Init {
+                    target,
+                    name,
+                    path,
+                    push,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let home = cli_home_directory()?;
+                remote_commands::init(
+                    &vault,
+                    &home,
+                    &target,
+                    &name,
+                    path.as_deref(),
+                    push,
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                    &mut io::stderr().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+
+        Some(Command::Remote {
             command: RemoteCommand::Status,
         }) => run_remote_status(
             cli.vault.as_deref(),
@@ -813,6 +854,14 @@ fn main() -> ExitCode {
                 match command {
                     PolicyCommand::Validate { file } => {
                         policy_commands::validate(&expand_vault_path(&file)?, &mut output)
+                    }
+                    PolicyCommand::Apply { file } => {
+                        let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                        policy_commands::apply(&root, &expand_vault_path(&file)?, &mut output)
+                    }
+                    PolicyCommand::Remove { name } => {
+                        let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                        policy_commands::remove(&root, &name, &mut output)
                     }
                     PolicyCommand::List => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -1179,6 +1228,19 @@ fn run_verify(
     finish_vault_result(result)
 }
 
+fn cli_home_directory() -> Result<PathBuf, String> {
+    std::env::var_os("HOME")
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            cfg!(windows)
+                .then(|| std::env::var_os("USERPROFILE"))
+                .flatten()
+                .filter(|value| !value.is_empty())
+        })
+        .map(PathBuf::from)
+        .ok_or_else(|| "cannot determine home directory".to_owned())
+}
+
 fn run_remote_status(
     explicit: Option<&Path>,
     profile: Option<&str>,
@@ -1188,16 +1250,7 @@ fn run_remote_status(
     let result = (|| {
         let vault = resolve_vault(explicit, profile)?;
         require_initialized(&vault)?;
-        let home = std::env::var_os("HOME")
-            .filter(|value| !value.is_empty())
-            .or_else(|| {
-                cfg!(windows)
-                    .then(|| std::env::var_os("USERPROFILE"))
-                    .flatten()
-                    .filter(|value| !value.is_empty())
-            })
-            .map(PathBuf::from)
-            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        let home = cli_home_directory()?;
         remote_commands::status(
             &vault,
             &home,

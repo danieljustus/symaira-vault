@@ -544,7 +544,10 @@ mod tests {
         symlink(parent.path(), &alias_parent).unwrap();
         let aliased_target = alias_parent.join("vault/entries/a.age");
         let normalized = journal_target(&root, aliased_target.to_str().unwrap()).unwrap();
-        assert_eq!(normalized, root.join("entries/a.age"));
+        assert_eq!(
+            normalized,
+            root.canonicalize().unwrap().join("entries/a.age")
+        );
 
         let outside = parent.path().join("outside");
         fs::create_dir(&outside).unwrap();
