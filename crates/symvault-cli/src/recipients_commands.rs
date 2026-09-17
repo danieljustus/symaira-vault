@@ -3,6 +3,124 @@ use std::{io::Write, path::Path};
 use symvault_crypto::Identity;
 use symvault_sync::{RecipientsFile, recipients::RecipientsError};
 
+/// One line reported by `recipients list`.
+///
+/// Invalid lines are retained with an empty normalized value, matching the
+/// Go command's `RecipientInfo` JSON projection. The raw line is deliberately
+/// not exposed because the command does not print it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ListedRecipient {
+    pub normalized: String,
+    pub valid: bool,
+    pub error: String,
+}
+
+/// Loads and validates every non-comment recipient line in file order.
+pub fn list(root: &Path) -> Result<Vec<ListedRecipient>, String> {
+    let lines = RecipientsFile::new(root)
+        .load_strings()
+        .map_err(|error| format!("cannot list recipients: {error}"))?
+        .unwrap_or_default();
+
+    Ok(lines
+        .into_iter()
+        .map(|raw| match validate_for_list(&raw) {
+            Ok(normalized) => ListedRecipient {
+                normalized,
+                valid: true,
+                error: String::new(),
+            },
+            Err(error) => ListedRecipient {
+                normalized: String::new(),
+                valid: false,
+                error,
+            },
+        })
+        .collect())
+}
+
+/// Renders the `recipients list` result in the global CLI output format.
+pub fn write_list<W: Write>(
+    output: &mut W,
+    recipients: &[ListedRecipient],
+    format: &str,
+    quiet: bool,
+) -> Result<(), String> {
+    if quiet {
+        return Ok(());
+    }
+
+    match format {
+        "text" | "" => {
+            if recipients.is_empty() {
+                writeln!(output, "No recipients configured.")
+                    .and_then(|()| {
+                        writeln!(
+                            output,
+                            "Use 'symvault recipients add <public-key>' to add a recipient."
+                        )
+                    })
+                    .map_err(|error| error.to_string())
+            } else {
+                writeln!(output, "Recipients ({}):", recipients.len())
+                    .and_then(|()| writeln!(output))
+                    .map_err(|error| error.to_string())?;
+                for recipient in recipients {
+                    let status = if recipient.valid { '✓' } else { '✗' };
+                    writeln!(output, "  {status} {}", recipient.normalized)
+                        .map_err(|error| error.to_string())?;
+                    if !recipient.valid {
+                        writeln!(output, "    Error: {}", recipient.error)
+                            .map_err(|error| error.to_string())?;
+                    }
+                }
+                Ok(())
+            }
+        }
+        "json" => {
+            let values: Vec<&str> = recipients
+                .iter()
+                .map(|recipient| recipient.normalized.as_str())
+                .collect();
+            serde_json::to_writer(&mut *output, &serde_json::json!({ "recipients": values }))
+                .map_err(|error| error.to_string())?;
+            writeln!(output).map_err(|error| error.to_string())
+        }
+        "yaml" => {
+            let values: Vec<&str> = recipients
+                .iter()
+                .map(|recipient| recipient.normalized.as_str())
+                .collect();
+            let rendered = serde_yaml_ng::to_string(&serde_json::json!({ "recipients": values }))
+                .map_err(|error| error.to_string())?;
+            output
+                .write_all(rendered.as_bytes())
+                .map_err(|error| error.to_string())
+        }
+        other => Err(format!(
+            "unknown output format: {other:?} (valid: text, json, yaml)"
+        )),
+    }
+}
+
+fn validate_for_list(raw: &str) -> Result<String, String> {
+    if raw.is_empty() {
+        return Err("recipient string is empty".to_owned());
+    }
+    if !raw.starts_with("age1") {
+        return Err("invalid key format: recipient must start with 'age1'".to_owned());
+    }
+    symvault_crypto::parse_recipient(raw)
+        .map(|recipient| recipient.to_string())
+        .map_err(|_| {
+            // The Go validator wraps age parser failures in this stable public
+            // category. The Rust crypto boundary intentionally redacts parser
+            // internals, so retain the category without inventing secret-bearing
+            // detail.
+            "invalid key format: invalid recipient".to_owned()
+        })
+}
+
 pub fn add(
     root: &Path,
     identity: &Identity,
