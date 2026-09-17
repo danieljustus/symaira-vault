@@ -105,7 +105,7 @@ fn trim_ascii_whitespace(data: &[u8]) -> &[u8] {
     &data[start..end]
 }
 
-fn create_temp_file(data: &[u8]) -> Result<(PathBuf, fs::File), String> {
+pub(crate) fn create_temp_file(data: &[u8]) -> Result<(PathBuf, fs::File), String> {
     let temp_dir = env::temp_dir();
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -137,7 +137,7 @@ fn create_temp_file(data: &[u8]) -> Result<(PathBuf, fs::File), String> {
     Err("create temp file: could not allocate a unique path".to_owned())
 }
 
-fn resolve_editor(preferred: &str) -> Result<String, String> {
+pub(crate) fn resolve_editor(preferred: &str) -> Result<String, String> {
     if !preferred.is_empty() {
         return command_path(preferred)
             .map(|path| path.to_string_lossy().into_owned())
@@ -208,7 +208,7 @@ fn is_executable(path: &Path) -> bool {
     path.is_file()
 }
 
-fn editor_command(editor: &str, path: &Path) -> Command {
+pub(crate) fn editor_command(editor: &str, path: &Path) -> Command {
     let mut command = Command::new(editor);
     command.arg(path);
     // The Go command prepares the child environment instead of forwarding

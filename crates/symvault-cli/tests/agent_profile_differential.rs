@@ -231,3 +231,205 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
     let rust = run(&rust_binary, &args, &escape_home, &escape_vault);
     assert_same(&go, &rust, "agent profile show escape --output json");
 }
+#[cfg(unix)]
+mod profile_edit_differential {
+    use std::{
+        env, fs,
+        io::Write,
+        os::unix::fs::PermissionsExt,
+        path::{Path, PathBuf},
+        process::{Command, Output, Stdio},
+    };
+
+    fn run(
+        binary: &Path,
+        args: &[&str],
+        root: &Path,
+        home: &Path,
+        editor: &Path,
+        confirmation: &str,
+    ) -> Output {
+        let mut child = Command::new(binary)
+            .args(args)
+            .env("HOME", home)
+            .env("USERPROFILE", home)
+            .env("XDG_CONFIG_HOME", home.join("config"))
+            .env("XDG_DATA_HOME", home.join("data"))
+            .env("XDG_CACHE_HOME", home.join("cache"))
+            .env("SYMVAULT_VAULT", root)
+            .env("EDITOR", editor)
+            .env_remove("VISUAL")
+            .env("CI", "1")
+            .env("NO_COLOR", "1")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("run profile edit");
+        child
+            .stdin
+            .take()
+            .expect("profile edit stdin")
+            .write_all(confirmation.as_bytes())
+            .expect("confirm profile edit");
+        child.wait_with_output().expect("wait for profile edit")
+    }
+
+    fn assert_same(go: &Output, rust: &Output, case: &str) {
+        assert_eq!(
+            rust.status.code(),
+            go.status.code(),
+            "{case}: status differs\ngo stderr: {:?}\nrust stderr: {:?}",
+            String::from_utf8_lossy(&go.stderr),
+            String::from_utf8_lossy(&rust.stderr)
+        );
+        assert_eq!(
+            rust.stdout,
+            go.stdout,
+            "{case}: stdout differs\ngo: {:?}\nrust: {:?}",
+            String::from_utf8_lossy(&go.stdout),
+            String::from_utf8_lossy(&rust.stdout)
+        );
+        assert_eq!(
+            rust.stderr,
+            go.stderr,
+            "{case}: stderr differs\ngo: {:?}\nrust: {:?}",
+            String::from_utf8_lossy(&go.stderr),
+            String::from_utf8_lossy(&rust.stderr)
+        );
+    }
+
+    fn fixture_root(name: &str, profile: &str) -> (tempfile::TempDir, tempfile::TempDir, PathBuf) {
+        let root = tempfile::Builder::new()
+            .prefix(&format!("symvault-profile-edit-{name}-"))
+            .tempdir()
+            .expect("vault root");
+        let home = tempfile::Builder::new()
+            .prefix(&format!("symvault-profile-edit-{name}-home-"))
+            .tempdir()
+            .expect("home");
+        for directory in ["config", "data", "cache"] {
+            fs::create_dir_all(home.path().join(directory)).expect("home directory");
+        }
+        fs::write(
+        root.path().join("config.yaml"),
+        "custom: keep\nagents:\n  demo:\n    allowedPaths: [old]\n    canWrite: false\n  other:\n    canWrite: true\n",
+    )
+    .expect("config");
+        let editor = root.path().join("profile-editor.sh");
+        let script = format!("#!/bin/sh\ncat > \"$1\" <<'YAML'\n{profile}YAML\n");
+        fs::write(&editor, script).expect("editor script");
+        fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).expect("editor mode");
+        (root, home, editor)
+    }
+
+    #[test]
+    fn agent_profile_edit_matches_go_and_preserves_cancelled_config() {
+        let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+            eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+            return;
+        };
+        let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
+            eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
+            return;
+        };
+        let go_binary = PathBuf::from(go_binary);
+        let rust_binary = PathBuf::from(rust_binary);
+
+        let cases = [
+            ("success", "allowedPaths:\n  - new\ncanWrite: true\n", "y\n"),
+            (
+                "cancel",
+                "allowedPaths:\n  - discarded\ncanWrite: true\n",
+                "n\n",
+            ),
+        ];
+        for (name, profile, confirmation) in cases {
+            let (go_root, go_home, go_editor) = fixture_root(name, profile);
+            let (rust_root, rust_home, rust_editor) = fixture_root(name, profile);
+            let before = fs::read(rust_root.path().join("config.yaml")).expect("rust config");
+            let args = ["agent", "profile", "edit", "demo"];
+            let go = run(
+                &go_binary,
+                &args,
+                go_root.path(),
+                go_home.path(),
+                &go_editor,
+                confirmation,
+            );
+            let rust = run(
+                &rust_binary,
+                &args,
+                rust_root.path(),
+                rust_home.path(),
+                &rust_editor,
+                confirmation,
+            );
+            assert_same(&go, &rust, name);
+            if name == "cancel" {
+                assert_eq!(
+                    fs::read(rust_root.path().join("config.yaml"))
+                        .expect("rust config after cancel"),
+                    before,
+                    "cancelled edit must not publish config"
+                );
+            } else {
+                let updated = fs::read_to_string(rust_root.path().join("config.yaml"))
+                    .expect("updated rust config");
+                assert!(updated.contains("custom: keep"));
+                assert!(updated.contains("other:"));
+                assert!(updated.contains("- new"));
+            }
+        }
+
+        let (go_root, go_home, go_editor) = fixture_root("invalid", "canWrite: [\n");
+        let (rust_root, rust_home, rust_editor) = fixture_root("invalid", "canWrite: [\n");
+        let args = ["agent", "profile", "edit", "demo"];
+        let go = run(
+            &go_binary,
+            &args,
+            go_root.path(),
+            go_home.path(),
+            &go_editor,
+            "y\n",
+        );
+        let rust = run(
+            &rust_binary,
+            &args,
+            rust_root.path(),
+            rust_home.path(),
+            &rust_editor,
+            "y\n",
+        );
+        assert_eq!(
+            go.status.success(),
+            rust.status.success(),
+            "invalid YAML status"
+        );
+        assert!(
+            go.stdout.is_empty() && rust.stdout.is_empty(),
+            "invalid YAML output"
+        );
+
+        let (go_root, go_home, go_editor) = fixture_root("unknown", "canWrite: true\n");
+        let (rust_root, rust_home, rust_editor) = fixture_root("unknown", "canWrite: true\n");
+        let args = ["agent", "profile", "edit", "missing"];
+        let go = run(
+            &go_binary,
+            &args,
+            go_root.path(),
+            go_home.path(),
+            &go_editor,
+            "y\n",
+        );
+        let rust = run(
+            &rust_binary,
+            &args,
+            rust_root.path(),
+            rust_home.path(),
+            &rust_editor,
+            "y\n",
+        );
+        assert_same(&go, &rust, "unknown profile");
+    }
+}

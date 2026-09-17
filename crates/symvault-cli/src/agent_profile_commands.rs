@@ -1,7 +1,14 @@
-use std::{collections::BTreeMap, fs, io::Write, path::Path, time::Duration};
+use std::{
+    collections::BTreeMap,
+    env, fs,
+    io::{self, Write},
+    path::Path,
+};
 
 use symvault_core::config::{AgentProfile, Config};
 use symvault_sync::safeio;
+
+const MAX_EDITED_PROFILE_BYTES: u64 = 16 * 1024 * 1024;
 
 /// Displays one merged agent profile, matching `agent profile show`.
 ///
@@ -60,6 +67,118 @@ pub(crate) fn export(
         return Ok(());
     }
     show(vault, name, None, output)
+}
+
+/// Edits one agent profile through a private temporary YAML document.
+///
+/// The complete config is validated before and after replacing only the named
+/// agent value. This keeps unrelated agents and top-level fields intact while
+/// ensuring an invalid editor result is never published.
+pub(crate) fn edit(
+    vault: &Path,
+    name: &str,
+    preferred_editor: Option<&str>,
+    output: &mut impl Write,
+    error_output: &mut impl Write,
+) -> Result<(), String> {
+    let config_path = vault.join("config.yaml");
+    let source = safeio::read(&config_path)
+        .map_err(|error| format!("read config: {error}"))?
+        .ok_or_else(|| "read config: file not found".to_owned())?;
+    let mut document: serde_yaml_ng::Value =
+        serde_yaml_ng::from_slice(&source).map_err(|error| format!("read config: {error}"))?;
+    let agent_value = document
+        .as_mapping()
+        .and_then(|mapping| mapping.get(key("agents")))
+        .and_then(serde_yaml_ng::Value::as_mapping)
+        .and_then(|agents| agents.get(key(name)))
+        .cloned()
+        .ok_or_else(|| format!("extract agent section: agent {name:?} not found in config"))?;
+    let section = serde_yaml_ng::to_string(&agent_value)
+        .map_err(|error| format!("extract agent section: {error}"))?;
+    let (temp_path, temp_file) = crate::edit_commands::create_temp_file(section.as_bytes())?;
+    drop(temp_file);
+
+    let result = (|| {
+        let editor = profile_editor(preferred_editor)?;
+        let status = crate::edit_commands::editor_command(&editor, &temp_path)
+            .status()
+            .map_err(|error| format!("editor exited with error: {error}"))?;
+        if !status.success() {
+            return Err(format!("editor exited with error: {status}"));
+        }
+        let edited = safeio::read_bounded(&temp_path, MAX_EDITED_PROFILE_BYTES)
+            .map_err(|error| format!("read edited file: {error}"))?
+            .ok_or_else(|| "read edited file: file not found".to_owned())?;
+        let edited_value: serde_yaml_ng::Value = serde_yaml_ng::from_slice(&edited)
+            .map_err(|error| format!("invalid YAML in edited profile: {error}"))?;
+        if !edited_value.is_mapping() {
+            return Err("invalid YAML in edited profile: profile must be a mapping".to_owned());
+        }
+        let mut validation = document.clone();
+        set_agent_value(&mut validation, name, edited_value.clone())?;
+        let rendered = serde_yaml_ng::to_string(&validation)
+            .map_err(|error| format!("save config: {error}"))?;
+        Config::load_from_bytes(rendered.as_bytes())
+            .map_err(|error| format!("invalid YAML in edited profile: {error}"))?;
+
+        writeln!(error_output, "Edited profile for {name:?}:")
+            .map_err(|error| error.to_string())?;
+        let preview = serde_yaml_ng::to_string(&edited_value)
+            .map_err(|error| format!("write profile preview: {error}"))?;
+        let preview = go_yaml_indentation(&preview);
+        output
+            .write_all(preview.as_bytes())
+            .map_err(|error| error.to_string())?;
+        write!(error_output, "\nApply changes? [y/N] ").map_err(|error| error.to_string())?;
+        let mut response = String::new();
+        io::stdin()
+            .read_line(&mut response)
+            .map_err(|error| format!("read confirmation: {error}"))?;
+        let response = response.trim().to_ascii_lowercase();
+        if response != "y" && response != "yes" {
+            writeln!(error_output, "Changes discarded.").map_err(|error| error.to_string())?;
+            return Ok(());
+        }
+        safeio::write_atomic(&config_path, rendered.as_bytes())
+            .map_err(|error| format!("save config: {error}"))?;
+        writeln!(error_output, "Profile for {name:?} updated.")
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    })();
+    let _ = safeio::secure_delete(&temp_path, MAX_EDITED_PROFILE_BYTES);
+    result
+}
+
+fn profile_editor(preferred: Option<&str>) -> Result<String, String> {
+    let selected = preferred
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .or_else(|| env::var("EDITOR").ok().filter(|value| !value.is_empty()))
+        .or_else(|| env::var("VISUAL").ok().filter(|value| !value.is_empty()))
+        .ok_or_else(|| "neither $EDITOR nor $VISUAL is set".to_owned())?;
+    crate::edit_commands::resolve_editor(&selected)
+}
+
+fn key(value: &str) -> serde_yaml_ng::Value {
+    serde_yaml_ng::Value::String(value.to_owned())
+}
+
+fn set_agent_value(
+    document: &mut serde_yaml_ng::Value,
+    name: &str,
+    value: serde_yaml_ng::Value,
+) -> Result<(), String> {
+    let agents = document
+        .as_mapping_mut()
+        .and_then(|mapping| mapping.get_mut(key("agents")))
+        .and_then(serde_yaml_ng::Value::as_mapping_mut)
+        .ok_or_else(|| "extract agent section: no agents section found in config".to_owned())?;
+    let profile = agents
+        .get_mut(key(name))
+        .ok_or_else(|| format!("extract agent section: agent {name:?} not found in config"))?;
+    *profile = value;
+    Ok(())
 }
 
 /// `yaml.v3` emits sequence indicators two columns to the right of
