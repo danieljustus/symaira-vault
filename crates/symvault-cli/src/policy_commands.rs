@@ -14,20 +14,20 @@ use std::{
 use symvault_core::policy::Policy;
 use symvault_sync::safeio;
 
-fn load(path: &Path) -> Result<Policy, String> {
+fn load(path: &Path) -> Result<(Policy, Vec<u8>), String> {
     let bytes = fs::read(path).map_err(|error| format!("read policy file: {error}"))?;
     let policy: Policy =
         serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse policy file: {error}"))?;
     policy
         .validate()
         .map_err(|error| format!("validate policy: {error}"))?;
-    Ok(policy)
+    Ok((policy, bytes))
 }
 
 /// Validates one policy file and writes the Go-shaped human-readable result.
 pub fn validate(path: &Path, output: &mut impl Write) -> Result<(), String> {
     let policy = match load(path) {
-        Ok(policy) => policy,
+        Ok((policy, _)) => policy,
         Err(error) => {
             writeln!(output, "❌ Policy validation failed for {}", path.display())
                 .map_err(|write_error| write_error.to_string())?;
@@ -93,8 +93,8 @@ pub fn list(root: &Path, output: &mut impl Write) -> Result<(), String> {
 
 /// Validates and applies a policy file below the vault's policy directory.
 pub fn apply(root: &Path, source: &Path, output: &mut impl Write) -> Result<(), String> {
-    let policy = match load(source) {
-        Ok(policy) => policy,
+    let (policy, source_bytes) = match load(source) {
+        Ok(loaded) => loaded,
         Err(error) => {
             writeln!(
                 output,
@@ -105,7 +105,6 @@ pub fn apply(root: &Path, source: &Path, output: &mut impl Write) -> Result<(), 
             return Err(error);
         }
     };
-    let source_bytes = fs::read(source).map_err(|error| format!("read policy file: {error}"))?;
     let name = source
         .file_name()
         .and_then(OsStr::to_str)
