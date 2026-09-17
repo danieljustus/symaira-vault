@@ -50,6 +50,15 @@ func main() {
 		var j, v, n bytes.Buffer
 		must((&exporter.JSONExporter{}).Export(&j, c.Entries, c.Mapping))
 		must((&exporter.CSVExporter{NoticeWriter: &n}).Export(&v, c.Entries, c.Mapping))
+		var streamed bytes.Buffer
+		stream := exporter.NewJSONStream(&streamed, c.Mapping)
+		for _, entry := range c.Entries {
+			must(stream.WriteEntry(entry))
+		}
+		must(stream.Close())
+		if !bytes.Equal(j.Bytes(), streamed.Bytes()) {
+			must(fmt.Errorf("Go batch/stream export mismatch: %s", c.Name))
+		}
 		c.JSON = j.String()
 		c.CSV = v.String()
 		c.Notices = n.String()

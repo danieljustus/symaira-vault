@@ -26,40 +26,57 @@ pub fn json<W: Write>(output: W, entries: &[ExportEntry]) -> Result<(), ExportEr
 }
 
 pub fn json_with_mapping<W: Write>(
-    mut output: W,
+    output: W,
     entries: &[ExportEntry],
     mapping: &BTreeMap<String, String>,
 ) -> Result<(), ExportError> {
-    if entries.is_empty() {
-        output.write_all(b"[]")?;
-        return Ok(());
+    let mut stream = JsonStream::new(output, mapping);
+    for entry in entries {
+        stream.write_entry(entry)?;
     }
-    let rows: Vec<BTreeMap<&str, Value>> = entries
-        .iter()
-        .map(|entry| {
-            BTreeMap::from([
-                (
-                    "data",
-                    Value::Object(
-                        entry
-                            .data
-                            .iter()
-                            .map(|(key, value)| {
-                                (mapping.get(key).unwrap_or(key).clone(), value.clone())
-                            })
-                            .collect(),
-                    ),
-                ),
-                ("path", Value::String(entry.path.clone())),
-            ])
-        })
-        .collect();
-    use serde_json::ser::Formatter;
-    // Reuse the shared Go escaping rule while retaining JSON indentation.
-    let rendered = serde_json::to_string_pretty(&rows)?;
-    symvault_gojson::GoFormatter.write_string_fragment(&mut output, &rendered)?;
-    output.write_all(b"\n")?;
-    Ok(())
+    stream.finish()
+}
+
+/// Entry-at-a-time JSON export with the same bytes as the batch API.
+pub struct JsonStream<'a, W: Write> {
+    output: W,
+    mapping: &'a BTreeMap<String, String>,
+    started: bool,
+}
+impl<'a, W: Write> JsonStream<'a, W> {
+    pub fn new(output: W, mapping: &'a BTreeMap<String, String>) -> Self {
+        Self {
+            output,
+            mapping,
+            started: false,
+        }
+    }
+    pub fn write_entry(&mut self, entry: &ExportEntry) -> Result<(), ExportError> {
+        use serde_json::ser::Formatter;
+        self.output
+            .write_all(if self.started { b",\n" } else { b"[\n" })?;
+        let data: BTreeMap<_, _> = entry
+            .data
+            .iter()
+            .map(|(key, value)| (self.mapping.get(key).unwrap_or(key), value))
+            .collect();
+        let row = serde_json::json!({"data": data, "path": entry.path});
+        let rendered = serde_json::to_string_pretty(&row)?;
+        for (index, line) in rendered.lines().enumerate() {
+            if index > 0 {
+                self.output.write_all(b"\n")?;
+            }
+            self.output.write_all(b"  ")?;
+            symvault_gojson::GoFormatter.write_string_fragment(&mut self.output, line)?;
+        }
+        self.started = true;
+        Ok(())
+    }
+    pub fn finish(mut self) -> Result<(), ExportError> {
+        self.output
+            .write_all(if self.started { b"\n]\n" } else { b"[]" })?;
+        Ok(())
+    }
 }
 
 /// Writes the Go CSV export shape: path first, then sorted non-attachment

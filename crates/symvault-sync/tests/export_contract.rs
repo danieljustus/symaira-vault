@@ -24,6 +24,18 @@ fn export_matches_production_go_bytes_and_attachment_notices() {
         let (mut json, mut csv, mut notices) = (Vec::new(), Vec::new(), Vec::new());
         export::json_with_mapping(&mut json, &case.entries, &mapping).unwrap();
         export::csv_with_mapping(&mut csv, &case.entries, &mapping, Some(&mut notices)).unwrap();
+        let mut streamed = Vec::new();
+        let mut stream = export::JsonStream::new(&mut streamed, &mapping);
+        for entry in &case.entries {
+            stream.write_entry(entry).unwrap();
+        }
+        stream.finish().unwrap();
+        assert_eq!(
+            streamed,
+            case.json.as_bytes(),
+            "{} streamed JSON",
+            case.name
+        );
         assert_eq!(json, case.json.as_bytes(), "{} JSON", case.name);
         assert_eq!(csv, case.csv.as_bytes(), "{} CSV", case.name);
         assert_eq!(notices, case.notices.as_bytes(), "{} notices", case.name);
@@ -45,6 +57,11 @@ fn export_propagates_output_and_notice_failures() {
         path: "fixture".into(),
         data: BTreeMap::from([("file_b64_0".into(), serde_json::json!("synthetic"))]),
     }];
+    assert!(
+        export::JsonStream::new(&mut Fail, &BTreeMap::new())
+            .finish()
+            .is_err()
+    );
     assert!(export::json(&mut Fail, &entries).is_err());
     assert!(export::csv(&mut Fail, &entries).is_err());
     assert!(
