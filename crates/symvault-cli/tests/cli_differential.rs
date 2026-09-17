@@ -1923,6 +1923,53 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
         b"must-survive"
     );
 
+    let hardlink = fixture_dir.join("hardlink");
+    let hardlink_script = format!(
+        "ln \"$SYMVAULT_FILE_CERT_P12\" {}; rm \"$SYMVAULT_FILE_CERT_P12\"",
+        hardlink.display()
+    );
+    let rust_hardlink = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            &hardlink_script,
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_hardlink, "Rust file use hardlink cleanup");
+    assert_eq!(
+        fs::read(&hardlink).expect("hardlink after cleanup"),
+        vec![0; content.len()]
+    );
+
+    let descendant_started = Instant::now();
+    let descendant = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            "sleep 5 &",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&descendant, "Rust file use background descendant");
+    assert!(descendant_started.elapsed().as_secs() < 2);
+
     fs::remove_dir_all(home).expect("cleanup file use home");
     fs::remove_dir_all(root).expect("cleanup file use vault");
     fs::remove_dir_all(fixture_dir).expect("cleanup file use fixtures");

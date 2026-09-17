@@ -2,7 +2,7 @@
 
 use std::{
     fs,
-    io::{Read, Write as _},
+    io::{Read, Seek, SeekFrom, Write as _},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -274,7 +274,7 @@ fn materialize_file(name: &str, content: &[u8]) -> Result<MaterializedFile, Stri
     for _ in 0..64 {
         let sequence = FILE_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let candidate = base.join(format!("symvault-file-{}-{sequence}", std::process::id()));
-        match fs::create_dir(&candidate) {
+        match create_private_directory(&candidate) {
             Ok(()) => {
                 directory = Some(candidate);
                 break;
@@ -286,10 +286,6 @@ fn materialize_file(name: &str, content: &[u8]) -> Result<MaterializedFile, Stri
     let directory = directory.ok_or_else(|| {
         "create ephemeral file directory: temporary name space exhausted".to_owned()
     })?;
-    if let Err(error) = set_private_directory(&directory) {
-        let _ = fs::remove_dir(&directory);
-        return Err(format!("secure ephemeral file directory: {error}"));
-    }
     let file = directory.join(name);
     let handle = match write_private_file(&file, content) {
         Ok(handle) => handle,
@@ -318,6 +314,7 @@ fn cleanup_file(materialized: MaterializedFile) {
     // replace the pathname with a symlink or another file, but cannot redirect
     // this handle. The zero buffer and original length keep cleanup bounded.
     let zeros = [0u8; 8192];
+    let _ = handle.seek(SeekFrom::Start(0));
     let mut remaining = length;
     while remaining > 0 {
         let count = remaining.min(zeros.len() as u64) as usize;
@@ -335,14 +332,15 @@ fn cleanup_file(materialized: MaterializedFile) {
 }
 
 #[cfg(unix)]
-fn set_private_directory(path: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::PermissionsExt as _;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+fn create_private_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt as _;
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700).create(path)
 }
 
 #[cfg(not(unix))]
-fn set_private_directory(_path: &Path) -> std::io::Result<()> {
-    Ok(())
+fn create_private_directory(path: &Path) -> std::io::Result<()> {
+    fs::create_dir(path)
 }
 
 #[cfg(unix)]
@@ -439,12 +437,7 @@ fn run_file_command(
             format_timeout(timeout.unwrap_or_default())
         ));
     }
-    let (stdout, _) = stdout_reader
-        .join()
-        .map_err(|_| "command stdout reader failed".to_owned())?;
-    let (stderr, _) = stderr_reader
-        .join()
-        .map_err(|_| "command stderr reader failed".to_owned())?;
+    let (stdout, stderr) = join_readers_with_deadline(stdout_reader, stderr_reader);
     let stdout = redact_output(&stdout, content);
     let stderr = redact_output(&stderr, content);
     Ok(UseResult {
@@ -453,6 +446,39 @@ fn run_file_command(
         exit_code: status.code().unwrap_or(-1),
         timed_out,
     })
+}
+
+fn join_readers_with_deadline(
+    stdout_reader: thread::JoinHandle<(Vec<u8>, bool)>,
+    stderr_reader: thread::JoinHandle<(Vec<u8>, bool)>,
+) -> (Vec<u8>, Vec<u8>) {
+    let deadline = Instant::now() + Duration::from_millis(250);
+    while (!stdout_reader.is_finished() || !stderr_reader.is_finished())
+        && Instant::now() < deadline
+    {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let stdout = if stdout_reader.is_finished() {
+        stdout_reader
+            .join()
+            .ok()
+            .map(|(data, _)| data)
+            .unwrap_or_default()
+    } else {
+        drop(stdout_reader);
+        Vec::new()
+    };
+    let stderr = if stderr_reader.is_finished() {
+        stderr_reader
+            .join()
+            .ok()
+            .map(|(data, _)| data)
+            .unwrap_or_default()
+    } else {
+        drop(stderr_reader);
+        Vec::new()
+    };
+    (stdout, stderr)
 }
 
 fn read_output(mut reader: impl Read) -> (Vec<u8>, bool) {
