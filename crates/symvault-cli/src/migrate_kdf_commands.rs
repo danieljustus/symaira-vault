@@ -80,7 +80,7 @@ pub fn migrate_kdf(
     let config_path = root.join("config.yaml");
     let config_update = prepare_config_update(&config_path)?;
 
-    let replacement = encrypt_identity_argon2id(identity, passphrase, Argon2idParams::default())
+    let replacement = encrypt_identity_argon2id(identity, passphrase, config_update.params)
         .map_err(|error| format!("encrypt identity with argon2id: {error}"))?;
     let verified = decrypt_identity(&replacement, passphrase)
         .map_err(|error| format!("verify argon2id identity: {error}"))?;
@@ -98,7 +98,7 @@ pub fn migrate_kdf(
         return Err(format_write_failure("write migrated identity", error, restore));
     }
 
-    if let Some(config_bytes) = config_update
+    if let Some(config_bytes) = config_update.bytes
         && let Err(error) = safeio::write_atomic(&config_path, &config_bytes)
     {
         let restore = safeio::write_atomic(&identity_path, &original);
@@ -118,14 +118,23 @@ fn format_write_failure(
     }
 }
 
-fn prepare_config_update(path: &Path) -> Result<Option<Vec<u8>>, String> {
+struct ConfigUpdate {
+    bytes: Option<Vec<u8>>,
+    params: Argon2idParams,
+}
+
+fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
     let Some(raw) = safeio::read(path).map_err(|error| format!("read config: {error}"))? else {
-        return Ok(None);
+        return Ok(ConfigUpdate {
+            bytes: None,
+            params: Argon2idParams::default(),
+        });
     };
     // Use the shared loader as the semantic validator before yaml-edit
     // changes the document.  This also rejects multi-document streams.
     symvault_core::config::Config::load_from_bytes(&raw)
         .map_err(|error| format!("load config: {error}"))?;
+    let params = argon2id_params_from_config(&raw)?;
     let source = std::str::from_utf8(&raw)
         .map_err(|error| format!("load config: invalid UTF-8: {error}"))?;
     let file = yaml_edit::YamlFile::from_str(source)
@@ -136,7 +145,10 @@ fn prepare_config_update(path: &Path) -> Result<Option<Vec<u8>>, String> {
         .ok_or_else(|| "load config: missing YAML document".to_owned())?;
     use yaml_edit::path::YamlPath;
     if document.try_get_path("vault").is_err() {
-        return Ok(Some(raw));
+        return Ok(ConfigUpdate {
+            bytes: Some(raw),
+            params,
+        });
     }
     document
         .try_set_path("vault.format_version", yaml_edit::ScalarValue::from(2))
@@ -149,7 +161,60 @@ fn prepare_config_update(path: &Path) -> Result<Option<Vec<u8>>, String> {
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
-    Ok(Some(rendered.into_bytes()))
+    Ok(ConfigUpdate {
+        bytes: Some(rendered.into_bytes()),
+        params,
+    })
+}
+
+fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
+    let document: serde_yaml_ng::Value = serde_yaml_ng::from_slice(raw)
+        .map_err(|error| format!("load config: {error}"))?;
+    let Some(root) = document.as_mapping() else {
+        return Ok(Argon2idParams::default());
+    };
+    let Some(vault) = root.get(serde_yaml_ng::Value::String("vault".to_owned())) else {
+        return Ok(Argon2idParams::default());
+    };
+    let Some(vault) = vault.as_mapping() else {
+        return Ok(Argon2idParams::default());
+    };
+    let mut params = Argon2idParams::default();
+    params.time = config_u32(vault, "argon2id_time", 2, 16, params.time)?;
+    params.memory_kib = config_u32(vault, "argon2id_memory", 19_456, 2_097_152, params.memory_kib)?;
+    params.threads = config_u32(vault, "argon2id_threads", 1, 16, params.threads)?;
+    if params.memory_kib < 4 * params.threads {
+        return Err(format!(
+            "invalid vault.argon2id_memory: {} KiB must be at least 4*threads ({})",
+            params.memory_kib,
+            4 * params.threads
+        ));
+    }
+    Ok(params)
+}
+
+fn config_u32(
+    vault: &serde_yaml_ng::Mapping,
+    name: &str,
+    min: u32,
+    max: u32,
+    default: u32,
+) -> Result<u32, String> {
+    let Some(value) = vault.get(serde_yaml_ng::Value::String(name.to_owned())) else {
+        return Ok(default);
+    };
+    let value = value
+        .as_i64()
+        .ok_or_else(|| format!("vault.{name} must be an integer"))?;
+    if value == 0 {
+        return Ok(default);
+    }
+    if value < i64::from(min) || value > i64::from(max) {
+        return Err(format!(
+            "invalid vault.{name}: {value} (expected {min}..={max})"
+        ));
+    }
+    u32::try_from(value).map_err(|_| format!("invalid vault.{name}: {value}"))
 }
 
 #[cfg(test)]

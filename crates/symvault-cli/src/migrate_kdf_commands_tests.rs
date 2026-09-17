@@ -51,6 +51,21 @@ fn malformed_config_preserves_identity_without_backup() {
 }
 
 #[test]
+fn uses_go_compatible_argon2id_config_overrides() {
+    let (root, expected, passphrase, _) = fixture();
+    fs::write(
+        root.join("config.yaml"),
+        b"vault:\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\n",
+    )
+    .expect("custom config");
+    migrate_kdf(&root, &expected, &passphrase).expect("custom migration");
+    let bytes = fs::read(root.join("identity.age")).expect("identity");
+    let raw = String::from_utf8_lossy(&bytes);
+    assert!(raw.contains("t=2,m=19456,p=1"), "argon2id stanza: {raw}");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn already_modern_and_unknown_files_are_not_mutated() {
     let (root, expected, passphrase, original) = fixture();
     assert_eq!(inspect_identity(&root).expect("inspect"), MigrationResult::NeedsMigration);
