@@ -12,77 +12,86 @@ use super::{ImportError, ImportedEntry, apply_prefix, normalize_path, parse_totp
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct CxfExport {
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default")]
+    version: CxfVersion,
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     accounts: Vec<CxfAccount>,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default)]
+struct CxfVersion {
+    #[serde(default, deserialize_with = "super::null_default")]
+    major: i64,
+    #[serde(default, deserialize_with = "super::null_default")]
+    minor: i64,
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct CxfAccount {
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default")]
+    id: String,
+    #[serde(default, deserialize_with = "super::null_default")]
+    username: String,
+    #[serde(default, deserialize_with = "super::null_default")]
+    email: String,
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     collections: Vec<CxfCollection>,
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<CxfItem>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct CxfCollection {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
+    id: String,
+    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     name: String,
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<CxfLinkedItem>,
-    #[serde(rename = "subCollections", default, deserialize_with = "null_vec")]
+    #[serde(rename = "subCollections", default, deserialize_with = "super::null_default_vec")]
     sub_collections: Vec<CxfCollection>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default)]
 struct CxfLinkedItem {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     item: String,
+    #[serde(default, deserialize_with = "super::null_default")]
+    account: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
 struct CxfItem {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "super::null_default")]
     name: String,
-    #[serde(default, deserialize_with = "null_default")]
+    #[serde(default, deserialize_with = "super::null_default")]
     scope: CxfScope,
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     credentials: Vec<Value>,
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     tags: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
 struct CxfScope {
-    #[serde(default, deserialize_with = "null_vec")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     urls: Vec<String>,
 }
 
-fn null_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Ok(Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default())
-}
-
-fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
-}
-
-/// Parse a FIDO Credential Exchange Format archive using the same bounded
+// Parse a FIDO Credential Exchange Format archive using the same bounded
 /// selection and item mapping rules as the Go importer.
 pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     if bytes.len() >= MAX_IMPORT_BYTES {
@@ -91,11 +100,11 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| ImportError::Parse(format!("open cxf zip: {error}")))?;
     let payload = read_payload(&mut archive)?;
-    let export: CxfExport = serde_json::from_slice(&payload)
+    let export: Option<CxfExport> = serde_json::from_slice(&payload)
         .map_err(|error| ImportError::Parse(format!("parse CXF JSON document: {error}")))?;
 
     let mut entries = Vec::new();
-    for account in export.accounts {
+    for account in export.unwrap_or_default().accounts {
         entries.extend(account_entries(account));
     }
     Ok(entries)
@@ -312,21 +321,21 @@ fn apply_basic_auth(
     urls: &mut Vec<String>,
     warnings: &mut Vec<String>,
 ) {
-    let username = match field_value(object.get("username")) {
+    let username = match field_value_named(object.get("username"), "cxfBasicAuth", "username") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: basic-auth: {error}"));
             return;
         }
     };
-    let password = match field_value(object.get("password")) {
+    let password = match field_value_named(object.get("password"), "cxfBasicAuth", "password") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: basic-auth: {error}"));
             return;
         }
     };
-    let credential_urls = match string_vec(object.get("urls")) {
+    let credential_urls = match string_vec_named(object.get("urls"), "cxfBasicAuth", "urls") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: basic-auth: {error}"));
@@ -343,28 +352,28 @@ fn apply_totp(
     data: &mut BTreeMap<String, Value>,
     warnings: &mut Vec<String>,
 ) {
-    let secret = match string_field(object.get("secret")) {
+    let secret = match string_field_named(object.get("secret"), "cxfTOTP", "secret", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
             return;
         }
     };
-    let algorithm = match string_field(object.get("algorithm")) {
+    let algorithm = match string_field_named(object.get("algorithm"), "cxfTOTP", "algorithm", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
             return;
         }
     };
-    let issuer = match string_field(object.get("issuer")) {
+    let issuer = match string_field_named(object.get("issuer"), "cxfTOTP", "issuer", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
             return;
         }
     };
-    let username = match string_field(object.get("username")) {
+    let username = match string_field_named(object.get("username"), "cxfTOTP", "username", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
@@ -372,14 +381,14 @@ fn apply_totp(
         }
     };
     let _ = (issuer, username);
-    let digits = match integer_field(object.get("digits")) {
+    let digits = match integer_field_named(object.get("digits"), "cxfTOTP", "digits", "int") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
             return;
         }
     };
-    let period = match integer_field(object.get("period")) {
+    let period = match integer_field_named(object.get("period"), "cxfTOTP", "period", "int") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
@@ -417,7 +426,7 @@ fn apply_note(
     data: &mut BTreeMap<String, Value>,
     warnings: &mut Vec<String>,
 ) {
-    let content = match field_value(object.get("content")) {
+    let content = match field_value_named(object.get("content"), "cxfNote", "content") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: note: {error}"));
@@ -463,19 +472,19 @@ fn apply_ssh_key(
     warnings: &mut Vec<String>,
 ) {
     for field in ["keyType", "keyComment"] {
-        if let Err(error) = string_field(object.get(field)) {
+        if let Err(error) = string_field_named(object.get(field), "cxfSSHKey", field, "string") {
             warnings.push(format!("cxf: ssh-key: {error}"));
             return;
         }
     }
-    let private_key = match string_field(object.get("privateKey")) {
+    let private_key = match string_field_named(object.get("privateKey"), "cxfSSHKey", "privateKey", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: ssh-key: {error}"));
             return;
         }
     };
-    let private_key_pem = match string_field(object.get("privateKeyPem")) {
+    let private_key_pem = match string_field_named(object.get("privateKeyPem"), "cxfSSHKey", "privateKeyPem", "string") {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: ssh-key: {error}"));
@@ -509,7 +518,7 @@ fn apply_credit_card(
     ];
     let mut values = BTreeMap::new();
     for field in fields {
-        match field_value(object.get(field)) {
+        match field_value_named(object.get(field), "cxfCreditCard", field) {
             Ok(value) => {
                 values.insert(field, value);
             }
@@ -545,48 +554,113 @@ fn skip_credential(credential_type: &str, warnings: &mut Vec<String>) {
     ));
 }
 
-fn field_value(value: Option<&Value>) -> Result<String, String> {
+fn field_value_named(
+    value: Option<&Value>,
+    struct_name: &str,
+    field_name: &str,
+) -> Result<String, String> {
     match value {
         None | Some(Value::Null) => Ok(String::new()),
         Some(Value::String(value)) => Ok(value.clone()),
-        Some(Value::Object(object)) => string_field(object.get("value")),
-        Some(other) => Err(format!("invalid field value type {}", json_type(other))),
+        Some(Value::Object(object)) => string_field_named(
+            object.get("value"),
+            struct_name,
+            field_name,
+            r#"struct { Value string "json:\"value\"" }"#,
+        ),
+        Some(other) => Err(go_unmarshal_field_error(
+            other,
+            struct_name,
+            field_name,
+            r#"struct { Value string "json:\"value\"" }"#,
+        )),
     }
 }
 
-fn string_field(value: Option<&Value>) -> Result<String, String> {
+fn string_field_named(
+    value: Option<&Value>,
+    struct_name: &str,
+    field_name: &str,
+    target_type: &str,
+) -> Result<String, String> {
     match value {
         None | Some(Value::Null) => Ok(String::new()),
         Some(Value::String(value)) => Ok(value.clone()),
-        Some(other) => Err(format!("invalid string type {}", json_type(other))),
+        Some(other) => Err(go_unmarshal_field_error(
+            other,
+            struct_name,
+            field_name,
+            target_type,
+        )),
     }
 }
 
-fn integer_field(value: Option<&Value>) -> Result<i64, String> {
+fn integer_field_named(
+    value: Option<&Value>,
+    struct_name: &str,
+    field_name: &str,
+    target_type: &str,
+) -> Result<i64, String> {
     match value {
         None | Some(Value::Null) => Ok(0),
         Some(Value::Number(number)) => number
             .as_i64()
-            .ok_or_else(|| "invalid integer value".into()),
-        Some(other) => Err(format!("invalid integer type {}", json_type(other))),
+            .ok_or_else(|| go_unmarshal_field_error(value.unwrap(), struct_name, field_name, target_type)),
+        Some(other) => Err(go_unmarshal_field_error(
+            other,
+            struct_name,
+            field_name,
+            target_type,
+        )),
     }
 }
 
-fn string_vec(value: Option<&Value>) -> Result<Vec<String>, String> {
+fn string_vec_named(
+    value: Option<&Value>,
+    struct_name: &str,
+    field_name: &str,
+) -> Result<Vec<String>, String> {
     match value {
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(Value::Array(values)) => values
             .iter()
-            .map(|value| string_field(Some(value)))
+            .enumerate()
+            .map(|(index, value)| match value {
+                Value::String(value) => Ok(value.clone()),
+                Value::Null => Ok(String::new()),
+                other => Err(go_unmarshal_field_error(
+                    other,
+                    struct_name,
+                    &format!("{field_name}[{index}]"),
+                    "string",
+                )),
+            })
             .collect(),
-        Some(other) => Err(format!("invalid URL list type {}", json_type(other))),
+        Some(other) => Err(go_unmarshal_field_error(
+            other,
+            struct_name,
+            field_name,
+            "[]string",
+        )),
     }
+}
+
+fn go_unmarshal_field_error(
+    value: &Value,
+    struct_name: &str,
+    field_name: &str,
+    target_type: &str,
+) -> String {
+    format!(
+        "json: cannot unmarshal {} into Go struct field {struct_name}.{field_name} of type {target_type}",
+        json_type(value)
+    )
 }
 
 fn json_type(value: &Value) -> &'static str {
     match value {
         Value::Null => "null",
-        Value::Bool(_) => "boolean",
+        Value::Bool(_) => "bool",
         Value::Number(_) => "number",
         Value::String(_) => "string",
         Value::Array(_) => "array",

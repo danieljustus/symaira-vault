@@ -98,7 +98,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "ddeef63b488ee46949e22dc77cdc4e83518c5eb68c999817e5308f8c250cbc08"
+    "generator_digest": "f5e6b118dfe78998ffe8ef170712b31d81a30b9f76f019e700324ea2011c9356"
   },
   "cases": [
     {
@@ -472,6 +472,117 @@
     {
       "id": "CXF-006-invalid-json",
       "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAANAAkAbWFuaWZlc3QuanNvblVUBQABAAAAAKrOyy/RzSrOzwMEAAD//1BLBwgYmcHPDwAAAAkAAABQSwECFAAUAAgACAAAACHsGJnBzw8AAAAJAAAADQAJAAAAAAAAAAAAAAAAAAAAbWFuaWZlc3QuanNvblVUBQABAAAAAFBLBQYAAAAAAQABAEQAAABTAAAAAAA=",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-007-null-fields",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAGSOzWoDMRCDX6XoPIH26muvJS9Qcph4h9RlbC/2OCUs++5l+rOk25skkPQt4BjrKNYRXstQpQWxqkq0VMtdmEzyziLA3eFLrydC4SwIeJELxxsIfZyf/22dCJZMBcGd13bTsckkxRLrXThz7x+1TQgLrqzjt06w2+ynZ+4pHnjYGwijS/uG2T6mP7Qb63GoPhxdE3qs80+FYHzZ7t1gz+2rV2k91eJQmd9rQ3gi5FRcPa7rZwAAAP//UEsHCA6zfCq5AAAAXQEAAFBLAQIUABQACAAIAAAAIewOs3wquQAAAF0BAAATAAkAAAAAAAAAAAAAAAAAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEASgAAAAMBAAAAAA==",
+      "expected": {
+        "entries": [
+          {
+            "path": "Legacy/Null-Name",
+            "data": {
+              "password": "",
+              "tags": [
+                "",
+                "tag"
+              ],
+              "username": ""
+            },
+            "warnings": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "CXF-008-trailing-json",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAGSOzWrDMBCEXyXMWYH2qmuvJS9QctjIi7tlLRlplRKM371sf0zq3GYGZuZbQCmVnq0hvuWuGhakosrJpOS7UIynnUWEu+O3Xs8BmSZGxCuPlG4IaP3y8rB1DjAxZUR3XttNp8oDZxPSu3Cm1j5LHRAXXEn7Xz3AbrOfXqhJOlK3dwT0xvUHZvsY/tFurKeueji5DmipzL+VAKNxu3eDPbevXrk2KdmhJvooFfE5YJLs6mldD1ZJVPL4FQAA//9QSwcIuZ2FY74AAABmAQAAUEsBAhQAFAAIAAgAAAAh7LmdhWO+AAAAZgEAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAACAEAAAAA",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-009-invalid-version-type",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSMQQoCMQxF7/LXXbjODTyDzKJ0gkTbRDpRkdK7S2C6fLz//kAuxd7qB+g2UKxWLi6mwVuC7KA1QYI4t3PZeWd1yXWV6qwOgj2R4L8Xg6DmjLl+og4nXkNeA+cW+sP9EFPQQMsP6yB8u+kdCU00+DLnPwAA//9QSwcIXdtgr3YAAACsAAAAUEsBAhQAFAAIAAgAAAAh7F3bYK92AAAArAAAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAAwAAAAAAA",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-010-invalid-account-id",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSLQQoCMQxF7/LXXehKyA08g8yidLKItol0oiCld5dI3f3H+28gl2Iv9QN0GyhWKxcX0+AtQXbQJUGc23p03lldcv0X6qwOgj2Q4J8ng6DmjLn6Xx1OvIa8Bs4t9Jv7IaaggZbv1kHnhCYa6zTnNwAA//9QSwcIqonHs3MAAACeAAAAUEsBAhQAFAAIAAgAAAAh7KqJx7NzAAAAngAAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAAvQAAAAAA",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-011-invalid-collection-id",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAESNsQ7CMAxE/+XmDDAheWXiG1CHKvVgSG2UGiQU5d+RQSVbLr57r2HO2Z7qG+jakK0Uzi6mvywL6JQgzmt8TAkuXhiE87+JPqVvcUdhDBpy5YXVZS67QZ3VQbA7Evz9CJqa8+DEGkN1idinOL+4bqGkhnW+WQUdE1bReB16/wQAAP//UEsHCC6En7CDAAAAzgAAAFBLAQIUABQACAAIAAAAIewuhJ+wgwAAAM4AAAATAAkAAAAAAAAAAAAAAAAAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEASgAAAM0AAAAAAA==",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-012-invalid-linked-account",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAEyOsc7CMAyE3+XmDP8/IXll4hkQQ5V6MKQ2ag0SqvLuyA1VOiW5031fVgw520t9AV1XZCuFs4tpe8sIOoRIEOepdb8h6NRSUDvqLcHFC4Nw7tOIN9y+O7LyzCOry1D2f6hzsGEPJPjnGTQ1587ZZF11ae6o3zwvoaQV03C3GfSfMInG7a/WbwAAAP//UEsHCHrP29WMAAAA9AAAAFBLAQIUABQACAAIAAAAIex6z9vVjAAAAPQAAAATAAkAAAAAAAAAAAAAAAAAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEASgAAANYAAAAAAA==",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-013-null-top-level",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAMorzckBBAAA//9QSwcIT/zLJQoAAAAEAAAAUEsBAhQAFAAIAAgAAAAh7E/8yyUKAAAABAAAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAAVAAAAAAA",
+      "expected": {}
+    },
+    {
+      "id": "CXF-014-malformed-credential-values",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAFSRT4vbMBDFv8ryzmNIslAX3UpLKZTupe2p5DCRJ8lsZMlI43RN8Hcvsptl96b5o9+8mXcDe5/GaAXuzw3awd0zIKhJvxZ8lk6iKYc1HriUvyl3cDdcOYwCh3TBTLBpqMGBi/qGRzuDMBbJkXuBa2e6wadoEg2ufW2PyQS1xuGUstq5h8PPb5+2IHR60qrvA2GQrKmDe9wQivgs7yCWbFggF5l+LamWMGS9ssl3meBw1BcbszQXmfD6zedpsHTKPJzVL6VFJOduheCqhUGQl0Hz9IWt5nabXdtsPoJwHEN4WpbD1xX/8LtIBiGO/UHyW4X1jGpNZYNwlaxH9Wya4tP/Xmx3j5ippXqShmOTDs/iDRTHEPa0OtRzOKbcS4UYn6ol99WwJ5haqNN+3NsePr+xb97P+2V20RSrfz0/pwy3JfQa62szz/8CAAD//1BLBwjQ3mw1TQEAABgCAABQSwECFAAUAAgACAAAACHs0N5sNU0BAAAYAgAAEwAJAAAAAAAAAAAAAAAAAAAAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAFBLBQYAAAAAAQABAEoAAACXAQAAAAA=",
+      "expected": {
+        "entries": [
+          {
+            "path": "Malformed-Credentials",
+            "data": {
+              "tags": [
+                "fixture"
+              ]
+            },
+            "warnings": [
+              "cxf: basic-auth: json: cannot unmarshal number into Go struct field cxfBasicAuth.username of type struct { Value string \"json:\\\"value\\\"\" }",
+              "cxf: note: json: cannot unmarshal number into Go struct field cxfNote.content of type struct { Value string \"json:\\\"value\\\"\" }",
+              "cxf: totp: json: cannot unmarshal number into Go struct field cxfTOTP.secret of type string",
+              "cxf: ssh-key: json: cannot unmarshal number into Go struct field cxfSSHKey.keyType of type string",
+              "cxf: credit-card: json: cannot unmarshal number into Go struct field cxfCreditCard.number of type struct { Value string \"json:\\\"value\\\"\" }"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CXF-015-malformed-credentials-container",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSKQQpCMQxE7zLrLnSbG3gG+YvSHyTSppBGXZTcXYK4m3nvbdTW5kt9ge4bcoL+BAXiPH6iGZ+sLrUvED429ZE+84xQ4OKdQbjljSOOgjfbkqmgjVGf00DXgiGa6xLxDQAA//9QSwcIuW501GQAAAB8AAAAUEsBAhQAFAAIAAgAAAAh7LludNRkAAAAfAAAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAArgAAAAAA",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-016-malformed-tags-container",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSMQQoCMQxF7/LXXehKyA08g3RROkGi00Q6UZDSu0sYZ5fkvZeBUqu91TfQbUAW0HFBgji3HdTOC6tLWf+7qbM6CPZEgn9fDIKaM2ZO+5+og5V7NJec4OJreNcgM4f54b6JKWiglYd10DmhicZ0mvMXAAD//1BLBwgNOU27dQAAAKAAAABQSwECFAAUAAgACAAAACHsDTlNu3UAAACgAAAAEwAJAAAAAAAAAAAAAAAAAAAAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAFBLBQYAAAAAAQABAEoAAAC/AAAAAAA=",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-017-invalid-account-username",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSMQapCMQxF93LHHfw/ErID1yAOSl8G0TaRNk+Q0r1LwM5yOPdkIpdip/oA3SaK1crFxTT4niAHaE+QIM7tt+x8sLrkukt1VgfBnkjwz4tBUHPG2n+iDideQ14DQ56Du+bGoEvgm/sQU9BEyw/roP+EJhrX31rfAAAA//9QSwcIcYf9bnwAAACzAAAAUEsBAhQAFAAIAAgAAAAh7HGH/W58AAAAswAAABMACQAAAAAAAAAAAAAAAAAAAG5lc3RlZC9wYXlsb2FkLmpzb25VVAUAAQAAAABQSwUGAAAAAAEAAQBKAAAAxgAAAAAA",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-018-invalid-account-email",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAADSMMaoDMQxE7zK1i/9b3SBnWLYwXhGU2FLwKgnB+O5BEHczPN4byKXYU/0EbQPFauXiYhp/T+CWpYI2vLvpFXuCHKAlIUGc28/tfLC65Lpa6qwOgt2R4J8Hg6DmjLk6YQcTrwEvcece+MX9FFPQQMs366D/hCYa62/ObwAAAP//UEsHCCu6YsGAAAAAuAAAAFBLAQIUABQACAAIAAAAIewrumLBgAAAALgAAAATAAkAAAAAAAAAAAAAAAAAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEASgAAAMoAAAAAAA==",
       "expected": {
         "error_contains": "parse CXF JSON document"
       }

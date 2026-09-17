@@ -73,7 +73,7 @@ func main() {
 		if err := checkFixture(root, *output, meta); err != nil {
 			fail(err)
 		}
-		fmt.Println("PASS Go CXF oracle fixture (6 synthetic cases)")
+		fmt.Println("PASS Go CXF oracle fixture (18 synthetic cases)")
 		return
 	}
 	cases, err := runOracle(root)
@@ -364,7 +364,76 @@ func payload() []byte {
   fail(e)
   return b
 }
-func main() { p:=payload(); cases:=[]Case{run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
+func nullPayload() []byte {
+  x := map[string]any{
+    "version": map[string]any{"major": 1, "minor": 0},
+    "accounts": []any{nil, map[string]any{
+      "collections": []any{nil, map[string]any{
+        "title": nil, "name": "Legacy", "items": []any{nil, map[string]any{"item": "null-item"}},
+        "subCollections": []any{nil},
+      }},
+      "items": []any{nil, map[string]any{
+        "id": "null-item", "title": nil, "name": "Null Name", "scope": nil,
+        "credentials": []any{nil, map[string]any{"type": "basic-auth", "username": nil, "password": map[string]any{"value": nil}}},
+        "tags": []any{nil, "tag"},
+      }},
+    }},
+  }
+  b, e := json.Marshal(x); fail(e); return b
+}
+func malformedCredentialPayload() []byte {
+  item := map[string]any{
+    "id": "malformed", "title": "Malformed Credentials", "tags": []string{"fixture"},
+    "credentials": []any{
+      map[string]any{"type": "basic-auth", "username": 7, "password": map[string]any{"value": "ok"}},
+      map[string]any{"type": "note", "content": 7},
+      map[string]any{"type": "totp", "secret": 7, "algorithm": "SHA1", "digits": 6, "period": 30},
+      map[string]any{"type": "cryptographic-key", "keyType": 7, "privateKey": "fixture-key"},
+      map[string]any{"type": "credit-card", "number": 7, "fullName": "Fixture User", "cardType": "visa", "verificationNumber": "123", "expiryDate": "2027-08"},
+      7, "not-an-object", nil,
+    },
+  }
+  x := map[string]any{
+    "version": map[string]any{"major": 1, "minor": 0},
+    "accounts": []any{map[string]any{"id": "account", "items": []any{item}}},
+  }
+  b, e := json.Marshal(x); fail(e); return b
+}
+
+func malformedContainerPayload(field string) []byte {
+  item := map[string]any{"id": "item", "title": "Item", "credentials": []any{map[string]any{"type": "note", "content": "ok"}}}
+  account := map[string]any{"id": "account", "items": []any{item}}
+  switch field {
+  case "credentials":
+    item["credentials"] = "wrong"
+  case "tags":
+    item["tags"] = []any{7}
+  }
+  x := map[string]any{"version": map[string]any{"major": 1, "minor": 0}, "accounts": []any{account}}
+  b, e := json.Marshal(x); fail(e); return b
+}
+
+func invalidTypedPayload(kind string) []byte {
+  item := map[string]any{"id": "item", "title": "Item", "credentials": []any{map[string]any{"type": "note", "content": "ok"}}}
+  account := map[string]any{"id": "account", "collections": []any{}, "items": []any{item}}
+  x := map[string]any{"version": map[string]any{"major": 1, "minor": 0}, "accounts": []any{account}}
+  switch kind {
+  case "version":
+    x["version"] = map[string]any{"major": "wrong", "minor": 0}
+  case "account-id":
+    account["id"] = 7
+  case "account-username":
+    account["username"] = 7
+  case "account-email":
+    account["email"] = []any{"wrong"}
+  case "collection-id":
+    account["collections"] = []any{map[string]any{"id": 7, "title": "Collection", "items": []any{}}}
+  case "linked-account":
+    account["collections"] = []any{map[string]any{"id": "collection", "title": "Collection", "items": []any{map[string]any{"item": "item", "account": 7}}}}
+  }
+  b, e := json.Marshal(x); fail(e); return b
+}
+func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
 `
 
 func runOracle(root string) ([]fixtureCase, error) {
