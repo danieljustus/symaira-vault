@@ -81,7 +81,16 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
             Err(StoreError::EntryNotFound(_)) => Entry::default(),
             Err(error) => return Err(store_error(error)),
         };
-        entry.data.insert(field.to_owned(), value);
+        validate_field_lengths(field, &value)?;
+        if let (Some(existing), Value::Object(incoming)) = (entry.data.get_mut(field), &value) {
+            if let Value::Object(existing) = existing {
+                merge_json_objects(existing, incoming);
+            } else {
+                entry.data.insert(field.to_owned(), value);
+            }
+        } else {
+            entry.data.insert(field.to_owned(), value);
+        }
         if field == "password" {
             const WEAK_PASSWORD_TAG: &str = "weak-password";
             let weak = entry
@@ -108,6 +117,40 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
                 }),
             )
             .map_err(store_error)
+    }
+}
+
+const MAX_FIELD_LENGTH: usize = 4096;
+
+/// Match Go's ValidateFieldLengths: string values are bounded by UTF-8 byte
+/// length and nested objects are checked recursively. Arrays intentionally
+/// retain the Go behavior, which only descends through map[string]any values.
+fn validate_field_lengths(field: &str, value: &Value) -> Result<(), String> {
+    match value {
+        Value::String(value) if value.len() > MAX_FIELD_LENGTH => Err(format!(
+            "field {field:?} exceeds maximum length of {MAX_FIELD_LENGTH} characters"
+        )),
+        Value::Object(values) => values
+            .iter()
+            .find_map(|(name, value)| validate_field_lengths(name, value).err())
+            .map_or(Ok(()), Err),
+        _ => Ok(()),
+    }
+}
+
+fn merge_json_objects(
+    destination: &mut serde_json::Map<String, Value>,
+    source: &serde_json::Map<String, Value>,
+) {
+    for (name, value) in source {
+        match (destination.get_mut(name), value) {
+            (Some(Value::Object(existing)), Value::Object(incoming)) => {
+                merge_json_objects(existing, incoming);
+            }
+            _ => {
+                destination.insert(name.clone(), value.clone());
+            }
+        }
     }
 }
 

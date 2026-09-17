@@ -108,6 +108,15 @@ fn write_synthetic_vault() -> (
     let mut data = BTreeMap::new();
     data.insert("password".into(), Value::String("StrongP@ssw0rd123".into()));
     data.insert("username".into(), Value::String("fixture-user".into()));
+    data.insert(
+        "totp".into(),
+        serde_json::json!({
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+        }),
+    );
     store
         .write_new_entry(
             "github",
@@ -212,6 +221,22 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
                     "secret": "JBSWY3DPEHPK3PXP"
                 })
             ),
+            "set_totp_partial" => assert_eq!(
+                entry.data["totp"],
+                serde_json::json!({
+                    "algorithm": "SHA1",
+                    "digits": 8,
+                    "period": 30,
+                    "secret": "JBSWY3DPEHPK3PXP"
+                })
+            ),
+            "set_metadata_update" => {
+                assert_eq!(entry.data["username"], "metadata-user");
+                assert_eq!(entry.metadata.version, 2);
+                assert_eq!(entry.metadata.write_history.len(), 1);
+                assert_eq!(entry.metadata.write_history[0].field, "username");
+                assert_eq!(entry.metadata.write_history[0].action, "set");
+            }
             "set_password_force_weak" => {
                 assert_eq!(entry.data["password"], "short");
                 assert!(entry.metadata.tags.iter().any(|tag| tag == "weak-password"));

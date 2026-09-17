@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
@@ -88,6 +89,21 @@ func TestGenerateMCPSetEntryFixture(t *testing.T) {
 			name:    "set_totp",
 			profile: config.AgentProfile{Name: "fixture", AllowedPaths: []string{"*"}, CanWrite: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")},
 			call:    `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"set_entry_field","arguments":{"path":"github","field":"totp","value":"{\"algorithm\":\"SHA1\",\"digits\":6,\"period\":30,\"secret\":\"JBSWY3DPEHPK3PXP\"}"}}}`,
+		},
+		{
+			name:    "set_totp_partial",
+			profile: config.AgentProfile{Name: "fixture", AllowedPaths: []string{"*"}, CanWrite: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")},
+			call:    `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"set_entry_field","arguments":{"path":"github","field":"totp","value":"{\"digits\":8}"}}}`,
+		},
+		{
+			name:    "set_metadata_update",
+			profile: config.AgentProfile{Name: "fixture", AllowedPaths: []string{"*"}, CanWrite: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")},
+			call:    `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"set_entry_field","arguments":{"path":"github","field":"username","value":"metadata-user"}}}`,
+		},
+		{
+			name:    "set_field_too_long",
+			profile: config.AgentProfile{Name: "fixture", AllowedPaths: []string{"*"}, CanWrite: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")},
+			call:    fmt.Sprintf(`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"set_entry_field","arguments":{"path":"github","field":"username","value":%q}}}`, strings.Repeat("x", vault.MaxFieldLength+1)),
 		},
 		{
 			name:    "set_password_force_weak",
@@ -190,6 +206,12 @@ func mcpSetEntryFixtureVault(t *testing.T) (string, *age.X25519Identity) {
 	entry := &vault.Entry{Data: map[string]any{
 		"username": "fixture-user",
 		"password": "StrongP@ssw0rd123",
+		"totp": map[string]any{
+			"algorithm": "SHA1",
+			"digits":    6,
+			"period":    30,
+			"secret":    "JBSWY3DPEHPK3PXP",
+		},
 	}}
 	if err := vault.WriteEntry(dir, "github", entry, identity); err != nil {
 		t.Fatalf("write fixture entry: %v", err)
