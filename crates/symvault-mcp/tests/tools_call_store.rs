@@ -120,6 +120,46 @@ fn policy() -> Engine {
     }])
 }
 
+#[test]
+fn fetch_id_uses_get_policy_before_storage() {
+    let (root, identity) = write_synthetic_vault();
+    let mut available_tools = read_only_tool_names();
+    available_tools.push("fetch".into());
+    let runtime = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        ReadOnlyRuntimeConfig {
+            agent_name: "fixture".into(),
+            allowed_paths: vec!["*".into()],
+            available_tools,
+            ..ReadOnlyRuntimeConfig::default()
+        },
+        Some(Engine::new([Policy {
+            version: "1".into(),
+            description: "deny fetch fixture".into(),
+            rules: vec![Rule {
+                name: "deny fetch id".into(),
+                priority: 10,
+                conditions: Conditions {
+                    agent_id: "fixture".into(),
+                    path: "github".into(),
+                    action: "get".into(),
+                    ..Conditions::default()
+                },
+                action: Action::Deny,
+            }],
+        }])),
+        None,
+    )
+    .expect("open fetch policy runtime");
+
+    let error = runtime
+        .authorize("fetch", &serde_json::json!({"id": "github"}))
+        .expect_err("fetch id must be checked by get policy");
+    assert!(error.is_error);
+    assert!(error.text.contains("policy denied tool \"fetch\""));
+}
+
 fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
     let root = tempdir().expect("synthetic vault tempdir");
     fs::write(
@@ -533,6 +573,9 @@ fn injected_audit_logger_records_go_event_boundaries() {
     config.available_tools = read_only_tool_names();
     config
         .available_tools
+        .extend(["search".into(), "fetch".into()]);
+    config
+        .available_tools
         .retain(|tool| tool != "generate_totp");
     config
         .unavailable_tools
@@ -563,6 +606,12 @@ fn injected_audit_logger_records_go_event_boundaries() {
         .call("find_entries", &serde_json::json!({"query": "github"}))
         .expect("find call");
     runtime
+        .call("search", &serde_json::json!({"query": "github"}))
+        .expect("OpenAI search call");
+    runtime
+        .call("fetch", &serde_json::json!({"id": "github"}))
+        .expect("OpenAI fetch call");
+    runtime
         .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
         .expect_err("scope denial is returned by metadata handler");
     runtime
@@ -582,6 +631,12 @@ fn injected_audit_logger_records_go_event_boundaries() {
         .collect::<Vec<_>>();
     assert!(events.iter().any(|event| {
         event["action"] == "find" && event["path"] == "github" && event["ok"] == true
+    }));
+    assert!(events.iter().any(|event| {
+        event["action"] == "search_openai" && event["path"] == "github" && event["ok"] == true
+    }));
+    assert!(events.iter().any(|event| {
+        event["action"] == "fetch_openai" && event["path"] == "github" && event["ok"] == false
     }));
     assert!(events.iter().any(|event| {
         event["action"] == "get_metadata" && event["path"] == "github" && event["ok"] == false

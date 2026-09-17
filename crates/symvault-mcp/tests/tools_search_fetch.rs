@@ -141,7 +141,7 @@ fn runtime_for_case(name: &str) -> ReadOnlyRuntime<MemoryStore> {
                 "fetch_values_allowed" | "fetch_session_limit" | "fetch_only_allowed_registry"
             ),
             redact_fields: (name == "fetch_redacted_before_seal").then(|| vec!["password".into()]),
-            max_secrets_in_session: (name == "fetch_session_limit").then_some(1).unwrap_or(0),
+            max_secrets_in_session: if name == "fetch_session_limit" { 1 } else { 0 },
             available_tools,
             vault_dir: "<fixture-vault>".into(),
             vault_unlocked: true,

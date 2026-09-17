@@ -297,24 +297,43 @@ impl StoreReadOnlyRuntime {
         }
     }
 
+    fn audit_target<'a>(name: &str, arguments: &'a Value) -> &'a str {
+        match name {
+            "fetch" => arguments
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("<invalid>"),
+            "search" => arguments
+                .get("query")
+                .and_then(Value::as_str)
+                .unwrap_or("<invalid>"),
+            _ => arguments
+                .get("path")
+                .and_then(Value::as_str)
+                .unwrap_or(name),
+        }
+    }
+
     fn authorize_policy(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
         let Some(policy) = &self.policy else {
             return Ok(());
         };
-        let path = arguments
-            .get("path")
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let path = match name {
+            "fetch" => arguments.get("id").and_then(Value::as_str),
+            _ => arguments.get("path").and_then(Value::as_str),
+        }
+        .unwrap_or_default();
         // Go's executeTool evaluates policy only after extracting a non-empty
-        // entry path. `health`, `symaira_whoami`, and `find_entries` therefore
-        // bypass the path policy; only get_entry/get_entry_metadata reach this point
-        // with a path in this bounded runtime.
+        // entry path. `health`, `symaira_whoami`, and query-only `search`/find
+        // therefore bypass the path policy. Fetch uses `id`; applying the
+        // configured get policy there is intentionally stricter than the Go
+        // middleware's path-only extraction and prevents an ID-based bypass.
         if path.is_empty() {
             return Ok(());
         }
         let action_type = match name {
             "find_entries" => "find",
-            "get_entry" | "get_entry_metadata" => "get",
+            "get_entry" | "get_entry_metadata" | "fetch" => "get",
             "set_entry_field" => "set",
             "delete_entry" => "delete",
             _ => "read",
@@ -579,10 +598,7 @@ fn read_scan_line<R: BufRead>(reader: &mut R, line: &mut Vec<u8>) -> std::io::Re
 impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
         if let Err(error) = self.inner.authorize(name, arguments) {
-            let path = arguments
-                .get("path")
-                .and_then(Value::as_str)
-                .unwrap_or(name);
+            let path = Self::audit_target(name, arguments);
             if !self.unavailable_tools.iter().any(|tool| tool == name) {
                 self.append_audit("tool_denied", path, false);
             }
@@ -693,6 +709,22 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                     .unwrap_or("<invalid>");
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("get_metadata", path, ok);
+            }
+            "search" => {
+                let query = arguments
+                    .get("query")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("search_openai", query, ok);
+            }
+            "fetch" => {
+                let id = arguments
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("fetch_openai", id, ok);
             }
             _ => {}
         }
