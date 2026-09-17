@@ -584,23 +584,23 @@ impl Config {
         if let Some(v) = root.get(key("agents")) {
             merge_agents(&mut config, v)?;
         }
-        if let Some(v) = root.get(key("vault")) {
+        if let Some(v) = root.get(key("vault")).filter(|v| !v.is_null()) {
             config.vault = Some(parse_vault(v, config.auth_method)?);
         }
-        if let Some(v) = root.get(key("git")) {
+        if let Some(v) = root.get(key("git")).filter(|v| !v.is_null()) {
             config.git = Some(parse_git(v)?);
         }
-        if let Some(v) = root.get(key("mcp")) {
+        if let Some(v) = root.get(key("mcp")).filter(|v| !v.is_null()) {
             let mcp = parse_mcp(v)?;
             if mcp.bind.is_empty() {
                 return Err(ConfigError::Invalid("mcp.bind must not be empty".into()));
             }
             config.mcp = Some(mcp);
         }
-        if let Some(v) = root.get(key("update")) {
+        if let Some(v) = root.get(key("update")).filter(|v| !v.is_null()) {
             config.update = Some(parse_update(v)?);
         }
-        if let Some(v) = root.get(key("clipboard")) {
+        if let Some(v) = root.get(key("clipboard")).filter(|v| !v.is_null()) {
             config.clipboard = Some(parse_clipboard(v)?);
         }
         if config.default_agent.is_empty() {
@@ -1501,40 +1501,98 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
     Ok(())
 }
 fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
-    out.push_str("vault:\n");
+    let mut body = String::new();
     if !v.path.is_empty() {
-        out.push_str(&format!("    path: {}\n", yaml_scalar(&v.path)?));
+        body.push_str(&format!("    path: {}\n", yaml_scalar(&v.path)?));
     }
     if !v.default_recipients.is_empty() {
-        out.push_str("    default_recipients:\n");
+        body.push_str("    default_recipients:\n");
         for r in &v.default_recipients {
-            out.push_str(&format!("        - {}\n", yaml_scalar(r)?));
+            body.push_str(&format!("        - {}\n", yaml_scalar(r)?));
         }
     }
     if v.confirm_remove {
-        out.push_str("    confirm_remove: true\n");
+        body.push_str("    confirm_remove: true\n");
+    }
+    // Go's SaveTo always carries the effective vault auth method and the
+    // non-zero vault defaults. Omitting these fields silently resets a vault
+    // to a different KDF/search/format configuration on the next load.
+    body.push_str(&format!(
+        "    authMethod: {}\n",
+        yaml_scalar(v.auth_method.as_str())?
+    ));
+    if v.use_touch_id {
+        body.push_str("    useTouchID: true\n");
+    }
+    if let Some(legacy_mode) = v.legacy_mode {
+        body.push_str(&format!("    legacy_mode: {legacy_mode}\n"));
+    }
+    if v.search_index {
+        body.push_str("    search_index: true\n");
+    }
+    if v.search_workers != 0 {
+        body.push_str(&format!("    search_workers: {}\n", v.search_workers));
+    }
+    if v.search_index_cache {
+        body.push_str("    search_index_cache: true\n");
+    }
+    if v.config_cache_entries != 0 {
+        body.push_str(&format!(
+            "    config_cache_entries: {}\n",
+            v.config_cache_entries
+        ));
+    }
+    if v.pseudonymize_paths {
+        body.push_str("    pseudonymize_paths: true\n");
+    }
+    if v.scrypt_work_factor != 0 {
+        body.push_str(&format!(
+            "    scrypt_work_factor: {}\n",
+            v.scrypt_work_factor
+        ));
+    }
+    if v.auto_migrate_kdf {
+        body.push_str("    auto_migrate_kdf: true\n");
+    }
+    if v.auto_heal_zero_key {
+        body.push_str("    auto_heal_zero_key: true\n");
+    }
+    if v.format_version != 0 {
+        body.push_str(&format!("    format_version: {}\n", v.format_version));
+    }
+    if body.is_empty() {
+        out.push_str("vault: {}\n");
+    } else {
+        out.push_str("vault:\n");
+        out.push_str(&body);
     }
     Ok(())
 }
 fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
-    out.push_str("git:\n");
-    if !v.auto_push {
-        out.push_str("    auto_push: false\n");
+    let mut body = String::new();
+    if v.auto_push {
+        body.push_str("    auto_push: true\n");
     }
-    if !v.auto_pull {
-        out.push_str("    auto_pull: false\n");
+    if v.auto_pull {
+        body.push_str("    auto_pull: true\n");
     }
     if v.auto_pull_interval > Duration::ZERO {
-        out.push_str(&format!(
+        body.push_str(&format!(
             "    auto_pull_interval: {}\n",
             format_duration(v.auto_pull_interval)
         ));
     }
     if !v.commit_template.is_empty() {
-        out.push_str(&format!(
+        body.push_str(&format!(
             "    commit_template: {}\n",
             yaml_scalar(&v.commit_template)?
         ));
+    }
+    if body.is_empty() {
+        out.push_str("git: {}\n");
+    } else {
+        out.push_str("git:\n");
+        out.push_str(&body);
     }
     Ok(())
 }
@@ -1566,25 +1624,37 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
     Ok(())
 }
 fn write_update(out: &mut String, v: &UpdateConfig) -> Result<(), ConfigError> {
-    out.push_str("update:\n");
+    let mut body = String::new();
     if v.cache_ttl > Duration::ZERO {
-        out.push_str(&format!(
+        body.push_str(&format!(
             "    cache_ttl: {}\n",
             format_duration(v.cache_ttl)
         ));
     }
+    if body.is_empty() {
+        out.push_str("update: {}\n");
+    } else {
+        out.push_str("update:\n");
+        out.push_str(&body);
+    }
     Ok(())
 }
 fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigError> {
-    out.push_str("clipboard:\n");
+    let mut body = String::new();
     if v.auto_clear_duration != 0 {
-        out.push_str(&format!(
+        body.push_str(&format!(
             "    auto_clear_duration: {}\n",
             v.auto_clear_duration
         ));
     }
-    if !v.copy_by_default {
-        out.push_str("    copyByDefault: false\n");
+    if v.copy_by_default {
+        body.push_str("    copyByDefault: true\n");
+    }
+    if body.is_empty() {
+        out.push_str("clipboard: {}\n");
+    } else {
+        out.push_str("clipboard:\n");
+        out.push_str(&body);
     }
     Ok(())
 }
@@ -1638,5 +1708,84 @@ mod tests {
             String::from_utf8(c.to_yaml_bytes().unwrap()).unwrap(),
             expected
         );
+    }
+
+    #[test]
+    fn vault_writer_preserves_modeled_fields() {
+        let vault = VaultConfig {
+            path: "/fixture/vault".into(),
+            default_recipients: vec!["age1fixture".into()],
+            confirm_remove: true,
+            auth_method: AuthMethod::Touchid,
+            use_touch_id: true,
+            legacy_mode: Some(false),
+            search_index: true,
+            search_workers: 4,
+            search_index_cache: true,
+            config_cache_entries: 12,
+            pseudonymize_paths: true,
+            scrypt_work_factor: 22,
+            auto_migrate_kdf: true,
+            auto_heal_zero_key: true,
+            format_version: 7,
+        };
+        let config = Config {
+            auth_method: AuthMethod::Touchid,
+            use_touch_id: Some(true),
+            vault: Some(vault.clone()),
+            ..Config::default()
+        };
+        let yaml = String::from_utf8(config.to_yaml_bytes().unwrap()).unwrap();
+        for field in [
+            "path: /fixture/vault",
+            "default_recipients:",
+            "confirm_remove: true",
+            "authMethod: touchid",
+            "useTouchID: true",
+            "legacy_mode: false",
+            "search_index: true",
+            "search_workers: 4",
+            "search_index_cache: true",
+            "config_cache_entries: 12",
+            "pseudonymize_paths: true",
+            "scrypt_work_factor: 22",
+            "auto_migrate_kdf: true",
+            "auto_heal_zero_key: true",
+            "format_version: 7",
+        ] {
+            assert!(yaml.contains(field), "writer omitted vault field {field:?}");
+        }
+        let loaded = Config::load_from_bytes(yaml.as_bytes()).unwrap();
+        assert_eq!(loaded.vault, Some(vault));
+    }
+
+    #[test]
+    fn optional_sections_use_empty_maps_and_null_sections_are_skipped() {
+        let config = Config {
+            git: Some(GitConfig {
+                auto_push: false,
+                auto_pull: false,
+                auto_pull_interval: Duration::ZERO,
+                commit_template: String::new(),
+            }),
+            update: Some(UpdateConfig {
+                cache_ttl: Duration::ZERO,
+            }),
+            ..Config::default()
+        };
+        let yaml = String::from_utf8(config.to_yaml_bytes().unwrap()).unwrap();
+        assert!(yaml.contains("git: {}\n"));
+        assert!(yaml.contains("update: {}\n"));
+        Config::load_from_bytes(yaml.as_bytes()).expect("empty optional maps are valid YAML");
+
+        let loaded = Config::load_from_bytes(
+            b"vault: null\ngit: null\nmcp: null\nupdate: null\nclipboard: null\n",
+        )
+        .expect("Go-compatible null optional sections");
+        assert!(loaded.vault.is_none());
+        assert!(loaded.git.is_none());
+        assert!(loaded.mcp.is_none());
+        assert!(loaded.update.is_none());
+        assert!(loaded.clipboard.is_none());
     }
 }
