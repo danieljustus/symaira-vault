@@ -212,6 +212,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
         match name {
             "health" => self.health(),
             "symaira_whoami" => self.whoami(),
+            "list_entries" => self.list_entries(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -286,12 +287,78 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         json_text(info)
     }
 
+    fn list_entries(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        // Go's handler treats a missing or invalid prefix as the empty prefix
+        // after RequireString fails. GetBool likewise defaults invalid values
+        // to false, so keep this boundary permissive and deterministic.
+        let prefix = arguments
+            .get("prefix")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if !self.scope_allows(prefix) {
+            return Err(format!(
+                "access denied: path {prefix:?} outside allowed scope"
+            ));
+        }
+        let include_details = arguments
+            .get("include_details")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let mut entries = self
+            .store
+            .list()
+            .map_err(|error| format!("list entries: {error}"))?;
+        entries.retain(|entry| prefix.is_empty() || entry.path.starts_with(prefix));
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+
+        if !include_details {
+            return json_text(Value::Array(
+                entries
+                    .into_iter()
+                    .map(|entry| Value::String(entry.path))
+                    .collect(),
+            ));
+        }
+
+        let summaries = entries
+            .into_iter()
+            .map(|entry| {
+                let mut summary = Map::new();
+                summary.insert(
+                    "path".into(),
+                    Value::String(crate::render::sanitize_for_mcp(&entry.path)),
+                );
+                if !entry.secret_type.is_empty() {
+                    summary.insert("type".into(), Value::String(entry.secret_type));
+                }
+                if !entry.usage_hint.is_empty() {
+                    summary.insert(
+                        "usage_hint".into(),
+                        Value::String(crate::render::sanitize_for_mcp(&entry.usage_hint)),
+                    );
+                }
+                if entry.auto_rotate {
+                    summary.insert("auto_rotate".into(), Value::Bool(true));
+                }
+                if !entry.fields.is_empty() {
+                    summary.insert("has_value".into(), Value::Bool(true));
+                    summary.insert(
+                        "field_count".into(),
+                        Value::from(i64::try_from(entry.fields.len()).unwrap_or(i64::MAX)),
+                    );
+                }
+                Value::Object(summary)
+            })
+            .collect();
+        json_text(Value::Array(summaries))
+    }
+
     fn find_entries(&self, arguments: &Value) -> Result<ToolCallResult, String> {
         let query = match required_string(arguments, "query") {
             Ok(query) => query,
             Err(result) => return Ok(result),
         };
-        let needle = query.to_lowercase();
+        let needle = symvault_core::go_to_lower(query);
         let mut matches = Vec::new();
         for entry in self
             .store
@@ -302,7 +369,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 continue;
             }
             let mut fields = Vec::new();
-            if entry.path.to_lowercase().contains(&needle) {
+            if symvault_core::go_to_lower(&entry.path).contains(&needle) {
                 fields.push("path".to_string());
             }
             for (field, value) in &entry.fields {
@@ -662,7 +729,7 @@ fn apply_semantic_injection_check(text: String, mode: &str) -> Result<String, St
     if mode.is_empty() || mode == "off" {
         return Ok(text);
     }
-    let lower = text.to_lowercase();
+    let lower = symvault_core::go_to_lower(&text);
     let Some(pattern) = SEMANTIC_INJECTION_PATTERNS
         .iter()
         .find(|pattern| lower.contains(**pattern))
@@ -721,7 +788,7 @@ fn collect_field_matches(
                 .as_str()
                 .map(str::to_owned)
                 .unwrap_or_else(|| scalar.to_string());
-            if !prefix.is_empty() && rendered.to_lowercase().contains(needle) {
+            if !prefix.is_empty() && symvault_core::go_to_lower(&rendered).contains(needle) {
                 fields.push(prefix.to_owned());
             }
         }
