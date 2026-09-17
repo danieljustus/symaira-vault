@@ -1,18 +1,75 @@
-//! Secret environment construction for the `run` command.
+//! Secret environment construction and bounded process execution for `run`.
 //!
-//! This module deliberately stops before process creation.  The caller owns
-//! command policy, environment filtering, and subprocess lifetime; this
-//! module only parses mappings and resolves the requested vault references.
+//! Command policy and vault/session authorization remain with the caller. This
+//! module parses mappings, resolves requested vault references, and provides a
+//! shared process seam for `run` and attachment commands after authorization.
 
 use std::{
     collections::BTreeMap,
     fs,
+    io::Read,
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 
 use serde_json::Value;
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
+
+/// Environment inherited by Go's `secrets.RunCommand` before caller-selected
+/// passthrough names and resolved secret mappings are applied.
+pub(crate) const RUN_ENV_WHITELIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "SHELL",
+    "TERM",
+    "COLORTERM",
+    "DISPLAY",
+    "XAUTHORITY",
+    "GIT_ASKPASS",
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "SSH_AUTH_SOCK",
+    "SSH_AGENT_LAUNCHER",
+    "GNUPGHOME",
+];
+
+const MAX_PROCESS_OUTPUT: usize = 100 * 1024;
+
+/// Inputs shared by `run` and `file use` after each command has performed its
+/// own policy and vault work. `whitelist` is deliberately supplied by the
+/// caller because `run` has Go's broad safe set while attachment commands
+/// retain their narrower legacy set.
+pub(crate) struct ProcessOptions<'a> {
+    pub(crate) command: &'a [String],
+    pub(crate) environment: &'a BTreeMap<String, String>,
+    pub(crate) passthrough: &'a [String],
+    pub(crate) working_directory: Option<&'a Path>,
+    pub(crate) timeout: Option<Duration>,
+    pub(crate) redactions: &'a [Vec<u8>],
+    pub(crate) whitelist: &'a [&'a str],
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct ProcessResult {
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+    pub(crate) exit_code: i32,
+    pub(crate) timed_out: bool,
+    pub(crate) duration: Duration,
+    pub(crate) stdout_truncated: bool,
+    pub(crate) stderr_truncated: bool,
+    pub(crate) rejected_env_vars: Vec<String>,
+}
 
 /// Resolved values to overlay on the child environment.  A caller that needs
 /// output redaction can borrow or clone this map at the process boundary.
@@ -194,6 +251,236 @@ fn parse_env_file_contents(
         result.insert(name.to_owned(), reference.to_owned());
     }
     Ok(result)
+}
+
+/// Execute a command using the caller-selected environment policy.
+///
+/// The process itself is deliberately kept behind this small seam so `run`
+/// and `file use` share bounded capture, timeout handling, and redaction. A
+/// timeout returns a result with `timed_out` set, allowing a caller to retain
+/// Go's result-plus-error semantics while attachment commands can keep their
+/// existing string error API.
+pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, String> {
+    if options.command.is_empty() {
+        return Err("command must contain at least one element".to_owned());
+    }
+
+    let mut child_command = Command::new(&options.command[0]);
+    child_command.args(&options.command[1..]);
+    child_command.env_clear();
+    for &key in options.whitelist {
+        if let Some(value) = std::env::var_os(key) {
+            child_command.env(key, value);
+        }
+    }
+
+    let mut rejected_env_vars = Vec::new();
+    for name in options.passthrough {
+        if is_sensitive_env_name(name) {
+            rejected_env_vars.push(name.clone());
+            continue;
+        }
+        if let Some(value) = std::env::var_os(name) {
+            child_command.env(name, value);
+        }
+    }
+    rejected_env_vars.sort();
+
+    for (name, value) in options.environment {
+        child_command.env(name, value);
+    }
+    if let Some(directory) = options.working_directory {
+        child_command.current_dir(directory);
+    }
+    child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    let mut child = child_command
+        .spawn()
+        .map_err(|error| format!("failed to run command: {error}"))?;
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => return terminate_after_spawn_failure(&mut child, "failed to capture command stdout"),
+    };
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => return terminate_after_spawn_failure(&mut child, "failed to capture command stderr"),
+    };
+    let stdout_reader = thread::spawn(|| read_process_output(stdout));
+    let stderr_reader = thread::spawn(|| read_process_output(stderr));
+    let started = Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if options
+                    .timeout
+                    .is_some_and(|limit| started.elapsed() >= limit)
+                {
+                    timed_out = true;
+                    let _ = child.kill();
+                    break child
+                        .wait()
+                        .map_err(|error| format!("wait for timed out command: {error}"))?;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("wait for command: {error}"));
+            }
+        }
+    };
+    let duration = started.elapsed();
+
+    if timed_out {
+        // A descendant may inherit a pipe and keep it open after the direct
+        // child is killed. Detach bounded readers so timeout cleanup does not
+        // wait for an unrelated descendant.
+        drop(stdout_reader);
+        drop(stderr_reader);
+        return Ok(ProcessResult {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: status.code().unwrap_or(-1),
+            timed_out: true,
+            duration,
+            stdout_truncated: false,
+            stderr_truncated: false,
+            rejected_env_vars,
+        });
+    }
+
+    let ((stdout, stdout_truncated), (stderr, stderr_truncated)) =
+        join_process_readers(stdout_reader, stderr_reader);
+    let stdout = redact_process_output(&stdout, options.redactions);
+    let stderr = redact_process_output(&stderr, options.redactions);
+    Ok(ProcessResult {
+        stdout,
+        stderr,
+        exit_code: status.code().unwrap_or(-1),
+        timed_out: false,
+        duration,
+        stdout_truncated,
+        stderr_truncated,
+        rejected_env_vars,
+    })
+}
+
+fn terminate_after_spawn_failure<T>(child: &mut std::process::Child, message: &str) -> Result<T, String> {
+    let _ = child.kill();
+    let _ = child.wait();
+    Err(message.to_owned())
+}
+
+fn is_sensitive_env_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    let normalized: String = upper
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let joined = normalized.replace('_', "");
+    [
+        "PASSPHRASE",
+        "PASSWORD",
+        "PASSWD",
+        "SECRET",
+        "TOKEN",
+        "APIKEY",
+        "CREDENTIAL",
+        "CREDENTIALS",
+        "PRIVATEKEY",
+    ]
+    .iter()
+    .any(|token| joined.contains(token) || normalized.split('_').any(|part| part == *token))
+}
+
+fn join_process_readers(
+    stdout_reader: thread::JoinHandle<(Vec<u8>, bool)>,
+    stderr_reader: thread::JoinHandle<(Vec<u8>, bool)>,
+) -> ((Vec<u8>, bool), (Vec<u8>, bool)) {
+    let deadline = Instant::now() + Duration::from_millis(250);
+    while (!stdout_reader.is_finished() || !stderr_reader.is_finished())
+        && Instant::now() < deadline
+    {
+        thread::sleep(Duration::from_millis(5));
+    }
+    let stdout = if stdout_reader.is_finished() {
+        stdout_reader.join().unwrap_or_default()
+    } else {
+        drop(stdout_reader);
+        (Vec::new(), false)
+    };
+    let stderr = if stderr_reader.is_finished() {
+        stderr_reader.join().unwrap_or_default()
+    } else {
+        drop(stderr_reader);
+        (Vec::new(), false)
+    };
+    (stdout, stderr)
+}
+
+fn read_process_output(mut reader: impl Read) -> (Vec<u8>, bool) {
+    let mut captured = Vec::with_capacity(MAX_PROCESS_OUTPUT);
+    let mut buffer = [0u8; 8192];
+    let mut truncated = false;
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                let remaining = MAX_PROCESS_OUTPUT.saturating_sub(captured.len());
+                captured.extend_from_slice(&buffer[..count.min(remaining)]);
+                truncated |= count > remaining;
+            }
+            Err(_) => break,
+        }
+    }
+    (captured, truncated)
+}
+
+fn redact_process_output(output: &[u8], redactions: &[Vec<u8>]) -> String {
+    let mut output = output.to_vec();
+    // Replace longer values first so a short secret that is a prefix of a
+    // longer one cannot expose the longer value's suffix.
+    let mut order: Vec<_> = (0..redactions.len()).collect();
+    order.sort_by_key(|&index| std::cmp::Reverse(redactions[index].len()));
+    for index in order {
+        output = replace_bytes(&output, &redactions[index], b"***");
+    }
+    String::from_utf8_lossy(&output).into_owned()
+}
+
+fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
+    if needle.is_empty() {
+        return input.to_vec();
+    }
+    let mut result = Vec::with_capacity(input.len());
+    let mut cursor = 0;
+    while cursor < input.len() {
+        if input[cursor..].starts_with(needle) {
+            result.extend_from_slice(replacement);
+            cursor += needle.len();
+        } else {
+            result.push(input[cursor]);
+            cursor += 1;
+        }
+    }
+    result
+}
+
+pub(crate) fn format_timeout(timeout: Duration) -> String {
+    if timeout.as_secs() > 0 {
+        format!("{}s", timeout.as_secs())
+    } else {
+        format!("{}ms", timeout.as_millis())
+    }
 }
 
 #[cfg(test)]
@@ -438,5 +725,27 @@ mod tests {
             .expect_err("missing reference");
         assert_eq!(error, "secret ref not found: missing.password");
         assert!(!error.contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn process_redaction_replaces_each_known_value() {
+        let redactions = vec![b"plain-secret".to_vec(), b"encoded-secret".to_vec()];
+        assert_eq!(
+            redact_process_output(b"plain-secret and encoded-secret", &redactions),
+            "*** and ***"
+        );
+    }
+
+    #[test]
+    fn process_redaction_masks_overlapping_longer_value_first() {
+        let redactions = vec![b"token".to_vec(), b"token-suffix".to_vec()];
+        assert_eq!(redact_process_output(b"token-suffix", &redactions), "***");
+    }
+
+    #[test]
+    fn process_passthrough_rejects_sensitive_names_without_disclosing_values() {
+        assert!(is_sensitive_env_name("VAULT_PASS_PHRASE"));
+        assert!(is_sensitive_env_name("api-key"));
+        assert!(!is_sensitive_env_name("TERM_MODE"));
     }
 }

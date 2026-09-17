@@ -4,10 +4,8 @@ use std::{
     fs,
     io::{Read, Seek, SeekFrom, Write as _},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     sync::atomic::{AtomicU64, Ordering},
-    thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -374,10 +372,7 @@ fn run_file_command(
     content: &[u8],
     timeout: Option<Duration>,
 ) -> Result<UseResult, String> {
-    let mut child_command = Command::new(&command[0]);
-    child_command.args(&command[1..]);
-    child_command.env_clear();
-    for key in [
+    const FILE_ENV_WHITELIST: &[&str] = &[
         "PATH",
         "HOME",
         "USERPROFILE",
@@ -388,149 +383,31 @@ fn run_file_command(
         "LC_ALL",
         "LC_CTYPE",
         "SystemRoot",
-    ] {
-        if let Some(value) = std::env::var_os(key) {
-            child_command.env(key, value);
-        }
-    }
-    child_command.env(format!("SYMVAULT_FILE_{name}"), file);
-    child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = child_command
-        .spawn()
-        .map_err(|error| format!("failed to run command: {error}"))?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| "failed to capture command stdout".to_owned())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "failed to capture command stderr".to_owned())?;
-    let stdout_reader = thread::spawn(|| read_output(stdout));
-    let stderr_reader = thread::spawn(|| read_output(stderr));
-    let started = Instant::now();
-    let mut timed_out = false;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {
-                if timeout.is_some_and(|limit| started.elapsed() >= limit) {
-                    timed_out = true;
-                    let _ = child.kill();
-                    break child
-                        .wait()
-                        .map_err(|error| format!("wait for timed out command: {error}"))?;
-                }
-                thread::sleep(Duration::from_millis(5));
-            }
-            Err(error) => return Err(format!("wait for command: {error}")),
-        }
-    };
-    if timed_out {
-        // A grandchild may inherit the pipe and keep it open after the direct
-        // child is killed. Detach bounded readers so timeout cleanup does not
-        // wait for an unrelated descendant.
-        drop(stdout_reader);
-        drop(stderr_reader);
+    ];
+    let mut environment = std::collections::BTreeMap::new();
+    environment.insert(format!("SYMVAULT_FILE_{name}"), file.display().to_string());
+    let redactions = vec![content.to_vec(), STANDARD.encode(content).into_bytes()];
+    let result = crate::run_commands::run_process(crate::run_commands::ProcessOptions {
+        command,
+        environment: &environment,
+        passthrough: &[],
+        working_directory: None,
+        timeout,
+        redactions: &redactions,
+        whitelist: FILE_ENV_WHITELIST,
+    })?;
+    if result.timed_out {
         return Err(format!(
             "command timed out after {}",
-            format_timeout(timeout.unwrap_or_default())
+            crate::run_commands::format_timeout(timeout.unwrap_or_default())
         ));
     }
-    let (stdout, stderr) = join_readers_with_deadline(stdout_reader, stderr_reader);
-    let stdout = redact_output(&stdout, content);
-    let stderr = redact_output(&stderr, content);
     Ok(UseResult {
-        stdout,
-        stderr,
-        exit_code: status.code().unwrap_or(-1),
-        timed_out,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exit_code: result.exit_code,
+        timed_out: result.timed_out,
     })
-}
-
-fn join_readers_with_deadline(
-    stdout_reader: thread::JoinHandle<(Vec<u8>, bool)>,
-    stderr_reader: thread::JoinHandle<(Vec<u8>, bool)>,
-) -> (Vec<u8>, Vec<u8>) {
-    let deadline = Instant::now() + Duration::from_millis(250);
-    while (!stdout_reader.is_finished() || !stderr_reader.is_finished())
-        && Instant::now() < deadline
-    {
-        thread::sleep(Duration::from_millis(5));
-    }
-    let stdout = if stdout_reader.is_finished() {
-        stdout_reader
-            .join()
-            .ok()
-            .map(|(data, _)| data)
-            .unwrap_or_default()
-    } else {
-        drop(stdout_reader);
-        Vec::new()
-    };
-    let stderr = if stderr_reader.is_finished() {
-        stderr_reader
-            .join()
-            .ok()
-            .map(|(data, _)| data)
-            .unwrap_or_default()
-    } else {
-        drop(stderr_reader);
-        Vec::new()
-    };
-    (stdout, stderr)
-}
-
-fn read_output(mut reader: impl Read) -> (Vec<u8>, bool) {
-    const MAX_OUTPUT: usize = 100 * 1024;
-    let mut captured = Vec::with_capacity(MAX_OUTPUT);
-    let mut buffer = [0u8; 8192];
-    let mut truncated = false;
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => {
-                let remaining = MAX_OUTPUT.saturating_sub(captured.len());
-                captured.extend_from_slice(&buffer[..count.min(remaining)]);
-                truncated |= count > remaining;
-            }
-            Err(_) => break,
-        }
-    }
-    (captured, truncated)
-}
-
-fn redact_output(output: &[u8], content: &[u8]) -> String {
-    let mut output = replace_bytes(output, content, b"***");
-    let encoded = STANDARD.encode(content);
-    output = replace_bytes(&output, encoded.as_bytes(), b"***");
-    String::from_utf8_lossy(&output).into_owned()
-}
-
-fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
-    if needle.is_empty() {
-        return input.to_vec();
-    }
-    let mut result = Vec::with_capacity(input.len());
-    let mut cursor = 0;
-    while cursor < input.len() {
-        if input[cursor..].starts_with(needle) {
-            result.extend_from_slice(replacement);
-            cursor += needle.len();
-        } else {
-            result.push(input[cursor]);
-            cursor += 1;
-        }
-    }
-    result
-}
-
-fn format_timeout(timeout: Duration) -> String {
-    if timeout.as_secs() > 0 {
-        format!("{}s", timeout.as_secs())
-    } else {
-        format!("{}ms", timeout.as_millis())
-    }
 }
 
 fn split_path_field(query: &str) -> (String, String) {
