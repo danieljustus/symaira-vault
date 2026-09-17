@@ -174,7 +174,7 @@ fn save_unlocked_session(
         .map_err(|error| format!("save identity session: {error}"))
 }
 
-fn get_all_recipients_for_encryption(
+pub(crate) fn get_all_recipients_for_encryption(
     vault: &Path,
     identity: &Identity,
 ) -> Result<Vec<Recipient>, String> {
@@ -203,7 +203,7 @@ fn get_all_recipients_for_encryption(
     Ok(result)
 }
 
-fn reencrypt_all_entries(
+pub(crate) fn reencrypt_all_entries(
     vault: &Path,
     identity: &Identity,
     recipients: &[Recipient],
