@@ -85,16 +85,62 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
 
     let use_profile = run(&go_binary, &["profile", "use", "über"], &profile_home);
     assert_success(&use_profile, "Go profile use");
-    fs::copy(
-        profile_home.join("config/symaira-vault/config.yaml"),
-        &legacy,
-    )
-    .expect("copy Go generated default profile config");
 
     let go_profile = run(&go_binary, &["profile", "list"], &profile_home);
     let rust_profile = run(&rust_binary, &["profile", "list"], &profile_home);
     assert_same(&go_profile, &rust_profile, "profile list profile");
 
+    let go_add_home = temporary_root("go-add");
+    let rust_add_home = temporary_root("rust-add");
+    fs::create_dir_all(&go_add_home).expect("Go add home");
+    fs::create_dir_all(&rust_add_home).expect("Rust add home");
+    let go_add = run(
+        &go_binary,
+        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
+        &go_add_home,
+    );
+    let rust_add = run(
+        &rust_binary,
+        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
+        &rust_add_home,
+    );
+    assert_same(&go_add, &rust_add, "profile add");
+    let go_generated = go_add_home.join("config/symaira-vault/config.yaml");
+    let rust_generated = rust_add_home.join("config/symaira-vault/config.yaml");
+    assert!(go_generated.is_file(), "Go profile destination");
+    assert!(rust_generated.is_file(), "Rust profile destination");
+
+    let go_legacy = go_add_home.join(".symvault/config.yaml");
+    let rust_legacy = rust_add_home.join(".symvault/config.yaml");
+    fs::create_dir_all(go_legacy.parent().expect("Go legacy parent")).expect("Go legacy");
+    fs::create_dir_all(rust_legacy.parent().expect("Rust legacy parent")).expect("Rust legacy");
+    fs::copy(go_generated, &go_legacy).expect("seed Go legacy config");
+    fs::copy(rust_generated, &rust_legacy).expect("seed Rust legacy config");
+    let mut rust_bytes = fs::read(&rust_legacy).expect("read Rust legacy config");
+    rust_bytes.extend_from_slice(b"customUnknown: keep\n");
+    fs::write(&rust_legacy, rust_bytes).expect("add unknown Rust config field");
+
+    let go_use = run(&go_binary, &["profile", "use", "über"], &go_add_home);
+    let rust_use = run(&rust_binary, &["profile", "use", "über"], &rust_add_home);
+    assert_same(&go_use, &rust_use, "profile use");
+    let preserved = String::from_utf8(fs::read(&rust_legacy).expect("read updated Rust config"))
+        .expect("Rust config UTF-8");
+    assert!(preserved.contains("customUnknown: keep"));
+
+    let go_missing = run(&go_binary, &["profile", "use", "missing"], &go_add_home);
+    let rust_missing = run(&rust_binary, &["profile", "use", "missing"], &rust_add_home);
+    assert_eq!(go_missing.status.code(), rust_missing.status.code());
+    assert_eq!(
+        go_missing.stdout, rust_missing.stdout,
+        "missing profile stdout"
+    );
+    assert_eq!(
+        go_missing.stderr, rust_missing.stderr,
+        "missing profile stderr"
+    );
+
     let _ = fs::remove_dir_all(empty_home);
     let _ = fs::remove_dir_all(profile_home);
+    let _ = fs::remove_dir_all(go_add_home);
+    let _ = fs::remove_dir_all(rust_add_home);
 }

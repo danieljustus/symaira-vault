@@ -1,8 +1,16 @@
-use std::{fmt::Write as FmtWrite, io::Write, path::Path};
+use std::{
+    env,
+    fmt::Write as FmtWrite,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 
+use crate::config as cli_config;
 use symvault_core::config::Config;
 
 const CONFIG_FILE: &str = ".symvault/config.yaml";
+const APP_NAME: &str = "symaira-vault";
 
 /// List the profiles from the legacy config location used by Go's profile
 /// command. A missing or invalid config has the same effect as Go's fallback
@@ -56,8 +64,8 @@ pub(crate) fn list(home: &Path, quiet: bool, output: &mut impl Write) -> Result<
 
     writeln!(
         output,
-        "{:<name_width$}  {:<path_width$}  {}",
-        "NAME", "VAULT PATH", "DEFAULT"
+        "{:<name_width$}  {:<path_width$}  DEFAULT",
+        "NAME", "VAULT PATH"
     )
     .map_err(|error| format!("write profile output: {error}"))?;
     for (name, path, marker) in rows {
@@ -67,4 +75,136 @@ pub(crate) fn list(home: &Path, quiet: bool, output: &mut impl Write) -> Result<
         writeln!(output, "{line}").map_err(|error| format!("write profile output: {error}"))?;
     }
     Ok(())
+}
+
+pub(crate) fn add(
+    home: &Path,
+    name: &str,
+    vault_path: &str,
+    quiet: bool,
+    output: &mut impl Write,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("profile name cannot be empty".to_owned());
+    }
+    if vault_path.is_empty() {
+        return Err("--vault is required".to_owned());
+    }
+
+    let source = home.join(CONFIG_FILE);
+    if let Ok(config) = Config::load(&source)
+        && config
+            .profiles
+            .as_ref()
+            .is_some_and(|profiles| profiles.contains_key(name))
+    {
+        return Err(format!("profile {name:?} already exists"));
+    }
+    let destination = default_config_path(home);
+    prepare_destination(&source, &destination)?;
+    let key = format!("profiles.{}.vault", escaped_path_segment(name));
+    set_string(&destination, &key, vault_path)?;
+    if !quiet {
+        writeln!(output, "Profile {name:?} added with vault {vault_path}")
+            .map_err(|error| format!("write profile output: {error}"))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn use_profile(
+    home: &Path,
+    name: &str,
+    quiet: bool,
+    output: &mut impl Write,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("profile name cannot be empty".to_owned());
+    }
+    let source = home.join(CONFIG_FILE);
+    let config = Config::load(&source).map_err(|error| format!("cannot load config: {error}"))?;
+    if !config
+        .profiles
+        .as_ref()
+        .is_some_and(|profiles| profiles.contains_key(name))
+    {
+        return Err(format!("profile {name:?} not found"));
+    }
+
+    let destination = default_config_path(home);
+    prepare_destination(&source, &destination)?;
+    set_string(&destination, "defaultProfile", name)?;
+    if !quiet {
+        writeln!(output, "Default profile set to {name:?}")
+            .map_err(|error| format!("write profile output: {error}"))?;
+    }
+    Ok(())
+}
+
+fn set_string(path: &Path, key: &str, value: &str) -> Result<(), String> {
+    let encoded =
+        serde_json::to_string(value).map_err(|error| format!("encode config value: {error}"))?;
+    cli_config::set(path, key, &encoded, true)
+}
+
+/// Match Go's resolver: an existing legacy directory selects its config;
+/// otherwise the XDG config directory is selected for `Config.Save`.
+fn default_config_path(home: &Path) -> PathBuf {
+    if home.join(".symvault").is_dir() {
+        return home.join(CONFIG_FILE);
+    }
+    let config_home = env::var_os("XDG_CONFIG_HOME")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".config"));
+    config_home.join(APP_NAME).join("config.yaml")
+}
+
+fn prepare_destination(source: &Path, destination: &Path) -> Result<(), String> {
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent).map_err(|error| format!("cannot save config: {error}"))?;
+    }
+    let source_is_valid = Config::load(source).is_ok();
+    if source != destination || !source_is_valid || !destination.exists() {
+        let seed = if source_is_valid {
+            fs::read(source).map_err(|error| format!("cannot load config: {error}"))?
+        } else {
+            b"profiles:\n".to_vec()
+        };
+        write_seed(destination, &seed)?;
+    }
+    Ok(())
+}
+
+fn write_seed(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut options = OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|error| format!("cannot save config: {error}"))?;
+    file.write_all(bytes)
+        .map_err(|error| format!("cannot save config: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("cannot save config: {error}"))?;
+    Ok(())
+}
+
+fn escaped_path_segment(segment: &str) -> String {
+    segment
+        .chars()
+        .flat_map(|character| match character {
+            '\\' => ['\\', '\\'],
+            '.' => ['\\', '.'],
+            '[' => ['\\', '['],
+            ']' => ['\\', ']'],
+            character => [character, '\0'],
+        })
+        .filter(|character| *character != '\0')
+        .collect()
 }
