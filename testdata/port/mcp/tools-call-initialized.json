@@ -16,7 +16,7 @@
       "internal/vault/search.go"
     ],
     "source_hash": "8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9",
-    "generator_hash": "5def7e23410a9153056cd336316fce758d940b3469d43392125e61607e8c8294"
+    "generator_hash": "2d5160138e709dd2a4338f666b29d2f67f798136e0b127a3347accdf56fa6f04"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",

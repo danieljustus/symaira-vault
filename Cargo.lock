@@ -2595,6 +2595,7 @@ dependencies = [
  "symvault-platform",
  "symvault-store",
  "symvault-sync",
+ "url",
  "yaml-edit",
  "zeroize",
 ]

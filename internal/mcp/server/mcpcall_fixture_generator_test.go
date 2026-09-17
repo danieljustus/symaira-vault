@@ -18,6 +18,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 )
 
 // This generator calls the production MCP protocol handler with a synthetic
@@ -68,6 +69,12 @@ func TestGenerateMCPCallFixture(t *testing.T) {
 	if !g && !check {
 		t.Skip("set SYMAIRA_GENERATE_MCP_CALL_FIXTURE=1 or SYMAIRA_CHECK_MCP_CALL_FIXTURE=1")
 	}
+
+	// Pin the advertised capability, as the tools/list oracle does. Host GUI/TTY
+	// availability must not change protocol fixtures; no prompt is invoked.
+	originalSecure := secureInputCapabilityFn
+	secureInputCapabilityFn = func() secureui.Capability { return secureui.CapTTY }
+	t.Cleanup(func() { secureInputCapabilityFn = originalSecure })
 
 	vaultDir, identity := mockVault(t)
 	profile := config.AgentProfile{
