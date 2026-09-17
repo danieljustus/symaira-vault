@@ -274,9 +274,10 @@ jobs:
       - name: Run bounded main/scheduled Rust fuzz pass
         run: make rust-fuzz
 
+  # Keep native Rust in the PR run so migration batches need no duplicate
+  # workflow_dispatch of the entire Go/CI matrix.
   rust-native:
     name: Rust native (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
@@ -882,6 +883,7 @@ jobs:
       - flake-vendorhash
       - port-contract
       - rust
+      - rust-native
       - test-pr
       - windows-process-tree
       - build-pr
@@ -914,6 +916,7 @@ jobs:
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
           RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_RUST: ${{ needs.rust.result }}
+          RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
@@ -942,6 +945,7 @@ jobs:
           check_required "$RES_FLAKE_VENDORHASH" flake-vendorhash
           check_required "$RES_PORT_CONTRACT" port-contract
           check_required "$RES_RUST" rust
+          check_required "$RES_RUST_NATIVE" rust-native
           check_required "$RES_TEST_PR" test-pr
           check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
           check_required "$RES_BUILD_PR" build-pr
