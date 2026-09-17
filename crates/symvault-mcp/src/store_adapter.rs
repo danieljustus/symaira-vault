@@ -82,6 +82,7 @@ pub struct StoreReadOnlyRuntime {
     audit: Option<SharedAuditLogger>,
     agent_name: String,
     transport: String,
+    unavailable_tools: Vec<String>,
 }
 
 impl StoreReadOnlyRuntime {
@@ -111,12 +112,18 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let unavailable_tools = config
+            .unavailable_tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect();
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
             audit,
             agent_name,
             transport,
+            unavailable_tools,
         })
     }
 
@@ -145,12 +152,18 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let unavailable_tools = config
+            .unavailable_tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect();
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
             audit,
             agent_name,
             transport,
+            unavailable_tools,
         })
     }
 
@@ -186,14 +199,14 @@ impl StoreReadOnlyRuntime {
             .unwrap_or_default();
         // Go's executeTool evaluates policy only after extracting a non-empty
         // entry path. `health`, `symaira_whoami`, and `find_entries` therefore
-        // bypass the path policy; only get_entry_metadata reaches this point
+        // bypass the path policy; only get_entry/get_entry_metadata reach this point
         // with a path in this bounded runtime.
         if path.is_empty() {
             return Ok(());
         }
         let action_type = match name {
             "find_entries" => "find",
-            "get_entry_metadata" => "get",
+            "get_entry" | "get_entry_metadata" => "get",
             _ => "read",
         };
         let result = policy.evaluate(EvalContext {
@@ -225,7 +238,9 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 .get("path")
                 .and_then(Value::as_str)
                 .unwrap_or(name);
-            self.append_audit("tool_denied", path, false);
+            if !self.unavailable_tools.iter().any(|tool| tool == name) {
+                self.append_audit("tool_denied", path, false);
+            }
             return Err(error);
         }
         self.authorize_policy(name, arguments)?;
@@ -242,6 +257,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                     .unwrap_or("<invalid>");
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("find", path, ok);
+            }
+            "get_entry" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("get", path, ok);
             }
             "get_entry_metadata" => {
                 let path = arguments
@@ -261,7 +284,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The four handlers in this bounded runtime. The catalog remains owned by
+/// The five handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -269,6 +292,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "health",
         "symaira_whoami",
         "find_entries",
+        "get_entry",
         "get_entry_metadata",
     ]
     .into_iter()

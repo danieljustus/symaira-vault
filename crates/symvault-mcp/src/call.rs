@@ -138,7 +138,7 @@ impl Default for ReadOnlyRuntimeConfig {
     }
 }
 
-/// Productive read-only runtime for the four portable tools in this slice.
+/// Productive read-only runtime for the five portable tools in this slice.
 ///
 /// The runtime performs argument validation, scope checks, search, metadata
 /// projection, and whoami construction over an injected store. It never opens
@@ -176,7 +176,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "health" => self.health(),
             "symaira_whoami" => self.whoami(),
             "find_entries" => self.find_entries(arguments),
-            "get_entry_metadata" => self.get_entry_metadata(arguments),
+            "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             _ => Err(format!("read-only runtime has no handler for {name}")),
         }
     }

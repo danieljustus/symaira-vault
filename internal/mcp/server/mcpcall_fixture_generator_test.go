@@ -88,6 +88,7 @@ func TestGenerateMCPCallFixture(t *testing.T) {
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"symaira_whoami"}}`,
 		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"find_entries","arguments":{"query":"test"}}}`,
 		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"get_entry_metadata","arguments":{"path":"github"}}}`,
+		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_entry","arguments":{"path":"github"}}}`,
 		`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"NaMe":"health","ArGuMeNtS":{"ignored":null}}}`,
 		`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"find_entries","arguments":{"query":null}}}`,
 		`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"health","NAME":"symaira_whoami"}}`,

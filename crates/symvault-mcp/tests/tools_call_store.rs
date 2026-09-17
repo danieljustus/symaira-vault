@@ -236,7 +236,7 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         fixture.oracle.source_hash.as_deref(),
         Some("8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9")
     );
-    assert_eq!(read_only_tool_names().len(), 4);
+    assert_eq!(read_only_tool_names().len(), 5);
     let case = fixture
         .cases
         .iter()
@@ -323,6 +323,9 @@ fn authorization_matches_go_path_policy_and_quota_order() {
     runtime
         .authorize("get_entry_metadata", &serde_json::json!({"path": "github"}))
         .expect_err("path-specific policy denies metadata before storage");
+    runtime
+        .authorize("get_entry", &serde_json::json!({"path": "github"}))
+        .expect_err("path-specific policy denies get before storage");
 
     // With policy removed, authorization passes and the handler applies the
     // Go-compatible scope check at the storage boundary.
@@ -338,6 +341,10 @@ fn authorization_matches_go_path_policy_and_quota_order() {
     let error = runtime
         .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
         .expect_err("metadata outside scope must not reach storage");
+    assert!(error.contains("outside allowed scope"));
+    let error = runtime
+        .call("get_entry", &serde_json::json!({"path": "github"}))
+        .expect_err("get outside scope must not reach storage");
     assert!(error.contains("outside allowed scope"));
 }
 
@@ -357,6 +364,9 @@ fn injected_audit_logger_records_go_event_boundaries() {
     let mut config = fixture_config();
     config.allowed_paths = vec!["allowed/*".into()];
     config.available_tools = read_only_tool_names();
+    config
+        .unavailable_tools
+        .retain(|tool| tool.name != "generate_totp");
     let runtime = StoreReadOnlyRuntime::open_with_audit(
         root.path(),
         identity,
@@ -386,6 +396,9 @@ fn injected_audit_logger_records_go_event_boundaries() {
         .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
         .expect_err("scope denial is returned by metadata handler");
     runtime
+        .call("get_entry", &serde_json::json!({"path": "github"}))
+        .expect_err("scope denial is returned by get handler");
+    runtime
         .authorize("generate_totp", &serde_json::json!({}))
         .expect_err("unsupported tool is denied before storage");
     runtime
@@ -402,6 +415,9 @@ fn injected_audit_logger_records_go_event_boundaries() {
     }));
     assert!(events.iter().any(|event| {
         event["action"] == "get_metadata" && event["path"] == "github" && event["ok"] == false
+    }));
+    assert!(events.iter().any(|event| {
+        event["action"] == "get" && event["path"] == "github" && event["ok"] == false
     }));
     assert!(
         events

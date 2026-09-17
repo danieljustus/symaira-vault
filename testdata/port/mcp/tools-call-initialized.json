@@ -16,7 +16,7 @@
       "internal/vault/search.go"
     ],
     "source_hash": "8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9",
-    "generator_hash": "abac6d0701cf87cd7c295dec5a1a330da214c9674dc7f2b09575dfbb800ce46a"
+    "generator_hash": "5def7e23410a9153056cd336316fce758d940b3469d43392125e61607e8c8294"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",
@@ -30,6 +30,7 @@
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_whoami\"}}",
         "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"find_entries\",\"arguments\":{\"query\":\"test\"}}}",
         "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"get_entry_metadata\",\"arguments\":{\"path\":\"github\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"get_entry\",\"arguments\":{\"path\":\"github\"}}}",
         "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"NaMe\":\"health\",\"ArGuMeNtS\":{\"ignored\":null}}}",
         "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"find_entries\",\"arguments\":{\"query\":null}}}",
         "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"NAME\":\"symaira_whoami\"}}"
@@ -104,6 +105,19 @@
           }
         },
         {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"auto_rotate\":false,\"fields\":[{\"handle\":\"op://github/password\",\"kind\":\"string\",\"name\":\"password\",\"usage\":{\"note\":\"The raw value is never returned to agents. Pass \\\"github.password\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\",\"run_command\":{\"env\":{\"\\u003cVAR_NAME\\u003e\":\"github.password\"}}}},{\"handle\":\"op://github/username\",\"kind\":\"string\",\"name\":\"username\",\"usage\":{\"note\":\"The raw value is never returned to agents. Pass \\\"github.username\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\",\"run_command\":{\"env\":{\"\\u003cVAR_NAME\\u003e\":\"github.username\"}}}}],\"has_value\":true,\"meta\":{\"created\":\"\\u003cfixture-time\\u003e\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"path\":\"github\",\"tags\":[],\"type\":\"\",\"usage_hint\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=usage_hint --\\u003e\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
           "id": 6,
           "jsonrpc": "2.0",
           "result": {
@@ -148,6 +162,7 @@
         0,
         0,
         0,
+        1,
         1,
         0,
         0,
