@@ -277,6 +277,8 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
+            "search" => self.search_openai(arguments),
+            "fetch" => self.fetch_openai(arguments),
             _ => Err(format!("read-only runtime has no handler for {name}")),
         }
     }
@@ -855,6 +857,20 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             Ok(query) => query,
             Err(result) => return Ok(result),
         };
+        let matches = self.find_matching_entries(query)?;
+        let matches = matches
+            .into_iter()
+            .map(|entry| ReadOnlyMatch {
+                path: crate::render::sanitize_for_mcp(&entry.path),
+                fields: entry.fields,
+            })
+            .collect::<Vec<_>>();
+        symvault_gojson::to_string(&matches)
+            .map(ToolCallResult::text)
+            .map_err(|error| error.to_string())
+    }
+
+    fn find_matching_entries(&self, query: &str) -> Result<Vec<OpenAISearchMatch>, String> {
         let needle = symvault_core::go_to_lower(query);
         let mut matches = Vec::new();
         for entry in self
@@ -880,16 +896,152 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             }
             fields.sort();
             if !fields.is_empty() {
-                matches.push(ReadOnlyMatch {
-                    path: crate::render::sanitize_for_mcp(&entry.path),
+                matches.push(OpenAISearchMatch {
+                    path: entry.path,
                     fields,
                 });
             }
         }
         matches.sort_by(|left, right| left.path.cmp(&right.path));
-        symvault_gojson::to_string(&matches)
-            .map(ToolCallResult::text)
-            .map_err(|error| error.to_string())
+        Ok(matches)
+    }
+
+    fn search_openai(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let query = match required_string(arguments, "query") {
+            Ok(query) => query,
+            Err(result) => return Ok(result),
+        };
+        let matches = self.find_matching_entries(query)?;
+        let results = matches
+            .into_iter()
+            .map(|entry| {
+                let id = crate::render::sanitize_for_mcp(&entry.path);
+                let title = crate::render::sanitize_for_mcp(entry_title(&entry.path));
+                let mut result = Map::new();
+                result.insert("id".into(), Value::String(id.clone()));
+                result.insert("title".into(), Value::String(title));
+                result.insert(
+                    "url".into(),
+                    Value::String(format!("symvault://entry/{id}")),
+                );
+                if !entry.fields.is_empty() {
+                    result.insert(
+                        "content".into(),
+                        Value::String(format!("Matching fields: {}", entry.fields.join(", "))),
+                    );
+                }
+                Value::Object(result)
+            })
+            .collect::<Vec<_>>();
+        let text = symvault_gojson::to_string(&Value::Array(results.clone()))
+            .map_err(|error| error.to_string())?;
+        let structured = Value::Object(Map::from_iter([("results".into(), Value::Array(results))]));
+        Ok(ToolCallResult::structured(text, structured))
+    }
+
+    fn fetch_openai(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let id = match required_string(arguments, "id") {
+            Ok(id) => id,
+            Err(result) => return Ok(result),
+        };
+        if !self.scope_allows(id) {
+            return Ok(ToolCallResult::error(format!(
+                "access denied: path {id:?} outside allowed scope"
+            )));
+        }
+        let cleaned = normalize_scope_path(id);
+        if cleaned == "quarantine" || cleaned.starts_with("quarantine/") {
+            return Ok(ToolCallResult::error(
+                "entry is in quarantine — run 'symvault import review promote' to make it accessible",
+            ));
+        }
+        let Some(mut entry) = self
+            .store
+            .get(id)
+            .map_err(|error| format!("fetch entry: {error}"))?
+        else {
+            return Ok(ToolCallResult::error(format!("entry not found: {id}")));
+        };
+
+        let sanitized_id = crate::render::sanitize_for_mcp(id);
+        let mut metadata = Map::new();
+        metadata.insert("created".into(), Value::String(entry.created.clone()));
+        metadata.insert("updated".into(), Value::String(entry.updated.clone()));
+        metadata.insert("version".into(), Value::from(entry.version));
+        metadata.insert("type".into(), Value::String(entry.secret_type.clone()));
+        let mut response = Map::new();
+        response.insert("id".into(), Value::String(sanitized_id.clone()));
+        response.insert(
+            "title".into(),
+            Value::String(crate::render::sanitize_for_mcp(entry_title(id))),
+        );
+        response.insert(
+            "url".into(),
+            Value::String(format!("symvault://entry/{sanitized_id}")),
+        );
+        response.insert("metadata".into(), Value::Object(metadata));
+
+        // The Go fetch handler uses ExposeValueTools as a second gate over
+        // CanReadValues. The runtime receives the filtered registry, so the
+        // presence of get_entry_value is the injected, side-effect-free
+        // representation of that profile decision.
+        let expose_values = self
+            .config
+            .available_tools
+            .iter()
+            .any(|name| name == "get_entry_value");
+        if expose_values && self.config.can_read_values && !entry.fields.is_empty() {
+            let mut redact = self.config.redact_fields.clone().unwrap_or_default();
+            if entry.secret_type == "payment" && !self.config.expose_payment_values {
+                redact.extend(
+                    ["card_number", "cvc", "iban"]
+                        .into_iter()
+                        .map(str::to_owned),
+                );
+            }
+            let redacted_entry = !redact.is_empty();
+            for (field, value) in &mut entry.fields {
+                *value = redact_value(field, value.clone(), &redact);
+            }
+            if redacted_entry {
+                // Match Go redactEntry: metadata was captured above, while
+                // the value branch sees an entry stripped of classification.
+                entry.classification = 0;
+            }
+            if entry.classification >= 3 && !self.config.auto_unseal {
+                return self.sealed_entry_response(id, &entry);
+            }
+            let field_count = i64::try_from(entry.fields.len()).unwrap_or(i64::MAX);
+            if self.config.max_secrets_in_session > 0 {
+                let used = self.secrets_accessed.load(Ordering::Acquire);
+                let next = used.saturating_add(field_count);
+                if next > self.config.max_secrets_in_session {
+                    return Ok(ToolCallResult::error(format!(
+                        "max secrets per session exceeded ({next}/{})",
+                        self.config.max_secrets_in_session
+                    )));
+                }
+            }
+            self.secrets_accessed
+                .fetch_add(field_count, Ordering::AcqRel);
+            let mut values = Map::new();
+            for (field, value) in entry.fields {
+                let wrapped = wrap_data_field(&field, value)?;
+                let checked = match wrapped {
+                    Value::String(text) => Value::String(apply_semantic_injection_check(
+                        text,
+                        &self.config.prompt_injection_mode,
+                        &self.config.agent_name,
+                    )?),
+                    other => other,
+                };
+                values.insert(field, checked);
+            }
+            response.insert("values".into(), Value::Object(values));
+        }
+        let value = Value::Object(response);
+        let text = symvault_gojson::to_string(&value).map_err(|error| error.to_string())?;
+        Ok(ToolCallResult::structured(text, value))
     }
 
     fn get_entry_metadata(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -1130,6 +1282,18 @@ struct ReadOnlyMatch {
     path: String,
     #[serde(rename = "Fields")]
     fields: Vec<String>,
+}
+
+struct OpenAISearchMatch {
+    path: String,
+    fields: Vec<String>,
+}
+
+fn entry_title(path: &str) -> &str {
+    match path.rsplit('/').next() {
+        Some("") | None => path,
+        Some(name) => name,
+    }
 }
 
 fn json_text(value: Value) -> Result<ToolCallResult, String> {
