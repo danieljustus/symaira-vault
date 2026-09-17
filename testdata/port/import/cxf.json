@@ -1,0 +1,485 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f894",
+    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/dottedpath.go",
+      "internal/config/migrate.go",
+      "internal/config/migrate_copy_unix.go",
+      "internal/config/migrate_copy_windows.go",
+      "internal/config/migrate_source_unix.go",
+      "internal/config/migrate_source_windows.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go",
+      "internal/crypto/age.go",
+      "internal/crypto/argon2id.go",
+      "internal/crypto/diceware.go",
+      "internal/crypto/hmac.go",
+      "internal/crypto/interop.go",
+      "internal/crypto/keygen.go",
+      "internal/crypto/keystore.go",
+      "internal/crypto/password.go",
+      "internal/crypto/secstring_other.go",
+      "internal/crypto/secstring_unix.go",
+      "internal/crypto/symmetric.go",
+      "internal/crypto/totp.go",
+      "internal/errors/errors.go",
+      "internal/fsutil/createsensitiveoutput.go",
+      "internal/fsutil/doc.go",
+      "internal/fsutil/reexport.go",
+      "internal/fsutil/safepath/doc.go",
+      "internal/fsutil/safepath/manager_unix.go",
+      "internal/fsutil/safepath/manager_windows.go",
+      "internal/fsutil/safepath/safepath.go",
+      "internal/fsutil/safewrite_windows.go",
+      "internal/importer/bitwarden.go",
+      "internal/importer/csv.go",
+      "internal/importer/csv_profiles.go",
+      "internal/importer/cxf.go",
+      "internal/importer/importer.go",
+      "internal/importer/onepux.go",
+      "internal/importer/pass.go",
+      "internal/importer/totp.go",
+      "internal/mcp/masking/doc.go",
+      "internal/mcp/masking/sanitizer.go",
+      "internal/mcp/masking/validator.go",
+      "internal/redact/detectors.go",
+      "internal/redact/entropy.go",
+      "internal/redact/redact.go",
+      "internal/redact/strict.go",
+      "internal/secrets/doc.go",
+      "internal/secrets/filter.go",
+      "internal/secrets/resolver.go",
+      "internal/secrets/runner.go",
+      "internal/vault/backup_codes.go",
+      "internal/vault/cache.go",
+      "internal/vault/devices.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_canary.go",
+      "internal/vault/entry_metadata.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/entry_validate.go",
+      "internal/vault/git.go",
+      "internal/vault/lock_unix.go",
+      "internal/vault/lock_windows.go",
+      "internal/vault/manifest.go",
+      "internal/vault/manifest_updater.go",
+      "internal/vault/metrics.go",
+      "internal/vault/payment.go",
+      "internal/vault/recipients.go",
+      "internal/vault/reencrypt.go",
+      "internal/vault/reencrypt_journal.go",
+      "internal/vault/reencrypt_journal_unix.go",
+      "internal/vault/reencrypt_journal_windows.go",
+      "internal/vault/reencrypt_unix.go",
+      "internal/vault/reencrypt_windows.go",
+      "internal/vault/search.go",
+      "internal/vault/search_index.go",
+      "internal/vault/service.go",
+      "internal/vault/symlink_harden.go",
+      "internal/vault/symlink_harden_windows.go",
+      "internal/vault/sync/sync.go",
+      "internal/vault/taint/taint.go",
+      "internal/vault/types.go",
+      "internal/vault/url.go",
+      "internal/vault/vault.go",
+      "internal/vault/vault_sync_reconcile.go"
+    ],
+    "source_digest": "c62362141fdc12c3586a085780feb23cd7a21828e00b4ab6c35cb2ef213f311a",
+    "generator_files": [
+      "scripts/rust-port/cmd/cxfgen/main.go"
+    ],
+    "generator_digest": "ddeef63b488ee46949e22dc77cdc4e83518c5eb68c999817e5308f8c250cbc08"
+  },
+  "cases": [
+    {
+      "id": "CXF-001-features",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAANAAkAbWFuaWZlc3QuanNvblVUBQABAAAAAKpWKkstKs7Mz1OyMqwFBAAA//9QSwcIM5owcRMAAAANAAAAUEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAJRUTVPbMBD9K2HPMvlqKeNjoZRCyWSGtgE6HBRrk2yxJY20DnEz/u8d2SRxEh9oTnmr3fV7T7tag0wSk2v2EP9eQ2LSFBMmo2tMjNnuH8SQmjlpKJ8F+Hx68f5sJk4RYhihZ1R7oYlxL1WAFMSBDoNotEocKtRMMq2xld6/GqcgXsNSpnloMaMV5w6jcAalAC5sCE+lpySSOS9AQO7RaZlhW104g7IUa5Dp3DjiRWDvF3Lw8QwEKJpTMOhcgEVHRkF81hPgMXHIEMPN5/vJ4/By/OV6fDscP4wPMWwZsWG701rbI8Anxla8cleJhM6C2fq428WVzGyKp4yeu1V6BwS0ncJz0C3nVf2bLhCga78bdn+vunQ7dzJcjTg2eIe/BZJGhz7OVmDvi1tVwfYXLA66VQX8at5dvbHlLeBhR3q8CbUSNppR8/7FOs+NSdCGsa49zvWYGK2OkjdsAmpSGVW4jYd1tJSMt1hADOrrr7/qou+eHl54OrnqPT3c2MfJ60524grLZu6kXVAS7Rng/aLxwfv763bZ0qkfhd0b6CV5GZTgypIrLiXvnQ56g09R7zwkzPI0HR1sw1U9NZ2f1TYI0Hk2RdfM+NDf/zVMC+yIo0AKBCzR0YwSGd6G0VGb/mAI5VbtW8lG7kWArXqJi5blbXCQSjn09eXUq75JOuVVY+JmlNbTsN1gbTiS0VKmpKKp9DgcnJwcbq1Yb3BWeEZXz3vbc2T/5w3KG1ZktMKmF3cVLp9DwhKdJ6NDaSb/GAdxX0BGOvzrleW/AAAA//9QSwcI3sDfvVACAADJBQAAUEsBAhQAFAAIAAgAAAAh7DOaMHETAAAADQAAAA0ACQAAAAAAAAAAAAAAAAAAAG1hbmlmZXN0Lmpzb25VVAUAAQAAAABQSwECFAAUAAgACAAAACHs3sDfvVACAADJBQAAEwAJAAAAAAAAAAAAAABXAAAAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAFBLBQYAAAAAAgACAI4AAADxAgAAAAA=",
+      "expected": {
+        "entries": [
+          {
+            "path": "Work/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Work/Nested/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Passkeys",
+            "data": {
+              "passkey": {
+                "credentialId": "one",
+                "rpId": "example.test",
+                "type": "passkey"
+              },
+              "passkeys": [
+                {
+                  "credentialId": "one",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                },
+                {
+                  "credentialId": "two",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                }
+              ]
+            },
+            "warnings": null
+          },
+          {
+            "path": "Notes",
+            "data": {
+              "notes": "first\n\nsecond"
+            },
+            "warnings": null
+          },
+          {
+            "path": "SSH",
+            "data": {
+              "private_key": "-----BEGIN PRIVATE KEY-----\ndGVzdC1rZXktbWF0ZXJpYWw=\n-----END PRIVATE KEY-----\n"
+            },
+            "warnings": null,
+            "secret_type": "ssh_key"
+          },
+          {
+            "path": "Card",
+            "data": {
+              "card_number": "4111111111111111",
+              "cardholder": "Fixture User",
+              "cvc": "123",
+              "expiry_month": "2027",
+              "expiry_year": "08",
+              "subtype": "card"
+            },
+            "warnings": null,
+            "secret_type": "payment"
+          },
+          {
+            "path": "Mixed",
+            "data": {
+              "password": "p",
+              "username": "u"
+            },
+            "warnings": [
+              "cxf: skipped credential type \"address\": not supported by Symaira Vault",
+              "cxf: skipped credential type \"file\": not supported by Symaira Vault",
+              "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)",
+              "cxf: skipped credential type \"mystery\": not supported by Symaira Vault"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CXF-002-preferred-payload",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAANAAkAbWFuaWZlc3QuanNvblVUBQABAAAAAKpWSkxOzi/NKylWsoqOrQUEAAD//1BLBwgL5RnJFQAAAA8AAABQSwMEFAAIAAgAAAAh7AAAAAAAAAAAAAAAABMACQBuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAlFRNU9swEP0rYc8y+Wop42OhlELJZIa2ATocFGuTbLEljbQOcTP+7x3ZJHESH2hOeavd9XtPu1qDTBKTa/YQ/15DYtIUEyaja0yM2e4fxJCaOWkonwX4fHrx/mwmThFiGKFnVHuhiXEvVYAUxIEOg2i0Shwq1EwyrbGV3r8apyBew1KmeWgxoxXnDqNwBqUALmwIT6WnJJI5L0BA7tFpmWFbXTiDshRrkOncOOJFYO8XcvDxDAQomlMw6FyARUdGQXzWE+AxccgQw83n+8nj8HL85Xp8Oxw/jA8xbBmxYbvTWtsjwCfGVrxyV4mEzoLZ+rjbxZXMbIqnjJ67VXoHBLSdwnPQLedV/ZsuEKBrvxt2f6+6dDt3MlyNODZ4h78FkkaHPs5WYO+LW1XB9hcsDrpVBfxq3l29seUt4GFHerwJtRI2mlHz/sU6z41J0Iaxrj3O9ZgYrY6SN2wCalIZVbiNh3W0lIy3WEAM6uuvv+qi754eXng6ueo9PdzYx8nrTnbiCstm7qRdUBLtGeD9ovHB+/vrdtnSqR+F3RvoJXkZlODKkisuJe+dDnqDT1HvPCTM8jQdHWzDVT01nZ/VNgjQeTZF18z40N//NUwL7IijQAoELNHRjBIZ3obRUZv+YAjlVu1byUbuRYCteomLluVtcJBKOfT15dSrvkk65VVj4maU1tOw3WBtOJLRUqakoqn0OBycnBxurVhvcFZ4RlfPe9tzZP/nDcobVmS0wqYXdxUun0PCEp0no0NpJv8YB3FfQEY6/OuV5b8AAAD//1BLBwjewN+9UAIAAMkFAABQSwMEFAAIAAgAAAAh7AAAAAAAAAAAAAAAAAsACQBleHBvcnQuanNvblVUBQABAAAAAKpWSkxOzi/NKylWsoqOrQUEAAD//1BLBwgL5RnJFQAAAA8AAABQSwECFAAUAAgACAAAACHsC+UZyRUAAAAPAAAADQAJAAAAAAAAAAAAAAAAAAAAbWFuaWZlc3QuanNvblVUBQABAAAAAFBLAQIUABQACAAIAAAAIezewN+9UAIAAMkFAAATAAkAAAAAAAAAAAAAAFkAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsBAhQAFAAIAAgAAAAh7AvlGckVAAAADwAAAAsACQAAAAAAAAAAAAAA8wIAAGV4cG9ydC5qc29uVVQFAAEAAAAAUEsFBgAAAAADAAMA0AAAAEoDAAAAAA==",
+      "expected": {
+        "entries": [
+          {
+            "path": "Work/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Work/Nested/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Passkeys",
+            "data": {
+              "passkey": {
+                "credentialId": "one",
+                "rpId": "example.test",
+                "type": "passkey"
+              },
+              "passkeys": [
+                {
+                  "credentialId": "one",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                },
+                {
+                  "credentialId": "two",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                }
+              ]
+            },
+            "warnings": null
+          },
+          {
+            "path": "Notes",
+            "data": {
+              "notes": "first\n\nsecond"
+            },
+            "warnings": null
+          },
+          {
+            "path": "SSH",
+            "data": {
+              "private_key": "-----BEGIN PRIVATE KEY-----\ndGVzdC1rZXktbWF0ZXJpYWw=\n-----END PRIVATE KEY-----\n"
+            },
+            "warnings": null,
+            "secret_type": "ssh_key"
+          },
+          {
+            "path": "Card",
+            "data": {
+              "card_number": "4111111111111111",
+              "cardholder": "Fixture User",
+              "cvc": "123",
+              "expiry_month": "2027",
+              "expiry_year": "08",
+              "subtype": "card"
+            },
+            "warnings": null,
+            "secret_type": "payment"
+          },
+          {
+            "path": "Mixed",
+            "data": {
+              "password": "p",
+              "username": "u"
+            },
+            "warnings": [
+              "cxf: skipped credential type \"address\": not supported by Symaira Vault",
+              "cxf: skipped credential type \"file\": not supported by Symaira Vault",
+              "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)",
+              "cxf: skipped credential type \"mystery\": not supported by Symaira Vault"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CXF-003-largest-json",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAANAAkAbWFuaWZlc3QuanNvblVUBQABAAAAAKpWSkxOzi/NKylWsoqOrQUEAAD//1BLBwgL5RnJFQAAAA8AAABQSwMEFAAIAAgAAAAh7AAAAAAAAAAAAAAAAAsACQBleHBvcnQuanNvblVUBQABAAAAAJRUTVPbMBD9K2HPMvlqKeNjoZRCyWSGtgE6HBRrk2yxJY20DnEz/u8d2SRxEh9oTnmr3fV7T7tag0wSk2v2EP9eQ2LSFBMmo2tMjNnuH8SQmjlpKJ8F+Hx68f5sJk4RYhihZ1R7oYlxL1WAFMSBDoNotEocKtRMMq2xld6/GqcgXsNSpnloMaMV5w6jcAalAC5sCE+lpySSOS9AQO7RaZlhW104g7IUa5Dp3DjiRWDvF3Lw8QwEKJpTMOhcgEVHRkF81hPgMXHIEMPN5/vJ4/By/OV6fDscP4wPMWwZsWG701rbI8Anxla8cleJhM6C2fq428WVzGyKp4yeu1V6BwS0ncJz0C3nVf2bLhCga78bdn+vunQ7dzJcjTg2eIe/BZJGhz7OVmDvi1tVwfYXLA66VQX8at5dvbHlLeBhR3q8CbUSNppR8/7FOs+NSdCGsa49zvWYGK2OkjdsAmpSGVW4jYd1tJSMt1hADOrrr7/qou+eHl54OrnqPT3c2MfJ60524grLZu6kXVAS7Rng/aLxwfv763bZ0qkfhd0b6CV5GZTgypIrLiXvnQ56g09R7zwkzPI0HR1sw1U9NZ2f1TYI0Hk2RdfM+NDf/zVMC+yIo0AKBCzR0YwSGd6G0VGb/mAI5VbtW8lG7kWArXqJi5blbXCQSjn09eXUq75JOuVVY+JmlNbTsN1gbTiS0VKmpKKp9DgcnJwcbq1Yb3BWeEZXz3vbc2T/5w3KG1ZktMKmF3cVLp9DwhKdJ6NDaSb/GAdxX0BGOvzrleW/AAAA//9QSwcI3sDfvVACAADJBQAAUEsBAhQAFAAIAAgAAAAh7AvlGckVAAAADwAAAA0ACQAAAAAAAAAAAAAAAAAAAG1hbmlmZXN0Lmpzb25VVAUAAQAAAABQSwECFAAUAAgACAAAACHs3sDfvVACAADJBQAACwAJAAAAAAAAAAAAAABZAAAAZXhwb3J0Lmpzb25VVAUAAQAAAABQSwUGAAAAAAIAAgCGAAAA6wIAAAAA",
+      "expected": {
+        "entries": [
+          {
+            "path": "Work/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Work/Nested/Login-/-Main",
+            "data": {
+              "password": "fixture-pass",
+              "tags": [
+                "fixture",
+                "nested"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 60,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test/login",
+              "urls": [
+                "https://example.test/login",
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          },
+          {
+            "path": "Passkeys",
+            "data": {
+              "passkey": {
+                "credentialId": "one",
+                "rpId": "example.test",
+                "type": "passkey"
+              },
+              "passkeys": [
+                {
+                  "credentialId": "one",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                },
+                {
+                  "credentialId": "two",
+                  "rpId": "example.test",
+                  "type": "passkey"
+                }
+              ]
+            },
+            "warnings": null
+          },
+          {
+            "path": "Notes",
+            "data": {
+              "notes": "first\n\nsecond"
+            },
+            "warnings": null
+          },
+          {
+            "path": "SSH",
+            "data": {
+              "private_key": "-----BEGIN PRIVATE KEY-----\ndGVzdC1rZXktbWF0ZXJpYWw=\n-----END PRIVATE KEY-----\n"
+            },
+            "warnings": null,
+            "secret_type": "ssh_key"
+          },
+          {
+            "path": "Card",
+            "data": {
+              "card_number": "4111111111111111",
+              "cardholder": "Fixture User",
+              "cvc": "123",
+              "expiry_month": "2027",
+              "expiry_year": "08",
+              "subtype": "card"
+            },
+            "warnings": null,
+            "secret_type": "payment"
+          },
+          {
+            "path": "Mixed",
+            "data": {
+              "password": "p",
+              "username": "u"
+            },
+            "warnings": [
+              "cxf: skipped credential type \"address\": not supported by Symaira Vault",
+              "cxf: skipped credential type \"file\": not supported by Symaira Vault",
+              "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)",
+              "cxf: skipped credential type \"mystery\": not supported by Symaira Vault"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "CXF-004-invalid-zip",
+      "input_b64": "bm90IGEgemlwIGFyY2hpdmU=",
+      "expected": {
+        "error_contains": "open cxf zip"
+      }
+    },
+    {
+      "id": "CXF-005-no-json",
+      "input_b64": "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "expected": {
+        "error_contains": "no CXF JSON document"
+      }
+    },
+    {
+      "id": "CXF-006-invalid-json",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAANAAkAbWFuaWZlc3QuanNvblVUBQABAAAAAKrOyy/RzSrOzwMEAAD//1BLBwgYmcHPDwAAAAkAAABQSwECFAAUAAgACAAAACHsGJnBzw8AAAAJAAAADQAJAAAAAAAAAAAAAAAAAAAAbWFuaWZlc3QuanNvblVUBQABAAAAAFBLBQYAAAAAAQABAEQAAABTAAAAAAA=",
+      "expected": {
+        "error_contains": "parse CXF JSON document"
+      }
+    }
+  ],
+  "scope": {
+    "limits": "oversized source and entry limits are separately exercised by Rust unit/integration tests",
+    "native": "portable parser behavior only; privileged runtime remains unproven",
+    "source": "synthetic CXF zip bytes only; no vault, keychain, or home access"
+  }
+}
