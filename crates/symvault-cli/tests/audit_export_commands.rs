@@ -74,7 +74,7 @@ fn audit_export_json_matches_go_for_filters_and_redaction() {
     fs::write(
         home.0.join(".symvault/audit-fixture.log"),
         concat!(
-            "{\"ts\":\"2020-01-01T00:00:00Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/password\",\"transport\":\"cli\",\"ok\":true}\n",
+            "{\"ts\":\"2020-01-01T00:00:00.123456789Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/<password>&\",\"transport\":\"cli\",\"ok\":true}\n",
             "{\"ts\":\"2020-01-02T00:00:00Z\",\"agent\":\"fixture\",\"action\":\"get\",\"path\":\"private/password\",\"ok\":false}\n",
             "not json\n"
         ),
@@ -134,10 +134,10 @@ fn audit_export_accepts_injected_hmac_generations_without_keychain_access() {
     let key = audit::AuditKey::new(key_bytes).expect("audit key");
     let kid = audit::key_fingerprint(&key_bytes);
     let mut entry = LogEntry {
-        timestamp: "2020-01-01T00:00:00Z".to_owned(),
+        timestamp: "2020-01-01T00:00:00.123456789Z".to_owned(),
         agent: "fixture".to_owned(),
         action: "set".to_owned(),
-        path: "safe/password".to_owned(),
+        path: "safe/<password>&".to_owned(),
         ok: true,
         kid: kid.clone(),
         ..LogEntry::default()
@@ -182,7 +182,7 @@ fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
     fs::create_dir_all(home.0.join(".symvault")).expect("audit directory");
     fs::write(
         home.0.join(".symvault/audit-fixture.log"),
-        b"{\"ts\":\"2020-01-01T00:00:00Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/password\",\"transport\":\"cli\",\"ok\":true}\n",
+        b"{\"ts\":\"2020-01-01T00:00:00.123456789Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/<password>&\",\"transport\":\"cli\",\"ok\":true}\n",
     )
     .expect("audit fixture");
     let go = PathBuf::from(go);

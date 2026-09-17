@@ -232,7 +232,7 @@ fn render_table(result: &ExportOutput<'_>, output: &mut impl Write) -> Result<()
     .map_err(|error| error.to_string())?;
     writeln!(output, "{}", "-".repeat(90)).map_err(|error| error.to_string())?;
     for row in result.entries.unwrap_or_default() {
-        let timestamp = truncate(&row.entry.timestamp, 20);
+        let timestamp = row.entry.timestamp.chars().take(20).collect::<String>();
         let action = truncate(&row.entry.action, 20);
         let path = truncate(
             if row.redacted_path.is_empty() {
