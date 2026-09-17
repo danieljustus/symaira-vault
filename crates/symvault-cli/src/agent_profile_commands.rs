@@ -510,7 +510,7 @@ mod tests {
         let sequence_block = "allowedPaths:\n- |-\n  first\n    nested\n- marker\n";
         assert_eq!(
             go_yaml_indentation(sequence_block),
-            "allowedPaths:\n  - |-\n    first\n      nested\n    - marker\n"
+            "allowedPaths:\n  - |-\n    first\n      nested\n  - marker\n"
         );
     }
 
