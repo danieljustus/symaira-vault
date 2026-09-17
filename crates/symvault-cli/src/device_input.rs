@@ -4,7 +4,7 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use symvault_core::config::{AuthMethod, Config};
 use zeroize::Zeroizing;
 
-pub(super) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
+pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
     io::stderr().flush().map_err(|e| format!("prompt: {e}"))?;
     if io::stdin().is_terminal() {
@@ -43,7 +43,7 @@ struct EnvironmentPolicy {
     disable_env_passphrase: bool,
 }
 
-pub(super) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
+pub(crate) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
     let config = Config::load_from_bytes(bytes).map_err(|e| e.to_string())?;
     if config.effective_auth_method() == AuthMethod::Touchid
         || config

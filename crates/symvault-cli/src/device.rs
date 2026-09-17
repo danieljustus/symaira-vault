@@ -1,9 +1,8 @@
 //! PAIRING-001 CLI implementation: device pair, join, accept, list, add, revoke.
 
-use serde::Serialize;
-#[path = "device_input.rs"]
-mod input;
+use crate::session_input as input;
 use input::{read_passphrase, unlock_passphrase};
+use serde::Serialize;
 use std::{
     collections::HashSet,
     io::{self, BufRead, Write},

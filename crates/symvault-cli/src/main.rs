@@ -3,9 +3,12 @@
 mod config;
 mod device;
 mod session_commands;
+#[path = "device_input.rs"]
+mod session_input;
 
 use std::{
     ffi::{OsStr, OsString},
+    fs,
     io::{self, Write},
     path::{Path, PathBuf},
     process::ExitCode,
@@ -30,6 +33,7 @@ use symvault_core::{
     config::{Config, PathResolver},
     session::SessionManager,
 };
+use symvault_crypto::{SecretBytes, decrypt_identity};
 use symvault_platform::FallbackKeyring;
 #[cfg(any(
     target_os = "macos",
@@ -302,9 +306,42 @@ fn run_unlock(
             }
             return Ok::<(), String>(());
         }
-        Err::<(), String>(
-            "interactive unlock is not yet available in the Rust CLI; use the Go CLI".to_owned(),
-        )
+        let config = Config::load(vault.join("config.yaml"))
+            .map_err(|error| format!("load config: {error}"))?;
+        let config_bytes =
+            fs::read(vault.join("config.yaml")).map_err(|error| format!("read config: {error}"))?;
+        let identity_bytes = fs::read(vault.join("identity.age"))
+            .map_err(|error| format!("read identity: {error}"))?;
+        let passphrase = session_input::unlock_passphrase(&config_bytes)?;
+        let secret = SecretBytes::new(passphrase.as_bytes());
+        decrypt_identity(&identity_bytes, &secret)
+            .map_err(|error| format!("unlock vault: {error}"))?;
+        let ttl = if config.session_timeout.is_zero() {
+            std::time::Duration::from_secs(15 * 60)
+        } else {
+            config.session_timeout
+        };
+        let max_lifetime = if config.session_max_lifetime.is_zero() {
+            std::time::Duration::from_secs(8 * 60 * 60)
+        } else {
+            config.session_max_lifetime
+        };
+        let vault_string = vault
+            .to_str()
+            .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+        runtime
+            .manager
+            .save_passphrase(vault_string, passphrase.as_bytes(), ttl, max_lifetime)
+            .map_err(|error| format!("save session: {error}"))?;
+        if !runtime.cache_status().persistent {
+            return Err(
+                "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support".to_owned(),
+            );
+        }
+        if !quiet {
+            eprintln!("Vault unlocked (session TTL: {})", format_duration(ttl));
+        }
+        Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
 }
@@ -349,7 +386,10 @@ fn finish_session_result(
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
                 ExitCode::from(not_initialized_code)
-            } else if locked_error && error == "no active session" {
+            } else if locked_error
+                && (error == "no active session"
+                    || error.starts_with("session cache is memory-only"))
+            {
                 ExitCode::from(4)
             } else {
                 ExitCode::from(1)
@@ -424,6 +464,20 @@ fn touch_id_available() -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         false
+    }
+}
+
+fn format_duration(duration: std::time::Duration) -> String {
+    let seconds = duration.as_secs();
+    let hours = seconds / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours}h{minutes}m{seconds}s")
+    } else if minutes > 0 {
+        format!("{minutes}m{seconds}s")
+    } else {
+        format!("{seconds}s")
     }
 }
 
