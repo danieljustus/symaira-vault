@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke config-cli-differential port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -469,6 +469,9 @@ config-profile-differential: config-profile-fixtures-check
 
 config-session-differential: rust-007-differential config-profile-differential
 
+config-cli-differential:
+	./scripts/rust-port/check_config_cli.sh
+
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
@@ -549,7 +552,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
