@@ -116,18 +116,16 @@ pub fn parse_mapping(value: &str) -> Result<BTreeMap<String, String>, String> {
 
 /// Renders the same JSON or CSV byte contract as the sync exporter.
 ///
-/// Mapping is applied to output field names before calling the shared
-/// formatter. This keeps the CLI from maintaining a second serializer.
+/// The shared formatters own mapping order and attachment handling.
 pub fn render(
     format: ExportFormat,
     entries: &[ExportEntry],
     mapping: &BTreeMap<String, String>,
 ) -> Result<Vec<u8>, String> {
-    let mapped = apply_mapping(entries, mapping);
     let mut output = Vec::new();
     match format {
-        ExportFormat::Json => export::json(&mut output, &mapped),
-        ExportFormat::Csv => export::csv(&mut output, &mapped),
+        ExportFormat::Json => export::json_with_mapping(&mut output, entries, mapping),
+        ExportFormat::Csv => export::csv_with_mapping(&mut output, entries, mapping, None),
     }
     .map_err(|error| error.to_string())?;
     Ok(output)
@@ -206,25 +204,6 @@ where
     })
 }
 
-fn apply_mapping(entries: &[ExportEntry], mapping: &BTreeMap<String, String>) -> Vec<ExportEntry> {
-    entries
-        .iter()
-        .map(|entry| ExportEntry {
-            path: entry.path.clone(),
-            data: entry
-                .data
-                .iter()
-                .map(|(field, value)| {
-                    (
-                        mapping.get(field).cloned().unwrap_or_else(|| field.clone()),
-                        value.clone(),
-                    )
-                })
-                .collect(),
-        })
-        .collect()
-}
-
 fn has_attachment(data: &BTreeMap<String, serde_json::Value>) -> bool {
     data.keys().any(|key| {
         key.starts_with("file_b64_") || matches!(key.as_str(), "chunk_count" | "chunk_size")
@@ -237,7 +216,13 @@ fn write_output(path: Option<&Path>, bytes: &[u8]) -> Result<(), String> {
             .write_all(bytes)
             .map_err(|error| format!("write export: {error}")),
         Some(path) => {
-            let mut file = OpenOptions::new()
+            let mut options = OpenOptions::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options
                 .create(true)
                 .truncate(true)
                 .write(true)

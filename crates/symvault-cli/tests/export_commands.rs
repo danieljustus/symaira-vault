@@ -103,3 +103,36 @@ fn go_export_fixture_is_provenance_bound_and_byte_identical() {
         assert_eq!(output, case.output, "case {}", case.name);
     }
 }
+
+#[test]
+fn cancellation_precedes_unlock_and_file_creation() {
+    let root = std::env::temp_dir().join(format!("symvault-export-cancel-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    let output = root.join("cancel.csv");
+    let result = export_commands::run_export(
+        &root,
+        &export_commands::ExportOptions {
+            format: export_commands::ExportFormat::Csv,
+            mapping: BTreeMap::new(),
+            output: Some(output.clone()),
+            yes: false,
+            quiet: true,
+        },
+        || Ok(false),
+        || panic!("canceled export must not unlock"),
+        |_, _| panic!("canceled export must not audit success"),
+    )
+    .unwrap();
+    assert!(!result.wrote_output);
+    assert!(!output.exists());
+    fs::remove_dir(&root).unwrap();
+    let entries = [ExportEntry {
+        path: "example".into(),
+        data: BTreeMap::from([("a".into(), json!("first")), ("b".into(), json!("second"))]),
+    }];
+    let mapping = BTreeMap::from([("a".into(), "z".into()), ("b".into(), "z".into())]);
+    assert_eq!(
+        export_commands::render(export_commands::ExportFormat::Csv, &entries, &mapping).unwrap(),
+        b"path,z,z\nexample,first,second\n"
+    );
+}

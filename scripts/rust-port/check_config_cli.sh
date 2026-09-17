@@ -18,5 +18,5 @@ git -C "$run_root/oracle" checkout --quiet --detach "$oracle_commit"
 (cd "$run_root/oracle" && "${GO:-go}" build -buildvcs=true -o "$run_root/symvault-go" .)
 "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
     --check --go-binary "$run_root/symvault-go"
-"${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test config_inspect --locked
+SYMVAULT_GO_BINARY="$run_root/symvault-go" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
+    -p symvault-cli --test config_inspect --test cli_differential --locked
