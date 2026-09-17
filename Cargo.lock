@@ -2591,6 +2591,7 @@ dependencies = [
  "symaira-core-version",
  "symvault-core",
  "symvault-crypto",
+ "symvault-mcp",
  "symvault-platform",
  "symvault-store",
  "symvault-sync",

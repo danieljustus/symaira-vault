@@ -103,7 +103,10 @@ fn unlock_vault_with_runtime(
     // A cached private identity is the fastest path and deliberately avoids
     // reading or decrypting the on-disk envelope. SessionManager renews the
     // idle timestamp when `refresh` is true, matching Go's vault reads.
-    if let Ok(cached) = runtime.manager.load_identity(vault_string, true)
+    if let Ok(cached) = runtime
+        .manager
+        .load_identity(vault_string, true)
+        .map(zeroize::Zeroizing::new)
         && let Ok(text) = std::str::from_utf8(&cached)
         && let Ok(identity) = parse_identity(text.trim())
     {
@@ -118,7 +121,10 @@ fn unlock_vault_with_runtime(
     // Prefer the encrypted session passphrase before invoking Touch ID or a
     // prompt. A bad/expired cache is recoverable and falls through to the
     // normal authentication path.
-    if let Ok(cached) = runtime.manager.load_passphrase(vault_string)
+    if let Ok(cached) = runtime
+        .manager
+        .load_passphrase(vault_string)
+        .map(zeroize::Zeroizing::new)
         && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
     {
         save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;

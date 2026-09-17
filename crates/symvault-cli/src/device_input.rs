@@ -46,7 +46,7 @@ struct EnvironmentPolicy {
 }
 
 pub(crate) fn env_passphrase_selected(bytes: &[u8]) -> bool {
-    let Ok(passphrase) = env::var("SYMVAULT_PASSPHRASE") else {
+    let Ok(passphrase) = env::var("SYMVAULT_PASSPHRASE").map(Zeroizing::new) else {
         return false;
     };
     if passphrase.is_empty() {
