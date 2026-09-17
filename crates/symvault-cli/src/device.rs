@@ -618,10 +618,10 @@ fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
         .ok_or_else(|| format!("journal path has no parent: {}", path.display()))?;
     let canonical_parent = fs::canonicalize(parent)
         .map_err(|error| format!("resolve journal parent {}: {error}", parent.display()))?;
+    validate_journal_ancestors(root, parent, path)?;
     if !canonical_parent.starts_with(root) {
         return Err(format!("journal path escapes vault: {}", path.display()));
     }
-    validate_journal_ancestors(root, parent, path)?;
     let name = path
         .file_name()
         .ok_or_else(|| format!("journal path has no file name: {}", path.display()))?;
@@ -631,21 +631,21 @@ fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
 fn validate_journal_ancestors(root: &Path, parent: &Path, display: &Path) -> Result<(), String> {
     let mut current = parent;
     loop {
+        let metadata = fs::symlink_metadata(current)
+            .map_err(|error| format!("stat journal parent {}: {error}", current.display()))?;
         let canonical = fs::canonicalize(current)
             .map_err(|error| format!("resolve journal parent {}: {error}", current.display()))?;
         if canonical == root {
             return Ok(());
         }
-        if !canonical.starts_with(root) {
-            return Err(format!("journal path escapes vault: {}", display.display()));
-        }
-        let metadata = fs::symlink_metadata(current)
-            .map_err(|error| format!("stat journal parent {}: {error}", current.display()))?;
         if metadata.file_type().is_symlink() {
             return Err(format!(
                 "journal path uses symlinked parent: {}",
                 current.display()
             ));
+        }
+        if !canonical.starts_with(root) {
+            return Err(format!("journal path escapes vault: {}", display.display()));
         }
         if !metadata.file_type().is_dir() {
             return Err(format!(

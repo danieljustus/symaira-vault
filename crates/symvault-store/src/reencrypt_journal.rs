@@ -276,10 +276,10 @@ fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, StoreErro
         path: parent.to_path_buf(),
         source,
     })?;
+    validate_journal_ancestors(root, parent, path)?;
     if !canonical_parent.starts_with(root) {
         return Err(StoreError::UnsafePath(path.display().to_string()));
     }
-    validate_journal_ancestors(root, parent, path)?;
     let name = path
         .file_name()
         .ok_or_else(|| StoreError::UnsafePath(path.display().to_string()))?;
@@ -293,6 +293,10 @@ fn validate_journal_ancestors(
 ) -> Result<(), StoreError> {
     let mut current = parent;
     loop {
+        let metadata = fs::symlink_metadata(current).map_err(|source| StoreError::Read {
+            path: current.to_path_buf(),
+            source,
+        })?;
         let canonical = current.canonicalize().map_err(|source| StoreError::Read {
             path: current.to_path_buf(),
             source,
@@ -300,23 +304,14 @@ fn validate_journal_ancestors(
         if canonical == root {
             return Ok(());
         }
+        if metadata.file_type().is_symlink() {
+            return Err(StoreError::Symlink(current.to_path_buf()));
+        }
         if !canonical.starts_with(root) {
             return Err(StoreError::UnsafePath(display.display().to_string()));
         }
-        match fs::symlink_metadata(current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(StoreError::Symlink(current.to_path_buf()));
-            }
-            Ok(metadata) if !metadata.file_type().is_dir() => {
-                return Err(StoreError::NotRegularFile(current.to_path_buf()));
-            }
-            Ok(_) => {}
-            Err(source) => {
-                return Err(StoreError::Read {
-                    path: current.to_path_buf(),
-                    source,
-                });
-            }
+        if !metadata.file_type().is_dir() {
+            return Err(StoreError::NotRegularFile(current.to_path_buf()));
         }
         current = current
             .parent()
