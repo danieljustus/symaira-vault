@@ -524,11 +524,9 @@ impl ShareStore {
             ));
         }
 
-        let approved_time = time::OffsetDateTime::parse(
-            now,
-            &time::format_description::well_known::Rfc3339,
-        )
-        .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
+        let approved_time =
+            time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
+                .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
         let approved_at = approved_time
             .format(&time::format_description::well_known::Rfc3339)
             .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
@@ -539,7 +537,7 @@ impl ShareStore {
         if grant.ttl > 0 {
             let expires = approved_time
                 .checked_add(time::Duration::nanoseconds(grant.ttl))
-            .ok_or_else(|| StoreError::Config("ttl exceeds timestamp range".into()))?;
+                .ok_or_else(|| StoreError::Config("ttl exceeds timestamp range".into()))?;
             grant.expires_at = Some(
                 expires
                     .format(&time::format_description::well_known::Rfc3339)
