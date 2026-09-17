@@ -5,8 +5,9 @@
 //! signing key.  The only mutation here is the bounded revoke operation,
 //! which uses the store's existing lock and atomic publication primitives.
 
-use std::{collections::BTreeMap, io, path::Path};
+use std::{collections::BTreeMap, fs, io, path::Path};
 
+use fs4::fs_std::FileExt;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -207,12 +208,43 @@ impl ShareStore {
         grant_id: &str,
         now: &str,
     ) -> Result<ShareGrant, StoreError> {
+        let _lock = store.acquire_write_lock()?;
+        self.revoke_locked(store.root(), &store.root_cap, grant_id, now)
+    }
+
+    /// Revokes a grant using only a no-follow vault root capability.
+    ///
+    /// This is the metadata-only path used by commands such as `share revoke`;
+    /// it does not require an initialized [`Store`], an identity, or an unlock
+    /// operation. The caller still gets the same lock and atomic publication
+    /// guarantees as [`Self::revoke`].
+    pub fn revoke_at(
+        &mut self,
+        root: impl AsRef<Path>,
+        grant_id: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = open_root_write_lock(&root_cap, root)?;
+        self.revoke_locked(root, &root_cap, grant_id, now)
+    }
+
+    fn revoke_locked(
+        &mut self,
+        root: &Path,
+        root_cap: &fs::File,
+        grant_id: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
         let now = time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
             .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?
             .format(&time::format_description::well_known::Rfc3339)
             .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?;
-        let _lock = store.acquire_write_lock()?;
-        let path = store.root().join(SHARE_STORE_FILE);
+        let path = root.join(SHARE_STORE_FILE);
         let mut current = Self::read(&path)?;
         let position = current
             .grants
@@ -232,8 +264,8 @@ impl ShareStore {
         current.grants[position].revoked_at = Some(now);
         let revoked = current.grants[position].clone();
         let bytes = encode_store(&current)?;
-        let target = store.root().join(SHARE_STORE_FILE);
-        crate::publication::replace(&target, &bytes, &store.root_cap)?;
+        let target = root.join(SHARE_STORE_FILE);
+        crate::publication::replace(&target, &bytes, root_cap)?;
         *self = current;
         Ok(revoked)
     }
@@ -478,6 +510,61 @@ fn is_zero(value: &i64) -> bool {
     *value == 0
 }
 
+fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, StoreError> {
+    let path = root.join(".lock");
+    #[cfg(unix)]
+    let file = crate::rooted::open_lock(root_cap, &path)?;
+    #[cfg(not(unix))]
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|source| StoreError::Write {
+            path: path.clone(),
+            source,
+        })?;
+    crate::set_private_permissions(&file).map_err(|source| StoreError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(true) => return Ok(file),
+            Ok(false) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(false) => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source)
+                if source.kind() == io::ErrorKind::WouldBlock
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source) => return Err(StoreError::Write { path, source }),
+        }
+    }
+}
+
 fn encode_store(store: &ShareStore) -> Result<Vec<u8>, StoreError> {
     #[derive(Serialize)]
     struct ShareStoreFile<'a> {
@@ -570,7 +657,11 @@ mod tests {
         fs::create_dir(root.path().join("entries")).expect("entries directory");
         let identity = symvault_crypto::generate_identity();
         let store = Store::open(root.path(), &identity).expect("open vault");
-        let path = root.path().join(SHARE_STORE_FILE);
+        let canonical_root = root
+            .path()
+            .canonicalize()
+            .expect("canonical vault directory");
+        let path = canonical_root.join(SHARE_STORE_FILE);
         (root, store, path)
     }
 
@@ -774,5 +865,30 @@ mod tests {
             .expect_err("revoked grant must fail");
         assert!(terminal.to_string().contains("cannot be revoked"));
         assert_eq!(fs::read(&path).expect("read unchanged shares"), original);
+    }
+
+    #[test]
+    fn revoke_at_requires_no_identity_or_initialized_store() {
+        let root = tempfile::tempdir().expect("metadata-only root");
+        let canonical_root = root.path().canonicalize().expect("canonical root");
+        let path = canonical_root.join(SHARE_STORE_FILE);
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write metadata fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read metadata fixture");
+
+        let revoked = snapshot
+            .revoke_at(&canonical_root, "grant-a", "2026-01-02T04:00:00Z")
+            .expect("metadata-only revoke");
+        assert_eq!(revoked.status, "revoked");
+        assert_eq!(
+            ShareStore::read(&path)
+                .expect("read revoked fixture")
+                .grants()[0]
+                .status,
+            "revoked"
+        );
     }
 }
