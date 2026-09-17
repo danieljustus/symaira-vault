@@ -856,7 +856,7 @@ mod tests {
         };
         fs::write(root.join("config.yaml"), config.to_yaml_bytes().unwrap()).unwrap();
         let encrypted =
-            encrypt_identity_scrypt(&identity, &SecretBytes::new(passphrase.as_bytes()), 18)
+            encrypt_identity_scrypt(&identity, &SecretBytes::new(passphrase.as_bytes()), 10)
                 .unwrap();
         fs::write(root.join("identity.age"), encrypted).unwrap();
         (root, identity, passphrase)
