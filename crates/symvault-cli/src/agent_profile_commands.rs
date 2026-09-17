@@ -340,10 +340,10 @@ impl serde::Serialize for YamlProfile<'_> {
 
         optional!("tier", data.tier);
         optional!("approvalMode", data.approval_mode);
-        if let Some(value) = &data.allowed_paths {
-            if !value.is_empty() {
-                state.serialize_field("allowedPaths", value)?;
-            }
+        if let Some(value) = &data.allowed_paths
+            && !value.is_empty()
+        {
+            state.serialize_field("allowedPaths", value)?;
         }
         optional_nonempty!("redactFields", data.redact_fields);
         optional_nonempty!("perToolRedactFields", data.per_tool_redact_fields);

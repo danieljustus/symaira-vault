@@ -812,7 +812,7 @@ fn main() -> ExitCode {
                 let mut output = io::stderr().lock();
                 match command {
                     PolicyCommand::Validate { file } => {
-                        policy_commands::validate(&file, &mut output)
+                        policy_commands::validate(&expand_vault_path(&file)?, &mut output)
                     }
                     PolicyCommand::List => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
