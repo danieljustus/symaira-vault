@@ -16,7 +16,7 @@ use std::{
 };
 
 use serde_json::Value;
-use symvault_core::redact::{EntropyDetector, ScanOptions, Scanner};
+use symvault_core::redact::{PatternDetector, ScanOptions, Scanner};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
 
@@ -147,12 +147,16 @@ pub(crate) fn resolve_secret_ref(
     if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
         let candidate_path = &reference[..index];
         let candidate_field = &reference[index + 1..];
-        if !candidate_field.is_empty()
-            && let Ok(entry) = store.get(candidate_path, identity)
+        if let Ok(entry) = store.get(candidate_path, identity)
             && entry.data.contains_key(candidate_field)
         {
             path = candidate_path;
-            field = Some(candidate_field);
+            // Go uses an empty string as its sentinel for no field. An entry
+            // may legally contain an empty key, in which case ref. selects
+            // the candidate entry's complete map.
+            if !candidate_field.is_empty() {
+                field = Some(candidate_field);
+            }
             return format_resolved_value(path, field, &entry);
         }
     }
@@ -478,11 +482,10 @@ fn redact_process_output(
         return output;
     }
 
-    // The core scanner is the shared Rust redaction boundary. Its current
-    // generic detector is the entropy heuristic; keeping the scan here makes
-    // detector failures fail closed through ScanError::safe_result instead of
-    // returning the unscanned child output.
-    let mut scanner = Scanner::new(vec![Box::new(EntropyDetector::new())]);
+    // The core scanner is the shared Rust redaction boundary. Keep scanning
+    // after exact masking so pattern matches cannot expose a known-value
+    // suffix; detector failures fail closed through ScanError::safe_result.
+    let mut scanner = Scanner::new(vec![Box::new(PatternDetector::new())]);
     match scanner.scan(&output, &ScanOptions::default()) {
         Ok(result) => result.text,
         Err(error) => error.safe_result.text,
@@ -844,11 +847,12 @@ mod tests {
     }
 
     #[test]
-    fn run_redaction_applies_shared_fail_closed_scanner_after_known_values() {
-        let input = b"known-secret aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789";
+    fn run_redaction_applies_shared_pattern_scanner_after_known_values() {
+        let pattern = ["AKIA", "ABCDEFGHIJKLMNOP"].concat();
+        let input = format!("known-secret {pattern}");
         let redactions = vec![b"known-secret".to_vec()];
         assert_eq!(
-            redact_process_output(input, &redactions, true),
+            redact_process_output(input.as_bytes(), &redactions, true),
             "*** [REDACTED]"
         );
     }
