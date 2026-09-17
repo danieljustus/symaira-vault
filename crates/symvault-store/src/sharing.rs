@@ -252,6 +252,44 @@ impl ShareStore {
         self.revoke_locked(root, &root_cap, grant_id, now, Some(expected_from_agent))
     }
 
+    /// Approves a pending grant after checking the requesting agent under the
+    /// same lock used to reload and publish the store. `approved_by` is kept
+    /// separate from `approval_agent` because Go records `human` when a
+    /// human, rather than the server agent, makes the decision.
+    pub fn approve_at_for_agent(
+        &mut self,
+        root: impl AsRef<Path>,
+        grant_id: &str,
+        approval_agent: &str,
+        approved_by: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
+        self.approve_locked(root, &root_cap, grant_id, approval_agent, approved_by, now)
+    }
+
+    /// Rejects a pending grant and atomically persists the updated lifecycle
+    /// state. Go's storage method has no actor check; MCP performs the human
+    /// approval/self-approval checks before it reaches this boundary.
+    pub fn reject_at(
+        &mut self,
+        root: impl AsRef<Path>,
+        grant_id: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
+        self.reject_locked(root, &root_cap, grant_id)
+    }
+
     /// Creates a pending grant and atomically persists it to the Go share
     /// store. The current file is reloaded after taking the root mutation
     /// lock, so a stale in-memory snapshot cannot discard a concurrent grant.
@@ -455,6 +493,93 @@ impl ShareStore {
         crate::publication::replace(&target, &bytes, root_cap)?;
         *self = current;
         Ok(revoked)
+    }
+
+    fn approve_locked(
+        &mut self,
+        root: &Path,
+        root_cap: &fs::File,
+        grant_id: &str,
+        approval_agent: &str,
+        approved_by: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let path = root.join(SHARE_STORE_FILE);
+        let mut current = Self::read(&path)?;
+        let position = current
+            .grants
+            .iter()
+            .position(|grant| grant.id == grant_id)
+            .ok_or_else(|| StoreError::Config(format!("share grant {grant_id} not found")))?;
+        let grant = &current.grants[position];
+        if grant.status != "pending" {
+            return Err(StoreError::Config(format!(
+                "share grant {grant_id} is not pending (status: {})",
+                grant.status
+            )));
+        }
+        if grant.from_agent == approval_agent {
+            return Err(StoreError::Config(
+                "the requesting agent cannot approve its own share request".into(),
+            ));
+        }
+
+        let approved_time = time::OffsetDateTime::parse(
+            now,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
+        let approved_at = approved_time
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
+        let grant = &mut current.grants[position];
+        grant.status = "approved".into();
+        grant.approved_at = Some(approved_at);
+        grant.approved_by = approved_by.into();
+        if grant.ttl > 0 {
+            let expires = approved_time
+                .checked_add(time::Duration::nanoseconds(grant.ttl))
+            .ok_or_else(|| StoreError::Config("ttl exceeds timestamp range".into()))?;
+            grant.expires_at = Some(
+                expires
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .map_err(|error| StoreError::Config(format!("invalid expires_at: {error}")))?,
+            );
+        }
+        let approved = grant.clone();
+        let bytes = encode_store(&current)?;
+        let target = root.join(SHARE_STORE_FILE);
+        crate::publication::replace(&target, &bytes, root_cap)?;
+        *self = current;
+        Ok(approved)
+    }
+
+    fn reject_locked(
+        &mut self,
+        root: &Path,
+        root_cap: &fs::File,
+        grant_id: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let path = root.join(SHARE_STORE_FILE);
+        let mut current = Self::read(&path)?;
+        let position = current
+            .grants
+            .iter()
+            .position(|grant| grant.id == grant_id)
+            .ok_or_else(|| StoreError::Config(format!("share grant {grant_id} not found")))?;
+        if current.grants[position].status != "pending" {
+            return Err(StoreError::Config(format!(
+                "share grant {grant_id} is not pending (status: {})",
+                current.grants[position].status
+            )));
+        }
+        current.grants[position].status = "rejected".into();
+        let rejected = current.grants[position].clone();
+        let bytes = encode_store(&current)?;
+        let target = root.join(SHARE_STORE_FILE);
+        crate::publication::replace(&target, &bytes, root_cap)?;
+        *self = current;
+        Ok(rejected)
     }
 
     /// Returns grants where `agent` is either the source or target agent.
@@ -1070,6 +1195,126 @@ mod tests {
         let persisted = ShareStore::read(&path).expect("read unchanged current share");
         assert_eq!(persisted.grants()[0].from_agent, "new-source");
         assert_eq!(persisted.grants()[0].status, "pending");
+    }
+
+    #[test]
+    fn approve_reloads_current_grants_and_recomputes_ttl_from_approval() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z","ttl":60000000000}]}"#,
+        )
+        .expect("write initial share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read initial share fixture");
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z","ttl":60000000000},{"id":"grant-b","from_agent":"other","to_agent":"target","secret_path":"prod/b","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write concurrent share fixture");
+
+        let approved = snapshot
+            .approve_at_for_agent(
+                vault_root,
+                "grant-a",
+                "approver",
+                "approver",
+                "2026-01-02T04:00:00Z",
+            )
+            .expect("approve pending grant");
+        assert_eq!(approved.status, "approved");
+        assert_eq!(approved.approved_by, "approver");
+        assert_eq!(
+            approved.approved_at.as_deref(),
+            Some("2026-01-02T04:00:00Z")
+        );
+        assert_eq!(approved.expires_at.as_deref(), Some("2026-01-02T04:01:00Z"));
+
+        let persisted = ShareStore::read(&path).expect("read approved grants");
+        assert_eq!(persisted.grants().len(), 2);
+        assert!(persisted.grants().iter().any(|grant| grant.id == "grant-b"));
+        assert_eq!(snapshot.grants(), persisted.grants());
+    }
+
+    #[test]
+    fn approve_checks_current_source_and_pending_status_without_mutating_on_error() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        let pending = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"old-source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#;
+        fs::write(&path, pending).expect("write pending share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read pending share fixture");
+        let before = snapshot.clone();
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"new-source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("replace current source");
+
+        let self_approval = snapshot
+            .approve_at_for_agent(
+                vault_root,
+                "grant-a",
+                "new-source",
+                "new-source",
+                "2026-01-02T04:00:00Z",
+            )
+            .expect_err("requesting agent cannot self-approve");
+        assert_eq!(
+            self_approval.to_string(),
+            "invalid vault config: the requesting agent cannot approve its own share request"
+        );
+        assert_eq!(snapshot.grants(), before.grants());
+        assert_eq!(fs::read(&path).expect("read unchanged share"),
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"new-source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#);
+
+        let terminal = ShareStore::read(&path).expect("read current share");
+        let mut terminal = terminal;
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"new-source","to_agent":"target","secret_path":"prod/a","status":"rejected","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write terminal share");
+        let terminal_error = terminal
+            .approve_at_for_agent(
+                vault_root,
+                "grant-a",
+                "approver",
+                "approver",
+                "2026-01-02T04:00:00Z",
+            )
+            .expect_err("terminal grant cannot be approved");
+        assert_eq!(
+            terminal_error.to_string(),
+            "invalid vault config: share grant grant-a is not pending (status: rejected)"
+        );
+    }
+
+    #[test]
+    fn reject_persists_pending_transition_and_preserves_terminal_file_on_error() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        let pending = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#;
+        fs::write(&path, pending).expect("write pending share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read pending share fixture");
+        let rejected = snapshot
+            .reject_at(vault_root, "grant-a")
+            .expect("reject pending grant");
+        assert_eq!(rejected.status, "rejected");
+        assert_eq!(rejected.approved_at, None);
+        assert_eq!(rejected.revoked_at, None);
+
+        let terminal_bytes = fs::read(&path).expect("read rejected share");
+        let error = snapshot
+            .reject_at(vault_root, "grant-a")
+            .expect_err("rejected grant cannot be rejected again");
+        assert_eq!(
+            error.to_string(),
+            "invalid vault config: share grant grant-a is not pending (status: rejected)"
+        );
+        assert_eq!(
+            fs::read(&path).expect("read unchanged terminal share"),
+            terminal_bytes
+        );
     }
 
     #[test]
