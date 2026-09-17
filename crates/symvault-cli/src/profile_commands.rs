@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::config as cli_config;
 use symvault_core::config::Config;
 
 const CONFIG_FILE: &str = ".symvault/config.yaml";
@@ -102,9 +101,18 @@ pub(crate) fn add(
         return Err(format!("profile {name:?} already exists"));
     }
     let destination = default_config_path(home);
-    prepare_destination(&source, &destination)?;
-    let key = format!("profiles.{}.vault", escaped_path_segment(name));
-    set_string(&destination, &key, vault_path)?;
+    let bytes = config_bytes(&source, &destination)?;
+    patch_config(&destination, &bytes, |document| {
+        let profiles = mapping_or_create(document, "profiles")?;
+        let profile = yaml_edit::MappingBuilder::new()
+            .pair("vault", yaml_edit::ScalarValue::double_quoted(vault_path))
+            .build_document();
+        let profile = profile
+            .as_mapping()
+            .ok_or_else(|| "cannot save config: invalid profile mapping".to_owned())?;
+        profiles.set(name, profile);
+        Ok(())
+    })?;
     if !quiet {
         writeln!(output, "Profile {name:?} added with vault {vault_path}")
             .map_err(|error| format!("write profile output: {error}"))?;
@@ -133,8 +141,14 @@ pub(crate) fn use_profile(
     }
 
     let destination = default_config_path(home);
-    prepare_destination(&source, &destination)?;
-    set_string(&destination, "defaultProfile", name)?;
+    let bytes = config_bytes(&source, &destination)?;
+    patch_config(&destination, &bytes, |document| {
+        document.set(
+            "defaultProfile",
+            yaml_edit::ScalarValue::double_quoted(name),
+        );
+        Ok(())
+    })?;
     if !quiet {
         writeln!(output, "Default profile set to {name:?}")
             .map_err(|error| format!("write profile output: {error}"))?;
@@ -142,10 +156,51 @@ pub(crate) fn use_profile(
     Ok(())
 }
 
-fn set_string(path: &Path, key: &str, value: &str) -> Result<(), String> {
-    let encoded =
-        serde_json::to_string(value).map_err(|error| format!("encode config value: {error}"))?;
-    cli_config::set(path, key, &encoded, true)
+fn mapping_or_create(
+    document: &yaml_edit::Document,
+    key: &str,
+) -> Result<yaml_edit::Mapping, String> {
+    if let Some(node) = document.get(key) {
+        return node
+            .as_mapping()
+            .cloned()
+            .ok_or_else(|| format!("cannot save config: {key} is not a mapping"));
+    }
+    document.set(key, yaml_edit::Mapping::new());
+    document
+        .get_mapping(key)
+        .ok_or_else(|| format!("cannot save config: {key} is not a mapping"))
+}
+
+fn patch_config(
+    path: &Path,
+    bytes: &[u8],
+    patch: impl FnOnce(&yaml_edit::Document) -> Result<(), String>,
+) -> Result<(), String> {
+    let source = std::str::from_utf8(bytes)
+        .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
+    let file = source
+        .parse::<yaml_edit::YamlFile>()
+        .map_err(|error| format!("cannot load config: {error}"))?;
+    let mut documents = file.documents();
+    let document = documents
+        .next()
+        .ok_or_else(|| "cannot load config: missing YAML document".to_owned())?;
+    if documents.next().is_some() {
+        return Err("cannot load config: multiple YAML documents are not supported".to_owned());
+    }
+    if document.as_mapping().is_none() {
+        return Err("cannot save config: root is not a mapping".to_owned());
+    }
+    patch(&document)?;
+    let mut rendered = document.to_string();
+    if !rendered.ends_with('\n') {
+        rendered.push('\n');
+    }
+    Config::load_from_bytes(rendered.as_bytes())
+        .map_err(|error| format!("config is invalid after update: {error}"))?;
+    symvault_sync::safeio::write_atomic(path, rendered.as_bytes())
+        .map_err(|error| format!("cannot save config: {error}"))
 }
 
 /// Match Go's resolver: an existing legacy directory selects its config;
@@ -161,7 +216,7 @@ fn default_config_path(home: &Path) -> PathBuf {
     config_home.join(APP_NAME).join("config.yaml")
 }
 
-fn prepare_destination(source: &Path, destination: &Path) -> Result<(), String> {
+fn config_bytes(source: &Path, destination: &Path) -> Result<Vec<u8>, String> {
     if let Some(parent) = destination.parent() {
         symvault_sync::safeio::create_dir_all(parent)
             .map_err(|error| format!("cannot save config: {error}"))?;
@@ -172,32 +227,12 @@ fn prepare_destination(source: &Path, destination: &Path) -> Result<(), String> 
             .as_ref()
             .map_err(|error| format!("cannot load config: {error}"))?;
     }
-    if !destination.exists() {
-        let seed = if source_config.is_ok() {
-            fs::read(source).map_err(|error| format!("cannot load config: {error}"))?
-        } else {
-            b"profiles:\n".to_vec()
-        };
-        write_seed(destination, &seed)?;
+    if destination.exists() {
+        return fs::read(destination).map_err(|error| format!("cannot load config: {error}"));
     }
-    Ok(())
-}
-
-fn write_seed(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    symvault_sync::safeio::write_atomic(path, bytes)
-        .map_err(|error| format!("cannot save config: {error}"))
-}
-
-fn escaped_path_segment(segment: &str) -> String {
-    segment
-        .chars()
-        .flat_map(|character| match character {
-            '\\' => ['\\', '\\'],
-            '.' => ['\\', '.'],
-            '[' => ['\\', '['],
-            ']' => ['\\', ']'],
-            character => [character, '\0'],
-        })
-        .filter(|character| *character != '\0')
-        .collect()
+    if source_config.is_ok() {
+        fs::read(source).map_err(|error| format!("cannot load config: {error}"))
+    } else {
+        Ok(b"profiles: {}\n".to_vec())
+    }
 }
