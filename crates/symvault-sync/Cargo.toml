@@ -25,5 +25,14 @@ thiserror = "=1.0.69"
 time = { version = "=0.3.47", features = ["formatting", "parsing"] }
 zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
 [dev-dependencies]
 tempfile = "=3.27.0"
