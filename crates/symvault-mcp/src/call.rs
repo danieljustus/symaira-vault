@@ -1,6 +1,7 @@
 use serde::de::{self, Deserialize, MapAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 /// A result returned by an MCP tool handler.
 #[derive(Clone, Debug, Default)]
@@ -69,6 +70,7 @@ pub struct ReadOnlyEntry {
     pub updated: String,
     pub version: i64,
     pub tags: Vec<String>,
+    pub classification: i32,
 }
 
 /// Read-only storage boundary. Implementations own vault identity and I/O;
@@ -94,6 +96,9 @@ pub struct ReadOnlyRuntimeConfig {
     pub tier: String,
     pub allowed_paths: Vec<String>,
     pub approval_mode: String,
+    pub can_read_values: bool,
+    pub auto_unseal: bool,
+    pub expose_payment_values: bool,
     pub can_write: bool,
     pub can_run_commands: bool,
     pub can_use_clipboard: bool,
@@ -120,6 +125,9 @@ impl Default for ReadOnlyRuntimeConfig {
             tier: String::new(),
             allowed_paths: vec!["*".into()],
             approval_mode: String::new(),
+            can_read_values: false,
+            auto_unseal: false,
+            expose_payment_values: false,
             can_write: false,
             can_run_commands: false,
             can_use_clipboard: false,
@@ -147,17 +155,34 @@ impl Default for ReadOnlyRuntimeConfig {
 pub struct ReadOnlyRuntime<S> {
     store: S,
     config: ReadOnlyRuntimeConfig,
+    secrets_accessed: AtomicI64,
 }
 
 impl<S> ReadOnlyRuntime<S> {
     pub fn new(store: S, config: ReadOnlyRuntimeConfig) -> Self {
-        Self { store, config }
+        let secrets_accessed = AtomicI64::new(config.secrets_used.max(0));
+        Self {
+            store,
+            config,
+            secrets_accessed,
+        }
     }
 }
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
         if self.config.available_tools.iter().any(|tool| tool == name) {
+            if name == "get_entry_value"
+                && !self.config.can_read_values
+                && !matches!(self.config.approval_mode.as_str(), "none" | "auto")
+            {
+                let message = if self.config.approval_mode == "deny" {
+                    "get_entry_value denied: approval mode is 'deny'"
+                } else {
+                    "get_entry_value requires approval but no interactive approval is available"
+                };
+                return Err(ToolCallResult::error(message));
+            }
             return Ok(());
         }
         let unavailable = self
@@ -177,6 +202,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "symaira_whoami" => self.whoami(),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
+            "get_entry_value" => self.get_entry_value(arguments),
             _ => Err(format!("read-only runtime has no handler for {name}")),
         }
     }
@@ -361,6 +387,143 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         json_text(Value::Object(result))
     }
 
+    fn get_entry_value(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let path = match required_string(arguments, "path") {
+            Ok(path) => path,
+            Err(result) => return Ok(result),
+        };
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let cleaned = normalize_scope_path(path);
+        if cleaned == "quarantine" || cleaned.starts_with("quarantine/") {
+            return Ok(ToolCallResult::error(
+                "entry is in quarantine — run 'symvault import review promote' to make it accessible",
+            ));
+        }
+        let Some(mut entry) = self
+            .store
+            .get(path)
+            .map_err(|error| format!("get entry: {error}"))?
+        else {
+            return Ok(ToolCallResult::error(format!("entry not found: {path}")));
+        };
+
+        if entry.classification >= 3 && !self.config.auto_unseal {
+            return self.sealed_entry_response(path, &entry);
+        }
+
+        let max_secrets = self.config.max_secrets_in_session;
+        let field_count = i64::try_from(entry.fields.len()).unwrap_or(i64::MAX);
+        if max_secrets > 0 {
+            let used = self.secrets_accessed.load(Ordering::Acquire);
+            let next = used.saturating_add(field_count);
+            if next > max_secrets {
+                return Ok(ToolCallResult::error(format!(
+                    "max secrets per session exceeded ({next}/{max_secrets})"
+                )));
+            }
+        }
+        self.secrets_accessed
+            .fetch_add(field_count, Ordering::AcqRel);
+
+        let mut redact = self.config.redact_fields.clone().unwrap_or_default();
+        if entry.secret_type == "payment" && !self.config.expose_payment_values {
+            redact.extend(
+                ["card_number", "cvc", "iban"]
+                    .into_iter()
+                    .map(str::to_owned),
+            );
+        }
+        let redacted_entry = !redact.is_empty();
+        for (field, value) in &mut entry.fields {
+            *value = redact_value(field, value.clone(), &redact);
+        }
+        // Go's redactEntry constructs a fresh Entry with only Data and
+        // Metadata. Preserve that omission behavior after field redaction.
+        if redacted_entry {
+            entry.path.clear();
+            entry.secret_type.clear();
+            entry.usage_hint.clear();
+            entry.auto_rotate = false;
+            entry.expires_at = None;
+            entry.classification = 0;
+        }
+        let mut data = Map::new();
+        for (field, value) in entry.fields {
+            data.insert(field.clone(), wrap_data_field(&field, value)?);
+        }
+
+        let mut meta = Map::new();
+        meta.insert("created".into(), Value::String(entry.created));
+        meta.insert("updated".into(), Value::String(entry.updated));
+        meta.insert("version".into(), Value::from(entry.version));
+        if !entry.tags.is_empty() {
+            meta.insert(
+                "tags".into(),
+                Value::Array(
+                    entry
+                        .tags
+                        .iter()
+                        .map(|tag| Value::String(crate::render::sanitize_for_mcp(tag)))
+                        .collect(),
+                ),
+            );
+        }
+        let mut secret_meta = Map::new();
+        if !entry.secret_type.is_empty() {
+            secret_meta.insert("type".into(), Value::String(entry.secret_type));
+        }
+        if !entry.usage_hint.is_empty() {
+            secret_meta.insert(
+                "usage_hint".into(),
+                Value::String(crate::render::sanitize_for_mcp(&entry.usage_hint)),
+            );
+        }
+        if entry.auto_rotate {
+            secret_meta.insert("auto_rotate".into(), Value::Bool(true));
+        }
+        if let Some(expires_at) = entry.expires_at {
+            secret_meta.insert("expires_at".into(), Value::String(expires_at));
+        }
+        let mut response = Map::new();
+        if !entry.path.is_empty() {
+            response.insert("path".into(), Value::String(entry.path));
+        }
+        response.insert("data".into(), Value::Object(data));
+        response.insert("meta".into(), Value::Object(meta));
+        response.insert("secret_meta".into(), Value::Object(secret_meta));
+        if entry.classification != 0 {
+            response.insert("classification".into(), Value::from(entry.classification));
+        }
+        json_text(Value::Object(response))
+    }
+
+    fn sealed_entry_response(
+        &self,
+        path: &str,
+        entry: &ReadOnlyEntry,
+    ) -> Result<ToolCallResult, String> {
+        let field = entry.fields.keys().next().map(String::as_str).unwrap_or("");
+        let classification = match entry.classification {
+            0 => "public",
+            1 => "internal",
+            2 => "confidential",
+            3 => "secret",
+            4 => "restricted",
+            _ => "unknown",
+        };
+        let response = serde_json::json!({
+            "handle": format!("op://{path}/{field}"),
+            "classification": classification,
+            "note": "Use secret_unseal tool to reveal the value",
+            "usage": usage_for(path, field),
+        });
+        json_text(response)
+    }
+
     fn scope_allows(&self, path: &str) -> bool {
         if self.config.allowed_paths.is_empty() {
             return false;
@@ -427,6 +590,40 @@ fn usage_for(path: &str, field: &str) -> Value {
         "note": format!("The raw value is never returned to agents. Pass \"{reference}\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first."),
         "run_command": {"env": {"<VAR_NAME>": reference}},
     })
+}
+
+fn redact_value(field: &str, value: Value, patterns: &[String]) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(name, nested)| {
+                    let nested_field = format!("{field}.{name}");
+                    (name, redact_value(&nested_field, nested, patterns))
+                })
+                .collect(),
+        ),
+        other => {
+            if is_redacted_field(field, patterns) {
+                Value::String("[REDACTED]".into())
+            } else {
+                other
+            }
+        }
+    }
+}
+
+fn wrap_data_field(label: &str, value: Value) -> Result<Value, String> {
+    match value {
+        Value::String(value) => crate::render::embed_as_data(label, &value)
+            .map(Value::String)
+            .map_err(|error| format!("embed data field: {error}")),
+        Value::Object(map) => map
+            .into_iter()
+            .map(|(name, nested)| Ok((name.clone(), wrap_data_field(&name, nested)?)))
+            .collect::<Result<Map<_, _>, String>>()
+            .map(Value::Object),
+        other => Ok(other),
+    }
 }
 
 fn collect_field_matches(

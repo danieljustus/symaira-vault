@@ -160,6 +160,94 @@ fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
     (root, identity)
 }
 
+fn write_get_value_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
+    let root = tempdir().expect("synthetic get-value vault tempdir");
+    fs::write(
+        root.path().join("config.yaml"),
+        "vault:\n  format_version: 1\n",
+    )
+    .expect("synthetic vault config");
+    fs::write(
+        root.path().join("identity.age"),
+        b"fixture identity placeholder",
+    )
+    .expect("synthetic identity marker");
+    fs::create_dir(root.path().join("entries")).expect("synthetic entries directory");
+
+    let identity = generate_identity();
+    let store = Store::open(root.path(), &identity).expect("open synthetic get-value vault");
+    let mut secret_data = BTreeMap::new();
+    secret_data.insert("password".into(), Value::String("testpass123".into()));
+    store
+        .write_new_entry(
+            "secret",
+            &Entry {
+                path: "secret".into(),
+                data: secret_data,
+                classification: 3,
+                metadata: EntryMetadata {
+                    created: "<fixture-time>".into(),
+                    updated: "<fixture-time>".into(),
+                    version: 1,
+                    ..EntryMetadata::default()
+                },
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write secret entry");
+
+    let mut payment_data = BTreeMap::new();
+    payment_data.insert(
+        "card_number".into(),
+        Value::String("4111111111111111".into()),
+    );
+    payment_data.insert("cvc".into(), Value::String("123".into()));
+    payment_data.insert("note".into(), Value::String("safe-note".into()));
+    store
+        .write_new_entry(
+            "payment",
+            &Entry {
+                path: "payment".into(),
+                data: payment_data,
+                secret_metadata: SecretMetadata {
+                    secret_type: "payment".into(),
+                    ..SecretMetadata::default()
+                },
+                metadata: EntryMetadata {
+                    created: "<fixture-time>".into(),
+                    updated: "<fixture-time>".into(),
+                    version: 1,
+                    ..EntryMetadata::default()
+                },
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write payment entry");
+
+    let mut quarantine_data = BTreeMap::new();
+    quarantine_data.insert("password".into(), Value::String("quarantined".into()));
+    store
+        .write_new_entry(
+            "quarantine/bad",
+            &Entry {
+                path: "quarantine/bad".into(),
+                data: quarantine_data,
+                metadata: EntryMetadata {
+                    created: "<fixture-time>".into(),
+                    updated: "<fixture-time>".into(),
+                    version: 1,
+                    ..EntryMetadata::default()
+                },
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .expect("write quarantined entry");
+    (root, identity)
+}
+
 fn normalize_text(text: &str) -> (String, usize) {
     let mut output = String::new();
     let mut remaining = text;
@@ -236,7 +324,7 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         fixture.oracle.source_hash.as_deref(),
         Some("8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9")
     );
-    assert_eq!(read_only_tool_names().len(), 5);
+    assert_eq!(read_only_tool_names().len(), 6);
     let case = fixture
         .cases
         .iter()
@@ -266,9 +354,10 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .collect::<Vec<Value>>();
     let mut actual = actual;
     let mut expected = case.output.clone();
+    let actual_root = fs::canonicalize(root.path()).expect("canonical synthetic vault root");
     let actual_markers = actual
         .iter_mut()
-        .map(|value| normalize(value, &root.path().to_string_lossy()))
+        .map(|value| normalize(value, &actual_root.to_string_lossy()))
         .collect::<Vec<_>>();
     let expected_markers = expected
         .iter_mut()
@@ -276,6 +365,85 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .collect::<Vec<_>>();
     assert_eq!(actual_markers, expected_markers, "marker counts");
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn get_entry_value_seals_redacts_and_blocks_sensitive_paths() {
+    let (root, identity) = write_get_value_vault();
+    let mut config = fixture_config();
+    config.available_tools = read_only_tool_names();
+    config
+        .unavailable_tools
+        .retain(|tool| tool.name != "get_entry_value");
+    config.can_read_values = true;
+    config.auto_unseal = false;
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct sealed get-value runtime");
+    runtime
+        .authorize("get_entry_value", &serde_json::json!({"path": "secret"}))
+        .expect("explicit value capability allows sealed get");
+    let sealed = runtime
+        .call("get_entry_value", &serde_json::json!({"path": "secret"}))
+        .expect("sealed get succeeds");
+    assert!(!sealed.is_error);
+    assert!(sealed.text.contains("op://secret/password"));
+    assert!(!sealed.text.contains("testpass123"));
+
+    let (root, identity) = write_get_value_vault();
+    let mut config = fixture_config();
+    config.available_tools = read_only_tool_names();
+    config
+        .unavailable_tools
+        .retain(|tool| tool.name != "get_entry_value");
+    config.can_read_values = true;
+    config.auto_unseal = true;
+    config.redact_fields = Some(vec!["note".into()]);
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct redaction runtime");
+    let redacted = runtime
+        .call("get_entry_value", &serde_json::json!({"path": "payment"}))
+        .expect("redacted payment get succeeds");
+    assert!(!redacted.is_error);
+    assert!(redacted.text.contains("[REDACTED]"));
+    assert!(!redacted.text.contains("4111111111111111"));
+    assert!(!redacted.text.contains("123"));
+    assert!(!redacted.text.contains("safe-note"));
+
+    let (root, identity) = write_get_value_vault();
+    let mut config = fixture_config();
+    config.available_tools = read_only_tool_names();
+    config
+        .unavailable_tools
+        .retain(|tool| tool.name != "get_entry_value");
+    config.can_read_values = true;
+    config.auto_unseal = true;
+    config.allowed_paths = vec!["allowed/*".into()];
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct scope runtime");
+    let scope_error = runtime
+        .call("get_entry_value", &serde_json::json!({"path": "secret"}))
+        .expect_err("scope denial must precede storage");
+    assert!(scope_error.contains("outside allowed scope"));
+
+    let (root, identity) = write_get_value_vault();
+    let mut config = fixture_config();
+    config.available_tools = read_only_tool_names();
+    config
+        .unavailable_tools
+        .retain(|tool| tool.name != "get_entry_value");
+    config.can_read_values = true;
+    config.auto_unseal = true;
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct quarantine runtime");
+    let quarantine = runtime
+        .call(
+            "get_entry_value",
+            &serde_json::json!({"path": "quarantine/bad"}),
+        )
+        .expect("quarantine denial is a tool result");
+    assert!(quarantine.is_error);
+    assert!(quarantine.text.contains("quarantine"));
+    assert!(!quarantine.text.contains("quarantined"));
 }
 
 #[test]

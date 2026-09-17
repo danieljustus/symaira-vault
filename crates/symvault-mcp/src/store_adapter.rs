@@ -48,6 +48,7 @@ impl StoreReadOnlyAdapter {
             updated: entry.metadata.updated,
             version: entry.metadata.version,
             tags: entry.metadata.tags,
+            classification: entry.classification,
         }
     }
 }
@@ -116,7 +117,10 @@ impl StoreReadOnlyRuntime {
             .unavailable_tools
             .iter()
             .map(|tool| tool.name.clone())
-            .collect();
+            .collect::<Vec<_>>();
+        config
+            .available_tools
+            .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
@@ -156,7 +160,10 @@ impl StoreReadOnlyRuntime {
             .unavailable_tools
             .iter()
             .map(|tool| tool.name.clone())
-            .collect();
+            .collect::<Vec<_>>();
+        config
+            .available_tools
+            .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
@@ -266,6 +273,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("get", path, ok);
             }
+            "get_entry_value" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("get_value", path, ok);
+            }
             "get_entry_metadata" => {
                 let path = arguments
                     .get("path")
@@ -284,7 +299,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The five handlers in this bounded runtime. The catalog remains owned by
+/// The six handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -293,6 +308,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "symaira_whoami",
         "find_entries",
         "get_entry",
+        "get_entry_value",
         "get_entry_metadata",
     ]
     .into_iter()
