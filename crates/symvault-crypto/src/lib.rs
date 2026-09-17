@@ -184,6 +184,16 @@ pub fn encrypt_identity_scrypt(
     )
 }
 
+/// Encrypts an identity with the current Vault Argon2id envelope format.
+pub fn encrypt_identity_argon2id(
+    identity: &Identity,
+    passphrase: &SecretBytes,
+    params: Argon2idParams,
+) -> Result<Vec<u8>, CryptoError> {
+    let secret = identity.0.to_string();
+    encrypt_argon2id(secret.expose_secret().as_bytes(), passphrase, params)
+}
+
 /// Decrypts an identity from an age envelope with a passphrase.
 pub fn decrypt_identity(
     ciphertext: &[u8],
