@@ -21,6 +21,7 @@ symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 tar = "=0.4.46"
+tempfile = "=3.27.0"
 thiserror = "=1.0.69"
 time = { version = "=0.3.47", features = ["formatting", "parsing"] }
 zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
@@ -33,6 +34,3 @@ windows-sys = { version = "=0.61.2", features = [
     "Win32_System_JobObjects",
     "Win32_System_Threading",
 ] }
-
-[dev-dependencies]
-tempfile = "=3.27.0"

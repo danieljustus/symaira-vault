@@ -511,3 +511,35 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn restore_does_not_follow_predictable_temporary_symlink() {
+    use std::os::unix::fs::symlink;
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    let destination = root.path().join("destination");
+    fs::create_dir(&source).unwrap();
+    fs::create_dir(&destination).unwrap();
+    fs::write(source.join("entry.age"), b"restored ciphertext").unwrap();
+    let victim = root.path().join("unrelated");
+    fs::write(&victim, b"untouched").unwrap();
+    let predictable = destination.join(format!("entry.tmp-{}", std::process::id()));
+    symlink(&victim, &predictable).unwrap();
+    let archive = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive, false).unwrap();
+    archive::restore(&archive, &destination, false).unwrap();
+    assert_eq!(fs::read(&victim).unwrap(), b"untouched");
+    assert!(
+        fs::symlink_metadata(predictable)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        fs::read(destination.join("entry.age")).unwrap(),
+        b"restored ciphertext"
+    );
+    assert!(archive::restore(&archive, &destination, false).is_err());
+    archive::restore(&archive, &destination, true).unwrap();
+}

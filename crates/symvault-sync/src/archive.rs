@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{self, Read},
+    io::{self, Read, Write},
     path::{Component, Path, PathBuf},
 };
 use tar::{Archive, Builder, EntryType, Header};
@@ -228,10 +228,26 @@ pub fn restore(
         }
         let hash = digest(&bytes);
         let m = entry.header().mode()?;
-        let tmp = target.with_extension(format!("tmp-{}", std::process::id()));
-        fs::write(&tmp, &bytes)?;
-        apply_mode(&tmp, m)?;
-        fs::rename(&tmp, &target)?;
+        let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
+        tmp.write_all(&bytes)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tmp.as_file()
+                .set_permissions(fs::Permissions::from_mode(m))?;
+        }
+        let published = if overwrite {
+            tmp.persist(&target)
+        } else {
+            tmp.persist_noclobber(&target)
+        };
+        published.map_err(|error| {
+            if !overwrite && error.error.kind() == io::ErrorKind::AlreadyExists {
+                ArchiveError::Exists(target.clone())
+            } else {
+                ArchiveError::Io(error.error)
+            }
+        })?;
         result.push(ArchiveEntry {
             path: rel
                 .to_string_lossy()
