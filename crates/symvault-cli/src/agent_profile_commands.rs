@@ -52,7 +52,7 @@ pub(crate) fn export(
     output_path: Option<&Path>,
     output: &mut impl Write,
 ) -> Result<(), String> {
-    if let Some(output_path) = output_path {
+    if let Some(output_path) = output_path.filter(|path| !path.as_os_str().is_empty()) {
         let mut rendered = Vec::new();
         show(vault, name, None, &mut rendered)?;
         safeio::write_atomic(output_path, &rendered)
@@ -196,8 +196,6 @@ struct ProfileData {
     allowed_env_vars: Option<Vec<String>>,
     allowed_executables: Option<Vec<String>>,
     prompt_injection_mode: Option<String>,
-    pre_call_hooks: Option<Vec<String>>,
-    post_call_hooks: Option<Vec<String>>,
     skill_path: Option<String>,
     skill_version: Option<String>,
     expose_payment_values: Option<bool>,
@@ -287,8 +285,6 @@ impl ProfileData {
             },
             prompt_injection_mode: raw("promptInjectionMode")
                 .map(|_| profile.prompt_injection_mode.clone()),
-            pre_call_hooks: raw_nonempty_slice_from_value(fields, "pre_call_hooks"),
-            post_call_hooks: raw_nonempty_slice_from_value(fields, "post_call_hooks"),
             skill_path: if builtin_skill_path || raw("skillPath").is_some() {
                 Some(profile.skill_path.clone())
             } else {
@@ -316,13 +312,6 @@ fn raw_nonempty_slice(fields: &SourceFields, field: &str, value: &[String]) -> O
         .contains_key(field)
         .then(|| (!value.is_empty()).then(|| value.to_owned()))
         .flatten()
-}
-
-fn raw_nonempty_slice_from_value(fields: &SourceFields, field: &str) -> Option<Vec<String>> {
-    fields
-        .get(field)
-        .and_then(parse_value)
-        .filter(|value: &Vec<String>| !value.is_empty())
 }
 
 fn format_duration(value: Duration) -> String {
@@ -396,8 +385,6 @@ impl serde::Serialize for YamlProfile<'_> {
         optional_nonempty!("allowedEnvVars", data.allowed_env_vars);
         optional_nonempty!("allowedExecutables", data.allowed_executables);
         optional!("promptInjectionMode", data.prompt_injection_mode);
-        optional_nonempty!("pre_call_hooks", data.pre_call_hooks);
-        optional_nonempty!("post_call_hooks", data.post_call_hooks);
         optional!("skillPath", data.skill_path);
         optional!("skillVersion", data.skill_version);
         optional!("exposePaymentValues", data.expose_payment_values);
@@ -447,8 +434,8 @@ impl serde::Serialize for JsonProfile<'_> {
         field!("AllowedEnvVars", data.allowed_env_vars);
         field!("AllowedExecutables", data.allowed_executables);
         field!("PromptInjectionMode", data.prompt_injection_mode);
-        field!("PreCallHooks", data.pre_call_hooks);
-        field!("PostCallHooks", data.post_call_hooks);
+        field!("PreCallHooks", Option::<Vec<String>>::None);
+        field!("PostCallHooks", Option::<Vec<String>>::None);
         field!("SkillPath", data.skill_path);
         field!("SkillVersion", data.skill_version);
         field!("ExposePaymentValues", data.expose_payment_values);
@@ -488,8 +475,6 @@ mod tests {
             allowed_env_vars: None,
             allowed_executables: None,
             prompt_injection_mode: None,
-            pre_call_hooks: None,
-            post_call_hooks: None,
             skill_path: None,
             skill_version: None,
             expose_payment_values: None,
@@ -530,8 +515,6 @@ mod tests {
             allowed_env_vars: None,
             allowed_executables: None,
             prompt_injection_mode: None,
-            pre_call_hooks: None,
-            post_call_hooks: None,
             skill_path: Some("first line\n- literal content\n".into()),
             skill_version: None,
             expose_payment_values: None,

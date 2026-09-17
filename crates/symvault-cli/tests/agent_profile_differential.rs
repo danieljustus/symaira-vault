@@ -154,6 +154,16 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
     let rust = run(&rust_binary, &export_args, &custom_home, &custom_vault);
     assert_same(&go, &rust, "agent profile export demo");
 
+    let empty_output_args = ["agent", "profile", "export", "demo", "--output", ""];
+    let go = run(&go_binary, &empty_output_args, &custom_home, &custom_vault);
+    let rust = run(
+        &rust_binary,
+        &empty_output_args,
+        &custom_home,
+        &custom_vault,
+    );
+    assert_same(&go, &rust, "agent profile export demo --output empty");
+
     let go_export_path = custom_home.join("go-profile.yaml");
     let rust_export_path = custom_home.join("rust-profile.yaml");
     let go_export_args = [
