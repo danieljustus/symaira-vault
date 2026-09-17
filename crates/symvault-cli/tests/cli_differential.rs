@@ -14,6 +14,22 @@ fn temporary_root(name: &str) -> PathBuf {
     env::temp_dir().join(format!("symvault-cli-differential-{name}-{suffix}"))
 }
 
+struct TempFixture(Vec<PathBuf>);
+
+impl TempFixture {
+    fn new(paths: impl IntoIterator<Item = PathBuf>) -> Self {
+        Self(paths.into_iter().collect())
+    }
+}
+
+impl Drop for TempFixture {
+    fn drop(&mut self) {
+        for path in &self.0 {
+            let _ = fs::remove_dir_all(path);
+        }
+    }
+}
+
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
     Command::new(binary)
         .args(args)
@@ -1728,6 +1744,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     let home = temporary_root("file-use-home");
     let root = temporary_root("file-use-vault");
     let fixture_dir = temporary_root("file-use-fixtures");
+    let _fixture_cleanup = TempFixture::new([home.clone(), root.clone(), fixture_dir.clone()]);
     fs::create_dir_all(&home).expect("home");
     fs::create_dir_all(&fixture_dir).expect("fixture directory");
     let source = fixture_dir.join("certificate.p12");
@@ -1852,7 +1869,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
 
     let timeout_script = |marker: &Path| {
         format!(
-            "printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {}; sleep 5",
+            "printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {}; exec sleep 5",
             marker.display()
         )
     };
@@ -1895,18 +1912,31 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
         &root,
         &home,
     );
-    assert!(!go_timeout.status.success());
-    assert!(!rust_timeout.status.success());
-    assert!(String::from_utf8_lossy(&go_timeout.stderr).contains("timed out"));
-    assert!(String::from_utf8_lossy(&rust_timeout.stderr).contains("timed out"));
+    let assert_timeout_and_cleanup = |output: &Output, marker: &Path, command: &str| {
+        assert!(!output.status.success(), "{command} unexpectedly succeeded");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("timed out"),
+            "{command} did not report a timeout: stderr={}\nstdout={}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout)
+        );
+        match fs::read_to_string(marker) {
+            Ok(materialized) => assert!(
+                !Path::new(materialized.trim()).exists(),
+                "{command} left materialized payload at {}",
+                materialized.trim()
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                // A 20ms deadline can expire before the shell starts. In that
+                // case it cannot have created a payload marker; run() has
+                // still reaped the CLI process before returning.
+            }
+            Err(error) => panic!("read {command} timeout marker: {error}"),
+        }
+    };
+    assert_timeout_and_cleanup(&go_timeout, &go_timeout_marker, "Go file use timeout");
+    assert_timeout_and_cleanup(&rust_timeout, &rust_timeout_marker, "Rust file use timeout");
     assert!(rust_timeout_started.elapsed().as_secs() < 2);
-    let go_timeout_path = fs::read_to_string(&go_timeout_marker).expect("Go timeout marker");
-    let rust_timeout_path = fs::read_to_string(&rust_timeout_marker).expect("Rust timeout marker");
-    assert!(!Path::new(&go_timeout_path).exists(), "Go timeout cleanup");
-    assert!(
-        !Path::new(&rust_timeout_path).exists(),
-        "Rust timeout cleanup"
-    );
 
     let sentinel = fixture_dir.join("sentinel");
     fs::write(&sentinel, b"must-survive").expect("sentinel");
@@ -1982,10 +2012,6 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     );
     assert_success(&descendant, "Rust file use background descendant");
     assert!(descendant_started.elapsed().as_secs() < 2);
-
-    fs::remove_dir_all(home).expect("cleanup file use home");
-    fs::remove_dir_all(root).expect("cleanup file use vault");
-    fs::remove_dir_all(fixture_dir).expect("cleanup file use fixtures");
 }
 
 #[test]
