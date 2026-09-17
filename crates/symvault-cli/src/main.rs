@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+mod add_commands;
 mod backup_commands;
 mod config;
 mod device;
@@ -101,6 +102,46 @@ enum Command {
         vault_dir: Option<PathBuf>,
         #[arg(long, default_value = "ask")]
         auth: String,
+    },
+    /// Add a new password entry.
+    #[command(alias = "new", alias = "create")]
+    Add {
+        #[arg(value_name = "NAME")]
+        name: String,
+        #[arg(long, value_name = "VALUE")]
+        value: Option<String>,
+        #[arg(long)]
+        stdin_value: bool,
+        #[arg(long)]
+        stdin_totp_secret: bool,
+        #[arg(long)]
+        generate: bool,
+        #[arg(long, default_value_t = 20)]
+        length: i64,
+        #[arg(long)]
+        username: Option<String>,
+        #[arg(long)]
+        url: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        totp_secret: Option<String>,
+        #[arg(long)]
+        totp_issuer: Option<String>,
+        #[arg(long)]
+        totp_account: Option<String>,
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        allow_empty: bool,
+        #[arg(long = "type")]
+        secret_type: Option<String>,
+        #[arg(long)]
+        usage_hint: Option<String>,
+        #[arg(long)]
+        auto_rotate: bool,
+        #[arg(long)]
+        expires_at: Option<String>,
     },
     /// List password entries.
     List {
@@ -373,6 +414,50 @@ fn main() -> ExitCode {
         Some(Command::Init { vault_dir, auth }) => {
             run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
         }
+        Some(Command::Add {
+            name,
+            value,
+            stdin_value,
+            stdin_totp_secret,
+            generate,
+            length,
+            username,
+            url,
+            notes,
+            totp_secret,
+            totp_issuer,
+            totp_account,
+            force,
+            allow_empty,
+            secret_type,
+            usage_hint,
+            auto_rotate,
+            expires_at,
+        }) => run_add(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            add_commands::AddOptions {
+                path: name,
+                value,
+                generate,
+                length,
+                username: username.unwrap_or_default(),
+                url: url.unwrap_or_default(),
+                notes: notes.unwrap_or_default(),
+                totp_secret: totp_secret.unwrap_or_default(),
+                totp_issuer: totp_issuer.unwrap_or_default(),
+                totp_account: totp_account.unwrap_or_default(),
+                force,
+                allow_empty,
+                secret_type: secret_type.unwrap_or_default(),
+                usage_hint: usage_hint.unwrap_or_default(),
+                auto_rotate,
+                expires_at: expires_at.unwrap_or_default(),
+            },
+            stdin_value,
+            stdin_totp_secret,
+            cli.quiet,
+        ),
         Some(Command::List { prefix }) => run_list(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -655,6 +740,40 @@ fn run_lock(explicit_vault: Option<&Path>, profile: Option<&str>, quiet: bool) -
         Ok::<(), String>(())
     })();
     finish_session_result(result, false, 3)
+}
+
+fn run_add(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    mut options: add_commands::AddOptions,
+    stdin_value: bool,
+    stdin_totp_secret: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        if stdin_value || stdin_totp_secret {
+            let stdin = io::stdin();
+            let mut input = io::BufReader::new(stdin.lock());
+            let (value, totp_secret) =
+                add_commands::read_stdin_values(&mut input, stdin_value, stdin_totp_secret)?;
+            if value.is_some() {
+                options.value = value;
+            }
+            if let Some(totp_secret) = totp_secret {
+                options.totp_secret = totp_secret;
+            }
+        }
+        let path = options.path.clone();
+        add_commands::add(&vault, &identity, &options)?;
+        if !quiet {
+            println!("Entry created: {path}");
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
 }
 
 fn run_init(

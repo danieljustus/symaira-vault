@@ -962,3 +962,345 @@ fn export_cancel_happens_before_vault_open() {
         fs::remove_dir_all(root).expect("cleanup vault");
     }
 }
+
+#[test]
+fn add_noninteractive_matches_go_and_preserves_existing_entries() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("add-home");
+    let root = temporary_root("add-vault");
+    let corrupt_path = root.join("entries/work/corrupt.age");
+    fs::create_dir_all(&home).expect("home");
+
+    let init = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&init, "Rust init for add differential");
+
+    let go_explicit = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/go-explicit",
+            "--value",
+            "StrongPass123!",
+            "--username",
+            "alice",
+            "--url",
+            "https://github.com/login",
+            "--notes",
+            "primary",
+            "--type",
+            "password",
+            "--usage-hint",
+            "login password",
+            "--auto-rotate",
+            "--expires-at",
+            "2030-01-02T03:04:05Z",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_explicit, "Go explicit add");
+    let rust_get_go = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/go-explicit.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_get_go, "Rust get Go explicit add");
+    assert_eq!(rust_get_go.stdout, b"StrongPass123!\n");
+
+    let rust_explicit = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/rust-explicit",
+            "--value",
+            "AnotherStrong123!",
+            "--username",
+            "bob",
+            "--url",
+            "https://example.test/login",
+            "--notes",
+            "secondary",
+            "--type",
+            "password",
+            "--usage-hint",
+            "secondary password",
+            "--auto-rotate",
+            "--expires-at",
+            "2030-01-02T03:04:05Z",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_explicit, "Rust explicit add");
+    let go_get_rust = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/rust-explicit.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_get_rust, "Go get Rust explicit add");
+    assert_eq!(go_get_rust.stdout, b"AnotherStrong123!\n");
+
+    let go_stdin = run_with_input(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/go-stdin",
+            "--stdin-value",
+        ],
+        &root,
+        &home,
+        b"GoStdinStrong123!\n",
+    );
+    assert_success(&go_stdin, "Go stdin add");
+    let rust_get_stdin = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/go-stdin.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_get_stdin, "Rust get Go stdin add");
+    assert_eq!(rust_get_stdin.stdout, b"GoStdinStrong123!\n");
+
+    let rust_stdin = run_with_input(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/rust-stdin",
+            "--stdin-value",
+        ],
+        &root,
+        &home,
+        b"RustStdinStrong123!\n",
+    );
+    assert_success(&rust_stdin, "Rust stdin add");
+    let go_get_stdin = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/rust-stdin.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_get_stdin, "Go get Rust stdin add");
+    assert_eq!(go_get_stdin.stdout, b"RustStdinStrong123!\n");
+
+    let rust_generated = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/rust-generated",
+            "--generate",
+            "--length",
+            "24",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_generated, "Rust generated add");
+    let go_get_generated = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/rust-generated.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_get_generated, "Go get Rust generated add");
+    assert_eq!(go_get_generated.stdout.trim_ascii().len(), 24);
+
+    let totp_secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+    let go_totp = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/go-totp",
+            "--value",
+            "TotpPassword123!",
+            "--totp-secret",
+            totp_secret,
+            "--totp-issuer",
+            "Example",
+            "--totp-account",
+            "alice@example.test",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_totp, "Go TOTP add");
+    let rust_get_totp = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/go-totp.totp",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_get_totp, "Rust get Go TOTP add");
+    assert!(String::from_utf8_lossy(&rust_get_totp.stdout).contains(totp_secret));
+
+    let rust_totp = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/rust-totp",
+            "--value",
+            "RustTotpPassword123!",
+            "--totp-secret",
+            totp_secret,
+            "--totp-issuer",
+            "Example",
+            "--totp-account",
+            "bob@example.test",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_totp, "Rust TOTP add");
+    let go_get_totp = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/rust-totp.totp",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_get_totp, "Go get Rust TOTP add");
+    assert!(String::from_utf8_lossy(&go_get_totp.stdout).contains(totp_secret));
+
+    let go_invalid_totp = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/invalid-totp",
+            "--value",
+            "InvalidTotpPassword123!",
+            "--totp-secret",
+            "not-a-totp-secret",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!go_invalid_totp.status.success());
+    let rust_invalid_get = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "get",
+            "work/invalid-totp.password",
+            "--print",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!rust_invalid_get.status.success());
+
+    let rust_duplicate = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/go-explicit",
+            "--value",
+            "Replacement123!",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!rust_duplicate.status.success());
+    assert!(String::from_utf8_lossy(&rust_duplicate.stderr).contains("already exists"));
+
+    fs::create_dir_all(corrupt_path.parent().unwrap()).expect("corrupt parent");
+    fs::write(&corrupt_path, b"damaged ciphertext").expect("corrupt entry");
+    let rust_corrupt = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/corrupt",
+            "--value",
+            "ShouldNotOverwrite123!",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!rust_corrupt.status.success());
+    assert!(String::from_utf8_lossy(&rust_corrupt.stderr).contains("already exists"));
+    assert_eq!(
+        fs::read(&corrupt_path).expect("read corrupt entry"),
+        b"damaged ciphertext"
+    );
+
+    fs::remove_dir_all(home).expect("cleanup home");
+    fs::remove_dir_all(root).expect("cleanup add vault");
+}

@@ -182,7 +182,7 @@ pub fn delete(root: &Path, identity: &Identity, path: &str) -> Result<(), String
     Ok(())
 }
 
-fn auto_commit(store: &Store, identity: &Identity, path: &str, action: &str) {
+pub(crate) fn auto_commit(store: &Store, identity: &Identity, path: &str, action: &str) {
     let result = (|| {
         let entry_path = store
             .configured_entry_path(path, identity)
