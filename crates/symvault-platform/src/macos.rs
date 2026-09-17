@@ -199,23 +199,10 @@ fn run_jxa(script: &str, timeout: Duration) -> Result<Vec<u8>, PlatformError> {
 }
 
 fn js_string(value: &str) -> String {
-    let mut result = String::with_capacity(value.len() + 2);
-    result.push('"');
-    for ch in value.chars() {
-        match ch {
-            '\\' => result.push_str("\\\\"),
-            '"' => result.push_str("\\\""),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            ch if ch.is_control() => {
-                result.push_str(&format!("\\u{:04x}", ch as u32));
-            }
-            ch => result.push(ch),
-        }
-    }
-    result.push('"');
-    result
+    serde_json::to_string(value)
+        .expect("strings always serialize")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
 /// Backward-compatible macOS name for the shared native OS keyring adapter.
@@ -518,6 +505,10 @@ mod tests {
 
     #[test]
     fn jxa_strings_are_escaped_without_changing_content() {
+        let source = "line\u{2028}paragraph\u{2029}literal\\u2028";
+        let encoded = js_string(source);
+        assert!(!encoded.contains(['\u{2028}', '\u{2029}']));
+        assert_eq!(serde_json::from_str::<String>(&encoded).unwrap(), source);
         assert_eq!(js_string("a\\\"\n\t"), "\"a\\\\\\\"\\n\\t\"");
     }
 

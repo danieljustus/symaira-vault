@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+serde_json.workspace = true
 base64 = "=0.22.1"
 symvault-core.workspace = true
 
@@ -20,4 +21,3 @@ rustix = { version = "=1.1.4", features = ["fs"] }
 
 [dev-dependencies]
 serde.workspace = true
-serde_json.workspace = true
