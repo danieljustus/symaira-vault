@@ -140,7 +140,7 @@ fn create_temp_file(data: &[u8]) -> Result<(PathBuf, fs::File), String> {
 fn resolve_editor(preferred: &str) -> Result<String, String> {
     if !preferred.is_empty() {
         return command_path(preferred)
-            .map(|_| preferred.to_owned())
+            .map(|path| path.to_string_lossy().into_owned())
             .ok_or_else(|| format!("editor {preferred:?} not found in PATH"));
     }
     if let Some(editor) = env::var_os("EDITOR").filter(|value| !value.is_empty()) {
@@ -148,7 +148,7 @@ fn resolve_editor(preferred: &str) -> Result<String, String> {
             .into_string()
             .map_err(|_| "EDITOR must be valid UTF-8".to_owned())?;
         return command_path(&editor)
-            .map(|_| editor.clone())
+            .map(|path| path.to_string_lossy().into_owned())
             .ok_or_else(|| format!("editor {editor:?} not found in PATH"));
     }
     for candidate in ["vim", "nano", "vi"] {

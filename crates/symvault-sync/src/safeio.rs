@@ -78,7 +78,7 @@ fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
 
     let descriptor = match open(
         path,
-        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
         Mode::empty(),
     ) {
         Ok(descriptor) => descriptor,
@@ -165,11 +165,16 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> Result<(), SafeIoError> {
 pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
     #[cfg(unix)]
     {
-        use rustix::fs::{Mode, OFlags, open};
+        use rustix::fs::{FileType, Mode, OFlags, fstat, open};
         use rustix::io::Errno;
         let descriptor = open(
             path,
-            OFlags::WRONLY | OFlags::APPEND | OFlags::CREATE | OFlags::NOFOLLOW,
+            OFlags::WRONLY
+                | OFlags::APPEND
+                | OFlags::CREATE
+                | OFlags::NOFOLLOW
+                | OFlags::NONBLOCK
+                | OFlags::CLOEXEC,
             Mode::from_raw_mode(FILE_MODE as _),
         )
         .map_err(|error| {
@@ -179,6 +184,10 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
                 SafeIoError::Io(error.into())
             }
         })?;
+        let metadata = fstat(&descriptor).map_err(|error| SafeIoError::Io(error.into()))?;
+        if !FileType::from_raw_mode(metadata.st_mode).is_file() {
+            return Err(SafeIoError::NotRegularFile);
+        }
         Ok(File::from(descriptor))
     }
     #[cfg(not(unix))]
@@ -198,7 +207,7 @@ pub fn secure_delete(path: &Path, max_bytes: u64) -> Result<(), SafeIoError> {
         use rustix::io::Errno;
         let descriptor = match open(
             path,
-            OFlags::WRONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK,
+            OFlags::WRONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
             Mode::empty(),
         ) {
             Ok(descriptor) => descriptor,
@@ -272,6 +281,7 @@ fn dir_builder() -> fs::DirBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
     fn atomic_write_replaces_existing_regular_file() {
@@ -326,5 +336,20 @@ mod tests {
         let _ = secure_delete(&link, 4096);
         assert!(!link.exists());
         assert_eq!(fs::read(sentinel).expect("sentinel remains"), b"sentinel");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_append_refuses_fifo_without_blocking() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let fifo = directory.path().join("fifo");
+        assert!(
+            Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .expect("mkfifo")
+                .success()
+        );
+        assert!(open_append(&fifo).is_err());
     }
 }
