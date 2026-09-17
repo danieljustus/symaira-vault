@@ -201,6 +201,98 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
     );
 
+    let rust_set = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "set",
+            "work/github.username",
+            "--value",
+            "alice",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_set, "Rust set update");
+    let go_updated = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_updated = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_updated, "Go get after Rust set");
+    assert_success(&rust_updated, "Rust get after Rust set");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&rust_updated.stdout)
+            .expect("Rust updated JSON"),
+        serde_json::from_slice::<serde_json::Value>(&go_updated.stdout).expect("Go updated JSON")
+    );
+
+    let go_create = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "set",
+            "work/to-delete.password",
+            "--value",
+            "temporary",
+            "--force",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_create, "Go set delete fixture");
+    let rust_delete = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "delete",
+            "work/to-delete",
+            "--yes",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_delete, "Rust delete");
+    let go_list_after_delete = run(
+        &go_binary,
+        &["--vault", rust_root.to_str().unwrap(), "list"],
+        &rust_root,
+        &home,
+    );
+    let rust_list_after_delete = run(
+        &rust_binary,
+        &["--vault", rust_root.to_str().unwrap(), "list"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_list_after_delete, "Go list after Rust delete");
+    assert_success(&rust_list_after_delete, "Rust list after delete");
+    assert_eq!(rust_list_after_delete.stdout, go_list_after_delete.stdout);
+
     let go_export = run(
         &go_binary,
         &[

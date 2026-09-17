@@ -8,6 +8,7 @@ mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
 mod vault_commands;
+mod write_commands;
 
 use std::{
     ffi::{OsStr, OsString},
@@ -124,6 +125,27 @@ enum Command {
         /// Permit a locked vault (unsupported by the native stdio runtime).
         #[arg(long)]
         allow_locked: bool,
+    },
+    /// Set a password entry or field.
+    Set {
+        #[arg(value_name = "PATH[.FIELD]")]
+        query: String,
+        #[arg(long, value_name = "VALUE")]
+        value: Option<String>,
+        #[arg(long)]
+        stdin_value: bool,
+        #[arg(long)]
+        allow_empty: bool,
+        #[arg(long)]
+        force: bool,
+    },
+    /// Delete a password entry.
+    #[command(alias = "rm", alias = "remove")]
+    Delete {
+        #[arg(value_name = "PATH")]
+        path: String,
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -299,6 +321,30 @@ fn main() -> ExitCode {
             agent.as_deref(),
             stdio,
             allow_locked,
+            cli.quiet,
+        ),
+        Some(Command::Set {
+            query,
+            value,
+            stdin_value,
+            allow_empty,
+            force,
+        }) => run_set(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &query,
+            value,
+            stdin_value,
+            allow_empty,
+            force,
+            cli.quiet,
+        ),
+        Some(Command::Delete { path, yes }) => run_delete(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &path,
+            yes,
+            cli.json || cli.output.as_deref() == Some("json"),
             cli.quiet,
         ),
         Some(Command::Version(_)) => {
@@ -624,6 +670,107 @@ fn run_mcp(
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
         mcp_commands::run(&vault, agent, identity)
+    })();
+    finish_vault_result(result)
+}
+
+fn run_set(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    query: &str,
+    value: Option<String>,
+    stdin_value: bool,
+    allow_empty: bool,
+    force: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        let value = if stdin_value {
+            let mut line = String::new();
+            io::stdin()
+                .read_line(&mut line)
+                .map_err(|error| format!("read --stdin-value: {error}"))?;
+            if line.is_empty() {
+                return Err("read --stdin-value: EOF".to_owned());
+            }
+            line.trim_end_matches(['\r', '\n']).to_owned()
+        } else if let Some(value) = value {
+            value
+        } else {
+            interactive_set_value(query, allow_empty)?
+        };
+        let path = write_commands::set_value(&vault, &identity, query, value, allow_empty, force)?;
+        if !quiet {
+            println!("Entry saved: {path}");
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn interactive_set_value(query: &str, allow_empty: bool) -> Result<String, String> {
+    let field = query
+        .rsplit_once('.')
+        .map(|(_, field)| if field.is_empty() { "password" } else { field })
+        .unwrap_or("password");
+    let value = session_input::read_passphrase(&format!("Enter value for {field}: "))?.to_string();
+    if write_commands::sensitive_field(field) && !value.is_empty() {
+        let confirmation = session_input::read_passphrase(&format!("Confirm value for {field}: "))?;
+        if confirmation.as_str() != value {
+            return Err("values do not match".to_owned());
+        }
+    }
+    if value.is_empty() && write_commands::sensitive_field(field) && !allow_empty {
+        return Err(format!(
+            "cannot set empty value for sensitive field {field:?} (use --allow-empty to override)"
+        ));
+    }
+    Ok(value)
+}
+
+fn run_delete(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    path: &str,
+    yes: bool,
+    json: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        if !yes {
+            eprint!("Delete {path}? (y/N): ");
+            io::stderr()
+                .flush()
+                .map_err(|error| format!("delete confirmation prompt: {error}"))?;
+            let mut answer = String::new();
+            io::stdin()
+                .read_line(&mut answer)
+                .map_err(|error| format!("delete confirmation: {error}"))?;
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({"deleted": false, "path": path, "canceled": true})
+                    );
+                } else if !quiet {
+                    eprintln!("Canceled");
+                }
+                return Ok::<(), String>(());
+            }
+        }
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        write_commands::delete(&vault, &identity, path)?;
+        if json {
+            println!("{}", serde_json::json!({"deleted": true, "path": path}));
+        } else if !quiet {
+            println!("Deleted: {path}");
+        }
+        Ok::<(), String>(())
     })();
     finish_vault_result(result)
 }
