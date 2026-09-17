@@ -73,7 +73,7 @@ struct ProfileData {
     name: String,
     tier: Option<String>,
     approval_mode: Option<String>,
-    allowed_paths: Vec<String>,
+    allowed_paths: Option<Vec<String>>,
     redact_fields: Option<Vec<String>>,
     per_tool_redact_fields: Option<BTreeMap<String, Vec<String>>>,
     can_write: Option<bool>,
@@ -136,8 +136,14 @@ impl ProfileData {
             approval_mode: emits("approvalMode")
                 .then(|| profile.approval_mode.clone())
                 .flatten(),
-            allowed_paths: profile.allowed_paths.clone(),
-            redact_fields: raw("redactFields").map(|_| profile.redact_fields.clone()),
+            allowed_paths: if fields.contains_key("allowedPaths")
+                && profile.allowed_paths.is_empty()
+            {
+                None
+            } else {
+                Some(profile.allowed_paths.clone())
+            },
+            redact_fields: raw_nonempty_slice(fields, "redactFields", &profile.redact_fields),
             per_tool_redact_fields: raw("perToolRedactFields").and_then(parse_value),
             can_write: emits("canWrite").then_some(profile.can_write),
             can_run_commands: emits("canRunCommands").then_some(profile.can_run_commands),
@@ -155,14 +161,22 @@ impl ProfileData {
             auto_unseal: emits("autoUnseal").then_some(profile.auto_unseal),
             require_approval: emits("requireApproval").then_some(profile.require_approval),
             approval_timeout: raw("approvalTimeout").map(|_| profile.approval_timeout),
-            allowed_tools: raw("allowed_tools").map(|_| profile.allowed_tools.clone()),
+            allowed_tools: raw_nonempty_slice(fields, "allowed_tools", &profile.allowed_tools),
             max_reads_per_hour: raw("max_reads_per_hour").map(|_| profile.max_reads_per_hour),
             max_reads_per_day: raw("max_reads_per_day").map(|_| profile.max_reads_per_day),
             max_secrets_in_session: raw("max_secrets_in_session")
                 .map(|_| profile.max_secrets_in_session),
             dynamic_providers: raw("dynamicProviders").and_then(parse_value),
-            allowed_env_vars: raw("allowedEnvVars").map(|_| profile.allowed_env_vars.clone()),
-            allowed_executables: if tier_sets_capabilities || raw("allowedExecutables").is_some() {
+            allowed_env_vars: raw_nonempty_slice(
+                fields,
+                "allowedEnvVars",
+                &profile.allowed_env_vars,
+            ),
+            allowed_executables: if tier_sets_capabilities {
+                (!profile.allowed_executables.is_empty())
+                    .then_some(profile.allowed_executables.clone())
+            } else if raw("allowedExecutables").is_some() && !profile.allowed_executables.is_empty()
+            {
                 Some(profile.allowed_executables.clone())
             } else {
                 None
@@ -189,6 +203,13 @@ where
     T: serde::de::DeserializeOwned,
 {
     serde_yaml_ng::from_value(value.clone()).ok()
+}
+
+fn raw_nonempty_slice(fields: &SourceFields, field: &str, value: &[String]) -> Option<Vec<String>> {
+    fields
+        .contains_key(field)
+        .then(|| (!value.is_empty()).then(|| value.to_owned()))
+        .flatten()
 }
 
 fn format_duration(value: Duration) -> String {
@@ -235,8 +256,10 @@ impl serde::Serialize for YamlProfile<'_> {
 
         optional!("tier", data.tier);
         optional!("approvalMode", data.approval_mode);
-        if !data.allowed_paths.is_empty() {
-            state.serialize_field("allowedPaths", &data.allowed_paths)?;
+        if let Some(value) = &data.allowed_paths {
+            if !value.is_empty() {
+                state.serialize_field("allowedPaths", value)?;
+            }
         }
         optional_nonempty!("redactFields", data.redact_fields);
         optional_nonempty!("perToolRedactFields", data.per_tool_redact_fields);
@@ -329,7 +352,7 @@ mod tests {
             name: "demo".into(),
             tier: Some("standard".into()),
             approval_mode: Some("prompt".into()),
-            allowed_paths: vec!["team/*".into()],
+            allowed_paths: Some(vec!["team/*".into()]),
             redact_fields: None,
             per_tool_redact_fields: None,
             can_write: Some(false),

@@ -112,6 +112,25 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
         );
     }
 
+    let empty_home = temporary_root("empty-fields-home");
+    let empty_vault = empty_home.join("vault");
+    fs::create_dir_all(&empty_vault).expect("empty fields vault");
+    fs::write(
+        empty_vault.join("config.yaml"),
+        "agents:\n  demo:\n    allowedPaths: []\n    redactFields: []\n    allowed_tools: []\n    allowedEnvVars: []\n    allowedExecutables: []\n    dynamicProviders: {}\n    perToolRedactFields: {}\n",
+    )
+    .expect("empty fields config");
+    for output in ["yaml", "json"] {
+        let args = ["agent", "profile", "show", "demo", "--output", output];
+        let go = run(&go_binary, &args, &empty_home, &empty_vault);
+        let rust = run(&rust_binary, &args, &empty_home, &empty_vault);
+        assert_same(
+            &go,
+            &rust,
+            &format!("agent profile show empty fields --output {output}"),
+        );
+    }
+
     let escape_home = temporary_root("escape-home");
     let escape_vault = escape_home.join("vault");
     fs::create_dir_all(&escape_vault).expect("escape vault");
