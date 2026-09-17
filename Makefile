@@ -849,10 +849,10 @@ export-differential:
 .PHONY: mcp-call-fixtures-check mcp-call-differential
 mcp-call-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpcallgen -check
-	SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP)Fixture$$' -count=1
+	SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry)Fixture$$' -count=1
 
 mcp-call-differential: mcp-call-fixtures-check
-	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --locked
+	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --locked
 
 .PHONY: export-cli-fixtures-check
 export-cli-fixtures-check:

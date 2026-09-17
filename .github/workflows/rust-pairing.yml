@@ -2,11 +2,9 @@ name: Rust pairing differential
 
 on:
   push:
-    # Integration branches are included, as in rust-store.yml: this workflow
-    # does not exist on the default branch yet, so workflow_dispatch cannot
-    # reach it, and a branch push is the only way to obtain native evidence
-    # before the single bundled pull request.
-    branches: [ main, 'migration/**' ]
+    # Pull requests already run the same native matrix before merge.
+    # Limit push events to main so each migration batch runs it once.
+    branches: [ main ]
     # Explicit allowlist rather than ci.yml's docs-only paths-ignore: a change
     # to the handshake contract must execute this gate instead of producing an
     # untested claim.
