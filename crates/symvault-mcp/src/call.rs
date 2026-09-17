@@ -411,24 +411,6 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             return Ok(ToolCallResult::error(format!("entry not found: {path}")));
         };
 
-        if entry.classification >= 3 && !self.config.auto_unseal {
-            return self.sealed_entry_response(path, &entry);
-        }
-
-        let max_secrets = self.config.max_secrets_in_session;
-        let field_count = i64::try_from(entry.fields.len()).unwrap_or(i64::MAX);
-        if max_secrets > 0 {
-            let used = self.secrets_accessed.load(Ordering::Acquire);
-            let next = used.saturating_add(field_count);
-            if next > max_secrets {
-                return Ok(ToolCallResult::error(format!(
-                    "max secrets per session exceeded ({next}/{max_secrets})"
-                )));
-            }
-        }
-        self.secrets_accessed
-            .fetch_add(field_count, Ordering::AcqRel);
-
         let mut redact = self.config.redact_fields.clone().unwrap_or_default();
         if entry.secret_type == "payment" && !self.config.expose_payment_values {
             redact.extend(
@@ -451,6 +433,24 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             entry.expires_at = None;
             entry.classification = 0;
         }
+
+        if entry.classification >= 3 && !self.config.auto_unseal {
+            return self.sealed_entry_response(path, &entry);
+        }
+
+        let max_secrets = self.config.max_secrets_in_session;
+        let field_count = i64::try_from(entry.fields.len()).unwrap_or(i64::MAX);
+        if max_secrets > 0 {
+            let used = self.secrets_accessed.load(Ordering::Acquire);
+            let next = used.saturating_add(field_count);
+            if next > max_secrets {
+                return Ok(ToolCallResult::error(format!(
+                    "max secrets per session exceeded ({next}/{max_secrets})"
+                )));
+            }
+        }
+        self.secrets_accessed
+            .fetch_add(field_count, Ordering::AcqRel);
         let mut data = Map::new();
         for (field, value) in entry.fields {
             data.insert(field.clone(), wrap_data_field(&field, value)?);

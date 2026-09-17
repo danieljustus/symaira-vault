@@ -91,6 +91,16 @@ func TestGenerateMCPGetValueFixture(t *testing.T) {
 			call: `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_entry_value","arguments":{"path":"secret"}}}`,
 		},
 		{
+			name: "classified_redacted",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"},
+				CanReadValues: config.BoolPtr(true), ExposeValueTools: config.BoolPtr(true),
+				AutoUnseal: config.BoolPtr(false), ApprovalMode: config.StrPtr("none"),
+				RedactFields: []string{"password"},
+			},
+			call: `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"get_entry_value","arguments":{"path":"classified"}}}`,
+		},
+		{
 			name: "explicit_allowed_redacted",
 			profile: config.AgentProfile{
 				Name: "fixture", AllowedPaths: []string{"*"},
@@ -210,6 +220,10 @@ func mcpGetValueFixtureVault(t *testing.T) (string, *age.X25519Identity) {
 		Data:           map[string]any{"password": "testpass123"},
 		Classification: taint.Secret,
 	}
+	classified := &vault.Entry{
+		Data:           map[string]any{"password": "classified-secret"},
+		Classification: taint.Secret,
+	}
 	payment := &vault.Entry{
 		Data: map[string]any{
 			"card_number": "4111111111111111",
@@ -221,6 +235,7 @@ func mcpGetValueFixtureVault(t *testing.T) (string, *age.X25519Identity) {
 	quarantine := &vault.Entry{Data: map[string]any{"password": "quarantined"}}
 	for path, entry := range map[string]*vault.Entry{
 		"secret":         secret,
+		"classified":     classified,
 		"payment":        payment,
 		"quarantine/bad": quarantine,
 	} {

@@ -64,6 +64,9 @@ fn fixture_entries() -> Vec<ReadOnlyEntry> {
     let mut quarantine = BTreeMap::new();
     quarantine.insert("password".into(), Value::String("quarantined".into()));
 
+    let mut classified = BTreeMap::new();
+    classified.insert("password".into(), Value::String("classified-secret".into()));
+
     vec![
         ReadOnlyEntry {
             path: "secret".into(),
@@ -84,6 +87,15 @@ fn fixture_entries() -> Vec<ReadOnlyEntry> {
             ..ReadOnlyEntry::default()
         },
         ReadOnlyEntry {
+            path: "classified".into(),
+            fields: classified,
+            created: "<fixture-time>".into(),
+            updated: "<fixture-time>".into(),
+            version: 1,
+            classification: 3,
+            ..ReadOnlyEntry::default()
+        },
+        ReadOnlyEntry {
             path: "quarantine/bad".into(),
             fields: quarantine,
             created: "<fixture-time>".into(),
@@ -98,6 +110,7 @@ fn runtime(case_name: &str) -> Arc<ReadOnlyRuntime<MemoryStore>> {
     let (allowed_paths, redact_fields) = match case_name {
         "denied_scope" => (vec!["allowed/*".into()], None),
         "explicit_allowed_redacted" => (vec!["*".into()], Some(vec!["note".into()])),
+        "classified_redacted" => (vec!["*".into()], Some(vec!["password".into()])),
         _ => (vec!["*".into()], None),
     };
     let config = ReadOnlyRuntimeConfig {
@@ -107,7 +120,7 @@ fn runtime(case_name: &str) -> Arc<ReadOnlyRuntime<MemoryStore>> {
         agent_name: "fixture".into(),
         approval_mode: "none".into(),
         can_read_values: true,
-        auto_unseal: case_name != "default_sealed",
+        auto_unseal: !matches!(case_name, "default_sealed" | "classified_redacted"),
         available_tools: read_only_tool_names(),
         allowed_paths,
         redact_fields,
