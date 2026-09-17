@@ -119,11 +119,13 @@ fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> 
 
     let manifest = root.join("manifest.age");
     let old_manifest = read_optional(store, &manifest)?;
-    if let Some(old_manifest) = old_manifest.as_deref()
-        && let Err(error) = store.rebuild_manifest_locked(identity)
-    {
+    if let Err(error) = store.rebuild_manifest_locked(identity) {
         let rollback = rollback_locked(store, &entries);
-        let restore = crate::publication::replace(&manifest, old_manifest, &store.root_cap);
+        let restore = if let Some(old_manifest) = old_manifest.as_deref() {
+            crate::publication::replace(&manifest, old_manifest, &store.root_cap)
+        } else {
+            store.remove_path(&manifest).map(|_| ())
+        };
         let cleanup = if rollback.is_ok() && restore.is_ok() {
             remove_journal(store)
         } else {

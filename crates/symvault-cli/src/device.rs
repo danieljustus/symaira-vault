@@ -241,26 +241,27 @@ pub(crate) fn reencrypt_all_entries(
                     };
                 }
 
-                if manifest.is_some() {
-                    if let Err(error) = store.rebuild_manifest_locked(identity) {
-                        let rollback = rollback_reencrypt_journal_locked(&vault);
-                        let restore_manifest = manifest.as_ref().map(|snapshot| {
+                if let Err(error) = store.rebuild_manifest_locked(identity) {
+                    let rollback = rollback_reencrypt_journal_locked(&vault);
+                    let restore_manifest = Some(match manifest.as_ref() {
+                        Some(snapshot) => {
                             restore_file(&snapshot.path, &snapshot.bytes, &snapshot.metadata)
-                        });
-                        let cleanup = if rollback.is_ok()
-                            && restore_manifest.as_ref().is_some_and(Result::is_ok)
-                        {
-                            remove_reencrypt_journal(&vault)
-                        } else {
-                            Ok(())
-                        };
-                        return Err(format_manifest_failure(
-                            error.to_string(),
-                            rollback,
-                            restore_manifest,
-                            cleanup,
-                        ));
-                    }
+                        }
+                        None => remove_file_if_exists(&vault.join("manifest.age")),
+                    });
+                    let cleanup = if rollback.is_ok()
+                        && restore_manifest.as_ref().is_some_and(Result::is_ok)
+                    {
+                        remove_reencrypt_journal(&vault)
+                    } else {
+                        Ok(())
+                    };
+                    return Err(format_manifest_failure(
+                        error.to_string(),
+                        rollback,
+                        restore_manifest,
+                        cleanup,
+                    ));
                 }
                 let current = load_reencrypt_journal(&vault)?;
                 verify_installed_targets(&current)?;
@@ -445,6 +446,14 @@ fn restore_metadata(path: &Path, metadata: &FileMetadata) -> Result<(), String> 
 fn restore_file(path: &Path, bytes: &[u8], metadata: &FileMetadata) -> Result<(), String> {
     safeio::write_atomic(path, bytes).map_err(|e| e.to_string())?;
     restore_metadata(path, metadata)
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("remove {}: {error}", path.display())),
+    }
 }
 
 fn journal_path(root: &Path) -> PathBuf {
@@ -792,11 +801,14 @@ fn stage_and_install_reencrypted(
     for (index, file) in files.iter().enumerate() {
         let temp = artifact_path(&file.path, "tmp", seed, index)?;
         let backup = artifact_path(&file.path, "backup", seed, index)?;
+        // Go rejects journals that name artifacts before recording the
+        // replacement digest. The replacement is already held in memory, so
+        // make every artifact-bearing journal state recoverable by Go.
+        journal.entries[index].digest = digest(&file.replacement);
         journal.entries[index].temp = journal_string(root, &temp)?;
         journal.entries[index].backup = journal_string(root, &backup)?;
         persist_reencrypt_journal(root, journal)?;
         stage_reencrypted_file(file, &temp)?;
-        journal.entries[index].digest = digest(&file.replacement);
         persist_reencrypt_journal(root, journal)?;
     }
 
@@ -1609,6 +1621,7 @@ mod tests {
             assert!(!temp.exists());
             assert!(!backup.exists());
             assert!(!journal_path(&root).exists());
+            assert!(root.join("manifest.age").is_file());
             let _ = fs::remove_dir_all(root);
         }
     }
