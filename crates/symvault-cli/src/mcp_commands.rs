@@ -32,6 +32,7 @@ pub fn run(
     agent: &str,
     identity: Identity,
     keyring: &dyn Keyring,
+    status: impl FnOnce() -> (bool, String, bool, String),
 ) -> Result<(), String> {
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
@@ -54,7 +55,13 @@ pub fn run(
     .map_err(|error| format!("open audit logger: {error}"))?;
     let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
     let policy = load_policy_engine(root)?;
-    let runtime_config = runtime_config(root, profile, agent_name);
+    let mut runtime_config = runtime_config(root, profile, agent_name);
+    let (touch_id_available, backend, persistent, message) = status();
+    runtime_config.auth_method = config.effective_auth_method().as_str().to_owned();
+    runtime_config.touch_id_available = touch_id_available;
+    runtime_config.cache_backend = backend;
+    runtime_config.cache_persistent = persistent;
+    runtime_config.cache_message = message;
     let mut handler = ProtocolHandler::with_store_read_only_runtime_and_audit(
         "symaira",
         "1.0.0",

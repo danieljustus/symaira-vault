@@ -5,6 +5,7 @@ mod audit_commands;
 mod backup_commands;
 mod config;
 mod device;
+mod edit_commands;
 mod export_commands;
 mod file_commands;
 mod history_commands;
@@ -15,6 +16,7 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod template_commands;
 mod utility_commands;
 mod vault_commands;
 mod verify_commands;
@@ -146,6 +148,14 @@ enum Command {
         #[arg(long)]
         expires_at: Option<String>,
     },
+    /// Edit an entry using an external editor.
+    #[command(alias = "modify")]
+    Edit {
+        #[arg(value_name = "NAME")]
+        name: String,
+        #[arg(long)]
+        editor: Option<String>,
+    },
     /// List password entries.
     List {
         #[arg(value_name = "PREFIX")]
@@ -189,6 +199,11 @@ enum Command {
     Recipients {
         #[command(subcommand)]
         command: RecipientsCommand,
+    },
+    /// Generate configuration files from built-in templates.
+    Template {
+        #[command(subcommand)]
+        command: TemplateCommand,
     },
     /// Create a compressed vault backup archive.
     Backup {
@@ -458,6 +473,23 @@ enum DeviceCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum TemplateCommand {
+    Generate {
+        #[arg(long = "type")]
+        kind: String,
+        #[arg(long)]
+        output: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value = "app")]
+        name: String,
+        #[arg(long, default_value = "")]
+        prefix: String,
+        refs: Vec<String>,
+    },
+}
+
 #[derive(Debug, Args)]
 struct VersionArgs {
     #[arg(value_name = "ARG", num_args = 0.., trailing_var_arg = true, allow_hyphen_values = true)]
@@ -527,6 +559,26 @@ fn main() -> ExitCode {
             stdin_totp_secret,
             cli.quiet,
         ),
+        Some(Command::Edit { name, editor }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&vault)?;
+                let identity = device::unlock_vault(&vault)?;
+                edit_commands::edit(
+                    &vault,
+                    &identity,
+                    &edit_commands::EditOptions {
+                        path: name.clone(),
+                        editor: editor.unwrap_or_default(),
+                    },
+                )?;
+                if !cli.quiet {
+                    println!("Entry updated: {name}");
+                }
+                Ok::<(), String>(())
+            })();
+            finish_vault_result(result)
+        }
         Some(Command::List { prefix }) => run_list(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -720,6 +772,42 @@ fn main() -> ExitCode {
                 cli.quiet,
             ),
         },
+        Some(Command::Template {
+            command:
+                TemplateCommand::Generate {
+                    kind,
+                    output,
+                    dry_run,
+                    name,
+                    prefix,
+                    refs,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&vault)?;
+                let identity = device::unlock_vault(&vault)?;
+                let rendered = template_commands::generate(
+                    &vault, &identity, &kind, &name, &prefix, &refs, dry_run,
+                )?;
+                if let Some(path) = output {
+                    symvault_sync::safeio::write_atomic(Path::new(&path), rendered.as_bytes())
+                        .map_err(|error| format!("write output file: {error}"))?;
+                    if cli.json || cli.output.as_deref() == Some("json") {
+                        println!(
+                            "{}",
+                            serde_json::json!({"output_path": path, "dry_run": dry_run})
+                        );
+                    } else {
+                        println!("Template written to: {path}");
+                    }
+                } else {
+                    println!("{rendered}");
+                }
+                Ok::<(), String>(())
+            })();
+            finish_vault_result(result)
+        }
         Some(Command::Device { command }) => {
             let vault = match resolve_vault(cli.vault.as_deref(), cli._profile.as_deref()) {
                 Ok(vault) => vault,
@@ -1473,7 +1561,15 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
-        mcp_commands::run(&vault, agent, identity, keyring)
+        mcp_commands::run(&vault, agent, identity, keyring, || {
+            let cache = runtime.cache_status();
+            (
+                touch_id_available(),
+                cache.backend,
+                cache.persistent,
+                cache.message,
+            )
+        })
     })();
     finish_vault_result(result)
 }

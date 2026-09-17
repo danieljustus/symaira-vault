@@ -554,7 +554,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -849,11 +849,15 @@ export-differential:
 .PHONY: mcp-call-fixtures-check mcp-call-differential
 mcp-call-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpcallgen -check
-	SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry)Fixture$$' -count=1
+	SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus)Fixture$$' -count=1
 
 mcp-call-differential: mcp-call-fixtures-check
-	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --locked
+	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --locked
 
 .PHONY: export-cli-fixtures-check
 export-cli-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd/admin -run '^TestExportFixture$$' -count=1
+
+.PHONY: reencrypt-journal-differential
+reencrypt-journal-differential:
+	$(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1

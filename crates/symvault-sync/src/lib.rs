@@ -16,6 +16,7 @@ pub mod pairing;
 pub mod recipients;
 pub mod reconcile;
 pub mod safeio;
+pub mod template;
 pub mod winner;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};

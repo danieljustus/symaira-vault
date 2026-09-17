@@ -1,7 +1,7 @@
 //! Go-compatible post-mutation Git history for encrypted vault entries.
 //!
-//! The vault mutation remains successful when Git is not configured or the
-//! repository is absent. Callers can surface a returned error as a warning,
+//! The vault mutation remains successful when the repository is absent.
+//! Callers can surface a returned error as a warning,
 //! matching Go's `AutoCommitEntry` behavior after the encrypted write.
 
 use std::path::Path;

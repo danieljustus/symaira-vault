@@ -1974,3 +1974,97 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     fs::remove_dir_all(root).expect("cleanup file use vault");
     fs::remove_dir_all(fixture_dir).expect("cleanup file use fixtures");
 }
+
+#[test]
+fn builtin_templates_match_go_cli() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = temporary_root("template-home");
+    let root = temporary_root("template-vault");
+    fs::create_dir_all(&home).unwrap();
+    assert_success(
+        &run(
+            &rust_binary,
+            &["init", "--auth", "passphrase"],
+            &root,
+            &home,
+        ),
+        "init template vault",
+    );
+    assert_success(
+        &run(
+            &rust_binary,
+            &[
+                "set",
+                "work/item.password",
+                "--value",
+                "<strong&secret>123!",
+                "--force",
+            ],
+            &root,
+            &home,
+        ),
+        "set template value",
+    );
+    for kind in [
+        "env",
+        "docker-compose",
+        "k8s-secret",
+        "github-actions",
+        "terraform",
+    ] {
+        for refs in [
+            vec!["TOKEN=work/item.password", "İΣ=op://work/item/password"],
+            vec!["--prefix", "work/"],
+            vec!["--dry-run", "TOKEN=missing.password"],
+        ] {
+            let mut args = vec!["template", "generate", "--type", kind, "--name", "sample"];
+            args.extend(refs);
+            let go = run(&go_binary, &args, &root, &home);
+            let rust = run(&rust_binary, &args, &root, &home);
+            assert_success(&go, kind);
+            assert_success(&rust, kind);
+            assert_eq!(rust.stdout, go.stdout, "{kind} {args:?}");
+        }
+    }
+    let output = root.join("rendered.env");
+    let args = [
+        "template",
+        "generate",
+        "--type",
+        "env",
+        "--output",
+        output.to_str().unwrap(),
+        "TOKEN=work/item.password",
+    ];
+    assert_success(&run(&go_binary, &args, &root, &home), "Go template file");
+    let expected = fs::read(&output).unwrap();
+    fs::remove_file(&output).unwrap();
+    assert_success(
+        &run(&rust_binary, &args, &root, &home),
+        "Rust template file",
+    );
+    assert_eq!(fs::read(&output).unwrap(), expected);
+    let custom = home.join(".config/symvault/templates");
+    fs::create_dir_all(&custom).unwrap();
+    fs::write(custom.join("env.tmpl"), "custom override").unwrap();
+    let rejected = run(
+        &rust_binary,
+        &[
+            "template",
+            "generate",
+            "--type",
+            "env",
+            "TOKEN=work/item.password",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("custom Go templates"));
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(home).unwrap();
+}
