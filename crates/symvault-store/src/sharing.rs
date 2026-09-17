@@ -1,9 +1,9 @@
-//! Read-only MCP share grant storage.
+//! MCP share grant storage.
 //!
 //! The Go MCP server stores grants in `mcp-shares.json`.  This module only
 //! reads that file and verifies cryptographically bound IDs with an injected
-//! signing key.  It deliberately does not create, approve, revoke, or delete
-//! grants; those mutations remain outside this bounded storage slice.
+//! signing key.  The only mutation here is the bounded revoke operation,
+//! which uses the store's existing lock and atomic publication primitives.
 
 use std::{collections::BTreeMap, io, path::Path};
 
@@ -11,7 +11,7 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
-use crate::{StoreError, read_open_regular_with_metadata};
+use crate::{Store, StoreError, read_open_regular_with_metadata};
 
 /// The Go share-store file name used below a vault directory.
 pub const SHARE_STORE_FILE: &str = "mcp-shares.json";
@@ -192,6 +192,50 @@ impl ShareStore {
         let store = Self::read(path)?;
         store.verified_grants(signing_key)?;
         Ok(store)
+    }
+
+    /// Revokes one grant in the store-owned `mcp-shares.json` file.
+    ///
+    /// The current file is reloaded after acquiring the vault write lock, so a
+    /// stale snapshot cannot overwrite grants created by another process.
+    /// Go permits revocation of every status except `revoked` and `rejected`;
+    /// the same exact status predicate is retained here. `now` is injected so
+    /// tests and callers do not depend on the host clock.
+    pub fn revoke(
+        &mut self,
+        store: &Store,
+        grant_id: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let now = time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
+            .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?;
+        let _lock = store.acquire_write_lock()?;
+        let path = store.root().join(SHARE_STORE_FILE);
+        let mut current = Self::read(&path)?;
+        let position = current
+            .grants
+            .iter()
+            .position(|grant| grant.id == grant_id)
+            .ok_or_else(|| StoreError::Config(format!("share grant {grant_id} not found")))?;
+        if matches!(
+            current.grants[position].status.as_str(),
+            "revoked" | "rejected"
+        ) {
+            return Err(StoreError::Config(format!(
+                "share grant {grant_id} cannot be revoked (status: {})",
+                current.grants[position].status
+            )));
+        }
+        current.grants[position].status = "revoked".into();
+        current.grants[position].revoked_at = Some(now);
+        let revoked = current.grants[position].clone();
+        let bytes = encode_store(&current)?;
+        let target = store.root().join(SHARE_STORE_FILE);
+        crate::publication::replace(&target, &bytes, &store.root_cap)?;
+        *self = current;
+        Ok(revoked)
     }
 
     /// Returns grants where `agent` is either the source or target agent.
@@ -434,6 +478,21 @@ fn is_zero(value: &i64) -> bool {
     *value == 0
 }
 
+fn encode_store(store: &ShareStore) -> Result<Vec<u8>, StoreError> {
+    #[derive(Serialize)]
+    struct ShareStoreFile<'a> {
+        version: i64,
+        grants: &'a [ShareGrant],
+    }
+    let mut bytes = serde_json::to_vec_pretty(&ShareStoreFile {
+        version: SHARE_STORE_VERSION,
+        grants: &store.grants,
+    })
+    .map_err(|error| StoreError::Config(format!("encode share store: {error}")))?;
+    bytes.push(b'\n');
+    Ok(bytes)
+}
+
 fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -497,6 +556,22 @@ mod tests {
         let root = tempfile::tempdir().expect("fixture directory");
         let path = root.path().canonicalize().unwrap().join(SHARE_STORE_FILE);
         (root, path)
+    }
+
+    fn store_fixture() -> (TempDir, Store, PathBuf) {
+        let root = tempfile::tempdir().expect("vault directory");
+        fs::write(
+            root.path().join("config.yaml"),
+            "vault:\n  format_version: 1\n",
+        )
+        .expect("vault config");
+        fs::write(root.path().join("identity.age"), b"fixture identity marker")
+            .expect("identity marker");
+        fs::create_dir(root.path().join("entries")).expect("entries directory");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root.path(), &identity).expect("open vault");
+        let path = root.path().join(SHARE_STORE_FILE);
+        (root, store, path)
     }
 
     #[test]
@@ -653,5 +728,51 @@ mod tests {
         .expect("write non-ascii fixture");
         let store = ShareStore::read(&path).expect("read non-ascii fixture");
         assert!(store.verified_grants(Some(GO_KEY)).is_err());
+    }
+
+    #[test]
+    fn revoke_reloads_current_file_and_preserves_concurrent_grants() {
+        let (_root, store, path) = store_fixture();
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write initial shares");
+        let mut snapshot = ShareStore::read(&path).expect("read initial shares");
+        // Simulate another writer adding a grant after this caller's snapshot.
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"},{"id":"grant-b","from_agent":"other","to_agent":"target","secret_path":"prod/b","status":"approved","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write concurrent share");
+
+        let revoked = snapshot
+            .revoke(&store, "grant-a", "2026-01-02T04:00:00Z")
+            .expect("revoke current grant");
+        assert_eq!(revoked.status, "revoked");
+        assert_eq!(revoked.revoked_at.as_deref(), Some("2026-01-02T04:00:00Z"));
+        let persisted = ShareStore::read(&path).expect("read persisted shares");
+        assert_eq!(persisted.grants().len(), 2);
+        assert_eq!(persisted.list(None)[0].status, "revoked");
+        assert!(persisted.grants().iter().any(|grant| grant.id == "grant-b"));
+        assert_eq!(snapshot.grants(), persisted.grants());
+    }
+
+    #[test]
+    fn revoke_matches_go_not_found_and_terminal_status_errors_without_writing() {
+        let (_root, store, path) = store_fixture();
+        let original = br#"{"version":1,"grants":[{"id":"done","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"revoked","created_at":"2026-01-02T03:04:05Z","revoked_at":"2026-01-02T03:30:00Z"}]}"#;
+        fs::write(&path, original).expect("write terminal share");
+        let mut snapshot = ShareStore::read(&path).expect("read terminal share");
+        let missing = snapshot
+            .revoke(&store, "missing", "2026-01-02T04:00:00Z")
+            .expect_err("missing grant must fail");
+        assert!(missing.to_string().contains("not found"));
+        assert_eq!(fs::read(&path).expect("read unchanged shares"), original);
+        let terminal = snapshot
+            .revoke(&store, "done", "2026-01-02T04:00:00Z")
+            .expect_err("revoked grant must fail");
+        assert!(terminal.to_string().contains("cannot be revoked"));
+        assert_eq!(fs::read(&path).expect("read unchanged shares"), original);
     }
 }
