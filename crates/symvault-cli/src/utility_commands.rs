@@ -5,7 +5,9 @@
 //! the utility command instead of inventing a second command contract.
 
 use serde::Serialize;
-use std::io::{Read, Write};
+#[cfg(test)]
+use std::io::Read;
+use std::io::Write;
 use symvault_core::password::{self, GeneratedPassword};
 
 #[derive(Serialize)]
@@ -42,6 +44,8 @@ pub fn generate_password(length: i64, use_symbols: bool) -> Result<GeneratedPass
 }
 
 /// Deterministic seam for Go/Rust fixture comparisons.
+#[cfg(test)]
+#[allow(dead_code)] // Used by integration tests that include this module.
 pub fn generate_password_with_reader<R: Read>(
     length: i64,
     use_symbols: bool,

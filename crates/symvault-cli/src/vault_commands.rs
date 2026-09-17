@@ -250,6 +250,8 @@ pub fn write_list<W: Write>(
 }
 
 /// Writes get output. Field reads never print surrounding entry metadata.
+#[cfg(test)]
+#[allow(dead_code)] // Used by integration tests that include this module.
 pub fn write_get<W: Write>(
     output: &mut W,
     result: &GetResult,
