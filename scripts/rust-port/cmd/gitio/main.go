@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/git"
@@ -180,21 +181,24 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 	result := git.PushWithResult(dir)
 	projection := pushProjection(result)
 	if id == "GIT-002-go-askpass" {
-		observed, err := os.ReadFile(marker)
+		observed, err := os.ReadFile(marker) // #nosec G304 -- marker is a private temporary fixture file within the isolated test directory
 		if err != nil {
 			panic(fmt.Sprintf("askpass marker missing after Go push (%v)", result.Error))
 		}
 		projection["observed"] = strings.TrimSpace(string(observed))
 	}
 	if id == "GIT-002-go-timeout" {
-		pid, err := os.ReadFile(marker)
+		pid, err := os.ReadFile(marker) // #nosec G304 -- marker is a private temporary fixture file within the isolated test directory
 		fail(err)
 		pidText := strings.TrimSpace(string(pid))
-		cleaned := !processAlive(pidText)
+		pidInt, err := parsePID(pidText)
+		fail(err)
+		validPID := strconv.Itoa(pidInt)
+		cleaned := !processAlive(validPID)
 		projection["timed_out"] = errorClass(result.Error) == "timeout"
 		projection["descendant_cleanup"] = cleaned
 		if !cleaned {
-			_ = exec.Command("kill", "-KILL", pidText).Run()
+			_ = exec.Command("kill", "-KILL", validPID).Run() // #nosec G204 -- validPID is a strictly validated positive integer PID from the isolated test process
 		}
 	}
 	input := map[string]any{"remote": "ssh://git@example.invalid/repo.git"}
@@ -211,6 +215,25 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 		Input:    input,
 		Expected: projection,
 	}
+}
+
+func parsePID(raw string) (int, error) {
+	if raw == "" {
+		return 0, fmt.Errorf("empty pid")
+	}
+	for _, r := range raw {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("invalid pid %q: contains non-digit characters", raw)
+		}
+	}
+	val, err := strconv.ParseInt(raw, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid pid %q: %w", raw, err)
+	}
+	if val <= 1 {
+		return 0, fmt.Errorf("invalid pid %d: must be greater than 1", val)
+	}
+	return int(val), nil
 }
 
 func processAlive(pid string) bool {
@@ -257,19 +280,19 @@ func transportCases() []Case {
 	cases = append(cases,
 		unixSSHFailureCase("GIT-002-go-ssh-precedence", func(dir, marker string) {
 			helper := marker + ".sh"
-			fail(os.WriteFile(helper, []byte("#!/bin/sh\nprintf '%s\\n' 'known_hosts: authentication failed: connection refused' >&2\nexit 1\n"), 0o700))
+			fail(os.WriteFile(helper, []byte("#!/bin/sh\nprintf '%s\\n' 'known_hosts: authentication failed: connection refused' >&2\nexit 1\n"), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
 			setGitConfig(dir, "core.sshCommand", helper)
 		}),
 		unixSSHFailureCase("GIT-002-go-askpass", func(dir, marker string) {
 			helper := marker + ".sh"
 			body := fmt.Sprintf("#!/bin/sh\nprintf 'askpass=%%s\\nterminal_prompt=%%s\\n' \"${GIT_ASKPASS:+inherited}\" \"$GIT_TERMINAL_PROMPT\" > %s\nexit 1\n", marker)
-			fail(os.WriteFile(helper, []byte(body), 0o700))
+			fail(os.WriteFile(helper, []byte(body), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
 			setGitConfig(dir, "core.sshCommand", helper)
 		}),
 		unixSSHFailureCase("GIT-002-go-timeout", func(dir, marker string) {
 			helper := marker + ".sh"
 			body := fmt.Sprintf("#!/bin/sh\n(sleep 60) &\nprintf '%%s\\n' \"$!\" > %s\nwait\n", marker)
-			fail(os.WriteFile(helper, []byte(body), 0o700))
+			fail(os.WriteFile(helper, []byte(body), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
 			setGitConfig(dir, "core.sshCommand", helper)
 		}),
 	)
@@ -290,7 +313,7 @@ func sourceFilesAtCommit(root, commit string) []string {
 }
 
 func pinnedFile(root, commit, name string) []byte {
-	out, err := exec.Command("git", "-C", root, "show", commit+":"+name).Output()
+	out, err := exec.Command("git", "-C", root, "show", commit+":"+name).Output() // #nosec G204 -- executable is fixed git; commit is pinned oracle revision and name is from git ls-tree
 	fail(err)
 	return out
 }
@@ -298,7 +321,7 @@ func pinnedFile(root, commit, name string) []byte {
 func pinnedSourceDigest(root, commit string, files []string) string {
 	var all []byte
 	for _, name := range files {
-		current, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
+		current, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name))) // #nosec G304 -- name is a verified repository-relative path under internal/git
 		fail(err)
 		pinned := pinnedFile(root, commit, name)
 		if !bytes.Equal(current, pinned) {
@@ -319,7 +342,7 @@ func metadata(root string) Oracle {
 		panic("working-tree internal/git file set differs from pinned Go oracle")
 	}
 	generator := "scripts/rust-port/cmd/gitio/main.go"
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(generator)))
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(generator))) // #nosec G304 -- generator is a compile-time constant within the repository
 	fail(err)
 	return Oracle{
 		Commit:          oracleCommit,
@@ -331,19 +354,32 @@ func metadata(root string) Oracle {
 	}
 }
 
+func validateOutputPath(root, output string) (string, error) {
+	path := filepath.Join(root, filepath.FromSlash(output))
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("fixture output escapes repository root")
+	}
+	return path, nil
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/sync/git-io.json", "fixture path")
 	check := flag.Bool("check", false, "verify fixture")
 	flag.Parse()
 	root := rootDir()
-	path := filepath.Join(root, filepath.FromSlash(*output))
+	path, err := validateOutputPath(root, *output)
+	fail(err)
 	meta := metadata(root)
 	fixture := Fixture{SchemaVersion: 1, Oracle: meta, Cases: transportCases()}
 	data, err := json.MarshalIndent(fixture, "", "  ")
 	fail(err)
 	data = append(data, '\n')
 	if *check {
-		existing, err := os.ReadFile(path)
+		existing, err := os.ReadFile(path) // #nosec G304 -- lexical path check in developer-controlled generator, not symlink confinement
 		fail(err)
 		if string(existing) != string(data) {
 			panic(fmt.Errorf("%s is stale; regenerate from the Go oracle", *output))
