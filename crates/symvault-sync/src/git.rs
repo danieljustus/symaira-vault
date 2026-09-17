@@ -900,15 +900,18 @@ mod tests {
         #[test]
         fn timeout_kills_descendants_and_reaps_inherited_output_handles() {
             let directory = tempfile::tempdir().expect("temporary directory");
-            let command_line = format!(
-                "set {HELPER_ENV}=child&&\"{}\" --exact {HELPER_TEST} --nocapture",
-                std::env::current_exe().expect("test executable").display()
+            let launcher = directory.path().join("launch.cmd");
+            let executable = std::env::current_exe().expect("test executable");
+            let launcher_body = format!(
+                "@echo off\r\nset \"{HELPER_ENV}=child\"\r\ncall \"{}\" --exact {HELPER_TEST} --nocapture\r\n",
+                executable.display()
             );
+            fs::write(&launcher, launcher_body).expect("write helper launcher");
             let working_directory = directory.path().to_path_buf();
             let runner = thread::spawn(move || {
                 run_process_with_timeout(
                     "cmd.exe",
-                    &["/D", "/S", "/C", &command_line],
+                    &["/D", "/C", "call launch.cmd"],
                     Some(&working_directory),
                     Duration::from_secs(5),
                 )
