@@ -465,7 +465,7 @@ fn normalize_block_scalar_indentation(
     rendered: &mut String,
     source: &str,
     node_start: usize,
-    scalar_ranges: &[yaml_edit::TextPosition],
+    scalar_ranges: &[BlockScalarInfo],
 ) {
     if scalar_ranges.is_empty() {
         return;
@@ -475,13 +475,13 @@ fn normalize_block_scalar_indentation(
         .filter(|byte| *byte == b'\n')
         .count();
     let mut lines = rendered.lines().map(str::to_owned).collect::<Vec<_>>();
-    for scalar_range in scalar_ranges {
-        let header_line = source[..scalar_range.start as usize]
+    for scalar in scalar_ranges.iter().rev() {
+        let header_line = source[..scalar.range.start as usize]
             .bytes()
             .filter(|byte| *byte == b'\n')
             .count()
             .saturating_sub(node_line);
-        let end = scalar_range.end as usize;
+        let end = scalar.range.end as usize;
         let end_line = source[..end]
             .bytes()
             .filter(|byte| *byte == b'\n')
@@ -506,6 +506,27 @@ fn normalize_block_scalar_indentation(
         };
         let header_indent = lines[header_line].len() - lines[header_line].trim_start().len();
         let target_indent = header_indent + 2;
+        let raw_header = source_lines
+            .get(node_line + header_line)
+            .copied()
+            .unwrap_or_default();
+        let raw_indent = raw_header.len() - raw_header.trim_start().len();
+        let raw_marker = scalar.range.start as usize
+            - source[..scalar.range.start as usize]
+                .rfind('\n')
+                .map_or(0, |offset| offset + 1);
+        let rendered_indent = lines[header_line].len() - lines[header_line].trim_start().len();
+        let marker = raw_marker
+            .saturating_sub(raw_indent)
+            .saturating_add(rendered_indent);
+        if matches!(lines[header_line].as_bytes().get(marker), Some(b'|' | b'>')) {
+            let token_end = lines[header_line][marker + 1..]
+                .char_indices()
+                .find(|(_, character)| !matches!(character, '+' | '-' | '0'..='9'))
+                .map_or(lines[header_line].len(), |(offset, _)| marker + 1 + offset);
+            let header = canonical_block_scalar_header(scalar.style, &scalar.value);
+            lines[header_line].replace_range(marker..token_end, &header);
+        }
         for (line, output_line) in lines
             .iter_mut()
             .enumerate()
@@ -523,14 +544,49 @@ fn normalize_block_scalar_indentation(
             let relative = indent.saturating_sub(body_base);
             *output_line = format!("{}{}", " ".repeat(target_indent + relative), trimmed);
         }
+        if scalar.style == yaml_edit::ScalarStyle::Folded {
+            for line in (body_start..=body_end).rev() {
+                let Some(source_line) = source_lines.get(node_line + line) else {
+                    continue;
+                };
+                let trimmed = source_line.trim_start();
+                let indent = source_line.len() - trimmed.len();
+                if !trimmed.is_empty()
+                    && indent > body_base
+                    && lines
+                        .get(line.saturating_sub(1))
+                        .is_some_and(|previous| !previous.is_empty())
+                {
+                    lines.insert(line, String::new());
+                }
+            }
+        }
     }
     *rendered = lines.join("\n");
 }
 
-fn collect_block_scalar_ranges(
-    node: &yaml_edit::YamlNode,
-    ranges: &mut Vec<yaml_edit::TextPosition>,
-) {
+struct BlockScalarInfo {
+    range: yaml_edit::TextPosition,
+    style: yaml_edit::ScalarStyle,
+    value: String,
+}
+
+fn canonical_block_scalar_header(style: yaml_edit::ScalarStyle, value: &str) -> String {
+    let marker = match style {
+        yaml_edit::ScalarStyle::Literal => '|',
+        yaml_edit::ScalarStyle::Folded => '>',
+        _ => return String::new(),
+    };
+    let trailing_newlines = value.len() - value.trim_end_matches('\n').len();
+    let chomping = match trailing_newlines {
+        0 => "-",
+        1 => "",
+        _ => "+",
+    };
+    format!("{marker}{chomping}")
+}
+
+fn collect_block_scalar_ranges(node: &yaml_edit::YamlNode, ranges: &mut Vec<BlockScalarInfo>) {
     match node {
         yaml_edit::YamlNode::Scalar(scalar)
             if matches!(
@@ -538,7 +594,12 @@ fn collect_block_scalar_ranges(
                 yaml_edit::ScalarStyle::Literal | yaml_edit::ScalarStyle::Folded
             ) =>
         {
-            ranges.push(scalar.byte_range())
+            let parsed = yaml_edit::ScalarValue::from_scalar(scalar);
+            ranges.push(BlockScalarInfo {
+                range: scalar.byte_range(),
+                style: parsed.style(),
+                value: scalar.as_string(),
+            })
         }
         yaml_edit::YamlNode::Mapping(mapping) => {
             for (_, value) in mapping.iter() {

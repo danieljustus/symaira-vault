@@ -292,6 +292,20 @@ func inputs() []inputCase {
 			args:        []string{"config", "get", "nested", "--file", fileMarker},
 		},
 		{
+			name:        "get_nested_block_scalar_explicit_indent",
+			description: "get preserves explicit indentation indicators in nested block scalars",
+			config:      []byte("nested:\n  note: |4\n      first\n        nested\n      last\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "nested", "--file", fileMarker},
+		},
+		{
+			name:        "get_nested_sequence_block_scalars",
+			description: "get preserves block scalars nested in a sequence",
+			config:      []byte("nested:\n  items:\n    - |2\n      first\n        nested\n    - >2-\n      second\n        nested\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "nested", "--file", fileMarker},
+		},
+		{
 			name:        "get_duplicate_sibling_comments",
 			description: "get attaches comments to the selected duplicate-content sibling",
 			config:      []byte("left:\n  # left comment\n  nested:\n    same: value\nright:\n  # right comment\n  nested:\n    same: value\n"),
@@ -473,6 +487,14 @@ func inputs() []inputCase {
 			writeConfig:        true,
 			captureConfigAfter: true,
 			args:               []string{"config", "set", "value", "|\n  first\n    nested\n  last", "--file", fileMarker},
+		},
+		{
+			name:               "set_literal_explicit_indent",
+			description:        "set preserves an explicit indentation indicator in a multiline string",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|4\n    first\n      nested\n    last", "--file", fileMarker},
 		},
 		{
 			name:               "set_newline_quoted",
