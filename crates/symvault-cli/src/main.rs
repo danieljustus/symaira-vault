@@ -9,10 +9,12 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod utility_commands;
 mod vault_commands;
 mod write_commands;
 
 use std::{
+    collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
     io::{self, Write},
@@ -50,6 +52,7 @@ use symvault_platform::FallbackKeyring;
     target_os = "netbsd"
 ))]
 use symvault_platform::OsKeyring;
+use symvault_store::Store;
 use symvault_sync::GitRepository;
 use zeroize::Zeroizing;
 
@@ -114,6 +117,20 @@ enum Command {
         query: Option<String>,
         #[arg(long)]
         url: Option<String>,
+    },
+    /// Generate a secure password.
+    #[command(alias = "gen")]
+    Generate {
+        #[arg(short = 'l', long, default_value_t = 20)]
+        length: i64,
+        #[arg(short = 's', long)]
+        symbols: bool,
+        #[arg(long)]
+        store: Option<String>,
+        #[arg(long)]
+        reveal: bool,
+        #[arg(long)]
+        quiet: bool,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -330,6 +347,24 @@ fn main() -> ExitCode {
             cli._profile.as_deref(),
             query.as_deref(),
             url.as_deref(),
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Generate {
+            length,
+            symbols,
+            store,
+            reveal,
+            quiet,
+        }) => run_generate(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            length,
+            symbols,
+            store.as_deref(),
+            reveal,
+            quiet,
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
             cli.quiet,
@@ -701,6 +736,64 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+fn run_generate(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    length: i64,
+    symbols: bool,
+    store_path: Option<&str>,
+    reveal: bool,
+    command_quiet: bool,
+    output: &str,
+    json: bool,
+    global_quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let password = utility_commands::generate_password(length, symbols)?;
+        let Some(store_path) = store_path.filter(|path| !path.is_empty()) else {
+            return utility_commands::render_password(
+                &mut io::stdout().lock(),
+                password.as_str(),
+                utility_commands::OutputOptions {
+                    format: output,
+                    json,
+                    quiet: global_quiet,
+                },
+            );
+        };
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        write_commands::set_fields(
+            &vault,
+            &identity,
+            store_path,
+            BTreeMap::from([(
+                String::from("password"),
+                serde_json::Value::String(password.to_string()),
+            )]),
+        )?;
+        let store = Store::open(&vault, &identity).map_err(|error| error.to_string())?;
+        let file = store
+            .configured_entry_path(store_path, &identity)
+            .map_err(|error| error.to_string())?;
+        let file = file.to_string_lossy();
+        utility_commands::render_stored(
+            &mut io::stdout().lock(),
+            store_path,
+            &file,
+            password.as_str(),
+            utility_commands::OutputOptions {
+                format: output,
+                json,
+                quiet: command_quiet || global_quiet,
+            },
+            reveal,
+        )
+    })();
+    finish_vault_result(result)
 }
 
 fn run_export(

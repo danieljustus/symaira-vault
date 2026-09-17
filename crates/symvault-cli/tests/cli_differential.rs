@@ -170,6 +170,45 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(go_get.stdout, b"secret\n");
     assert_eq!(rust_get.stdout, go_get.stdout);
 
+    let go_generate = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "generate",
+            "--length",
+            "16",
+            "--store",
+            "generated.password",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_generate = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "generate",
+            "--length",
+            "16",
+            "--store",
+            "generated.password",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_generate, "Go generate store");
+    assert_success(&rust_generate, "Rust generate store");
+    assert_eq!(
+        first_json(&rust_generate.stdout, "Rust generate store"),
+        first_json(&go_generate.stdout, "Go generate store")
+    );
+
     let go_set_url = run(
         &go_binary,
         &[
