@@ -19,9 +19,27 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
 }
 
 fn assert_same(go: &Output, rust: &Output, case: &str) {
-    assert_eq!(rust.status, go.status, "{case}: status differs");
-    assert_eq!(rust.stdout, go.stdout, "{case}: stdout differs");
-    assert_eq!(rust.stderr, go.stderr, "{case}: stderr differs");
+    assert_eq!(
+        rust.status,
+        go.status,
+        "{case}: status differs (go stderr: {:?}; rust stderr: {:?})",
+        String::from_utf8_lossy(&go.stderr),
+        String::from_utf8_lossy(&rust.stderr)
+    );
+    assert_eq!(
+        rust.stdout,
+        go.stdout,
+        "{case}: stdout differs\ngo: {:?}\nrust: {:?}",
+        String::from_utf8_lossy(&go.stdout),
+        String::from_utf8_lossy(&rust.stdout)
+    );
+    assert_eq!(
+        rust.stderr,
+        go.stderr,
+        "{case}: stderr differs\ngo: {:?}\nrust: {:?}",
+        String::from_utf8_lossy(&go.stderr),
+        String::from_utf8_lossy(&rust.stderr)
+    );
 }
 
 #[test]
@@ -92,6 +110,7 @@ fn agent_list_matches_go_text_json_and_yaml() {
         &["agent", "list"][..],
         &["--output", "json", "agent", "list"][..],
         &["--output", "yaml", "agent", "list"][..],
+        &["--output", "future", "agent", "list"][..],
     ] {
         let go = run(&go_binary, args, root.path(), home.path());
         let rust = run(&rust_binary, args, root.path(), home.path());

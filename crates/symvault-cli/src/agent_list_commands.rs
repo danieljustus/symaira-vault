@@ -112,6 +112,9 @@ pub(crate) fn list(
                         && !is_expired(token.expires_at.as_deref())
                 })
                 .collect();
+            // Go iterates the token map in unspecified order when several active
+            // tokens exist. Keep Rust output reproducible; the differential
+            // fixture uses one active token per agent.
             let token = active.first().copied();
             let last_seen = active
                 .iter()
@@ -138,9 +141,8 @@ pub(crate) fn list(
         "" | "text" => write_text(&result, output),
         "json" => write_json(&result, quiet, output),
         "yaml" => write_yaml(&result, quiet, output),
-        other => Err(format!(
-            "unknown output format: {other:?} (valid: text, json, yaml)"
-        )),
+        // newAgentListCmd falls back to text for an unknown output value.
+        _ => write_text(&result, output),
     }
 }
 
@@ -153,7 +155,20 @@ fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
     };
     let registry: TokenRegistryFile = serde_json::from_slice(&bytes)
         .map_err(|error| format!("load token registry: parse token registry: {error}"))?;
-    Ok(registry.tokens.unwrap_or_default().into_values().collect())
+    let tokens: Vec<_> = registry.tokens.unwrap_or_default().into_values().collect();
+    for token in &tokens {
+        for timestamp in [&token.expires_at, &token.last_used_at]
+            .into_iter()
+            .flatten()
+        {
+            if timestamp_to_epoch(timestamp) == i64::MIN {
+                return Err(format!(
+                    "load token registry: parse token registry: invalid timestamp {timestamp:?}"
+                ));
+            }
+        }
+    }
+    Ok(tokens)
 }
 
 fn skill_status(home: &Path, raw_path: &str) -> (bool, bool) {
@@ -181,7 +196,13 @@ fn clean_path(path: &Path) -> PathBuf {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                if !clean.pop() && !path.is_absolute() {
+                let can_pop_normal = clean
+                    .components()
+                    .next_back()
+                    .is_some_and(|last| matches!(last, Component::Normal(_)));
+                if can_pop_normal {
+                    clean.pop();
+                } else if !path.is_absolute() {
                     clean.push(component.as_os_str());
                 }
             }
@@ -273,7 +294,7 @@ fn write_json(
     if quiet {
         return Ok(());
     }
-    let mut serializer = serde_json::Serializer::pretty(output);
+    let mut serializer = serde_json::Serializer::new(output);
     result
         .serialize(&mut serializer)
         .map_err(|error| error.to_string())?;
