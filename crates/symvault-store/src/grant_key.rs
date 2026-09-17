@@ -2,7 +2,10 @@
 
 use std::{io, path::Path};
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 use std::fs;
 
 use symvault_core::session::Keyring;
@@ -11,17 +14,27 @@ use zeroize::Zeroizing;
 
 const KEYRING_SERVICE: &str = "symaira";
 const KEYRING_ACCOUNT_PREFIX: &str = "grant-signing-key:";
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 const KEY_FILE_NAME: &str = "grant-signing-key";
 const KEY_BYTES: usize = 32;
+#[cfg(test)]
 const KEY_HEX_BYTES: usize = KEY_BYTES * 2;
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 const AGE_HEADER: &[u8] = b"age-encryption.org/";
 
 /// Returns the keyring address used by Go's grant-sharing server.
 pub fn grant_keyring_address(directory: &Path) -> io::Result<String> {
     let directory = directory.to_str().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "grant key path is not valid UTF-8")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "grant key path is not valid UTF-8",
+        )
     })?;
     if directory.contains('|') {
         return Err(io::Error::new(
@@ -29,7 +42,9 @@ pub fn grant_keyring_address(directory: &Path) -> io::Result<String> {
             "grant key path contains a reserved separator",
         ));
     }
-    Ok(format!("{KEYRING_SERVICE}|{KEYRING_ACCOUNT_PREFIX}{directory}"))
+    Ok(format!(
+        "{KEYRING_SERVICE}|{KEYRING_ACCOUNT_PREFIX}{directory}"
+    ))
 }
 
 /// Loads or creates the 32-byte grant HMAC key.
@@ -94,12 +109,18 @@ fn decode_key(encoded: &[u8]) -> io::Result<SecretBytes> {
         ));
     }
     let mut bytes = Zeroizing::new(Vec::with_capacity(KEY_BYTES));
-    for pair in encoded.chunks_exact(2) {
+    for pair in encoded.as_chunks::<2>().0 {
         let high = hex_digit(pair[0]).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid grant signing key encoding")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid grant signing key encoding",
+            )
         })?;
         let low = hex_digit(pair[1]).ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidData, "invalid grant signing key encoding")
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid grant signing key encoding",
+            )
         })?;
         bytes.push((high << 4) | low);
     }
@@ -115,7 +136,10 @@ fn hex_digit(byte: u8) -> Option<u8> {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 fn load_or_create_file_key(
     directory: &Path,
     identity: Option<&Identity>,
@@ -134,8 +158,9 @@ fn load_or_create_file_key(
                         "grant signing key identity is required",
                     )
                 })?;
-                let decrypted = symvault_crypto::decrypt(&data, identity)
-                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+                let decrypted = symvault_crypto::decrypt(&data, identity).map_err(|error| {
+                    io::Error::new(io::ErrorKind::InvalidData, error.to_string())
+                })?;
                 Zeroizing::new(decrypted)
             } else {
                 data
@@ -149,18 +174,17 @@ fn load_or_create_file_key(
                 write_file_key(&root_cap, &path, &output)?;
                 return Ok(SecretBytes::new(&bytes));
             }
-            if !encrypted {
-                if let Some(identity) = identity {
-                    let output = encrypt_file_key(&plaintext, Some(identity))?;
-                    write_file_key(&root_cap, &path, &output)?;
-                }
+            if !encrypted && let Some(identity) = identity {
+                let output = encrypt_file_key(&plaintext, Some(identity))?;
+                write_file_key(&root_cap, &path, &output)?;
             }
             Ok(SecretBytes::new(&plaintext))
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             let mut bytes = Zeroizing::new(vec![0u8; KEY_BYTES]);
-            getrandom::fill(&mut bytes)
-                .map_err(|error| io::Error::other(format!("generate grant signing key: {error}")))?;
+            getrandom::fill(&mut bytes).map_err(|error| {
+                io::Error::other(format!("generate grant signing key: {error}"))
+            })?;
             let output = encrypt_file_key(&bytes, identity)?;
             write_file_key(&root_cap, &path, &output)?;
             Ok(SecretBytes::new(&bytes))
@@ -171,7 +195,10 @@ fn load_or_create_file_key(
 
 #[cfg(all(
     unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+    any(
+        test,
+        not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+    )
 ))]
 fn read_file_key(root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
     crate::rooted::read(root_cap, Path::new(KEY_FILE_NAME), path).map_err(store_error_to_io)
@@ -179,18 +206,27 @@ fn read_file_key(root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
 
 #[cfg(all(
     not(unix),
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+    any(
+        test,
+        not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+    )
 ))]
 fn read_file_key(_root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
     crate::read_regular(path).map_err(store_error_to_io)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 fn write_file_key(root_cap: &fs::File, path: &Path, bytes: &[u8]) -> io::Result<()> {
     crate::publication::replace(path, bytes, root_cap).map_err(store_error_to_io)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
 fn store_error_to_io(error: crate::StoreError) -> io::Error {
     match error {
         crate::StoreError::Read { source, .. } | crate::StoreError::Write { source, .. } => source,
@@ -202,24 +238,26 @@ fn store_error_to_io(error: crate::StoreError) -> io::Error {
             io::ErrorKind::InvalidData,
             "grant signing key file exceeds the store read limit",
         ),
-        crate::StoreError::Symlink(_) | crate::StoreError::NotRegularFile(_) => {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "grant signing key path is not a regular file",
-            )
-        }
+        crate::StoreError::Symlink(_) | crate::StoreError::NotRegularFile(_) => io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "grant signing key path is not a regular file",
+        ),
         other => io::Error::other(other.to_string()),
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-fn encrypt_file_key(bytes: &[u8], identity: Option<&Identity>) -> io::Result<Vec<u8>> {
+#[cfg(any(
+    test,
+    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
+))]
+fn encrypt_file_key(bytes: &[u8], identity: Option<&Identity>) -> io::Result<Zeroizing<Vec<u8>>> {
     let Some(identity) = identity else {
-        return Ok(bytes.to_vec());
+        return Ok(Zeroizing::new(bytes.to_vec()));
     };
     let recipient = symvault_crypto::parse_recipient(&symvault_crypto::recipient_string(identity))
         .map_err(|error| io::Error::other(error.to_string()))?;
     symvault_crypto::encrypt(bytes, &[recipient])
+        .map(Zeroizing::new)
         .map_err(|error| io::Error::other(error.to_string()))
 }
 
@@ -248,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_keyring_value_is_rejected_without_replacement() {
+    fn malformed_keyring_value_is_regenerated_like_go() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let keyring = MemoryKeyring::new();
         let address = grant_keyring_address(directory.path()).expect("address");
@@ -272,5 +310,36 @@ mod tests {
         let loaded = load_or_create_grant_signing_key(directory.path(), &keyring, None)
             .expect("load short key");
         assert_eq!(loaded.as_bytes(), &[0xab]);
+    }
+    #[test]
+    fn file_fallback_encrypts_and_migrates_plaintext() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let first = load_or_create_file_key(&root, Some(&identity)).unwrap();
+        let path = root.join(KEY_FILE_NAME);
+        assert!(fs::read(&path).unwrap().starts_with(AGE_HEADER));
+        assert_eq!(
+            load_or_create_file_key(&root, Some(&identity))
+                .unwrap()
+                .as_bytes(),
+            first.as_bytes()
+        );
+        fs::write(&path, [17; KEY_BYTES]).unwrap();
+        let migrated = load_or_create_file_key(&root, Some(&identity)).unwrap();
+        assert_eq!(migrated.as_bytes(), &[17; KEY_BYTES]);
+        assert!(fs::read(&path).unwrap().starts_with(AGE_HEADER));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_fallback_rejects_symlink_without_changing_target() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let target = root.join("unrelated");
+        fs::write(&target, [19; KEY_BYTES]).unwrap();
+        std::os::unix::fs::symlink(&target, root.join(KEY_FILE_NAME)).unwrap();
+        assert!(load_or_create_file_key(&root, None).is_err());
+        assert_eq!(fs::read(target).unwrap(), [19; KEY_BYTES]);
     }
 }

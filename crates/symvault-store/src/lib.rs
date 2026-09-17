@@ -26,13 +26,16 @@ use zeroize::{Zeroize, Zeroizing};
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
 
+/// Go-compatible grant signing key persistence.
+pub mod grant_key;
+
 /// Pure fixed-clock write metadata preparation.
 pub mod metadata;
 
 /// Thread-safe process-local ownership of encrypted search indexes.
 pub mod search_index_store;
 
-/// Read-only access to Go-compatible MCP share grant metadata.
+/// Go-compatible MCP share metadata and atomic lifecycle updates.
 pub mod sharing;
 
 mod publication;

@@ -18,8 +18,8 @@ use symvault_core::{
 };
 use symvault_crypto::Identity;
 use symvault_mcp::{
-    ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, ToolListConfig,
-    read_only_tool_names, run_stdio, unavailable_tool,
+    ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
+    ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
 
 /// Starts the bounded native MCP stdio server for an already unlocked vault.
@@ -56,23 +56,21 @@ pub fn run(
     let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
     let policy = load_policy_engine(root)?;
     let mut runtime_config = runtime_config(root, profile, agent_name);
+    let signing_key =
+        symvault_store::grant_key::load_or_create_grant_signing_key(root, keyring, Some(&identity))
+            .map_err(|error| format!("load grant signing key: {error}"))?;
     let (touch_id_available, backend, persistent, message) = status();
     runtime_config.auth_method = config.effective_auth_method().as_str().to_owned();
     runtime_config.touch_id_available = touch_id_available;
     runtime_config.cache_backend = backend;
     runtime_config.cache_persistent = persistent;
     runtime_config.cache_message = message;
-    let mut handler = ProtocolHandler::with_store_read_only_runtime_and_audit(
-        "symaira",
-        "1.0.0",
-        root,
-        identity,
-        runtime_config,
-        policy,
-        None,
-        Some(audit),
-    )
-    .map_err(|error| format!("create MCP runtime: {error}"))?;
+    let runtime =
+        StoreReadOnlyRuntime::open_with_audit(root, identity, runtime_config, policy, Some(audit))
+            .map_err(|error| format!("create MCP runtime: {error}"))?
+            .with_grant_signing_key(signing_key);
+    let mut handler =
+        ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
     handler.set_tool_list_config(tool_list_config(profile));
 
     let stdin = io::stdin();
