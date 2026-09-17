@@ -211,3 +211,141 @@ fn remote_status_matches_go_for_local_repository_states() {
     let _ = fs::remove_dir_all(&vault);
     let _ = fs::remove_dir_all(&bare);
 }
+
+fn initialized_remote_fixture(name: &str) -> (PathBuf, PathBuf) {
+    let home = temporary_root(&format!("{name}-home"));
+    let vault = temporary_root(&format!("{name}-vault"));
+    fs::create_dir_all(home.join(".symvault")).expect("legacy config directory");
+    fs::create_dir_all(&vault).expect("vault directory");
+    fs::write(vault.join("identity.age"), b"synthetic identity marker").expect("identity");
+    fs::write(vault.join("config.yaml"), b"authMethod: passphrase\n").expect("vault config");
+    fs::write(
+        home.join(".symvault/config.yaml"),
+        b"git:\n  auto_push: false\n",
+    )
+    .expect("user config");
+    let git = Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(&vault)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .output()
+        .expect("initialize git repository");
+    assert_success(&git, "initialize remote fixture repository");
+    (home, vault)
+}
+
+#[test]
+fn remote_init_matches_go_for_target_forms_and_rejects_empty_target() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
+        eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(rust_binary);
+
+    let (go_home, go_vault) = initialized_remote_fixture("default-go");
+    let (rust_home, rust_vault) = initialized_remote_fixture("default-rust");
+    let go_args = [
+        "--vault",
+        go_vault.to_str().expect("Go vault path"),
+        "remote",
+        "init",
+        "alice@example.test",
+    ];
+    let rust_args = [
+        "--vault",
+        rust_vault.to_str().expect("Rust vault path"),
+        "remote",
+        "init",
+        "alice@example.test",
+    ];
+    let go = run(&go_binary, &go_args, &go_vault, &go_home);
+    let rust = run(&rust_binary, &rust_args, &rust_vault, &rust_home);
+    assert_success(&go, "Go remote init default target");
+    assert_success(&rust, "Rust remote init default target");
+    assert_same(&go, &rust, "remote init default target");
+
+    let go_url = Command::new("git")
+        .args([
+            "-C",
+            go_vault.to_str().unwrap(),
+            "remote",
+            "get-url",
+            "origin",
+        ])
+        .output()
+        .expect("read Go remote URL");
+    let rust_url = Command::new("git")
+        .args([
+            "-C",
+            rust_vault.to_str().unwrap(),
+            "remote",
+            "get-url",
+            "origin",
+        ])
+        .output()
+        .expect("read Rust remote URL");
+    assert_eq!(go_url.stdout, rust_url.stdout, "remote init URL");
+    assert_eq!(
+        go_url.stdout,
+        b"ssh://alice@example.test/~symvault-remote.git\n"
+    );
+
+    let (go_home, go_vault) = initialized_remote_fixture("custom-go");
+    let (rust_home, rust_vault) = initialized_remote_fixture("custom-rust");
+    let go_args = [
+        "--vault",
+        go_vault.to_str().expect("Go custom vault path"),
+        "remote",
+        "init",
+        "alice@example.test:/srv/ignored.git",
+        "--name",
+        "upstream",
+        "--path",
+        "/srv/custom.git",
+    ];
+    let rust_args = [
+        "--vault",
+        rust_vault.to_str().expect("Rust custom vault path"),
+        "remote",
+        "init",
+        "alice@example.test:/srv/ignored.git",
+        "--name",
+        "upstream",
+        "--path",
+        "/srv/custom.git",
+    ];
+    let go = run(&go_binary, &go_args, &go_vault, &go_home);
+    let rust = run(&rust_binary, &rust_args, &rust_vault, &rust_home);
+    assert_success(&go, "Go remote init custom target");
+    assert_success(&rust, "Rust remote init custom target");
+    assert_same(&go, &rust, "remote init custom target");
+
+    let (go_home, go_vault) = initialized_remote_fixture("empty-go");
+    let (rust_home, rust_vault) = initialized_remote_fixture("empty-rust");
+    let go_args = [
+        "--vault",
+        go_vault.to_str().expect("Go empty vault path"),
+        "remote",
+        "init",
+        "   ",
+    ];
+    let rust_args = [
+        "--vault",
+        rust_vault.to_str().expect("Rust empty vault path"),
+        "remote",
+        "init",
+        "   ",
+    ];
+    let go = run(&go_binary, &go_args, &go_vault, &go_home);
+    let rust = run(&rust_binary, &rust_args, &rust_vault, &rust_home);
+    assert_same(&go, &rust, "remote init empty target");
+
+    for path in [go_home, go_vault, rust_home, rust_vault] {
+        let _ = fs::remove_dir_all(path);
+    }
+}

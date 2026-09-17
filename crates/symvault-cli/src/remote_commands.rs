@@ -4,13 +4,203 @@
 //! config file.  It deliberately does not unlock the vault or contact a
 //! remote, matching the Go command's read-only behavior.
 
-use std::{io::Write, path::Path};
+use std::{env, io::Write, path::Path};
 
 use serde::Serialize;
-use symvault_core::config::Config;
+use symvault_core::config::{Config, GitConfig};
 use symvault_sync::GitRepository;
 
 const REMOTE_NAME: &str = "origin";
+
+/// Adds a named SSH remote and enables Git auto-push in the user's legacy
+/// configuration, matching `remote init`. The command only edits the local
+/// repository; `push` is an explicit opt-in and reports a failed initial push
+/// as a warning, as the Go command does.
+pub(crate) fn init(
+    root: &Path,
+    home: &Path,
+    target: &str,
+    name: &str,
+    custom_path: Option<&str>,
+    push: bool,
+    quiet: bool,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<(), String> {
+    let target = target.trim();
+    if target.is_empty() {
+        return Err("ssh-target must not be empty".to_owned());
+    }
+    if !root.join("config.yaml").is_file() || !root.join("identity.age").is_file() {
+        return Err("vault not initialized. Run 'symvault init' first".to_owned());
+    }
+    let repository = GitRepository::open(root)
+        .map_err(|error| format!("cannot check existing remotes: {error}"))?;
+    if let Some(existing_url) = repository
+        .remote_url(name)
+        .map_err(|error| format!("cannot check existing remotes: {error}"))?
+    {
+        if existing_url.is_empty() {
+            return Err(format!(
+                "remote {name:?} already exists. Remove it first to reconfigure."
+            ));
+        }
+        return Err(format!(
+            "remote {name:?} already exists with URL {existing_url}. Remove it first to reconfigure."
+        ));
+    }
+
+    let (user, host, repository_path) = parse_ssh_target(target, custom_path)?;
+    let remote_url = build_ssh_url(&user, &host, &repository_path);
+    repository
+        .add_remote(name, &remote_url)
+        .map_err(|error| format!("cannot add remote: {error}"))?;
+
+    if let Err(error) = enable_auto_push(home) {
+        if !quiet {
+            writeln!(
+                stderr,
+                "Warning: remote added but could not enable auto_push in config: {error}"
+            )
+            .map_err(|error| error.to_string())?;
+        }
+    }
+
+    if !quiet {
+        writeln!(stdout, "Remote {name:?} added successfully.")
+            .map_err(|error| error.to_string())?;
+        write_hint(stderr, quiet, format_args!("SSH target: {target}"))?;
+        write_hint(stderr, quiet, format_args!("Remote URL: {remote_url}"))?;
+        write_hint(
+            stderr,
+            quiet,
+            format_args!("Bare repo path: {repository_path}"),
+        )?;
+    }
+
+    if push {
+        if !quiet {
+            writeln!(stdout, "Pushing vault to remote...").map_err(|error| error.to_string())?;
+        }
+        let result = repository.push(name);
+        if result.error.is_none() && result.success {
+            if !quiet {
+                writeln!(stdout, "Vault pushed successfully.")
+                    .map_err(|error| error.to_string())?;
+            }
+        } else if !quiet {
+            let error = result
+                .error
+                .unwrap_or_else(|| "push did not complete".to_owned());
+            write_hint(
+                stderr,
+                quiet,
+                format_args!("Warning: initial push failed: {error}"),
+            )?;
+            write_hint(
+                stderr,
+                quiet,
+                format_args!(
+                    "Make sure a bare git repository exists at {repository_path} on {host}"
+                ),
+            )?;
+            write_hint(
+                stderr,
+                quiet,
+                format_args!("Create it with: ssh {host} 'git init --bare {repository_path}'"),
+            )?;
+        }
+    } else if !quiet {
+        write_hint(
+            stderr,
+            quiet,
+            format_args!("Create the bare repo on the remote with:"),
+        )?;
+        write_hint(
+            stderr,
+            quiet,
+            format_args!("  ssh {host} 'git init --bare {repository_path}'"),
+        )?;
+        write_hint(
+            stderr,
+            quiet,
+            format_args!("Then push with: symvault git push"),
+        )?;
+    }
+    Ok(())
+}
+
+fn write_hint(
+    stderr: &mut impl Write,
+    quiet: bool,
+    message: std::fmt::Arguments<'_>,
+) -> Result<(), String> {
+    if quiet {
+        return Ok(());
+    }
+    writeln!(stderr, "{message}").map_err(|error| error.to_string())
+}
+
+fn parse_ssh_target(
+    target: &str,
+    custom_path: Option<&str>,
+) -> Result<(String, String, String), String> {
+    let mut user = String::new();
+    let mut remainder = target.to_owned();
+    if let Some(index) = remainder.rfind('@') {
+        user = remainder[..index].to_owned();
+        remainder = remainder[index + 1..].to_owned();
+    }
+    let (host, target_path) = if let Some(index) = remainder.rfind(':') {
+        (
+            remainder[..index].to_owned(),
+            remainder[index + 1..].to_owned(),
+        )
+    } else {
+        (remainder, String::new())
+    };
+    if host.is_empty() {
+        return Err(format!(
+            "invalid ssh-target: host must not be empty in ssh target {target:?}"
+        ));
+    }
+    if user.is_empty() {
+        user = env::var("USER")
+            .or_else(|_| env::var("USERNAME"))
+            .unwrap_or_default();
+    }
+    let repository_path = custom_path
+        .filter(|path| !path.is_empty())
+        .unwrap_or(&target_path);
+    let repository_path = if repository_path.is_empty() {
+        "~/symvault-remote.git"
+    } else {
+        repository_path
+    };
+    Ok((user, host, repository_path.to_owned()))
+}
+
+fn build_ssh_url(user: &str, host: &str, repository_path: &str) -> String {
+    let clean_path = repository_path
+        .strip_prefix('~')
+        .unwrap_or(repository_path)
+        .strip_prefix('/')
+        .unwrap_or_else(|| repository_path.strip_prefix('~').unwrap_or(repository_path));
+    if user.is_empty() {
+        format!("ssh://{host}/~{clean_path}")
+    } else {
+        format!("ssh://{user}@{host}/~{clean_path}")
+    }
+}
+
+fn enable_auto_push(home: &Path) -> Result<(), String> {
+    let path = home.join(".symvault").join("config.yaml");
+    let mut config = Config::load(&path).unwrap_or_default();
+    config.git.get_or_insert_with(GitConfig::default).auto_push = true;
+    config
+        .save_to(path)
+        .map_err(|error| format!("cannot save config: {error}"))
+}
 
 #[derive(Serialize)]
 struct RemoteInfo<'a> {
