@@ -86,11 +86,13 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         "not_available",
         "mcp.Tool is not available in the current environment",
     ));
-    unavailable_tools.push(unavailable_tool(
-        "generate_totp",
-        "not_available",
-        "mcp.Tool is not available in the current environment",
-    ));
+    if !(profile.can_read_values || profile.can_use_clipboard || profile.can_use_autotype) {
+        unavailable_tools.push(unavailable_tool(
+            "generate_totp",
+            "not_available",
+            "mcp.Tool is not available in the current environment",
+        ));
+    }
     if !expose_value_tools {
         unavailable_tools.push(unavailable_tool(
             "get_entry_value",
@@ -136,7 +138,9 @@ fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
         expose_value_tools: Some(profile.expose_value_tools),
         execute_api_available: false,
         secure_input_available: false,
-        generate_totp_available: false,
+        generate_totp_available: profile.can_read_values
+            || profile.can_use_clipboard
+            || profile.can_use_autotype,
     }
 }
 
@@ -196,6 +200,27 @@ mod tests {
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn totp_registry_tracks_profile_capabilities() {
+        for (read, clipboard, autotype) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
+            let profile = AgentProfile {
+                can_read_values: read,
+                can_use_clipboard: clipboard,
+                can_use_autotype: autotype,
+                ..AgentProfile::default()
+            };
+            assert_eq!(
+                tool_list_config(&profile).generate_totp_available,
+                read || clipboard || autotype
+            );
+        }
     }
 
     #[test]
