@@ -69,7 +69,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     fs::create_dir_all(&profile_home).expect("profile home");
     let add = run(
         &go_binary,
-        &["profile", "add", "work", "--vault", "/fixture-vault"],
+        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
         &profile_home,
     );
     assert_success(&add, "Go profile add");
@@ -83,7 +83,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy directory");
     fs::copy(generated, &legacy).expect("copy Go generated config");
 
-    let use_profile = run(&go_binary, &["profile", "use", "work"], &profile_home);
+    let use_profile = run(&go_binary, &["profile", "use", "über"], &profile_home);
     assert_success(&use_profile, "Go profile use");
     fs::copy(
         profile_home.join("config/symaira-vault/config.yaml"),
