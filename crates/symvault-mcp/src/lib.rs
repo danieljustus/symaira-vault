@@ -17,6 +17,9 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+mod tools;
+pub use tools::ToolListConfig;
+
 /// The newest protocol version this server speaks.
 pub const LATEST_SUPPORTED_PROTOCOL_VERSION: &str = "2025-11-25";
 
@@ -268,12 +271,14 @@ impl Message {
 #[derive(Debug)]
 pub enum Error {
     Serialize(serde_json::Error),
+    Catalog(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Serialize(e) => write!(f, "serialize: {e}"),
+            Error::Catalog(e) => write!(f, "tool catalog: {e}"),
         }
     }
 }
@@ -376,6 +381,7 @@ fn go_kind(value: &serde_json::Value) -> &'static str {
 pub struct ProtocolHandler {
     server_name: String,
     server_version: String,
+    tool_list_config: ToolListConfig,
     initialized: bool,
 }
 
@@ -384,8 +390,28 @@ impl ProtocolHandler {
         ProtocolHandler {
             server_name: server_name.into(),
             server_version: server_version.into(),
+            tool_list_config: ToolListConfig::default(),
             initialized: false,
         }
+    }
+
+    /// Constructs a handler with explicitly injected runtime/profile inputs for
+    /// the native tools/list surface. No capability detection occurs here.
+    pub fn with_tool_list_config(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        tool_list_config: ToolListConfig,
+    ) -> Self {
+        ProtocolHandler {
+            server_name: server_name.into(),
+            server_version: server_version.into(),
+            tool_list_config,
+            initialized: false,
+        }
+    }
+
+    pub fn set_tool_list_config(&mut self, tool_list_config: ToolListConfig) {
+        self.tool_list_config = tool_list_config;
     }
 
     /// Whether `initialize` has been handled on this connection.
@@ -403,6 +429,7 @@ impl ProtocolHandler {
             "initialize" => self.handle_initialize(msg).map(Some),
             "initialized" | "notifications/initialized" => Ok(None),
             "ping" => Message::response(msg.id.clone(), serde_json::json!({})).map(Some),
+            "tools/list" => self.handle_tools_list(msg).map(Some),
             _ => {
                 if msg.is_notification() {
                     return Ok(None);
@@ -458,6 +485,31 @@ impl ProtocolHandler {
 
         self.initialized = true;
         Message::response_from(msg.id.clone(), &result)
+    }
+
+    fn handle_tools_list(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+
+        let include_all = msg
+            .params
+            .as_deref()
+            .and_then(|params| serde_json::from_str::<serde_json::Value>(params.get()).ok())
+            .and_then(|params| {
+                params
+                    .get("include_all_tools")
+                    .and_then(serde_json::Value::as_bool)
+            })
+            .unwrap_or(false);
+        let tools =
+            tools::list_tools(&self.tool_list_config, include_all).map_err(Error::Catalog)?;
+        Message::response(msg.id.clone(), serde_json::json!({"tools": tools}))
     }
 }
 

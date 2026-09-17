@@ -1,0 +1,238 @@
+package server
+
+// This focused generator runs the production registry and list-time filters.
+// It is intentionally a Go test so it can call the unexported registry seam
+// without adding a public compatibility API just for fixture production.
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
+)
+
+type mcpListFixture struct {
+	SchemaVersion int              `json:"schema_version"`
+	Oracle        mcpListOracle    `json:"oracle"`
+	Catalog       []map[string]any `json:"catalog"`
+	Cases         []mcpListCase    `json:"cases"`
+}
+
+type mcpListOracle struct {
+	Commit        string   `json:"commit"`
+	CommitSHA     string   `json:"commit_sha"`
+	SourceFiles   []string `json:"source_files"`
+	SourceHash    string   `json:"source_hash"`
+	GeneratorHash string   `json:"generator_hash"`
+}
+
+type mcpListCase struct {
+	Name       string           `json:"name"`
+	Profile    string           `json:"profile"`
+	IncludeAll bool             `json:"include_all_tools"`
+	Runtime    mcpListRuntime   `json:"runtime"`
+	Tools      []map[string]any `json:"tools"`
+}
+
+type mcpListRuntime struct {
+	ExecuteAPI   bool `json:"execute_api"`
+	SecureInput  bool `json:"secure_input"`
+	GenerateTOTP bool `json:"generate_totp"`
+}
+
+var mcpListSourceFiles = []string{
+	"internal/mcp/server/tool_registry.go",
+	"internal/mcp/server/leanmode.go",
+	"internal/mcp/server/protocol.go",
+}
+
+const mcpListPinnedSourceHash = "35195e6c2e49e6e24307e87e877d69f82d79f3bd3e7b0e306fcbb91084013372"
+
+func TestGenerateMCPListFixture(t *testing.T) {
+	generate := os.Getenv("SYMAIRA_GENERATE_MCP_LIST_FIXTURE") == "1"
+	check := os.Getenv("SYMAIRA_CHECK_MCP_LIST_FIXTURE") == "1"
+	if !generate && !check {
+		t.Skip("set SYMAIRA_GENERATE_MCP_LIST_FIXTURE=1 or SYMAIRA_CHECK_MCP_LIST_FIXTURE=1")
+	}
+
+	// The production registry uses host capability detection for these three
+	// tools. Inject deterministic capabilities so this capture never touches a
+	// keychain, vault, GUI, or real command runner.
+	originalSecure := secureInputCapabilityFn
+	secureInputCapabilityFn = func() secureui.Capability { return secureui.CapNone }
+	t.Cleanup(func() { secureInputCapabilityFn = originalSecure })
+
+	baselineRuntime := mcpListRuntime{GenerateTOTP: true}
+
+	cases := []mcpListCase{
+		captureMCPListCase("nil_lean", "", false, baselineRuntime, nil),
+		captureMCPListCase("nil_all", "", true, baselineRuntime, nil),
+	}
+
+	secureInputCapabilityFn = func() secureui.Capability { return secureui.CapTTY }
+	runtime := mcpListRuntime{ExecuteAPI: true, SecureInput: true, GenerateTOTP: true}
+	for _, tier := range []string{"read-only", "standard", "admin"} {
+		srv := mcpListProfile(t, tier, runtime)
+		cases = append(cases,
+			captureMCPListCase(tier+"_all", tier, true, runtime, srv),
+			captureMCPListCase(tier+"_lean", tier, false, runtime, srv),
+		)
+	}
+
+	sourceHash := mcpListSourceHash(t, mcpListSourceFiles)
+	if sourceHash != mcpListPinnedSourceHash {
+		t.Fatalf("Go MCP list sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpListPinnedSourceHash)
+	}
+	if pinnedHash := mcpListGitSourceHash(t, mcpListSourceFiles); pinnedHash != sourceHash {
+		t.Fatalf("working Go MCP list sources differ from caadd5e: got %s, want %s", sourceHash, pinnedHash)
+	}
+	generatorHash := mcpListGeneratorHash(t)
+	fixture := mcpListFixture{
+		SchemaVersion: 1,
+		Oracle: mcpListOracle{
+			Commit:        "caadd5e",
+			CommitSHA:     "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+			SourceFiles:   mcpListSourceFiles,
+			SourceHash:    sourceHash,
+			GeneratorHash: generatorHash,
+		},
+		Catalog: toolsListPayload(mcpListProfile(t, "admin", runtime)),
+		Cases:   cases,
+	}
+
+	root := mcpListRepoRoot(t)
+	path := filepath.Join(root, "testdata", "port", "mcp", "tool-list.json")
+	data, err := json.MarshalIndent(fixture, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal fixture: %v", err)
+	}
+	data = append(data, '\n')
+	if check {
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read fixture: %v", err)
+		}
+		if !bytes.Equal(got, data) {
+			t.Fatal("MCP list fixture is stale; run with SYMAIRA_GENERATE_MCP_LIST_FIXTURE=1")
+		}
+		t.Logf("checked %s (%d bytes)", path, len(data))
+		return
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	t.Logf("wrote %s (%d bytes)", path, len(data))
+}
+
+func captureMCPListCase(name, tier string, includeAll bool, runtime mcpListRuntime, srv *Server) mcpListCase {
+	var tools []map[string]any
+	if srv == nil && tier != "" {
+		panic("profile required for tier case")
+	}
+	if srv == nil {
+		tools = toolsListPayload(nil)
+	} else {
+		tools = toolsListPayload(srv)
+	}
+	if !includeAll {
+		tools = filterLeanTools(tools)
+	}
+	return mcpListCase{Name: name, Profile: tier, IncludeAll: includeAll, Runtime: runtime, Tools: tools}
+}
+
+func mcpListProfile(t *testing.T, tier string, runtime mcpListRuntime) *Server {
+	t.Helper()
+	trueValue := true
+	profile := config.AgentProfile{
+		Name:             "fixture",
+		Tier:             config.StrPtr(tier),
+		CanRunCommands:   &trueValue,
+		CanUseClipboard:  &trueValue,
+		CanUseAutotype:   &trueValue,
+		CanReadValues:    &trueValue,
+		ExposeValueTools: config.BoolPtr(tier == "admin"),
+		AllowedPaths:     []string{"*"},
+		ApprovalMode:     config.StrPtr("none"),
+	}
+	if !runtime.ExecuteAPI {
+		profile.CanRunCommands = config.BoolPtr(false)
+	}
+	if !runtime.GenerateTOTP {
+		profile.CanUseClipboard = config.BoolPtr(false)
+		profile.CanUseAutotype = config.BoolPtr(false)
+		profile.CanReadValues = config.BoolPtr(false)
+	}
+	return newTestServerWithVault(t, profile, "stdio", "")
+}
+
+func mcpListSourceHash(t *testing.T, files []string) string {
+	t.Helper()
+	h := sha256.New()
+	for _, name := range files {
+		data, err := os.ReadFile(filepath.Join(mcpListRepoRoot(t), name))
+		if err != nil {
+			t.Fatalf("read source %s: %v", name, err)
+		}
+		fmt.Fprintf(h, "%s\x00", name)
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func mcpListGitSourceHash(t *testing.T, files []string) string {
+	t.Helper()
+	h := sha256.New()
+	root := mcpListRepoRoot(t)
+	for _, name := range files {
+		cmd := exec.Command("git", "show", "caadd5e:"+name)
+		cmd.Dir = root
+		data, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("read pinned source %s: %v", name, err)
+		}
+		fmt.Fprintf(h, "%s\x00", name)
+		h.Write(data)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func mcpListGeneratorHash(t *testing.T) string {
+	t.Helper()
+	_, path, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate fixture generator")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture generator: %v", err)
+	}
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
+}
+
+func mcpListRepoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get working directory: %v", err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("could not locate repository root")
+		}
+		dir = parent
+	}
+}
