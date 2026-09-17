@@ -1,3 +1,4 @@
+use base64::Engine;
 use serde_json::Value;
 use symvault_sync::importer::{self, Format};
 
@@ -18,7 +19,24 @@ fn csv_profiles_and_paths_match_production_go() {
             "firefox" => Format::Firefox,
             _ => unreachable!(),
         };
-        let result = importer::parse(format, case["input"].as_str().unwrap().as_bytes());
+        let input = case
+            .get("input_b64")
+            .and_then(Value::as_str)
+            .map(|encoded| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .unwrap_or_else(|error| {
+                        panic!("{} has invalid input_b64: {error}", case["name"])
+                    })
+            })
+            .unwrap_or_else(|| {
+                case.get("input")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .as_bytes()
+                    .to_vec()
+            });
+        let result = importer::parse(format, &input);
         assert_eq!(
             result.is_err(),
             case["failed"].as_bool().unwrap(),

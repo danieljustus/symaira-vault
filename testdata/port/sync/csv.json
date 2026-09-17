@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "ac851d41181faa7d99baa9b6f464065ec2189413cdf257a427f754c013a3d8ea",
+  "generator_digest": "2395a5c714e0c7986e28eeb05fc14fefbb3d2fd8d5c170ff3e0ed348622d0431",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -79,6 +79,69 @@
           "warnings": [
             "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
           ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_values",
+      "format": "csv",
+      "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKQSzigiz/Cg==",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "\ufffd",
+            "username": "\ufffd\ufffd"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_header",
+      "format": "csv",
+      "input_b64": "dGl0bGXigix1c2VybmFtZSxwYXNzd29yZApBLHUscAo=",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_malformed",
+      "format": "csv",
+      "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKwygsdSxwCg==",
+      "entries": [
+        {
+          "path": "\ufffd(",
+          "data": {
+            "password": "p",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_bom_header",
+      "format": "csv",
+      "input_b64": "77u/dGl0bGUscGFzc3dvcmQKQSxwCg==",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
         }
       ],
       "failed": false
@@ -226,7 +289,6 @@
     {
       "name": "empty",
       "format": "csv",
-      "input": "",
       "entries": [],
       "failed": false
     },

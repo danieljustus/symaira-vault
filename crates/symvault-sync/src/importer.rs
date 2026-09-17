@@ -48,7 +48,7 @@ pub enum Format {
 }
 
 pub fn normalize_path(value: &str) -> String {
-    let mut s = value.trim().trim_matches('/').replace(' ', "-");
+    let mut s = go_trim_space(value).trim_matches('/').replace(' ', "-");
     for c in ['"', '*', '?', '<', '>', '|', ':', '\\'] {
         s = s.replace(c, "");
     }
@@ -113,17 +113,36 @@ pub fn parse_csv_profile(
         })
         .collect();
     let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false)
         .terminator(csv::Terminator::Any(b'\n'))
         .flexible(true)
         .from_reader(normalized.as_slice());
+    // csv-core silently strips a UTF-8 BOM at the beginning of a stream.
+    // Go's encoding/csv leaves it in the first header name, so restore those
+    // three bytes before applying the Go field mapping below.
+    let has_bom = bytes.starts_with(b"\xEF\xBB\xBF");
     let mut columns = BTreeMap::new();
-    for (index, column) in reader
-        .headers()
+    let mut header = csv::ByteRecord::new();
+    if !reader
+        .read_byte_record(&mut header)
         .map_err(|e| ImportError::Parse(format!("read csv header: {e}")))?
-        .iter()
-        .enumerate()
     {
-        let column = column.trim();
+        return Ok(Vec::new());
+    }
+    for (index, column_bytes) in header.iter().enumerate() {
+        // Go's encoding/csv keeps arbitrary bytes in strings. When the
+        // importer result is JSON encoded, encoding/json replaces each
+        // invalid byte with U+FFFD. Do that conversion before applying the
+        // same trimming/case-folding and field mapping as the Go importer.
+        let column = if has_bom && index == 0 {
+            let mut with_bom = Vec::with_capacity(3 + column_bytes.len());
+            with_bom.extend_from_slice(b"\xEF\xBB\xBF");
+            with_bom.extend_from_slice(column_bytes);
+            go_string_from_bytes(&with_bom)
+        } else {
+            go_string_from_bytes(column_bytes)
+        };
+        let column = go_trim_space(&column);
         if !column.is_empty() {
             columns.insert(column.to_owned(), index);
             columns.insert(column.to_lowercase(), index);
@@ -131,9 +150,13 @@ pub fn parse_csv_profile(
     }
     let mut result = Vec::new();
     let mut used = std::collections::BTreeSet::new();
-    for row in reader.records() {
-        let row = row.map_err(|e| ImportError::Parse(format!("read csv row: {e}")))?;
-        if row.iter().all(|v| v.trim().is_empty()) {
+    let mut row = csv::ByteRecord::new();
+    while reader
+        .read_byte_record(&mut row)
+        .map_err(|e| ImportError::Parse(format!("read csv row: {e}")))?
+    {
+        let row: Vec<String> = row.iter().map(go_string_from_bytes).collect();
+        if row.iter().all(|v| go_trim_space(v).is_empty()) {
             continue;
         }
         let get = |column: &str| {
@@ -188,6 +211,44 @@ pub fn parse_csv_profile(
     Ok(result)
 }
 
+/// Convert Go strings containing arbitrary bytes to the Unicode string that
+/// encoding/json emits. `String::from_utf8_lossy` is not equivalent here: it
+/// collapses an invalid multi-byte sequence into one replacement character,
+/// while Go's JSON encoder emits one U+FFFD for each invalid byte.
+fn go_string_from_bytes(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len());
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(valid) => {
+                result.push_str(valid);
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                // `valid_up_to` ends on a UTF-8 character boundary.
+                result.push_str(
+                    std::str::from_utf8(&remaining[..valid_len])
+                        .expect("valid UTF-8 prefix reported by from_utf8"),
+                );
+                result.push('\u{FFFD}');
+                // Consume exactly one invalid byte. This matches Go's
+                // encoding/json behavior for both malformed and truncated
+                // UTF-8 sequences.
+                remaining = &remaining[valid_len + 1..];
+            }
+        }
+    }
+    result
+}
+
+// Go's strings.TrimSpace follows Unicode White Space and does not remove the
+// UTF-8 BOM (U+FEFF). Rust's str::trim historically treats the BOM as trim
+// material, so keep this boundary explicit for CSV headers and values.
+fn go_trim_space(value: &str) -> &str {
+    value.trim_matches(|character: char| character.is_whitespace() && character != '\u{FEFF}')
+}
+
 // csv intentionally accepts malformed quoting; Go's default encoding/csv
 // rejects it. Validate quote structure before passing bytes to that reader.
 fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
@@ -230,7 +291,7 @@ fn validate_csv_quotes(bytes: &[u8]) -> Result<(), ImportError> {
 }
 
 fn host_from_url(raw: &str) -> &str {
-    let mut raw = raw.trim();
+    let mut raw = go_trim_space(raw);
     if let Some((_, tail)) = raw.split_once("://") {
         raw = tail;
     }
@@ -460,8 +521,10 @@ fn default_csv_mapping(format: Format) -> BTreeMap<String, String> {
 
 /// Match built-in profiles in the production Go priority order.
 pub fn detect_csv_profile(header: &[String]) -> Format {
-    let columns: std::collections::BTreeSet<_> =
-        header.iter().map(|c| c.trim().to_lowercase()).collect();
+    let columns: std::collections::BTreeSet<_> = header
+        .iter()
+        .map(|c| go_trim_space(c).to_lowercase())
+        .collect();
     for (format, required) in [
         (
             Format::Apple,

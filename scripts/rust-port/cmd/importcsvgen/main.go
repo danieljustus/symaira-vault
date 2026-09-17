@@ -3,6 +3,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,11 +24,12 @@ type entry struct {
 	SecretType string         `json:"secret_type,omitempty"`
 }
 type csvCase struct {
-	Name    string          `json:"name"`
-	Format  importer.Format `json:"format"`
-	Input   string          `json:"input"`
-	Entries []entry         `json:"entries"`
-	Failed  bool            `json:"failed"`
+	Name     string          `json:"name"`
+	Format   importer.Format `json:"format"`
+	Input    string          `json:"input,omitempty"`
+	InputB64 string          `json:"input_b64,omitempty"`
+	Entries  []entry         `json:"entries"`
+	Failed   bool            `json:"failed"`
 }
 
 type totpCase struct {
@@ -51,6 +53,10 @@ func main() {
 	must(err)
 	cases := []csvCase{
 		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
+		{Name: "csv_invalid_utf8_values", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title,username,password\nA,\xe2\x82,\xff\n"))},
+		{Name: "csv_invalid_utf8_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title\xe2\x82,username,password\nA,u,p\n"))},
+		{Name: "csv_invalid_utf8_malformed", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title,username,password\n\xc3(,u,p\n"))},
+		{Name: "csv_bom_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("\xef\xbb\xbftitle,password\nA,p\n"))},
 		{Name: "apple_totp", Format: "apple", Input: "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=sha256&digits=8&period=45\n"},
 		{Name: "bw_nulls", Format: "bitwarden", Input: `{"folders":null,"items":[{"type":1,"name":"Login","folderId":null,"notes":null,"login":{"username":null,"uris":null},"fields":null}]}`},
 		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},
@@ -81,7 +87,7 @@ func main() {
 	for i := range cases {
 		parser, newErr := importer.New(cases[i].Format)
 		must(newErr)
-		entries, parseErr := parser.Parse(strings.NewReader(cases[i].Input))
+		entries, parseErr := parser.Parse(bytes.NewReader(caseInput(cases[i])))
 		cases[i].Failed = parseErr != nil
 		cases[i].Entries = []entry{}
 		for _, e := range entries {
@@ -151,6 +157,15 @@ func main() {
 		must(os.WriteFile(path, content, 0600))
 	}
 	fmt.Printf("PASS CSV oracle (%d cases)\n", len(cases))
+}
+
+func caseInput(c csvCase) []byte {
+	if c.InputB64 != "" {
+		input, err := base64.StdEncoding.DecodeString(c.InputB64)
+		must(err)
+		return input
+	}
+	return []byte(c.Input)
 }
 func secretType(e importer.ImportedEntry) string {
 	if e.SecretMetadata != nil {
