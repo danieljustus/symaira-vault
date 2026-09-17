@@ -322,7 +322,21 @@ fn force_sync_preserves_dirty_config_like_go() {
         fs::read(rust_vault.join("config.yaml")).expect("Rust remote config")
     );
     assert_eq!(
-        fs::read(go_vault.join("config.conflict-test-device.yaml")).expect("Go conflict config"),
+        // go-git hard reset removes its ignored .device-id before recreating
+        // the conflict copy, so discover its generated filename. Rust retains
+        // the stable per-device ID; compare the preserved bytes explicitly.
+        fs::read(
+            fs::read_dir(&go_vault)
+                .unwrap()
+                .map(Result::unwrap)
+                .find(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("config.conflict-"))
+                .expect("Go conflict config")
+                .path()
+        )
+        .unwrap(),
         fs::read(rust_vault.join("config.conflict-test-device.yaml"))
             .expect("Rust conflict config")
     );

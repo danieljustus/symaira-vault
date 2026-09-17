@@ -379,7 +379,17 @@ impl GitRepository {
             // A remote commit containing the generated conflict path would
             // overwrite a pre-reset snapshot during reset --hard. Refuse
             // that ambiguous collision instead of silently losing data.
-            if self.file_at_ref(&remote_branch, &conflict).is_ok() {
+            let collision = match self.conflict_path_collision(&remote_branch, &conflict) {
+                Ok(collision) => collision,
+                Err(error) => {
+                    return PullResult {
+                        remote_url,
+                        error: Some(format!("cannot inspect remote conflict path: {error}")),
+                        ..Default::default()
+                    };
+                }
+            };
+            if collision {
                 return PullResult {
                     remote_url,
                     error: Some(format!(
@@ -411,6 +421,31 @@ impl GitRepository {
             remote_url,
             ..Default::default()
         }
+    }
+
+    // A remote file or symlink replacing any parent would remove the backup
+    // subtree during reset, even when the exact conflict path is absent.
+    fn conflict_path_collision(&self, revision: &str, path: &str) -> Result<bool, GitError> {
+        for (depth, ancestor) in Path::new(path).ancestors().enumerate() {
+            let ancestor = ancestor
+                .to_str()
+                .ok_or_else(|| GitError::Parse("invalid conflict path".into()))?;
+            if ancestor.is_empty() {
+                break;
+            }
+            let output = self.command(&[
+                "--literal-pathspecs",
+                "ls-tree",
+                "-z",
+                revision,
+                "--",
+                ancestor,
+            ])?;
+            if !output.stdout.is_empty() && (depth == 0 || !output.stdout.starts_with(b"040000 ")) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn changed_paths(&self, left: &str, right: &str) -> Result<Vec<String>, GitError> {
@@ -1221,6 +1256,18 @@ mod tests {
             fs::read(&conflict).expect("existing conflict bytes"),
             b"existing sentinel\n"
         );
+        fs::remove_file(&conflict).expect("remove own sentinel");
+        run_git(remote.path(), &["rm", "-r", "--", "entries"]);
+        fs::write(remote.path().join("entries"), b"remote replaces directory").unwrap();
+        run_git(remote.path(), &["add", "entries"]);
+        run_git(
+            remote.path(),
+            &["commit", "--quiet", "-m", "replace ancestor"],
+        );
+        run_git(remote.path(), &["push", "--quiet", "origin", "HEAD"]);
+        assert!(repo.force_pull("origin").error.is_some());
+        assert_eq!(repo.head().unwrap(), before_head);
+        assert_eq!(fs::read(&path).unwrap(), b"local-entry\n");
     }
 
     #[test]
