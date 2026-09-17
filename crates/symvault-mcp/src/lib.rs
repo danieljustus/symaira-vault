@@ -281,6 +281,7 @@ impl Message {
 /// which travel back to the client as an [`RpcError`].
 #[derive(Debug)]
 pub enum Error {
+    Io(std::io::Error),
     Serialize(serde_json::Error),
     Catalog(String),
 }
@@ -288,6 +289,7 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Io(e) => write!(f, "io: {e}"),
             Error::Serialize(e) => write!(f, "serialize: {e}"),
             Error::Catalog(e) => write!(f, "tool catalog: {e}"),
         }
@@ -810,6 +812,33 @@ pub fn run_stream(input: &str, handler: &mut ProtocolHandler) -> Result<Vec<Stri
         }
     }
     Ok(out)
+}
+
+/// Runs the newline-delimited stdio transport until the input reaches EOF.
+///
+/// The caller owns the handler and its injected runtime. Responses are flushed
+/// after each request so a spawned CLI process can be driven interactively.
+/// A final fragment without a newline is dropped, matching the Go transport's
+/// `ReadString('\n')` loop.
+pub fn run_stdio<R: std::io::BufRead, W: std::io::Write>(
+    mut input: R,
+    mut output: W,
+    handler: &mut ProtocolHandler,
+) -> Result<(), Error> {
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = input.read_until(b'\n', &mut line).map_err(Error::Io)?;
+        if read == 0 || !line.ends_with(b"\n") {
+            return Ok(());
+        }
+        line.pop();
+        if let Some(response) = handle_line_bytes(&line, handler)? {
+            output.write_all(response.as_bytes()).map_err(Error::Io)?;
+            output.write_all(b"\n").map_err(Error::Io)?;
+            output.flush().map_err(Error::Io)?;
+        }
+    }
 }
 
 /// Splits a stream the way the oracle's reader consumes it: into *newline-
