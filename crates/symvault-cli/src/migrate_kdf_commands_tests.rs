@@ -58,6 +58,47 @@ fn migrates_and_retains_backup_and_config_fields() {
 }
 
 #[test]
+fn migrates_flow_config_without_dropping_unknown_fields() {
+    let (root, expected, passphrase, _) = fixture();
+    fs::write(
+        root.join("config.yaml"),
+        b"vault: {format_version: 1, scrypt_work_factor: 18, auto_migrate_kdf: false, custom_nested: {keep: [one, two]}}\nroot_unknown: [true, 7]\n",
+    )
+    .expect("flow config");
+
+    migrate_kdf(&root, &expected, &passphrase).expect("flow migration");
+    let rendered = fs::read(root.join("config.yaml")).expect("rendered config");
+    let value: serde_yaml_ng::Value = serde_yaml_ng::from_slice(&rendered).expect("valid YAML");
+    let vault = value
+        .get("vault")
+        .and_then(serde_yaml_ng::Value::as_mapping)
+        .expect("vault mapping");
+    assert_eq!(
+        vault
+            .get("format_version")
+            .and_then(serde_yaml_ng::Value::as_i64),
+        Some(2)
+    );
+    assert!(vault.get("scrypt_work_factor").is_none());
+    assert_eq!(
+        vault
+            .get("auto_migrate_kdf")
+            .and_then(serde_yaml_ng::Value::as_bool),
+        Some(false)
+    );
+    assert!(vault.get("custom_nested").is_some());
+    assert_eq!(
+        value
+            .get("root_unknown")
+            .and_then(serde_yaml_ng::Value::as_sequence)
+            .map(Vec::len),
+        Some(2)
+    );
+    symvault_core::config::Config::load_from_bytes(&rendered).expect("config remains loadable");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn malformed_config_preserves_identity_without_backup() {
     let (root, expected, passphrase, original) = fixture();
     fs::write(root.join("config.yaml"), b"vault: [malformed\n").expect("bad config");

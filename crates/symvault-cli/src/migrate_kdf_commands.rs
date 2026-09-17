@@ -5,7 +5,7 @@
 //! passphrase, prepares every fallible input first, and only then replaces the
 //! encrypted identity and reconciles the config.
 
-use std::{path::Path, str::FromStr};
+use std::path::Path;
 
 use symvault_crypto::{
     Argon2idParams, EnvelopeFormat, Identity, SecretBytes, decrypt_identity,
@@ -130,45 +130,45 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
             params: Argon2idParams::default(),
         });
     };
-    // Use the shared loader as the semantic validator before yaml-edit
-    // changes the document.  This also rejects multi-document streams.
+    // Use the shared loader as the semantic validator before changing the
+    // generic YAML value. This also rejects multi-document streams.
     symvault_core::config::Config::load_from_bytes(&raw)
         .map_err(|error| format!("load config: {error}"))?;
     let params = argon2id_params_from_config(&raw)?;
-    let source = std::str::from_utf8(&raw)
-        .map_err(|error| format!("load config: invalid UTF-8: {error}"))?;
-    use yaml_edit::path::YamlPath;
-    // yaml-edit keeps the indentation token that precedes a nested mapping
-    // entry as a sibling of that entry. Removing the middle
-    // `scrypt_work_factor` entry therefore leaves the next key indented twice
-    // (and produces invalid YAML). Locate the already validated scalar and
-    // remove its complete source line before parsing the document we update.
-    // This keeps comments and all unrelated fields byte-for-byte intact.
-    let legacy_line = yaml_edit::YamlFile::from_str(source)
-        .ok()
-        .and_then(|file| file.documents().next())
-        .and_then(|document| document.try_get_path("vault.scrypt_work_factor").ok())
-        .and_then(|node| node.as_scalar().map(|scalar| scalar.start_position(source).line));
-    let edited_source = legacy_line.map_or_else(
-        || source.to_owned(),
-        |line| remove_source_line(source, line),
-    );
-    let file = yaml_edit::YamlFile::from_str(&edited_source)
+    // Mutate the generic YAML value so flow-style mappings, anchors, and
+    // multi-line scalar values cannot be mistaken for a single source line.
+    // Unlike the typed Config serializer, this retains unknown configuration
+    // fields. Formatting/comments may be normalized, as the Go config writer
+    // also serializes the validated configuration rather than patching text.
+    let mut expected: serde_yaml_ng::Value = serde_yaml_ng::from_slice(&raw)
         .map_err(|error| format!("load config: {error}"))?;
-    let document = file
-        .documents()
-        .next()
-        .ok_or_else(|| "load config: missing YAML document".to_owned())?;
-    if document.try_get_path("vault").is_err() {
+    let Some(root) = expected.as_mapping_mut() else {
         return Ok(ConfigUpdate {
             bytes: Some(raw),
             params,
         });
+    };
+    let Some(vault) = root.get_mut("vault").and_then(|value| value.as_mapping_mut()) else {
+        return Ok(ConfigUpdate {
+            bytes: Some(raw),
+            params,
+        });
+    };
+    vault.remove("scrypt_work_factor");
+    vault.insert(
+        serde_yaml_ng::Value::String("format_version".to_owned()),
+        serde_yaml_ng::Value::Number(serde_yaml_ng::Number::from(2)),
+    );
+    let rendered = serde_yaml_ng::to_string(&expected)
+        .map_err(|error| format!("render config: {error}"))?;
+    let reparsed: serde_yaml_ng::Value = serde_yaml_ng::from_slice(rendered.as_bytes())
+        .map_err(|error| format!("validate rendered config: {error}"))?;
+    if reparsed != expected {
+        return Err("validate rendered config: semantic value changed".to_owned());
     }
-    document
-        .try_set_path("vault.format_version", yaml_edit::ScalarValue::from(2))
-        .map_err(|error| format!("set vault.format_version: {error}"))?;
-    let mut rendered = document.to_string();
+    symvault_core::config::Config::load_from_bytes(rendered.as_bytes())
+        .map_err(|error| format!("validate rendered config: {error}"))?;
+    let mut rendered = rendered;
     if !rendered.ends_with('\n') {
         rendered.push('\n');
     }
@@ -176,14 +176,6 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
         bytes: Some(rendered.into_bytes()),
         params,
     })
-}
-
-fn remove_source_line(source: &str, line_number: usize) -> String {
-    source
-        .split_inclusive('\n')
-        .enumerate()
-        .filter_map(|(index, line)| (index + 1 != line_number).then_some(line))
-        .collect()
 }
 
 fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
