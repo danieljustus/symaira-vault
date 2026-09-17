@@ -4,8 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub fn list(path: &Path, output: &str, quiet: bool) -> Result<(), String> {
-    let _ = output;
+pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
     let bytes = fs::read(path).map_err(|error| format!("cannot load config: {error}"))?;
     if !quiet {
         let _ = io::stdout().write_all(&bytes);

@@ -197,7 +197,7 @@ fn main() -> ExitCode {
                     }
                 },
             };
-            match config::list(&path, &cli.output, cli.quiet) {
+            match config::list(&path, cli.quiet) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
