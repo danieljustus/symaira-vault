@@ -130,3 +130,84 @@ fn initialize_rejects_existing_vault_and_empty_passphrase() {
     );
     fs::remove_dir_all(root).expect("cleanup");
 }
+
+#[test]
+fn get_totp_matches_go_fixed_clock_json_and_text_contract() {
+    let entry = Entry {
+        data: BTreeMap::from([
+            ("password".to_owned(), serde_json::json!("secret")),
+            (
+                "totp".to_owned(),
+                serde_json::json!({
+                    "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+                    "digits": 8,
+                }),
+            ),
+        ]),
+        metadata: EntryMetadata {
+            updated: "2026-01-02T03:04:05Z".to_owned(),
+            ..EntryMetadata::default()
+        },
+        ..Entry::default()
+    };
+    let result = vault_commands::GetResult::Entry {
+        path: "totp-entry".to_owned(),
+        entry: Box::new(entry),
+    };
+
+    let mut json = Vec::new();
+    let mut diagnostics = Vec::new();
+    vault_commands::write_get_at(&mut json, &mut diagnostics, &result, "json", false, 59)
+        .expect("JSON get");
+    assert!(diagnostics.is_empty());
+    let json: serde_json::Value = serde_json::from_slice(&json).expect("get JSON");
+    assert_eq!(json["TOTP"]["code"], "94287082");
+    assert_eq!(json["TOTP"]["period"], 30);
+    assert_eq!(json["TOTP"]["remaining"], 1);
+
+    let mut text = Vec::new();
+    let mut diagnostics = Vec::new();
+    vault_commands::write_get_at(&mut text, &mut diagnostics, &result, "text", false, 59)
+        .expect("text get");
+    assert!(
+        String::from_utf8(text)
+            .unwrap()
+            .contains("password: secret\n")
+    );
+    assert_eq!(diagnostics, b"TOTP Code: 94287082 (expires in 1s)\n");
+}
+
+#[test]
+fn get_totp_invalid_secret_warns_only_in_text_mode() {
+    let result = vault_commands::GetResult::Entry {
+        path: "bad-totp".to_owned(),
+        entry: Box::new(Entry {
+            data: BTreeMap::from([(
+                "totp".to_owned(),
+                serde_json::json!({"secret": "INVALID!!!SECRET!!!"}),
+            )]),
+            ..Entry::default()
+        }),
+    };
+    let mut text = Vec::new();
+    let mut diagnostics = Vec::new();
+    vault_commands::write_get_at(&mut text, &mut diagnostics, &result, "text", false, 59)
+        .expect("invalid TOTP still renders entry");
+    assert!(
+        String::from_utf8(text)
+            .unwrap()
+            .contains("Path: bad-totp\n")
+    );
+    assert_eq!(
+        diagnostics,
+        b"Warning: could not generate TOTP code: invalid TOTP secret\n"
+    );
+
+    let mut json = Vec::new();
+    let mut diagnostics = Vec::new();
+    vault_commands::write_get_at(&mut json, &mut diagnostics, &result, "json", false, 59)
+        .expect("invalid TOTP JSON");
+    let json: serde_json::Value = serde_json::from_slice(&json).expect("get JSON");
+    assert!(json["TOTP"].is_null());
+    assert!(diagnostics.is_empty());
+}

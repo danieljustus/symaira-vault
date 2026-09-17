@@ -4,7 +4,12 @@
 //! functions accept an already-unlocked identity so callers can reuse the
 //! same session boundary for every command without duplicating key handling.
 
-use std::{collections::BTreeMap, io::Write, path::Path};
+use std::{
+    collections::BTreeMap,
+    io::{self, Write},
+    path::Path,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::Serialize;
 use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
@@ -46,6 +51,25 @@ pub enum GetResult {
         field: String,
         value: serde_json::Value,
     },
+}
+
+#[derive(Debug, Serialize, Eq, PartialEq)]
+struct TotpOutput {
+    code: String,
+    period: i64,
+    remaining: i64,
+}
+
+#[derive(Serialize)]
+struct GetEntryOutput<'a> {
+    #[serde(rename = "Fields")]
+    fields: &'a BTreeMap<String, serde_json::Value>,
+    #[serde(rename = "TOTP")]
+    totp: Option<TotpOutput>,
+    #[serde(rename = "Path")]
+    path: &'a str,
+    #[serde(rename = "Modified")]
+    modified: String,
 }
 
 /// Opens an existing vault using a caller-provided unlocked identity.
@@ -232,11 +256,30 @@ pub fn write_get<W: Write>(
     format: &str,
     quiet: bool,
 ) -> Result<(), String> {
-    if quiet {
-        return Ok(());
-    }
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs() as i64;
+    let mut diagnostics = io::sink();
+    write_get_at(output, &mut diagnostics, result, format, quiet, now)
+}
+
+/// Writes get output at a fixed Unix timestamp for deterministic contract tests.
+///
+/// `diagnostics` receives the text-mode TOTP status or warning that Go writes to
+/// stderr. Structured output contains the generated TOTP object and does not
+/// write diagnostics.
+pub fn write_get_at<W: Write, E: Write>(
+    output: &mut W,
+    diagnostics: &mut E,
+    result: &GetResult,
+    format: &str,
+    quiet: bool,
+    unix_time: i64,
+) -> Result<(), String> {
     match result {
         GetResult::Field { value, .. } => match format {
+            _ if quiet => Ok(()),
             "text" | "" => writeln!(output, "{}", value_text(value)).map_err(|e| e.to_string()),
             "json" => {
                 serde_json::to_writer(&mut *output, value).map_err(|e| e.to_string())?;
@@ -247,14 +290,36 @@ pub fn write_get<W: Write>(
             )),
         },
         GetResult::Entry { path, entry } => match format {
-            "text" | "" => write_entry_text(output, path, entry),
+            "text" | "" => {
+                if !quiet {
+                    write_entry_text(output, path, entry)?;
+                }
+                match entry_totp(entry, unix_time) {
+                    Ok(Some(totp)) => writeln!(
+                        diagnostics,
+                        "TOTP Code: {} (expires in {}s)",
+                        totp.code, totp.remaining
+                    )
+                    .map_err(|error| error.to_string()),
+                    Ok(None) => Ok(()),
+                    Err(_error) if quiet => Ok(()),
+                    Err(error) => writeln!(
+                        diagnostics,
+                        "Warning: could not generate TOTP code: {error}"
+                    )
+                    .map_err(|error| error.to_string()),
+                }
+            }
             "json" => {
-                let value = serde_json::json!({
-                    "Fields": &entry.data,
-                    "TOTP": null,
-                    "Path": path,
-                    "Modified": modified_text(&entry.metadata.updated),
-                });
+                if quiet {
+                    return Ok(());
+                }
+                let value = GetEntryOutput {
+                    fields: &entry.data,
+                    totp: entry_totp(entry, unix_time).ok().flatten(),
+                    path,
+                    modified: modified_text(&entry.metadata.updated),
+                };
                 serde_json::to_writer(&mut *output, &value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
@@ -263,6 +328,45 @@ pub fn write_get<W: Write>(
             )),
         },
     }
+}
+
+fn entry_totp(entry: &Entry, unix_time: i64) -> Result<Option<TotpOutput>, String> {
+    let Some(serde_json::Value::Object(totp)) = entry.data.get("totp") else {
+        return Ok(None);
+    };
+    let Some(secret) = totp.get("secret").and_then(serde_json::Value::as_str) else {
+        return Ok(None);
+    };
+    if secret.is_empty() {
+        return Ok(None);
+    }
+    let algorithm = totp
+        .get("algorithm")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("SHA1");
+    let digits = json_integer(totp.get("digits")).unwrap_or(6);
+    let period = json_integer(totp.get("period")).unwrap_or(30);
+    let code = symvault_core::totp::generate_totp_at(secret, algorithm, digits, period, unix_time)
+        .map_err(|error| error.to_string())?;
+    let period = i64::from(code.period);
+    let remaining = period - unix_time.rem_euclid(period);
+    Ok(Some(TotpOutput {
+        code: code.code,
+        period,
+        remaining,
+    }))
+}
+
+fn json_integer(value: Option<&serde_json::Value>) -> Option<i32> {
+    value
+        .and_then(serde_json::Value::as_i64)
+        .and_then(|value| i32::try_from(value).ok())
+        .or_else(|| {
+            value
+                .and_then(serde_json::Value::as_f64)
+                .map(|value| value as i32)
+        })
 }
 
 fn value_text(value: &serde_json::Value) -> String {
