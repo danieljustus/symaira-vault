@@ -3,8 +3,10 @@
 mod config;
 mod device;
 mod export_commands;
+mod history_commands;
 mod import_commands;
 mod mcp_commands;
+mod recipients_commands;
 mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
@@ -133,6 +135,16 @@ enum Command {
         #[arg(long)]
         quiet: bool,
     },
+    /// Run a read-only Git history operation.
+    Git {
+        action: String,
+        path: Option<String>,
+    },
+    /// Manage vault recipients.
+    Recipients {
+        #[command(subcommand)]
+        command: RecipientsCommand,
+    },
     /// Export vault entries to CSV or JSON.
     Export {
         #[arg(long, value_name = "FORMAT", required = true)]
@@ -218,6 +230,27 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum RecipientsCommand {
+    /// List recipients configured for the vault.
+    List,
+    /// Add a recipient public key.
+    Add {
+        recipient: String,
+        #[arg(long)]
+        reencrypt: bool,
+    },
+    /// Remove a recipient public key.
+    #[command(alias = "rm")]
+    Remove {
+        recipient: String,
+        #[arg(short = 'y', long)]
+        yes: bool,
+        #[arg(long)]
+        no_reencrypt: bool,
     },
 }
 
@@ -368,6 +401,19 @@ fn main() -> ExitCode {
             quiet,
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Git { action, path }) => run_git(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &action,
+            path.as_deref(),
+            cli.quiet,
+        ),
+        Some(Command::Recipients { command }) => run_recipients(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            command,
             cli.quiet,
         ),
         Some(Command::Export {
@@ -748,6 +794,89 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+fn run_git(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    action: &str,
+    path: Option<&str>,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        if action != "log" {
+            return Err(format!("unknown action: {action} (use push, pull, or log)"));
+        }
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let commits = history_commands::log(&vault, path, 0)
+            .map_err(|error| format!("cannot get log: {error}"))?;
+        history_commands::write_log(&mut io::stdout().lock(), &commits, quiet)
+    })();
+    finish_vault_result(result)
+}
+
+fn run_recipients(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    command: RecipientsCommand,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        match command {
+            RecipientsCommand::List => {
+                Err("recipients list helper is pending integration".to_owned())
+            }
+            RecipientsCommand::Add {
+                recipient,
+                reencrypt,
+            } => {
+                let identity = device::unlock_vault(&vault)?;
+                recipients_commands::add(
+                    &vault,
+                    &identity,
+                    &recipient,
+                    reencrypt,
+                    quiet,
+                    &mut io::stdout().lock(),
+                )
+            }
+            RecipientsCommand::Remove {
+                recipient,
+                yes,
+                no_reencrypt,
+            } => {
+                let identity = device::unlock_vault(&vault)?;
+                if !yes {
+                    eprint!("Remove recipient {recipient}? (y/N): ");
+                    io::stderr()
+                        .flush()
+                        .map_err(|error| format!("recipient confirmation prompt: {error}"))?;
+                    let mut answer = String::new();
+                    io::stdin()
+                        .read_line(&mut answer)
+                        .map_err(|error| format!("recipient confirmation: {error}"))?;
+                    if !answer.trim().eq_ignore_ascii_case("y") {
+                        if !quiet {
+                            eprintln!("Canceled");
+                        }
+                        return Ok::<(), String>(());
+                    }
+                }
+                recipients_commands::remove(
+                    &vault,
+                    &identity,
+                    &recipient,
+                    no_reencrypt,
+                    quiet,
+                    &mut io::stdout().lock(),
+                )
+            }
+        }
+    })();
+    finish_vault_result(result)
 }
 
 #[allow(clippy::too_many_arguments)]
