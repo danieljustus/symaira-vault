@@ -169,13 +169,26 @@ impl GitRepository {
         self.log(1).map(|mut v| v.pop())
     }
     pub fn log(&self, limit: usize) -> Result<Vec<Commit>, GitError> {
-        let n = limit.to_string();
-        let out = self.command(&[
-            "log",
-            &format!("-{n}"),
-            "--date=iso-strict",
-            "--format=%H%x1f%an%x1f%aI%x1f%s%x1e",
-        ])?;
+        self.log_path(None, limit)
+    }
+
+    /// Returns commits, optionally restricted to a repository-relative path.
+    ///
+    /// The Go CLI's `git log [path]` passes the path to the Git history walk;
+    /// retaining that filter here avoids loading unrelated vault history and
+    /// keeps the command's path argument after `--`.
+    pub fn log_path(&self, path: Option<&str>, limit: usize) -> Result<Vec<Commit>, GitError> {
+        let limit_arg = format!("-{limit}");
+        let mut args = vec!["log"];
+        if limit > 0 {
+            args.push(&limit_arg);
+        }
+        args.extend(["--date=iso-strict", "--format=%H%x1f%an%x1f%aI%x1f%s%x1e"]);
+        if let Some(path) = path.filter(|path| !path.is_empty()) {
+            validate_paths(&[path.to_owned()])?;
+            args.extend(["--", path]);
+        }
+        let out = self.command(&args)?;
         let text = String::from_utf8(out.stdout).map_err(|e| GitError::Parse(e.to_string()))?;
         text.split('\x1e')
             .filter(|s| !s.trim().is_empty())
