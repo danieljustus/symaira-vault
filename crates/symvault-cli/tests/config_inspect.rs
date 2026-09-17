@@ -160,6 +160,8 @@ fn fixture_pins_go_oracle_and_exercises_config_edges() {
         "get_anchored_quoted_scalar",
         "get_complex_quote_comment",
         "get_mapping_node",
+        "get_nested_block_scalar_relative_indent",
+        "get_nested_block_scalar_chomping",
         "get_multidoc_first",
         "get_multidoc_second_missing",
         "set_existing_scalar",
@@ -183,6 +185,9 @@ fn fixture_pins_go_oracle_and_exercises_config_edges() {
         "set_literal_clip",
         "set_literal_keep",
         "set_literal_empty",
+        "set_literal_relative_indent",
+        "set_newline_quoted",
+        "set_newline_literal",
         "get_duplicate_sibling_comments",
         "get_colon_block_scalar_indentation",
     ] {

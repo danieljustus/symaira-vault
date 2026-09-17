@@ -165,10 +165,14 @@ fn canonical_scalar_node(scalar: &yaml_edit::Scalar) -> Result<yaml_edit::YamlNo
             };
             let content = value.trim_end_matches('\n');
             let mut source = format!("{header}\n");
-            for line in content.lines() {
-                source.push_str("  ");
-                source.push_str(line);
-                source.push('\n');
+            if content.is_empty() {
+                source.push_str("  \n");
+            } else {
+                for line in content.lines() {
+                    source.push_str("  ");
+                    source.push_str(line);
+                    source.push('\n');
+                }
             }
             for _ in 1..trailing_newlines {
                 source.push('\n');
@@ -413,8 +417,6 @@ fn normalize_node_lines(lines: &[&str], first_value: usize, base: usize) -> Stri
         })
         .collect::<Vec<_>>()
         .join("\n")
-        .trim()
-        .to_owned()
 }
 
 fn normalize_node_text_for_node(source: &str, node: &yaml_edit::YamlNode) -> String {
@@ -429,11 +431,13 @@ fn normalize_node_text_for_node(source: &str, node: &yaml_edit::YamlNode) -> Str
         .map_or(0, |index| index + 1);
     let source_indent = range.start as usize - line_start;
     let lines = text.lines().collect::<Vec<_>>();
-    let rendered = lines
+    let mut rendered = lines
         .first()
         .map(|_| normalize_node_lines(&lines, 0, source_indent))
-        .map(normalize_block_scalar_indentation)
         .unwrap_or_default();
+    let mut scalar_ranges = Vec::new();
+    collect_block_scalar_ranges(node, &mut scalar_ranges);
+    normalize_block_scalar_indentation(&mut rendered, source, range.start as usize, &scalar_ranges);
     let source_lines = source[..line_start].lines().collect::<Vec<_>>();
     let mut comments = Vec::new();
     for line in source_lines.iter().rev() {
@@ -457,26 +461,97 @@ fn normalize_node_text_for_node(source: &str, node: &yaml_edit::YamlNode) -> Str
     format!("{}\n{rendered}", comments.join("\n"))
 }
 
-fn normalize_block_scalar_indentation(text: String) -> String {
-    let mut lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
-    let mut block_header_indent = None;
-    for line in &mut lines {
-        let trimmed = line.trim_start();
-        let indent = line.len() - trimmed.len();
-        if let Some(header_indent) = block_header_indent {
-            if trimmed.is_empty() || indent > header_indent {
-                if indent > header_indent + 2 {
-                    *line = format!("{}{}", " ".repeat(header_indent + 2), trimmed);
-                }
+fn normalize_block_scalar_indentation(
+    rendered: &mut String,
+    source: &str,
+    node_start: usize,
+    scalar_ranges: &[yaml_edit::TextPosition],
+) {
+    if scalar_ranges.is_empty() {
+        return;
+    }
+    let node_line = source[..node_start]
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .count();
+    let mut lines = rendered.lines().map(str::to_owned).collect::<Vec<_>>();
+    for scalar_range in scalar_ranges {
+        let header_line = source[..scalar_range.start as usize]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            .saturating_sub(node_line);
+        let end = scalar_range.end as usize;
+        let end_line = source[..end]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            .saturating_sub(usize::from(end > 0 && source.as_bytes()[end - 1] == b'\n'))
+            .saturating_sub(node_line);
+        let body_start = header_line + 1;
+        if body_start >= lines.len() || end_line < body_start {
+            continue;
+        }
+        let body_end = end_line.min(lines.len().saturating_sub(1));
+        let source_lines = source.lines().collect::<Vec<_>>();
+        let Some(body_base) = (body_start..=body_end)
+            .filter_map(|line| source_lines.get(node_line + line))
+            .filter_map(|line| {
+                let trimmed = line.trim_start();
+                (!trimmed.is_empty()).then_some(line.len() - trimmed.len())
+            })
+            .min()
+        else {
+            continue;
+        };
+        let header_indent = lines[header_line].len() - lines[header_line].trim_start().len();
+        let target_indent = header_indent + 2;
+        for (line, output_line) in lines
+            .iter_mut()
+            .enumerate()
+            .take(body_end + 1)
+            .skip(body_start)
+        {
+            let Some(source_line) = source_lines.get(node_line + line) else {
+                continue;
+            };
+            let trimmed = source_line.trim_start();
+            if trimmed.is_empty() {
                 continue;
             }
-            block_header_indent = None;
-        }
-        if trimmed.ends_with('|') || trimmed.ends_with('>') {
-            block_header_indent = Some(indent);
+            let indent = source_line.len() - trimmed.len();
+            let relative = indent.saturating_sub(body_base);
+            *output_line = format!("{}{}", " ".repeat(target_indent + relative), trimmed);
         }
     }
-    lines.join("\n")
+    *rendered = lines.join("\n");
+}
+
+fn collect_block_scalar_ranges(
+    node: &yaml_edit::YamlNode,
+    ranges: &mut Vec<yaml_edit::TextPosition>,
+) {
+    match node {
+        yaml_edit::YamlNode::Scalar(scalar)
+            if matches!(
+                yaml_edit::ScalarValue::from_scalar(scalar).style(),
+                yaml_edit::ScalarStyle::Literal | yaml_edit::ScalarStyle::Folded
+            ) =>
+        {
+            ranges.push(scalar.byte_range())
+        }
+        yaml_edit::YamlNode::Mapping(mapping) => {
+            for (_, value) in mapping.iter() {
+                collect_block_scalar_ranges(&value, ranges);
+            }
+        }
+        yaml_edit::YamlNode::Sequence(sequence) => {
+            for value in sequence.values() {
+                collect_block_scalar_ranges(&value, ranges);
+            }
+        }
+        _ => {}
+    }
 }
 
 fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
