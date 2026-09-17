@@ -16,7 +16,9 @@ use std::{
 };
 
 use serde_json::Value;
-use symvault_core::redact::{PatternDetector, ScanOptions, Scanner};
+use symvault_core::redact::{
+    PatternDetector, ScanOptions, Scanner, redact_known_values,
+};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
 
@@ -306,6 +308,19 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     for (name, value) in options.extra_environment {
         child_command.env(name, value);
     }
+    #[cfg(windows)]
+    if !has_system_root_assignment(
+        options.environment,
+        options.extra_environment,
+        options.passthrough,
+    ) {
+        // os/exec injects SystemRoot for Windows children when the caller
+        // clears the environment. Keep the same bootstrap variable when the
+        // Rust runner applies its explicit whitelist.
+        if let Some(value) = std::env::var_os("SystemRoot") {
+            child_command.env("SystemRoot", value);
+        }
+    }
     if let Some(directory) = options.working_directory {
         child_command.current_dir(directory);
     }
@@ -385,6 +400,23 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         stderr_truncated,
         rejected_env_vars,
     })
+}
+
+#[cfg(windows)]
+fn has_system_root_assignment(
+    environment: &BTreeMap<String, String>,
+    extra_environment: &[(OsString, OsString)],
+    passthrough: &[String],
+) -> bool {
+    environment
+        .keys()
+        .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
+        || extra_environment
+            .iter()
+            .any(|(name, _)| name.to_string_lossy().eq_ignore_ascii_case("SystemRoot"))
+        || passthrough
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
 }
 
 fn terminate_after_spawn_failure<T>(child: &mut std::process::Child, message: &str) -> Result<T, String> {
@@ -470,12 +502,25 @@ fn redact_process_output(
     generic_redaction: bool,
 ) -> String {
     let mut output = output.to_vec();
+    if generic_redaction {
+        let text = String::from_utf8_lossy(&output).into_owned();
+        let values = redactions
+            .iter()
+            .filter_map(|value| String::from_utf8(value.clone()).ok())
+            .collect::<Vec<_>>();
+        let (text, _) = redact_known_values(&text, &values, "***");
+        output = text.into_bytes();
+    }
     // Replace longer values first so a short secret that is a prefix of a
-    // longer one cannot expose the longer value's suffix.
-    let mut order: Vec<_> = (0..redactions.len()).collect();
-    order.sort_by_key(|&index| std::cmp::Reverse(redactions[index].len()));
-    for index in order {
-        output = replace_bytes(&output, &redactions[index], b"***");
+    // longer one cannot expose the longer value's suffix. The generic run
+    // path above already merged all exact spans against the original text;
+    // retain this byte-oriented path for attachment commands.
+    if !generic_redaction {
+        let mut order: Vec<_> = (0..redactions.len()).collect();
+        order.sort_by_key(|&index| std::cmp::Reverse(redactions[index].len()));
+        for index in order {
+            output = replace_bytes(&output, &redactions[index], b"***");
+        }
     }
     let output = String::from_utf8_lossy(&output).into_owned();
     if !generic_redaction {
@@ -842,6 +887,15 @@ mod tests {
         let redactions = vec![b"token".to_vec(), b"token-suffix".to_vec()];
         assert_eq!(
             redact_process_output(b"token-suffix", &redactions, false),
+            "***"
+        );
+    }
+
+    #[test]
+    fn generic_process_redaction_merges_overlapping_known_values() {
+        let redactions = vec![b"abcd".to_vec(), b"bcde".to_vec()];
+        assert_eq!(
+            redact_process_output(b"abcde", &redactions, true),
             "***"
         );
     }

@@ -162,7 +162,7 @@ impl Detector for ExactValueDetector {
         if self.overflowed && !text.is_empty() {
             return Ok((MARKER.to_string(), 1));
         }
-        match redact_exact_values(text, &self.values, MAX_EXACT_SCAN_WORK) {
+        match redact_exact_values(text, &self.values, MAX_EXACT_SCAN_WORK, MARKER) {
             Some(result) => Ok(result),
             None => Ok((MARKER.to_string(), 1)),
         }
@@ -196,53 +196,53 @@ impl PatternDetector {
     #[must_use]
     pub fn new() -> Self {
         let rules = [
-            (r"(?-u:\bAKIA[0-9A-Z]{16}\b)", PatternValidator::None),
+            (r"(?-u:\b)AKIA[0-9A-Z]{16}(?-u:\b)", PatternValidator::None),
             (
-                r"(?-u:\b[A-Za-z0-9/+=]{40}\b)",
+                r"(?-u:\b)[A-Za-z0-9/+=]{40}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bghp_[a-zA-Z0-9]{36,251}\b)",
+                r"(?-u:\b)ghp_[a-zA-Z0-9]{36,251}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bgho_[a-zA-Z0-9]{36,251}\b)",
+                r"(?-u:\b)gho_[a-zA-Z0-9]{36,251}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bghs_[a-zA-Z0-9]{36,251}\b)",
+                r"(?-u:\b)ghs_[a-zA-Z0-9]{36,251}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bsk_live_[a-zA-Z0-9]{24,}\b)",
+                r"(?-u:\b)sk_live_[a-zA-Z0-9]{24,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bsk_test_[a-zA-Z0-9]{24,}\b)",
+                r"(?-u:\b)sk_test_[a-zA-Z0-9]{24,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bxox[baprs]-[a-zA-Z0-9\-]+\b)",
+                r"(?-u:\b)xox[baprs]-[a-zA-Z0-9\-]+(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bhttps://hooks\.slack\.[a-z]+/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+\b)",
+                r"(?-u:\b)https://hooks\.slack\.[a-z]+/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bsk-[a-zA-Z0-9]{20,}-[a-zA-Z0-9]{10,}\b)",
+                r"(?-u:\b)sk-[a-zA-Z0-9]{20,}-[a-zA-Z0-9]{10,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r#"(?-u:\bapi[_-]?key\s*[:=]\s*['"]?[a-zA-Z0-9_-]{16,}['"]?\b)"#,
+                r#"(?-u:\b)api[_-]?key(?-u:\s)*[:=](?-u:\s)*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
                 PatternValidator::None,
             ),
             (
-                r#"(?-u:\bsecret[_-]?key\s*[:=]\s*['"]?[a-zA-Z0-9_-]{16,}['"]?\b)"#,
+                r#"(?-u:\b)secret[_-]?key(?-u:\s)*[:=](?-u:\s)*['"]?[a-zA-Z0-9_-]{16,}['"]?(?-u:\b)"#,
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b[a-zA-Z]+://[^:]+:[^@]+@[^\s]+\b)",
+                r"(?-u:\b)[a-zA-Z]+://[^:]+:[^@]+@[^\s]+(?-u:\b)",
                 PatternValidator::None,
             ),
             (
@@ -250,43 +250,43 @@ impl PatternDetector {
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bssh-rsa\s+[A-Za-z0-9+/=]{100,}\b)",
+                r"(?-u:\b)ssh-rsa(?-u:\s)+[A-Za-z0-9+/=]{100,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\b)",
+                r"(?-u:\b)eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b)",
+                r"(?-u:\b)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b(?:\d[ -]*?){13,16}\b)",
+                r"(?-u:\b)(?:(?-u:\d)[ -]*?){13,16}(?-u:\b)",
                 PatternValidator::Luhn,
             ),
             (
-                r"(?-u:\b[A-Z]{2}\d{2}[A-Z0-9]{1,30}\b)",
+                r"(?-u:\b)[A-Z]{2}(?-u:\d){2}[A-Z0-9]{1,30}(?-u:\b)",
                 PatternValidator::Iban,
             ),
             (
-                r"(?-u:\b(?:\+?\d{1,3}[-. ]?)?\(?\d{2,4}\)?[-. ]?\d{2,4}[-. ]?\d{4,9}\b)",
+                r"(?-u:\b)(?:\+?(?-u:\d){1,3}[-. ]?)?\(?(?-u:\d){2,4}\)?[-. ]?(?-u:\d){2,4}[-. ]?(?-u:\d){4,9}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bBearer\s+[A-Za-z0-9\-._~+/]+={0,2}\b)",
+                r"(?-u:\b)Bearer(?-u:\s)+[A-Za-z0-9\-._~+/]+={0,2}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\bFQoGZXIvYXdzE[\w/+=]{100,}\b)",
+                r"(?-u:\b)FQoGZXIvYXdzE[A-Za-z0-9_/+=]{100,}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b\d{3}-\d{2}-\d{4}\b)",
+                r"(?-u:\b)(?-u:\d){3}-(?-u:\d){2}-(?-u:\d){4}(?-u:\b)",
                 PatternValidator::None,
             ),
             (
-                r"(?-u:\b(?:\d{1,3}\.){3}\d{1,3}\b)",
+                r"(?-u:\b)(?:(?-u:\d){1,3}\.){3}(?-u:\d){1,3}(?-u:\b)",
                 PatternValidator::None,
             ),
         ]
@@ -421,10 +421,42 @@ fn validate_iban(value: &str) -> bool {
     remainder == 1
 }
 
+/// Redacts caller-supplied values using the bounded, overlap-merging exact
+/// matcher. Unlike ExactValueDetector, this helper intentionally accepts
+/// one-character values because command-specific secret resolvers may expose
+/// them and Go's RedactKnownSecrets does not apply the detector's minimum.
+///
+/// Empty values are ignored. Values are bounded by the same count, span, and
+/// scan-work limits as the exact detector. marker is used for every merged
+/// span; an empty marker falls back to ***.
+pub fn redact_known_values(text: &str, values: &[String], marker: &str) -> (String, usize) {
+    let marker = if marker.is_empty() { "***" } else { marker };
+    let mut seen = HashSet::new();
+    let mut retained = Vec::with_capacity(values.len().min(MAX_EXACT_VALUE_COUNT));
+    let mut overflowed = false;
+    for value in values {
+        if value.is_empty() || !seen.insert(value) {
+            continue;
+        }
+        if retained.len() >= MAX_EXACT_VALUE_COUNT {
+            overflowed = true;
+            break;
+        }
+        retained.push(value.clone());
+    }
+    if overflowed && !text.is_empty() {
+        return (marker.to_owned(), 1);
+    }
+    retained.sort_by_key(|value| Reverse(value.len()));
+    redact_exact_values(text, &retained, MAX_EXACT_SCAN_WORK, marker)
+        .unwrap_or_else(|| (marker.to_owned(), 1))
+}
+
 fn redact_exact_values(
     text: &str,
     values: &[String],
     mut scan_work: usize,
+    marker: &str,
 ) -> Option<(String, usize)> {
     if text.is_empty() {
         return Some((text.to_string(), 0));
@@ -494,7 +526,7 @@ fn redact_exact_values(
     let mut last_end = 0;
     for span in &merged {
         out.push_str(&text[last_end..span.start]);
-        out.push_str(MARKER);
+        out.push_str(marker);
         last_end = span.end;
     }
     out.push_str(&text[last_end..]);
@@ -978,10 +1010,11 @@ mod tests {
     #[test]
     fn exact_value_scan_work_boundary_is_deterministic() {
         let values = vec!["z".to_string()];
-        let (out, count) = redact_exact_values("aaaa", &values, 4).expect("near-bound scan");
+        let (out, count) =
+            redact_exact_values("aaaa", &values, 4, MARKER).expect("near-bound scan");
         assert_eq!(out, "aaaa");
         assert_eq!(count, 0);
-        assert!(redact_exact_values("aaaa", &values, 3).is_none());
+        assert!(redact_exact_values("aaaa", &values, 3, MARKER).is_none());
     }
 
     #[cfg_attr(
@@ -1004,14 +1037,32 @@ mod tests {
     #[test]
     fn exact_value_scan_work_arithmetic_is_safe() {
         let values = vec!["z".to_string()];
-        let (out, count) = redact_exact_values("aaaa", &values, usize::MAX).expect("max budget");
+        let (out, count) =
+            redact_exact_values("aaaa", &values, usize::MAX, MARKER).expect("max budget");
         assert_eq!(out, "aaaa");
         assert_eq!(count, 0);
         let long_value = vec!["zzzzz".to_string()];
         let (out, count) =
-            redact_exact_values("aaaa", &long_value, usize::MAX).expect("long value");
+            redact_exact_values("aaaa", &long_value, usize::MAX, MARKER).expect("long value");
         assert_eq!(out, "aaaa");
         assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn known_value_redaction_merges_overlaps_and_accepts_short_values() {
+        let values = vec!["abcd".to_owned(), "bcde".to_owned()];
+        assert_eq!(
+            redact_known_values("abcde", &values, "***"),
+            ("***".into(), 1)
+        );
+        assert_eq!(
+            redact_known_values("a", &["a".to_owned()], ""),
+            ("***".into(), 1)
+        );
+        assert_eq!(
+            redact_known_values("plain", &["".to_owned(), "secret".to_owned()], "***"),
+            ("plain".into(), 0)
+        );
     }
 
     #[test]

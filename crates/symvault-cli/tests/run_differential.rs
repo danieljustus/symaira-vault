@@ -46,6 +46,79 @@ fn string_args(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
 
+fn synthetic_pattern_corpus() -> String {
+    let aws_access = ["AKIA", "0123456789ABCDEF"].concat();
+    let aws_secret = "A".repeat(40);
+    let github_pat = format!("ghp_{}", "A".repeat(36));
+    let github_oauth = format!("gho_{}", "B".repeat(36));
+    let github_app = format!("ghs_{}", "C".repeat(36));
+    let stripe_live = format!("sk_live_{}", "D".repeat(24));
+    let stripe_test = format!("sk_test_{}", "E".repeat(24));
+    let slack_token = format!("xoxb-{}", "F".repeat(12));
+    let slack_webhook = format!(
+        "https://hooks.slack.invalid/services/T{}/B{}/{}",
+        "G".repeat(8),
+        "H".repeat(8),
+        "I".repeat(12)
+    );
+    let openai_key = format!("sk-{}-{}", "J".repeat(20), "K".repeat(10));
+    let generic_api = format!("api_key={}", "L".repeat(16));
+    let generic_secret = format!("secret-key:{}", "M".repeat(16));
+    let password_url = "https://fixture:password@example.invalid/path".to_owned();
+    let private_key = "-----BEGIN RSA PRIVATE KEY-----".to_owned();
+    let ssh_key = format!("ssh-rsa {}", "N".repeat(100));
+    let jwt = format!(
+        "eyJ{}.eyJ{}.{}",
+        "O".repeat(4),
+        "P".repeat(4),
+        "Q".repeat(4)
+    );
+    let email = "fixture@example.invalid".to_owned();
+    let valid_card = "4111111111111111".to_owned();
+    let invalid_card = "4111111111111112".to_owned();
+    let valid_iban = "GB82WEST12345698765432".to_owned();
+    let invalid_iban = "GB82WEST12345698765431".to_owned();
+    let phone = "+1 212 555 0123".to_owned();
+    let bearer = "Bearer abcdef123456".to_owned();
+    let sts = format!("FQoGZXIvYXdzE{}", "R".repeat(100));
+    let ssn = "123-45-6789".to_owned();
+    let ipv4 = "192.0.2.1".to_owned();
+    // Go's regexp package uses ASCII word boundaries. Surrounding the AWS
+    // value with UTF-8 letters proves the Rust pattern keeps that behavior.
+    let unicode_adjacent = format!("é{aws_access}é");
+
+    [
+        aws_access,
+        aws_secret,
+        github_pat,
+        github_oauth,
+        github_app,
+        stripe_live,
+        stripe_test,
+        slack_token,
+        slack_webhook,
+        openai_key,
+        generic_api,
+        generic_secret,
+        password_url,
+        private_key,
+        ssh_key,
+        jwt,
+        email,
+        valid_card,
+        invalid_card,
+        valid_iban,
+        invalid_iban,
+        phone,
+        bearer,
+        sts,
+        ssn,
+        ipv4,
+        unicode_adjacent,
+    ]
+    .join("|")
+}
+
 #[test]
 fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -89,10 +162,28 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
     );
     assert_success(&set, "Go set");
 
+    for (path, value) in [("run/overlap-short", "abcd"), ("run/overlap-long", "bcde")] {
+        let set = run(
+            &go_binary,
+            &string_args(&[
+                "--vault",
+                root.to_str().expect("vault path"),
+                "set",
+                path,
+                "--value",
+                value,
+                "--force",
+            ]),
+            &root,
+            &home,
+        );
+        assert_success(&set, "Go set overlap fixture");
+    }
+
     fs::write(&env_file, b"FROM_FILE=run/password\n").expect("env file");
-    let pattern_suffix = "ABCDEFGHIJKLMNOP";
+    let pattern_corpus = synthetic_pattern_corpus();
     let command = format!(
-        "printf '%s|%s|%s|%s' \"$TOKEN\" \"$FROM_FILE\" \"$RUN_SAFE_MARKER\" AKIA{pattern_suffix}"
+        "printf '%s|%s|%s|%s|%s' \"$TOKEN\" \"$FROM_FILE\" \"$RUN_SAFE_MARKER\" '{pattern_corpus}' abcde"
     );
     let mut args = vec![
         "--vault".to_owned(),
@@ -100,6 +191,10 @@ fn run_matches_go_for_secret_env_file_passthrough_pattern_and_exit() {
         "run".to_owned(),
         "--env".to_owned(),
         "TOKEN=run/password".to_owned(),
+        "--env".to_owned(),
+        "OVERLAP=run/overlap-short".to_owned(),
+        "--env".to_owned(),
+        "OVERLAP_LONG=run/overlap-long".to_owned(),
         "--env-file".to_owned(),
         env_file.to_str().expect("env path").to_owned(),
         "--passthrough".to_owned(),
