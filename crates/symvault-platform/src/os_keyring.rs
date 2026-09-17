@@ -22,12 +22,6 @@ pub struct OsKeyring;
 
 #[cfg(not(target_os = "macos"))]
 impl OsKeyring {
-    /// Reports whether the selected provider can accept native keyring
-    /// operations without reading or writing a credential.
-    pub fn is_available() -> bool {
-        keyring::Entry::store_status().is_ok()
-    }
-
     fn entry(key: &str) -> Result<Entry, SessionError> {
         let Some((service, account)) = split_keyring_key(key) else {
             return Err(SessionError::Keyring("invalid keyring key".to_owned()));
