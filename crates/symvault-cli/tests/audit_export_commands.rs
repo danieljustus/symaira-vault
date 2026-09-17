@@ -4,11 +4,14 @@
 mod audit_export_commands;
 
 use std::{
+    collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use symvault_store::audit::{self, LogEntry};
 
 struct TempDir(PathBuf);
 
@@ -107,4 +110,50 @@ fn audit_export_json_matches_go_for_filters_and_redaction() {
         .expect("Rust export");
         assert_eq!(first_json(&actual), first_json(&expected.stdout));
     }
+}
+
+#[test]
+fn audit_export_accepts_injected_hmac_generations_without_keychain_access() {
+    let home = TempDir::new("hmac");
+    fs::create_dir_all(home.0.join(".symvault")).expect("audit directory");
+    let key_bytes = [7_u8; 32];
+    let key = audit::AuditKey::new(key_bytes).expect("audit key");
+    let kid = audit::key_fingerprint(&key_bytes);
+    let mut entry = LogEntry {
+        timestamp: "2020-01-01T00:00:00Z".to_owned(),
+        agent: "fixture".to_owned(),
+        action: "set".to_owned(),
+        path: "safe/password".to_owned(),
+        ok: true,
+        kid: kid.clone(),
+        ..LogEntry::default()
+    };
+    entry.hmac = audit::compute_hmac(&key_bytes, &[], &entry);
+    fs::write(
+        home.0.join(".symvault/audit-fixture.log"),
+        format!("{}\n", serde_json::to_string(&entry).expect("audit JSON")),
+    )
+    .expect("audit fixture");
+    let mut keys = BTreeMap::new();
+    keys.insert(kid.clone(), key);
+    let mut output = Vec::new();
+    audit_export_commands::export_with_keys(
+        &home.0,
+        &audit_export_commands::Options {
+            agent: "fixture",
+            action: "",
+            since: "",
+            failed_only: false,
+            redact_paths: false,
+            format: "json",
+        },
+        true,
+        &keys,
+        &kid,
+        &mut output,
+    )
+    .expect("Rust HMAC export");
+    let value = first_json(&output);
+    assert_eq!(value["verified"], 1);
+    assert_eq!(value["entries"][0]["verify_status"], "verified");
 }

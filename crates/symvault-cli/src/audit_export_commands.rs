@@ -47,6 +47,24 @@ fn is_false(value: &bool) -> bool {
 
 /// Export local audit logs without unlocking a vault or contacting a remote.
 pub fn export(home: &Path, options: &Options<'_>, output: &mut impl Write) -> Result<(), String> {
+    let keys = BTreeMap::new();
+    export_with_keys(home, options, false, &keys, "", output)
+}
+
+/// Export with caller-supplied audit generations.  The production dispatcher
+/// obtains these through its existing keyring/session boundary; tests can
+/// inject synthetic `AuditKey` values without touching a platform keychain.
+pub fn export_with_keys(
+    home: &Path,
+    options: &Options<'_>,
+    verify_hmac: bool,
+    keys: &BTreeMap<String, audit::AuditKey>,
+    current_kid: &str,
+    output: &mut impl Write,
+) -> Result<(), String> {
+    if verify_hmac && keys.is_empty() {
+        return Err("HMAC verification requires a key".into());
+    }
     let audit_dir = home.join(".symvault");
     fs::create_dir_all(&audit_dir).map_err(|error| format!("create audit directory: {error}"))?;
     let agents = discover_agents(&audit_dir, options.agent)?;
@@ -56,14 +74,22 @@ pub fn export(home: &Path, options: &Options<'_>, output: &mut impl Write) -> Re
         redact_paths: options.redact_paths,
         verify_hmac: false,
     };
-    let keys = BTreeMap::new();
     let mut entries = Vec::new();
     let mut verified = 0;
     let mut legacy = 0;
     let mut tampered = 0;
     for agent in agents {
-        let result = audit::export_directory(&audit_dir, &agent, &store_options, &keys, "")
-            .map_err(|error| format!("load agent {agent}: {error}"))?;
+        let result = audit::export_directory(
+            &audit_dir,
+            &agent,
+            &audit::ExportOptions {
+                verify_hmac,
+                ..store_options.clone()
+            },
+            keys,
+            current_kid,
+        )
+        .map_err(|error| format!("load agent {agent}: {error}"))?;
         entries.extend(result.entries);
         verified += result.verified;
         legacy += result.legacy;
