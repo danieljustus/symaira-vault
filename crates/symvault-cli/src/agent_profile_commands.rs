@@ -44,13 +44,14 @@ pub(crate) fn show(
     Ok(())
 }
 
-/// `yaml.v3` emits sequence indicators two columns to the left of
+/// `yaml.v3` emits sequence indicators two columns to the right of
 /// `serde_yaml_ng` for the profile-shaped sequences we expose. Adjust only
-/// actual sequence marker lines; block scalar content is left byte-for-byte
-/// intact so a scalar beginning with `- ` cannot be mistaken for a sequence.
+/// actual sequence marker lines. When a sequence item starts a block scalar,
+/// shift its continuation lines with the marker while leaving mapping-owned
+/// block scalar content byte-for-byte intact.
 fn go_yaml_indentation(rendered: &str) -> String {
     let mut adjusted = String::with_capacity(rendered.len());
-    let mut block_scalar_indent = None;
+    let mut block_scalar = None;
 
     for line in rendered.split_inclusive('\n') {
         let (content, newline) = line
@@ -58,27 +59,42 @@ fn go_yaml_indentation(rendered: &str) -> String {
             .map_or((line, ""), |content| (content, "\n"));
         let leading_spaces = content.bytes().take_while(|byte| *byte == b' ').count();
 
-        if let Some(indent) = block_scalar_indent {
+        if let Some((indent, sequence_item)) = block_scalar {
             if !content.trim().is_empty() && leading_spaces <= indent {
-                block_scalar_indent = None;
+                block_scalar = None;
+            } else {
+                if sequence_item && !content.trim().is_empty() {
+                    adjusted.push_str("  ");
+                }
+                adjusted.push_str(content);
+                adjusted.push_str(newline);
+                continue;
             }
         }
 
-        let in_block_scalar = block_scalar_indent.is_some();
-        if !in_block_scalar && content.starts_with("  - ") {
-            adjusted.push_str(&content[2..]);
+        let marker = content
+            .get(leading_spaces..)
+            .is_some_and(|value| value == "-" || value.starts_with("- "));
+        if marker {
+            adjusted.push_str("  ");
+            adjusted.push_str(content);
         } else {
             adjusted.push_str(content);
         }
         adjusted.push_str(newline);
 
-        if block_scalar_indent.is_none() {
-            let value = content
+        let value = if marker {
+            content
+                .get(leading_spaces..)
+                .and_then(|value| value.strip_prefix('-'))
+                .map_or("", str::trim)
+        } else {
+            content
                 .split_once(':')
-                .map_or("", |(_, value)| value.trim());
-            if is_block_scalar_header(value) {
-                block_scalar_indent = Some(leading_spaces);
-            }
+                .map_or("", |(_, value)| value.trim())
+        };
+        if is_block_scalar_header(value) {
+            block_scalar = Some((leading_spaces, marker));
         }
     }
 
@@ -490,6 +506,12 @@ mod tests {
         let adjusted = go_yaml_indentation(&rendered);
         assert!(adjusted.contains("allowedPaths:\n  - team/*\n"));
         assert!(adjusted.contains("  - literal content\n"));
+
+        let sequence_block = "allowedPaths:\n- |-\n  first\n    nested\n- marker\n";
+        assert_eq!(
+            go_yaml_indentation(sequence_block),
+            "allowedPaths:\n  - |-\n    first\n      nested\n    - marker\n"
+        );
     }
 
     #[test]
