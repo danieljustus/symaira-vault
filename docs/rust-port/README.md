@@ -63,6 +63,8 @@ passes. The measured Go baseline is in
 
 ## Implementation progress
 
+- 2026-09-17 continuation: native MCP catalog/list dispatch (35 schemas, 11 injected cases), Windows Go process-tree lifecycle coverage, and external temporary-storage support. See [continuation evidence and boundaries](resume-20260917.md). Tool execution and the Rust Windows process-tree adapter remain open.
+
 - `RUST-001` passed: the 131-command Go contract fixture and neutral differential harness are executable in CI.
 - `RUST-002` passed: the pinned Rust workspace and byte-exact `version` slice
   passes all ten Go↔Rust cases plus format, Clippy, nextest, doctest, feature,

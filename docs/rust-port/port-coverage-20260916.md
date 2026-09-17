@@ -34,8 +34,9 @@ because the implementation did not exist, not because a contract was missing.
 MCP-001 and MCP-004 have since been ported: the `symvault-mcp` crate implements
 the JSON-RPC envelope, the `initialize` handshake, the line-framed stdio
 dispatch loop and its hygiene behavior under hostile input, against 45 cases
-generated from the pinned oracle. That is the handshake and the frame loop only. **There is still no tool surface** — no `tools/list`,
-no `tools/call`, no tool registry — and `internal/mcp/server/tool_registry.go`
+generated from the pinned oracle. That is the handshake and the frame loop only. **Update 2026-09-17:** a native registry and `tools/list` slice now preserve 35
+Go schemas and 11 injected profile/runtime cases. `tools/call` and full runtime/
+authorization integration remain absent. The original inventory found that `internal/mcp/server/tool_registry.go`
 alone is 837 lines against the 35 tool definitions MCP-002 enumerates. Reading
 "MCP has started" as "MCP is close" would repeat exactly the error this page
 exists to correct.
@@ -99,6 +100,8 @@ find crates -path '*/src/*' -name '*.rs' | xargs wc -l | tail -1
 python3 -c "import json;print(len(json.load(open('testdata/port/cli/command-tree.json'))['commands']))"
 
 # MCP and HTTP in the Rust workspace
-grep -rn 'jsonrpc\|tools/call' crates/*/src/          # no matches
+grep -rn 'jsonrpc\|tools/call' crates/*/src/          # inspect implemented protocol seams
 grep -rn 'axum\|hyper\|TcpListener' crates/*/Cargo.toml  # no matches
 ```
+
+2026-09-17 continuation: native raw `config list` now has 13 real Go CLI cases; config get/set and complete CLI parity remain open. See [continuation](resume-20260917.md).
