@@ -94,7 +94,7 @@ def main():
         if platform.system() == "Darwin":
             commands.append(cargo + ["-p", "symvault-platform", "--test", "native_keyring", "--all-features", "--", "--ignored", "--exact", "native_keyring_binary_roundtrip_and_delete", "--nocapture"])
     report_path.write_text(json.dumps(report, indent=2))
-    tmp_parent = "/private/tmp" if platform.system() == "Darwin" else None
+    tmp_parent = env.get("TMPDIR") or ("/private/tmp" if platform.system() == "Darwin" else None)
     try:
         with tempfile.TemporaryDirectory(prefix="sv-native-", dir=tmp_parent) as temporary, contextlib.ExitStack() as cleanup:
             for key, leaf in [("HOME", "home"), ("USERPROFILE", "home"), ("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"), ("XDG_CACHE_HOME", "cache"), ("XDG_RUNTIME_DIR", "runtime"), ("TMPDIR", "tmp"), ("TMP", "tmp"), ("TEMP", "tmp")]:
