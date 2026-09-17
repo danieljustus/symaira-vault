@@ -58,20 +58,41 @@ fn run_stdin_command(
     input: &[u8],
     timeout: Duration,
 ) -> Result<Vec<u8>, PlatformError> {
+    let output = run_native_process(program, args, input, timeout)?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(failed("native macOS helper returned an error"))
+    }
+}
+
+pub(crate) fn run_native_process(
+    program: &str,
+    args: &[&str],
+    input: &[u8],
+    timeout: Duration,
+) -> Result<std::process::Output, PlatformError> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::os::unix::process::CommandExt;
 
     let deadline = Instant::now()
         .checked_add(bounded_timeout(timeout))
         .ok_or_else(|| failed("native macOS helper timeout out of range"))?;
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
         .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    // Preserve private-home keychain routing in the disposable native runner.
+    // No credential-bearing environment variables reach native helpers.
+    if let Some(home) = std::env::var_os("HOME") {
+        command.env("HOME", home);
+    }
+    let mut child = command
         .spawn()
         .map_err(|_| unavailable("native macOS helper unavailable"))?;
     let result = (|| {
@@ -91,6 +112,7 @@ fn run_stdin_command(
         }
         let mut written = 0;
         let mut output = Vec::new();
+        let mut diagnostic = Vec::new();
         let (mut stdout_done, mut stderr_done) = (false, false);
         let mut status = None;
         loop {
@@ -108,9 +130,13 @@ fn run_stdin_command(
                     stdin.take();
                 }
             }
-            for (pipe, done, capture) in [
-                (&mut stdout as &mut dyn Read, &mut stdout_done, true),
-                (&mut stderr as &mut dyn Read, &mut stderr_done, false),
+            for (pipe, done, captured) in [
+                (&mut stdout as &mut dyn Read, &mut stdout_done, &mut output),
+                (
+                    &mut stderr as &mut dyn Read,
+                    &mut stderr_done,
+                    &mut diagnostic,
+                ),
             ] {
                 if *done {
                     continue;
@@ -118,8 +144,7 @@ fn run_stdin_command(
                 let mut buffer = [0_u8; 8192];
                 match pipe.read(&mut buffer) {
                     Ok(0) => *done = true,
-                    Ok(count) if capture => output.extend_from_slice(&buffer[..count]),
-                    Ok(_) => {}
+                    Ok(count) => captured.extend_from_slice(&buffer[..count]),
                     Err(error)
                         if matches!(
                             error.kind(),
@@ -138,11 +163,11 @@ fn run_stdin_command(
                 && stderr_done
                 && stdin.is_none()
             {
-                return if status.success() {
-                    Ok(output)
-                } else {
-                    Err(failed("native macOS helper returned an error"))
-                };
+                return Ok(std::process::Output {
+                    status,
+                    stdout: output,
+                    stderr: diagnostic,
+                });
             }
             if Instant::now() >= deadline {
                 return Err(PlatformError {
