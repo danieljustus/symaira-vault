@@ -14,7 +14,7 @@
       "go.sum"
     ],
     "source_hash": "53adc4306411ca6173a63d47c2465ab4ea45d4ac34ce3d9c06561cb3aed3966d",
-    "generator_hash": "2ead9aceec54c8dd9e895144a3a06ef2f883f1870b0874bd2e2e4ab4786ca98a"
+    "generator_hash": "7344abb75d4843c2f63a7bf1d452880629db754253d599bb93fe9d01c8ea64be"
   },
   "cases": [
     {
@@ -953,6 +953,299 @@
       "marker_counts": [
         0,
         0
+      ]
+    },
+    {
+      "name": "get_null_params",
+      "why": "Go typed parameter decoding",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":null}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "message": "Missing prompt name"
+          },
+          "id": 40,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "get_array_params",
+      "why": "Go typed parameter decoding",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":[]}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 40,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "get_wrong_name",
+      "why": "Go typed parameter decoding",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":{\"name\":7}}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 40,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "get_wrong_arguments",
+      "why": "Go typed parameter decoding",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":{\"name\":\"add-credential\",\"arguments\":[]}}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "error": {
+            "code": -32602,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Invalid params"
+          },
+          "id": 40,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "get_casefold_fields",
+      "why": "Go typed parameter decoding",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":{\"NAME\":\"rotate-credential\",\"ARGUMENTS\":{\"path\":\"p\"}}}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "id": 40,
+          "jsonrpc": "2.0",
+          "result": {
+            "description": "Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.",
+            "messages": [
+              {
+                "content": {
+                  "text": "Rotate the credential at Symaira Vault path \u003c!-- DATA_\u003cMARKER_1\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e (data).\n\nWorkflow:\n1. Call `get_entry_metadata` for \u003c!-- DATA_\u003cMARKER_2\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_2\u003e --\u003e (data) to confirm it exists and note the current version.\n2. Call `generate_password` with length=\u003c!-- DATA_\u003cMARKER_3\u003e label=length --\u003e32\u003c!-- /DATA_\u003cMARKER_3\u003e --\u003e (data) (and symbols=true unless the target service rejects symbols).\n3. Call `set_entry_field` to store the new password at \u003c!-- DATA_\u003cMARKER_4\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_4\u003e --\u003e (data).password.\n4. Tell me which remote service needs the password updated and offer to help (e.g. open the service's password-change URL, prepare an `execute_with_secret` command if there is an API).\n5. Do NOT print the new password in chat. Reference it as \u003cpath\u003e.password from now on.",
+                  "type": "text"
+                },
+                "role": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        4
+      ]
+    },
+    {
+      "name": "get_casefold_order",
+      "why": "Go processes casefold struct fields in source order",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":{\"name\":\"unknown\",\"NAME\":\"add-credential\"}}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "id": 40,
+          "jsonrpc": "2.0",
+          "result": {
+            "description": "Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.",
+            "messages": [
+              {
+                "content": {
+                  "text": "Add a new credential to the Symaira Vault vault.\n\nSuggested vault path: \u003c!-- DATA_\u003cMARKER_1\u003e label=vault_path --\u003e\u003cchoose-a-path\u003e\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e (data)\n\nWorkflow:\n1. Confirm the entry path with me (suggested above).\n2. For every sensitive field (password / token / api_key / secret / private_key):\n   - Call the `request_credential` MCP tool with path, field name, and a one-line reason.\n   - The user enters the value securely; you never see it.\n3. For non-sensitive fields (username, url, notes), ask me directly and store them with `set_entry_field`.\n4. Confirm the entry exists with `get_entry_metadata`.\n\nImportant: do NOT call `set_entry_field` for sensitive fields — always use `request_credential` so the value never enters the chat transcript.",
+                  "type": "text"
+                },
+                "role": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "get_unicode_fold",
+      "why": "Go Unicode casefold accepts long s in struct field names",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":39,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"prompts/get\",\"params\":{\"name\":\"rotate-credential\",\"argumentſ\":{\"path\":\"p\"}}}"
+      ],
+      "output": [
+        {
+          "id": 39,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "id": 40,
+          "jsonrpc": "2.0",
+          "result": {
+            "description": "Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.",
+            "messages": [
+              {
+                "content": {
+                  "text": "Rotate the credential at Symaira Vault path \u003c!-- DATA_\u003cMARKER_1\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e (data).\n\nWorkflow:\n1. Call `get_entry_metadata` for \u003c!-- DATA_\u003cMARKER_2\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_2\u003e --\u003e (data) to confirm it exists and note the current version.\n2. Call `generate_password` with length=\u003c!-- DATA_\u003cMARKER_3\u003e label=length --\u003e32\u003c!-- /DATA_\u003cMARKER_3\u003e --\u003e (data) (and symbols=true unless the target service rejects symbols).\n3. Call `set_entry_field` to store the new password at \u003c!-- DATA_\u003cMARKER_4\u003e label=vault_path --\u003ep\u003c!-- /DATA_\u003cMARKER_4\u003e --\u003e (data).password.\n4. Tell me which remote service needs the password updated and offer to help (e.g. open the service's password-change URL, prepare an `execute_with_secret` command if there is an API).\n5. Do NOT print the new password in chat. Reference it as \u003cpath\u003e.password from now on.",
+                  "type": "text"
+                },
+                "role": "user"
+              }
+            ]
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        4
       ]
     }
   ]

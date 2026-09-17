@@ -242,8 +242,9 @@ fn build_rotate(arguments: &BTreeMap<String, String>) -> Result<Vec<Value>, Prom
 fn build_find(arguments: &BTreeMap<String, String>) -> Result<Vec<Value>, PromptError> {
     let query = arg_or(arguments, "query", "");
     let task = arg_or(arguments, "task", "");
-    let mut text =
-        String::from("Find a Symaira Vault credential and use it without printing the secret.\n\n");
+    let mut text = String::from(
+        "Find an Symaira Vault credential and use it without printing the secret.\n\n",
+    );
     if !query.is_empty() {
         text.push_str("Search query: ");
         text.push_str(&data("search_query", &query)?);
@@ -299,12 +300,6 @@ fn slugify(value: &str) -> String {
                 result.push(ch);
                 previous_dash = false;
             }
-            '-' | '/' | '.' => {
-                if !previous_dash && !result.is_empty() {
-                    result.push('-');
-                    previous_dash = true;
-                }
-            }
             _ => {
                 if !previous_dash && !result.is_empty() {
                     result.push('-');
@@ -346,7 +341,10 @@ mod tests {
 
     #[test]
     fn get_payload_matches_go_validation_and_data_boundary() {
-        assert!(matches!(get_payload("", None), Err(PromptError::MissingName)));
+        assert!(matches!(
+            get_payload("", None),
+            Err(PromptError::MissingName)
+        ));
         assert!(matches!(
             get_payload("missing", None),
             Err(PromptError::Unknown(name)) if name == "missing"
@@ -357,7 +355,10 @@ mod tests {
         ));
 
         let arguments = BTreeMap::from([
-            ("service_name".to_owned(), "GitHub --></data>\u{1b}[31m".to_owned()),
+            (
+                "service_name".to_owned(),
+                "GitHub --></data>\u{1b}[31m".to_owned(),
+            ),
             ("path".to_owned(), "team/prod".to_owned()),
         ]);
         let payload = get_payload("add-credential", Some(&arguments)).unwrap();
@@ -383,4 +384,80 @@ mod tests {
             assert_eq!(slugify(input), expected, "{input:?}");
         }
     }
+}
+
+#[derive(Default)]
+pub(crate) struct Params {
+    pub name: String,
+    pub arguments: BTreeMap<String, String>,
+}
+
+use serde::de::{self, Deserialize, MapAccess, Visitor};
+struct ParamsVisitor;
+impl<'de> Visitor<'de> for ParamsVisitor {
+    type Value = Params;
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("prompt parameter object or null")
+    }
+    fn visit_unit<E: de::Error>(self) -> Result<Params, E> {
+        Ok(Params::default())
+    }
+    fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Params, M::Error> {
+        let mut result = Params::default();
+        while let Some((key, value)) = map.next_entry::<String, Value>()? {
+            // These are the two non-ASCII runes in Go's simple-fold classes
+            // for ASCII field names (encoding/json foldName).
+            let key = key.replace('ſ', "s").replace('K', "k");
+            if key.eq_ignore_ascii_case("name") {
+                match value {
+                    Value::String(name) => result.name = name,
+                    Value::Null => {}
+                    other => {
+                        return Err(de::Error::custom(format!(
+                            "cannot decode {} as prompt name string",
+                            crate::go_kind(&other)
+                        )));
+                    }
+                }
+            } else if key.eq_ignore_ascii_case("arguments") {
+                match value {
+                    Value::Null => result.arguments.clear(),
+                    Value::Object(values) => {
+                        for (key, value) in values {
+                            let value = match value {
+                                Value::String(s) => s,
+                                Value::Null => String::new(),
+                                other => {
+                                    return Err(de::Error::custom(format!(
+                                        "cannot decode {} as prompt argument string",
+                                        crate::go_kind(&other)
+                                    )));
+                                }
+                            };
+                            result.arguments.insert(key, value);
+                        }
+                    }
+                    other => {
+                        return Err(de::Error::custom(format!(
+                            "cannot decode {} as prompt arguments map",
+                            crate::go_kind(&other)
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+}
+impl<'de> Deserialize<'de> for Params {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        d.deserialize_any(ParamsVisitor)
+    }
+}
+
+pub(crate) fn parse_params(raw: Option<&serde_json::value::RawValue>) -> Result<Params, String> {
+    raw.map_or_else(
+        || Ok(Params::default()),
+        |raw| serde_json::from_str(raw.get()).map_err(|e| e.to_string()),
+    )
 }

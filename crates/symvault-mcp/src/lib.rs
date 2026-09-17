@@ -17,6 +17,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+mod prompts;
 pub mod render;
 mod tools;
 pub use tools::ToolListConfig;
@@ -431,6 +432,7 @@ impl ProtocolHandler {
             "initialized" | "notifications/initialized" => Ok(None),
             "ping" => Message::response(msg.id.clone(), serde_json::json!({})).map(Some),
             "tools/list" => self.handle_tools_list(msg).map(Some),
+            "prompts/list" | "prompts/get" => self.handle_prompts(msg).map(Some),
             _ => {
                 if msg.is_notification() {
                     return Ok(None);
@@ -486,6 +488,50 @@ impl ProtocolHandler {
 
         self.initialized = true;
         Message::response_from(msg.id.clone(), &result)
+    }
+
+    fn handle_prompts(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+        if msg.method == "prompts/list" {
+            return Message::response(
+                msg.id.clone(),
+                serde_json::json!({"prompts": prompts::list_payload()}),
+            );
+        }
+        let params = match prompts::parse_params(msg.params.as_deref()) {
+            Ok(params) => params,
+            Err(error) => {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INVALID_PARAMS,
+                    "Invalid params",
+                    Some(serde_json::Value::String(error)),
+                ));
+            }
+        };
+        match prompts::get_payload(&params.name, Some(&params.arguments)) {
+            Ok(payload) => Message::response(msg.id.clone(), payload),
+            Err(error) => {
+                let code = if matches!(error, prompts::PromptError::Embed(_)) {
+                    error_code::INTERNAL_ERROR
+                } else {
+                    error_code::INVALID_PARAMS
+                };
+                Ok(Message::error_response(
+                    msg.id.clone(),
+                    code,
+                    &error.to_string(),
+                    None,
+                ))
+            }
+        }
     }
 
     fn handle_tools_list(&self, msg: &Message) -> Result<Message, Error> {

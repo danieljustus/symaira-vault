@@ -873,10 +873,15 @@ mod tests {
             let alive = {
                 #[cfg(target_os = "linux")]
                 {
-                    fs::read_to_string(format!("/proc/{pid}/stat"))
-                        .ok()
-                        .and_then(|stat| stat.split_whitespace().nth(2)?.chars().next())
-                        .is_some_and(|state| state != 'Z')
+                    match fs::read_to_string(format!("/proc/{pid}/stat")) {
+                        Ok(stat) => {
+                            // comm is parenthesized and may itself contain spaces.
+                            let (_, tail) = stat.rsplit_once(')').expect("valid proc stat comm");
+                            tail.split_whitespace().next().expect("proc state") != "Z"
+                        }
+                        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                        Err(error) => panic!("cannot inspect descendant {pid}: {error}"),
+                    }
                 }
                 #[cfg(not(target_os = "linux"))]
                 {

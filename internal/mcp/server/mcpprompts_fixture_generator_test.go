@@ -183,6 +183,13 @@ func TestGenerateMCPPromptsFixture(t *testing.T) {
 			"a prompts/get notification is handled but transport emits no response",
 			[]string{mcpPromptInitialize(33), `{"jsonrpc":"2.0","method":"prompts/get","params":{"name":"add-credential"}}`, `{"jsonrpc":"2.0","id":34,"method":"prompts/list"}`},
 		},
+		{"get_null_params", "Go typed parameter decoding", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":null}`}},
+		{"get_array_params", "Go typed parameter decoding", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":[]}`}},
+		{"get_wrong_name", "Go typed parameter decoding", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":{"name":7}}`}},
+		{"get_wrong_arguments", "Go typed parameter decoding", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":{"name":"add-credential","arguments":[]}}`}},
+		{"get_casefold_fields", "Go typed parameter decoding", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":{"NAME":"rotate-credential","ARGUMENTS":{"path":"p"}}}`}},
+		{"get_casefold_order", "Go processes casefold struct fields in source order", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":{"name":"unknown","NAME":"add-credential"}}`}},
+		{"get_unicode_fold", "Go Unicode casefold accepts long s in struct field names", []string{mcpPromptInitialize(39), `{"jsonrpc":"2.0","id":40,"method":"prompts/get","params":{"name":"rotate-credential","argumentſ":{"path":"p"}}}`}},
 	}
 	for _, tc := range cases {
 		output, markerCounts := captureMCPPromptsCase(t, tc.input)
