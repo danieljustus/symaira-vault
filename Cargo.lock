@@ -2684,6 +2684,7 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sha2 0.10.9",
+ "symvault-core",
  "symvault-crypto",
  "tempfile",
  "thiserror 1.0.69",

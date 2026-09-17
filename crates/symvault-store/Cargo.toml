@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+symvault-core.workspace = true
 base64 = "=0.22.1"
 serde.workspace = true
 serde_json.workspace = true

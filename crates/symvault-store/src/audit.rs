@@ -305,6 +305,104 @@ pub fn verify_entries(
     (result, statuses)
 }
 
+/// Opens the production audit log using Go's OS-keyring address and hex codec.
+/// The caller supplies the process-wide native keyring/fallback adapter.
+/// Legacy raw key files are removed only after a successful keyring write.
+pub fn open_with_keyring(
+    agent: &str,
+    directory: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+    rotation: RotationConfig,
+) -> io::Result<Logger> {
+    if agent.contains(['/', '\\']) || agent.contains("..") || agent == "." {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid audit agent name",
+        ));
+    }
+    if !directory.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "vault directory does not exist",
+        ));
+    }
+    let directory_text = directory.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "audit path is not valid UTF-8")
+    })?;
+    // The shared session keyring address separates service/account at '|'.
+    // Reject an ambiguous audit account rather than addressing another item.
+    if directory_text.contains('|') {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "audit keyring path contains a reserved separator",
+        ));
+    }
+    let address = format!("symaira|audit-hmac-key:{directory_text}");
+    let loaded = keyring.get(&address);
+    let key = match loaded {
+        Ok(encoded) => {
+            let encoded = zeroize::Zeroizing::new(encoded);
+            let mut decoded = zeroize::Zeroizing::new(Vec::with_capacity(encoded.len() / 2));
+            if !encoded.len().is_multiple_of(2) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "invalid audit key encoding",
+                ));
+            }
+            for pair in encoded.as_chunks::<2>().0 {
+                let digit = |byte: u8| (byte as char).to_digit(16).map(|value| value as u8);
+                let high = digit(pair[0]);
+                let low = digit(pair[1]);
+                match (high, low) {
+                    (Some(high), Some(low)) => decoded.push(high * 16 + low),
+                    _ => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "invalid audit key encoding",
+                        ));
+                    }
+                }
+            }
+            AuditKey::new(&*decoded)?
+        }
+        Err(_) => {
+            let legacy = directory.join(KEY_FILE);
+            let (mut bytes, migrate) = match fs::read(&legacy) {
+                Ok(bytes) => (zeroize::Zeroizing::new(bytes), true),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                    let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
+                    getrandom::fill(&mut bytes)
+                        .map_err(|error| io::Error::other(error.to_string()))?;
+                    (bytes, false)
+                }
+                Err(error) => return Err(error),
+            };
+            let key = AuditKey::new(&*bytes)?;
+            let encoded = zeroize::Zeroizing::new(
+                bytes
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            );
+            let saved = keyring.set(&address, encoded.as_bytes());
+            bytes.zeroize();
+            if migrate {
+                if saved.is_ok() {
+                    let _ = fs::remove_file(legacy);
+                }
+            } else {
+                saved.map_err(|_| io::Error::other("could not store audit key"))?;
+            }
+            key
+        }
+    };
+    Logger::open(
+        directory.join(format!("{LOG_PREFIX}{agent}{LOG_SUFFIX}")),
+        key,
+        rotation,
+    )
+}
+
 /// Local key archive manager. Raw key files are private (`0600`) and are only
 /// intended for the isolated Rust audit adapter; production Go keyring files
 /// remain the oracle and are never replaced by this type.
@@ -497,11 +595,14 @@ impl Logger {
             fs::create_dir_all(parent)?;
         }
         let previous = last_hmac(&path)?;
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .read(true)
-            .open(&path)?;
+        let mut options = OpenOptions::new();
+        options.create(true).append(true).read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let file = options.open(&path)?;
         Ok(Self {
             kid: key_fingerprint(key.bytes()),
             path,
