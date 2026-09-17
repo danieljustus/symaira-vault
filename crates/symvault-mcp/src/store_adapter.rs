@@ -674,15 +674,21 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             return Err(error);
         }
         self.authorize_policy(name, arguments)?;
-        if let Some(limit) = self.rate_limit_denied() {
-            return Err(ToolCallResult::error(format!(
-                "rate limit exceeded: max {limit} requests per minute"
-            )));
-        }
         Ok(())
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
+        // Go registers rate limiting as a pre-call hook. It runs only after
+        // tool availability, argument decoding, and authorization have
+        // succeeded, and hook failures are returned as handler errors so the
+        // protocol emits JSON-RPC -32603. Keep the check here rather than in
+        // authorize: callers may inspect authorization without dispatching a
+        // call, and denied/unknown tools must not consume the window.
+        if let Some(limit) = self.rate_limit_denied() {
+            return Err(format!(
+                "rate limit exceeded: max {limit} requests per minute"
+            ));
+        }
         let result = if name == "symaira_audit_self" {
             self.audit_self(arguments)
         } else {

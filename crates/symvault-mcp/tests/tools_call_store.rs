@@ -189,12 +189,162 @@ fn configured_rate_limit_matches_go_pre_call_hook() {
 
     runtime
         .authorize("health", &serde_json::json!({}))
-        .expect("first pre-call is within the configured window");
-    let error = runtime
+        .expect("authorization does not consume the configured window");
+    runtime
         .authorize("health", &serde_json::json!({}))
-        .expect_err("second pre-call exceeds the configured window");
-    assert!(error.is_error);
-    assert_eq!(error.text, "rate limit exceeded: max 1 requests per minute");
+        .expect("repeated authorization does not consume the configured window");
+    runtime
+        .call("health", &serde_json::json!({}))
+        .expect("first dispatched call is within the configured window");
+    let error = runtime
+        .call("health", &serde_json::json!({}))
+        .expect_err("second dispatched call exceeds the configured window");
+    assert_eq!(error, "rate limit exceeded: max 1 requests per minute");
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitFixture {
+    schema_version: u32,
+    oracle: RateLimitOracle,
+    server_name: String,
+    server_version: String,
+    cases: Vec<RateLimitCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitOracle {
+    commit: String,
+    commit_sha: String,
+    source_files: Vec<String>,
+    source_hash: String,
+    generator_hash: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitCase {
+    name: String,
+    input: Vec<String>,
+    output: Vec<Value>,
+}
+
+#[test]
+fn go_generated_rate_limit_fixture_matches_rust_dispatch() {
+    let fixture: RateLimitFixture = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/tools-rate-limit.json"
+    ))
+    .expect("valid Go-generated rate-limit fixture");
+    assert_eq!(fixture.schema_version, 1);
+    assert_eq!(fixture.oracle.commit, "fca3f894");
+    assert_eq!(
+        fixture.oracle.commit_sha,
+        "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+    );
+    assert_eq!(fixture.oracle.source_files.len(), 7);
+    assert_eq!(fixture.oracle.source_hash.len(), 64);
+    assert_eq!(fixture.oracle.generator_hash.len(), 64);
+    assert_eq!(fixture.cases.len(), 4);
+
+    // The fourth oracle case deliberately records a pinned Go bug: a
+    // non-biometric policy error falls through to the handler, so the failed
+    // storage call consumes the hook window. Rust keeps its policy denial
+    // fail-closed and therefore compares the three valid dispatch-order
+    // branches here; the stricter divergence is asserted below.
+    for case in fixture
+        .cases
+        .iter()
+        .filter(|case| case.name != "policy_check_error_reaches_handler")
+    {
+        let (root, identity) = write_synthetic_vault();
+        let unavailable_tools = if case.name == "unavailable_before_allowed" {
+            vec![ReadOnlyUnavailableTool {
+                name: "generate_totp".into(),
+                code: "not_available".into(),
+                reason: "tool \"generate_totp\" is not available in the current environment".into(),
+            }]
+        } else {
+            Vec::new()
+        };
+        let runtime = StoreReadOnlyRuntime::open(
+            root.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                server_name: fixture.server_name.clone(),
+                server_version: "1.0.0".into(),
+                transport: "stdio".into(),
+                agent_name: "fixture".into(),
+                approval_mode: "none".into(),
+                allowed_paths: vec!["*".into()],
+                available_tools: read_only_tool_names(),
+                unavailable_tools,
+                vault_dir: "<fixture-vault>".into(),
+                vault_unlocked: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("open fixture runtime");
+        runtime.set_rate_limit_per_minute(Some(1));
+        let mut handler = ProtocolHandler::with_tool_call_runtime(
+            &fixture.server_name,
+            &fixture.server_version,
+            Arc::new(runtime),
+        );
+        let input = case
+            .input
+            .iter()
+            .map(|line| format!("{line}\n"))
+            .collect::<String>();
+        let actual: Vec<Value> = run_stream(&input, &mut handler)
+            .expect("Rust rate-limit stream dispatch")
+            .iter()
+            .map(|line| serde_json::from_str(line).expect("Rust emits JSON responses"))
+            .collect();
+        assert_eq!(actual, case.output, "rate-limit case {}", case.name);
+    }
+}
+
+#[test]
+fn policy_denial_does_not_consume_rate_limit_window() {
+    let (root, identity) = write_synthetic_vault();
+    let runtime = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        ReadOnlyRuntimeConfig {
+            agent_name: "fixture".into(),
+            available_tools: read_only_tool_names(),
+            ..ReadOnlyRuntimeConfig::default()
+        },
+        Some(Engine::new([Policy {
+            version: "1".into(),
+            description: "fixture policy denial".into(),
+            rules: vec![Rule {
+                name: "deny fixture read".into(),
+                priority: 10,
+                conditions: Conditions {
+                    agent_id: "fixture".into(),
+                    path: "github".into(),
+                    action: "get".into(),
+                    ..Conditions::default()
+                },
+                action: Action::Deny,
+            }],
+        }])),
+        None,
+    )
+    .expect("open policy fixture runtime");
+    runtime.set_rate_limit_per_minute(Some(1));
+
+    let denied = runtime
+        .authorize("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect_err("policy denial must happen before dispatch");
+    assert!(denied.text.contains("policy denied tool"));
+    runtime
+        .authorize("health", &serde_json::json!({}))
+        .expect("policy denial must not consume the pre-call window");
+    runtime
+        .call("health", &serde_json::json!({}))
+        .expect("health remains the first dispatched call");
 }
 
 fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
