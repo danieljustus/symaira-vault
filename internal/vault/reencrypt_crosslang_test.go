@@ -257,7 +257,9 @@ func initPassphraseReencryptVault(t *testing.T) (string, *age.X25519Identity, []
 	if err := os.WriteFile(filepath.Join(root, "recipients.txt"), []byte(identity.Recipient().String()+"\n"), 0o600); err != nil {
 		t.Fatalf("write recipients: %v", err)
 	}
-	large := string(bytes.Repeat([]byte("rust-production-"), 512*1024))
+	// Keep the fixture large enough to expose journal publication, while
+	// avoiding an unnecessary multi-dozen-megabyte encryption delay on CI.
+	large := string(bytes.Repeat([]byte("rust-production-"), 32*1024))
 	for i := 0; i < 8; i++ {
 		path := fmt.Sprintf("cross-language-%02d", i)
 		mustWriteEntry(t, root, identity, path, map[string]interface{}{"value": large})
