@@ -271,75 +271,83 @@ fn host_from_url(raw: &str) -> &str {
     raw.split(':').next().unwrap_or("")
 }
 
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct Bw {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     folders: Vec<BwFolder>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     items: Vec<BwItem>,
 }
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct BwFolder {
+    #[serde(default, deserialize_with = "null_default")]
     id: String,
+    #[serde(default, deserialize_with = "null_default")]
     name: String,
 }
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct BwItem {
-    #[serde(rename = "type")]
-    kind: u8,
+    #[serde(rename = "type", default, deserialize_with = "null_default")]
+    kind: i64,
+    #[serde(default, deserialize_with = "null_default")]
     name: String,
-    #[serde(rename = "folderId", default)]
+    #[serde(rename = "folderId", default, deserialize_with = "null_default")]
     folder_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     notes: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     login: BwLogin,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     card: BwCard,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     fields: Vec<BwField>,
 }
 #[derive(Default, Deserialize)]
 struct BwLogin {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     username: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     password: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     totp: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     uris: Vec<BwUri>,
 }
 #[derive(Default, Deserialize)]
 struct BwUri {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     uri: String,
 }
 #[derive(Default, Deserialize)]
 struct BwCard {
-    #[serde(rename = "cardholderName", default)]
+    #[serde(rename = "cardholderName", default, deserialize_with = "null_default")]
     cardholder: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     number: String,
-    #[serde(rename = "expMonth", default)]
+    #[serde(rename = "expMonth", default, deserialize_with = "null_default")]
     exp_month: String,
-    #[serde(rename = "expYear", default)]
+    #[serde(rename = "expYear", default, deserialize_with = "null_default")]
     exp_year: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     code: String,
 }
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 struct BwField {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_default")]
     value: String,
 }
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let x: Bw = serde_json::from_slice(bytes)
-        .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?;
-    let folders: xhash::HashMap<String, String> =
-        x.folders.into_iter().map(|f| (f.id, f.name)).collect();
+    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(bytes))
+        .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?
+        .unwrap_or_default();
+    let folders: xhash::HashMap<String, String> = x
+        .folders
+        .into_iter()
+        .filter(|f| !f.id.is_empty())
+        .map(|f| (f.id, f.name))
+        .collect();
     let mut out = Vec::new();
     for item in x.items {
         if item.kind != 1 && item.kind != 2 {
@@ -379,20 +387,28 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
                 ),
             );
             d.insert("notes".into(), Value::String(item.notes));
-            if !item.login.totp.is_empty() {
-                insert_totp(&mut d, &mut warnings, &item.login.totp);
-            }
         } else {
             d.insert("card_number".into(), Value::String(item.card.number));
             d.insert("cardholder".into(), Value::String(item.card.cardholder));
             d.insert("expiry_month".into(), Value::String(item.card.exp_month));
             d.insert("expiry_year".into(), Value::String(item.card.exp_year));
             d.insert("cvc".into(), Value::String(item.card.code));
+            d.insert("subtype".into(), Value::String("card".into()));
         }
         for f in item.fields {
-            if !f.name.is_empty() {
+            if f.name.is_empty() {
+                continue;
+            }
+            if item.kind == 1 && f.name.eq_ignore_ascii_case("totp") {
+                if !f.value.is_empty() {
+                    insert_totp(&mut d, &mut warnings, &f.value);
+                }
+            } else {
                 d.insert(f.name, Value::String(f.value));
             }
+        }
+        if item.kind == 1 && !item.login.totp.is_empty() {
+            insert_totp(&mut d, &mut warnings, &item.login.totp);
         }
         out.push(ImportedEntry {
             path,
@@ -621,4 +637,12 @@ fn insert_totp(
 }
 mod xhash {
     pub type HashMap<K, V> = std::collections::HashMap<K, V>;
+}
+
+fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }

@@ -2,13 +2,15 @@
   "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
   "sources": [
     "internal/crypto/totp.go",
+    "internal/importer/bitwarden.go",
     "internal/importer/csv.go",
     "internal/importer/csv_profiles.go",
     "internal/importer/importer.go",
-    "internal/importer/totp.go"
+    "internal/importer/totp.go",
+    "internal/vault/payment.go"
   ],
-  "source_digest": "9b1c9f0b91c2376b5e7f8ccdbe824301d731a075b1f0ef4c20ec4dcf8f7c3f11",
-  "generator_digest": "e29fa26f213b3e0475af7be3d939ec9fd0f4f545e06b63830306ba75c8cd1274",
+  "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
+  "generator_digest": "2263b21f1fd2d0f4897fc0e61fc2adfa1782706accc790507fcfe82af196b70b",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -46,6 +48,125 @@
           "warnings": null
         }
       ],
+      "failed": false
+    },
+    {
+      "name": "bw_nulls",
+      "format": "bitwarden",
+      "input": "{\"folders\":null,\"items\":[{\"type\":1,\"name\":\"Login\",\"folderId\":null,\"notes\":null,\"login\":{\"username\":null,\"uris\":null},\"fields\":null}]}",
+      "entries": [
+        {
+          "path": "Login",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_empty_fields",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1}]}",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_card",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":2,\"name\":\"Card\",\"card\":{\"number\":\"fixture-123\",\"code\":\"000\"}}]}",
+      "entries": [
+        {
+          "path": "Card",
+          "data": {
+            "card_number": "fixture-123",
+            "cardholder": "",
+            "cvc": "000",
+            "expiry_month": "",
+            "expiry_year": "",
+            "subtype": "card"
+          },
+          "warnings": null,
+          "secret_type": "payment"
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_totp_precedence",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"Login\",\"login\":{\"totp\":\"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=8\"},\"fields\":[{\"name\":\"TOTP\",\"value\":\"bad\"},{\"name\":\"totp\",\"value\":\"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\"}]}]}",
+      "entries": [
+        {
+          "path": "Login",
+          "data": {
+            "notes": "",
+            "password": "",
+            "totp": {
+              "algorithm": "SHA1",
+              "digits": 8,
+              "period": 30,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            },
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_empty_folder",
+      "format": "bitwarden",
+      "input": "{\"folders\":[{\"id\":\"\",\"name\":\"Ignore\"}],\"items\":[{\"type\":1,\"name\":\"Bare\"}]}",
+      "entries": [
+        {
+          "path": "Bare",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_trailing_json",
+      "format": "bitwarden",
+      "input": "{\"items\":[]} {\"ignored\":true}",
+      "entries": [],
+      "failed": false
+    },
+    {
+      "name": "bw_null_document",
+      "format": "bitwarden",
+      "input": "null",
+      "entries": [],
       "failed": false
     },
     {

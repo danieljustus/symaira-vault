@@ -17,9 +17,10 @@ import (
 const pinnedOracleCommit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 
 type entry struct {
-	Path     string         `json:"path"`
-	Data     map[string]any `json:"data"`
-	Warnings []string       `json:"warnings"`
+	Path       string         `json:"path"`
+	Data       map[string]any `json:"data"`
+	Warnings   []string       `json:"warnings"`
+	SecretType string         `json:"secret_type,omitempty"`
 }
 type csvCase struct {
 	Name    string          `json:"name"`
@@ -41,7 +42,7 @@ func main() {
 	rootBytes, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	must(err)
 	root := strings.TrimSpace(string(rootBytes))
-	sources := []string{"internal/crypto/totp.go", "internal/importer/csv.go", "internal/importer/csv_profiles.go", "internal/importer/importer.go", "internal/importer/totp.go"}
+	sources := []string{"internal/crypto/totp.go", "internal/importer/bitwarden.go", "internal/importer/csv.go", "internal/importer/csv_profiles.go", "internal/importer/importer.go", "internal/importer/totp.go", "internal/vault/payment.go"}
 	_, err = provenance.Verify(root, pinnedOracleCommit, sources)
 	must(err)
 	digest, err := provenance.Digest(root, sources)
@@ -51,6 +52,13 @@ func main() {
 	cases := []csvCase{
 		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
 		{Name: "apple_totp", Format: "apple", Input: "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=sha256&digits=8&period=45\n"},
+		{Name: "bw_nulls", Format: "bitwarden", Input: `{"folders":null,"items":[{"type":1,"name":"Login","folderId":null,"notes":null,"login":{"username":null,"uris":null},"fields":null}]}`},
+		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},
+		{Name: "bw_card", Format: "bitwarden", Input: `{"items":[{"type":2,"name":"Card","card":{"number":"fixture-123","code":"000"}}]}`},
+		{Name: "bw_totp_precedence", Format: "bitwarden", Input: `{"items":[{"type":1,"name":"Login","login":{"totp":"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&digits=8"},"fields":[{"name":"TOTP","value":"bad"},{"name":"totp","value":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}`},
+		{Name: "bw_empty_folder", Format: "bitwarden", Input: `{"folders":[{"id":"","name":"Ignore"}],"items":[{"type":1,"name":"Bare"}]}`},
+		{Name: "bw_trailing_json", Format: "bitwarden", Input: `{"items":[]} {"ignored":true}`},
+		{Name: "bw_null_document", Format: "bitwarden", Input: `null`},
 		{Name: "empty", Format: "csv", Input: ""},
 		{Name: "empty_fields", Format: "csv", Input: "title,username,password,url,notes\nA,,p,,\n"},
 		{Name: "no_title_no_invented_path", Format: "csv", Input: "url,password\nhttps://example.test,p\n"},
@@ -77,7 +85,7 @@ func main() {
 		cases[i].Failed = err != nil
 		cases[i].Entries = []entry{}
 		for _, e := range entries {
-			cases[i].Entries = append(cases[i].Entries, entry{e.Path, e.Data, e.Warnings})
+			cases[i].Entries = append(cases[i].Entries, entry{Path: e.Path, Data: e.Data, Warnings: e.Warnings, SecretType: secretType(e)})
 		}
 	}
 	secret := "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
@@ -136,6 +144,12 @@ func main() {
 		must(os.WriteFile(path, content, 0600))
 	}
 	fmt.Printf("PASS CSV oracle (%d cases)\n", len(cases))
+}
+func secretType(e importer.ImportedEntry) string {
+	if e.SecretMetadata != nil {
+		return string(e.SecretMetadata.Type)
+	}
+	return ""
 }
 func must(err error) {
 	if err != nil {

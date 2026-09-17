@@ -12,6 +12,7 @@ fn csv_profiles_and_paths_match_production_go() {
     for case in fixture["cases"].as_array().unwrap() {
         let format = match case["format"].as_str().unwrap() {
             "csv" => Format::Csv,
+            "bitwarden" => Format::Bitwarden,
             "apple" => Format::Apple,
             "chrome" => Format::Chrome,
             "firefox" => Format::Firefox,
