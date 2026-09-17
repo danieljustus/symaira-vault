@@ -85,6 +85,10 @@ fn catalog() -> Result<&'static [ToolDefinition], String> {
         .map_err(Clone::clone)
 }
 
+pub(crate) fn contains_tool(name: &str) -> Result<bool, String> {
+    Ok(catalog()?.iter().any(|definition| definition.name == name))
+}
+
 fn blocked_by_tier(tier: Option<&str>, name: &str) -> bool {
     match tier {
         Some("read-only") => matches!(

@@ -17,9 +17,11 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+mod call;
 mod prompts;
 pub mod render;
 mod tools;
+pub use call::{ToolCallResult, ToolCallRuntime};
 pub use tools::ToolListConfig;
 
 /// The newest protocol version this server speaks.
@@ -384,6 +386,7 @@ pub struct ProtocolHandler {
     server_name: String,
     server_version: String,
     tool_list_config: ToolListConfig,
+    tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
 }
 
@@ -393,6 +396,7 @@ impl ProtocolHandler {
             server_name: server_name.into(),
             server_version: server_version.into(),
             tool_list_config: ToolListConfig::default(),
+            tool_call_runtime: None,
             initialized: false,
         }
     }
@@ -408,12 +412,34 @@ impl ProtocolHandler {
             server_name: server_name.into(),
             server_version: server_version.into(),
             tool_list_config,
+            tool_call_runtime: None,
+            initialized: false,
+        }
+    }
+
+    /// Constructs a handler with an explicitly injected tools/call runtime.
+    /// The runtime is the only path to storage and policy; construction itself
+    /// performs no vault or platform probing.
+    pub fn with_tool_call_runtime(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        runtime: std::sync::Arc<dyn ToolCallRuntime>,
+    ) -> Self {
+        ProtocolHandler {
+            server_name: server_name.into(),
+            server_version: server_version.into(),
+            tool_list_config: ToolListConfig::default(),
+            tool_call_runtime: Some(runtime),
             initialized: false,
         }
     }
 
     pub fn set_tool_list_config(&mut self, tool_list_config: ToolListConfig) {
         self.tool_list_config = tool_list_config;
+    }
+
+    pub fn set_tool_call_runtime(&mut self, runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>) {
+        self.tool_call_runtime = runtime;
     }
 
     /// Whether `initialize` has been handled on this connection.
@@ -432,6 +458,7 @@ impl ProtocolHandler {
             "initialized" | "notifications/initialized" => Ok(None),
             "ping" => Message::response(msg.id.clone(), serde_json::json!({})).map(Some),
             "tools/list" => self.handle_tools_list(msg).map(Some),
+            "tools/call" => self.handle_tools_call(msg).map(Some),
             "prompts/list" | "prompts/get" => self.handle_prompts(msg).map(Some),
             _ => {
                 if msg.is_notification() {
@@ -557,6 +584,73 @@ impl ProtocolHandler {
         let tools =
             tools::list_tools(&self.tool_list_config, include_all).map_err(Error::Catalog)?;
         Message::response(msg.id.clone(), serde_json::json!({"tools": tools}))
+    }
+
+    fn handle_tools_call(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+
+        // Go checks the server pointer before parsing params. Keep this order
+        // so a locked default handler returns vault-locked even for malformed
+        // arguments, without probing any platform or storage capability.
+        let Some(runtime) = self.tool_call_runtime.as_ref() else {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                "vault locked: run 'symvault unlock' first",
+                None,
+            ));
+        };
+
+        let (name, arguments) = match call::parse_params(msg.params.as_deref().map(RawValue::get)) {
+            Ok(params) => params,
+            Err(error) => {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INVALID_PARAMS,
+                    "Invalid params",
+                    Some(serde_json::Value::String(error)),
+                ));
+            }
+        };
+        if !arguments.is_object() {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &format!(
+                    "parse arguments: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
+                    go_kind(&arguments)
+                ),
+                None,
+            ));
+        }
+        let known = tools::contains_tool(&name).map_err(Error::Catalog)?;
+        if !known {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &format!("unknown tool: {name}"),
+                None,
+            ));
+        }
+        if let Err(result) = runtime.authorize(&name, &arguments) {
+            return Message::response(msg.id.clone(), call::payload(result));
+        }
+        match runtime.call(&name, &arguments) {
+            Ok(result) => Message::response(msg.id.clone(), call::payload(result)),
+            Err(error) => Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &error,
+                None,
+            )),
+        }
     }
 }
 
