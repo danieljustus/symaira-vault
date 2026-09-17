@@ -67,6 +67,9 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Strin
         rendered.push('\n');
     }
     atomic_write(path, rendered.as_bytes())?;
+    if let Err(error) = symvault_core::config::Config::load(path) {
+        return Err(format!("config is invalid after update: {error}"));
+    }
     if !quiet {
         println!("Set {key} = {value}");
     }
@@ -115,39 +118,7 @@ fn parse_set_value(value: &str) -> Result<SetValue, String> {
         return Ok(SetValue::Node(canonical_sequence(&sequence)?));
     }
     if let Some(scalar) = document.as_scalar() {
-        let parsed = yaml_edit::ScalarValue::from_scalar(&scalar);
-        let value = scalar.as_string();
-        if matches!(
-            parsed.style(),
-            yaml_edit::ScalarStyle::Literal | yaml_edit::ScalarStyle::Folded
-        ) {
-            return Ok(SetValue::Node(canonical_scalar_node(&scalar)?));
-        }
-        let scalar = match parsed.scalar_type() {
-            yaml_edit::ScalarType::String => {
-                let plain = yaml_edit::ScalarValue::string(&value);
-                if plain.to_yaml_string().starts_with('\'') {
-                    yaml_edit::ScalarValue::double_quoted(value)
-                } else {
-                    plain
-                }
-            }
-            yaml_edit::ScalarType::Integer => parsed
-                .to_i64()
-                .map(yaml_edit::ScalarValue::from)
-                .unwrap_or_else(|| yaml_edit::ScalarValue::parse(value)),
-            yaml_edit::ScalarType::Float => parsed
-                .to_f64()
-                .map(yaml_edit::ScalarValue::from)
-                .unwrap_or_else(|| yaml_edit::ScalarValue::parse(value)),
-            yaml_edit::ScalarType::Boolean => parsed
-                .to_bool()
-                .map(yaml_edit::ScalarValue::from)
-                .unwrap_or_else(|| yaml_edit::ScalarValue::parse(value)),
-            yaml_edit::ScalarType::Null => yaml_edit::ScalarValue::null(),
-            _ => yaml_edit::ScalarValue::parse(value),
-        };
-        return Ok(SetValue::Scalar(scalar));
+        return Ok(SetValue::Node(canonical_scalar_node(&scalar)?));
     }
     Err("cannot parse config value: unsupported YAML node".to_owned())
 }
@@ -172,36 +143,47 @@ fn canonical_node(node: yaml_edit::YamlNode) -> Result<yaml_edit::YamlNode, Stri
 
 fn canonical_scalar_node(scalar: &yaml_edit::Scalar) -> Result<yaml_edit::YamlNode, String> {
     let parsed = yaml_edit::ScalarValue::from_scalar(scalar);
-    let value = scalar.as_string();
+    let mut value = scalar.as_string();
     if matches!(
         parsed.style(),
         yaml_edit::ScalarStyle::Literal | yaml_edit::ScalarStyle::Folded
-    ) {
-        let content = value.strip_suffix('\n').unwrap_or(&value);
-        let mut source = String::from("|-\n");
-        for line in content.lines() {
-            source.push_str("  ");
-            source.push_str(line);
-            source.push('\n');
+    ) && !scalar.value().ends_with('\n')
+        && value.ends_with('\n')
+    {
+        value.pop();
+    }
+    if parsed.scalar_type() == yaml_edit::ScalarType::String {
+        if value.trim_matches('\n').is_empty() {
+            return scalar_node_from_value(yaml_edit::ScalarValue::double_quoted(""));
         }
-        let file = yaml_edit::YamlFile::from_str(&source)
-            .map_err(|error| format!("cannot parse config value: {error}"))?;
-        return file
-            .documents()
-            .next()
-            .and_then(|document| document.as_scalar())
-            .map(yaml_edit::YamlNode::Scalar)
-            .ok_or_else(|| "cannot parse config value: unsupported YAML scalar".to_owned());
+        if value.contains('\n') {
+            let trailing_newlines = value.len() - value.trim_end_matches('\n').len();
+            let header = match trailing_newlines {
+                0 => "|-",
+                1 => "|",
+                _ => "|+",
+            };
+            let content = value.trim_end_matches('\n');
+            let mut source = format!("{header}\n");
+            for line in content.lines() {
+                source.push_str("  ");
+                source.push_str(line);
+                source.push('\n');
+            }
+            for _ in 1..trailing_newlines {
+                source.push('\n');
+            }
+            return scalar_node_from_source(&source);
+        }
+        let plain = yaml_edit::ScalarValue::string(&value);
+        let value = if plain.to_yaml_string().starts_with('\'') {
+            yaml_edit::ScalarValue::double_quoted(value)
+        } else {
+            plain
+        };
+        return scalar_node_from_value(value);
     }
     let scalar = match parsed.scalar_type() {
-        yaml_edit::ScalarType::String => {
-            let plain = yaml_edit::ScalarValue::string(&value);
-            if plain.to_yaml_string().starts_with('\'') {
-                yaml_edit::ScalarValue::double_quoted(value)
-            } else {
-                plain
-            }
-        }
         yaml_edit::ScalarType::Integer => parsed
             .to_i64()
             .map(yaml_edit::ScalarValue::from)
@@ -217,7 +199,21 @@ fn canonical_scalar_node(scalar: &yaml_edit::Scalar) -> Result<yaml_edit::YamlNo
         yaml_edit::ScalarType::Null => yaml_edit::ScalarValue::null(),
         _ => yaml_edit::ScalarValue::parse(value),
     };
-    yaml_edit::YamlBuilder::scalar(scalar)
+    scalar_node_from_value(scalar)
+}
+
+fn scalar_node_from_source(source: &str) -> Result<yaml_edit::YamlNode, String> {
+    let file = yaml_edit::YamlFile::from_str(source)
+        .map_err(|error| format!("cannot parse config value: {error}"))?;
+    file.documents()
+        .next()
+        .and_then(|document| document.as_scalar())
+        .map(yaml_edit::YamlNode::Scalar)
+        .ok_or_else(|| "cannot parse config value: unsupported YAML scalar".to_owned())
+}
+
+fn scalar_node_from_value(value: yaml_edit::ScalarValue) -> Result<yaml_edit::YamlNode, String> {
+    yaml_edit::YamlBuilder::scalar(value)
         .build()
         .documents()
         .next()
@@ -313,6 +309,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .and_then(|name| name.to_str())
         .ok_or_else(|| "cannot write config: invalid path".to_owned())?;
     let temporary = path.with_file_name(format!(".{file_name}.tmp-{}", std::process::id()));
+    let mut created = false;
     let result = (|| {
         let mut options = fs::OpenOptions::new();
         options.write(true).create_new(true);
@@ -324,6 +321,7 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         let mut file = options
             .open(&temporary)
             .map_err(|error| format!("cannot write config: {error}"))?;
+        created = true;
         file.write_all(bytes)
             .map_err(|error| format!("cannot write config: {error}"))?;
         file.sync_all()
@@ -331,18 +329,17 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         fs::rename(&temporary, path).map_err(|error| format!("cannot write config: {error}"))?;
         Ok(())
     })();
-    if result.is_err() {
+    if created && result.is_err() {
         let _ = fs::remove_file(&temporary);
     }
     result
 }
 
 fn json_string(value: &str) -> Result<String, String> {
-    Ok(serde_json::to_string(value)
-        .map_err(|error| error.to_string())?
-        .replace("\\u003c", "<")
-        .replace("\\u003e", ">")
-        .replace("\\u0026", "&"))
+    let encoded = serde_json::to_string(value).map_err(|error| error.to_string())?;
+    Ok(encoded
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029"))
 }
 
 fn lookup_scalar(source: &str, path: &str) -> Result<String, String> {
@@ -374,7 +371,7 @@ fn lookup_scalar(source: &str, path: &str) -> Result<String, String> {
     let value = match &current {
         yaml_edit::YamlNode::Scalar(scalar) => scalar.as_string(),
         yaml_edit::YamlNode::Alias(alias) => alias.name(),
-        _ => normalize_node_text_with_comments(source, &current.to_string()),
+        _ => normalize_node_text_for_node(source, &current),
     };
     Ok(value)
 }
@@ -387,34 +384,23 @@ fn normalize_node_text(text: &str) -> String {
     };
     let base = lines
         .iter()
-        .enumerate()
         .skip(first_value + 1)
-        .filter_map(|(_, line)| {
+        .filter_map(|line| {
             let trimmed = line.trim_start();
             if trimmed.is_empty() || trimmed.starts_with('#') {
-                return None;
-            }
-            let indent = line.len() - trimmed.len();
-            if is_structural_yaml_line(trimmed) {
-                Some(indent)
-            } else {
                 None
+            } else {
+                Some(line.len() - trimmed.len())
             }
         })
+        .map(|indent| indent.saturating_sub(2))
         .min()
-        .or_else(|| {
-            lines
-                .iter()
-                .skip(first_value + 1)
-                .filter_map(|line| {
-                    let trimmed = line.trim_start();
-                    (!trimmed.is_empty()).then(|| line.len() - trimmed.len())
-                })
-                .map(|indent| indent.saturating_sub(2))
-                .min()
-        })
         .unwrap_or(0);
 
+    normalize_node_lines(&lines, first_value, base)
+}
+
+fn normalize_node_lines(lines: &[&str], first_value: usize, base: usize) -> String {
     lines
         .iter()
         .enumerate()
@@ -431,22 +417,26 @@ fn normalize_node_text(text: &str) -> String {
         .to_owned()
 }
 
-fn normalize_node_text_with_comments(source: &str, text: &str) -> String {
-    let rendered = normalize_node_text(text);
-    let Some(first_line) = rendered.lines().next() else {
-        return rendered;
+fn normalize_node_text_for_node(source: &str, node: &yaml_edit::YamlNode) -> String {
+    let Some(range) = node_range(node) else {
+        return normalize_node_text(&node.to_string());
     };
-    let source_lines = source.lines().collect::<Vec<_>>();
-    let Some(first_index) = source_lines
-        .iter()
-        .position(|line| line.trim() == first_line.trim())
-    else {
-        return rendered;
+    let Some(text) = source.get(range.start as usize..range.end as usize) else {
+        return normalize_node_text(&node.to_string());
     };
-    let source_indent =
-        source_lines[first_index].len() - source_lines[first_index].trim_start_matches(' ').len();
+    let line_start = source[..range.start as usize]
+        .rfind('\n')
+        .map_or(0, |index| index + 1);
+    let source_indent = range.start as usize - line_start;
+    let lines = text.lines().collect::<Vec<_>>();
+    let rendered = lines
+        .first()
+        .map(|_| normalize_node_lines(&lines, 0, source_indent))
+        .map(normalize_block_scalar_indentation)
+        .unwrap_or_default();
+    let source_lines = source[..line_start].lines().collect::<Vec<_>>();
     let mut comments = Vec::new();
-    for line in source_lines[..first_index].iter().rev() {
+    for line in source_lines.iter().rev() {
         let trimmed = line.trim_start();
         if trimmed.is_empty() {
             continue;
@@ -467,8 +457,35 @@ fn normalize_node_text_with_comments(source: &str, text: &str) -> String {
     format!("{}\n{rendered}", comments.join("\n"))
 }
 
-fn is_structural_yaml_line(line: &str) -> bool {
-    line.starts_with('-') || line.find(':').is_some_and(|index| index > 0)
+fn normalize_block_scalar_indentation(text: String) -> String {
+    let mut lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+    let mut block_header_indent = None;
+    for line in &mut lines {
+        let trimmed = line.trim_start();
+        let indent = line.len() - trimmed.len();
+        if let Some(header_indent) = block_header_indent {
+            if trimmed.is_empty() || indent > header_indent {
+                if indent > header_indent + 2 {
+                    *line = format!("{}{}", " ".repeat(header_indent + 2), trimmed);
+                }
+                continue;
+            }
+            block_header_indent = None;
+        }
+        if trimmed.ends_with('|') || trimmed.ends_with('>') {
+            block_header_indent = Some(indent);
+        }
+    }
+    lines.join("\n")
+}
+
+fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
+    match node {
+        yaml_edit::YamlNode::Mapping(mapping) => Some(mapping.byte_range()),
+        yaml_edit::YamlNode::Sequence(sequence) => Some(sequence.byte_range()),
+        yaml_edit::YamlNode::Scalar(scalar) => Some(scalar.byte_range()),
+        yaml_edit::YamlNode::Alias(_) | yaml_edit::YamlNode::TaggedNode(_) => None,
+    }
 }
 
 pub fn resolve_path(file: Option<PathBuf>) -> Result<PathBuf, String> {
@@ -485,4 +502,36 @@ pub fn resolve_path(file: Option<PathBuf>) -> Result<PathBuf, String> {
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "cannot determine config file path".to_owned())?;
     Ok(PathBuf::from(home).join(".symvault").join("config.yaml"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::atomic_write;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn atomic_write_keeps_preexisting_tempfile_on_create_collision() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("symvault-config-atomic-{unique}"));
+        fs::create_dir_all(&root).expect("create test directory");
+        let target = root.join("config.yaml");
+        let temporary = root.join(format!(".config.yaml.tmp-{}", std::process::id()));
+        fs::write(&temporary, b"owned by another writer").expect("create collision tempfile");
+
+        let result = atomic_write(&target, b"new content");
+
+        assert!(result.is_err());
+        assert!(!target.exists());
+        assert_eq!(
+            fs::read(&temporary).expect("read collision tempfile"),
+            b"owned by another writer"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
 }

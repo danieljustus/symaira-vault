@@ -278,6 +278,20 @@ func inputs() []inputCase {
 			args:        []string{"config", "get", "nested", "--file", fileMarker},
 		},
 		{
+			name:        "get_duplicate_sibling_comments",
+			description: "get attaches comments to the selected duplicate-content sibling",
+			config:      []byte("left:\n  # left comment\n  nested:\n    same: value\nright:\n  # right comment\n  nested:\n    same: value\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "right", "--file", fileMarker},
+		},
+		{
+			name:        "get_colon_block_scalar_indentation",
+			description: "get preserves colon-containing block scalar lines at their node indentation",
+			config:      []byte("nested:\n    note: |\n        line: content\n        line two\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "nested", "--file", fileMarker},
+		},
+		{
 			name:        "get_mapping_comments_anchors",
 			description: "get preserves comments and anchors in a mapping node",
 			config:      []byte("root:\n  # retained comment\n  anchored: &real \"value\" # trailing\n  alias: *real\n"),
@@ -407,6 +421,38 @@ func inputs() []inputCase {
 			args:               []string{"config", "set", "value", "|\n  line one\n  line two", "--file", fileMarker},
 		},
 		{
+			name:               "set_literal_strip",
+			description:        "set preserves a strip-chomping literal scalar's semantic value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|-\n  one", "--file", fileMarker},
+		},
+		{
+			name:               "set_literal_clip",
+			description:        "set preserves a clip-chomping literal scalar's semantic value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|\n  one\n", "--file", fileMarker},
+		},
+		{
+			name:               "set_literal_keep",
+			description:        "set preserves a keep-chomping literal scalar's semantic value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|+\n  one\n\n", "--file", fileMarker},
+		},
+		{
+			name:               "set_literal_empty",
+			description:        "set emits an empty string for an empty literal scalar",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|\n", "--file", fileMarker},
+		},
+		{
 			name:               "set_quiet",
 			description:        "quiet set writes the value without stdout",
 			config:             []byte("value: old\n"),
@@ -456,9 +502,24 @@ func inputs() []inputCase {
 			args:               []string{"config", "set", "value", "new", "--file", fileMarker},
 		},
 		{
+			name:               "set_invalid_mcp_bind",
+			description:        "set writes then reports a config validation error for an invalid known field",
+			config:             []byte("mcp:\n  bind: 127.0.0.1\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "mcp.bind", "", "--file", fileMarker},
+		},
+		{
 			name:        "get_json_unescaped",
 			description: "JSON get output does not HTML escape scalar strings",
 			config:      []byte("special: \"<&>\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "special", "--file", fileMarker, "--json"},
+		},
+		{
+			name:        "get_json_escape_controls",
+			description: "JSON get preserves literal escape text and Unicode separators while leaving HTML characters unescaped",
+			config:      []byte("special: \"\\\\u003c <>&\\u2028\"\n"),
 			writeConfig: true,
 			args:        []string{"config", "get", "special", "--file", fileMarker, "--json"},
 		},
@@ -611,7 +672,7 @@ func cleanupCase(tempRoot string, cause error) error {
 }
 
 func errorNeedle(stderr []byte) string {
-	for _, needle := range []string{"cannot determine config file path", "cannot load config", "key ", "cannot access key"} {
+	for _, needle := range []string{"config is invalid after update", "cannot determine config file path", "cannot load config", "key ", "cannot access key"} {
 		if bytes.Contains(stderr, []byte(needle)) {
 			return needle
 		}

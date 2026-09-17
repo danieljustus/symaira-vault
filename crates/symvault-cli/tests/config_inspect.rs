@@ -40,6 +40,8 @@ struct Case {
     #[serde(default)]
     write_config: bool,
     #[serde(default)]
+    capture_config_after: bool,
+    #[serde(default)]
     default_path: bool,
     #[serde(default)]
     clear_home: bool,
@@ -100,10 +102,10 @@ fn run_case(case: &Case, root: &Path) -> (std::process::Output, Option<Vec<u8>>)
         .args(args)
         .output()
         .expect("run symvault config case");
-    let after = if case.config_after_bytes.is_empty() {
-        None
-    } else {
+    let after = if case.capture_config_after {
         Some(fs::read(&config).expect("read changed isolated config"))
+    } else {
+        None
     };
     (output, after)
 }
@@ -176,6 +178,13 @@ fn fixture_pins_go_oracle_and_exercises_config_edges() {
         "set_flow_mapping_value",
         "set_flow_sequence_value",
         "set_malformed",
+        "set_invalid_mcp_bind",
+        "set_literal_strip",
+        "set_literal_clip",
+        "set_literal_keep",
+        "set_literal_empty",
+        "get_duplicate_sibling_comments",
+        "get_colon_block_scalar_indentation",
     ] {
         assert!(
             fixture.cases.iter().any(|case| case.name == required),
@@ -208,8 +217,8 @@ fn config_cases_match_go_generated_contract() {
             .iter()
             .map(|value| u8::try_from(*value).expect("fixture byte is in range"))
             .collect();
-        let after_matches =
-            expected_after.is_empty() || actual_after.as_deref() == Some(expected_after.as_slice());
+        let after_matches = !case.capture_config_after
+            || actual_after.as_deref() == Some(expected_after.as_slice());
         if status != i32::from(case.expected.exit_code)
             || output.stdout != expected_stdout
             || !after_matches
@@ -218,7 +227,7 @@ fn config_cases_match_go_generated_contract() {
                     .contains(&case.expected.stderr_contains))
         {
             failures.push(format!(
-                "{}: status={status}, stdout={:?}, stderr={:?}",
+                "{}: status={status}, stdout={:?}, stderr={:?}, after={actual_after:?}, expected_after={expected_after:?}",
                 case.name,
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr)
