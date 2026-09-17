@@ -1,7 +1,7 @@
 use crate::offline::{NETWORK_MESSAGE, PushError, is_offline_error};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, OpenOptions},
     io::{self, Read},
     path::{Path, PathBuf},
@@ -232,6 +232,17 @@ impl GitRepository {
             };
         }
         let before = self.head().ok();
+        let branch = self.branch_name();
+        let snapshots = match self.snapshot_candidates() {
+            Ok(snapshots) => snapshots,
+            Err(error) => {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!("cannot snapshot local files before pull: {error}")),
+                    ..Default::default()
+                };
+            }
+        };
         let had_merge_state = self.merge_state_exists();
         let args = ["pull", "--no-edit", "--no-rebase", name];
         match self.command(&args) {
@@ -256,8 +267,21 @@ impl GitRepository {
                 // that was already in progress when this invocation started:
                 // that state belongs to the caller and may contain staged
                 // conflict resolutions.
-                if !had_merge_state && self.merge_state_exists() {
-                    let _ = self.command(&["merge", "--abort"]);
+                let merge_aborted = if !had_merge_state && self.merge_state_exists() {
+                    self.command(&["merge", "--abort"]).is_ok() && !self.merge_state_exists()
+                } else {
+                    true
+                };
+                let message = e.to_string();
+                let should_resolve =
+                    !is_offline_transport_error(&message) && !contains_auth_marker(&message);
+                if merge_aborted && !had_merge_state && should_resolve {
+                    let _ = self.preserve_divergent_conflicts(
+                        name,
+                        branch.as_deref(),
+                        before.as_deref(),
+                        &snapshots,
+                    );
                 }
                 PullResult {
                     remote_url,
@@ -266,6 +290,76 @@ impl GitRepository {
                 }
             }
         }
+    }
+
+    fn branch_name(&self) -> Option<String> {
+        let output = self.command(&["symbolic-ref", "--short", "HEAD"]).ok()?;
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        (!branch.is_empty()).then_some(branch)
+    }
+
+    fn snapshot_candidates(&self) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
+        let output = self.command(&["ls-files", "-z", "--"])?;
+        let mut snapshots = BTreeMap::new();
+        for path in output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+        {
+            let path = String::from_utf8(path.to_vec())
+                .map_err(|error| GitError::Parse(error.to_string()))?;
+            if !is_conflict_candidate(&path) {
+                continue;
+            }
+            match crate::safeio::read(&self.root.join(&path))
+                .map_err(|error| GitError::Parse(error.to_string()))?
+            {
+                Some(data) => {
+                    snapshots.insert(path, data);
+                }
+                None => {}
+            }
+        }
+        Ok(snapshots)
+    }
+
+    fn preserve_divergent_conflicts(
+        &self,
+        remote_name: &str,
+        branch: Option<&str>,
+        before: Option<&str>,
+        snapshots: &BTreeMap<String, Vec<u8>>,
+    ) -> Result<(), GitError> {
+        let (Some(branch), Some(before)) = (branch, before) else {
+            return Ok(());
+        };
+        let remote_branch = format!("{remote_name}/{branch}");
+        let output = self.command(&["merge-base", before, &remote_branch])?;
+        let ancestor = String::from_utf8(output.stdout)
+            .map_err(|error| GitError::Parse(error.to_string()))?
+            .trim()
+            .to_owned();
+        if ancestor.is_empty() {
+            return Ok(());
+        }
+        let device = self.device_identity();
+        for path in self.changed_paths(&ancestor, &remote_branch)? {
+            if !is_conflict_candidate(&path) {
+                continue;
+            }
+            let Some(local) = snapshots.get(&path) else {
+                continue;
+            };
+            if self
+                .file_at_ref(&ancestor, &path)
+                .is_ok_and(|base| base.as_slice() == local.as_slice())
+            {
+                continue;
+            }
+            let conflict = conflict_copy_path(&path, &device);
+            write_conflict_copy(&self.root, &conflict, local)?;
+        }
+        Ok(())
     }
 
     /// Fetches and hard-resets the worktree to the remote branch.

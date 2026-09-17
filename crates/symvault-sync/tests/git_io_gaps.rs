@@ -271,6 +271,7 @@ fn divergent_pull_matches_go_oracle_projection() {
         ..Default::default()
     })
     .unwrap();
+    fs::write(local.join(".device-id"), b"test-device\n").unwrap();
 
     git(
         temp.path(),
@@ -302,6 +303,10 @@ fn divergent_pull_matches_go_oracle_projection() {
     assert_eq!(
         sha256(&fs::read(local.join(entry)).unwrap()),
         expected["final_sha256"]
+    );
+    assert_eq!(
+        fs::read(local.join("entry.conflict-test-device.age")).unwrap(),
+        input["local_bytes"].as_str().unwrap().as_bytes()
     );
 }
 
