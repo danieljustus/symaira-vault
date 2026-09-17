@@ -1,17 +1,19 @@
 //! PAIRING-001 CLI implementation: device pair, join, accept, list, add, revoke.
 
 use crate::session_input as input;
-use input::{read_passphrase, unlock_passphrase};
+use input::read_passphrase;
 use serde::Serialize;
 use std::{
     collections::HashSet,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
+    time::Duration,
 };
 use symvault_core::config::{Config, GitConfig};
 use symvault_crypto::{
     Identity, Recipient, SecretBytes, decrypt_identity, encrypt_identity_scrypt, fingerprint,
-    generate_identity, parse_recipient, recipient_string, reencrypt,
+    generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
+    reencrypt,
 };
 use symvault_sync::{
     CommitOptions, DeviceRegistry, GitRepository, GoTime, JoinResponse, PairingFile,
@@ -81,16 +83,89 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     if !is_initialized(vault) {
         return Err("vault is not initialized (run 'symvault init' first)".to_owned());
     }
+    let runtime = crate::runtime_session_manager();
+    unlock_vault_with_runtime(vault, &runtime)
+}
+
+fn unlock_vault_with_runtime(
+    vault: &Path,
+    runtime: &crate::RuntimeSession,
+) -> Result<Identity, String> {
+    let vault_string = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    let config_path = vault.join("config.yaml");
+    let config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+    let config_bytes = safeio::read(&config_path)
+        .map_err(|e| format!("read config: {e}"))?
+        .ok_or_else(|| "configuration is missing".to_owned())?;
+
+    // A cached private identity is the fastest path and deliberately avoids
+    // reading or decrypting the on-disk envelope. SessionManager renews the
+    // idle timestamp when `refresh` is true, matching Go's vault reads.
+    if let Ok(cached) = runtime.manager.load_identity(vault_string, true)
+        && let Ok(text) = std::str::from_utf8(&cached)
+        && let Ok(identity) = parse_identity(text.trim())
+    {
+        return Ok(identity);
+    }
+
     let id_path = vault.join("identity.age");
     let data = safeio::read(&id_path)
         .map_err(|e| format!("read identity: {e}"))?
         .ok_or_else(|| "vault is not initialized (run 'symvault init' first)".to_owned())?;
-    let config_bytes = safeio::read(&vault.join("config.yaml"))
-        .map_err(|e| format!("read config: {e}"))?
-        .ok_or("configuration is missing")?;
-    let passphrase = unlock_passphrase(&config_bytes)?;
+
+    // Prefer the encrypted session passphrase before invoking Touch ID or a
+    // prompt. A bad/expired cache is recoverable and falls through to the
+    // normal authentication path.
+    if let Ok(cached) = runtime.manager.load_passphrase(vault_string)
+        && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
+    {
+        save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
+        return Ok(identity);
+    }
+
+    let passphrase = crate::unlock_passphrase(&config_bytes, &config, vault, runtime)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))
+    let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    if !input::env_passphrase_selected(&config_bytes) {
+        save_unlocked_session(
+            runtime,
+            vault_string,
+            &config,
+            passphrase.as_bytes(),
+            &identity,
+        )?;
+    }
+    Ok(identity)
+}
+
+fn save_unlocked_session(
+    runtime: &crate::RuntimeSession,
+    vault: &str,
+    config: &Config,
+    passphrase: &[u8],
+    identity: &Identity,
+) -> Result<(), String> {
+    let ttl = if config.session_timeout.is_zero() {
+        Duration::from_secs(15 * 60)
+    } else {
+        config.session_timeout
+    };
+    let max_lifetime = if config.session_max_lifetime.is_zero() {
+        Duration::from_secs(8 * 60 * 60)
+    } else {
+        config.session_max_lifetime
+    };
+    runtime
+        .manager
+        .save_passphrase(vault, passphrase, ttl, max_lifetime)
+        .map_err(|error| format!("save session: {error}"))?;
+    let cached_identity = identity_string(identity);
+    runtime
+        .manager
+        .save_identity(vault, cached_identity.as_bytes(), ttl, max_lifetime)
+        .map_err(|error| format!("save identity session: {error}"))
 }
 
 fn get_all_recipients_for_encryption(
@@ -742,4 +817,80 @@ pub(super) fn list(vault: &Path, format: &str, json: bool, quiet: bool) -> Resul
         .lock()
         .write_all(&out)
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, sync::Arc};
+    use symvault_core::session::{MemoryKeyring, SessionManager};
+    use symvault_platform::FallbackKeyring;
+
+    fn fixture_runtime() -> crate::RuntimeSession {
+        let keyring = FallbackKeyring::new(Arc::new(MemoryKeyring::new()), true);
+        crate::RuntimeSession {
+            manager: SessionManager::with_system_clock(keyring.clone()),
+            keyring: Some(keyring),
+            memory_only: false,
+        }
+    }
+
+    fn encrypted_fixture() -> (PathBuf, Identity, String) {
+        let root = std::env::temp_dir().join(format!(
+            "symvault-device-unlock-{}-{}",
+            std::process::id(),
+            GoTime::now().to_rfc3339_nano().replace([':', '.', '-'], "")
+        ));
+        fs::create_dir_all(&root).expect("create fixture vault");
+        let identity = generate_identity();
+        let passphrase = "fixture-device-passphrase".to_owned();
+        let config = Config {
+            vault_dir: root.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        fs::write(root.join("config.yaml"), config.to_yaml_bytes().unwrap()).unwrap();
+        let encrypted =
+            encrypt_identity_scrypt(&identity, &SecretBytes::new(passphrase.as_bytes()), 18)
+                .unwrap();
+        fs::write(root.join("identity.age"), encrypted).unwrap();
+        (root, identity, passphrase)
+    }
+
+    #[test]
+    fn cached_identity_and_passphrase_open_the_same_encrypted_fixture() {
+        let (root, expected, passphrase) = encrypted_fixture();
+        let vault = root.to_str().unwrap().to_owned();
+
+        let identity_runtime = fixture_runtime();
+        let identity_bytes = identity_string(&expected);
+        identity_runtime
+            .manager
+            .save_identity(
+                &vault,
+                identity_bytes.as_bytes(),
+                Duration::from_secs(60),
+                Duration::from_secs(600),
+            )
+            .unwrap();
+        let cached = unlock_vault_with_runtime(&root, &identity_runtime).unwrap();
+        assert_eq!(recipient_string(&cached), recipient_string(&expected));
+
+        let passphrase_runtime = fixture_runtime();
+        passphrase_runtime
+            .manager
+            .save_passphrase(
+                &vault,
+                passphrase.as_bytes(),
+                Duration::from_secs(60),
+                Duration::from_secs(600),
+            )
+            .unwrap();
+        let cached_passphrase = unlock_vault_with_runtime(&root, &passphrase_runtime).unwrap();
+        assert_eq!(
+            recipient_string(&cached_passphrase),
+            recipient_string(&expected)
+        );
+        assert!(!passphrase_runtime.manager.is_identity_expired(&vault));
+        let _ = fs::remove_dir_all(root);
+    }
 }

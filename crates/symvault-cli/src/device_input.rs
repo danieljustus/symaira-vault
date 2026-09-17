@@ -1,7 +1,9 @@
 //! Credential input boundary for the bounded pairing CLI.
 use serde::Deserialize;
-use std::io::{self, BufRead, IsTerminal, Write};
-use symvault_core::config::{AuthMethod, Config};
+use std::{
+    env,
+    io::{self, BufRead, IsTerminal, Write},
+};
 use zeroize::Zeroizing;
 
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
@@ -43,20 +45,25 @@ struct EnvironmentPolicy {
     disable_env_passphrase: bool,
 }
 
-pub(crate) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
-    let config = Config::load_from_bytes(bytes).map_err(|e| e.to_string())?;
-    if config.effective_auth_method() == AuthMethod::Touchid
-        || config
-            .vault
-            .as_ref()
-            .is_some_and(|v| v.use_touch_id || v.auth_method == AuthMethod::Touchid)
-    {
-        return Err(
-            "Touch ID unlock is not available in device pairing; use the session unlock command"
-                .to_owned(),
-        );
+pub(crate) fn env_passphrase_selected(bytes: &[u8]) -> bool {
+    let Ok(passphrase) = env::var("SYMVAULT_PASSPHRASE") else {
+        return false;
+    };
+    if passphrase.is_empty() {
+        return false;
     }
-    unlock_passphrase_for_session(bytes)
+    let Ok(policy) = serde_yaml_ng::from_slice::<UnlockPolicy>(bytes) else {
+        return false;
+    };
+    let policy = policy.security.unwrap_or_default();
+    if policy.disable_env_passphrase {
+        return false;
+    }
+    policy.allow_env_passphrase
+        || matches!(
+            env::var("SYMVAULT_ALLOW_ENV_PASSPHRASE").as_deref(),
+            Ok("1" | "true" | "yes")
+        )
 }
 
 pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
