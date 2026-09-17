@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde::de::{self, Deserialize, MapAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
@@ -140,6 +141,13 @@ pub struct ReadOnlyRuntimeConfig {
     pub unavailable_tools: Vec<ReadOnlyUnavailableTool>,
     pub vault_dir: String,
     pub vault_unlocked: bool,
+    /// Authentication/session status supplied by the owning session layer.
+    /// The MCP runtime never probes a platform keychain or biometric API.
+    pub auth_method: String,
+    pub touch_id_available: bool,
+    pub cache_backend: String,
+    pub cache_persistent: bool,
+    pub cache_message: String,
 }
 
 impl Default for ReadOnlyRuntimeConfig {
@@ -172,6 +180,12 @@ impl Default for ReadOnlyRuntimeConfig {
             unavailable_tools: Vec::new(),
             vault_dir: String::new(),
             vault_unlocked: false,
+            auth_method: "passphrase".into(),
+            touch_id_available: false,
+            cache_backend: "memory".into(),
+            cache_persistent: false,
+            cache_message: "OS keyring unavailable. Sessions are stored in process memory only."
+                .into(),
         }
     }
 }
@@ -250,6 +264,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
         match name {
             "health" => self.health(),
+            "get_auth_status" => self.get_auth_status(),
             "symaira_whoami" => self.whoami(),
             "list_entries" => self.list_entries(arguments),
             "generate_password" => self.generate_password(arguments),
@@ -265,6 +280,33 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
 }
 
 impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    fn get_auth_status(&self) -> Result<ToolCallResult, String> {
+        #[derive(Serialize)]
+        struct CacheStatus<'a> {
+            backend: &'a str,
+            persistent: bool,
+            message: &'a str,
+        }
+        #[derive(Serialize)]
+        struct AuthStatus<'a> {
+            cache: CacheStatus<'a>,
+            method: &'a str,
+            #[serde(rename = "touchIDAvailable")]
+            touch_id_available: bool,
+        }
+        serde_json::to_string(&AuthStatus {
+            cache: CacheStatus {
+                backend: &self.config.cache_backend,
+                persistent: self.config.cache_persistent,
+                message: &self.config.cache_message,
+            },
+            method: &self.config.auth_method,
+            touch_id_available: self.config.touch_id_available,
+        })
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
+    }
+
     fn health(&self) -> Result<ToolCallResult, String> {
         let mut result = Map::new();
         result.insert(

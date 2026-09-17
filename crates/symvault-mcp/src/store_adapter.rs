@@ -434,11 +434,12 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The eleven handlers in this bounded runtime. The catalog remains owned by
+/// The twelve handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
     [
+        "get_auth_status",
         "health",
         "symaira_whoami",
         "list_entries",
