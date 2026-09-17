@@ -40,13 +40,17 @@ impl MinuteRateLimiter {
         }
     }
 
-    fn allow(&mut self) -> bool {
-        if self.window_started.elapsed() > MCP_RATE_LIMIT_WINDOW {
-            self.window_started = Instant::now();
+    fn allow_at(&mut self, now: Instant) -> bool {
+        if self.count == 0 || now.duration_since(self.window_started) > MCP_RATE_LIMIT_WINDOW {
+            self.window_started = now;
             self.count = 0;
         }
         self.count = self.count.saturating_add(1);
         self.count <= self.limit
+    }
+
+    fn allow(&mut self) -> bool {
+        self.allow_at(Instant::now())
     }
 }
 
@@ -392,10 +396,15 @@ impl StoreReadOnlyRuntime {
             return Ok(());
         }
         let action_type = match name {
+            "list_entries" => "list",
             "find_entries" => "find",
-            "get_entry" | "get_entry_metadata" | "fetch" => "get",
-            "set_entry_field" => "set",
-            "delete_entry" => "delete",
+            "get_entry" | "get_entry_value" | "get_entry_metadata" | "secret_unseal" | "fetch" => {
+                "get"
+            }
+            "set_entry_field" | "secure_input" | "request_credential" => "set",
+            "delete_entry" | "symaira_delete" => "delete",
+            "run_command" | "execute_with_secret" | "execute_api_request" => "run",
+            "generate_password" | "generate_totp" | "generate_template" => "generate",
             _ => "read",
         };
         let result = policy.evaluate(EvalContext {
@@ -828,6 +837,26 @@ pub fn read_only_tool_names() -> Vec<String> {
     .into_iter()
     .map(str::to_owned)
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter};
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn rate_limit_window_starts_on_first_call_and_resets_without_sleep() {
+        let start = Instant::now();
+        let mut limiter = MinuteRateLimiter {
+            limit: 1,
+            window_started: start,
+            count: 0,
+        };
+
+        assert!(limiter.allow_at(start), "first call starts the window");
+        assert!(!limiter.allow_at(start + Duration::from_secs(1)));
+        assert!(limiter.allow_at(start + MCP_RATE_LIMIT_WINDOW + Duration::from_secs(1)));
+    }
 }
 
 pub fn unavailable_tool(

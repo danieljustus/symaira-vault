@@ -158,6 +158,16 @@ fn fetch_id_uses_get_policy_before_storage() {
         .expect_err("fetch id must be checked by get policy");
     assert!(error.is_error);
     assert!(error.text.contains("policy denied tool \"fetch\""));
+
+    let error = runtime
+        .authorize("get_entry_value", &serde_json::json!({"path": "github"}))
+        .expect_err("value reads must use the get policy action");
+    assert!(error.is_error);
+    assert!(
+        error
+            .text
+            .contains("policy denied tool \"get_entry_value\"")
+    );
 }
 
 #[test]
