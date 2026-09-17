@@ -25,18 +25,118 @@ pub(crate) fn show(
 
     if output_format == Some("json") {
         let view = JsonProfile(&data);
-        serde_json::to_writer_pretty(&mut *output, &view)
+        let rendered = serde_json::to_string_pretty(&view)
+            .map_err(|error| format!("write profile output: {error}"))?;
+        let rendered = escape_go_json(&rendered);
+        output
+            .write_all(rendered.as_bytes())
             .map_err(|error| format!("write profile output: {error}"))?;
         writeln!(output).map_err(|error| format!("write profile output: {error}"))?;
     } else {
         let view = YamlProfile(&data);
         let rendered = serde_yaml_ng::to_string(&view)
             .map_err(|error| format!("write profile output: {error}"))?;
+        let rendered = go_yaml_indentation(&rendered);
         output
             .write_all(rendered.as_bytes())
             .map_err(|error| format!("write profile output: {error}"))?;
     }
     Ok(())
+}
+
+/// `yaml.v3` emits sequence indicators two columns to the left of
+/// `serde_yaml_ng` for the profile-shaped sequences we expose. Adjust only
+/// actual sequence marker lines; block scalar content is left byte-for-byte
+/// intact so a scalar beginning with `- ` cannot be mistaken for a sequence.
+fn go_yaml_indentation(rendered: &str) -> String {
+    let mut adjusted = String::with_capacity(rendered.len());
+    let mut block_scalar_indent = None;
+
+    for line in rendered.split_inclusive('\n') {
+        let (content, newline) = line
+            .strip_suffix('\n')
+            .map_or((line, ""), |content| (content, "\n"));
+        let leading_spaces = content.bytes().take_while(|byte| *byte == b' ').count();
+
+        if let Some(indent) = block_scalar_indent {
+            if !content.trim().is_empty() && leading_spaces <= indent {
+                block_scalar_indent = None;
+            }
+        }
+
+        let in_block_scalar = block_scalar_indent.is_some();
+        if !in_block_scalar && content.starts_with("  - ") {
+            adjusted.push_str(&content[2..]);
+        } else {
+            adjusted.push_str(content);
+        }
+        adjusted.push_str(newline);
+
+        if block_scalar_indent.is_none() {
+            let value = content
+                .split_once(':')
+                .map_or("", |(_, value)| value.trim());
+            if is_block_scalar_header(value) {
+                block_scalar_indent = Some(leading_spaces);
+            }
+        }
+    }
+
+    adjusted
+}
+
+fn is_block_scalar_header(value: &str) -> bool {
+    let Some(first) = value.as_bytes().first().copied() else {
+        return false;
+    };
+    if first != b'|' && first != b'>' {
+        return false;
+    }
+    value[1..]
+        .chars()
+        .all(|character| matches!(character, '+' | '-' | '0'..='9'))
+}
+
+/// `encoding/json` escapes HTML-sensitive characters and Unicode line
+/// separators. `serde_json`'s standard serializer intentionally leaves these
+/// five characters literal, so preserve its pretty whitespace and transform
+/// only characters inside already-serialized JSON strings.
+fn escape_go_json(rendered: &str) -> String {
+    let mut escaped = String::with_capacity(rendered.len());
+    let mut in_string = false;
+    let mut escaped_character = false;
+
+    for character in rendered.chars() {
+        if in_string {
+            if escaped_character {
+                escaped.push(character);
+                escaped_character = false;
+                continue;
+            }
+            match character {
+                '\\' => {
+                    escaped.push(character);
+                    escaped_character = true;
+                }
+                '"' => {
+                    escaped.push(character);
+                    in_string = false;
+                }
+                '<' => escaped.push_str("\\u003c"),
+                '>' => escaped.push_str("\\u003e"),
+                '&' => escaped.push_str("\\u0026"),
+                '\u{2028}' => escaped.push_str("\\u2028"),
+                '\u{2029}' => escaped.push_str("\\u2029"),
+                _ => escaped.push(character),
+            }
+        } else {
+            escaped.push(character);
+            if character == '"' {
+                in_string = true;
+            }
+        }
+    }
+    escaped
 }
 
 type SourceFields = BTreeMap<String, serde_yaml_ng::Value>;
@@ -384,5 +484,55 @@ mod tests {
         assert!(rendered.contains("\"Name\": \"demo\""));
         assert!(rendered.contains("\"ApprovalTimeout\": 120000000000"));
         assert!(rendered.find("\"Name\"").unwrap() < rendered.find("\"Tier\"").unwrap());
+    }
+
+    #[test]
+    fn profile_output_matches_go_sequence_indent_without_rewriting_block_scalars() {
+        let data = ProfileData {
+            name: "demo".into(),
+            tier: None,
+            approval_mode: None,
+            allowed_paths: Some(vec!["team/*".into()]),
+            redact_fields: None,
+            per_tool_redact_fields: None,
+            can_write: None,
+            can_run_commands: None,
+            can_manage_config: None,
+            can_use_clipboard: None,
+            can_use_autotype: None,
+            can_read_values: None,
+            expose_value_tools: None,
+            auto_unseal: None,
+            require_approval: None,
+            approval_timeout: None,
+            allowed_tools: None,
+            max_reads_per_hour: None,
+            max_reads_per_day: None,
+            max_secrets_in_session: None,
+            dynamic_providers: None,
+            allowed_env_vars: None,
+            allowed_executables: None,
+            prompt_injection_mode: None,
+            skill_path: Some("first line\n- literal content\n".into()),
+            skill_version: None,
+            expose_payment_values: None,
+            payment_policy: None,
+        };
+        let rendered = serde_yaml_ng::to_string(&YamlProfile(&data)).unwrap();
+        let adjusted = go_yaml_indentation(&rendered);
+        assert!(adjusted.contains("allowedPaths:\n  - team/*\n"));
+        assert!(adjusted.contains("  - literal content\n"));
+    }
+
+    #[test]
+    fn json_output_escapes_go_html_and_line_separator_characters_only_in_strings() {
+        let rendered = r#"{
+  "value": "<&> ",
+  "literal": "\\u003c"
+}"#;
+        let escaped = escape_go_json(rendered);
+        assert!(escaped.contains(r#""value": "\u003c\u0026\u003e\u2028""#));
+        assert!(escaped.contains(r#""literal": "\\u003c""#));
+        assert!(escaped.contains("{\n"));
     }
 }

@@ -1,16 +1,39 @@
 use std::{
     env, fs,
+    ops::Deref,
     path::{Path, PathBuf},
     process::{Command, Output},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-fn temporary_root(name: &str) -> PathBuf {
+struct TemporaryRoot(PathBuf);
+
+impl TemporaryRoot {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Deref for TemporaryRoot {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.path()
+    }
+}
+
+impl Drop for TemporaryRoot {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn temporary_root(name: &str) -> TemporaryRoot {
     let suffix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
-    env::temp_dir().join(format!("symvault-agent-profile-{name}-{suffix}"))
+    TemporaryRoot(env::temp_dir().join(format!("symvault-agent-profile-{name}-{suffix}")))
 }
 
 fn run(binary: &Path, args: &[&str], home: &Path, vault: &Path) -> Output {
@@ -34,8 +57,20 @@ fn assert_same(go: &Output, rust: &Output, command: &str) {
         go.stderr,
         rust.stderr
     );
-    assert_eq!(rust.stdout, go.stdout, "{command} stdout");
-    assert_eq!(rust.stderr, go.stderr, "{command} stderr");
+    assert_eq!(
+        rust.stdout,
+        go.stdout,
+        "{command} stdout\nGo UTF-8={:?}\nRust UTF-8={:?}",
+        String::from_utf8_lossy(&go.stdout),
+        String::from_utf8_lossy(&rust.stdout)
+    );
+    assert_eq!(
+        rust.stderr,
+        go.stderr,
+        "{command} stderr\nGo UTF-8={:?}\nRust UTF-8={:?}",
+        String::from_utf8_lossy(&go.stderr),
+        String::from_utf8_lossy(&rust.stderr)
+    );
 }
 
 #[test]
