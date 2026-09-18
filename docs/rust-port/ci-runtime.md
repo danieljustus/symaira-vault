@@ -57,3 +57,22 @@ That is a measured 33 % reduction (34–35 min → 23 min) at unchanged gate cov
 The same run is the first fully green CI of this migration wave: the Windows
 native job went from always-red to 5.8 min green after the dead-code lint gate,
 the unix-only POSIX-mode assertions and the POSIX git-IO fixtures were fixed.
+
+## Second measurement: bounded Miri corpus
+
+Run [35351411265](https://github.com/danieljustus/symaira-vault/actions/runs/35351411265)
+(head `87b7ccd3`, which includes the bounded corpus from `9bbdbff9`) completed
+green in **15.1 min** (13:38:39 → 13:53:45 UTC):
+
+| Job | Duration |
+| --- | --- |
+| **Rust Miri** | **14.0 min** (was 22.8 min) |
+| Rust | 12.2 min |
+| CI Success | success |
+
+Cumulative: 34–35 min → 23.0 min → **15.1 min**, a 57 % reduction with the same
+gates. The corpus bound removed ~8.8 min of interpreter time
+(`config_profiles_contract` 369.6 s → 48.5 s and `config_bytes_contract`
+153.8 s → 83.6 s locally). The remaining Miri cost is regex compilation in the
+redact pattern test plus the unbounded smaller binaries; that is the next lever
+if more CI throughput is needed.
