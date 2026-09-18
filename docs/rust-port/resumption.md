@@ -50,3 +50,11 @@ The current local `golangci-lint run` and locally installed gosec `2.29.0` repor
 - Record each native CI run against its exact head SHA before changing matrix status. A configured workflow is not evidence of execution.
 - Preserve any re-discovered parallel worktrees/branches and the checkpoint object above. Do not reset, clean, delete, or bulk-commit them.
 - **Conclusion at this checkpoint:** `STABILER TEILSTAND, MIGRATION NOCH OFFEN`. The storage/index candidate has native Ubuntu/macOS/Windows evidence and is a bounded behavior-preserving module-move input; it is not release-, cutover-, or consolidation-ready while the listed RUST-005 and later-slice gaps remain.
+
+## Continuation checkpoint: 2026-09-18, HEAD `f929e819`
+
+The active integration branch is `codex/vault-rust-resume-20260917`; the pushed PR branch is `migration/rust-batch-20260916`, PR #1069 remains Draft. Agent profile edit, token listing, audit display, read-only `agent doctor`, signed pending share requests, share lifecycle persistence, and the grant-signing-key loader are connected. `agent doctor` checks the configured profile, skill path, YAML frontmatter, `managed_by: symaira` sentinel, and body SHA-256 drift without modifying files.
+
+The prior general CI failure was reduced to a Clippy `write_literal` warning in the token-table heading. Commit `f929e819` fixes that warning; local workspace Clippy, three focused doctor tests, token/audit differential tests, and 22 sharing tests pass. New CI for `f929e819` must still be observed at the exact head before claiming native acceptance.
+
+Next bounded work: implement the human TTY approval primitive and wire MCP `approve_share` only after safe terminal/timeout tests; then continue remaining agent token mutations and MCP/HTTP/Broker slices. Keep Go production and preserve rollback. Estimated total migration progress remains 50–55% by effort, not an acceptance percentage. All local build/test/cache/temp paths remain on the external NVMe.

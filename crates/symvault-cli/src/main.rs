@@ -2,6 +2,7 @@
 
 mod add_commands;
 mod agent_audit_commands;
+mod agent_doctor_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
 mod agent_token_commands;
@@ -426,6 +427,9 @@ enum ShareCommand {
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
     List,
+    Doctor {
+        name: String,
+    },
     Audit {
         name: String,
         #[arg(long, default_value_t = 50)]
@@ -1155,6 +1159,23 @@ fn main() -> ExitCode {
                     &format,
                     &mut io::stdout().lock(),
                     &mut io::stderr().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::Doctor { name },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_doctor_commands::doctor(
+                    &vault,
+                    &name,
+                    option_env!("SYMVAULT_VERSION").unwrap_or("dev"),
+                    &mut io::stdout().lock(),
                 )
             })();
             if let Err(error) = &result {
