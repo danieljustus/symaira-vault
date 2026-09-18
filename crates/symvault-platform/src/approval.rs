@@ -157,6 +157,7 @@ pub fn request_approval(req: &ApprovalRequest) -> ApprovalResult {
 /// Seam abstracting a terminal so tests never touch a real TTY.
 trait Terminal {
     fn set_raw_mode(&mut self) -> Result<(), String>;
+    fn restore(&mut self);
     fn write_all(&mut self, buf: &[u8]) -> Result<(), String>;
     fn read_response(&mut self, deadline: Instant) -> Result<String, ReadFailure>;
 }
@@ -219,6 +220,12 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
 
     let approved = parse_approval_response(&response);
     let remembered = req.can_remember && parse_remember_response(&response);
+    // Go restores the cooked terminal before acknowledging the answer, so the
+    // trailing newline is translated by the line discipline. Restoring here
+    // (instead of only in `Drop` at return) keeps that byte-for-byte and keeps
+    // the acknowledgement on its own line. `Drop` remains the safety net for
+    // every early return above.
+    terminal.restore();
     let ack: &[u8] = if approved || remembered {
         b"yes\n"
     } else {
@@ -304,12 +311,9 @@ fn build_prompt(req: &ApprovalRequest) -> String {
 /// strings (e.g. `"Agent:     "`).
 fn push_row(out: &mut String, label: &str, value: &str) {
     let value = truncate(value, VALUE_WIDTH);
-    // ponytail: Go's `%-*s` pads by rune count; this pads by byte count
-    // instead, so a multi-byte value shifts the box's right border. Cosmetic
-    // only — truncation content and cutoff point stay exact. Upgrade path:
-    // pad using value.chars().count() if exact box alignment for non-ASCII
-    // values is ever required.
-    let pad = VALUE_WIDTH.saturating_sub(value.len());
+    // Go's `%-*s` pads to the width in runes, and `centerText` pads by bytes —
+    // mirror each one where it applies. Truncation above stays byte-based.
+    let pad = VALUE_WIDTH.saturating_sub(value.chars().count());
     out.push_str("║ ");
     out.push_str(label);
     out.push_str(&value);
@@ -483,6 +487,13 @@ fn open_real_terminal() -> Option<RealTerminal> {
 #[cfg(unix)]
 impl Drop for RealTerminal {
     fn drop(&mut self) {
+        self.restore();
+    }
+}
+
+#[cfg(unix)]
+impl RealTerminal {
+    fn restore_now(&mut self) {
         if let Some(original) = self.original_termios.take() {
             let _ = rustix::termios::tcsetattr(
                 &self.fd,
@@ -503,6 +514,10 @@ impl Terminal for RealTerminal {
             .map_err(|error| error.to_string())?;
         self.original_termios = Some(original);
         Ok(())
+    }
+
+    fn restore(&mut self) {
+        self.restore_now();
     }
 
     fn write_all(&mut self, mut buf: &[u8]) -> Result<(), String> {
@@ -543,7 +558,7 @@ impl Terminal for RealTerminal {
                 Ok(0) => break Ok(()),
                 Ok(n) => {
                     collected.extend_from_slice(&chunk[..n]);
-                    if collected.contains(&b'\n') || collected.len() >= MAX_RESPONSE_BYTES {
+                    if response_is_complete(&collected) || collected.len() >= MAX_RESPONSE_BYTES {
                         break Ok(());
                     }
                 }
@@ -566,6 +581,18 @@ impl Terminal for RealTerminal {
     }
 }
 
+/// Whether the collected terminal bytes already hold a complete answer.
+///
+/// Go reads through `go-tty`, whose `ReadString` stops at either Enter byte, so
+/// both `\r` and `\n` complete the answer. Raw mode clears `ICRNL`, which means
+/// the Enter key arrives as `\r` only — waiting for `\n` alone would never see a
+/// human keypress and would run into the timeout with the answer already typed.
+fn response_is_complete(collected: &[u8]) -> bool {
+    collected
+        .iter()
+        .any(|byte| *byte == b'\n' || *byte == b'\r')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -579,6 +606,9 @@ mod tests {
         raw_mode_set: bool,
         restored: Arc<Mutex<bool>>,
         written: Vec<Vec<u8>>,
+        /// Optional ordered marker log so a test can assert that the cooked
+        /// terminal was restored before the acknowledgement was written.
+        timeline: Option<Arc<Mutex<Vec<&'static str>>>>,
     }
 
     #[derive(Clone)]
@@ -596,6 +626,28 @@ mod tests {
                 raw_mode_set: false,
                 restored,
                 written: Vec::new(),
+                timeline: None,
+            }
+        }
+
+        fn tracking_with_timeline(
+            restored: Arc<Mutex<bool>>,
+            timeline: Arc<Mutex<Vec<&'static str>>>,
+        ) -> Self {
+            Self {
+                raw_mode_result: None,
+                write_result: None,
+                read_result: None,
+                raw_mode_set: false,
+                restored,
+                written: Vec::new(),
+                timeline: Some(timeline),
+            }
+        }
+
+        fn mark(&self, marker: &'static str) {
+            if let Some(timeline) = &self.timeline {
+                timeline.lock().unwrap().push(marker);
             }
         }
     }
@@ -617,7 +669,15 @@ mod tests {
             result
         }
 
+        fn restore(&mut self) {
+            if self.raw_mode_set {
+                *self.restored.lock().unwrap() = true;
+            }
+            self.mark("restore");
+        }
+
         fn write_all(&mut self, buf: &[u8]) -> Result<(), String> {
+            self.mark("write");
             self.written.push(buf.to_vec());
             self.write_result.clone().unwrap_or(Ok(()))
         }
@@ -794,6 +854,71 @@ mod tests {
         let value = &row.as_bytes()[value_start..value_start + 56];
         assert_eq!(value.len(), 56);
         assert!(row.ends_with(" ║"));
+    }
+
+    #[test]
+    fn response_is_complete_accepts_both_enter_bytes() {
+        // Raw mode clears ICRNL, so the Enter key arrives as CR. Go stops at
+        // either byte; stopping only at LF would never end a real keypress.
+        assert!(response_is_complete(b"y\r"));
+        assert!(response_is_complete(b"y\n"));
+        assert!(response_is_complete(b"\r\n"));
+        assert!(!response_is_complete(b"yes"));
+        assert!(!response_is_complete(b""));
+    }
+
+    #[test]
+    fn push_row_pads_by_runes_like_go_printf_width() {
+        let ascii = build_prompt(&ApprovalRequest {
+            agent_name: "Muller".to_owned(),
+            ..Default::default()
+        });
+        let umlaut = build_prompt(&ApprovalRequest {
+            agent_name: "Müller".to_owned(),
+            ..Default::default()
+        });
+        let agent_row = |prompt: &str| {
+            prompt
+                .lines()
+                .find(|line| line.starts_with("║ Agent:"))
+                .expect("agent row")
+                .to_owned()
+        };
+        // Go's `%-*s` pads the 56-column value field by runes, so a multi-byte
+        // value keeps the same row width as an ASCII value of the same rune
+        // count. Byte padding would make the umlaut row one column narrower.
+        assert_eq!(
+            agent_row(&umlaut).chars().count(),
+            agent_row(&ascii).chars().count()
+        );
+        assert!(agent_row(&umlaut).ends_with(" ║"));
+        assert_eq!(agent_row(&umlaut).chars().count(), 71);
+    }
+
+    #[test]
+    fn run_approval_restores_cooked_mode_before_acknowledging() {
+        let restored = Arc::new(Mutex::new(false));
+        let timeline = Arc::new(Mutex::new(Vec::new()));
+        let mut terminal = FakeTerminal::tracking_with_timeline(restored.clone(), timeline.clone());
+        terminal.read_result = Some(Ok("y\r".to_owned()));
+        let result = run_approval(&approved_request(), Some(terminal));
+        assert!(result.approved);
+        assert!(*restored.lock().unwrap());
+        let timeline = timeline.lock().unwrap().clone();
+        assert_eq!(
+            timeline,
+            vec!["write", "restore", "write"],
+            "prompt write, cooked-mode restore, then the acknowledgement"
+        );
+    }
+
+    #[test]
+    fn run_approval_approves_on_carriage_return_enter_byte() {
+        let mut terminal = FakeTerminal::default();
+        terminal.read_result = Some(Ok("yes\r".to_owned()));
+        let result = run_approval(&approved_request(), Some(terminal));
+        assert!(result.approved);
+        assert!(!result.remembered);
     }
 
     #[test]
