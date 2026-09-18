@@ -9,7 +9,8 @@ use std::{
     path::Path,
 };
 
-use symvault_core::config::parse_duration_nanos;
+use serde_json::ser::Formatter;
+use symvault_core::config::parse_go_duration;
 use symvault_store::audit::LogEntry;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -79,7 +80,9 @@ fn read_audit_log(path: &Path, limit: i64) -> io::Result<Vec<LogEntry>> {
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = (&mut reader).take(SCANNER_MAX_TOKEN).read_until(b'\n', &mut line)?;
+        let read = (&mut reader)
+            .take(SCANNER_MAX_TOKEN as u64)
+            .read_until(b'\n', &mut line)?;
         if read == 0 {
             break;
         }
@@ -149,19 +152,17 @@ fn parse_since_duration(value: &str) -> Option<i128> {
         // Go's ParseHumanDuration delegates this branch to fmt.Sscanf("%d"),
         // which consumes a leading signed integer and ignores a trailing
         // suffix (for example, 1.5d is interpreted as one day).
+        let days = days.trim_start();
         let end = days
             .char_indices()
             .find(|(index, character)| {
-                !character.is_ascii_digit()
-                    && !(*index == 0 && matches!(character, '+' | '-'))
+                !character.is_ascii_digit() && !(*index == 0 && matches!(character, '+' | '-'))
             })
             .map_or(days.len(), |(index, _)| index);
         let days = days[..end].parse::<i64>().ok()?;
-        return (days >= 0)
-            .then_some(i128::from(days))
-            .and_then(|days| days.checked_mul(86_400_000_000_000));
+        return (days >= 0).then_some(i128::from(days.wrapping_mul(86_400_000_000_000)));
     }
-    let nanos = parse_duration_nanos(value)?;
+    let nanos = i128::from(parse_go_duration(value).ok()?);
     (nanos >= 0).then_some(nanos)
 }
 
@@ -178,8 +179,12 @@ fn render_json(entries: &[LogEntry], output: &mut impl Write) -> Result<(), Stri
 }
 
 fn render_table(entries: &[LogEntry], output: &mut impl Write) -> Result<(), String> {
-    writeln!(output, "{:<26} {:<20} {:<8} DETAILS", "TIMESTAMP", "ACTION", "OK")
-        .map_err(|error| error.to_string())?;
+    writeln!(
+        output,
+        "{:<26} {:<20} {:<8} DETAILS",
+        "TIMESTAMP", "ACTION", "OK"
+    )
+    .map_err(|error| error.to_string())?;
     for entry in entries {
         let ok = if entry.ok { "✓" } else { "✗" };
         let mut detail = entry.path.clone();
@@ -196,8 +201,12 @@ fn render_table(entries: &[LogEntry], output: &mut impl Write) -> Result<(), Str
         if detail.is_empty() {
             detail.push('-');
         }
-        writeln!(output, "{:<26} {:<20} {:<8} {}", entry.timestamp, entry.action, ok, detail)
-            .map_err(|error| error.to_string())?;
+        writeln!(
+            output,
+            "{:<26} {:<20} {:<8} {}",
+            entry.timestamp, entry.action, ok, detail
+        )
+        .map_err(|error| error.to_string())?;
     }
     Ok(())
 }

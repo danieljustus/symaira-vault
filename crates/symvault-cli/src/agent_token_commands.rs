@@ -30,7 +30,7 @@ pub(crate) fn list(
         return Ok(());
     }
     if tokens.is_empty() {
-        return writeln!(output, "No tokens found for {agent:?}.")
+        return writeln!(output, "No tokens found for agent {agent:?}.")
             .map_err(|error| error.to_string());
     }
 
@@ -51,7 +51,13 @@ pub(crate) fn list(
         } else {
             &token.agent_name
         };
-        let tools = truncate_tools(&token.allowed_tools.join(", "));
+        let tools = truncate_tools(
+            &token
+                .allowed_tools
+                .as_deref()
+                .unwrap_or_default()
+                .join(", "),
+        );
         let expires = token
             .expires_at
             .as_deref()

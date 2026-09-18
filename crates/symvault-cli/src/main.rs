@@ -1,8 +1,10 @@
 #![deny(unsafe_code)]
 
 mod add_commands;
+mod agent_audit_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
+mod agent_token_commands;
 mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
@@ -424,6 +426,19 @@ enum ShareCommand {
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
     List,
+    Audit {
+        name: String,
+        #[arg(long, default_value_t = 50)]
+        limit: i64,
+        #[arg(long, default_value = "")]
+        since: String,
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+    Token {
+        #[command(subcommand)]
+        command: AgentTokenCommand,
+    },
     Whoami {
         #[arg(short = 'o', long)]
         output: Option<String>,
@@ -432,6 +447,11 @@ enum AgentCommand {
         #[command(subcommand)]
         command: AgentProfileCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum AgentTokenCommand {
+    List { name: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1095,6 +1115,47 @@ fn main() -> ExitCode {
                         &mut io::stderr().lock(),
                     )
                 }
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Token {
+                    command: AgentTokenCommand::List { name },
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_token_commands::list(&vault, &name, cli.quiet, &mut io::stdout().lock())
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Audit {
+                    name,
+                    limit,
+                    since,
+                    format,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_audit_commands::view(
+                    &vault,
+                    &name,
+                    limit,
+                    &since,
+                    &format,
+                    &mut io::stdout().lock(),
+                    &mut io::stderr().lock(),
+                )
             })();
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");

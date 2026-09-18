@@ -46,10 +46,7 @@ fn agent_audit_matches_go_for_formats_filters_limits_and_missing_logs() {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
-        return;
-    };
+    let rust_binary = env!("CARGO_BIN_EXE_symvault");
     let go_binary = PathBuf::from(go_binary);
     let rust_binary = PathBuf::from(rust_binary);
     let vault = tempfile::tempdir().expect("vault fixture");

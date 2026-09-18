@@ -67,7 +67,7 @@ pub(crate) struct TokenEntry {
     #[serde(default)]
     pub(crate) label: String,
     #[serde(default)]
-    pub(crate) allowed_tools: Vec<String>,
+    pub(crate) allowed_tools: Option<Vec<String>>,
     #[serde(default)]
     pub(crate) expires_at: Option<String>,
     #[serde(default)]

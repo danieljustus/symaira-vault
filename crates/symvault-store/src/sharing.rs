@@ -524,6 +524,14 @@ impl ShareStore {
             ));
         }
 
+        // Approval applies only to the exact grant shown to the human.
+        // A concurrent edit to its target, field, or TTL requires a new prompt.
+        if self.grants.iter().find(|grant| grant.id == grant_id) != Some(grant) {
+            return Err(StoreError::Config(
+                "share grant changed during approval".into(),
+            ));
+        }
+
         let approved_time =
             time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
                 .map_err(|error| StoreError::Config(format!("invalid approval clock: {error}")))?;
@@ -570,6 +578,12 @@ impl ShareStore {
                 "share grant {grant_id} is not pending (status: {})",
                 current.grants[position].status
             )));
+        }
+        if self.grants.iter().find(|grant| grant.id == grant_id) != Some(&current.grants[position])
+        {
+            return Err(StoreError::Config(
+                "share grant changed during approval".into(),
+            ));
         }
         current.grants[position].status = "rejected".into();
         let rejected = current.grants[position].clone();
@@ -1193,6 +1207,41 @@ mod tests {
         let persisted = ShareStore::read(&path).expect("read unchanged current share");
         assert_eq!(persisted.grants()[0].from_agent, "new-source");
         assert_eq!(persisted.grants()[0].status, "pending");
+    }
+
+    #[test]
+    fn approval_rejects_changed_target_and_ttl_without_publication() {
+        let (_root, path) = fixture_path();
+        let root = path.parent().unwrap();
+        let original = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z","ttl":60000000000}]}"#;
+        fs::write(&path, original).unwrap();
+        let mut snapshot = ShareStore::read(&path).unwrap();
+        let changed = String::from_utf8(original.to_vec())
+            .unwrap()
+            .replace("prod/a", "prod/admin");
+        fs::write(&path, &changed).unwrap();
+        assert!(
+            snapshot
+                .approve_at_for_agent(
+                    root,
+                    "grant-a",
+                    "approver",
+                    "approver",
+                    "2026-01-02T04:00:00Z"
+                )
+                .unwrap_err()
+                .to_string()
+                .contains("changed during approval")
+        );
+        assert!(
+            snapshot
+                .reject_at(root, "grant-a")
+                .unwrap_err()
+                .to_string()
+                .contains("changed during approval")
+        );
+        assert_eq!(fs::read(&path).unwrap(), changed.as_bytes());
+        assert_eq!(snapshot.grants()[0].secret_path, "prod/a");
     }
 
     #[test]

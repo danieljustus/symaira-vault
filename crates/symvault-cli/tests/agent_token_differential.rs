@@ -89,7 +89,7 @@ fn agent_token_list_matches_go_plaintext_registry() {
       "id": "tok-revoked",
       "label": "",
       "hash": "revoked-hash",
-      "allowed_tools": [],
+      "allowed_tools": null,
       "agent_name": "alpha",
       "revoked": true
     },
@@ -132,6 +132,14 @@ fn agent_token_list_matches_go_plaintext_registry() {
             "agent",
             "token",
             "list",
+            "missing",
+        ][..],
+        &[
+            "--vault",
+            "agent-token-list-placeholder",
+            "agent",
+            "token",
+            "list",
             "alpha",
         ][..],
         &[
@@ -160,8 +168,16 @@ fn agent_token_list_matches_go_plaintext_registry() {
             "",
         ][..],
     ] {
-        let mut actual_args = args.to_vec();
-        actual_args[1] = root.path().to_str().expect("UTF-8 root");
+        let actual_args: Vec<_> = args
+            .iter()
+            .map(|arg| {
+                if *arg == "agent-token-list-placeholder" {
+                    root.path().to_str().expect("UTF-8 root")
+                } else {
+                    *arg
+                }
+            })
+            .collect();
         let go = run(&go_binary, &actual_args, root.path(), home.path());
         let rust = run(&rust_binary, &actual_args, root.path(), home.path());
         assert_same(&go, &rust, &format!("agent token list {actual_args:?}"));
