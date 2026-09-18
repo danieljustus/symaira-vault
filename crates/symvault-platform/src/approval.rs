@@ -366,7 +366,12 @@ fn parse_remember_response(response: &str) -> bool {
 
 /// Renders a [`Duration`] the way Go's `time.Duration.String()` does
 /// (`30s`, `1m30s`, `1h2m3.456s`, ...) rather than Rust's `Debug` form.
-fn format_go_duration(d: Duration) -> String {
+///
+/// Public because callers that reproduce Go's `%s` on a `time.Duration` field
+/// (for example the `share approve` prompt's TTL text) must render it the same
+/// way this module renders its timeout error.
+#[must_use]
+pub fn format_go_duration(d: Duration) -> String {
     const MICROSECOND: u128 = 1_000;
     const MILLISECOND: u128 = 1_000_000;
     const SECOND: u128 = 1_000_000_000;

@@ -12,6 +12,9 @@ use std::{
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::{Identity, SecretBytes};
+use symvault_platform::approval::{
+    self as approval_prompt, ApprovalRequest, ApprovalResult, format_go_duration,
+};
 use symvault_store::{
     Entry, Store, StoreError, WriteRecord,
     sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
@@ -19,6 +22,34 @@ use symvault_store::{
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
+
+/// Human-approval seam for the MCP share lifecycle.
+///
+/// Go calls the package-level `IsTTYPresent`/`RequestApproval`, which open the
+/// controlling terminal directly. Keeping the same behaviour behind a seam lets
+/// the protocol tests drive approve/deny/error without a real TTY, and makes the
+/// "never read approval from MCP stdin" rule structurally true: there is no
+/// stdin path in this interface at all.
+pub trait ApprovalSeam: Send + Sync {
+    fn is_tty_present(&self) -> bool;
+    fn request(&self, request: &ApprovalRequest) -> ApprovalResult;
+}
+
+/// Production seam: the real controlling-terminal prompt.
+pub struct PlatformApproval;
+
+impl ApprovalSeam for PlatformApproval {
+    fn is_tty_present(&self) -> bool {
+        approval_prompt::is_tty_present()
+    }
+
+    fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
+        approval_prompt::request_approval(request)
+    }
+}
+
+/// Go's `handleApproveShare` prompt timeout.
+const SHARE_APPROVAL_TIMEOUT: Duration = Duration::from_secs(60);
 
 const MCP_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 
@@ -231,6 +262,7 @@ pub struct StoreReadOnlyRuntime {
     transport: String,
     unavailable_tools: Vec<String>,
     now_unix: Option<i64>,
+    approval: Arc<dyn ApprovalSeam>,
 }
 
 impl StoreReadOnlyRuntime {
@@ -283,6 +315,7 @@ impl StoreReadOnlyRuntime {
             transport,
             unavailable_tools,
             now_unix,
+            approval: Arc::new(PlatformApproval),
         })
     }
 
@@ -335,7 +368,16 @@ impl StoreReadOnlyRuntime {
             transport,
             unavailable_tools,
             now_unix,
+            approval: Arc::new(PlatformApproval),
         })
+    }
+
+    /// Replaces the controlling-terminal approval seam. Production callers keep
+    /// the default; tests inject a synthetic human without touching a TTY.
+    #[must_use]
+    pub fn with_approval_seam(mut self, seam: Arc<dyn ApprovalSeam>) -> Self {
+        self.approval = seam;
+        self
     }
 
     /// Enables the Go-compatible fixed one-minute MCP pre-call limiter for
@@ -460,6 +502,128 @@ impl StoreReadOnlyRuntime {
         }))
         .map(ToolCallResult::text)
         .map_err(|error| error.to_string())
+    }
+
+    /// Go's `handleApproveShare`: a pending grant is only ever approved after a
+    /// human answers the controlling-terminal prompt, and the agent that
+    /// requested the share can never approve it. A non-approval answer rejects
+    /// the grant instead of leaving it pending.
+    fn approve_share(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let grant_id = match crate::call::required_string(arguments, "grant_id") {
+            Ok(value) => value,
+            Err(error) => {
+                self.append_audit("share_approve", "<invalid>", false);
+                return Ok(error);
+            }
+        };
+
+        let quoted =
+            || serde_json::to_string(grant_id).unwrap_or_else(|_| format!("\"{grant_id}\""));
+        let grant = {
+            let share_store = self
+                .share_store
+                .lock()
+                .map_err(|_| "share store lock poisoned".to_owned())?;
+            share_store
+                .grants()
+                .iter()
+                .find(|grant| grant.id == grant_id)
+                .cloned()
+        };
+        let Some(grant) = grant else {
+            self.append_audit("share_approve", grant_id, false);
+            return Ok(ToolCallResult::error(format!(
+                "share grant {} not found",
+                quoted()
+            )));
+        };
+        if grant.status != "pending" {
+            return Ok(ToolCallResult::error(format!(
+                "share grant {} is not pending (status: {})",
+                quoted(),
+                grant.status
+            )));
+        }
+        // Reject self-approval before any prompt is rendered: the agent that
+        // requested the share cannot also answer for the human.
+        if self.agent_name == grant.from_agent {
+            self.append_audit("share_approve_denied", &grant.secret_path, false);
+            return Ok(ToolCallResult::error(
+                "the requesting agent cannot approve its own share request",
+            ));
+        }
+        if !self.approval.is_tty_present() {
+            self.append_audit("share_approve", &grant.secret_path, false);
+            return Ok(ToolCallResult::error(
+                "cannot approve share: no TTY available for human confirmation",
+            ));
+        }
+
+        let short_id: String = grant.id.chars().take(8).collect();
+        let mut details = format!(
+            "Share {short_id}: {} → {}, path: {}\nAgent requesting approval: {}",
+            grant.from_agent, grant.to_agent, grant.secret_path, self.agent_name
+        );
+        if !grant.secret_field.is_empty() {
+            details.push_str(&format!(", field: {}", grant.secret_field));
+        }
+        if grant.ttl > 0 {
+            details.push_str(&format!(
+                ", ttl: {}",
+                format_go_duration(Duration::from_nanos(u64::try_from(grant.ttl).unwrap_or(0)))
+            ));
+        }
+
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "approve_share".into(),
+            details,
+            timeout: SHARE_APPROVAL_TIMEOUT,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            self.append_audit("share_approve", &grant.secret_path, false);
+            return Ok(ToolCallResult::error(format!("approval failed: {error}")));
+        }
+
+        let now = self
+            .now_unix
+            .and_then(|unix| OffsetDateTime::from_unix_timestamp(unix).ok())
+            .unwrap_or_else(OffsetDateTime::now_utc)
+            .format(&Rfc3339)
+            .map_err(|error| format!("format approval clock: {error}"))?;
+        let mut share_store = self
+            .share_store
+            .lock()
+            .map_err(|_| "share store lock poisoned".to_owned())?;
+        if approval.approved {
+            // Go records the deciding agent when one exists, otherwise "human".
+            let approved_by = if self.agent_name.is_empty() {
+                "human"
+            } else {
+                self.agent_name.as_str()
+            };
+            share_store
+                .approve_at_for_agent(
+                    &self.share_root,
+                    grant_id,
+                    &self.agent_name,
+                    approved_by,
+                    &now,
+                )
+                .map_err(|error| format!("failed to approve share grant: {error}"))?;
+            self.append_audit("share_approve", &grant.secret_path, true);
+            return Ok(ToolCallResult::text(format!(
+                "Share grant {grant_id} approved"
+            )));
+        }
+
+        share_store
+            .reject_at(&self.share_root, grant_id)
+            .map_err(|error| format!("failed to reject share grant: {error}"))?;
+        self.append_audit("share_reject", &grant.secret_path, true);
+        Ok(ToolCallResult::text(format!(
+            "Share grant {grant_id} rejected"
+        )))
     }
 
     fn list_shares(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -851,6 +1015,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.list_shares(arguments)
         } else if name == "request_share" {
             self.request_share(arguments)
+        } else if name == "approve_share" {
+            self.approve_share(arguments)
         } else if name == "revoke_share" {
             self.revoke_share(arguments)
         } else {
@@ -1039,6 +1205,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry_value",
         "get_entry_metadata",
         "list_shares",
+        "approve_share",
         "revoke_share",
         "request_share",
     ]
