@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke config-cli-differential port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -618,16 +618,21 @@ audit-differential: audit-fixtures-check
 	@test -s target/audit/rust-output.jsonl
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
 
-rust-gates: store-differential audit-differential
+# Split from `rust-gates` so CI can run the interpreter-heavy Miri pass in its
+# own parallel job: Miri accounts for roughly two thirds of the aggregate gate
+# wall clock (see docs/rust-port/ci-runtime.md), and it needs a different
+# toolchain and target directory than every other gate.
+rust-gates-core: store-differential audit-differential
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
 	$(MAKE) rust-test
 	$(MAKE) rust-security
 	$(MAKE) rust-fuzz-smoke
-	$(MAKE) rust-miri
 	$(MAKE) rust-features
 	$(MAKE) rust-coverage
 	$(MAKE) rust-version-contract
+
+rust-gates: rust-gates-core rust-miri
 
 # Install dependencies
 deps:
@@ -687,6 +692,7 @@ help:
 	@echo "  rust-lint          - Run rustfmt and Clippy with warnings denied"
 	@echo "  rust-test          - Run Rust nextest and doctests"
 	@echo "  rust-miri          - Run symvault-core tests under Miri"
+	@echo "  rust-gates-core    - Run every staged Rust gate except Miri"
 	@echo "  rust-features      - Check each Rust feature independently"
 	@echo "  rust-coverage      - Measure Rust workspace coverage"
 	@echo "  rust-security      - Run Rust advisory and dependency-policy gates"

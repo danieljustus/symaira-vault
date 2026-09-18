@@ -239,9 +239,6 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
-      - name: Install pinned nightly Miri toolchain
-        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
-
       - name: Install Rust verification tools
         uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
@@ -251,8 +248,29 @@ jobs:
       - name: Install pinned cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 
+      # The interpreter-heavy Miri pass runs in the parallel `rust-miri` job;
+      # `rust-gates-core` is every remaining staged gate.
       - name: Run Rust gates and Go differential contract
-        run: make rust-gates
+        run: make rust-gates-core
+
+  rust-miri:
+    name: Rust Miri
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
+
+      - name: Install pinned nightly Miri toolchain
+        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
+
+      - name: Run symvault-core tests under Miri
+        run: make rust-miri
 
   rust-fuzz:
     name: Rust fuzz (main/schedule)
@@ -835,6 +853,7 @@ jobs:
       - flake-vendorhash
       - port-contract
       - rust
+      - rust-miri
       - rust-native
       - test-pr
       - windows-process-tree
@@ -868,6 +887,7 @@ jobs:
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
           RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_RUST: ${{ needs.rust.result }}
+          RES_RUST_MIRI: ${{ needs.rust-miri.result }}
           RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
@@ -897,6 +917,7 @@ jobs:
           check_required "$RES_FLAKE_VENDORHASH" flake-vendorhash
           check_required "$RES_PORT_CONTRACT" port-contract
           check_required "$RES_RUST" rust
+          check_required "$RES_RUST_MIRI" rust-miri
           check_required "$RES_RUST_NATIVE" rust-native
           check_required "$RES_TEST_PR" test-pr
           check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
