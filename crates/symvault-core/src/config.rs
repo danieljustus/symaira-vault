@@ -271,9 +271,17 @@ pub struct PathEnvironment {
 }
 
 /// Returns the raw XDG value when set, otherwise the XDG default beneath home.
-fn xdg_base(value: &str, home: &str, fallback: &str) -> PathBuf {
+fn xdg_base(value: &str, home: &str, fallback: &[&str]) -> PathBuf {
     if value.is_empty() {
-        Path::new(home).join(fallback)
+        // Go joins every fallback component separately
+        // (`filepath.Join(home, ".local", "share")`), so the resolved path uses
+        // host separators throughout. Joining one prepared string instead would
+        // keep `/` inside the segment on Windows and produce a mixed path.
+        fallback
+            .iter()
+            .fold(Path::new(home).to_path_buf(), |path, component| {
+                path.join(component)
+            })
     } else {
         PathBuf::from(value)
     }
@@ -307,9 +315,9 @@ pub fn resolve_paths(env: &PathEnvironment) -> PathResolver {
     }
 
     let legacy = Path::new(&env.home).join(LEGACY_DIR);
-    let cache_dir = xdg_base(&env.xdg_cache_home, &env.home, ".cache").join(APP_NAME);
-    let xdg_config = xdg_base(&env.xdg_config_home, &env.home, ".config").join(APP_NAME);
-    let xdg_data = xdg_base(&env.xdg_data_home, &env.home, ".local/share").join(APP_NAME);
+    let cache_dir = xdg_base(&env.xdg_cache_home, &env.home, &[".cache"]).join(APP_NAME);
+    let xdg_config = xdg_base(&env.xdg_config_home, &env.home, &[".config"]).join(APP_NAME);
+    let xdg_data = xdg_base(&env.xdg_data_home, &env.home, &[".local", "share"]).join(APP_NAME);
 
     let (config_dir, mut data_dir, migrated) =
         match (env.legacy_dir_exists, env.xdg_data_dir_exists) {
@@ -353,7 +361,7 @@ impl PathResolver {
         }
         let probed = PathEnvironment {
             legacy_dir_exists: Path::new(&home).join(LEGACY_DIR).is_dir(),
-            xdg_data_dir_exists: xdg_base(&env.xdg_data_home, &home, ".local/share")
+            xdg_data_dir_exists: xdg_base(&env.xdg_data_home, &home, &[".local", "share"])
                 .join(APP_NAME)
                 .is_dir(),
             ..env

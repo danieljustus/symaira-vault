@@ -47,9 +47,9 @@ pub(crate) fn preview(
         return write_no_migration(quiet, output);
     }
 
-    let config_dir = xdg_root(xdg_config_home, home, ".config").join(APP_SUBDIR);
-    let data_dir = xdg_root(xdg_data_home, home, ".local/share").join(APP_SUBDIR);
-    let cache_dir = xdg_root(xdg_cache_home, home, ".cache").join(APP_SUBDIR);
+    let config_dir = xdg_root(xdg_config_home, home, &[".config"]).join(APP_SUBDIR);
+    let data_dir = xdg_root(xdg_data_home, home, &[".local", "share"]).join(APP_SUBDIR);
+    let cache_dir = xdg_root(xdg_cache_home, home, &[".cache"]).join(APP_SUBDIR);
     let groups = [
         ("config.yaml", config_dir.join("config.yaml")),
         ("vault", data_dir.join("vault")),
@@ -103,11 +103,18 @@ fn write_no_migration(quiet: bool, output: &mut impl Write) -> Result<(), String
     Ok(())
 }
 
-fn xdg_root(value: Option<&Path>, home: &Path, fallback: &str) -> PathBuf {
+fn xdg_root(value: Option<&Path>, home: &Path, fallback: &[&str]) -> PathBuf {
     value
         .filter(|path| !path.as_os_str().is_empty())
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| home.join(fallback))
+        .unwrap_or_else(|| {
+            // Go builds the XDG default with one `filepath.Join` component per
+            // segment; keep the same component-wise join so Windows paths do not
+            // mix `/` and `\`.
+            fallback
+                .iter()
+                .fold(home.to_path_buf(), |path, component| path.join(component))
+        })
 }
 
 fn append_entry(

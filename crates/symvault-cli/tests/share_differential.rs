@@ -105,13 +105,18 @@ fn assert_same(go: &Output, rust: &Output, args: &[&str], case: &str) {
 
 fn normalized_revoke_listing(bytes: &[u8]) -> serde_json::Value {
     let mut value: serde_json::Value = serde_json::from_slice(bytes).expect("share JSON");
-    for grant in value.as_array_mut().expect("share grant array") {
+    let grants = value.as_array_mut().expect("share grant array");
+    for grant in grants.iter_mut() {
         if let Some(revoked_at) = grant.get_mut("revoked_at")
             && !revoked_at.is_null()
         {
             *revoked_at = serde_json::Value::String("<dynamic>".to_owned());
         }
     }
+    // Go keeps grants in a map, and `range` over a Go map is randomized, so the
+    // Go CLI's `share list` order is not a contract. Compare the persisted
+    // metadata as a set keyed by grant id instead of a flaky array order.
+    grants.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
     value
 }
 
