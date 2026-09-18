@@ -624,6 +624,79 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
     }
 }
 
+/// Implements `symvault config validate [path]`.
+///
+/// Mirrors Go's `config validate` for its non-interactive path: load, then
+/// run [`symvault_core::config::Config::validate`], reporting every
+/// violation at once. Go's `--fix` interactive `$EDITOR`/auto-repair flow is
+/// intentionally not ported here (it requires a TTY-driven repair UI outside
+/// this bounded CLI slice); callers asking for that flag get "not supported"
+/// rather than a silent no-op.
+pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {
+    if fix {
+        return Err("config validate --fix is not supported by this build".to_owned());
+    }
+    let json = output == "json";
+    let path_display = path.display().to_string();
+
+    let loaded = symvault_core::config::Config::load(path);
+    let config = match loaded {
+        Ok(config) => config,
+        Err(error) => {
+            if json {
+                print_json(
+                    &serde_json::json!({ "error": error.to_string(), "valid": false }),
+                    quiet,
+                )?;
+                return Err(format!("config load failed: {error}"));
+            }
+            return Err(format!("cannot load config from {path_display}: {error}"));
+        }
+    };
+
+    let errors = config.validate();
+    if !errors.is_empty() {
+        if json {
+            print_json(
+                &serde_json::json!({ "errors": errors, "valid": false }),
+                quiet,
+            )?;
+        } else if !quiet {
+            println!("Configuration is invalid ({path_display}):");
+            for line in &errors {
+                println!("  ✗ {line}");
+            }
+        }
+        return Err(format!("config validation failed: {}", errors.join("\n")));
+    }
+
+    if json {
+        print_json(
+            &serde_json::json!({ "path": path_display, "valid": true }),
+            quiet,
+        )?;
+    } else if !quiet {
+        println!("Configuration is valid ({path_display})");
+    }
+    Ok(())
+}
+
+/// Encodes `value` as one line of JSON, matching Go's `SetEscapeHTML(false)`
+/// printer. Suppressed under `--quiet`, matching Go's quiet-aware `PrintJSON`.
+fn print_json(value: &serde_json::Value, quiet: bool) -> Result<(), String> {
+    if quiet {
+        return Ok(());
+    }
+    let mut rendered = serde_json::to_string(value)
+        .map_err(|error| error.to_string())?
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    rendered.push('\n');
+    io::stdout()
+        .write_all(rendered.as_bytes())
+        .map_err(|error| error.to_string())
+}
+
 pub fn resolve_path(file: Option<PathBuf>) -> Result<PathBuf, String> {
     if let Some(path) = file
         && !path.as_os_str().is_empty()

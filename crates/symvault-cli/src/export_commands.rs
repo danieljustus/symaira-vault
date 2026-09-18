@@ -72,7 +72,7 @@ pub(crate) fn audit_export(
         .map_err(|error| format!("write audit log: {error}"))
 }
 
-fn go_timestamp_seconds() -> String {
+pub(crate) fn go_timestamp_seconds() -> String {
     let value = GoTime::now().to_rfc3339_nano();
     value
         .find('.')
