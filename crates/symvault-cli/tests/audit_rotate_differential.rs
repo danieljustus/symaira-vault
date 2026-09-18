@@ -42,6 +42,16 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str], input: Option<&[
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env("NO_COLOR", "1");
+    if args.first() == Some(&"init")
+        && let Some(data) = input
+    {
+        let pass = String::from_utf8_lossy(data)
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        cmd.env("SYMVAULT_PASSPHRASE", pass);
+    }
     if let Some(data) = input {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -81,15 +91,15 @@ fn assert_same_normalized(go: &Output, rust: &Output, case: &str) {
         String::from_utf8_lossy(&rust.stderr)
     );
     assert_eq!(
-        normalize_key_preview(&rust.stdout),
-        normalize_key_preview(&go.stdout),
+        rust.stdout,
+        go.stdout,
         "{case}: stdout differs\ngo: {:?}\nrust: {:?}",
         String::from_utf8_lossy(&go.stdout),
         String::from_utf8_lossy(&rust.stdout)
     );
     assert_eq!(
-        rust.stderr,
-        go.stderr,
+        normalize_key_preview(&rust.stderr),
+        normalize_key_preview(&go.stderr),
         "{case}: stderr differs\ngo: {:?}\nrust: {:?}",
         String::from_utf8_lossy(&go.stderr),
         String::from_utf8_lossy(&rust.stderr)

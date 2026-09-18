@@ -3,8 +3,11 @@ use serde::Deserialize;
 use std::{
     env,
     io::{self, BufRead, IsTerminal, Write},
+    sync::atomic::{AtomicBool, Ordering},
 };
 use zeroize::Zeroizing;
+
+static PIPE_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
@@ -16,9 +19,16 @@ pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
         );
         return Ok(Zeroizing::new(line.trim().to_owned()));
     }
-    eprintln!(
-        "Warning: reading passphrase from a non-TTY source; the producing process may expose it."
-    );
+    let label = prompt.trim_end().trim_end_matches(':').trim();
+    if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+        && env::var("SYMVAULT_NO_PIPE_WARNING")
+            .map(|v| v.is_empty() || v == "0")
+            .unwrap_or(true)
+    {
+        eprintln!(
+            "Reading {label} from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'."
+        );
+    }
     let mut line = Zeroizing::new(String::new());
     if io::stdin()
         .lock()

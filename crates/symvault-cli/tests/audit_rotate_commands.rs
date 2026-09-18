@@ -75,10 +75,12 @@ fn audit_rotate_key_cli_flow() {
     let home = TempDir::new("home");
     let uninit_vault = home.0.join("uninit");
 
-    // 1. Uninitialized vault rejects
-    let out = run_cli(&uninit_vault, &home.0, &["audit", "rotate-key"]);
-    assert_eq!(out.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("vault not initialized"));
+    // 1. Uninitialized vault bootstraps like Go (exit code 0, printed to stderr)
+    let out0 = run_cli(&uninit_vault, &home.0, &["audit", "rotate-key"]);
+    assert_eq!(out0.status.code(), Some(0));
+    let stderr0 = String::from_utf8_lossy(&out0.stderr);
+    assert!(stderr0.contains("New key: "));
+    assert!(stderr0.contains("HMAC key bootstrapped"));
 
     // Initialize vault
     let vault = home.0.join("vault");
@@ -87,13 +89,13 @@ fn audit_rotate_key_cli_flow() {
     // 2. First rotation bootstraps because no key exists yet
     let out1 = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
     assert_eq!(out1.status.code(), Some(0));
-    let stdout1 = String::from_utf8_lossy(&out1.stdout);
-    assert!(stdout1.contains("New key: "));
-    assert!(stdout1.contains("(first 4 bytes)"));
-    assert!(stdout1.contains(
+    let stderr1 = String::from_utf8_lossy(&out1.stderr);
+    assert!(stderr1.contains("New key: "));
+    assert!(stderr1.contains("(first 4 bytes)"));
+    assert!(stderr1.contains(
         "HMAC key bootstrapped — no previous key existed, so no archive file was written."
     ));
-    assert!(stdout1.contains("A new audit log will be started on the next audit write."));
+    assert!(stderr1.contains("A new audit log will be started on the next audit write."));
 
     // Check no rotated files exist yet
     let rotated_files: Vec<_> = fs::read_dir(&vault)
@@ -112,10 +114,10 @@ fn audit_rotate_key_cli_flow() {
 
     let out2 = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
     assert_eq!(out2.status.code(), Some(0));
-    let stdout2 = String::from_utf8_lossy(&out2.stdout);
-    assert!(stdout2.contains("HMAC key rotated successfully."));
-    assert!(stdout2.contains("Old key archived to: "));
-    assert!(stdout2.contains("audit-hmac-key.rotated."));
+    let stderr2 = String::from_utf8_lossy(&out2.stderr);
+    assert!(stderr2.contains("HMAC key rotated successfully."));
+    assert!(stderr2.contains("Old key archived to: "));
+    assert!(stderr2.contains("audit-hmac-key.rotated."));
     assert!(
         !vault.join("audit-hmac-key").exists(),
         "legacy key must be removed after rotation"

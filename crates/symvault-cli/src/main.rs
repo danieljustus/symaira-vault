@@ -1524,6 +1524,11 @@ fn main() -> ExitCode {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Run 'symvault doctor' to diagnose and fix configuration issues."
+                    );
                     ExitCode::from(6)
                 }
             }
@@ -1840,7 +1845,6 @@ fn run_audit(
 fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
         let runtime = runtime_session_manager();
         let keyring = runtime
             .keyring
@@ -1849,25 +1853,28 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
         let (new_key, archive_path) =
             symvault_store::audit::rotate_key_with_keyring(&vault, keyring)
                 .map_err(|error| format!("rotate HMAC key: {error}"))?;
-        let mut stdout = io::stdout().lock();
-        writeln!(stdout, "New key: {} (first 4 bytes)", new_key.preview_hex())
+        let mut stderr = io::stderr().lock();
+        writeln!(stderr, "New key: {} (first 4 bytes)", new_key.preview_hex())
             .map_err(|error| error.to_string())?;
         match &archive_path {
             None => writeln!(
-                stdout,
+                stderr,
                 "HMAC key bootstrapped — no previous key existed, so no archive file was written."
             ),
-            Some(path) => writeln!(stdout, "HMAC key rotated successfully.")
-                .and_then(|()| writeln!(stdout, "Old key archived to: {}", path.display())),
+            Some(path) => writeln!(stderr, "HMAC key rotated successfully.")
+                .and_then(|()| writeln!(stderr, "Old key archived to: {}", path.display())),
         }
         .map_err(|error| error.to_string())?;
         writeln!(
-            stdout,
+            stderr,
             "A new audit log will be started on the next audit write."
         )
         .map_err(|error| error.to_string())?;
         Ok::<(), String>(())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 
@@ -1953,6 +1960,9 @@ fn run_auth_set(
         }
         Ok::<(), String>(())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 
@@ -1975,8 +1985,25 @@ fn run_auth_rotate_passphrase(
 
         let old_passphrase = session_input::read_passphrase("Current passphrase: ")
             .map_err(|error| format!("cannot read current passphrase: {error}"))?;
-        let identity = decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes()))
-            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
+        let identity =
+            match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
+                Ok(identity) => identity,
+                Err(_) => {
+                    let load_error = if symvault_crypto::detect_envelope(&original)
+                        == symvault_crypto::EnvelopeFormat::Argon2id
+                    {
+                        let recipients_file = vault.join("recipients.txt");
+                        if !recipients_file.is_file() {
+                            "load identity: zero-key recovery requires a trusted recipients.txt"
+                        } else {
+                            "load identity: zero-key recovery failed"
+                        }
+                    } else {
+                        "load identity: decryption failed"
+                    };
+                    return Err(format!("current passphrase is incorrect: {load_error}"));
+                }
+            };
 
         let new_passphrase =
             session_input::read_passphrase("New passphrase (minimum 12 characters): ")
@@ -2114,6 +2141,9 @@ fn run_auth_rotate_passphrase(
         }
         Ok::<(), String>(())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 
@@ -3045,6 +3075,9 @@ fn run_auth_status(
         }
         Ok::<(), String>(())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_session_result(result, false, 1)
 }
 

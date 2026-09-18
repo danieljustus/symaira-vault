@@ -632,6 +632,37 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
 /// intentionally not ported here (it requires a TTY-driven repair UI outside
 /// this bounded CLI slice); callers asking for that flag get "not supported"
 /// rather than a silent no-op.
+fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
+    #[cfg(windows)]
+    let err_msg = match err.raw_os_error() {
+        Some(2) => "The system cannot find the file specified.",
+        Some(3) => "The system cannot find the path specified.",
+        Some(5) => "Access is denied.",
+        _ => {
+            if err.kind() == io::ErrorKind::NotFound {
+                "The system cannot find the file specified."
+            } else {
+                "general error"
+            }
+        }
+    };
+    #[cfg(not(windows))]
+    let err_msg = match err.raw_os_error() {
+        Some(2) => "no such file or directory",
+        Some(13) => "permission denied",
+        _ => {
+            if err.kind() == io::ErrorKind::NotFound {
+                "no such file or directory"
+            } else if err.kind() == io::ErrorKind::PermissionDenied {
+                "permission denied"
+            } else {
+                "input/output error"
+            }
+        }
+    };
+    format!("{op} {}: {err_msg}", path.display())
+}
+
 pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {
     if fix {
         return Err("config validate --fix is not supported by this build".to_owned());
@@ -639,18 +670,37 @@ pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(),
     let json = output == "json";
     let path_display = path.display().to_string();
 
-    let loaded = symvault_core::config::Config::load(path);
-    let config = match loaded {
-        Ok(config) => config,
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
         Err(error) => {
+            let path_err = format_go_path_error("open", path, &error);
             if json {
                 print_json(
-                    &serde_json::json!({ "error": error.to_string(), "valid": false }),
+                    &serde_json::json!({ "error": path_err, "valid": false }),
                     quiet,
                 )?;
-                return Err(format!("config load failed: {error}"));
+                return Err(format!("config load failed: {path_err}"));
             }
-            return Err(format!("cannot load config from {path_display}: {error}"));
+            return Err(format!(
+                "cannot load config from {path_display}: {path_err}: {path_err}"
+            ));
+        }
+    };
+
+    let config = match symvault_core::config::Config::load_from_bytes(&bytes) {
+        Ok(config) => config,
+        Err(error) => {
+            let err_msg = error.to_string();
+            if json {
+                print_json(
+                    &serde_json::json!({ "error": err_msg, "valid": false }),
+                    quiet,
+                )?;
+                return Err(format!("config load failed: {err_msg}"));
+            }
+            return Err(format!(
+                "cannot load config from {path_display}: {err_msg}: {err_msg}"
+            ));
         }
     };
 

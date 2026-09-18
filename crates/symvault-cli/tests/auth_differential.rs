@@ -42,6 +42,16 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str], input: Option<&[
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env("NO_COLOR", "1");
+    if args.first() == Some(&"init")
+        && let Some(data) = input
+    {
+        let pass = String::from_utf8_lossy(data)
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        cmd.env("SYMVAULT_PASSPHRASE", pass);
+    }
     if let Some(data) = input {
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
@@ -298,6 +308,8 @@ fn auth_rotate_passphrase_matches_go_contract() {
     assert_same(&res_go, &res_rust, "auth rotate-passphrase canceled");
 
     // Case 7: Successful rotation
+    let rust_vault = home.0.join("rust-vault");
+    copy_dir_all(&uninit_vault, &rust_vault);
     let input = b"original-passphrase-123\nnew-rotated-passphrase-1\nnew-rotated-passphrase-1\n";
     let res_go = run(
         &go,
@@ -308,10 +320,24 @@ fn auth_rotate_passphrase_matches_go_contract() {
     );
     let res_rust = run(
         &rust,
-        &uninit_vault,
+        &rust_vault,
         &home.0,
         &["auth", "rotate-passphrase", "-y"],
         Some(input),
     );
     assert_same(&res_go, &res_rust, "auth rotate-passphrase success");
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) {
+    fs::create_dir_all(dst).expect("create dst dir");
+    for entry in fs::read_dir(src).expect("read src dir") {
+        let entry = entry.expect("dir entry");
+        let ty = entry.file_type().expect("file type");
+        let dest_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dest_path);
+        } else {
+            fs::copy(entry.path(), &dest_path).expect("copy file");
+        }
+    }
 }

@@ -2269,11 +2269,13 @@ mod tests {
 
     #[test]
     fn validate_reports_every_violation_at_once() {
-        let mut c = Config::default();
-        c.vault_dir = "  ".into();
-        c.session_timeout = Duration::ZERO;
-        c.session_max_lifetime = Duration::ZERO;
-        c.default_agent = "missing".into();
+        let c = Config {
+            vault_dir: "  ".into(),
+            session_timeout: Duration::ZERO,
+            session_max_lifetime: Duration::ZERO,
+            default_agent: "missing".into(),
+            ..Config::default()
+        };
         let errors = c.validate();
         assert_eq!(errors.len(), 4, "errors={errors:?}");
         assert!(errors[0].starts_with("vaultDir: must not be empty"));
@@ -2307,11 +2309,13 @@ mod tests {
 
     #[test]
     fn validate_rejects_negative_clipboard_duration() {
-        let mut c = Config::default();
-        c.clipboard = Some(ClipboardConfig {
-            auto_clear_duration: -1,
-            copy_by_default: false,
-        });
+        let c = Config {
+            clipboard: Some(ClipboardConfig {
+                auto_clear_duration: -1,
+                copy_by_default: false,
+            }),
+            ..Config::default()
+        };
         let errors = c.validate();
         assert!(
             errors
@@ -2322,25 +2326,29 @@ mod tests {
 
     #[test]
     fn validate_enforces_argon2id_floor_and_ceiling() {
-        let mut c = Config::default();
-        c.vault = Some(VaultConfig {
-            argon2id_time: 1,
-            argon2id_threads: 20,
-            argon2id_memory: 100,
-            ..VaultConfig::default()
-        });
+        let c = Config {
+            vault: Some(VaultConfig {
+                argon2id_time: 1,
+                argon2id_threads: 20,
+                argon2id_memory: 100,
+                ..VaultConfig::default()
+            }),
+            ..Config::default()
+        };
         let errors = c.validate();
         assert!(errors.iter().any(|e| e.contains("argon2id_time")));
         assert!(errors.iter().any(|e| e.contains("argon2id_threads")));
         assert!(errors.iter().any(|e| e.contains("argon2id_memory")));
 
-        let mut c = Config::default();
-        c.vault = Some(VaultConfig {
-            argon2id_time: 3,
-            argon2id_threads: 2,
-            argon2id_memory: 65536,
-            ..VaultConfig::default()
-        });
+        let c = Config {
+            vault: Some(VaultConfig {
+                argon2id_time: 3,
+                argon2id_threads: 2,
+                argon2id_memory: 65536,
+                ..VaultConfig::default()
+            }),
+            ..Config::default()
+        };
         assert!(c.validate().is_empty());
     }
 }
