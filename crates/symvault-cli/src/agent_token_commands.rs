@@ -36,8 +36,8 @@ pub(crate) fn list(
 
     writeln!(
         output,
-        "{:<22} {:<16} {:<14} {:<28} {:<20} {}",
-        "ID", "LABEL", "AGENT", "TOOLS", "EXPIRES AT", "STATUS"
+        "{:<22} {:<16} {:<14} {:<28} {:<20} STATUS",
+        "ID", "LABEL", "AGENT", "TOOLS", "EXPIRES AT"
     )
     .map_err(|error| error.to_string())?;
     for token in tokens {
