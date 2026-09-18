@@ -108,6 +108,20 @@ fn truncate_tools(tools: &str) -> String {
         .map_or_else(|| tools.to_owned(), |prefix| format!("{prefix}..."))
 }
 
+/// Mirrors pflag's empty `stringSlice` value.
+///
+/// Go reads the raw flag value as CSV, and `readAsCSV("")` yields no records at
+/// all, so `--tools ""` means "no tools specified" rather than "one empty tool"
+/// and hits Go's `at least one tool must be specified` error. Clap hands the
+/// command `[""]` instead, which would otherwise create a token whose
+/// allowed-tools list is a single empty string.
+fn normalize_tools(mut tools: Vec<String>) -> Vec<String> {
+    if tools.len() == 1 && tools[0].is_empty() {
+        tools.clear();
+    }
+    tools
+}
+
 /// Creates a new scoped token for `agent`. Mirrors `newAgentTokenNewCmd`.
 pub(crate) fn new(
     root: &Path,
@@ -118,6 +132,7 @@ pub(crate) fn new(
     quiet: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
+    let tools = normalize_tools(tools);
     if tools.is_empty() {
         return Err("at least one tool must be specified (use --tools '*')".to_owned());
     }
@@ -174,6 +189,7 @@ pub(crate) fn rotate(
     quiet: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
+    let tools = normalize_tools(tools);
     if tools.is_empty() {
         return Err("at least one tool must be specified (use --tools '*')".to_owned());
     }
