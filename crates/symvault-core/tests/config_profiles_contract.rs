@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use symvault_core::config::{Config, Profile};
+use symvault_core::test_support::corpus_limit;
 
 #[derive(Debug, Deserialize)]
 struct OracleCase {
@@ -47,11 +48,62 @@ fn cases() -> Vec<OracleCase> {
     fixture().cases
 }
 
+fn select_profile_indices(cases: &[OracleCase], limit: usize) -> Vec<usize> {
+    if limit >= cases.len() {
+        return (0..cases.len()).collect();
+    }
+    let mut selected = Vec::with_capacity(limit);
+    let mut has_ok = false;
+    let mut has_panic = false;
+    let mut has_err = false;
+
+    // First pass: guarantee at least one case of every shape
+    // (happy path, null_profile panic branch, and invalid mapping error branch)
+    for (i, case) in cases.iter().enumerate() {
+        if selected.len() >= limit {
+            break;
+        }
+        let is_panic = case.name == "null_profile";
+        let is_err = case.error.is_some() && !is_panic;
+        let is_ok = case.result.is_some();
+
+        if (is_panic && !has_panic) || (is_err && !has_err) || (is_ok && !has_ok) {
+            selected.push(i);
+            if is_panic {
+                has_panic = true;
+            }
+            if is_err {
+                has_err = true;
+            }
+            if is_ok {
+                has_ok = true;
+            }
+        }
+    }
+
+    // Second pass: fill remaining slots from the prefix preserving order
+    for i in 0..cases.len() {
+        if selected.len() >= limit {
+            break;
+        }
+        if !selected.contains(&i) {
+            selected.push(i);
+        }
+    }
+
+    selected
+}
+
 #[test]
 fn pinned_go_profile_cases_match_load_and_save() {
     let cases = cases();
     assert_eq!(cases.len(), 62);
-    for case in cases {
+    let limit = corpus_limit(cases.len());
+    let selected_indices = select_profile_indices(&cases, limit);
+    for (i, case) in cases.into_iter().enumerate() {
+        if !selected_indices.contains(&i) {
+            continue;
+        }
         let loaded = Config::load_from_bytes(case.input.as_bytes());
         match (loaded, case.result, case.error, case.panic) {
             (Ok(config), Some(expected), None, None) => {

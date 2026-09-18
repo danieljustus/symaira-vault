@@ -14,6 +14,7 @@ pub mod quota;
 pub mod redact;
 pub mod secret_ref;
 pub mod session;
+pub mod test_support;
 pub mod tier;
 pub mod totp;
 
