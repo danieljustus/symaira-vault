@@ -156,7 +156,28 @@ impl GitRepository {
         if staged.is_ok() {
             return Ok(None);
         }
+        // Go resolves the commit identity itself (options, then the vault's git
+        // config, then its own defaults) and commits in-process, so a host
+        // without a global git identity still commits. Shelling out to git needs
+        // the same values, otherwise the commit fails on a host whose git has no
+        // user.name/user.email — which is exactly how the rotate-passphrase
+        // differential diverged between macOS and CI. `-c` must precede the
+        // subcommand, so the identity options open the argument list.
+        let name = opts
+            .author
+            .clone()
+            .or_else(|| self.git_config_user("user.name"))
+            .unwrap_or_else(|| "Symaira Vault".to_owned());
+        let email = opts
+            .email
+            .clone()
+            .or_else(|| self.git_config_user("user.email"))
+            .unwrap_or_else(|| "symvault@example.com".to_owned());
         let mut args = vec![
+            "-c".to_owned(),
+            format!("user.name={name}"),
+            "-c".to_owned(),
+            format!("user.email={email}"),
             "commit".to_owned(),
             "--quiet".to_owned(),
             "-m".to_owned(),
@@ -169,6 +190,15 @@ impl GitRepository {
         self.command(&refs)?;
         self.log(1).map(|mut v| v.pop())
     }
+    /// Reads one git identity key from the repository config, as Go's
+    /// `gitConfigUser` does. A missing key or a failing git invocation yields
+    /// `None`, which lets the caller apply Go's defaults.
+    fn git_config_user(&self, key: &str) -> Option<String> {
+        let output = self.command(&["config", "--get", key]).ok()?;
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if value.is_empty() { None } else { Some(value) }
+    }
+
     pub fn log(&self, limit: usize) -> Result<Vec<Commit>, GitError> {
         self.log_path(None, limit)
     }
@@ -1304,6 +1334,65 @@ mod tests {
             status: "exit status: 1".to_owned(),
             stderr: stderr.to_owned(),
         }
+    }
+
+    /// Go commits in-process with its own identity (options, then the vault's
+    /// git config, then `Symaira Vault <symvault@example.com>`), so it never
+    /// depends on the host having a git identity. Shelling out to git does, so
+    /// `commit` must supply the resolved values itself — without this, the
+    /// rotate-passphrase differential failed on CI (no git identity there)
+    /// while passing on a developer host.
+    #[test]
+    fn commit_supplies_go_identity_when_the_repository_has_none() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = GitRepository::init(root.path()).unwrap();
+        // An explicitly empty identity stands in for a host without one; the
+        // repository-local value wins over any ambient developer identity.
+        repo.command(&["config", "user.name", ""]).unwrap();
+        repo.command(&["config", "user.email", ""]).unwrap();
+        fs::write(root.path().join("config.yaml"), b"base").unwrap();
+
+        repo.commit(CommitOptions {
+            message: "rotate".to_owned(),
+            ..CommitOptions::default()
+        })
+        .unwrap()
+        .expect("commit created");
+
+        let head = repo.log(1).unwrap();
+        assert_eq!(head.len(), 1);
+        assert_eq!(head[0].author, "Symaira Vault");
+        assert_eq!(commit_email(&repo), "symvault@example.com");
+    }
+
+    /// The vault's own git config wins over the defaults, exactly as in Go.
+    #[test]
+    fn commit_prefers_the_repository_identity_over_go_defaults() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = GitRepository::init(root.path()).unwrap();
+        repo.command(&["config", "user.name", "Vault Owner"])
+            .unwrap();
+        repo.command(&["config", "user.email", "owner@example.invalid"])
+            .unwrap();
+        fs::write(root.path().join("config.yaml"), b"base").unwrap();
+
+        repo.commit(CommitOptions {
+            message: "rotate".to_owned(),
+            ..CommitOptions::default()
+        })
+        .unwrap()
+        .expect("commit created");
+
+        let head = repo.log(1).unwrap();
+        assert_eq!(head[0].author, "Vault Owner");
+        assert_eq!(commit_email(&repo), "owner@example.invalid");
+    }
+
+    /// The author email of the current HEAD, which the commit must carry for git
+    /// to accept the commit at all on a host without an identity.
+    fn commit_email(repo: &GitRepository) -> String {
+        let out = repo.command(&["log", "-1", "--format=%ae"]).unwrap();
+        String::from_utf8_lossy(&out.stdout).trim().to_owned()
     }
 
     #[test]
