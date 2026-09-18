@@ -1,5 +1,39 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-18 (nach `56e0c83c`, ersetzt nichts darunter)
+
+- **Gepusht:** `56e0c83c` auf `migration/rust-batch-20260916`, Draft PR #1069.
+- **Drei native CI-Fehler von `dce458bf` root-cause-behoben** (`d9bc4f0f`):
+  Windows-XDG-Pfad parität zu Go komponentenweise gejoint (`xdg_base`/`xdg_root`),
+  `share revoke`-Differential sortiert jetzt (Go iteriert eine Map: 3 verschiedene
+  Reihenfolgen in 12 Läufen des gepinnten Oracles, also kein Vertrag), macOS
+  `ShareStore::read_verified` gegen Symlink-Präfix kanonisiert (Reproduktion:
+  Fehler `ENOTDIR` mit Symlink-`TMPDIR`, identisch zum CI-Fehler).
+- **Human-TTY-Approval portiert** (`e89a633c`, `bc44b3b6`): `crates/symvault-platform/src/approval.rs`
+  mit Prompt-Renderer, Go-Duration-Text, Timeout, Raw-Mode-Restore und
+  `/dev/tty`-Zugriff über `rustix` (Crate bleibt `#![deny(unsafe_code)]`).
+  Review hat drei Abweichungen gefunden und korrigiert: Enter kommt im Raw-Mode als
+  `\r` (nicht `\n`), Cooked-Mode wird vor dem Acknowledge wiederhergestellt,
+  Zeilen werden nach Runen (nicht Bytes) gepolstert.
+- **MCP `approve_share` verbunden** (`0d5abe96`): menschliche Bestätigung
+  verpflichtend, Selbstfreigabe vor dem Prompt verweigert, fehlende TTY fail-closed,
+  Grant wird unter Sperre erneut geprüft, Nicht-Bestätigung lehnt ab (wie Go).
+  8 neue Protokolltests; Workspace 655/655 grün.
+- **CI-Laufzeit gemessen und halbiert** (`56e0c83c`): Der Job `Rust` war mit 33,7 min
+  der kritische Pfad, davon ~22 min Miri. Miri läuft jetzt als eigener paralleler
+  Job; `make rust-gates` behält seine Bedeutung (`rust-gates-core` + `rust-miri`).
+  Basis: `docs/rust-port/ci-runtime.md`. Erwartung ~22 min; nächster Hebel ist die
+  Per-Test-Messung der Miri-Laufzeit (läuft).
+- **CLI-Lückeninventur erzeugt** (`docs/rust-port/cli-gap-inventory.md`): 11 von 45
+  Top-Level-Gruppen fehlen komplett, dazu 30+ Subkommandos und 11 Flag-Lücken.
+  Zwei Worker-Lanes laufen dagegen: Agent-Token-Mutationen (`new`/`revoke`/`rotate`)
+  und `auth set`/`auth rotate-passphrase`/`audit rotate-key`/`config validate`.
+- **Offene, bewusste Lücke:** Windows-TTY-Approval fehlt (fail-closed „deny“,
+  `ponytail:`-Kommentar nennt den Upgrade-Pfad `CONIN$`/`CONOUT$` + `SetConsoleMode`).
+- Verbleibend: 13 von 35 MCP-Tools ohne Handler (davon 7 GUI-/Biometrie-abhängig),
+  HTTP/OAuth/Broker, native Biometrie/Session, Swift-Bridge, Rest-CLI/TUI,
+  Release-/Value-/Rollback-Gates. Go bleibt Produktion; kein Cutover/Release.
+
 ## Candidate and provenance
 
 - **Integration candidate before this handover document:** `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`; it is based on `origin/main` `81210de2720ee000fa26adda4da4080daae01677`.
