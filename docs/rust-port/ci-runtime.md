@@ -36,3 +36,24 @@ Expected wall clock: `max(≈12 min, ≈22 min, ≈7 min) ≈ 22 min` instead of
 without dropping or weakening a single gate. Reducing Miri itself (per-test
 timings, and whether the crypto-heavy contract tests need interpreter coverage)
 is tracked separately; that is the next wall-clock lever.
+
+## Measured result after the split
+
+Run [35345367545](https://github.com/danieljustus/symaira-vault/actions/runs/35345367545)
+(head `0305d03d`) completed **green, including `CI Success`, in 23.0 min**
+(12:34:13 → 12:57:11 UTC). Job durations from that run:
+
+| Job | Duration |
+| --- | --- |
+| **Rust Miri** | **22.8 min** (new critical path) |
+| Rust | 12.3 min |
+| Rust port contract | 7.2 min |
+| Rust native (windows-latest) | 5.8 min |
+| Rust native (macos-latest) | 4.6 min |
+| Test (ubuntu) — PR | 4.0 min |
+| Lint | 2.4 min |
+
+That is a measured 33 % reduction (34–35 min → 23 min) at unchanged gate coverage.
+The same run is the first fully green CI of this migration wave: the Windows
+native job went from always-red to 5.8 min green after the dead-code lint gate,
+the unix-only POSIX-mode assertions and the POSIX git-IO fixtures were fixed.
