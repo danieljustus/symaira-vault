@@ -5,6 +5,19 @@
 //! wording). Approval input is always read from the controlling terminal
 //! (`/dev/tty`), never from MCP stdin/stdout, so a compromised or scripted
 //! MCP client cannot answer its own approval prompt.
+//!
+//! Only `is_tty_present` and `request_approval` are reachable from a public
+//! caller; the renderer, parsers and terminal seam are exercised by this
+//! module's tests and by the Unix implementation. On non-Unix targets there is
+//! no terminal implementation at all (approval fails closed), so those items
+//! are unreachable in a non-test build there and must not fail `-D warnings`.
+#![cfg_attr(
+    not(unix),
+    allow(
+        dead_code,
+        reason = "no controlling-terminal implementation on this target; approval fails closed"
+    )
+)]
 
 use std::time::{Duration, Instant};
 
