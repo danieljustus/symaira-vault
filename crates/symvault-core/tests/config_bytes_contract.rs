@@ -7,6 +7,16 @@
 
 use serde::Deserialize;
 use symvault_core::config::Config;
+use symvault_core::test_support::corpus_limit;
+
+/// The fixture cases a run executes: the full corpus natively, a bounded prefix
+/// under Miri, where interpreter time scales with corpus size while UB coverage
+/// scales with code paths. See `symvault_core::test_support`.
+fn cases_for_run() -> Vec<Case> {
+    let all = fixture().cases;
+    let limit = corpus_limit(all.len());
+    all.into_iter().take(limit).collect()
+}
 
 #[derive(Debug, Deserialize)]
 struct Oracle {
@@ -201,7 +211,7 @@ const ACCEPTANCE_PENDING_ADJUDICATION: [&str; 0] = [];
 fn acceptance_matches_go_oracle() {
     let mut unexpected = Vec::new();
     let mut diverging = Vec::new();
-    for case in &fixture().cases {
+    for case in &cases_for_run() {
         let result = Config::load_from_bytes(case.input.as_bytes());
         let rejected = result.is_err();
         if rejected == case.rejected {
@@ -238,7 +248,7 @@ fn acceptance_matches_go_oracle() {
 
 #[test]
 fn accepted_inputs_resolve_to_the_go_snapshot() {
-    for case in &fixture().cases {
+    for case in &cases_for_run() {
         let Some(expected) = &case.snapshot else {
             continue;
         };
@@ -263,7 +273,7 @@ fn accepted_inputs_resolve_to_the_go_snapshot() {
 /// Re-loading the writer's canonical output must reproduce the same snapshot.
 #[test]
 fn canonical_output_round_trips() {
-    for case in &fixture().cases {
+    for case in &cases_for_run() {
         let Some(expected) = &case.snapshot else {
             continue;
         };
@@ -585,7 +595,7 @@ fn writer_modes_match_go_oracle() {
 /// return the loader to silently discarding what the operator wrote.
 #[test]
 fn warnings_match_go_oracle() {
-    for case in &fixture().cases {
+    for case in &cases_for_run() {
         if case.rejected {
             continue;
         }
