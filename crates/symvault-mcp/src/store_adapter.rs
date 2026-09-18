@@ -1204,6 +1204,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry",
         "get_entry_value",
         "get_entry_metadata",
+        "symaira_delete",
         "list_shares",
         "approve_share",
         "revoke_share",

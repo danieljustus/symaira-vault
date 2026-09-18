@@ -212,3 +212,77 @@ fn write_synthetic_vault() -> (
         .expect("write encrypted synthetic entry");
     (root, identity, verifier)
 }
+
+/// `symaira_delete` is Go's deprecated alias for `delete_entry`; Go registers it
+/// with the same handler and dispatches both names (`tool_registry.go:176`,
+/// `server_dispatch.go:47`). Rust must expose and dispatch it too, and it keeps
+/// the tier gate for the alias as well: Go's tier map lists only the canonical
+/// name, so the alias would slip past a read-only/standard restriction there.
+/// That is the stricter side of a Go quirk and is recorded as a deliberate
+/// deviation rather than copied.
+#[test]
+fn symaira_delete_alias_dispatches_like_delete_entry_and_keeps_the_tier_gate() {
+    assert!(
+        read_only_tool_names()
+            .iter()
+            .any(|name| name == "symaira_delete"),
+        "the alias must be an available tool"
+    );
+
+    // Restricted tier: refused, and the message names the invoked tool.
+    let (root, identity, _verifier) = write_synthetic_vault();
+    let restricted = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        ReadOnlyRuntimeConfig {
+            agent_name: "fixture".into(),
+            tier: "standard".into(),
+            can_write: true,
+            allowed_paths: vec!["*".into()],
+            available_tools: read_only_tool_names(),
+            ..ReadOnlyRuntimeConfig::default()
+        },
+        None,
+        None,
+    )
+    .expect("open restricted runtime");
+    let denied = restricted
+        .authorize("symaira_delete", &serde_json::json!({"path": "github"}))
+        .expect_err("the alias keeps the delete tier gate");
+    assert_eq!(
+        denied.text,
+        "Tool \"symaira_delete\" requires tier \"admin\""
+    );
+
+    // Unrestricted tier: the alias deletes the entry and reports like the
+    // canonical tool (Go fixture: "Successfully deleted entry: github").
+    let (root, identity, verifier) = write_synthetic_vault();
+    let runtime = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        ReadOnlyRuntimeConfig {
+            agent_name: "fixture".into(),
+            can_write: true,
+            allowed_paths: vec!["*".into()],
+            available_tools: read_only_tool_names(),
+            ..ReadOnlyRuntimeConfig::default()
+        },
+        None,
+        None,
+    )
+    .expect("open runtime");
+    let deleted = runtime
+        .call("symaira_delete", &serde_json::json!({"path": "github"}))
+        .expect("alias dispatch");
+    assert!(!deleted.is_error, "alias must not report an error");
+    assert_eq!(deleted.text, "Successfully deleted entry: github");
+
+    let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
+    assert!(
+        matches!(
+            store.get("github", &verifier),
+            Err(StoreError::EntryNotFound(_))
+        ),
+        "the alias must actually delete the entry"
+    );
+}

@@ -220,15 +220,16 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"set_entry_field\" requires tier \"standard\"",
             ));
         }
-        if self.config.tier == "read-only" && name == "delete_entry" {
-            return Err(ToolCallResult::error(
-                "Tool \"delete_entry\" requires tier \"standard\"",
-            ));
+        let deletes = name == "delete_entry" || name == "symaira_delete";
+        if self.config.tier == "read-only" && deletes {
+            return Err(ToolCallResult::error(format!(
+                "Tool \"{name}\" requires tier \"standard\""
+            )));
         }
-        if self.config.tier == "standard" && name == "delete_entry" {
-            return Err(ToolCallResult::error(
-                "Tool \"delete_entry\" requires tier \"admin\"",
-            ));
+        if self.config.tier == "standard" && deletes {
+            return Err(ToolCallResult::error(format!(
+                "Tool \"{name}\" requires tier \"admin\""
+            )));
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
             let approval_mode =
@@ -273,7 +274,13 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "generate_template" => self.generate_template(arguments),
             "generate_totp" => self.generate_totp(arguments),
             "set_entry_field" => self.set_entry_field(arguments),
-            "delete_entry" => self.delete_entry(arguments),
+            // `symaira_delete` is Go's deprecated alias for the same handler
+            // (Go dispatches both names in server_dispatch.go). Go's tier map
+            // only blocks the canonical name, so the alias slips past a
+            // read-only/standard restriction there; this port keeps the alias
+            // subject to the same rules and names the invoked tool in the error,
+            // which is the stricter side and recorded as a deliberate deviation.
+            "delete_entry" | "symaira_delete" => self.delete_entry(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
