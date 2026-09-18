@@ -455,7 +455,41 @@ enum AgentCommand {
 
 #[derive(Debug, Subcommand)]
 enum AgentTokenCommand {
-    List { name: String },
+    List {
+        name: String,
+    },
+    New {
+        name: String,
+        #[arg(
+            long,
+            use_value_delimiter = true,
+            value_delimiter = ',',
+            default_value = "*"
+        )]
+        tools: Vec<String>,
+        #[arg(long, default_value = "")]
+        ttl: String,
+        #[arg(long, default_value = "")]
+        label: String,
+    },
+    Revoke {
+        name: String,
+        token_id: String,
+    },
+    Rotate {
+        name: String,
+        #[arg(
+            long,
+            use_value_delimiter = true,
+            value_delimiter = ',',
+            default_value = "*"
+        )]
+        tools: Vec<String>,
+        #[arg(long, default_value = "")]
+        ttl: String,
+        #[arg(long, default_value = "")]
+        label: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1134,6 +1168,85 @@ fn main() -> ExitCode {
             let result = (|| {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 agent_token_commands::list(&vault, &name, cli.quiet, &mut io::stdout().lock())
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Token {
+                    command:
+                        AgentTokenCommand::New {
+                            name,
+                            tools,
+                            ttl,
+                            label,
+                        },
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_token_commands::new(
+                    &vault,
+                    &name,
+                    tools,
+                    &ttl,
+                    &label,
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Token {
+                    command: AgentTokenCommand::Revoke { name, token_id },
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_token_commands::revoke(
+                    &vault,
+                    &name,
+                    &token_id,
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Token {
+                    command:
+                        AgentTokenCommand::Rotate {
+                            name,
+                            tools,
+                            ttl,
+                            label,
+                        },
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_token_commands::rotate(
+                    &vault,
+                    &name,
+                    tools,
+                    &ttl,
+                    &label,
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                )
             })();
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
