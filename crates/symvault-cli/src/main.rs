@@ -1523,6 +1523,11 @@ fn main() -> ExitCode {
             match config::validate(&path, fix, output, cli.quiet) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
+                    // Go prints this failure twice: once from the command's own
+                    // RunE and again from Cobra's ExecuteRoot. Verified against
+                    // the pinned oracle for a missing file and for a YAML parse
+                    // error, including the doctor hint below; the duplicate line
+                    // is parity, not a copy-paste bug.
                     let _ = writeln!(io::stderr(), "Error: {error}");
                     let _ = writeln!(io::stderr(), "Error: {error}");
                     let _ = writeln!(
