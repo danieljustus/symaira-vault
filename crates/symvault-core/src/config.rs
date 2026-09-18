@@ -474,6 +474,78 @@ impl Config {
         Ok(())
     }
 
+    /// Checks the config for semantic correctness, matching Go's
+    /// `Config.Validate()`. Every violation is collected (not just the first)
+    /// so `symvault config validate` can report them all at once, joined with
+    /// `\n` the same way Go's `errors.Join(...).Error()` renders them.
+    ///
+    /// `authMethod` values are not re-checked here: unlike Go's untyped
+    /// string field, the Rust `AuthMethod` enum is already validated at parse
+    /// time, so a loaded `Config` can never carry an invalid one. Go's
+    /// `audit.maxFileSize` and `paymentPolicies` checks are omitted because
+    /// this port does not yet model those config sections at all.
+    #[must_use]
+    pub fn validate(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+
+        if self.vault_dir.trim().is_empty() {
+            errors.push(
+                "vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)"
+                    .to_owned(),
+            );
+        }
+        if self.session_timeout.is_zero() {
+            errors.push(
+                "sessionTimeout: must be greater than 0 (default: 15m, configure sessionTimeout in config.yaml)"
+                    .to_owned(),
+            );
+        }
+        if self.session_max_lifetime.is_zero() {
+            errors.push(
+                "sessionMaxLifetime: must be greater than 0 (default: 8h, configure sessionMaxLifetime in config.yaml)"
+                    .to_owned(),
+            );
+        }
+
+        if !self.default_agent.is_empty() && !self.agents.contains_key(&self.default_agent) {
+            errors.push(format!(
+                "defaultAgent: {:?} not found in agents (define a matching agent profile in the agents section of config.yaml)",
+                self.default_agent
+            ));
+        }
+
+        for (name, agent) in &self.agents {
+            let mode = agent.approval_mode.as_deref().unwrap_or("");
+            if !matches!(mode, "" | "none" | "deny" | "prompt" | "auto") {
+                errors.push(format!(
+                    "agents.{name}.approvalMode: invalid value {mode:?} (valid: none, deny, prompt, auto; configure in config.yaml)"
+                ));
+            }
+        }
+
+        for (name, agent) in &self.agents {
+            for (index, pattern) in agent.allowed_paths.iter().enumerate() {
+                if !is_valid_glob_pattern(pattern) {
+                    errors.push(format!(
+                        "agents.{name}.allowedPaths[{index}]: invalid glob pattern {pattern:?} (use valid filepath.Match syntax, configure in config.yaml)"
+                    ));
+                }
+            }
+        }
+
+        if let Some(clipboard) = &self.clipboard
+            && clipboard.auto_clear_duration < 0
+        {
+            errors.push(
+                "clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)"
+                    .to_owned(),
+            );
+        }
+
+        errors.extend(validate_argon2id_config(self.vault.as_ref()));
+        errors
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
         let bytes = fs::read(path)?;
         Self::load_from_bytes(&bytes)
@@ -1354,6 +1426,116 @@ fn string_list(value: &serde_yaml_ng::Value, field: &str) -> Result<Vec<String>,
         .collect()
 }
 
+/// Mirrors Go's `validateArgon2idConfig`: an explicit zero means "use the
+/// default" and is exempt from range checks, while a non-zero value must fall
+/// within the floor/ceiling Go enforces.
+fn validate_argon2id_config(vault: Option<&VaultConfig>) -> Vec<String> {
+    let Some(vault) = vault else {
+        return Vec::new();
+    };
+    let mut errors = Vec::new();
+
+    if vault.argon2id_time != 0 {
+        if vault.argon2id_time < 2 {
+            errors.push(format!(
+                "vault.argon2id_time: {} is below minimum floor of 2",
+                vault.argon2id_time
+            ));
+        } else if vault.argon2id_time > 16 {
+            errors.push(format!(
+                "vault.argon2id_time: {} exceeds maximum ceiling of 16",
+                vault.argon2id_time
+            ));
+        }
+    }
+
+    let effective_threads = if vault.argon2id_threads != 0 {
+        if vault.argon2id_threads < 1 {
+            errors.push(format!(
+                "vault.argon2id_threads: {} is below minimum floor of 1",
+                vault.argon2id_threads
+            ));
+        } else if vault.argon2id_threads > 16 {
+            errors.push(format!(
+                "vault.argon2id_threads: {} exceeds maximum ceiling of 16",
+                vault.argon2id_threads
+            ));
+        }
+        vault.argon2id_threads
+    } else {
+        4
+    };
+
+    if vault.argon2id_memory != 0 {
+        if vault.argon2id_memory < 19456 {
+            errors.push(format!(
+                "vault.argon2id_memory: {} KiB is below minimum floor of 19456 KiB",
+                vault.argon2id_memory
+            ));
+        } else if vault.argon2id_memory > 2_097_152 {
+            errors.push(format!(
+                "vault.argon2id_memory: {} KiB exceeds maximum ceiling of 2097152 KiB",
+                vault.argon2id_memory
+            ));
+        }
+        if effective_threads > 0 {
+            let min_memory = 4 * effective_threads;
+            if vault.argon2id_memory < min_memory {
+                errors.push(format!(
+                    "vault.argon2id_memory: {} KiB must be at least 4*threads ({min_memory} KiB)",
+                    vault.argon2id_memory
+                ));
+            }
+        }
+    }
+
+    errors
+}
+
+/// Reports whether `pattern` is syntactically valid `filepath.Match` glob
+/// syntax. Checks only the failure Go's matcher would raise as `ErrBadPattern`
+/// on real-world configs: an unterminated `[...]` class or a dangling escape.
+/// ponytail: not a full filepath.Match parser (no validation of nested range
+/// bounds); widen if a config ever needs stricter glob rejection.
+fn is_valid_glob_pattern(pattern: &str) -> bool {
+    let bytes = pattern.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' => {
+                i += 1;
+                if i >= bytes.len() {
+                    return false;
+                }
+            }
+            b'[' => {
+                i += 1;
+                if i < bytes.len() && (bytes[i] == b'^' || bytes[i] == b'!') {
+                    i += 1;
+                }
+                let mut closed = false;
+                while i < bytes.len() {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    } else if bytes[i] == b']' {
+                        closed = true;
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+                if !closed {
+                    return false;
+                }
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    true
+}
+
 fn parse_vault(value: &serde_yaml_ng::Value, auth: AuthMethod) -> Result<VaultConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = VaultConfig {
@@ -2078,5 +2260,95 @@ mod tests {
         assert!(loaded.mcp.is_none());
         assert!(loaded.update.is_none());
         assert!(loaded.clipboard.is_none());
+    }
+
+    #[test]
+    fn validate_accepts_defaults() {
+        assert!(Config::default().validate().is_empty());
+    }
+
+    #[test]
+    fn validate_reports_every_violation_at_once() {
+        let c = Config {
+            vault_dir: "  ".into(),
+            session_timeout: Duration::ZERO,
+            session_max_lifetime: Duration::ZERO,
+            default_agent: "missing".into(),
+            ..Config::default()
+        };
+        let errors = c.validate();
+        assert_eq!(errors.len(), 4, "errors={errors:?}");
+        assert!(errors[0].starts_with("vaultDir: must not be empty"));
+        assert!(errors.iter().any(|e| e.starts_with("sessionTimeout:")));
+        assert!(errors.iter().any(|e| e.starts_with("sessionMaxLifetime:")));
+        assert!(errors.iter().any(|e| e.contains("defaultAgent")));
+    }
+
+    #[test]
+    fn validate_rejects_unknown_approval_mode_but_allows_auto() {
+        let mut c = Config::default();
+        c.agents.get_mut("default").unwrap().approval_mode = Some("bogus".into());
+        let errors = c.validate();
+        assert!(errors.iter().any(|e| e.contains("approvalMode")));
+
+        let mut c = Config::default();
+        c.agents.get_mut("default").unwrap().approval_mode = Some("auto".into());
+        assert!(c.validate().is_empty());
+    }
+
+    #[test]
+    fn validate_rejects_unterminated_glob_class() {
+        let mut c = Config::default();
+        c.agents.get_mut("default").unwrap().allowed_paths = vec!["/tmp/[abc".into()];
+        let errors = c.validate();
+        assert!(errors.iter().any(|e| e.contains("allowedPaths[0]")));
+
+        c.agents.get_mut("default").unwrap().allowed_paths = vec!["/tmp/[abc]*".into()];
+        assert!(c.validate().is_empty());
+    }
+
+    #[test]
+    fn validate_rejects_negative_clipboard_duration() {
+        let c = Config {
+            clipboard: Some(ClipboardConfig {
+                auto_clear_duration: -1,
+                copy_by_default: false,
+            }),
+            ..Config::default()
+        };
+        let errors = c.validate();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("clipboard.autoClearDuration"))
+        );
+    }
+
+    #[test]
+    fn validate_enforces_argon2id_floor_and_ceiling() {
+        let c = Config {
+            vault: Some(VaultConfig {
+                argon2id_time: 1,
+                argon2id_threads: 20,
+                argon2id_memory: 100,
+                ..VaultConfig::default()
+            }),
+            ..Config::default()
+        };
+        let errors = c.validate();
+        assert!(errors.iter().any(|e| e.contains("argon2id_time")));
+        assert!(errors.iter().any(|e| e.contains("argon2id_threads")));
+        assert!(errors.iter().any(|e| e.contains("argon2id_memory")));
+
+        let c = Config {
+            vault: Some(VaultConfig {
+                argon2id_time: 3,
+                argon2id_threads: 2,
+                argon2id_memory: 65536,
+                ..VaultConfig::default()
+            }),
+            ..Config::default()
+        };
+        assert!(c.validate().is_empty());
     }
 }

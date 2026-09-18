@@ -63,10 +63,10 @@ use symvault_core::platform::TouchId;
 use symvault_core::session::MemoryKeyring;
 use symvault_core::{
     TOOL_NAME,
-    config::{Config, PathResolver},
+    config::{AuthMethod, Config, PathResolver, VaultConfig},
     session::SessionManager,
 };
-use symvault_crypto::{SecretBytes, decrypt_identity};
+use symvault_crypto::{SecretBytes, decrypt_identity, encrypt_identity_scrypt};
 use symvault_platform::FallbackKeyring;
 #[cfg(any(
     target_os = "macos",
@@ -78,7 +78,7 @@ use symvault_platform::FallbackKeyring;
 ))]
 use symvault_platform::OsKeyring;
 use symvault_store::Store;
-use symvault_sync::GitRepository;
+use symvault_sync::{CommitOptions, GitError, GitRepository, GoTime};
 use zeroize::Zeroizing;
 
 const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
@@ -511,6 +511,8 @@ enum AgentProfileCommand {
 
 #[derive(Debug, Subcommand)]
 enum AuditCommand {
+    /// Rotate the audit log HMAC key.
+    RotateKey,
     /// Export local audit evidence.
     Export {
         #[arg(long, default_value = "")]
@@ -617,6 +619,13 @@ enum FileCommand {
 
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
+    /// Validate the configuration file.
+    Validate {
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+        #[arg(long)]
+        fix: bool,
+    },
     /// Get a value using dotted path notation.
     Get {
         #[arg(value_name = "DOTTED.PATH")]
@@ -644,6 +653,25 @@ enum ConfigCommand {
 enum AuthCommand {
     /// Show authentication method and session-cache status.
     Status,
+    /// Set the vault unlock authentication method.
+    Set {
+        #[arg(value_name = "passphrase|touchid")]
+        method: String,
+    },
+    /// Change the vault master passphrase.
+    RotatePassphrase {
+        #[arg(
+            long,
+            default_value_t = true,
+            num_args = 0..=1,
+            require_equals = true,
+            action = clap::ArgAction::Set,
+            default_missing_value = "true"
+        )]
+        reencrypt: bool,
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1330,6 +1358,10 @@ fn main() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Audit {
+            command: Some(AuditCommand::RotateKey),
+            ..
+        }) => run_audit_rotate_key(cli.vault.as_deref(), cli._profile.as_deref()),
+        Some(Command::Audit {
             command:
                 Some(AuditCommand::Export {
                     agent,
@@ -1459,6 +1491,19 @@ fn main() -> ExitCode {
                 cli.json,
                 cli.quiet,
             ),
+            AuthCommand::Set { method } => run_auth_set(
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+                &method,
+                cli.quiet,
+            ),
+            AuthCommand::RotatePassphrase { reencrypt, yes } => run_auth_rotate_passphrase(
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+                reencrypt,
+                yes,
+                cli.quiet,
+            ),
         },
         Some(Command::Migrate {
             command: MigrateCommand::Paths,
@@ -1573,6 +1618,39 @@ fn main() -> ExitCode {
                 }
             }
         }
+        Some(Command::Config {
+            command: ConfigCommand::Validate { path, fix },
+        }) => {
+            let path = match config::resolve_path(path) {
+                Ok(path) => path,
+                Err(error) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    return ExitCode::from(1);
+                }
+            };
+            let output = if cli.json {
+                "json"
+            } else {
+                cli.output.as_deref().unwrap_or("text")
+            };
+            match config::validate(&path, fix, output, cli.quiet) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    // Go prints this failure twice: once from the command's own
+                    // RunE and again from Cobra's ExecuteRoot. Verified against
+                    // the pinned oracle for a missing file and for a YAML parse
+                    // error, including the doctor hint below; the duplicate line
+                    // is parity, not a copy-paste bug.
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Run 'symvault doctor' to diagnose and fix configuration issues."
+                    );
+                    ExitCode::from(6)
+                }
+            }
+        }
         Some(Command::Config { command }) => {
             let (path, operation) = match command {
                 ConfigCommand::Get { key, file } => {
@@ -1605,6 +1683,7 @@ fn main() -> ExitCode {
                     };
                     (path, ConfigOperation::Set { key, value })
                 }
+                ConfigCommand::Validate { .. } => unreachable!("handled by the arm above"),
             };
             let result = match operation {
                 ConfigOperation::Get { key } => config::get(
@@ -1878,6 +1957,311 @@ fn run_audit(
         }
         Ok::<(), String>(())
     })();
+    finish_vault_result(result)
+}
+
+fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        let runtime = runtime_session_manager();
+        let keyring = runtime
+            .keyring
+            .as_deref()
+            .ok_or_else(|| "audit keyring unavailable".to_owned())?;
+        let (new_key, archive_path) =
+            symvault_store::audit::rotate_key_with_keyring(&vault, keyring)
+                .map_err(|error| format!("rotate HMAC key: {error}"))?;
+        let mut stderr = io::stderr().lock();
+        writeln!(stderr, "New key: {} (first 4 bytes)", new_key.preview_hex())
+            .map_err(|error| error.to_string())?;
+        match &archive_path {
+            None => writeln!(
+                stderr,
+                "HMAC key bootstrapped — no previous key existed, so no archive file was written."
+            ),
+            Some(path) => writeln!(stderr, "HMAC key rotated successfully.")
+                .and_then(|()| writeln!(stderr, "Old key archived to: {}", path.display())),
+        }
+        .map_err(|error| error.to_string())?;
+        writeln!(
+            stderr,
+            "A new audit log will be started on the next audit write."
+        )
+        .map_err(|error| error.to_string())?;
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
+    finish_vault_result(result)
+}
+
+fn run_auth_set(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    method: &str,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        // Go validates the method argument before resolving the vault; match
+        // that order so an invalid argument never depends on vault state.
+        let method = AuthMethod::parse(method).map_err(|error| match error {
+            symvault_core::config::ConfigError::Invalid(msg) => msg,
+            other => other.to_string(),
+        })?;
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let config_path = vault.join("config.yaml");
+        let mut config =
+            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        match method {
+            AuthMethod::Passphrase => {
+                config
+                    .set_auth_method(method.as_str())
+                    .map_err(|error| error.to_string())?;
+                config
+                    .save_to(&config_path)
+                    .map_err(|error| format!("save config: {error}"))?;
+                #[cfg(target_os = "macos")]
+                {
+                    let runtime = runtime_session_manager();
+                    if let Some(keyring) = runtime.keyring.as_deref()
+                        && let Err(error) =
+                            session_commands::clear_touch_id_passphrase(&vault, keyring)
+                    {
+                        eprintln!("Warning: could not remove Touch ID unlock item: {error}");
+                    }
+                }
+                if !quiet {
+                    println!("Auth method set to passphrase");
+                }
+            }
+            AuthMethod::Touchid => {
+                if !touch_id_available() {
+                    return Err(
+                        "touch ID is not available in this Symaira Vault build or on this Mac"
+                            .to_owned(),
+                    );
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let runtime = runtime_session_manager();
+                    let config_bytes =
+                        fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
+                    let identity_bytes = fs::read(vault.join("identity.age"))
+                        .map_err(|error| format!("read identity: {error}"))?;
+                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+                    decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
+                        .map_err(|error| format!("open vault: {error}"))?;
+                    let keyring = runtime.keyring.as_deref().ok_or_else(|| {
+                        "save Touch ID unlock item: keyring unavailable".to_owned()
+                    })?;
+                    session_commands::save_touch_id_passphrase(
+                        &vault,
+                        keyring,
+                        passphrase.as_bytes(),
+                    )
+                    .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
+                    config
+                        .set_auth_method(method.as_str())
+                        .map_err(|error| error.to_string())?;
+                    config
+                        .save_to(&config_path)
+                        .map_err(|error| format!("save config: {error}"))?;
+                    if !quiet {
+                        println!("Auth method set to touchid");
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                unreachable!("touch_id_available() is always false on this platform");
+            }
+        }
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
+    finish_vault_result(result)
+}
+
+fn run_auth_rotate_passphrase(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    reencrypt: bool,
+    yes: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let config_path = vault.join("config.yaml");
+        let mut config =
+            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        let identity_path = vault.join("identity.age");
+        let original = fs::read(&identity_path)
+            .map_err(|error| format!("cannot read current passphrase: {error}"))?;
+
+        let old_passphrase = session_input::read_passphrase("Current passphrase: ")
+            .map_err(|error| format!("cannot read current passphrase: {error}"))?;
+        let identity =
+            match decrypt_identity(&original, &SecretBytes::new(old_passphrase.as_bytes())) {
+                Ok(identity) => identity,
+                Err(_) => {
+                    let load_error = if symvault_crypto::detect_envelope(&original)
+                        == symvault_crypto::EnvelopeFormat::Argon2id
+                    {
+                        let recipients_file = vault.join("recipients.txt");
+                        if !recipients_file.is_file() {
+                            "load identity: zero-key recovery requires a trusted recipients.txt"
+                        } else {
+                            "load identity: zero-key recovery failed"
+                        }
+                    } else {
+                        "load identity: decryption failed"
+                    };
+                    return Err(format!("current passphrase is incorrect: {load_error}"));
+                }
+            };
+
+        let new_passphrase =
+            session_input::read_passphrase("New passphrase (minimum 12 characters): ")
+                .map_err(|error| format!("cannot read new passphrase: {error}"))?;
+        if new_passphrase.len() < 12 {
+            return Err("passphrase must be at least 12 characters".to_owned());
+        }
+        let confirmation = session_input::read_passphrase("Confirm new passphrase: ")
+            .map_err(|error| format!("cannot read confirmation: {error}"))?;
+        if *new_passphrase != *confirmation {
+            return Err("passphrases do not match".to_owned());
+        }
+        if *old_passphrase == *new_passphrase {
+            return Err("new passphrase must be different from the current passphrase".to_owned());
+        }
+
+        if !yes {
+            eprint!("Change vault passphrase? (y/N): ");
+            io::stderr().flush().map_err(|error| error.to_string())?;
+            let mut answer = String::new();
+            if io::stdin()
+                .read_line(&mut answer)
+                .map_err(|error| format!("read confirmation: {error}"))?
+                == 0
+                && answer.is_empty()
+            {
+                return Err("read confirmation: EOF".to_owned());
+            }
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                eprintln!("Canceled");
+                return Ok::<(), String>(());
+            }
+        }
+
+        // Go's rotate-passphrase always re-encrypts the identity with scrypt
+        // (never argon2id), even when the identity was previously migrated.
+        // That is the pinned oracle contract, not a Rust simplification.
+        let replacement =
+            encrypt_identity_scrypt(&identity, &SecretBytes::new(new_passphrase.as_bytes()), 0)
+                .map_err(|error| format!("save identity with new passphrase: {error}"))?;
+        symvault_sync::safeio::write_atomic(&identity_path, &replacement)
+            .map_err(|error| format!("save identity with new passphrase: {error}"))?;
+
+        if reencrypt {
+            let recipients = device::get_all_recipients_for_encryption(&vault, &identity)
+                .map_err(|error| format!("get recipients for re-encryption: {error}"))?;
+            device::reencrypt_all_entries(&vault, &identity, &recipients)
+                .map_err(|error| format!("re-encrypt entries: {error}"))?;
+        }
+
+        let runtime = runtime_session_manager();
+        let vault_string = vault
+            .to_str()
+            .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+        let ttl = if config.session_timeout.is_zero() {
+            std::time::Duration::from_secs(15 * 60)
+        } else {
+            config.session_timeout
+        };
+        let max_lifetime = if config.session_max_lifetime.is_zero() {
+            std::time::Duration::from_secs(8 * 60 * 60)
+        } else {
+            config.session_max_lifetime
+        };
+        // Session-cache refresh is best-effort here, matching Go's warn-only
+        // handling in rotate-passphrase (unlike `unlock`, where it is fatal).
+        if let Err(error) = runtime.manager.save_passphrase(
+            vault_string,
+            new_passphrase.as_bytes(),
+            ttl,
+            max_lifetime,
+        ) {
+            eprintln!("Warning: could not update session cache: {error}");
+        }
+        let identity_string = symvault_crypto::identity_string(&identity);
+        let _ = runtime.manager.save_identity(
+            vault_string,
+            identity_string.as_bytes(),
+            ttl,
+            max_lifetime,
+        );
+
+        #[cfg(target_os = "macos")]
+        if config.effective_auth_method() == AuthMethod::Touchid
+            && let Some(keyring) = runtime.keyring.as_deref()
+            && let Err(error) = session_commands::save_touch_id_passphrase(
+                &vault,
+                keyring,
+                new_passphrase.as_bytes(),
+            )
+        {
+            eprintln!("Warning: could not update Touch ID unlock: {error}");
+        }
+
+        let vault_config = config.vault.get_or_insert_with(VaultConfig::default);
+        vault_config.last_rotated = Some(GoTime::now().to_rfc3339_nano());
+        config
+            .save_to(&config_path)
+            .map_err(|error| format!("save config: {error}"))?;
+
+        // Git auto-commit is best-effort in Go: absence of a repo is silent,
+        // any other failure is a warning, never a rotation failure.
+        match GitRepository::open(&vault) {
+            Ok(repo) => {
+                if let Err(error) = repo.commit(CommitOptions {
+                    message: "Rotate vault passphrase".to_owned(),
+                    ..CommitOptions::default()
+                }) {
+                    eprintln!("Warning: git auto-commit failed: {error}");
+                }
+            }
+            Err(GitError::InvalidPath(_)) => {}
+            Err(error) => eprintln!("Warning: git auto-commit failed: {error}"),
+        }
+
+        if let Some(keyring) = runtime.keyring.as_deref()
+            && let Ok(mut logger) = symvault_store::audit::open_with_keyring(
+                "symvault",
+                &vault,
+                keyring,
+                symvault_store::audit::RotationConfig::default(),
+            )
+        {
+            let _ = logger.append(symvault_store::audit::LogEntry {
+                timestamp: export_commands::go_timestamp_seconds(),
+                agent: "symvault".to_owned(),
+                action: "rotate-passphrase".to_owned(),
+                ok: true,
+                ..symvault_store::audit::LogEntry::default()
+            });
+        }
+
+        if !quiet {
+            println!("Passphrase rotated successfully.");
+        }
+        Ok::<(), String>(())
+    })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 
@@ -2809,6 +3193,9 @@ fn run_auth_status(
         }
         Ok::<(), String>(())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_session_result(result, false, 1)
 }
 

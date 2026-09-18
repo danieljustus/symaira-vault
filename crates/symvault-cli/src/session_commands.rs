@@ -167,6 +167,41 @@ pub fn load_touch_id_passphrase(
     Ok(Zeroizing::new(value))
 }
 
+/// Stores a passphrase under the Go-compatible Touch ID keychain address so a
+/// later unlock or biometric setup change can retrieve it. Mirrors Go's
+/// `session.SaveBiometricPassphrase` (the C store call has no separate
+/// authentication step; only `Load` is biometric-gated in both ports).
+#[cfg(any(target_os = "macos", test))]
+pub fn save_touch_id_passphrase(
+    vault: &Path,
+    keyring: &dyn Keyring,
+    passphrase: &[u8],
+) -> Result<(), String> {
+    let vault = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    let key = format!("{BIOMETRIC_SERVICE_PREFIX}{vault}|{BIOMETRIC_ACCOUNT}");
+    keyring
+        .set(&key, passphrase)
+        .map_err(|error| format!("save Touch ID unlock item: {error}"))
+}
+
+/// Removes the Touch ID unlock item for a vault, mirroring Go's
+/// `session.ClearBiometricPassphrase`. Go's real keychain reports "not found"
+/// as an error when no item was ever configured; callers should treat a
+/// failure here as a warning rather than fatal, matching how the Go CLI's
+/// `auth set passphrase` only logs a warning on this call.
+#[cfg(any(target_os = "macos", test))]
+pub fn clear_touch_id_passphrase(vault: &Path, keyring: &dyn Keyring) -> Result<(), String> {
+    let vault = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    let key = format!("{BIOMETRIC_SERVICE_PREFIX}{vault}|{BIOMETRIC_ACCOUNT}");
+    keyring
+        .delete(&key)
+        .map_err(|error| format!("could not remove Touch ID unlock item: {error}"))
+}
+
 /// Returns whether a macOS process is attached to an Aqua GUI session.
 /// Touch ID prompts cannot be shown from SSH, daemon, or CI contexts.
 #[allow(dead_code)]
@@ -266,6 +301,30 @@ mod tests {
         let error = load_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, &touch)
             .expect_err("unavailable touch id");
         assert_eq!(error, "Touch ID unlock is unavailable on this system");
+    }
+
+    #[test]
+    fn save_touch_id_passphrase_uses_go_service_and_account() {
+        let keyring = symvault_core::session::MemoryKeyring::new();
+        save_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, b"secret")
+            .expect("save biometric passphrase");
+        let stored = keyring
+            .get("symvault-biometric:/fixture/vault|passphrase")
+            .expect("stored under go-compatible address");
+        assert_eq!(stored, b"secret");
+    }
+
+    #[test]
+    fn clear_touch_id_passphrase_removes_saved_item() {
+        let keyring = symvault_core::session::MemoryKeyring::new();
+        save_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, b"secret")
+            .expect("save biometric passphrase");
+        clear_touch_id_passphrase(Path::new("/fixture/vault"), &keyring)
+            .expect("clear biometric passphrase");
+        let error = keyring
+            .get("symvault-biometric:/fixture/vault|passphrase")
+            .expect_err("item removed");
+        assert!(matches!(error, SessionError::NotFound));
     }
 
     #[test]
