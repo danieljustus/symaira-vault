@@ -118,5 +118,52 @@ fn writes_preserve_other_fields_reject_corruption_and_delete() {
     assert_eq!(fs::read(&path).unwrap(), b"corrupt ciphertext");
     write_commands::delete(&root, &identity, "example").unwrap();
     assert!(!path.exists());
+
+    // Test set_entry with TOTP
+    let valid_secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+    write_commands::set_entry(
+        &root,
+        &identity,
+        "totp_test",
+        "SecretPassword123".into(),
+        false,
+        true,
+        Some(valid_secret),
+        Some("MyIssuer"),
+        Some("user@test.org"),
+    )
+    .unwrap();
+
+    let entry = store.get("totp_test", &identity).unwrap();
+    assert_eq!(
+        entry.data.get("password"),
+        Some(&serde_json::json!("SecretPassword123"))
+    );
+    let totp_val = entry.data.get("totp").expect("totp field present");
+    assert_eq!(
+        totp_val.get("secret"),
+        Some(&serde_json::json!(valid_secret))
+    );
+    assert_eq!(totp_val.get("issuer"), Some(&serde_json::json!("MyIssuer")));
+    assert_eq!(
+        totp_val.get("account_name"),
+        Some(&serde_json::json!("user@test.org"))
+    );
+
+    // Reject weak/short secret
+    let err = write_commands::set_entry(
+        &root,
+        &identity,
+        "totp_bad",
+        "SecretPassword123".into(),
+        false,
+        true,
+        Some("SHORT"),
+        None,
+        None,
+    )
+    .unwrap_err();
+    assert!(err.contains("TOTP secret too short"));
+
     fs::remove_dir_all(root).unwrap();
 }

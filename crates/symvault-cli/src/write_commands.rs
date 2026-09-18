@@ -1,7 +1,7 @@
 //! CLI entry mutations using the existing encrypted store and Git adapter.
 use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
-use symvault_core::password;
+use symvault_core::{password, totp};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError, WriteRecord};
 use symvault_sync::GoTime;
@@ -13,13 +13,17 @@ pub fn sensitive_field(field: &str) -> bool {
         .any(|part| lower.contains(part))
 }
 
-pub fn set_value(
+#[allow(clippy::too_many_arguments)]
+pub fn set_entry(
     root: &Path,
     identity: &Identity,
     query: &str,
     value: String,
     allow_empty: bool,
     force: bool,
+    totp_secret: Option<&str>,
+    totp_issuer: Option<&str>,
+    totp_account: Option<&str>,
 ) -> Result<String, String> {
     let (path, field) = query
         .rsplit_once('.')
@@ -34,13 +38,49 @@ pub fn set_value(
     if !force && field == "password" && !value.is_empty() {
         password::validate_password_strength(&value)?;
     }
-    set_fields(
+    let mut data = BTreeMap::from([(field.to_owned(), Value::String(value))]);
+    if let Some(secret) = totp_secret
+        && !secret.is_empty()
+    {
+        totp::validate_totp_secret(secret).map_err(|error| error.to_string())?;
+        let mut totp_data = serde_json::Map::new();
+        totp_data.insert("secret".to_owned(), Value::String(secret.to_owned()));
+        if let Some(issuer) = totp_issuer
+            && !issuer.is_empty()
+        {
+            totp_data.insert("issuer".to_owned(), Value::String(issuer.to_owned()));
+        }
+        if let Some(account) = totp_account
+            && !account.is_empty()
+        {
+            totp_data.insert("account_name".to_owned(), Value::String(account.to_owned()));
+        }
+        data.insert("totp".to_owned(), Value::Object(totp_data));
+    }
+    set_fields(root, identity, path, data)?;
+    Ok(path.to_owned())
+}
+
+#[allow(dead_code)]
+pub fn set_value(
+    root: &Path,
+    identity: &Identity,
+    query: &str,
+    value: String,
+    allow_empty: bool,
+    force: bool,
+) -> Result<String, String> {
+    set_entry(
         root,
         identity,
-        path,
-        BTreeMap::from([(field.to_owned(), Value::String(value))]),
-    )?;
-    Ok(path.to_owned())
+        query,
+        value,
+        allow_empty,
+        force,
+        None,
+        None,
+        None,
+    )
 }
 
 pub fn set_fields(

@@ -2107,3 +2107,307 @@ fn builtin_templates_match_go_cli() {
     fs::remove_dir_all(root).unwrap();
     fs::remove_dir_all(home).unwrap();
 }
+
+#[test]
+fn get_flags_parity_matches_go() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let root = temporary_root("get-flags");
+    let home = temporary_root("get-flags-home");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&home).unwrap();
+
+    let init = run(
+        &rust_binary,
+        &["init", "--auth", "passphrase"],
+        &root,
+        &home,
+    );
+    assert_success(&init, "Rust init for get flags parity");
+
+    let add = run(
+        &rust_binary,
+        &[
+            "add",
+            "test/secret-entry",
+            "--value",
+            "DifferentialSecret123!",
+            "--force",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&add, "Rust add secret");
+
+    // --length
+    let go_len = run(
+        &go_binary,
+        &["get", "test/secret-entry.password", "--length"],
+        &root,
+        &home,
+    );
+    let rust_len = run(
+        &rust_binary,
+        &["get", "test/secret-entry.password", "--length"],
+        &root,
+        &home,
+    );
+    assert_success(&go_len, "Go get --length");
+    assert_success(&rust_len, "Rust get --length");
+    assert_eq!(rust_len.stdout, go_len.stdout, "--length stdout");
+
+    // --digest
+    let go_digest = run(
+        &go_binary,
+        &["get", "test/secret-entry.password", "--digest"],
+        &root,
+        &home,
+    );
+    let rust_digest = run(
+        &rust_binary,
+        &["get", "test/secret-entry.password", "--digest"],
+        &root,
+        &home,
+    );
+    assert_success(&go_digest, "Go get --digest");
+    assert_success(&rust_digest, "Rust get --digest");
+    assert_eq!(rust_digest.stdout, go_digest.stdout, "--digest stdout");
+
+    // --metadata
+    let go_meta = run(
+        &go_binary,
+        &["get", "test/secret-entry.password", "--metadata"],
+        &root,
+        &home,
+    );
+    let rust_meta = run(
+        &rust_binary,
+        &["get", "test/secret-entry.password", "--metadata"],
+        &root,
+        &home,
+    );
+    assert_success(&go_meta, "Go get --metadata");
+    assert_success(&rust_meta, "Rust get --metadata");
+    assert_eq!(rust_meta.stdout, go_meta.stdout, "--metadata stdout");
+
+    // --length --quiet
+    let go_quiet = run(
+        &go_binary,
+        &["get", "test/secret-entry.password", "--length", "--quiet"],
+        &root,
+        &home,
+    );
+    let rust_quiet = run(
+        &rust_binary,
+        &["get", "test/secret-entry.password", "--length", "--quiet"],
+        &root,
+        &home,
+    );
+    assert_success(&go_quiet, "Go get --length --quiet");
+    assert_success(&rust_quiet, "Rust get --length --quiet");
+    assert!(rust_quiet.stdout.is_empty());
+    assert_eq!(rust_quiet.stdout, go_quiet.stdout);
+
+    // Mutual exclusivity
+    let go_mut = run(
+        &go_binary,
+        &["get", "test/secret-entry.password", "--length", "--digest"],
+        &root,
+        &home,
+    );
+    let rust_mut = run(
+        &rust_binary,
+        &["get", "test/secret-entry.password", "--length", "--digest"],
+        &root,
+        &home,
+    );
+    assert_eq!(rust_mut.status.code(), Some(9));
+    assert_eq!(go_mut.status.code(), Some(9));
+    assert_eq!(rust_mut.status, go_mut.status);
+    assert_eq!(rust_mut.stderr, go_mut.stderr);
+
+    // Missing field error
+    let go_missing_field = run(
+        &go_binary,
+        &["get", "test/secret-entry", "--length"],
+        &root,
+        &home,
+    );
+    let rust_missing_field = run(
+        &rust_binary,
+        &["get", "test/secret-entry", "--length"],
+        &root,
+        &home,
+    );
+    assert_eq!(rust_missing_field.status.code(), Some(9));
+    assert_eq!(go_missing_field.status.code(), Some(9));
+    assert_eq!(rust_missing_field.status, go_missing_field.status);
+    assert_eq!(rust_missing_field.stderr, go_missing_field.stderr);
+
+    // Missing entry error
+    let go_missing_entry = run(
+        &go_binary,
+        &["get", "missing/entry.password", "--length"],
+        &root,
+        &home,
+    );
+    let rust_missing_entry = run(
+        &rust_binary,
+        &["get", "missing/entry.password", "--length"],
+        &root,
+        &home,
+    );
+    assert_eq!(rust_missing_entry.status.code(), Some(9));
+    assert_eq!(go_missing_entry.status.code(), Some(9));
+    assert_eq!(rust_missing_entry.status, go_missing_entry.status);
+    assert_eq!(rust_missing_entry.stderr, go_missing_entry.stderr);
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(home).unwrap();
+}
+
+#[test]
+fn set_totp_flags_parity_matches_go() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let go_root = temporary_root("set-totp-go");
+    let go_home = temporary_root("set-totp-go-home");
+    let rust_root = temporary_root("set-totp-rust");
+    let rust_home = temporary_root("set-totp-rust-home");
+    for (root, home) in [(&go_root, &go_home), (&rust_root, &rust_home)] {
+        fs::create_dir_all(root).unwrap();
+        fs::create_dir_all(home).unwrap();
+        let init = run(&rust_binary, &["init", "--auth", "passphrase"], root, home);
+        assert_success(&init, "init for set totp");
+    }
+
+    let secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+    let set_args = [
+        "set",
+        "work/totp-entry",
+        "--value",
+        "StrongPassword123!",
+        "--force",
+        "--totp-secret",
+        secret,
+        "--totp-issuer",
+        "SymairaCorp",
+        "--totp-account",
+        "alice@corp.test",
+    ];
+    let go_set = run(&go_binary, &set_args, &go_root, &go_home);
+    let rust_set = run(&rust_binary, &set_args, &rust_root, &rust_home);
+    assert_success(&go_set, "Go set with TOTP");
+    assert_success(&rust_set, "Rust set with TOTP");
+
+    let get_json_args = ["get", "work/totp-entry", "--output", "json"];
+    let go_json = run(&go_binary, &get_json_args, &go_root, &go_home);
+    let rust_json = run(&rust_binary, &get_json_args, &rust_root, &rust_home);
+    assert_success(&go_json, "Go get TOTP entry JSON");
+    assert_success(&rust_json, "Rust get TOTP entry JSON");
+
+    let go_val: serde_json::Value = serde_json::from_slice(&go_json.stdout).unwrap();
+    let rust_val: serde_json::Value = serde_json::from_slice(&rust_json.stdout).unwrap();
+    assert_eq!(go_val["Fields"]["password"], rust_val["Fields"]["password"]);
+    assert_eq!(go_val["Fields"]["totp"], rust_val["Fields"]["totp"]);
+    assert_eq!(go_val["TOTP"]["period"], rust_val["TOTP"]["period"]);
+    assert_eq!(go_val["TOTP"]["code"], rust_val["TOTP"]["code"]);
+
+    // Weak/short secret rejection parity
+    let bad_set_args = [
+        "set",
+        "work/bad-totp",
+        "--value",
+        "StrongPassword123!",
+        "--force",
+        "--totp-secret",
+        "SHORT",
+    ];
+    let go_bad = run(&go_binary, &bad_set_args, &go_root, &go_home);
+    let rust_bad = run(&rust_binary, &bad_set_args, &rust_root, &rust_home);
+    assert!(!go_bad.status.success());
+    assert!(!rust_bad.status.success());
+    assert_eq!(rust_bad.status.code(), Some(1));
+    assert_eq!(go_bad.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&rust_bad.stderr).contains("TOTP secret too short"));
+    assert!(String::from_utf8_lossy(&go_bad.stderr).contains("TOTP secret too short"));
+
+    fs::remove_dir_all(go_root).unwrap();
+    fs::remove_dir_all(go_home).unwrap();
+    fs::remove_dir_all(rust_root).unwrap();
+    fs::remove_dir_all(rust_home).unwrap();
+}
+
+#[test]
+fn template_name_and_prefix_parity_matches_go() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let root = temporary_root("template-prefix");
+    let home = temporary_root("template-prefix-home");
+    fs::create_dir_all(&root).unwrap();
+    fs::create_dir_all(&home).unwrap();
+
+    let init = run(
+        &rust_binary,
+        &["init", "--auth", "passphrase"],
+        &root,
+        &home,
+    );
+    assert_success(&init, "init for template prefix test");
+
+    for (path, val) in [
+        ("deploy/api", "apisecret12345"),
+        ("deploy/db", "dbsecret12345"),
+    ] {
+        let add = run(
+            &rust_binary,
+            &["add", path, "--value", val, "--force"],
+            &root,
+            &home,
+        );
+        assert_success(&add, "add entry for template");
+    }
+
+    let env_args = [
+        "template", "generate", "--type", "env", "--prefix", "deploy/",
+    ];
+    let go_env = run(&go_binary, &env_args, &root, &home);
+    let rust_env = run(&rust_binary, &env_args, &root, &home);
+    assert_success(&go_env, "Go template generate env prefix");
+    assert_success(&rust_env, "Rust template generate env prefix");
+    assert_eq!(rust_env.stdout, go_env.stdout, "template env prefix stdout");
+
+    let k8s_args = [
+        "template",
+        "generate",
+        "--type",
+        "k8s-secret",
+        "--name",
+        "cluster-secrets",
+        "--prefix",
+        "deploy/",
+    ];
+    let go_k8s = run(&go_binary, &k8s_args, &root, &home);
+    let rust_k8s = run(&rust_binary, &k8s_args, &root, &home);
+    assert_success(&go_k8s, "Go template generate k8s name prefix");
+    assert_success(&rust_k8s, "Rust template generate k8s name prefix");
+    assert_eq!(
+        rust_k8s.stdout, go_k8s.stdout,
+        "template k8s name prefix stdout"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(home).unwrap();
+}

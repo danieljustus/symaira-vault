@@ -212,6 +212,12 @@ enum Command {
         query: String,
         #[arg(short, long)]
         _print: bool,
+        #[arg(long)]
+        length: bool,
+        #[arg(long)]
+        digest: bool,
+        #[arg(long)]
+        metadata: bool,
     },
     /// Search entry paths and contents.
     #[command(alias = "search")]
@@ -344,6 +350,12 @@ enum Command {
         allow_empty: bool,
         #[arg(long)]
         force: bool,
+        #[arg(long)]
+        totp_secret: Option<String>,
+        #[arg(long)]
+        totp_issuer: Option<String>,
+        #[arg(long)]
+        totp_account: Option<String>,
     },
     /// Delete a password entry.
     #[command(alias = "rm", alias = "remove")]
@@ -850,12 +862,22 @@ fn main() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
-        Some(Command::Get { query, .. }) => run_get(
+        Some(Command::Get {
+            query,
+            _print,
+            length,
+            digest,
+            metadata,
+        }) => run_get(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             &query,
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
+            _print,
+            length,
+            digest,
+            metadata,
             cli.quiet,
         ),
         Some(Command::Find { query, url }) => run_find(
@@ -1434,6 +1456,9 @@ fn main() -> ExitCode {
             stdin_value,
             allow_empty,
             force,
+            totp_secret,
+            totp_issuer,
+            totp_account,
         }) => run_set(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1442,6 +1467,9 @@ fn main() -> ExitCode {
             stdin_value,
             allow_empty,
             force,
+            totp_secret,
+            totp_issuer,
+            totp_account,
             cli.quiet,
         ),
         Some(Command::Delete { path, yes }) => run_delete(
@@ -1636,13 +1664,7 @@ fn main() -> ExitCode {
             match config::validate(&path, fix, output, cli.quiet) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
-                    // Go prints this failure twice: once from the command's own
-                    // RunE and again from Cobra's ExecuteRoot. Verified against
-                    // the pinned oracle for a missing file and for a YAML parse
-                    // error, including the doctor hint below; the duplicate line
-                    // is parity, not a copy-paste bug.
-                    let _ = writeln!(io::stderr(), "Error: {error}");
-                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    print_error_like_go(&error);
                     let _ = writeln!(
                         io::stderr(),
                         "Run 'symvault doctor' to diagnose and fix configuration issues."
@@ -2443,19 +2465,87 @@ fn run_list(
     finish_vault_result(result)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_get(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
     query: &str,
     output: &str,
     json: bool,
+    print: bool,
+    length: bool,
+    digest: bool,
+    metadata: bool,
     quiet: bool,
 ) -> ExitCode {
+    let flags_count =
+        usize::from(print) + usize::from(length) + usize::from(digest) + usize::from(metadata);
+    if flags_count > 1 {
+        print_error_like_go("--print, --length, --digest, and --metadata are mutually exclusive");
+        return ExitCode::from(9);
+    }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        let result = vault_commands::get(&vault, &identity, query)?;
+        let result = vault_commands::get(&vault, &identity, query);
+        if length || digest || metadata {
+            let value = match result {
+                Ok(vault_commands::GetResult::Field { value, .. }) => value,
+                _ => {
+                    // Go reports this from the command and again from
+                    // ExecuteRoot; the caller below prints it once, so emit the
+                    // command-level line here to keep the pair identical to Go.
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Error: field is required for --length, --digest, or --metadata"
+                    );
+                    return Err(
+                        "field is required for --length, --digest, or --metadata".to_owned()
+                    );
+                }
+            };
+            let str_value = match &value {
+                serde_json::Value::String(s) => s.clone(),
+                serde_json::Value::Null => String::new(),
+                other => other.to_string(),
+            };
+            if !quiet {
+                if length {
+                    println!("{}", str_value.len());
+                } else if digest {
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    hasher.update(str_value.as_bytes());
+                    let hash = hasher.finalize();
+                    let mut hex_hash = String::with_capacity(64);
+                    for byte in &hash {
+                        let _ =
+                            std::fmt::Write::write_fmt(&mut hex_hash, format_args!("{byte:02x}"));
+                    }
+                    let short_hex = &hex_hash[..12];
+                    println!("sha256:{short_hex}");
+                } else if metadata {
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    hasher.update(str_value.as_bytes());
+                    let hash = hasher.finalize();
+                    let mut hex_hash = String::with_capacity(64);
+                    for byte in &hash {
+                        let _ =
+                            std::fmt::Write::write_fmt(&mut hex_hash, format_args!("{byte:02x}"));
+                    }
+                    let short_hex = &hex_hash[..12];
+                    let meta = serde_json::json!({
+                        "length": str_value.len(),
+                        "sha256_12": short_hex,
+                    });
+                    println!("{meta}");
+                }
+            }
+            return Ok(());
+        }
+        let result = result?;
         let format = if json { "json" } else { output };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -2529,7 +2619,11 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let _ = writeln!(io::stderr(), "Error: {error}");
-            ExitCode::from(1)
+            if error == "field is required for --length, --digest, or --metadata" {
+                ExitCode::from(9)
+            } else {
+                ExitCode::from(1)
+            }
         }
     }
 }
@@ -2901,6 +2995,9 @@ fn run_set(
     stdin_value: bool,
     allow_empty: bool,
     force: bool,
+    totp_secret: Option<String>,
+    totp_issuer: Option<String>,
+    totp_account: Option<String>,
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
@@ -2921,7 +3018,17 @@ fn run_set(
         } else {
             interactive_set_value(query, allow_empty)?
         };
-        let path = write_commands::set_value(&vault, &identity, query, value, allow_empty, force)?;
+        let path = write_commands::set_entry(
+            &vault,
+            &identity,
+            query,
+            value,
+            allow_empty,
+            force,
+            totp_secret.as_deref(),
+            totp_issuer.as_deref(),
+            totp_account.as_deref(),
+        )?;
         if !quiet {
             println!("Entry saved: {path}");
         }
@@ -3219,6 +3326,19 @@ fn finish_session_result(
                 ExitCode::from(1)
             }
         }
+    }
+}
+
+/// Prints one error line the way Go's CLI does.
+///
+/// Cobra writes the failure from the command's own `RunE` and again from
+/// `ExecuteRoot`, so the identical `Error: …` line appears twice on stderr.
+/// Verified against the pinned oracle for `config validate`, `auth set`,
+/// `auth rotate-passphrase` and `get`'s mutually-exclusive flags. The duplicate
+/// is contract parity, not a copy-paste bug.
+fn print_error_like_go(message: &str) {
+    for _ in 0..2 {
+        let _ = writeln!(io::stderr(), "Error: {message}");
     }
 }
 
