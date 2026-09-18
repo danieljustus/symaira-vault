@@ -32,6 +32,29 @@ same walk whenever the surface changes; the raw JSON lives in
 
 ## Missing flags on commands that exist
 
+**Corrected 2026-09-18:** the first extraction scanned the whole `--help` text, so
+flags named only in prose or in a nested command's section were counted as gaps.
+Re-extracted from the local `Flags:`/`Options:` section only, comparing Go's flag
+definitions against Rust's:
+
+| Node | Really missing |
+| --- | --- |
+| `import` | `--quarantine` |
+| `mcp` | `--bind`, `--port`, `--tls-ca`, `--tls-cert`, `--tls-key` |
+| `run` | `--broker`, `--broker-passthrough`, `--broker-strict` |
+
+Everything else the first pass reported is already covered: `file`, `file use`,
+`share`, `share list`, `migrate`, `remote`, `set`, `template`, `get` and
+`migrate kdf` show no local-flag difference, and `share list --status` (which the
+first pass listed under `share`) exists in both. `migrate --dry-run` exists only
+in `import`; `migrate`'s flag section defines nothing but `--help`.
+
+All three real gaps belong to feature slices that are not ported yet (broker,
+HTTP/TLS, quarantine rules), so they must be recorded as blocked rather than
+implemented as accepted-and-ignored flags.
+
+### Superseded first extraction (kept as history)
+
 | Node | Missing flags |
 | --- | --- |
 | `file` | `--cert`, `--field`, `--from`, `--out`, `--shred` |
