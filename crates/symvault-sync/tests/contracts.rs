@@ -516,6 +516,11 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
             .iter()
             .find(|entry| entry.path == expected["path"].as_str().unwrap())
             .unwrap();
+        // Unix permission bits are only asserted on native Unix, as in
+        // crates/symvault-store/tests/manifest_keys.rs: the Go-generated fixture
+        // records modes measured on a POSIX host, and Windows has no POSIX mode
+        // bits to preserve or compare.
+        #[cfg(unix)]
         assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
         assert_eq!(actual.size, expected["size"].as_u64().unwrap());
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
@@ -528,6 +533,8 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
             .find(|entry| entry.path == expected["path"].as_str().unwrap())
             .unwrap();
         assert!(!actual.directory);
+        // Same POSIX-mode convention as the archive members above.
+        #[cfg(unix)]
         assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
         assert_eq!(actual.size, expected["size"].as_u64().unwrap());
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
