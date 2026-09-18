@@ -328,7 +328,7 @@ fn protocol_request_share_persists_signed_pending_grant_and_rejects_invalid_ttl(
     assert_eq!(grant["status"], "pending");
     assert_eq!(grant["from_agent"], "fixture");
     let stored = symvault_store::sharing::ShareStore::read_verified(
-        root.path().join("mcp-shares.json"),
+        root.path().canonicalize().unwrap().join("mcp-shares.json"),
         Some(&[42; 32]),
     )
     .unwrap();
