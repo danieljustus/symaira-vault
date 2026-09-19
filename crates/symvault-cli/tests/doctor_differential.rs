@@ -841,3 +841,69 @@ fn differential_doctor_recipients_recovery_invalid() {
         "run `symvault recipients list`"
     );
 }
+
+/// Wave 2a: session/tooling/manifest checks must match the pinned oracle field
+/// by field on a missing vault and on a corrupt `config.yaml`. None of these IDs
+/// quotes a YAML parser error, so the documented go-yaml-vs-Rust dialect
+/// divergence does not apply here — any deviation is a real port defect.
+#[test]
+fn differential_doctor_session_tooling_checks() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("wave2a_home");
+    let _fix = TempFixture::new(vec![home.clone()]);
+
+    let missing = home.join("missing_vault");
+    compare_wave2a_checks(&go, &rust, &missing, &home);
+
+    let corrupt = home.join("corrupt_vault");
+    fs::create_dir_all(&corrupt).unwrap();
+    fs::write(
+        corrupt.join("config.yaml"),
+        "agents:\n  - this: [is: broken\n",
+    )
+    .unwrap();
+    compare_wave2a_checks(&go, &rust, &corrupt, &home);
+}
+
+fn compare_wave2a_checks(go: &Path, rust: &Path, vault: &Path, home: &Path) {
+    const IDS: &str = "auth.method,session.cache,audit.keyring.orphans,vault.manifest.intact,\
+tooling.autotype.backend,tooling.clipboard.backend,daemon.status,tooling.secureui,\
+tooling.precommit,session.keyring,security.env_passphrase";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--json",
+        "--no-network",
+        "--only",
+        IDS,
+    ];
+    let out_go = run(go, &args, vault, home);
+    let out_rust = run(rust, &args, vault, home);
+    let json_go = first_json(&out_go.stdout, "Go wave 2a checks");
+    let json_rust = first_json(&out_rust.stdout, "Rust wave 2a checks");
+
+    let items = |json: &serde_json::Value| -> Vec<serde_json::Value> {
+        json["results"].as_array().cloned().unwrap_or_default()
+    };
+    let go_items = items(&json_go);
+    let rust_items = items(&json_rust);
+    assert_eq!(
+        go_items.len(),
+        rust_items.len(),
+        "different number of checks for vault {vault:?}: go={go_items:?} rust={rust_items:?}"
+    );
+    assert!(!go_items.is_empty(), "no checks selected for {vault:?}");
+
+    for (a, b) in go_items.iter().zip(rust_items.iter()) {
+        for field in ["id", "name", "status", "message", "hint", "fixable"] {
+            assert_eq!(
+                a.get(field),
+                b.get(field),
+                "field {field} diverged for vault {vault:?}: go={a} rust={b}"
+            );
+        }
+    }
+}

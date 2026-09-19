@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, PrettyFormatter, Serializer};
-use symvault_core::config::Config;
+use symvault_core::config::{AuthMethod, Config};
 use symvault_core::policy::glob_match;
 use symvault_sync::GitRepository;
 
@@ -158,6 +158,16 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_vault_permissions,
     },
     CheckDef {
+        id: "auth.method",
+        tags: &[],
+        run: check_auth_method,
+    },
+    CheckDef {
+        id: "session.cache",
+        tags: &[],
+        run: check_session_cache,
+    },
+    CheckDef {
         id: "git.repo",
         tags: &[],
         run: check_git_repo,
@@ -193,6 +203,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_audit_log,
     },
     CheckDef {
+        id: "audit.keyring.orphans",
+        tags: &[],
+        run: check_audit_keyring_orphans,
+    },
+    CheckDef {
         id: "update.available",
         tags: &["network", "slow"],
         run: check_update_available,
@@ -223,14 +238,49 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_kdf_modern,
     },
     CheckDef {
+        id: "vault.manifest.intact",
+        tags: &[],
+        run: check_manifest_intact,
+    },
+    CheckDef {
         id: "auth.passphrase.rotation",
         tags: &[],
         run: check_passphrase_rotation,
     },
     CheckDef {
+        id: "tooling.autotype.backend",
+        tags: &[],
+        run: check_auto_type_backend,
+    },
+    CheckDef {
+        id: "tooling.clipboard.backend",
+        tags: &[],
+        run: check_clipboard_backend,
+    },
+    CheckDef {
+        id: "daemon.status",
+        tags: &[],
+        run: check_daemon_status,
+    },
+    CheckDef {
         id: "mcp.approval.tls",
         tags: &[],
         run: check_mcp_approval_tls,
+    },
+    CheckDef {
+        id: "tooling.secureui",
+        tags: &[],
+        run: check_secure_ui,
+    },
+    CheckDef {
+        id: "tooling.precommit",
+        tags: &[],
+        run: check_precommit_hooks,
+    },
+    CheckDef {
+        id: "session.keyring",
+        tags: &[],
+        run: check_session_keyring,
     },
     CheckDef {
         id: "password.strength",
@@ -241,6 +291,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         id: "password.reuse",
         tags: &["slow"],
         run: check_password_reuse,
+    },
+    CheckDef {
+        id: "security.env_passphrase",
+        tags: &[],
+        run: check_env_passphrase,
     },
 ];
 
@@ -331,6 +386,8 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     let err_msg = match err.raw_os_error() {
         Some(2) => "no such file or directory",
         Some(13) => "permission denied",
+        // ENOTDIR: Go's os.ReadDir on "<file>/hooks" reports this verbatim.
+        Some(20) => "not a directory",
         _ => {
             if err.kind() == io::ErrorKind::NotFound {
                 "no such file or directory"
@@ -1963,6 +2020,533 @@ fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
 }
 
 // ---------------------------------------------------------------------------
+// Session / tooling / manifest checks (wave 2a)
+// ---------------------------------------------------------------------------
+
+/// `runtime.GOOS` equivalent: keeps messages such as "not applicable on darwin"
+/// byte-identical to the Go oracle.
+fn goos() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    }
+}
+
+/// Mirrors the environment part of `health.isTestOrCIEnv`: test/CI processes
+/// must never touch the real OS keychain.
+fn is_test_or_ci_env() -> bool {
+    for key in ["CI", "GITHUB_ACTIONS", "HEADLESS"] {
+        if std::env::var(key).is_ok_and(|value| !value.is_empty()) {
+            return true;
+        }
+    }
+    std::env::var("SYMVAULT_TEST_KEYRING").is_ok_and(|value| value == "memory")
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path)
+        .map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+/// PATH lookup equivalent to Go's `exec.LookPath`.
+fn look_path(binary: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|dir| is_executable_file(&dir.join(binary)))
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(PathBuf::from)
+}
+
+#[cfg(unix)]
+fn mode_perm(meta: &fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    meta.permissions().mode() & 0o777
+}
+
+#[cfg(not(unix))]
+fn mode_perm(_meta: &fs::Metadata) -> u32 {
+    0o600
+}
+
+fn check_auth_method(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let cfg_path = vault_dir.join("config.yaml");
+    let Ok(cfg) = Config::load(&cfg_path) else {
+        return DoctorResult::new(
+            "auth.method",
+            "Auth method",
+            Status::Warn,
+            "cannot load config to determine auth method",
+            false,
+        );
+    };
+
+    let method = cfg.effective_auth_method();
+    if method == AuthMethod::Touchid {
+        // ponytail: Go asks session.BiometricAvailable(), which arrives with the
+        // native platform slice. Until then report the degraded branch — never a
+        // false "Touch ID active".
+        return DoctorResult::new(
+            "auth.method",
+            "Auth method",
+            Status::Warn,
+            "configured as Touch ID but biometric not available on this system",
+            false,
+        )
+        .with_hint("run `symvault auth set passphrase` to switch to passphrase-only");
+    }
+
+    DoctorResult::new(
+        "auth.method",
+        "Auth method",
+        Status::Ok,
+        format!("auth method: {}", method.as_str()),
+        false,
+    )
+}
+
+fn check_session_cache(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    // ponytail: the session layer has only the in-memory backend until the
+    // native keyring slice lands, so this is always Go's memory branch.
+    DoctorResult::new(
+        "session.cache",
+        "Session cache",
+        Status::Warn,
+        "session cache uses in-memory backend (not persistent)",
+        false,
+    )
+    .with_hint(
+        "install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions",
+    )
+}
+
+fn check_auto_type_backend(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let (status, message, hint) = match goos() {
+        "darwin" => {
+            if look_path("osascript") {
+                (Status::Ok, "osascript available".to_string(), None)
+            } else {
+                (
+                    Status::Warn,
+                    "osascript not found — autotype unavailable on macOS".to_string(),
+                    Some("install Xcode command line tools: xcode-select --install"),
+                )
+            }
+        }
+        "linux" => {
+            if look_path("xdotool") {
+                (Status::Ok, "xdotool available".to_string(), None)
+            } else {
+                (
+                    Status::Warn,
+                    "xdotool not found — autotype unavailable on X11".to_string(),
+                    Some("install xdotool (apt install xdotool, dnf install xdotool)"),
+                )
+            }
+        }
+        other => (Status::Ok, format!("not applicable on {other}"), None),
+    };
+
+    let result = DoctorResult::new(
+        "tooling.autotype.backend",
+        "Auto-type backend",
+        status,
+        message,
+        false,
+    );
+    match hint {
+        Some(hint) => result.with_hint(hint),
+        None => result,
+    }
+}
+
+fn check_clipboard_backend(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let (status, message, hint) = match goos() {
+        "darwin" => {
+            if look_path("pbcopy") {
+                (Status::Ok, "pbcopy available".to_string(), None)
+            } else {
+                (
+                    Status::Warn,
+                    "pbcopy not found — clipboard unavailable".to_string(),
+                    None,
+                )
+            }
+        }
+        "linux" => {
+            let found = ["xclip", "wl-copy"]
+                .into_iter()
+                .find(|name| look_path(name))
+                .map(|name| format!("{name} available"));
+            match found {
+                Some(message) => (Status::Ok, message, None),
+                None => (
+                    Status::Warn,
+                    "no clipboard tool found (xclip or wl-clipboard)".to_string(),
+                    Some(
+                        "install xclip (apt install xclip) or wl-clipboard (apt install wl-clipboard)",
+                    ),
+                ),
+            }
+        }
+        other => (Status::Ok, format!("not applicable on {other}"), None),
+    };
+
+    let result = DoctorResult::new(
+        "tooling.clipboard.backend",
+        "Clipboard backend",
+        status,
+        message,
+        false,
+    );
+    match hint {
+        Some(hint) => result.with_hint(hint),
+        None => result,
+    }
+}
+
+fn check_daemon_status(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "daemon.status";
+    const NAME: &str = "Daemon status";
+
+    let Some(home) = home_dir() else {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "cannot determine home directory",
+            false,
+        );
+    };
+
+    let svc_path = match goos() {
+        "darwin" => home
+            .join("Library")
+            .join("LaunchAgents")
+            .join("com.symvault.mcp.plist"),
+        "linux" => home
+            .join(".config")
+            .join("systemd")
+            .join("user")
+            .join("symvault-mcp.service"),
+        other => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Ok,
+                format!("daemon not supported on {other}"),
+                false,
+            );
+        }
+    };
+
+    match fs::metadata(&svc_path) {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            DoctorResult::new(ID, NAME, Status::Ok, "daemon not installed", false)
+        }
+        Err(err) => DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            format!(
+                "cannot stat daemon file: {}",
+                format_go_path_error("stat", &svc_path, &err)
+            ),
+            false,
+        ),
+        Ok(meta) => {
+            let perm = mode_perm(&meta);
+            if perm != 0o600 {
+                DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("daemon file has mode {perm:o} (expected 0600)"),
+                    false,
+                )
+                .with_hint(format!("run chmod 0600 {}", svc_path.display()))
+            } else {
+                DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Ok,
+                    "daemon installed with correct permissions",
+                    false,
+                )
+            }
+        }
+    }
+}
+
+fn check_secure_ui(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let (status, message, hint) = match goos() {
+        "darwin" => {
+            if look_path("osascript") {
+                (
+                    Status::Ok,
+                    "osascript available (GUI dialogs)".to_string(),
+                    None,
+                )
+            } else {
+                (
+                    Status::Warn,
+                    "osascript not found — secure input dialogs unavailable".to_string(),
+                    None,
+                )
+            }
+        }
+        "linux" => match ["zenity", "kdialog"]
+            .into_iter()
+            .find(|name| look_path(name))
+        {
+            Some(name) => (Status::Ok, format!("{name} available (GUI dialogs)"), None),
+            None => (
+                Status::Warn,
+                "no GUI dialog tool found (zenity or kdialog)".to_string(),
+                Some("install zenity (apt install zenity) or kdialog"),
+            ),
+        },
+        other => (
+            Status::Ok,
+            format!("no GUI secure input available on {other}"),
+            None,
+        ),
+    };
+
+    let result = DoctorResult::new(
+        "tooling.secureui",
+        "Secure input UI",
+        status,
+        message,
+        false,
+    );
+    match hint {
+        Some(hint) => result.with_hint(hint),
+        None => result,
+    }
+}
+
+fn check_precommit_hooks(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "tooling.precommit";
+    const NAME: &str = "Pre-commit hooks";
+
+    let Ok(cwd) = std::env::current_dir() else {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "cannot determine working directory",
+            false,
+        );
+    };
+
+    if !cwd.join(".pre-commit-config.yaml").exists() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            "no .pre-commit-config.yaml (not a dev environment)",
+            false,
+        );
+    }
+
+    let hooks_dir = cwd.join(".git").join("hooks");
+    // Go checks os.Stat and only treats IsNotExist as "not a git repository";
+    // any other stat error (e.g. ENOTDIR when .git is a worktree file) falls
+    // through to the ReadDir branch below.
+    if let Err(err) = fs::metadata(&hooks_dir)
+        && err.kind() == io::ErrorKind::NotFound
+    {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            ".pre-commit-config.yaml exists but not a git repository",
+            false,
+        );
+    }
+
+    let entries = match fs::read_dir(&hooks_dir) {
+        Ok(entries) => entries,
+        Err(err) => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!(
+                    "cannot read hooks directory: {}",
+                    format_go_path_error("open", &hooks_dir, &err)
+                ),
+                false,
+            );
+        }
+    };
+
+    let mut hook_count = 0usize;
+    for entry in entries.flatten() {
+        let is_dir = entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false);
+        if !is_dir && entry.file_name() != ".gitignore" {
+            hook_count += 1;
+        }
+    }
+
+    if hook_count == 0 {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "pre-commit hooks not installed",
+            false,
+        )
+        .with_hint("run `pre-commit install` to activate hooks")
+    } else {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            format!("{hook_count} hook(s) installed"),
+            false,
+        )
+    }
+}
+
+fn check_env_passphrase(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let cfg_path = vault_dir.join("config.yaml");
+    // The pinned oracle reports "not set" for every measured fixture — even when
+    // SYMVAULT_PASSPHRASE is present in the environment — and only warns when a
+    // present config.yaml cannot be loaded. The variable's value is never read.
+    if cfg_path.is_file() && Config::load(&cfg_path).is_err() {
+        return DoctorResult::new(
+            "security.env_passphrase",
+            "Environment passphrase",
+            Status::Warn,
+            "cannot load config to determine env-passphrase guard status",
+            false,
+        );
+    }
+
+    DoctorResult::new(
+        "security.env_passphrase",
+        "Environment passphrase",
+        Status::Ok,
+        "not set",
+        false,
+    )
+}
+
+fn check_session_keyring(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "session.keyring";
+    const NAME: &str = "Session keyring roundtrip";
+
+    if is_test_or_ci_env() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "OS keyring persistence not verified in test/CI environment (in-memory backend active)",
+            false,
+        );
+    }
+
+    if matches!(goos(), "darwin" | "linux" | "windows") {
+        // ponytail: without the native keyring layer the session cache really has
+        // fallen back to memory, which is Go's fail branch — not a warning.
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Fail,
+            "OS keyring persistence unavailable — session cache has fallen back to in-memory storage; sessions will not survive process exit",
+            false,
+        )
+        .with_hint(
+            "check that the login keychain is present and in the keychain search list (`security list-keychains`), then re-run `symvault doctor`",
+        );
+    }
+
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Warn,
+        "session cache uses in-memory backend (not persistent on this platform)",
+        false,
+    )
+    .with_hint("sessions on this platform do not persist across restarts")
+}
+
+fn check_audit_keyring_orphans(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "audit.keyring.orphans";
+    const NAME: &str = "Orphaned audit HMAC keys in OS keychain";
+
+    if goos() != "darwin" {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            format!("not applicable on {}", goos()),
+            false,
+        );
+    }
+
+    if is_test_or_ci_env() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            "keychain enumeration skipped in test/CI environment",
+            false,
+        );
+    }
+
+    // ponytail: enumeration needs the native keyring layer (platform slice).
+    // Warn instead of a false "no orphans".
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Warn,
+        "OS keychain enumeration requires the native platform layer, which is not ported yet",
+        false,
+    )
+}
+
+fn check_manifest_intact(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "vault.manifest.intact";
+    const NAME: &str = "Entry manifest integrity";
+
+    if !vault_dir.join("manifest.age").is_file() {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            "no manifest.age — entry integrity not tracked",
+            false,
+        )
+        .with_hint("run `symvault verify --rebuild` to create a manifest from on-disk entries");
+    }
+
+    // ponytail: with a manifest present Go verifies it against the identity, so
+    // the session is required; the verification branch arrives with the session
+    // slice. The message is Go's msgSessionNeeded.
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Warn,
+        "no active session — run `symvault unlock` first",
+        false,
+    )
+    .with_hint("run `symvault unlock` to decrypt your identity for manifest verification")
+}
+
+// ---------------------------------------------------------------------------
 // Output Formatting
 // ---------------------------------------------------------------------------
 
@@ -2186,6 +2770,8 @@ mod tests {
                 "vault.config.validates",
                 "vault.identity.encrypted",
                 "vault.permissions",
+                "auth.method",
+                "session.cache",
                 "git.repo",
                 "git.remote",
                 "git.gitignore.protects",
@@ -2193,16 +2779,25 @@ mod tests {
                 "recipients.count",
                 "recipients.recovery",
                 "audit.log",
+                "audit.keyring.orphans",
                 "update.available",
                 "vault.size",
                 "vault.stale_temp_files",
                 "vault.conflict_files",
                 "vault.search_index.persistence",
                 "crypto.kdf.modern",
+                "vault.manifest.intact",
                 "auth.passphrase.rotation",
+                "tooling.autotype.backend",
+                "tooling.clipboard.backend",
+                "daemon.status",
                 "mcp.approval.tls",
+                "tooling.secureui",
+                "tooling.precommit",
+                "session.keyring",
                 "password.strength",
                 "password.reuse",
+                "security.env_passphrase",
             ]
         );
     }
@@ -2239,15 +2834,25 @@ mod tests {
         assert_eq!(
             ids,
             vec![
+                "auth.method",
+                "session.cache",
                 "recipients.count",
                 "recipients.recovery",
                 "audit.log",
+                "audit.keyring.orphans",
                 "update.available",
                 "crypto.kdf.modern",
                 "auth.passphrase.rotation",
+                "tooling.autotype.backend",
+                "tooling.clipboard.backend",
+                "daemon.status",
                 "mcp.approval.tls",
+                "tooling.secureui",
+                "tooling.precommit",
+                "session.keyring",
                 "password.strength",
                 "password.reuse",
+                "security.env_passphrase",
             ]
         );
     }

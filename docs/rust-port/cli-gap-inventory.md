@@ -57,11 +57,13 @@ implemented as accepted-and-ignored flags.
 
 The command group exists in Rust, but only part of Go's check registry is ported.
 Measured with `--json --no-network` against the pinned Go oracle
-(`parent-doctor-matrix.py`, fixtures `empty` + `corrupt`): Go runs **35** checks,
-Rust **20**. For the 20 shared IDs the name/status/message/hint/fixable fields are
-byte-identical on a missing vault (**0 field deviations**). The remaining 15 IDs
-are **not implemented** and are therefore *absent* from the output rather than
-reported as OK — a missing check may never look like a passing one.
+(`parent-doctor-matrix.py`, fixtures `empty`, `corrupt`, `env` and `initialized`):
+Go runs **35** checks, Rust **31**. For the 31 shared IDs the
+name/status/message/hint/fixable fields are byte-identical on a missing vault, on a
+missing vault with the env-passphrase variables set, and on an oracle-initialized
+vault (**0 field deviations**). The remaining 4 IDs are **not implemented** and are
+therefore *absent* from the output rather than reported as OK — a missing check may
+never look like a passing one.
 
 ### Known deviation: config-loader error dialect (not yet parity)
 
@@ -74,36 +76,69 @@ The prefixed part (`config.yaml parse error: `, `failed to load config: `,
 - `vault.config.parses`, `vault.config.validates`, `auth.passphrase.rotation`
 
 This is a **pre-existing** divergence of the Rust config loader shared by the whole
-CLI, not introduced by the doctor port, and it is **not** claimed as parity.
+CLI, not introduced by the doctor port, and it is **not** claimed as parity. None of
+the checks ported in this wave quote a parser error, so they match on the corrupt
+fixture as well (covered by `differential_doctor_session_tooling_checks`).
 
-Ported IDs (22 in the registry, 20 of them without network):
+Ported IDs (33 in the registry, 31 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
-`vault.identity.encrypted`, `vault.permissions`, `git.repo`, `git.remote`,
-`git.gitignore.protects`, `git.lastsync.fresh` (network), `recipients.count`,
-`recipients.recovery`, `audit.log`, `update.available` (network), `vault.size`,
-`vault.stale_temp_files`, `vault.conflict_files`, `vault.search_index.persistence`,
-`crypto.kdf.modern`, `auth.passphrase.rotation`, `mcp.approval.tls`,
-`password.strength`, `password.reuse`.
+`vault.identity.encrypted`, `vault.permissions`, `auth.method`, `session.cache`,
+`git.repo`, `git.remote`, `git.gitignore.protects`, `git.lastsync.fresh` (network),
+`recipients.count`, `recipients.recovery`, `audit.log`, `audit.keyring.orphans`,
+`update.available` (network), `vault.size`, `vault.stale_temp_files`,
+`vault.conflict_files`, `vault.search_index.persistence`, `crypto.kdf.modern`,
+`vault.manifest.intact`, `auth.passphrase.rotation`, `tooling.autotype.backend`,
+`tooling.clipboard.backend`, `daemon.status`, `mcp.approval.tls`, `tooling.secureui`,
+`tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
+`security.env_passphrase`.
 
-Still open (15): `auth.method`, `session.cache`, `mcp.tokens`,
-`audit.keyring.orphans`, `crypto.scrypt.benchmark`, `vault.manifest.intact`,
-`tooling.autotype.backend`, `tooling.clipboard.backend`, `daemon.status`,
-`mcp.dynamic.engines`, `mcp.agents`, `tooling.secureui`, `tooling.precommit`,
-`session.keyring`, `security.env_passphrase`.
+Still open (4): `mcp.tokens`, `crypto.scrypt.benchmark`, `mcp.dynamic.engines`,
+`mcp.agents`.
 
-Three of the open IDs were implemented, measured against the oracle and then
-**withdrawn again** because they cannot be byte-pinned — do not re-add them
+### Branch limitations of the ported checks (documented, not hidden)
+
+These branches are unreachable in the fixture matrix but exist in Go, so they are
+explicitly listed instead of being silently simplified:
+
+- `auth.method`: the `touchid` branch needs `session.BiometricAvailable()` from the
+  native platform slice; until then it always reports Go's degraded branch
+  (`warn`, "configured as Touch ID but biometric not available on this system").
+- `session.keyring`, `audit.keyring.orphans`: the non-test/non-CI branches need the
+  OS keyring layer. Outside test/CI `session.keyring` reports Go's **fail** branch
+  (the Rust session cache really has fallen back to memory), and
+  `audit.keyring.orphans` reports `warn` instead of a false "no orphans".
+- `vault.manifest.intact`: the branch with an existing `manifest.age` needs the
+  identity/session to verify and uses Go's `msgSessionNeeded` text; additionally the
+  hint points at `symvault verify --rebuild`, which is **not implemented in Rust
+  yet** — the check must stay byte-identical anyway, so this is a documented hole.
+- `security.env_passphrase`: the **pinned oracle** reports `not set` for every
+  measured fixture, even with `SYMVAULT_PASSPHRASE` set in the environment; the
+  current Go *tree* source would warn in that case. The port follows the pinned
+  binary (the contract), never reads the variable's value, and this divergence
+  between oracle and tree is recorded here.
+
+The four open IDs were each implemented at some point, measured against the oracle
+and then **withdrawn again** because they cannot be byte-pinned — do not re-add them
 without a new decision:
 
 - `crypto.scrypt.benchmark`: Go embeds a *measured* duration and its recommended
-  work factor for this machine in the message, so the reference output is not
-  stable across runs.
+  work factor for this machine in the message (the argon2id branch is stable, the
+  scrypt branch is not).
 - `mcp.tokens`: Go's message depends on token-registry side effects inside the
-  (synthetic) vault path and contains a non-deterministic temp-file name.
-- `mcp.server.reachable`, `mcp.dynamic.engines`, `mcp.agents`: their outcome is
-  dominated by the config-loader error dialect above; `dynamic.engines` also
-  reported `ok` where Go reports `warn`.
+  (synthetic) vault path and contains a non-deterministic temp-file name; on an
+  initialized vault it reports the *user's* token count.
+- `mcp.dynamic.engines`, `mcp.agents`: on a loadable config the oracle reports
+  `no dynamic providers configured` / the user's agent list — i.e. environment
+  state; on a missing vault their message embeds the config path, and on a corrupt
+  config the go-yaml dialect. `dynamic.engines` also reported `ok` where Go reports
+  `warn` in the withdrawn attempt.
+
+Plan for these four (parent decision, `wave2b-decision-note.md`): `dynamic.engines`
+and `mcp.agents` can still be pinned for the missing-vault fixture with the same
+documented dialect exception as `auth.passphrase.rotation`; `mcp.tokens` and
+`crypto.scrypt.benchmark` stay out unless a shape-only comparison is explicitly
+accepted as such.
 
 Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
 stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and
