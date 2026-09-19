@@ -192,29 +192,37 @@ mod tests {
     const MANAGED: &str = "---\nmanaged_by: symaira\nmanaged_version: dev\n---\nbody\n";
     const FOREIGN: &str = "---\nmanaged_by: someone-else\n---\nbody\n";
 
+    /// Returns (temp dir guard, vault root, skill file).
+    ///
+    /// The vault root is the *canonicalized* temp path on purpose: the store
+    /// opens its root without following symlinks, and macOS points `TMPDIR` at
+    /// `/var/folders/...`, which is reached through the `/var` symlink. Using
+    /// the raw temp path made this fixture fail on the CI runners while passing
+    /// against a plain local temp directory.
     fn fixture(skill: &str) -> (tempfile::TempDir, PathBuf, PathBuf) {
-        let root = tempfile::tempdir().expect("fixture root");
-        let skill_file = root.path().join("SKILL.md");
+        let dir = tempfile::tempdir().expect("fixture root");
+        let vault = dir.path().canonicalize().expect("resolved fixture root");
+        let skill_file = vault.join("SKILL.md");
         fs::write(&skill_file, skill).unwrap();
         fs::write(
-            root.path().join("config.yaml"),
+            vault.join("config.yaml"),
             format!(
                 "agents:\n  demo:\n    tier: safe\n    skillPath: {}\n",
                 skill_file.display()
             ),
         )
         .unwrap();
-        fs::create_dir_all(root.path().join("mcp-tokens")).unwrap();
-        fs::write(root.path().join("mcp-tokens/demo.token"), "raw\n").unwrap();
-        (root, skill_file.clone(), skill_file)
+        fs::create_dir_all(vault.join("mcp-tokens")).unwrap();
+        fs::write(vault.join("mcp-tokens/demo.token"), "raw\n").unwrap();
+        (dir, vault, skill_file)
     }
 
     /// Writes the version-2 registry shape directly. Minting through
     /// `token_registry::create` made this test depend on another module's I/O
     /// and failed on the CI runners; the command under test only reads the file.
-    fn mint_token(root: &Path) {
+    fn mint_token(vault: &Path) {
         fs::write(
-            root.join("mcp-tokens.json"),
+            vault.join("mcp-tokens.json"),
             r#"{"version":2,"tokens":{"tok-fixture":{"id":"tok-fixture","hash":"deadbeef","prefix":"dead","allowed_tools":["*"],"tool_registry_hash":"","agent_name":"demo","created_at":"2026-01-01T00:00:00Z","revoked":false}}}"#,
         )
         .unwrap();
@@ -230,33 +238,33 @@ mod tests {
 
     #[test]
     fn uninstall_removes_profile_token_file_token_and_managed_skill() {
-        let (root, skill_file, _) = fixture(MANAGED);
-        mint_token(root.path());
-        uninstall(root.path(), "demo", &options()).expect("uninstall success");
+        let (_dir, vault, skill_file) = fixture(MANAGED);
+        mint_token(&vault);
+        uninstall(&vault, "demo", &options()).expect("uninstall success");
 
-        let config = fs::read_to_string(root.path().join("config.yaml")).unwrap();
+        let config = fs::read_to_string(vault.join("config.yaml")).unwrap();
         assert!(!config.contains("demo:"), "profile kept: {config}");
-        assert!(!root.path().join("mcp-tokens/demo.token").exists());
+        assert!(!vault.join("mcp-tokens/demo.token").exists());
         assert!(!skill_file.exists(), "managed skill kept");
 
-        let registry = fs::read_to_string(root.path().join("mcp-tokens.json")).unwrap();
+        let registry = fs::read_to_string(vault.join("mcp-tokens.json")).unwrap();
         assert!(registry.contains("\"revoked\": true"), "{registry}");
     }
 
     #[test]
     fn uninstall_keeps_foreign_and_unreadable_skill_files() {
         for skill in [FOREIGN, "# no frontmatter\n"] {
-            let (root, skill_file, _) = fixture(skill);
-            uninstall(root.path(), "demo", &options()).expect("uninstall success");
+            let (_dir, vault, skill_file) = fixture(skill);
+            uninstall(&vault, "demo", &options()).expect("uninstall success");
             assert!(skill_file.exists(), "skill removed for {skill:?}");
         }
     }
 
     #[test]
     fn uninstall_keeps_parts_selected_by_flags() {
-        let (root, skill_file, _) = fixture(MANAGED);
+        let (_dir, vault, skill_file) = fixture(MANAGED);
         uninstall(
-            root.path(),
+            &vault,
             "demo",
             &Options {
                 keep_config: true,
@@ -266,19 +274,19 @@ mod tests {
         )
         .expect("uninstall success");
         assert!(
-            fs::read_to_string(root.path().join("config.yaml"))
+            fs::read_to_string(vault.join("config.yaml"))
                 .unwrap()
                 .contains("demo:")
         );
         assert!(skill_file.exists());
-        assert!(!root.path().join("mcp-tokens/demo.token").exists());
+        assert!(!vault.join("mcp-tokens/demo.token").exists());
     }
 
     #[test]
     fn uninstall_without_confirmation_leaves_everything_alone() {
-        let (root, skill_file, _) = fixture(MANAGED);
+        let (_dir, vault, skill_file) = fixture(MANAGED);
         uninstall(
-            root.path(),
+            &vault,
             "demo",
             &Options {
                 keep_config: false,
@@ -288,18 +296,18 @@ mod tests {
         )
         .expect("cancel is not an error");
         assert!(
-            fs::read_to_string(root.path().join("config.yaml"))
+            fs::read_to_string(vault.join("config.yaml"))
                 .unwrap()
                 .contains("demo:")
         );
         assert!(skill_file.exists());
-        assert!(root.path().join("mcp-tokens/demo.token").exists());
+        assert!(vault.join("mcp-tokens/demo.token").exists());
     }
 
     #[test]
     fn uninstall_reports_an_unknown_agent() {
-        let (root, _, _) = fixture(MANAGED);
-        let error = uninstall(root.path(), "nope", &options()).expect_err("must fail");
+        let (_dir, vault, _) = fixture(MANAGED);
+        let error = uninstall(&vault, "nope", &options()).expect_err("must fail");
         assert_eq!(error, "agent \"nope\" not found in config");
     }
 }
