@@ -12,6 +12,7 @@ mod audit_export_commands;
 mod backup_commands;
 mod config;
 mod device;
+mod doctor_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
@@ -240,6 +241,30 @@ enum Command {
         reveal: bool,
         #[arg(long)]
         quiet: bool,
+    },
+    /// Check vault health and configuration
+    Doctor {
+        /// Skip checks that require network access
+        #[arg(long)]
+        no_network: bool,
+        /// Return non-zero exit code for warnings (7) or failures (8)
+        #[arg(long)]
+        strict: bool,
+        /// Only run checks matching these glob patterns (comma-separated, e.g. vault.*)
+        #[arg(long, value_delimiter = ',')]
+        only: Option<Vec<String>>,
+        /// Skip checks matching these glob patterns (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        exclude: Option<Vec<String>>,
+        /// Auto-repair safe issues (permissions, gitignore, git init)
+        #[arg(long)]
+        fix: bool,
+        /// Log what --fix would do without modifying anything
+        #[arg(long)]
+        fix_dry_run: bool,
+        /// Skip slow checks
+        #[arg(long)]
+        quick: bool,
     },
     /// Run a read-only Git history operation.
     Git {
@@ -904,6 +929,28 @@ fn main() -> ExitCode {
             reveal,
             quiet,
             cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Doctor {
+            no_network,
+            strict,
+            only,
+            exclude,
+            fix,
+            fix_dry_run,
+            quick,
+        }) => run_doctor(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            no_network,
+            strict,
+            only,
+            exclude,
+            fix,
+            fix_dry_run,
+            quick,
+            cli.output.as_deref(),
             cli.json,
             cli.quiet,
         ),
@@ -1801,6 +1848,74 @@ fn run_verify(
         )
     })();
     finish_vault_result(result)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_doctor(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    no_network: bool,
+    strict: bool,
+    only: Option<Vec<String>>,
+    exclude: Option<Vec<String>>,
+    fix: bool,
+    fix_dry_run: bool,
+    quick: bool,
+    output_format: Option<&str>,
+    json: bool,
+    _quiet: bool,
+) -> ExitCode {
+    let vault_dir =
+        resolve_vault(explicit_vault, profile).unwrap_or_else(|_| PathResolver::new().data_dir);
+    let opts = doctor_commands::DoctorOptions {
+        no_network,
+        quick,
+        only: only.unwrap_or_default(),
+        exclude: exclude.unwrap_or_default(),
+    };
+
+    let mut results = doctor_commands::run_checks(&vault_dir, &opts);
+
+    if let Some(format) = output_format
+        && format != "text"
+    {
+        let _ = writeln!(
+            io::stderr(),
+            "Error: output format {format:?} is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
+        );
+        return ExitCode::from(9);
+    }
+
+    let mut stdout = io::stdout();
+    let mut stderr = io::stderr();
+    if let Err(err) = doctor_commands::apply_fixes(&mut results, fix, fix_dry_run, &mut stderr) {
+        let _ = writeln!(io::stderr(), "Error: {err}");
+        return ExitCode::from(1);
+    }
+
+    if json {
+        if let Err(err) = doctor_commands::render_json(&vault_dir, &results, &mut stdout) {
+            let _ = writeln!(io::stderr(), "Error: {err}");
+            return ExitCode::from(1);
+        }
+    } else if let Err(err) = doctor_commands::render_text(&vault_dir, &results, &mut stderr) {
+        let _ = writeln!(io::stderr(), "Error: {err}");
+        return ExitCode::from(1);
+    }
+
+    if strict {
+        let sc = doctor_commands::score(&results);
+        if sc.fail > 0 {
+            let _ = writeln!(io::stderr(), "Error: {} check(s) failed", sc.fail);
+            return ExitCode::from(8);
+        }
+        if sc.warn > 0 {
+            let _ = writeln!(io::stderr(), "Error: {} warning(s)", sc.warn);
+            return ExitCode::from(7);
+        }
+    }
+
+    ExitCode::SUCCESS
 }
 
 fn cli_home_directory() -> Result<PathBuf, String> {

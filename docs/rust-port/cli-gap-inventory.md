@@ -6,9 +6,9 @@ claim behavioural parity for the commands that do exist. Regenerate with the
 same walk whenever the surface changes; the raw JSON lives in
 `target/resume-evidence/cli-gap-inventory.json` after a run.
 
-## Missing top-level groups (11 of 45)
+## Missing top-level groups (10 of 45)
 
-`approval`, `broker`, `completion`, `doctor`, `dynamic`, `help`, `intake`,
+`approval`, `broker`, `completion`, `dynamic`, `help`, `intake`,
 `setup`, `startup-profile`, `ui`, `update`.
 
 ## Missing subcommands inside existing groups
@@ -52,6 +52,38 @@ in `import`; `migrate`'s flag section defines nothing but `--help`.
 All three real gaps belong to feature slices that are not ported yet (broker,
 HTTP/TLS, quarantine rules), so they must be recorded as blocked rather than
 implemented as accepted-and-ignored flags.
+
+## `symvault doctor` check coverage (2026-09-19)
+
+The command group exists in Rust, but only part of Go's check registry is ported.
+Measured with `--json --no-network` against the pinned Go oracle: Go runs **35**
+checks, Rust **13**, and for the 13 shared IDs the name/status/message/hint/fixable
+fields are byte-identical (0 field deviations). The remaining 24 IDs (38 total
+without `--no-network`) are **not implemented** and are therefore *absent* from the
+output rather than reported as OK.
+
+Ported IDs (14 in the registry, 13 of them without network):
+
+`vault.initialized`, `vault.config.parses`, `vault.config.validates`,
+`vault.identity.encrypted`, `vault.permissions`, `git.repo`, `git.remote`,
+`git.gitignore.protects`, `git.lastsync.fresh` (network), `vault.size`,
+`vault.stale_temp_files`, `vault.conflict_files`, `vault.search_index.persistence`,
+`auth.passphrase.rotation`.
+
+Still open (24): `auth.method`, `session.cache`, `recipients.count`,
+`recipients.recovery`, `mcp.tokens`, `audit.log`, `audit.keyring.orphans`,
+`crypto.scrypt.benchmark`, `crypto.kdf.modern`, `vault.manifest.intact`,
+`tooling.autotype.backend`, `tooling.clipboard.backend`, `daemon.status`,
+`mcp.approval.tls`, `mcp.dynamic.engines`, `mcp.agents`, `tooling.secureui`,
+`tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
+`security.env_passphrase`, `update.available`, `mcp.server`.
+
+Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
+stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and
+`Error: output format "json" is not supported by 'symvault doctor' …`, only the
+deprecated `--json` flag produces JSON; without `--strict` the exit code stays 0
+even with failures (8 = at least one fail, 7 = warnings only); `--only 'config.*'`
+matches nothing because the IDs are `vault.config.parses`/`vault.config.validates`.
 
 ### Superseded first extraction (kept as history)
 
