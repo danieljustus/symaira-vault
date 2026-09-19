@@ -11,6 +11,7 @@ mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
 mod config;
+mod daemon_commands;
 mod device;
 mod doctor_commands;
 mod edit_commands;
@@ -353,6 +354,8 @@ enum Command {
     },
     /// Start the MCP server for agent access.
     Mcp {
+        #[command(subcommand)]
+        action: Option<McpAction>,
         /// Agent profile used by the stdio server.
         #[arg(long)]
         agent: Option<String>,
@@ -434,6 +437,30 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+/// The Go CLI exposes `mcp` as both a server and a service-installer command
+/// group; `serve` is accepted there as an alias for the bare `mcp` form.
+#[derive(Debug, Subcommand)]
+enum McpAction {
+    /// Run the MCP server over the selected transport.
+    Serve {
+        /// Agent profile used by the stdio server.
+        #[arg(long)]
+        agent: Option<String>,
+        /// Run the MCP protocol over stdin/stdout.
+        #[arg(long)]
+        stdio: bool,
+        /// Permit a locked vault (unsupported by the native stdio runtime).
+        #[arg(long)]
+        allow_locked: bool,
+    },
+    /// Install MCP server as a background service.
+    Install,
+    /// Show MCP server service status.
+    Status,
+    /// Remove the MCP server background service.
+    Uninstall,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1505,17 +1532,41 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Mcp {
+            action,
             agent,
             stdio,
             allow_locked,
-        }) => run_mcp(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            agent.as_deref(),
-            stdio,
-            allow_locked,
-            cli.quiet,
-        ),
+        }) => match action {
+            Some(McpAction::Install) => {
+                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Install)
+            }
+            Some(McpAction::Status) => {
+                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Status)
+            }
+            Some(McpAction::Uninstall) => {
+                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Uninstall)
+            }
+            Some(McpAction::Serve {
+                agent,
+                stdio,
+                allow_locked,
+            }) => run_mcp(
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+                agent.as_deref(),
+                stdio,
+                allow_locked,
+                cli.quiet,
+            ),
+            None => run_mcp(
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+                agent.as_deref(),
+                stdio,
+                allow_locked,
+                cli.quiet,
+            ),
+        },
         Some(Command::Set {
             query,
             value,
@@ -3077,6 +3128,94 @@ fn run_migrate_kdf(explicit_vault: Option<&Path>, profile: Option<&str>, yes: bo
         }
         println!("The previous identity.age was backed up to identity.age.bak.");
         Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+/// Which `mcp` service action to run.
+#[derive(Clone, Copy)]
+enum McpService {
+    Install,
+    Status,
+    Uninstall,
+}
+
+/// Prints a line the way the Go CLI's quiet-aware printer does for the first
+/// line of a service report.
+fn println_quiet_aware(quiet: bool, line: &str) {
+    if !quiet {
+        println!("{line}");
+    }
+}
+
+/// Loads the agent-facing global config for the service commands. A missing or
+/// unreadable config is reported exactly like the oracle and the defaults apply.
+fn service_config(warn: bool) -> Option<Config> {
+    // The oracle reads `<home>/.symvault/config.yaml` (config.DefaultVaultSubdir),
+    // not the XDG path, and only `install` reports a load failure.
+    let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
+    let config_path = home.join(".symvault").join("config.yaml");
+    if let Err(error) = fs::read(&config_path) {
+        if warn {
+            eprintln!(
+                "Could not load config, using defaults: open {}: {}",
+                config_path.display(),
+                go_io_reason(&error)
+            );
+        }
+        return None;
+    }
+    Config::load(&config_path).ok()
+}
+
+/// Renders an io error the way Go's `*os.PathError` does ("no such file or
+/// directory", "permission denied", ...).
+fn go_io_reason(error: &std::io::Error) -> String {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "no such file or directory".to_owned(),
+        std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
+        std::io::ErrorKind::AlreadyExists => "file exists".to_owned(),
+        _ => error.to_string(),
+    }
+}
+
+fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpService) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, None)?;
+        let config = service_config(matches!(action, McpService::Install));
+        let (port, bind) = match config.as_ref().and_then(|cfg| cfg.mcp.as_ref()) {
+            Some(mcp) => (Some(mcp.port), Some(mcp.bind.as_str())),
+            None => (None, None),
+        };
+        let installer = daemon_commands::Installer::new(&vault, port, bind)
+            .map_err(|error| error.formatted())?;
+        match action {
+            McpService::Install => {
+                installer.install().map_err(|error| error.formatted())?;
+                println_quiet_aware(quiet, "Service installed successfully.");
+                if let Ok(path) = installer.service_file_path() {
+                    println!("  Service file: {}", path.display());
+                }
+                println!("  Port:         {}", installer.port());
+                println!("  Bind:         {}", installer.bind());
+                println!("  Vault:        {}", installer.vault_dir().display());
+            }
+            McpService::Uninstall => {
+                installer.uninstall().map_err(|error| error.formatted())?;
+                println_quiet_aware(quiet, "Service uninstalled successfully.");
+            }
+            McpService::Status => {
+                let status = installer.status().map_err(|error| error.formatted())?;
+                println_quiet_aware(quiet, &format!("Status: {status}"));
+                if let Ok(path) = installer.service_file_path() {
+                    println!("  Service file: {}", path.display());
+                }
+                println!("  Port:         {}", installer.port());
+                println!("  Bind:         {}", installer.bind());
+                println!("  Vault:        {}", installer.vault_dir().display());
+            }
+        }
+        Ok(())
     })();
     finish_vault_result(result)
 }
