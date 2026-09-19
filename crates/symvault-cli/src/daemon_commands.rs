@@ -795,9 +795,9 @@ mod tests {
         );
     }
 
-    /// The launchd layout only exists on unix; on Windows the installer resolves
-    /// `%USERPROFILE%` like the oracle's `os.UserHomeDir`.
-    #[cfg(unix)]
+    /// The launchd layout is macOS-only: on Linux the same call returns the
+    /// systemd unit path, which the byte test for the unit file covers.
+    #[cfg(target_os = "macos")]
     #[test]
     fn service_file_path_is_home_relative_not_library() {
         // The oracle writes `~/LaunchAgents/...`, not `~/Library/LaunchAgents/...`.
@@ -861,5 +861,16 @@ WantedBy=default.target
         assert_eq!(systemd_escape(r"C:\vault"), r"C:\\vault");
         assert_eq!(systemd_escape("a\"b"), "a\\\"b");
         assert_eq!(systemd_escape("$HOME"), "$$HOME");
+    }
+
+    /// Linux counterpart: the same call must return the systemd unit path.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn service_file_path_is_the_systemd_unit_on_linux() {
+        let path = fixture_installer()
+            .service_file_path()
+            .expect("service path");
+        assert!(path.ends_with(".config/systemd/user/symvault-mcp.service"));
+        assert!(!path.to_string_lossy().contains("LaunchAgents"));
     }
 }
