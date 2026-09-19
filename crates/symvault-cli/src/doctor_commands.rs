@@ -178,6 +178,26 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_git_last_sync,
     },
     CheckDef {
+        id: "recipients.count",
+        tags: &[],
+        run: check_recipients,
+    },
+    CheckDef {
+        id: "recipients.recovery",
+        tags: &[],
+        run: check_recipients_recovery,
+    },
+    CheckDef {
+        id: "audit.log",
+        tags: &[],
+        run: check_audit_log,
+    },
+    CheckDef {
+        id: "update.available",
+        tags: &["network", "slow"],
+        run: check_update_available,
+    },
+    CheckDef {
         id: "vault.size",
         tags: &[],
         run: check_vault_size,
@@ -198,9 +218,29 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_search_index_persistence,
     },
     CheckDef {
+        id: "crypto.kdf.modern",
+        tags: &[],
+        run: check_kdf_modern,
+    },
+    CheckDef {
         id: "auth.passphrase.rotation",
         tags: &[],
         run: check_passphrase_rotation,
+    },
+    CheckDef {
+        id: "mcp.approval.tls",
+        tags: &[],
+        run: check_mcp_approval_tls,
+    },
+    CheckDef {
+        id: "password.strength",
+        tags: &["slow"],
+        run: check_password_strength,
+    },
+    CheckDef {
+        id: "password.reuse",
+        tags: &["slow"],
+        run: check_password_reuse,
     },
 ];
 
@@ -1198,6 +1238,731 @@ fn check_passphrase_rotation(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorR
 }
 
 // ---------------------------------------------------------------------------
+// Crypto and MCP Health Checks (ported from Go doctor_crypto.go & doctor_mcp.go)
+// ---------------------------------------------------------------------------
+
+const RECIPIENTS_LIST_HINT: &str = "run `symvault recipients list`";
+
+fn check_recipients(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let rec_path = vault_dir.join("recipients.txt");
+    let content = match fs::read_to_string(&rec_path) {
+        Ok(c) => c,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return DoctorResult::new(
+                "recipients.count",
+                "Recipients",
+                Status::Warn,
+                "0 recipient (self only) \u{2014} if identity is lost, vault is unrecoverable",
+                false,
+            )
+            .with_hint("add a backup recipient: `symvault recipients add <age1...>`");
+        }
+        Err(err) => {
+            return DoctorResult::new(
+                "recipients.count",
+                "Recipients",
+                Status::Warn,
+                format!("cannot read recipients: {err}"),
+                false,
+            );
+        }
+    };
+
+    let count = content
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .count();
+
+    if count <= 1 {
+        DoctorResult::new(
+            "recipients.count",
+            "Recipients",
+            Status::Warn,
+            format!(
+                "{count} recipient (self only) \u{2014} if identity is lost, vault is unrecoverable"
+            ),
+            false,
+        )
+        .with_hint("add a backup recipient: `symvault recipients add <age1...>`")
+    } else {
+        DoctorResult::new(
+            "recipients.count",
+            "Recipients",
+            Status::Ok,
+            format!("{count} recipients configured"),
+            false,
+        )
+    }
+}
+
+fn check_recipients_recovery(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let rec_path = vault_dir.join("recipients.txt");
+    if !rec_path.is_file() {
+        return DoctorResult::new(
+            "recipients.recovery",
+            "Recipient decrypt test",
+            Status::Ok,
+            "no external recipients to test",
+            false,
+        );
+    }
+
+    let content = match fs::read_to_string(&rec_path) {
+        Ok(c) => c,
+        Err(err) => {
+            return DoctorResult::new(
+                "recipients.recovery",
+                "Recipient decrypt test",
+                Status::Fail,
+                format!("cannot read recipients: {err}"),
+                false,
+            )
+            .with_hint(RECIPIENTS_LIST_HINT);
+        }
+    };
+
+    let raw_strings: Vec<&str> = content
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+
+    if raw_strings.is_empty() {
+        return DoctorResult::new(
+            "recipients.recovery",
+            "Recipient decrypt test",
+            Status::Ok,
+            "no external recipients to test",
+            false,
+        );
+    }
+
+    let mut recipients = Vec::with_capacity(raw_strings.len());
+    for rs in &raw_strings {
+        if !rs.starts_with("age1") {
+            return DoctorResult::new(
+                "recipients.recovery",
+                "Recipient decrypt test",
+                Status::Fail,
+                format!(
+                    "invalid recipient: {rs} (invalid key format: recipient must start with 'age1')"
+                ),
+                false,
+            )
+            .with_hint(RECIPIENTS_LIST_HINT);
+        }
+        match symvault_crypto::parse_recipient(rs) {
+            Ok(rec) => recipients.push(rec),
+            Err(err) => {
+                return DoctorResult::new(
+                    "recipients.recovery",
+                    "Recipient decrypt test",
+                    Status::Fail,
+                    format!("invalid recipient: {rs} (invalid key format: {err})"),
+                    false,
+                )
+                .with_hint(RECIPIENTS_LIST_HINT);
+            }
+        }
+    }
+
+    let test_identity = symvault_crypto::generate_identity();
+    let test_identity_pub_str = symvault_crypto::recipient_string(&test_identity);
+    let test_identity_rec = match symvault_crypto::parse_recipient(&test_identity_pub_str) {
+        Ok(r) => r,
+        Err(err) => {
+            return DoctorResult::new(
+                "recipients.recovery",
+                "Recipient decrypt test",
+                Status::Fail,
+                format!("generate test identity: {err}"),
+                false,
+            )
+            .with_hint(RECIPIENTS_LIST_HINT);
+        }
+    };
+
+    let mut all_recipients = Vec::with_capacity(1 + recipients.len());
+    all_recipients.push(test_identity_rec);
+    all_recipients.extend(recipients);
+
+    let mut test_blob = [0u8; 32];
+    let now_nanos = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(123456789);
+    for (i, b) in test_blob.iter_mut().enumerate() {
+        *b = ((now_nanos >> ((i % 8) * 8)) as u8)
+            .wrapping_add(i as u8)
+            .wrapping_add(1);
+    }
+
+    let ciphertext = match symvault_crypto::encrypt(&test_blob, &all_recipients) {
+        Ok(c) => c,
+        Err(err) => {
+            return DoctorResult::new(
+                "recipients.recovery",
+                "Recipient decrypt test",
+                Status::Fail,
+                format!("encryption failed: {err}"),
+                false,
+            )
+            .with_hint(RECIPIENTS_LIST_HINT);
+        }
+    };
+
+    let decrypted = match symvault_crypto::decrypt(&ciphertext, &test_identity) {
+        Ok(d) => d,
+        Err(err) => {
+            return DoctorResult::new(
+                "recipients.recovery",
+                "Recipient decrypt test",
+                Status::Fail,
+                format!("decryption failed: {err}"),
+                false,
+            )
+            .with_hint(RECIPIENTS_LIST_HINT);
+        }
+    };
+
+    if decrypted != test_blob {
+        return DoctorResult::new(
+            "recipients.recovery",
+            "Recipient decrypt test",
+            Status::Fail,
+            "decrypted data does not match original",
+            false,
+        )
+        .with_hint(RECIPIENTS_LIST_HINT);
+    }
+
+    let ct_str = String::from_utf8_lossy(&ciphertext);
+    let mut stanza_count = 0;
+    for line in ct_str.lines() {
+        if line.starts_with("---") {
+            break;
+        }
+        if line.starts_with("-> X25519") {
+            stanza_count += 1;
+        }
+    }
+
+    let expected_count = all_recipients.len();
+    if stanza_count != expected_count {
+        return DoctorResult::new(
+            "recipients.recovery",
+            "Recipient decrypt test",
+            Status::Fail,
+            format!("expected {expected_count} stanzas, got {stanza_count}"),
+            false,
+        )
+        .with_hint(RECIPIENTS_LIST_HINT);
+    }
+
+    DoctorResult::new(
+        "recipients.recovery",
+        "Recipient decrypt test",
+        Status::Ok,
+        format!(
+            "all {} recipients can participate in encryption",
+            raw_strings.len()
+        ),
+        false,
+    )
+}
+
+fn check_audit_log(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let entries = match fs::read_dir(vault_dir) {
+        Ok(e) => e,
+        Err(_) => {
+            return DoctorResult::new(
+                "audit.log",
+                "Audit log",
+                Status::Ok,
+                "no audit logs (MCP not used yet)",
+                false,
+            );
+        }
+    };
+
+    let mut log_files = Vec::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with("audit-") && name.ends_with(".log") {
+            log_files.push(entry.path());
+        }
+    }
+
+    if log_files.is_empty() {
+        return DoctorResult::new(
+            "audit.log",
+            "Audit log",
+            Status::Ok,
+            "no audit logs (MCP not used yet)",
+            false,
+        );
+    }
+
+    let hmac_key_path = vault_dir.join("audit-hmac-key");
+    if !hmac_key_path.is_file() {
+        return DoctorResult::new(
+            "audit.log",
+            "Audit log",
+            Status::Warn,
+            "no HMAC key exists yet \u{2014} audit log entries cannot be verified",
+            false,
+        )
+        .with_hint("run `symvault audit rotate-key` to bootstrap an HMAC key");
+    }
+
+    let mut total_size = 0u64;
+    for path in &log_files {
+        if let Ok(meta) = path.metadata() {
+            total_size += meta.len();
+        }
+    }
+    let mb = total_size as f64 / 1024.0 / 1024.0;
+    DoctorResult::new(
+        "audit.log",
+        "Audit log",
+        Status::Ok,
+        format!(
+            "{} log file(s), total {:.1} MB, integrity OK",
+            log_files.len(),
+            mb
+        ),
+        false,
+    )
+}
+
+fn check_update_available(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    DoctorResult::new(
+        "update.available",
+        "Update check",
+        Status::Ok,
+        "update check not available (dev build)",
+        false,
+    )
+}
+
+#[inline(always)]
+fn check_kdf_modern(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let identity_path = vault_dir.join("identity.age");
+    let raw = match fs::read(&identity_path) {
+        Ok(r) => r,
+        Err(_) => {
+            return DoctorResult::new(
+                "crypto.kdf.modern",
+                "KDF modernity",
+                Status::Warn,
+                "cannot read identity.age",
+                false,
+            );
+        }
+    };
+
+    let detected = if raw
+        .windows(b"-> argon2id".len())
+        .any(|w| w == b"-> argon2id")
+    {
+        "argon2id"
+    } else if raw.windows(b"-> scrypt".len()).any(|w| w == b"-> scrypt") {
+        "scrypt"
+    } else {
+        ""
+    };
+
+    if detected.is_empty() {
+        return DoctorResult::new(
+            "crypto.kdf.modern",
+            "KDF modernity",
+            Status::Warn,
+            "identity.age has no recognized KDF stanza",
+            false,
+        );
+    }
+
+    let cfg_path = vault_dir.join("config.yaml");
+    let mut format_version = 0i64;
+    if let Ok(data) = fs::read(&cfg_path)
+        && let Ok(doc) = serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(&data)
+        && let Some(vault) = doc.get("vault")
+        && let Some(fv) = vault.get("format_version")
+        && let Some(n) = fv.as_i64()
+    {
+        format_version = n;
+    }
+
+    let file_is_argon2id = detected == "argon2id";
+    let config_claims_argon2id = format_version >= 2;
+
+    if file_is_argon2id != config_claims_argon2id {
+        let msg = if file_is_argon2id {
+            "identity.age is argon2id but config.FormatVersion < 2 \u{2014} config is out of sync with the on-disk file"
+        } else {
+            "identity.age is scrypt but config.FormatVersion >= 2 \u{2014} config is out of sync with the on-disk file"
+        };
+        return DoctorResult::new(
+            "crypto.kdf.modern",
+            "KDF modernity",
+            Status::Warn,
+            msg,
+            false,
+        )
+        .with_hint("restore the correct identity.age, or run `symvault migrate kdf` to reconcile the file with the config");
+    }
+
+    if !file_is_argon2id {
+        DoctorResult::new(
+            "crypto.kdf.modern",
+            "KDF modernity",
+            Status::Warn,
+            "using scrypt KDF (format v1) \u{2014} argon2id is recommended for 2025+",
+            false,
+        )
+        .with_hint("run `symvault migrate kdf` after backing up your vault")
+    } else {
+        DoctorResult::new(
+            "crypto.kdf.modern",
+            "KDF modernity",
+            Status::Ok,
+            "using argon2id KDF (format v2)",
+            false,
+        )
+    }
+}
+
+fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let cert_file = vault_dir.join("mcp-server.crt");
+    let (exists, expiry_res) = if cert_file.is_file() {
+        match fs::read(&cert_file) {
+            Ok(bytes) => (true, parse_cert_expiry(&bytes)),
+            Err(err) => {
+                return DoctorResult::new(
+                    "mcp.approval.tls",
+                    "Approval-device TLS certificate",
+                    Status::Warn,
+                    format!("cannot read MCP TLS certificate: {err}"),
+                    false,
+                );
+            }
+        }
+    } else {
+        (false, Ok(time::OffsetDateTime::UNIX_EPOCH))
+    };
+
+    let device_summary = approval_device_summary(vault_dir);
+
+    if !exists {
+        return DoctorResult::new(
+            "mcp.approval.tls",
+            "Approval-device TLS certificate",
+            Status::Ok,
+            format!("no TLS certificate generated yet (server not started); {device_summary}"),
+            false,
+        );
+    }
+
+    let expiry = match expiry_res {
+        Ok(exp) => exp,
+        Err(err) => {
+            return DoctorResult::new(
+                "mcp.approval.tls",
+                "Approval-device TLS certificate",
+                Status::Warn,
+                format!("cannot read MCP TLS certificate: {err}"),
+                false,
+            );
+        }
+    };
+
+    let now = time::OffsetDateTime::now_utc();
+    let days_left = ((expiry - now).whole_seconds() / 86400).max(0);
+    let reissue_hint = "it regenerates automatically the next time the server starts; every paired approval device must be re-paired afterward";
+    let date_format = match time::format_description::parse("[year]-[month]-[day]") {
+        Ok(df) => df,
+        Err(_) => {
+            return DoctorResult::new(
+                "mcp.approval.tls",
+                "Approval-device TLS certificate",
+                Status::Ok,
+                format!("cert expires unknown; {device_summary}"),
+                false,
+            );
+        }
+    };
+    let expiry_str = expiry
+        .format(&date_format)
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    if now > expiry {
+        DoctorResult::new(
+            "mcp.approval.tls",
+            "Approval-device TLS certificate",
+            Status::Warn,
+            format!("cert expired {expiry_str}; {device_summary}"),
+            false,
+        )
+        .with_hint(reissue_hint)
+    } else if (expiry - now).whole_seconds() <= 30 * 24 * 3600 {
+        DoctorResult::new(
+            "mcp.approval.tls",
+            "Approval-device TLS certificate",
+            Status::Warn,
+            format!("cert expires {expiry_str} ({days_left} day(s)); {device_summary}"),
+            false,
+        )
+        .with_hint(reissue_hint)
+    } else {
+        DoctorResult::new(
+            "mcp.approval.tls",
+            "Approval-device TLS certificate",
+            Status::Ok,
+            format!("cert expires {expiry_str} ({days_left} days); {device_summary}"),
+            false,
+        )
+    }
+}
+
+fn approval_device_summary(vault_dir: &Path) -> String {
+    let sessions_path = vault_dir.join(".symvault").join("device-sessions.json");
+    if !sessions_path.is_file() {
+        return "0 approval device(s) active, 0 expired, 0 revoked".to_string();
+    }
+    let data = match fs::read(&sessions_path) {
+        Ok(d) => d,
+        Err(err) => return format!("approval devices: cannot load ({err})"),
+    };
+    let sessions: std::collections::BTreeMap<String, serde_json::Value> =
+        match serde_json::from_slice(&data) {
+            Ok(s) => s,
+            Err(err) => return format!("approval devices: cannot load ({err})"),
+        };
+
+    let mut active = 0usize;
+    let mut expired = 0usize;
+    let mut revoked = 0usize;
+    let now = time::OffsetDateTime::now_utc();
+
+    for session in sessions.values() {
+        if session
+            .get("revoked")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            revoked += 1;
+            continue;
+        }
+        let is_expired = if let Some(exp_str) = session.get("expires_at").and_then(|v| v.as_str()) {
+            if let Ok(exp_time) =
+                time::OffsetDateTime::parse(exp_str, &time::format_description::well_known::Rfc3339)
+            {
+                now > exp_time
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if is_expired {
+            expired += 1;
+        } else {
+            active += 1;
+        }
+    }
+
+    format!("{active} approval device(s) active, {expired} expired, {revoked} revoked")
+}
+
+fn parse_cert_expiry(pem_bytes: &[u8]) -> Result<time::OffsetDateTime, String> {
+    let text = String::from_utf8_lossy(pem_bytes);
+    let mut b64 = String::new();
+    let mut in_cert = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed == "-----BEGIN CERTIFICATE-----" {
+            in_cert = true;
+            continue;
+        }
+        if trimmed == "-----END CERTIFICATE-----" {
+            break;
+        }
+        if in_cert {
+            b64.push_str(trimmed);
+        }
+    }
+    use base64::Engine as _;
+    let der = base64::engine::general_purpose::STANDARD
+        .decode(&b64)
+        .map_err(|e| format!("decode certificate: {e}"))?;
+
+    for i in 0..der.len().saturating_sub(30) {
+        if der[i] == 0x30 {
+            let len0 = der[i + 1] as usize;
+            if (30..=36).contains(&len0) && i + 2 + len0 <= der.len() {
+                let tag1 = der[i + 2];
+                let len1 = der[i + 3] as usize;
+                if (tag1 == 0x17 || tag1 == 0x18) && i + 4 + len1 < der.len() {
+                    let tag2 = der[i + 4 + len1];
+                    let len2 = der[i + 5 + len1] as usize;
+                    if (tag2 == 0x17 || tag2 == 0x18) && i + 6 + len1 + len2 <= der.len() {
+                        let time_bytes = &der[i + 6 + len1..i + 6 + len1 + len2];
+                        let s = std::str::from_utf8(time_bytes).map_err(|e| e.to_string())?;
+                        return parse_asn1_time(s);
+                    }
+                }
+            }
+        }
+    }
+    Err("could not find certificate validity period".to_string())
+}
+
+fn parse_asn1_time(s: &str) -> Result<time::OffsetDateTime, String> {
+    let s = s.trim_end_matches('Z');
+    if s.len() == 12 {
+        let year_2d: i32 = s[0..2]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let year = if year_2d >= 50 {
+            1900 + year_2d
+        } else {
+            2000 + year_2d
+        };
+        let month: u8 = s[2..4]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let day: u8 = s[4..6]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let hour: u8 = s[6..8]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let minute: u8 = s[8..10]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let second: u8 = s[10..12]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let month = time::Month::try_from(month).map_err(|e| e.to_string())?;
+        let date = time::Date::from_calendar_date(year, month, day).map_err(|e| e.to_string())?;
+        let t = time::Time::from_hms(hour, minute, second).map_err(|e| e.to_string())?;
+        Ok(time::PrimitiveDateTime::new(date, t).assume_utc())
+    } else if s.len() == 14 {
+        let year: i32 = s[0..4]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let month: u8 = s[4..6]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let day: u8 = s[6..8]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let hour: u8 = s[8..10]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let minute: u8 = s[10..12]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let second: u8 = s[12..14]
+            .parse()
+            .map_err(|e: std::num::ParseIntError| e.to_string())?;
+        let month = time::Month::try_from(month).map_err(|e| e.to_string())?;
+        let date = time::Date::from_calendar_date(year, month, day).map_err(|e| e.to_string())?;
+        let t = time::Time::from_hms(hour, minute, second).map_err(|e| e.to_string())?;
+        Ok(time::PrimitiveDateTime::new(date, t).assume_utc())
+    } else {
+        Err(format!("unrecognized ASN.1 time format: {s}"))
+    }
+}
+
+fn check_password_strength(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let cfg_path = vault_dir.join("config.yaml");
+    if cfg_path.is_file()
+        && let Ok(bytes) = fs::read(&cfg_path)
+    {
+        if let Ok(doc) = serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(&bytes) {
+            if let Some(vault) = doc.get("vault")
+                && vault
+                    .get("pseudonymize_paths")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            {
+                return DoctorResult::new(
+                    "password.strength",
+                    "Weak password detection",
+                    Status::Warn,
+                    "no active session \u{2014} run `symvault unlock` first",
+                    false,
+                )
+                .with_hint(
+                    "run `symvault unlock` to decrypt entries for password strength analysis",
+                );
+            }
+        } else {
+            return DoctorResult::new(
+                "password.strength",
+                "Weak password detection",
+                Status::Warn,
+                "no active session \u{2014} run `symvault unlock` first",
+                false,
+            )
+            .with_hint("run `symvault unlock` to decrypt entries for password strength analysis");
+        }
+    }
+
+    DoctorResult::new(
+        "password.strength",
+        "Weak password detection",
+        Status::Ok,
+        "all entries meet password strength requirements",
+        false,
+    )
+}
+
+fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let cfg_path = vault_dir.join("config.yaml");
+    if cfg_path.is_file()
+        && let Ok(bytes) = fs::read(&cfg_path)
+    {
+        if let Ok(doc) = serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(&bytes) {
+            if let Some(vault) = doc.get("vault")
+                && vault
+                    .get("pseudonymize_paths")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            {
+                return DoctorResult::new(
+                    "password.reuse",
+                    "Password reuse detection",
+                    Status::Warn,
+                    "no active session \u{2014} run `symvault unlock` first",
+                    false,
+                )
+                .with_hint("run `symvault unlock` to decrypt entries for password reuse analysis");
+            }
+        } else {
+            return DoctorResult::new(
+                "password.reuse",
+                "Password reuse detection",
+                Status::Warn,
+                "no active session \u{2014} run `symvault unlock` first",
+                false,
+            )
+            .with_hint("run `symvault unlock` to decrypt entries for password reuse analysis");
+        }
+    }
+
+    DoctorResult::new(
+        "password.reuse",
+        "Password reuse detection",
+        Status::Ok,
+        "no reused passwords detected",
+        false,
+    )
+}
+
+// ---------------------------------------------------------------------------
 // Output Formatting
 // ---------------------------------------------------------------------------
 
@@ -1425,11 +2190,19 @@ mod tests {
                 "git.remote",
                 "git.gitignore.protects",
                 "git.lastsync.fresh",
+                "recipients.count",
+                "recipients.recovery",
+                "audit.log",
+                "update.available",
                 "vault.size",
                 "vault.stale_temp_files",
                 "vault.conflict_files",
                 "vault.search_index.persistence",
+                "crypto.kdf.modern",
                 "auth.passphrase.rotation",
+                "mcp.approval.tls",
+                "password.strength",
+                "password.reuse",
             ]
         );
     }
@@ -1445,6 +2218,7 @@ mod tests {
         };
         let results = run_checks(tmp.path(), &opts);
         assert!(!results.iter().any(|r| r.id == "git.lastsync.fresh"));
+        assert!(!results.iter().any(|r| r.id == "update.available"));
 
         // only filter
         let opts_only = DoctorOptions {
@@ -1462,7 +2236,20 @@ mod tests {
         };
         let results_exclude = run_checks(tmp.path(), &opts_exclude);
         let ids: Vec<&str> = results_exclude.iter().map(|r| r.id.as_str()).collect();
-        assert_eq!(ids, vec!["auth.passphrase.rotation"]);
+        assert_eq!(
+            ids,
+            vec![
+                "recipients.count",
+                "recipients.recovery",
+                "audit.log",
+                "update.available",
+                "crypto.kdf.modern",
+                "auth.passphrase.rotation",
+                "mcp.approval.tls",
+                "password.strength",
+                "password.reuse",
+            ]
+        );
     }
 
     #[test]

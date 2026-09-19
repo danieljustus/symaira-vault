@@ -56,27 +56,54 @@ implemented as accepted-and-ignored flags.
 ## `symvault doctor` check coverage (2026-09-19)
 
 The command group exists in Rust, but only part of Go's check registry is ported.
-Measured with `--json --no-network` against the pinned Go oracle: Go runs **35**
-checks, Rust **13**, and for the 13 shared IDs the name/status/message/hint/fixable
-fields are byte-identical (0 field deviations). The remaining 24 IDs (38 total
-without `--no-network`) are **not implemented** and are therefore *absent* from the
-output rather than reported as OK.
+Measured with `--json --no-network` against the pinned Go oracle
+(`parent-doctor-matrix.py`, fixtures `empty` + `corrupt`): Go runs **35** checks,
+Rust **20**. For the 20 shared IDs the name/status/message/hint/fixable fields are
+byte-identical on a missing vault (**0 field deviations**). The remaining 15 IDs
+are **not implemented** and are therefore *absent* from the output rather than
+reported as OK — a missing check may never look like a passing one.
 
-Ported IDs (14 in the registry, 13 of them without network):
+### Known deviation: config-loader error dialect (not yet parity)
+
+On a *corrupt* `config.yaml` three shared IDs diverge in the `message` field, all
+through the same root cause: Go renders go-yaml's error text (`yaml: line 1: …`)
+while the Rust loader renders its own (`parse config: … at line 3 column 1`).
+The prefixed part (`config.yaml parse error: `, `failed to load config: `,
+`cannot load config: `) is identical, so only the parser dialect differs:
+
+- `vault.config.parses`, `vault.config.validates`, `auth.passphrase.rotation`
+
+This is a **pre-existing** divergence of the Rust config loader shared by the whole
+CLI, not introduced by the doctor port, and it is **not** claimed as parity.
+
+Ported IDs (22 in the registry, 20 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
 `vault.identity.encrypted`, `vault.permissions`, `git.repo`, `git.remote`,
-`git.gitignore.protects`, `git.lastsync.fresh` (network), `vault.size`,
+`git.gitignore.protects`, `git.lastsync.fresh` (network), `recipients.count`,
+`recipients.recovery`, `audit.log`, `update.available` (network), `vault.size`,
 `vault.stale_temp_files`, `vault.conflict_files`, `vault.search_index.persistence`,
-`auth.passphrase.rotation`.
+`crypto.kdf.modern`, `auth.passphrase.rotation`, `mcp.approval.tls`,
+`password.strength`, `password.reuse`.
 
-Still open (24): `auth.method`, `session.cache`, `recipients.count`,
-`recipients.recovery`, `mcp.tokens`, `audit.log`, `audit.keyring.orphans`,
-`crypto.scrypt.benchmark`, `crypto.kdf.modern`, `vault.manifest.intact`,
+Still open (15): `auth.method`, `session.cache`, `mcp.tokens`,
+`audit.keyring.orphans`, `crypto.scrypt.benchmark`, `vault.manifest.intact`,
 `tooling.autotype.backend`, `tooling.clipboard.backend`, `daemon.status`,
-`mcp.approval.tls`, `mcp.dynamic.engines`, `mcp.agents`, `tooling.secureui`,
-`tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
-`security.env_passphrase`, `update.available`, `mcp.server`.
+`mcp.dynamic.engines`, `mcp.agents`, `tooling.secureui`, `tooling.precommit`,
+`session.keyring`, `security.env_passphrase`.
+
+Three of the open IDs were implemented, measured against the oracle and then
+**withdrawn again** because they cannot be byte-pinned — do not re-add them
+without a new decision:
+
+- `crypto.scrypt.benchmark`: Go embeds a *measured* duration and its recommended
+  work factor for this machine in the message, so the reference output is not
+  stable across runs.
+- `mcp.tokens`: Go's message depends on token-registry side effects inside the
+  (synthetic) vault path and contains a non-deterministic temp-file name.
+- `mcp.server.reachable`, `mcp.dynamic.engines`, `mcp.agents`: their outcome is
+  dominated by the config-loader error dialect above; `dynamic.engines` also
+  reported `ok` where Go reports `warn`.
 
 Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
 stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and

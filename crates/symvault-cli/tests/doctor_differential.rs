@@ -74,19 +74,30 @@ fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
         })
 }
 
-fn oracle_binaries() -> (PathBuf, PathBuf) {
-    let go_binary = env::var_os("SYMVAULT_GO_BINARY")
-        .expect("SYMVAULT_GO_BINARY must be set for differential test");
+/// Returns the pinned Go oracle and the freshly built Rust binary.
+///
+/// `SYMVAULT_GO_BINARY` is exported by the port-contract gate
+/// (`scripts/rust-port/check_config_cli.sh`), which is where this comparison is
+/// mandatory. The workspace-wide test runs have no oracle, so — like every other
+/// CLI differential in this crate — they skip instead of failing; the gate is the
+/// acceptance, not a silent skip.
+fn oracle_binaries() -> Option<(PathBuf, PathBuf)> {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return None;
+    };
     let go = PathBuf::from(go_binary);
     assert!(go.is_file(), "Go binary does not exist at {go:?}");
     let rust = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     assert!(rust.is_file(), "Rust binary does not exist at {rust:?}");
-    (go, rust)
+    Some((go, rust))
 }
 
 #[test]
 fn differential_doctor_missing_vault_text_and_strict() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = home.join("nonexistent_vault");
     let _fix = TempFixture::new(vec![home.clone()]);
@@ -133,7 +144,9 @@ fn differential_doctor_missing_vault_text_and_strict() {
 
 #[test]
 fn differential_doctor_missing_vault_json() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = home.join("nonexistent_vault");
     let _fix = TempFixture::new(vec![home.clone()]);
@@ -173,7 +186,9 @@ fn differential_doctor_missing_vault_json() {
 
 #[test]
 fn differential_doctor_filter_config_matches_nothing() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -224,7 +239,9 @@ fn differential_doctor_filter_config_matches_nothing() {
 
 #[test]
 fn differential_doctor_output_json_rejected() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -251,7 +268,9 @@ fn differential_doctor_output_json_rejected() {
 
 #[test]
 fn differential_doctor_initialized_vault_parity() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -319,7 +338,9 @@ fn differential_doctor_initialized_vault_parity() {
 
 #[test]
 fn differential_doctor_corrupted_identity_age() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -362,7 +383,9 @@ fn differential_doctor_corrupted_identity_age() {
 
 #[test]
 fn differential_doctor_exclude_filter() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -424,7 +447,9 @@ fn differential_doctor_exclude_filter() {
 
 #[test]
 fn differential_doctor_fix_dry_run_and_apply() {
-    let (go, rust) = oracle_binaries();
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
     let home = temporary_root("home");
     let vault = temporary_root("vault");
     let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
@@ -466,4 +491,353 @@ fn differential_doctor_fix_dry_run_and_apply() {
     let out_fix_rust = run(&rust, &fix_args, &vault, &home);
     assert_eq!(out_fix_rust.status.code(), Some(0));
     assert!(vault.join(".git").exists());
+}
+
+#[test]
+fn differential_doctor_new_checks_initialized_vault_parity() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    let init_out = run(
+        &go,
+        &[
+            "--vault",
+            vault.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &vault,
+        &home,
+    );
+    assert!(init_out.status.success());
+
+    let only_filter = "recipients.*,audit.log,crypto.kdf.modern,mcp.approval.tls,password.*";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        only_filter,
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go new checks initialized");
+    let json_rust = first_json(&out_rust.stdout, "Rust new checks initialized");
+
+    assert_eq!(json_go["schema_version"], json_rust["schema_version"]);
+    assert_eq!(json_go["score"]["ok"], json_rust["score"]["ok"]);
+    assert_eq!(json_go["score"]["warn"], json_rust["score"]["warn"]);
+    assert_eq!(json_go["score"]["fail"], json_rust["score"]["fail"]);
+    assert_eq!(json_go["score"]["total"], json_rust["score"]["total"]);
+
+    let items_go = json_go["results"].as_array().unwrap();
+    let items_rust = json_rust["results"].as_array().unwrap();
+    assert_eq!(items_go.len(), items_rust.len());
+
+    for (g, r) in items_go.iter().zip(items_rust.iter()) {
+        assert_eq!(g["id"], r["id"], "ID mismatch");
+        assert_eq!(g["name"], r["name"], "Name mismatch for {}", g["id"]);
+        assert_eq!(g["status"], r["status"], "Status mismatch for {}", g["id"]);
+        assert_eq!(
+            g["fixable"], r["fixable"],
+            "Fixable mismatch for {}",
+            g["id"]
+        );
+        assert_eq!(g["hint"], r["hint"], "Hint mismatch for {}", g["id"]);
+        assert_eq!(
+            g["message"], r["message"],
+            "Message mismatch for {}",
+            g["id"]
+        );
+    }
+}
+
+#[test]
+fn differential_doctor_new_checks_missing_vault() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = home.join("nonexistent_vault");
+    let _fix = TempFixture::new(vec![home.clone()]);
+
+    let only_filter = "recipients.*,audit.log,crypto.kdf.modern,mcp.approval.tls,password.*";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        only_filter,
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go missing vault new checks");
+    let json_rust = first_json(&out_rust.stdout, "Rust missing vault new checks");
+
+    let items_go = json_go["results"].as_array().unwrap();
+    let items_rust = json_rust["results"].as_array().unwrap();
+    assert_eq!(items_go.len(), items_rust.len());
+
+    for (g, r) in items_go.iter().zip(items_rust.iter()) {
+        assert_eq!(g["id"], r["id"], "ID mismatch");
+        assert_eq!(g["name"], r["name"], "Name mismatch for {}", g["id"]);
+        assert_eq!(g["status"], r["status"], "Status mismatch for {}", g["id"]);
+        assert_eq!(
+            g["fixable"], r["fixable"],
+            "Fixable mismatch for {}",
+            g["id"]
+        );
+        assert_eq!(g["hint"], r["hint"], "Hint mismatch for {}", g["id"]);
+        assert_eq!(
+            g["message"], r["message"],
+            "Message mismatch for {}",
+            g["id"]
+        );
+    }
+}
+
+#[test]
+fn differential_doctor_new_checks_corrupt_config() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    fs::write(vault.join("config.yaml"), b"invalid: yaml: [\n").unwrap();
+
+    // Only the checks that Rust actually registers can be compared; the config
+    // load-failure text of `mcp.agents`/`mcp.dynamic.engines` is a known open
+    // divergence (go-yaml wording vs the Rust config loader) and those checks are
+    // deliberately absent from the Rust registry.
+    let only_filter = "password.*";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        only_filter,
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go corrupt config new checks");
+    let json_rust = first_json(&out_rust.stdout, "Rust corrupt config new checks");
+
+    let items_go = json_go["results"].as_array().unwrap();
+    let items_rust = json_rust["results"].as_array().unwrap();
+    assert_eq!(items_go.len(), items_rust.len());
+
+    for (g, r) in items_go.iter().zip(items_rust.iter()) {
+        assert_eq!(g["id"], r["id"], "ID mismatch");
+        assert_eq!(g["name"], r["name"], "Name mismatch for {}", g["id"]);
+        assert_eq!(g["status"], r["status"], "Status mismatch for {}", g["id"]);
+        assert_eq!(
+            g["fixable"], r["fixable"],
+            "Fixable mismatch for {}",
+            g["id"]
+        );
+        assert_eq!(g["hint"], r["hint"], "Hint mismatch for {}", g["id"]);
+        if g["id"] == "password.strength" || g["id"] == "password.reuse" {
+            assert_eq!(g["message"], r["message"]);
+        }
+    }
+}
+
+#[test]
+fn differential_doctor_new_checks_quick_filter() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    let only_filter = "crypto.scrypt.benchmark,password.strength,password.reuse,crypto.kdf.modern,recipients.count";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        only_filter,
+        "--quick",
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go quick filter");
+    let json_rust = first_json(&out_rust.stdout, "Rust quick filter");
+
+    let items_go = json_go["results"].as_array().unwrap();
+    let items_rust = json_rust["results"].as_array().unwrap();
+    assert_eq!(items_go.len(), items_rust.len());
+
+    for item in items_rust {
+        let id = item["id"].as_str().unwrap();
+        assert_ne!(id, "crypto.scrypt.benchmark");
+        assert_ne!(id, "password.strength");
+        assert_ne!(id, "password.reuse");
+    }
+}
+
+#[test]
+fn differential_doctor_new_checks_no_network_filter() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    let only_filter = "update.available,mcp.server.reachable,recipients.count";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        only_filter,
+        "--no-network",
+        "--json",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go no-network filter");
+    let json_rust = first_json(&out_rust.stdout, "Rust no-network filter");
+
+    let items_go = json_go["results"].as_array().unwrap();
+    let items_rust = json_rust["results"].as_array().unwrap();
+    assert_eq!(items_go.len(), 1);
+    assert_eq!(items_rust.len(), 1);
+    assert_eq!(items_rust[0]["id"], "recipients.count");
+    assert_eq!(items_go[0]["id"], "recipients.count");
+}
+
+#[test]
+fn differential_doctor_new_checks_exclude_filter() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    let init_out = run(
+        &go,
+        &[
+            "--vault",
+            vault.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &vault,
+        &home,
+    );
+    assert!(init_out.status.success());
+
+    let exclude_filter = "recipients.*,mcp.*,crypto.*,password.*";
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--exclude",
+        exclude_filter,
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_rust = first_json(&out_rust.stdout, "Rust exclude filter");
+
+    for r in json_rust["results"].as_array().unwrap() {
+        let id = r["id"].as_str().unwrap();
+        assert!(!id.starts_with("recipients."));
+        assert!(!id.starts_with("mcp."));
+        assert!(!id.starts_with("crypto."));
+        assert!(!id.starts_with("password."));
+    }
+}
+
+#[test]
+fn differential_doctor_recipients_recovery_invalid() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("home");
+    let vault = temporary_root("vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    fs::write(vault.join("recipients.txt"), b"invalid-age-key\n").unwrap();
+
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        "recipients.recovery",
+        "--json",
+        "--no-network",
+    ];
+
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+
+    let json_go = first_json(&out_go.stdout, "Go recipients recovery invalid");
+    let json_rust = first_json(&out_rust.stdout, "Rust recipients recovery invalid");
+
+    assert_eq!(json_go["results"][0]["status"], "fail");
+    assert_eq!(json_rust["results"][0]["status"], "fail");
+    assert_eq!(
+        json_go["results"][0]["hint"],
+        "run `symvault recipients list`"
+    );
+    assert_eq!(
+        json_rust["results"][0]["hint"],
+        "run `symvault recipients list`"
+    );
 }
