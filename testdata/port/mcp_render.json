@@ -1,0 +1,117 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "sources": [
+    "go.mod",
+    "go.sum",
+    "internal/mcp/server/render.go"
+  ],
+  "source_digest": "25f9596d4493f405ae61e9806923bb95071db07a0b98bf0eff7a68d851cc014e",
+  "generator_digest": "e14eeb829dc229bbb5096fff752db64561d683e3de6df35ca8ba29cfd499275e",
+  "cases": [
+    {
+      "input": "",
+      "output": ""
+    },
+    {
+      "input": "hello\nworld\t\r",
+      "output": "hello\nworld\t\r"
+    },
+    {
+      "input": "a\u0000bc",
+      "output": "abc"
+    },
+    {
+      "input": "\u001b[31mred\u001b[0m",
+      "output": "red"
+    },
+    {
+      "input": "before\u001b[",
+      "output": "before"
+    },
+    {
+      "input": "before\u001b[12",
+      "output": "before"
+    },
+    {
+      "input": "a\u001bzB",
+      "output": "aB"
+    },
+    {
+      "input": "a\u001b",
+      "output": "a"
+    },
+    {
+      "input": "a\u001béZ",
+      "output": "a\ufffdZ"
+    },
+    {
+      "input": "\u001b]8;;https://example.test\u001b\\link\u001b]8;;\u0007",
+      "output": "link"
+    },
+    {
+      "input": "\u001b]unfinished",
+      "output": ""
+    },
+    {
+      "input": "\u001b]\\x\u0007Y",
+      "output": "Y"
+    },
+    {
+      "input": "\u003c/data\u003e",
+      "output": "\u003c/ data \u003e"
+    },
+    {
+      "input": "\u003c/data key=\"x\"\u003e",
+      "output": "\u003c/ data key=\"x\" \u003e"
+    },
+    {
+      "input": "\u003c/_x\u003e\u003c/9x\u003e\u003c/é\u003e",
+      "output": "\u003c/ _x \u003e\u003c/9x\u003e\u003c/é\u003e"
+    },
+    {
+      "input": "\u003c/data",
+      "output": "\u003c/data"
+    },
+    {
+      "input": "--\u003e\u003c!-- DATA_x --\u003e",
+      "output": "-- \u003e\u003c!-- DATA_x -- \u003e"
+    },
+    {
+      "input": "＜／ＤＡＴＡ＞",
+      "output": "\u003c/ DATA \u003e"
+    },
+    {
+      "input": "é‍‮\u003c/data\u003e",
+      "output": "é\u003c/ data \u003e"
+    },
+    {
+      "input": "͏A­B﻿C",
+      "output": "ABC"
+    },
+    {
+      "input": "\u003c/a\u001b[31m\u003e",
+      "output": "\u003c/ a\u001b[31m \u003e"
+    },
+    {
+      "input": "각",
+      "output": "각"
+    },
+    {
+      "input": "Ǻ",
+      "output": "Ǻ"
+    },
+    {
+      "input": "á̧́́́́́́́́́́́́́́́́́́́́́́́́́́́́́",
+      "output": "á̧́́́́́́́́́́́́́́́́́́́́́́́́́́́́́"
+    },
+    {
+      "input": "á̧́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́",
+      "output": "á̧́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́"
+    },
+    {
+      "input": "̧̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́",
+      "output": "̧̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́̈́"
+    }
+  ],
+  "scalar_digest": "78ba1f68c95e05abf10b1907f6d854b68b369aeb244145e70ee49ec0112d4030"
+}

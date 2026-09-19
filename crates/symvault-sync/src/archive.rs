@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{self, Read},
+    io::{self, Read, Seek, Write},
     path::{Component, Path, PathBuf},
 };
 use tar::{Archive, Builder, EntryType, Header};
 use thiserror::Error;
 
 const MAX_ARCHIVE_ENTRIES: usize = 100_000;
-const MAX_ARCHIVE_FILE: u64 = 64 * 1024 * 1024;
-const MAX_ARCHIVE_TOTAL: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_FILE: u64 = 1 << 30;
+const MAX_ARCHIVE_TOTAL: u64 = 16 * (1 << 30);
 
 #[derive(Debug, Error)]
 pub enum ArchiveError {
@@ -67,14 +67,24 @@ fn mode(meta: &fs::Metadata) -> u32 {
         0
     }
 }
-fn digest(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+fn copy_and_hash(mut input: impl Read, mut output: impl Write) -> io::Result<(u64, String)> {
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 32 * 1024];
+    let mut size = 0u64;
+    loop {
+        let count = input.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        output.write_all(&buffer[..count])?;
+        digest.update(&buffer[..count]);
+        size += count as u64;
+    }
+    Ok((size, format!("{:x}", digest.finalize())))
 }
 
-/// Creates a gzip-compressed tar backup. Symlinks and special files are rejected.
+/// Creates a private gzip tar backup. Source symlinks are skipped, as in Go;
+/// special files and unsafe output targets are rejected.
 pub fn backup(
     root: impl AsRef<Path>,
     output: impl AsRef<Path>,
@@ -84,22 +94,44 @@ pub fn backup(
     if !root.is_dir() {
         return Err(ArchiveError::NotDirectory(root.to_path_buf()));
     }
-    let file = fs::File::create(output)?;
-    let encoder = GzEncoder::new(file, Compression::default());
+    let root = root.canonicalize()?;
+    let output = output.as_ref();
+    crate::safeio::refuse_unsafe_target(output)
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let parent = output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    crate::safeio::create_dir_all(parent).map_err(|error| io::Error::other(error.to_string()))?;
+    let output = parent.canonicalize()?.join(
+        output
+            .file_name()
+            .ok_or_else(|| ArchiveError::UnsafePath(output.display().to_string()))?,
+    );
+    let mut staged =
+        tempfile::NamedTempFile::new_in(output.parent().expect("canonical output has parent"))?;
+    let staged_path = staged.path().to_path_buf();
+    let encoder = GzEncoder::new(staged.as_file_mut(), Compression::default());
     let mut builder = Builder::new(encoder);
     let mut manifest = Vec::new();
-    let mut paths: Vec<_> = walkdir(root)?.into_iter().collect();
+    let mut paths: Vec<_> = walkdir(&root)?.into_iter().collect();
     paths.sort();
     for path in paths {
+        if path == staged_path || path == output {
+            continue;
+        }
         let rel = path
-            .strip_prefix(root)
+            .strip_prefix(&root)
             .map_err(|_| ArchiveError::UnsafePath(path.display().to_string()))?;
         let rel = safe_relative(rel)?;
-        if exclude_git && (rel == Path::new(".git") || rel.starts_with(".git")) {
+        if exclude_git && rel.to_string_lossy().starts_with(".git") {
             continue;
         }
         let meta = fs::symlink_metadata(&path)?;
-        if meta.file_type().is_symlink() || (!meta.is_dir() && !meta.is_file()) {
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if !meta.is_dir() && !meta.is_file() {
             return Err(ArchiveError::UnsupportedEntry(rel.display().to_string()));
         }
         let slash = rel
@@ -118,19 +150,24 @@ pub fn backup(
             if meta.len() > MAX_ARCHIVE_FILE {
                 return Err(ArchiveError::Limit);
             }
-            let bytes = fs::read(&path)?;
+            let mut file = fs::File::open(&path)?;
+            let (size, hash) = copy_and_hash((&mut file).take(MAX_ARCHIVE_FILE + 1), io::sink())?;
+            if size > MAX_ARCHIVE_FILE {
+                return Err(ArchiveError::Limit);
+            }
+            file.rewind()?;
             let mut h = Header::new_gnu();
             h.set_metadata(&meta);
             h.set_mode(mode(&meta));
-            h.set_size(bytes.len() as u64);
+            h.set_size(size);
             h.set_cksum();
-            builder.append_data(&mut h, &rel, bytes.as_slice())?;
+            builder.append_data(&mut h, &rel, &mut file)?;
             manifest.push(ArchiveEntry {
                 path: slash,
                 directory: false,
                 mode: mode(&meta),
-                size: bytes.len() as u64,
-                sha256: digest(&bytes),
+                size,
+                sha256: hash,
             });
         }
         if manifest.len() > MAX_ARCHIVE_ENTRIES {
@@ -138,6 +175,10 @@ pub fn backup(
         }
     }
     builder.into_inner()?.finish()?;
+    staged.as_file().sync_all()?;
+    staged
+        .persist(output)
+        .map_err(|error| ArchiveError::Io(error.error))?;
     Ok(manifest)
 }
 fn walkdir(root: &Path) -> Result<Vec<PathBuf>, ArchiveError> {
@@ -171,7 +212,7 @@ pub fn restore(
     {
         return Err(ArchiveError::UnsafePath(dest.display().to_string()));
     }
-    fs::create_dir_all(dest)?;
+    crate::safeio::create_dir_all(dest).map_err(|error| io::Error::other(error.to_string()))?;
     if !dest.is_dir() {
         return Err(ArchiveError::NotDirectory(dest.to_path_buf()));
     }
@@ -194,14 +235,15 @@ pub fn restore(
         ensure_no_symlink_components(dest, &rel)?;
         let kind = entry.header().entry_type();
         if kind == EntryType::Directory {
-            fs::create_dir_all(&target)?;
-            apply_mode(&target, entry.header().mode()?)?;
+            crate::safeio::create_dir_all(&target)
+                .map_err(|error| io::Error::other(error.to_string()))?;
+            apply_mode(&target, entry.header().mode()? & 0o700)?;
             result.push(ArchiveEntry {
                 path: rel
                     .to_string_lossy()
                     .replace(std::path::MAIN_SEPARATOR, "/"),
                 directory: true,
-                mode: entry.header().mode()?,
+                mode: entry.header().mode()? & 0o700,
                 size: 0,
                 sha256: String::new(),
             });
@@ -219,19 +261,33 @@ pub fn restore(
             return Err(ArchiveError::Exists(target));
         }
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)?;
+            crate::safeio::create_dir_all(parent)
+                .map_err(|error| io::Error::other(error.to_string()))?;
         }
-        let mut bytes = Vec::with_capacity(size.min(MAX_ARCHIVE_FILE) as usize);
-        entry.read_to_end(&mut bytes)?;
-        if bytes.len() as u64 != size {
+        let m = entry.header().mode()? & 0o600;
+        let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
+        let (copied, hash) = copy_and_hash(&mut entry, &mut tmp)?;
+        if copied != size {
             return Err(ArchiveError::Limit);
         }
-        let hash = digest(&bytes);
-        let m = entry.header().mode()?;
-        let tmp = target.with_extension(format!("tmp-{}", std::process::id()));
-        fs::write(&tmp, &bytes)?;
-        apply_mode(&tmp, m)?;
-        fs::rename(&tmp, &target)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            tmp.as_file()
+                .set_permissions(fs::Permissions::from_mode(m))?;
+        }
+        let published = if overwrite {
+            tmp.persist(&target)
+        } else {
+            tmp.persist_noclobber(&target)
+        };
+        published.map_err(|error| {
+            if !overwrite && error.error.kind() == io::ErrorKind::AlreadyExists {
+                ArchiveError::Exists(target.clone())
+            } else {
+                ArchiveError::Io(error.error)
+            }
+        })?;
         result.push(ArchiveEntry {
             path: rel
                 .to_string_lossy()

@@ -1,10 +1,15 @@
 //! Credential input boundary for the bounded pairing CLI.
 use serde::Deserialize;
-use std::io::{self, BufRead, IsTerminal, Write};
-use symvault_core::config::{AuthMethod, Config};
+use std::{
+    env,
+    io::{self, BufRead, IsTerminal, Write},
+    sync::atomic::{AtomicBool, Ordering},
+};
 use zeroize::Zeroizing;
 
-pub(super) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
+static PIPE_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
     io::stderr().flush().map_err(|e| format!("prompt: {e}"))?;
     if io::stdin().is_terminal() {
@@ -14,9 +19,16 @@ pub(super) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String>
         );
         return Ok(Zeroizing::new(line.trim().to_owned()));
     }
-    eprintln!(
-        "Warning: reading passphrase from a non-TTY source; the producing process may expose it."
-    );
+    let label = prompt.trim_end().trim_end_matches(':').trim();
+    if !PIPE_WARNING_EMITTED.swap(true, Ordering::Relaxed)
+        && env::var("SYMVAULT_NO_PIPE_WARNING")
+            .map(|v| v.is_empty() || v == "0")
+            .unwrap_or(true)
+    {
+        eprintln!(
+            "Reading {label} from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'."
+        );
+    }
     let mut line = Zeroizing::new(String::new());
     if io::stdin()
         .lock()
@@ -43,19 +55,28 @@ struct EnvironmentPolicy {
     disable_env_passphrase: bool,
 }
 
-pub(super) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
-    let config = Config::load_from_bytes(bytes).map_err(|e| e.to_string())?;
-    if config.effective_auth_method() == AuthMethod::Touchid
-        || config
-            .vault
-            .as_ref()
-            .is_some_and(|v| v.use_touch_id || v.auth_method == AuthMethod::Touchid)
-    {
-        return Err(
-            "Touch ID unlock is not yet integrated in the Rust pairing CLI; use the Go CLI"
-                .to_owned(),
-        );
+pub(crate) fn env_passphrase_selected(bytes: &[u8]) -> bool {
+    let Ok(passphrase) = env::var("SYMVAULT_PASSPHRASE").map(Zeroizing::new) else {
+        return false;
+    };
+    if passphrase.is_empty() {
+        return false;
     }
+    let Ok(policy) = serde_yaml_ng::from_slice::<UnlockPolicy>(bytes) else {
+        return false;
+    };
+    let policy = policy.security.unwrap_or_default();
+    if policy.disable_env_passphrase {
+        return false;
+    }
+    policy.allow_env_passphrase
+        || matches!(
+            env::var("SYMVAULT_ALLOW_ENV_PASSPHRASE").as_deref(),
+            Ok("1" | "true" | "yes")
+        )
+}
+
+pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
     let policy: UnlockPolicy =
         serde_yaml_ng::from_slice(bytes).map_err(|e| format!("parse unlock policy: {e}"))?;
     let policy = policy.security.unwrap_or_default();
@@ -69,7 +90,7 @@ pub(super) fn unlock_passphrase(bytes: &[u8]) -> Result<Zeroizing<String>, Strin
                 return Err("environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
             }
             eprintln!(
-                "Warning: SYMVAULT_PASSPHRASE is active; environment passphrases may be exposed by process inspection."
+                "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps."
             );
             return Ok(pass);
         }

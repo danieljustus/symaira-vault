@@ -1,0 +1,802 @@
+{
+  "headers": [
+    [],
+    [
+      "title",
+      "url",
+      "username",
+      "password",
+      "OTPAuth"
+    ],
+    [
+      "name",
+      "url",
+      "username",
+      "password",
+      "note"
+    ],
+    [
+      "url",
+      "username",
+      "password",
+      "httpRealm"
+    ],
+    [
+      " NAME ",
+      " URL ",
+      "USERNAME",
+      "password",
+      "note"
+    ],
+    [
+      "title",
+      "url",
+      "username",
+      "password",
+      "otpauth",
+      "name",
+      "note",
+      "httprealm"
+    ],
+    [
+      "url",
+      "username",
+      "password"
+    ]
+  ],
+  "detected": [
+    "csv",
+    "apple",
+    "chrome",
+    "firefox",
+    "chrome",
+    "apple",
+    "csv"
+  ],
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "sources": [
+    "internal/crypto/totp.go",
+    "internal/importer/bitwarden.go",
+    "internal/importer/csv.go",
+    "internal/importer/csv_profiles.go",
+    "internal/importer/importer.go",
+    "internal/importer/totp.go",
+    "internal/vault/payment.go"
+  ],
+  "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
+  "generator_digest": "b1fc71fdb3a0e8668bcde63dbdd743d3f0180bb3267192d2b6de1f67ad286823",
+  "cases": [
+    {
+      "name": "csv_invalid_totp",
+      "format": "csv",
+      "input": "title,password,otp\nA,p,bad\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_values",
+      "format": "csv",
+      "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKQSzigiz/Cg==",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "\ufffd",
+            "username": "\ufffd\ufffd"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_header",
+      "format": "csv",
+      "input_b64": "dGl0bGXigix1c2VybmFtZSxwYXNzd29yZApBLHUscAo=",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_utf8_malformed",
+      "format": "csv",
+      "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKwygsdSxwCg==",
+      "entries": [
+        {
+          "path": "\ufffd(",
+          "data": {
+            "password": "p",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_bom_header",
+      "format": "csv",
+      "input_b64": "77u/dGl0bGUscGFzc3dvcmQKQSxwCg==",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "chrome_distinct_invalid_titles",
+      "format": "chrome",
+      "input_b64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vb25lLnRlc3QsdSxwLG4K/ixodHRwczovL3R3by50ZXN0LHUyLHAyLG4yCg==",
+      "entries": [
+        {
+          "path": "\ufffd",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://one.test",
+            "username": "u"
+          },
+          "warnings": null
+        },
+        {
+          "path": "\ufffd",
+          "data": {
+            "notes": "n2",
+            "password": "p2",
+            "url": "https://two.test",
+            "username": "u2"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_header_lowercase_replacement_alias",
+      "format": "csv",
+      "mapping": "title=�",
+      "input_b64": "/wp2YWx1ZQo=",
+      "entries": [
+        {
+          "path": "value",
+          "data": {},
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_header_does_not_override_valid_replacement",
+      "format": "csv",
+      "mapping": "title=�",
+      "input_b64": "/yzvv70KcmF3LHZhbGlkCg==",
+      "entries": [
+        {
+          "path": "valid",
+          "data": {},
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "apple_totp",
+      "format": "apple",
+      "input": "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=sha256\u0026digits=8\u0026period=45\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p",
+            "totp": {
+              "algorithm": "SHA256",
+              "digits": 8,
+              "period": 45,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            }
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_nulls",
+      "format": "bitwarden",
+      "input": "{\"folders\":null,\"items\":[{\"type\":1,\"name\":\"Login\",\"folderId\":null,\"notes\":null,\"login\":{\"username\":null,\"uris\":null},\"fields\":null}]}",
+      "entries": [
+        {
+          "path": "Login",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_empty_fields",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1}]}",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_card",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":2,\"name\":\"Card\",\"card\":{\"number\":\"fixture-123\",\"code\":\"000\"}}]}",
+      "entries": [
+        {
+          "path": "Card",
+          "data": {
+            "card_number": "fixture-123",
+            "cardholder": "",
+            "cvc": "000",
+            "expiry_month": "",
+            "expiry_year": "",
+            "subtype": "card"
+          },
+          "warnings": null,
+          "secret_type": "payment"
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_totp_precedence",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"Login\",\"login\":{\"totp\":\"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=8\"},\"fields\":[{\"name\":\"TOTP\",\"value\":\"bad\"},{\"name\":\"totp\",\"value\":\"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\"}]}]}",
+      "entries": [
+        {
+          "path": "Login",
+          "data": {
+            "notes": "",
+            "password": "",
+            "totp": {
+              "algorithm": "SHA1",
+              "digits": 8,
+              "period": 30,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            },
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_empty_folder",
+      "format": "bitwarden",
+      "input": "{\"folders\":[{\"id\":\"\",\"name\":\"Ignore\"}],\"items\":[{\"type\":1,\"name\":\"Bare\"}]}",
+      "entries": [
+        {
+          "path": "Bare",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_trailing_json",
+      "format": "bitwarden",
+      "input": "{\"items\":[]} {\"ignored\":true}",
+      "entries": [],
+      "failed": false
+    },
+    {
+      "name": "bw_null_document",
+      "format": "bitwarden",
+      "input": "null",
+      "entries": [],
+      "failed": false
+    },
+    {
+      "name": "empty",
+      "format": "csv",
+      "entries": [],
+      "failed": false
+    },
+    {
+      "name": "empty_fields",
+      "format": "csv",
+      "input": "title,username,password,url,notes\nA,,p,,\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "p",
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "normalize_after_invalid_char_removal",
+      "format": "csv",
+      "input": "title,password\n.?.,p\n",
+      "entries": [
+        {
+          "path": "-",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "no_title_no_invented_path",
+      "format": "csv",
+      "input": "url,password\nhttps://example.test,p\n",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p",
+            "url": "https://example.test"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "duplicate_header_last",
+      "format": "csv",
+      "input": "title,password,password\nA,old,new\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "new"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "duplicate_header_casefold_last",
+      "format": "csv",
+      "input": "title,password,PASSWORD\nA,old,new\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "new"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "short_row",
+      "format": "csv",
+      "input": "title,password,url\nA,p\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "blank_rows",
+      "format": "csv",
+      "input": "title,password\n , \nA,p\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "embedded_newline",
+      "format": "csv",
+      "input": "title,password\nA,\"line1\nline2\"\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "line1\nline2"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "escaped_quote",
+      "format": "csv",
+      "input": "title,password\nA,\"a\"\"b\"\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\"b"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bare_quote",
+      "format": "csv",
+      "input": "title,password\nA,a\"b\n",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "closed_quote_suffix",
+      "format": "csv",
+      "input": "title,password\nA,\"a\"b\n",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "bare_cr",
+      "format": "csv",
+      "input": "title,password\nA,a\rb\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\rb"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "trailing_cr",
+      "format": "csv",
+      "input": "title,password\nA,p\r",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "crlf",
+      "format": "csv",
+      "input": "title,password\r\nA,\"a\r\nb\"\r\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\nb"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "malformed",
+      "format": "csv",
+      "input": "title,password\nA,\"unterminated",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "chrome_hosts_collisions",
+      "format": "chrome",
+      "input": "name,url,username,password,note\n,https://USER:PASS@EXAMPLE.test:8080/a,u,p,n\n,https://example.test/b,u2,p2,\nexample.test-2,https://other.test,u3,p3,\n",
+      "entries": [
+        {
+          "path": "example.test",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://USER:PASS@EXAMPLE.test:8080/a",
+            "username": "u"
+          },
+          "warnings": null
+        },
+        {
+          "path": "example.test-2",
+          "data": {
+            "notes": "",
+            "password": "p2",
+            "url": "https://example.test/b",
+            "username": "u2"
+          },
+          "warnings": null
+        },
+        {
+          "path": "example.test-2-2",
+          "data": {
+            "notes": "",
+            "password": "p3",
+            "url": "https://other.test",
+            "username": "u3"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "firefox_ipv6",
+      "format": "firefox",
+      "input": "url,username,password,httpRealm\nhttps://[::1]:8000/a,u,p,\n",
+      "entries": [
+        {
+          "path": "[1]",
+          "data": {
+            "password": "p",
+            "url": "https://[::1]:8000/a",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "apple_empty_title",
+      "format": "apple",
+      "input": "Title,URL,Username,Password,Notes,OTPAuth\n,https://example.test,u,p,,\n",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "notes": "",
+            "password": "p",
+            "url": "https://example.test",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "profile_case_headers",
+      "format": "chrome",
+      "input": " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n",
+      "entries": [
+        {
+          "path": "Title",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://example.test",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    }
+  ],
+  "paths": {
+    " .... ": "--",
+    " a b ": "a-b",
+    "......": "---",
+    "../a..b": "-/a-b",
+    "////a///": "a",
+    "a:b\\c": "abc"
+  },
+  "prefixes": [
+    [
+      " / x y / ",
+      "a:b"
+    ],
+    [
+      "",
+      "../a"
+    ],
+    [
+      "p",
+      ""
+    ]
+  ],
+  "prefix_results": [
+    " x y /a:b",
+    "../a",
+    "p"
+  ],
+  "totps": [
+    {
+      "input": "",
+      "value": null,
+      "error": "empty TOTP value"
+    },
+    {
+      "input": "bad",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "  jbswy3dpehpk3pxpjbswy3dpehpk3pxp  ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpehpk3pxp"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=sha512\u0026digits=8\u0026period=45",
+      "value": {
+        "algorithm": "SHA512",
+        "digits": 8,
+        "period": 45,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://hotp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "unsupported otpauth type \"hotp\": only otpauth://totp/... is supported"
+    },
+    {
+      "input": "otpauth:///Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "otpauth URI is missing the type (expected otpauth://totp/...)"
+    },
+    {
+      "input": "otpauth://totp/Example",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=%ZZ",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP;bad=x",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=\u0026secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "OTPAUTH://TOTP/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=MD5",
+      "value": null,
+      "error": "invalid TOTP configuration: invalid TOTP algorithm \"MD5\": must be SHA1, SHA256, or SHA512"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=7",
+      "value": null,
+      "error": "invalid TOTP digits 7 in otpauth URI: must be 6 or 8"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=no",
+      "value": null,
+      "error": "invalid TOTP digits \"no\" in otpauth URI: strconv.Atoi: parsing \"no\": invalid syntax"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=0",
+      "value": null,
+      "error": "invalid TOTP period 0 in otpauth URI: must be 1-3600 seconds"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=3601",
+      "value": null,
+      "error": "invalid TOTP period 3601 in otpauth URI: must be 1-3600 seconds"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=9223372036854775808",
+      "value": null,
+      "error": "invalid TOTP period \"9223372036854775808\" in otpauth URI: strconv.Atoi: parsing \"9223372036854775808\": value out of range"
+    }
+  ]
+}

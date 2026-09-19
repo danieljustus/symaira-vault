@@ -17,6 +17,21 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+mod call;
+mod prompts;
+pub mod render;
+pub mod store_adapter;
+mod tools;
+pub use call::{
+    ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
+    ToolCallResult, ToolCallRuntime,
+};
+pub use store_adapter::{
+    SharedAuditLogger, StoreReadOnlyAdapter, StoreReadOnlyRuntime, read_only_tool_names,
+    unavailable_tool,
+};
+pub use tools::ToolListConfig;
+
 /// The newest protocol version this server speaks.
 pub const LATEST_SUPPORTED_PROTOCOL_VERSION: &str = "2025-11-25";
 
@@ -267,13 +282,17 @@ impl Message {
 /// which travel back to the client as an [`RpcError`].
 #[derive(Debug)]
 pub enum Error {
+    Io(std::io::Error),
     Serialize(serde_json::Error),
+    Catalog(String),
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Io(e) => write!(f, "io: {e}"),
             Error::Serialize(e) => write!(f, "serialize: {e}"),
+            Error::Catalog(e) => write!(f, "tool catalog: {e}"),
         }
     }
 }
@@ -376,6 +395,8 @@ fn go_kind(value: &serde_json::Value) -> &'static str {
 pub struct ProtocolHandler {
     server_name: String,
     server_version: String,
+    tool_list_config: ToolListConfig,
+    tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
 }
 
@@ -384,8 +405,97 @@ impl ProtocolHandler {
         ProtocolHandler {
             server_name: server_name.into(),
             server_version: server_version.into(),
+            tool_list_config: ToolListConfig::default(),
+            tool_call_runtime: None,
             initialized: false,
         }
+    }
+
+    /// Constructs a handler with explicitly injected runtime/profile inputs for
+    /// the native tools/list surface. No capability detection occurs here.
+    pub fn with_tool_list_config(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        tool_list_config: ToolListConfig,
+    ) -> Self {
+        ProtocolHandler {
+            server_name: server_name.into(),
+            server_version: server_version.into(),
+            tool_list_config,
+            tool_call_runtime: None,
+            initialized: false,
+        }
+    }
+
+    /// Constructs a handler with an explicitly injected tools/call runtime.
+    /// The runtime is the only path to storage and policy; construction itself
+    /// performs no vault or platform probing.
+    pub fn with_tool_call_runtime(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        runtime: std::sync::Arc<dyn ToolCallRuntime>,
+    ) -> Self {
+        ProtocolHandler {
+            server_name: server_name.into(),
+            server_version: server_version.into(),
+            tool_list_config: ToolListConfig::default(),
+            tool_call_runtime: Some(runtime),
+            initialized: false,
+        }
+    }
+
+    /// Opens a concrete encrypted-store runtime for the bounded read-only
+    /// tools/call slice. The caller supplies the identity and policy state;
+    /// this constructor performs no ambient vault or platform discovery.
+    pub fn with_store_read_only_runtime(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        root: impl AsRef<std::path::Path>,
+        identity: symvault_crypto::Identity,
+        config: ReadOnlyRuntimeConfig,
+        policy: Option<symvault_core::policy::Engine>,
+        _quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
+    ) -> Result<Self, String> {
+        Self::with_store_read_only_runtime_and_audit(
+            server_name,
+            server_version,
+            root,
+            identity,
+            config,
+            policy,
+            _quota,
+            None,
+        )
+    }
+
+    /// Opens the concrete encrypted-store runtime with an already-open audit
+    /// logger. The logger is supplied by the owning CLI/session boundary so
+    /// this protocol crate performs no keyring discovery.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_store_read_only_runtime_and_audit(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        root: impl AsRef<std::path::Path>,
+        identity: symvault_crypto::Identity,
+        config: ReadOnlyRuntimeConfig,
+        policy: Option<symvault_core::policy::Engine>,
+        _quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
+        audit: Option<SharedAuditLogger>,
+    ) -> Result<Self, String> {
+        let runtime = StoreReadOnlyRuntime::open_with_audit(root, identity, config, policy, audit)?;
+        Ok(Self::with_tool_call_runtime(
+            server_name,
+            server_version,
+            std::sync::Arc::new(runtime),
+        ))
+    }
+
+    pub fn set_tool_list_config(&mut self, tool_list_config: ToolListConfig) {
+        self.tool_list_config = tool_list_config;
+    }
+
+    pub fn set_tool_call_runtime(&mut self, runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>) {
+        self.tool_call_runtime = runtime;
     }
 
     /// Whether `initialize` has been handled on this connection.
@@ -403,6 +513,9 @@ impl ProtocolHandler {
             "initialize" => self.handle_initialize(msg).map(Some),
             "initialized" | "notifications/initialized" => Ok(None),
             "ping" => Message::response(msg.id.clone(), serde_json::json!({})).map(Some),
+            "tools/list" => self.handle_tools_list(msg).map(Some),
+            "tools/call" => self.handle_tools_call(msg).map(Some),
+            "prompts/list" | "prompts/get" => self.handle_prompts(msg).map(Some),
             _ => {
                 if msg.is_notification() {
                     return Ok(None);
@@ -458,6 +571,142 @@ impl ProtocolHandler {
 
         self.initialized = true;
         Message::response_from(msg.id.clone(), &result)
+    }
+
+    fn handle_prompts(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+        if msg.method == "prompts/list" {
+            return Message::response(
+                msg.id.clone(),
+                serde_json::json!({"prompts": prompts::list_payload()}),
+            );
+        }
+        let params = match prompts::parse_params(msg.params.as_deref()) {
+            Ok(params) => params,
+            Err(error) => {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INVALID_PARAMS,
+                    "Invalid params",
+                    Some(serde_json::Value::String(error)),
+                ));
+            }
+        };
+        match prompts::get_payload(&params.name, Some(&params.arguments)) {
+            Ok(payload) => Message::response(msg.id.clone(), payload),
+            Err(error) => {
+                let code = if matches!(error, prompts::PromptError::Embed(_)) {
+                    error_code::INTERNAL_ERROR
+                } else {
+                    error_code::INVALID_PARAMS
+                };
+                Ok(Message::error_response(
+                    msg.id.clone(),
+                    code,
+                    &error.to_string(),
+                    None,
+                ))
+            }
+        }
+    }
+
+    fn handle_tools_list(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+
+        let include_all = msg
+            .params
+            .as_deref()
+            .and_then(|params| serde_json::from_str::<serde_json::Value>(params.get()).ok())
+            .and_then(|params| {
+                params
+                    .get("include_all_tools")
+                    .and_then(serde_json::Value::as_bool)
+            })
+            .unwrap_or(false);
+        let tools =
+            tools::list_tools(&self.tool_list_config, include_all).map_err(Error::Catalog)?;
+        Message::response(msg.id.clone(), serde_json::json!({"tools": tools}))
+    }
+
+    fn handle_tools_call(&self, msg: &Message) -> Result<Message, Error> {
+        if !self.initialized {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::SERVER_ERROR,
+                "Server not initialized",
+                None,
+            ));
+        }
+
+        // Go checks the server pointer before parsing params. Keep this order
+        // so a locked default handler returns vault-locked even for malformed
+        // arguments, without probing any platform or storage capability.
+        let Some(runtime) = self.tool_call_runtime.as_ref() else {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                "vault locked: run 'symvault unlock' first",
+                None,
+            ));
+        };
+
+        let (name, arguments) = match call::parse_params(msg.params.as_deref().map(RawValue::get)) {
+            Ok(params) => params,
+            Err(error) => {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INVALID_PARAMS,
+                    "Invalid params",
+                    Some(serde_json::Value::String(error)),
+                ));
+            }
+        };
+        if !arguments.is_object() {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &format!(
+                    "parse arguments: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
+                    go_kind(&arguments)
+                ),
+                None,
+            ));
+        }
+        let known = tools::contains_tool(&name).map_err(Error::Catalog)?;
+        if !known {
+            return Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &format!("unknown tool: {name}"),
+                None,
+            ));
+        }
+        if let Err(result) = runtime.authorize(&name, &arguments) {
+            return Message::response(msg.id.clone(), call::payload(result));
+        }
+        match runtime.call(&name, &arguments) {
+            Ok(result) => Message::response(msg.id.clone(), call::payload(result)),
+            Err(error) => Ok(Message::error_response(
+                msg.id.clone(),
+                error_code::INTERNAL_ERROR,
+                &error,
+                None,
+            )),
+        }
     }
 }
 
@@ -590,6 +839,33 @@ pub fn run_stream(input: &str, handler: &mut ProtocolHandler) -> Result<Vec<Stri
         }
     }
     Ok(out)
+}
+
+/// Runs the newline-delimited stdio transport until the input reaches EOF.
+///
+/// The caller owns the handler and its injected runtime. Responses are flushed
+/// after each request so a spawned CLI process can be driven interactively.
+/// A final fragment without a newline is dropped, matching the Go transport's
+/// `ReadString('\n')` loop.
+pub fn run_stdio<R: std::io::BufRead, W: std::io::Write>(
+    mut input: R,
+    mut output: W,
+    handler: &mut ProtocolHandler,
+) -> Result<(), Error> {
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = input.read_until(b'\n', &mut line).map_err(Error::Io)?;
+        if read == 0 || !line.ends_with(b"\n") {
+            return Ok(());
+        }
+        line.pop();
+        if let Some(response) = handle_line_bytes(&line, handler)? {
+            output.write_all(response.as_bytes()).map_err(Error::Io)?;
+            output.write_all(b"\n").map_err(Error::Io)?;
+            output.flush().map_err(Error::Io)?;
+        }
+    }
 }
 
 /// Splits a stream the way the oracle's reader consumes it: into *newline-

@@ -640,7 +640,7 @@ enum GlobToken {
     },
 }
 
-fn glob_match(pattern: &str, value: &str) -> bool {
+pub fn glob_match(pattern: &str, value: &str) -> bool {
     let Some(tokens) = parse_glob(pattern) else {
         return false;
     };

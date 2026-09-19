@@ -24,7 +24,7 @@ git rev-parse --verify --quiet "$main_ref" >/dev/null 2>&1 || main_ref="main"
 # an earlier version of this collector also could not see.
 collect_pins() {
     {
-        grep -rhoE '(pinnedOracleCommit|const revision)[[:space:]]*=[[:space:]]*"[0-9a-f]{7,40}"' \
+        grep -rhoE '(pinnedOracleCommit|oracleCommit|const revision)[[:space:]]*=[[:space:]]*"[0-9a-f]{7,40}"' \
             "$@" 2>/dev/null || true
         grep -rhoE 'commit:[[:space:]]*"[0-9a-f]{7,40}"' "$@" 2>/dev/null || true
     } | grep -oE '[0-9a-f]{7,40}"?$' | tr -d '"' | sort -u
@@ -49,7 +49,7 @@ fi
 # unchecked and the row passes on a clone that happens to hold the object.
 status=0
 for dir in $(grep -rl 'provenance.Verify' scripts/rust-port/cmd --include='*.go' | xargs -n1 dirname | sort -u); do
-    found=$(collect_pins "$dir"/*.go)
+    found=$(collect_pins "$dir"/*.go) || found=""
     if [ -z "$found" ]; then
         if ! grep -qE "^[A-Z_]*ORACLE_COMMIT" Makefile || ! grep -q "$(basename "$dir")" Makefile; then
             echo "FAIL $(basename "$dir") verifies provenance but contributes no pin this script can see"

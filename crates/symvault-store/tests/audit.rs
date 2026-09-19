@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, fs, time::UNIX_EPOCH};
 use serde::Deserialize;
 use symvault_store::audit::{
     AuditKey, ExportOptions, KeyStore, Logger, RotationConfig, canonical_json, compute_hmac,
-    export_directory, key_fingerprint, redact_path, verify_entries, verify_jsonl,
+    export_directory, key_fingerprint, load_or_create_key_with_keyring, redact_path,
+    verify_entries, verify_jsonl,
 };
 
 const FIXTURE: &str = concat!(
@@ -21,6 +22,17 @@ struct Fixture {
     negative_cases: Vec<NegativeCase>,
     export: ExportVector,
     rotation: RotationVector,
+    keystore: KeystoreVector,
+}
+#[derive(Debug, Deserialize)]
+struct KeystoreVector {
+    keyring_service: String,
+    keyring_account_prefix: String,
+    stored_hex: String,
+    legacy_key_hex: String,
+    migrated_key_hex: String,
+    legacy_file_removed: bool,
+    reopened_matches: bool,
 }
 #[derive(Debug, Deserialize)]
 struct Oracle {
@@ -99,7 +111,7 @@ fn jsonl(lines: &[serde_json::Value]) -> Vec<u8> {
 fn go_fixture_is_provenance_bound_and_canonical_bytes_match() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "a57f565a");
+    assert_eq!(fixture.oracle.commit, "fca3f894");
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     assert_eq!(fixture.entries.len(), 4);
@@ -397,4 +409,79 @@ fn log_rotation_enforces_max_age_retention() {
         .filter(|item| item.file_name().to_string_lossy().contains(".rotated."))
         .count();
     assert_eq!(rotated, 0);
+}
+
+#[test]
+fn production_keyring_address_migrates_legacy_key_and_reopens_chain() {
+    use symvault_core::session::{Keyring, MemoryKeyring};
+    use symvault_store::audit::{LogEntry, open_with_keyring};
+    let root = tempfile::tempdir().unwrap();
+    let legacy = root.path().join("audit-hmac-key");
+    let fixture = fixture();
+    let key = hex_bytes(&fixture.keystore.legacy_key_hex);
+    fs::write(&legacy, &key).unwrap();
+    let keyring = MemoryKeyring::new();
+    let mut log =
+        open_with_keyring("fixture", root.path(), &keyring, RotationConfig::default()).unwrap();
+    log.append(LogEntry {
+        timestamp: "2026-09-17T00:00:00Z".into(),
+        agent: "fixture".into(),
+        action: "export".into(),
+        ok: true,
+        ..LogEntry::default()
+    })
+    .unwrap();
+    let kid = log.kid().to_owned();
+    drop(log);
+    assert_eq!(!legacy.exists(), fixture.keystore.legacy_file_removed);
+    let address = format!(
+        "{}|{}{}",
+        fixture.keystore.keyring_service,
+        fixture.keystore.keyring_account_prefix,
+        root.path().display()
+    );
+    let stored = keyring.get(&address).unwrap();
+    assert_eq!(stored, fixture.keystore.stored_hex.as_bytes());
+    assert_eq!(stored, fixture.keystore.migrated_key_hex.as_bytes());
+    let log =
+        open_with_keyring("fixture", root.path(), &keyring, RotationConfig::default()).unwrap();
+    assert_eq!(log.kid() == kid, fixture.keystore.reopened_matches);
+    assert!(
+        open_with_keyring(
+            "../outside",
+            root.path(),
+            &keyring,
+            RotationConfig::default()
+        )
+        .is_err()
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(log.path()).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+}
+
+#[test]
+fn keyring_loader_roundtrips_without_creating_an_audit_log() {
+    use symvault_core::session::{Keyring, MemoryKeyring};
+
+    let root = tempfile::tempdir().unwrap();
+    let keyring = MemoryKeyring::new();
+    let first = load_or_create_key_with_keyring(root.path(), &keyring).unwrap();
+    let address = format!("symaira|audit-hmac-key:{}", root.path().display());
+    let stored = keyring.get(&address).unwrap();
+    assert_eq!(stored.len(), 64);
+    assert_eq!(
+        first.fingerprint(),
+        key_fingerprint(&hex_bytes(&String::from_utf8(stored).unwrap()))
+    );
+    assert!(!root.path().join("audit-fixture.log").exists());
+
+    let second = load_or_create_key_with_keyring(root.path(), &keyring).unwrap();
+    assert_eq!(second.fingerprint(), first.fingerprint());
+    assert!(!root.path().join("audit-fixture.log").exists());
 }
