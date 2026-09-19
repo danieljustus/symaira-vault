@@ -46,7 +46,7 @@ impl Installer {
             CliError::new(
                 ExitCode::General,
                 "create installer",
-                Some(ErrorCause::new(CauseKind::Other, "get home directory")),
+                Some(ErrorCause::new(CauseKind::Other, home_dir_error_message())),
             )
         })?;
         let port = match port {
@@ -86,13 +86,42 @@ impl Installer {
     /// `~/Library/LaunchAgents` here.
     pub fn service_file_path(&self) -> Result<PathBuf, CliError> {
         let home = home_dir()
-            .ok_or_else(|| CliError::new(ExitCode::General, "get home directory", None))?;
+            .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
         Ok(home.join("LaunchAgents").join(PLIST_FILE))
     }
 }
 
+/// The oracle's `os.UserHomeDir` error text, kept verbatim; the platform name in
+/// the message follows Go's implementation.
+fn home_dir_error_message() -> &'static str {
+    if cfg!(windows) {
+        "get home directory: %USERPROFILE% is not defined"
+    } else {
+        "get home directory: $HOME is not defined"
+    }
+}
+
+/// Mirrors Go's `os.UserHomeDir`: `$HOME` on unix, `%USERPROFILE%` (with the
+/// `HOMEDRIVE`+`HOMEPATH` fallback) on Windows.
 fn home_dir() -> Option<PathBuf> {
-    env::var_os("HOME").map(PathBuf::from)
+    if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(home));
+    }
+    #[cfg(windows)]
+    {
+        if let Some(profile) = env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
+            return Some(PathBuf::from(profile));
+        }
+        if let (Some(drive), Some(path)) = (env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH"))
+            && !drive.is_empty()
+            && !path.is_empty()
+        {
+            let mut joined = PathBuf::from(drive);
+            joined.push(path);
+            return Some(joined);
+        }
+    }
+    None
 }
 
 /// Characters rejected before any template rendering (oracle
@@ -243,7 +272,7 @@ impl Installer {
 
         let plist_path = self.service_file_path()?;
         let home = home_dir()
-            .ok_or_else(|| CliError::new(ExitCode::General, "get home directory", None))?;
+            .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
 
         if let Some(dir) = plist_path.parent() {
             fs::create_dir_all(dir).map_err(|err| {
@@ -422,7 +451,21 @@ mod tests {
 
     #[test]
     fn validation_rejects_injected_values() {
-        let installer = fixture_installer();
+        // Absolute paths look different per platform; `fixture_installer` keeps
+        // Unix-style values because the plist fixture compares bytes.
+        let (bin, vault) = if cfg!(windows) {
+            ("C:\\opt\\symvault\\symvault", "C:\\data\\vault")
+        } else {
+            ("/opt/symvault/bin/symvault", "/data/vault")
+        };
+        let installer = Installer {
+            binary_path: PathBuf::from(bin),
+            vault_dir: PathBuf::from(vault),
+            port: 8080,
+            bind: "127.0.0.1".to_string(),
+            log_path: PathBuf::from("log"),
+            err_log_path: PathBuf::from("err"),
+        };
         assert!(
             validate_install_options(
                 &installer.binary_path,
@@ -469,6 +512,9 @@ mod tests {
         );
     }
 
+    /// The launchd layout only exists on unix; on Windows the installer resolves
+    /// `%USERPROFILE%` like the oracle's `os.UserHomeDir`.
+    #[cfg(unix)]
     #[test]
     fn service_file_path_is_home_relative_not_library() {
         // The oracle writes `~/LaunchAgents/...`, not `~/Library/LaunchAgents/...`.
