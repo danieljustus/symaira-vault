@@ -871,6 +871,12 @@ fn compare_wave2a_checks(go: &Path, rust: &Path, vault: &Path, home: &Path) {
     const IDS: &str = "auth.method,session.cache,audit.keyring.orphans,vault.manifest.intact,\
 tooling.autotype.backend,tooling.clipboard.backend,daemon.status,tooling.secureui,\
 tooling.precommit,session.keyring,security.env_passphrase";
+    compare_doctor_ids(go, rust, vault, home, IDS);
+}
+
+/// Compares the selected doctor IDs field by field between the pinned oracle and
+/// the Rust binary. Used where no documented divergence applies.
+fn compare_doctor_ids(go: &Path, rust: &Path, vault: &Path, home: &Path, ids: &str) {
     let args = [
         "--vault",
         vault.to_str().unwrap(),
@@ -878,7 +884,7 @@ tooling.precommit,session.keyring,security.env_passphrase";
         "--json",
         "--no-network",
         "--only",
-        IDS,
+        ids,
     ];
     let out_go = run(go, &args, vault, home);
     let out_rust = run(rust, &args, vault, home);
@@ -906,4 +912,43 @@ tooling.precommit,session.keyring,security.env_passphrase";
             );
         }
     }
+}
+
+/// Wave 2b: the two MCP config checks must match on a missing vault and on an
+/// oracle-initialized vault (loadable config -> agent list). The corrupt-config
+/// case is excluded here by design: both IDs quote the config-loader error, which
+/// is the documented go-yaml-vs-Rust dialect divergence.
+#[test]
+fn differential_doctor_mcp_config_checks() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    const IDS: &str = "mcp.dynamic.engines,mcp.agents";
+
+    let home = temporary_root("wave2b_home");
+    let vault = temporary_root("wave2b_vault");
+    let _fix = TempFixture::new(vec![home.clone(), vault.clone()]);
+
+    // Missing vault: "cannot load config: open <path>: no such file or directory"
+    compare_doctor_ids(&go, &rust, &vault, &home, IDS);
+
+    // Initialized vault: the config is loadable, so the agent list must match.
+    let init_out = run(
+        &go,
+        &[
+            "--vault",
+            vault.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &vault,
+        &home,
+    );
+    assert!(
+        init_out.status.success(),
+        "oracle init failed: {}",
+        String::from_utf8_lossy(&init_out.stderr)
+    );
+    compare_doctor_ids(&go, &rust, &vault, &home, IDS);
 }

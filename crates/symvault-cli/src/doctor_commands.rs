@@ -268,6 +268,16 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_mcp_approval_tls,
     },
     CheckDef {
+        id: "mcp.dynamic.engines",
+        tags: &[],
+        run: check_dynamic_secret_engines,
+    },
+    CheckDef {
+        id: "mcp.agents",
+        tags: &[],
+        run: check_mcp_agents,
+    },
+    CheckDef {
         id: "tooling.secureui",
         tags: &[],
         run: check_secure_ui,
@@ -2019,6 +2029,97 @@ fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
     )
 }
 
+/// Loads a config the way the doctor checks need it: a read failure keeps Go's
+/// `open <path>: <reason>` wording, a parse failure carries the loader's own text
+/// (the documented go-yaml vs Rust dialect divergence).
+fn load_config_for_check(cfg_path: &Path) -> Result<Config, String> {
+    match fs::read(cfg_path) {
+        Err(err) => Err(format_go_path_error("open", cfg_path, &err)),
+        Ok(bytes) => Config::load_from_bytes(&bytes).map_err(|err| err.to_string()),
+    }
+}
+
+fn check_dynamic_secret_engines(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "mcp.dynamic.engines";
+    const NAME: &str = "Dynamic secret engines";
+
+    let cfg_path = vault_dir.join("config.yaml");
+    let cfg = match load_config_for_check(&cfg_path) {
+        Ok(cfg) => cfg,
+        Err(detail) => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("cannot load config: {detail}"),
+                false,
+            );
+        }
+    };
+
+    let configured = cfg
+        .agents
+        .values()
+        .any(|profile| !profile.dynamic_providers.is_empty());
+    if !configured {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            "no dynamic providers configured",
+            false,
+        );
+    }
+
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Warn,
+        "dynamic providers configured but engines not registered",
+        false,
+    )
+    .with_hint("dynamic provider engines were never wired to the MCP server")
+}
+
+fn check_mcp_agents(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "mcp.agents";
+    const NAME: &str = "MCP agents configured";
+    // Fixed order, exactly as Go iterates it.
+    const KNOWN_AGENTS: [&str; 5] = ["claude-code", "codex", "opencode", "hermes", "openclaw"];
+
+    let cfg_path = vault_dir.join("config.yaml");
+    let cfg = match load_config_for_check(&cfg_path) {
+        Ok(cfg) => cfg,
+        Err(detail) => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("cannot load config: {detail}"),
+                false,
+            );
+        }
+    };
+
+    let found: Vec<&str> = KNOWN_AGENTS
+        .into_iter()
+        .filter(|agent| cfg.agents.contains_key(*agent))
+        .collect();
+
+    if found.is_empty() {
+        return DoctorResult::new(ID, NAME, Status::Ok, "no AI agent MCP configs found", false)
+            .with_hint("run `symvault agent install <agent> --config-only` to install MCP config");
+    }
+
+    DoctorResult::new(
+        ID,
+        NAME,
+        Status::Ok,
+        format!("{} configured", found.join(", ")),
+        false,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Session / tooling / manifest checks (wave 2a)
 // ---------------------------------------------------------------------------
@@ -2792,6 +2893,8 @@ mod tests {
                 "tooling.clipboard.backend",
                 "daemon.status",
                 "mcp.approval.tls",
+                "mcp.dynamic.engines",
+                "mcp.agents",
                 "tooling.secureui",
                 "tooling.precommit",
                 "session.keyring",
@@ -2847,6 +2950,8 @@ mod tests {
                 "tooling.clipboard.backend",
                 "daemon.status",
                 "mcp.approval.tls",
+                "mcp.dynamic.engines",
+                "mcp.agents",
                 "tooling.secureui",
                 "tooling.precommit",
                 "session.keyring",
