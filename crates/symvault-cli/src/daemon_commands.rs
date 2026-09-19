@@ -8,6 +8,13 @@
 //! cleared environment (only `HOME`), so no secret-bearing variable reaches the
 //! helper — the same intent as the oracle's filtered environment.
 
+// On Windows the module only ever produces the unsupported-platform error, so the
+// helpers and fields the macOS/Linux branches need are intentionally unused there.
+#![cfg_attr(
+    not(any(target_os = "macos", target_os = "linux")),
+    allow(dead_code, unused_imports)
+)]
+
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -16,10 +23,21 @@ use std::{
 
 use symvault_core::error::{CauseKind, CliError, ErrorCause, ExitCode};
 
+#[cfg(any(target_os = "macos", test))]
 const LABEL: &str = "com.symvault.mcp";
+#[cfg(target_os = "macos")]
 const PLIST_FILE: &str = "com.symvault.mcp.plist";
+#[cfg(any(target_os = "macos", test))]
+#[cfg(any(target_os = "macos", test))]
 const LOG_FILE: &str = "symvault-mcp.log";
+#[cfg(any(target_os = "macos", test))]
 const ERR_LOG_FILE: &str = "symvault-mcp.error.log";
+#[cfg(target_os = "linux")]
+const SYSTEMD_USER_DIR: &str = ".config/systemd/user";
+#[cfg(target_os = "linux")]
+const SYSTEMD_UNIT_NAME: &str = "symvault-mcp.service";
+#[cfg(target_os = "linux")]
+const SYSTEMD_UNIT_LABEL: &str = "symvault-mcp";
 
 /// Installer inputs, mirroring Go's `daemon.Installer`.
 pub struct Installer {
@@ -27,7 +45,9 @@ pub struct Installer {
     vault_dir: PathBuf,
     port: i64,
     bind: String,
+    #[cfg(any(target_os = "macos", test))]
     log_path: PathBuf,
+    #[cfg(any(target_os = "macos", test))]
     err_log_path: PathBuf,
 }
 
@@ -57,12 +77,19 @@ impl Installer {
             Some(value) if !value.is_empty() => value.to_string(),
             _ => "127.0.0.1".to_string(),
         };
+        // The home lookup must happen on every platform: the oracle reports a
+        // missing home from `NewInstaller`, not from the platform branch.
+        #[cfg(not(any(target_os = "macos", test)))]
+        let _ = &home;
+
         Ok(Installer {
             binary_path,
             vault_dir: vault_dir.to_path_buf(),
             port,
             bind,
+            #[cfg(any(target_os = "macos", test))]
             log_path: home.join("Logs").join(LOG_FILE),
+            #[cfg(any(target_os = "macos", test))]
             err_log_path: home.join("Logs").join(ERR_LOG_FILE),
         })
     }
@@ -85,6 +112,22 @@ impl Installer {
     /// `~/LaunchAgents/com.symvault.mcp.plist` — the oracle does not use
     /// `~/Library/LaunchAgents` here.
     pub fn service_file_path(&self) -> Result<PathBuf, CliError> {
+        #[cfg(target_os = "linux")]
+        let result = self.linux_service_file_path();
+        #[cfg(target_os = "macos")]
+        let result = self.plist_path();
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let result = Err(CliError::new(
+            ExitCode::General,
+            format!("unsupported platform: {}", std::env::consts::OS),
+            None,
+        ));
+        result
+    }
+    /// The launchd plist path.
+    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
+    fn plist_path(&self) -> Result<PathBuf, CliError> {
         let home = home_dir()
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
         Ok(home.join("LaunchAgents").join(PLIST_FILE))
@@ -172,6 +215,7 @@ fn validate_install_options(
 
 /// Go's `encoding/xml` text escaping for the five characters the oracle can
 /// emit here.
+#[cfg(any(target_os = "macos", test))]
 fn xml_escape(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for ch in value.chars() {
@@ -191,6 +235,7 @@ fn xml_escape(value: &str) -> String {
 /// Renders the plist exactly as the oracle does: XML header, DOCTYPE, four-space
 /// indentation, `<true></true>` for booleans.
 #[must_use]
+#[cfg(any(target_os = "macos", test))]
 pub fn render_plist(installer: &Installer, home: &Path) -> String {
     let mut out = String::new();
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -241,6 +286,7 @@ pub fn render_plist(installer: &Installer, home: &Path) -> String {
 }
 
 /// Resolves `launchctl` through the inherited `PATH` (Go's `exec.LookPath`).
+#[cfg(target_os = "macos")]
 fn launchctl_path() -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
     env::split_paths(&path)
@@ -249,6 +295,7 @@ fn launchctl_path() -> Option<PathBuf> {
 }
 
 /// Runs `launchctl` with a cleared environment; returns its combined output.
+#[cfg(target_os = "macos")]
 fn run_launchctl(args: &[&str]) -> io::Result<std::process::Output> {
     let Some(binary) = launchctl_path() else {
         return Err(io::Error::new(
@@ -265,12 +312,168 @@ fn run_launchctl(args: &[&str]) -> io::Result<std::process::Output> {
     command.output()
 }
 
+#[cfg(target_os = "linux")]
+fn systemctl_path() -> Option<PathBuf> {
+    let path = env::var_os("PATH")?;
+    env::split_paths(&path)
+        .map(|dir| dir.join("systemctl"))
+        .find(|candidate| candidate.is_file())
+}
+
+/// Runs `systemctl` with a cleared environment; returns its combined output.
+#[cfg(target_os = "linux")]
+fn run_systemctl(args: &[&str]) -> io::Result<std::process::Output> {
+    let Some(binary) = systemctl_path() else {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "exec: \"systemctl\": executable file not found in $PATH",
+        ));
+    };
+    let mut command = Command::new(binary);
+    command.args(args);
+    command.env_clear();
+    if let Some(home) = home_dir() {
+        command.env("HOME", home);
+    }
+    command.output()
+}
+
+/// Escapes a value for a systemd unit file, mirroring the oracle's
+/// `systemdEscape` (backslashes first, then quotes, then `$`).
+#[cfg(any(target_os = "linux", test))]
+fn systemd_escape(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('$', "$$")
+}
+
+#[cfg(any(target_os = "linux", test))]
+const SYSTEMD_TEMPLATE: &str = r#"[Unit]
+Description=Symaira Vault MCP Server
+
+[Service]
+Type=simple
+ExecStart="{{BINARY}}" serve --port {{PORT}} --bind "{{BIND}}"
+Environment="SYMVAULT_VAULT={{VAULT}}"
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+"#;
+
+#[cfg(any(target_os = "linux", test))]
+fn render_systemd_unit(installer: &Installer) -> String {
+    SYSTEMD_TEMPLATE
+        .replace(
+            "{{BINARY}}",
+            &systemd_escape(&installer.binary_path.to_string_lossy()),
+        )
+        .replace("{{PORT}}", &installer.port.to_string())
+        .replace("{{BIND}}", &systemd_escape(&installer.bind))
+        .replace(
+            "{{VAULT}}",
+            &systemd_escape(&installer.vault_dir.to_string_lossy()),
+        )
+}
+
 impl Installer {
-    /// Writes the plist, unloads any previous instance and loads the service.
+    /// Installs the background service for the running platform.
     pub fn install(&self) -> Result<(), CliError> {
+        #[cfg(target_os = "linux")]
+        let result = self.install_linux();
+        #[cfg(target_os = "macos")]
+        let result = self.install_darwin();
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let result = Err(CliError::new(
+            ExitCode::General,
+            format!(
+                "unsupported platform: {}; service templates are available for macOS (launchd) and Linux (systemd)",
+                std::env::consts::OS
+            ),
+            None,
+        ));
+        result
+    }
+    /// Writes the systemd user unit, reloads, enables and starts the service.
+    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
+    fn install_linux(&self) -> Result<(), CliError> {
+        let unit_path = self.linux_service_file_path()?;
+        self.write_systemd_unit(&unit_path).map_err(|err| {
+            CliError::new(
+                ExitCode::PermissionDenied,
+                "failed to write systemd service file",
+                Some(ErrorCause::new(CauseKind::Other, err)),
+            )
+        })?;
+
+        for (args, label) in [
+            (
+                vec!["--user", "daemon-reload"],
+                "systemctl daemon-reload failed",
+            ),
+            (
+                vec!["--user", "enable", SYSTEMD_UNIT_LABEL],
+                "systemctl enable failed",
+            ),
+            (
+                vec!["--user", "start", SYSTEMD_UNIT_LABEL],
+                "systemctl start failed",
+            ),
+        ] {
+            match run_systemctl(&args) {
+                Ok(output) if output.status.success() => {}
+                Ok(output) => {
+                    return Err(CliError::new(
+                        ExitCode::General,
+                        format!("{}: {}", label, combined_output(&output).trim()),
+                        None,
+                    ));
+                }
+                Err(err) => {
+                    return Err(CliError::new(
+                        ExitCode::General,
+                        format!("{}: {}", label, err),
+                        Some(ErrorCause::new(CauseKind::Other, err.to_string())),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
+    fn linux_service_file_path(&self) -> Result<PathBuf, CliError> {
+        let home = home_dir()
+            .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
+        Ok(home.join(SYSTEMD_USER_DIR).join(SYSTEMD_UNIT_NAME))
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
+    fn write_systemd_unit(&self, path: &Path) -> Result<(), String> {
+        validate_install_options(&self.binary_path, &self.vault_dir, &self.bind, self.port)
+            .map_err(|err| err.message().to_string())?;
+
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir).map_err(|err| format!("create directory: {err}"))?;
+            set_mode(dir, 0o700);
+        }
+        fs::write(path, render_systemd_unit(self))
+            .map_err(|err| format!("write service file: {err}"))?;
+        set_mode(path, 0o600);
+        Ok(())
+    }
+
+    /// Writes the plist, unloads any previous instance and loads the service.
+    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
+    fn install_darwin(&self) -> Result<(), CliError> {
         validate_install_options(&self.binary_path, &self.vault_dir, &self.bind, self.port)?;
 
-        let plist_path = self.service_file_path()?;
+        let plist_path = self.plist_path()?;
         let home = home_dir()
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
 
@@ -323,9 +526,49 @@ impl Installer {
         }
     }
 
-    /// Unloads the service (best effort) and removes the plist.
+    /// Removes the background service for the running platform.
     pub fn uninstall(&self) -> Result<(), CliError> {
-        let plist_path = self.service_file_path()?;
+        #[cfg(target_os = "linux")]
+        let result = self.uninstall_linux();
+        #[cfg(target_os = "macos")]
+        let result = self.uninstall_darwin();
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let result = Err(CliError::new(
+            ExitCode::General,
+            format!("unsupported platform: {}", std::env::consts::OS),
+            None,
+        ));
+        result
+    }
+    /// Stops and disables the unit (best effort), removes the file, reloads.
+    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
+    fn uninstall_linux(&self) -> Result<(), CliError> {
+        let _ = run_systemctl(&["--user", "stop", SYSTEMD_UNIT_LABEL]);
+        let _ = run_systemctl(&["--user", "disable", SYSTEMD_UNIT_LABEL]);
+
+        let unit_path = self.linux_service_file_path()?;
+        match fs::remove_file(&unit_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(CliError::new(
+                    ExitCode::PermissionDenied,
+                    "failed to remove systemd service file",
+                    Some(ErrorCause::new(CauseKind::Other, err.to_string())),
+                ));
+            }
+        }
+
+        let _ = run_systemctl(&["--user", "daemon-reload"]);
+        Ok(())
+    }
+
+    /// Unloads the service (best effort) and removes the plist.
+    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
+    fn uninstall_darwin(&self) -> Result<(), CliError> {
+        let plist_path = self.plist_path()?;
         let _ = run_launchctl(&["unload", &plist_path.to_string_lossy()]);
 
         match fs::remove_file(&plist_path) {
@@ -339,7 +582,39 @@ impl Installer {
 
     /// Returns `running`, `stopped` or `not installed`.
     pub fn status(&self) -> Result<&'static str, CliError> {
-        let plist_path = self.service_file_path()?;
+        #[cfg(target_os = "linux")]
+        let result = self.status_linux();
+        #[cfg(target_os = "macos")]
+        let result = self.status_darwin();
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let result = Err(CliError::new(
+            ExitCode::General,
+            format!("unsupported platform: {}", std::env::consts::OS),
+            None,
+        ));
+        result
+    }
+    #[cfg(any(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
+    fn status_linux(&self) -> Result<&'static str, CliError> {
+        let unit_path = self.linux_service_file_path()?;
+        if !unit_path.exists() {
+            return Ok("not installed");
+        }
+        match run_systemctl(&["--user", "is-active", SYSTEMD_UNIT_LABEL]) {
+            Ok(output)
+                if output.status.success() && combined_output(&output).trim() == "active" =>
+            {
+                Ok("running")
+            }
+            _ => Ok("stopped"),
+        }
+    }
+
+    #[cfg(any(target_os = "macos", test))]
+    #[cfg(target_os = "macos")]
+    fn status_darwin(&self) -> Result<&'static str, CliError> {
+        let plist_path = self.plist_path()?;
         if !plist_path.exists() {
             return Ok("not installed");
         }
@@ -363,6 +638,14 @@ impl Installer {
         }
         Ok("stopped")
     }
+}
+
+/// Combined stdout+stderr of a finished command, like Go's `CombinedOutput`.
+#[cfg(target_os = "linux")]
+fn combined_output(output: &std::process::Output) -> String {
+    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
+    combined.push_str(&String::from_utf8_lossy(&output.stderr));
+    combined
 }
 
 fn set_mode(path: &Path, mode: u32) {
@@ -523,5 +806,60 @@ mod tests {
             .expect("service path");
         assert!(path.ends_with("LaunchAgents/com.symvault.mcp.plist"));
         assert!(!path.to_string_lossy().contains("Library/LaunchAgents"));
+    }
+
+    /// The systemd unit recorded from the pinned Go oracle in
+    /// `target/resume-evidence/wave3b-systemd-differential.json`; only the
+    /// machine-dependent binary path is substituted.
+    #[cfg(any(target_os = "linux", test))]
+    const ORACLE_SYSTEMD_UNIT: &str = r#"[Unit]
+Description=Symaira Vault MCP Server
+
+[Service]
+Type=simple
+ExecStart="/opt/symvault/bin/symvault" serve --port 8080 --bind "127.0.0.1"
+Environment="SYMVAULT_VAULT=/home/tester/vault"
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+"#;
+
+    #[cfg(any(target_os = "linux", test))]
+    fn linux_fixture_installer() -> Installer {
+        Installer {
+            binary_path: PathBuf::from("/opt/symvault/bin/symvault"),
+            vault_dir: PathBuf::from("/home/tester/vault"),
+            port: 8080,
+            bind: "127.0.0.1".to_string(),
+            log_path: PathBuf::from("log"),
+            err_log_path: PathBuf::from("err"),
+        }
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn render_systemd_unit_matches_the_go_oracle_byte_for_byte() {
+        let rendered = render_systemd_unit(&linux_fixture_installer());
+        if rendered != ORACLE_SYSTEMD_UNIT {
+            let left: Vec<&str> = rendered.lines().collect();
+            let right: Vec<&str> = ORACLE_SYSTEMD_UNIT.lines().collect();
+            for index in 0..left.len().max(right.len()) {
+                let (a, b) = (
+                    left.get(index).copied().unwrap_or("<missing>"),
+                    right.get(index).copied().unwrap_or("<missing>"),
+                );
+                assert_eq!(a, b, "unit line {index} diverged");
+            }
+        }
+        assert_eq!(rendered, ORACLE_SYSTEMD_UNIT);
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    #[test]
+    fn systemd_escape_matches_the_oracle() {
+        assert_eq!(systemd_escape(r"C:\vault"), r"C:\\vault");
+        assert_eq!(systemd_escape("a\"b"), "a\\\"b");
+        assert_eq!(systemd_escape("$HOME"), "$$HOME");
     }
 }
