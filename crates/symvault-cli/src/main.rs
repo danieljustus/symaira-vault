@@ -796,7 +796,26 @@ struct VersionArgs {
     _extra: Vec<OsString>,
 }
 
+/// Windows gives the main thread a 1 MiB stack. Building and parsing the generated
+/// clap command tree (45+ subcommands) exceeds that in a debug build — reproduced
+/// locally as `ulimit -s 1024` aborting even on `--help`. Run the CLI on a thread
+/// with an explicit stack so every platform behaves the same; the Windows
+/// device-list differential is the regression check for this.
+const CLI_STACK_SIZE: usize = 16 * 1024 * 1024;
+
 fn main() -> ExitCode {
+    match std::thread::Builder::new()
+        .name("symvault".to_string())
+        .stack_size(CLI_STACK_SIZE)
+        .spawn(run_cli)
+    {
+        Ok(handle) => handle.join().unwrap_or_else(|_| ExitCode::from(101)),
+        // Thread creation is not expected to fail; running inline keeps the CLI usable.
+        Err(_) => run_cli(),
+    }
+}
+
+fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
