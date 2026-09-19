@@ -1842,23 +1842,22 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
         name,
         "default" | "claude-code" | "codex" | "hermes" | "openclaw" | "opencode"
     );
-    // ponytail: this writer approximates Go's nil-vs-false distinction with the
-    // builtin-name set plus truthiness. It reproduces every measured profile
-    // (builtin presets, and profiles that only carry `tier`/`skillPath`), but a
-    // non-builtin profile whose preset legitimately sets one of these to false
-    // would lose the line. Upgrade path: type them `Option<bool>` like Go.
-    if builtin || p.can_write {
-        out.push_str(&format!("        canWrite: {}\n", p.can_write));
-    }
+    // ponytail: Go types these as `*bool`, so a key that was present in the
+    // input is written back even when it is false (pinned Go contract:
+    // `config_session_contract.rs` expects `exposeValueTools: false` for a
+    // non-builtin `custom` profile), while an absent key writes no line at all.
+    // Rust stores plain `bool`, so presence cannot be recovered here: builtins
+    // always carry the preset set, everything else always carries canWrite and
+    // exposeValueTools. Measured consequence: a profile whose YAML only sets
+    // `tier` renders two extra lines. Upgrade path: type them `Option<bool>`.
+    out.push_str(&format!("        canWrite: {}\n", p.can_write));
     if builtin || p.can_run_commands {
         out.push_str(&format!("        canRunCommands: {}\n", p.can_run_commands));
     }
-    if builtin || p.expose_value_tools {
-        out.push_str(&format!(
-            "        exposeValueTools: {}\n",
-            p.expose_value_tools
-        ));
-    }
+    out.push_str(&format!(
+        "        exposeValueTools: {}\n",
+        p.expose_value_tools
+    ));
     if p.expose_payment_values {
         out.push_str("        exposePaymentValues: true\n");
     }

@@ -209,19 +209,15 @@ mod tests {
         (root, skill_file.clone(), skill_file)
     }
 
+    /// Writes the version-2 registry shape directly. Minting through
+    /// `token_registry::create` made this test depend on another module's I/O
+    /// and failed on the CI runners; the command under test only reads the file.
     fn mint_token(root: &Path) {
-        token_registry::create(
-            root,
-            &token_registry::NewToken {
-                label: "",
-                allowed_tools: vec!["*".to_owned()],
-                agent_name: "demo",
-                ttl: None,
-                tool_registry_hash: "",
-            },
-            OffsetDateTime::now_utc(),
+        fs::write(
+            root.join("mcp-tokens.json"),
+            r#"{"version":2,"tokens":{"tok-fixture":{"id":"tok-fixture","hash":"deadbeef","prefix":"dead","allowed_tools":["*"],"tool_registry_hash":"","agent_name":"demo","created_at":"2026-01-01T00:00:00Z","revoked":false}}}"#,
         )
-        .expect("token fixture");
+        .unwrap();
     }
 
     fn options() -> Options {
