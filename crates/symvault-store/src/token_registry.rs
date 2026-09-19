@@ -165,6 +165,52 @@ pub fn revoke(
     Ok(true)
 }
 
+/// Outcome of revoking every active token owned by one agent, mirroring Go's
+/// `agent uninstall` sequence: `Load` (which sweeps expired entries), revoke
+/// each matching active token, then one `Save`.
+pub struct RevokeAllOutcome {
+    /// Tokens that were still active and are revoked now.
+    pub revoked: usize,
+    /// Set when the registry could not be persisted. Go only warns about this
+    /// and still reports the revoke count, so the error rides along instead of
+    /// aborting the command.
+    pub save_error: Option<StoreError>,
+}
+
+/// Revokes every active token owned by `agent_name` under one lock.
+///
+/// Matches Go's `agent uninstall`: when no token matched, nothing is written
+/// (the load-time expired sweep stays unpersisted, exactly like Go's early
+/// return before `Save`).
+pub fn revoke_all_for_agent(
+    root: &Path,
+    agent_name: &str,
+    now: OffsetDateTime,
+) -> Result<RevokeAllOutcome, StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    purge_expired(&mut entries, now);
+    let mut revoked = 0usize;
+    for entry in entries.values_mut() {
+        if entry.agent_name == agent_name && !entry.revoked {
+            entry.revoked = true;
+            entry.revoked_at = Some(go_rfc3339(now));
+            revoked += 1;
+        }
+    }
+    let save_error = if revoked > 0 {
+        write(&root_cap, &target, &entries).err()
+    } else {
+        None
+    };
+    Ok(RevokeAllOutcome {
+        revoked,
+        save_error,
+    })
+}
+
 /// Revokes every active token owned by `agent_name`, then creates a new one,
 /// all under one lock and one atomic publish. Mirrors Go's
 /// `newAgentTokenRotateCmd`: `List` (expired sweep) + per-token `Revoke`,

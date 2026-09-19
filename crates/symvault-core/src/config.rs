@@ -1817,6 +1817,12 @@ fn is_base60(value: &str) -> bool {
 }
 
 fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), ConfigError> {
+    // Go's `AgentProfile` is a struct of `*T` fields with `omitempty`, so the
+    // emission order is the declaration order and an unset pointer writes
+    // nothing at all — `tier` leads the block (`internal/config/config.go:144`).
+    if let Some(v) = p.tier.as_deref().filter(|value| !value.is_empty()) {
+        out.push_str(&format!("        tier: {}\n", yaml_scalar(v)?));
+    }
     if let Some(v) = &p.approval_mode {
         out.push_str(&format!("        approvalMode: {}\n", yaml_scalar(v)?));
     }
@@ -1836,14 +1842,23 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
         name,
         "default" | "claude-code" | "codex" | "hermes" | "openclaw" | "opencode"
     );
-    out.push_str(&format!("        canWrite: {}\n", p.can_write));
+    // ponytail: this writer approximates Go's nil-vs-false distinction with the
+    // builtin-name set plus truthiness. It reproduces every measured profile
+    // (builtin presets, and profiles that only carry `tier`/`skillPath`), but a
+    // non-builtin profile whose preset legitimately sets one of these to false
+    // would lose the line. Upgrade path: type them `Option<bool>` like Go.
+    if builtin || p.can_write {
+        out.push_str(&format!("        canWrite: {}\n", p.can_write));
+    }
     if builtin || p.can_run_commands {
         out.push_str(&format!("        canRunCommands: {}\n", p.can_run_commands));
     }
-    out.push_str(&format!(
-        "        exposeValueTools: {}\n",
-        p.expose_value_tools
-    ));
+    if builtin || p.expose_value_tools {
+        out.push_str(&format!(
+            "        exposeValueTools: {}\n",
+            p.expose_value_tools
+        ));
+    }
     if p.expose_payment_values {
         out.push_str("        exposePaymentValues: true\n");
     }

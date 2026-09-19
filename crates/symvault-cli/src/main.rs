@@ -6,6 +6,7 @@ mod agent_doctor_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
 mod agent_token_commands;
+mod agent_uninstall_commands;
 mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
@@ -514,6 +515,18 @@ enum AgentCommand {
     Profile {
         #[command(subcommand)]
         command: AgentProfileCommand,
+    },
+    Uninstall {
+        name: String,
+        /// Don't remove the skill file.
+        #[arg(long)]
+        keep_skill: bool,
+        /// Don't modify the agent config file.
+        #[arg(long)]
+        keep_config: bool,
+        /// Skip confirmation prompt.
+        #[arg(long)]
+        yes: bool,
     },
 }
 
@@ -1432,6 +1445,32 @@ fn run_cli() -> ExitCode {
                     &name,
                     option_env!("SYMVAULT_VERSION").unwrap_or("dev"),
                     &mut io::stdout().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Uninstall {
+                    name,
+                    keep_skill,
+                    keep_config,
+                    yes,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                agent_uninstall_commands::uninstall(
+                    &vault,
+                    &name,
+                    &agent_uninstall_commands::Options {
+                        keep_config,
+                        keep_skill,
+                        yes,
+                    },
                 )
             })();
             if let Err(error) = &result {

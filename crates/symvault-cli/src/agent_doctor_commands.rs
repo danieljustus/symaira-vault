@@ -9,12 +9,12 @@ use std::{
 use serde::Deserialize;
 use symvault_core::config::Config;
 
-const SENTINEL: &str = "symaira";
+pub(crate) const SENTINEL: &str = "symaira";
 
 #[derive(Debug, Deserialize)]
-struct Manifest {
+pub(crate) struct Manifest {
     #[serde(default)]
-    managed_by: String,
+    pub(crate) managed_by: String,
     #[serde(default)]
     managed_version: String,
     #[serde(default)]
@@ -96,7 +96,7 @@ pub(crate) fn doctor(
     writeln!(output, "\nAll checks passed for {agent}").map_err(io_error)
 }
 
-fn parse_manifest(data: &[u8]) -> Result<(Manifest, &[u8]), ()> {
+pub(crate) fn parse_manifest(data: &[u8]) -> Result<(Manifest, &[u8]), ()> {
     let opening = if data.starts_with(b"---\r\n") {
         5
     } else if data.starts_with(b"---\n") {
@@ -124,7 +124,7 @@ fn parse_manifest(data: &[u8]) -> Result<(Manifest, &[u8]), ()> {
     Ok((manifest, &rest[body_start..]))
 }
 
-fn expand_tilde(value: &str) -> Option<PathBuf> {
+pub(crate) fn expand_tilde(value: &str) -> Option<PathBuf> {
     let suffix = value.strip_prefix("~/")?;
     let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
     Some(PathBuf::from(home).join(suffix))
