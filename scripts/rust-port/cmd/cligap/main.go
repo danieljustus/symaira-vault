@@ -5,7 +5,7 @@
 // already freezes the oracle's command paths, aliases and local flags, so the
 // comparison runs against a committed artifact and stays deterministic and
 // cheap enough for CI. What it measures is surface reachability and flag
-// presence - never behavioural parity. A reachable command with a byte-identical
+// presence - never behavioral parity. A reachable command with a byte-identical
 // help text is not evidence that the command behaves like Go.
 //
 // Deliberate non-claims:
@@ -94,8 +94,8 @@ func main() {
 		fatal("read oracle tree: %v", err)
 	}
 	var oracle tree
-	if err := json.Unmarshal(content, &oracle); err != nil {
-		fatal("parse oracle tree: %v", err)
+	if unmarshalErr := json.Unmarshal(content, &oracle); unmarshalErr != nil {
+		fatal("parse oracle tree: %v", unmarshalErr)
 	}
 
 	repr := report{
@@ -161,8 +161,7 @@ func main() {
 		}
 	}
 	sort.Strings(repr.RustOnlyPaths)
-	commands, _ := rustWalkAll(absolute, *depth)
-	repr.RustPaths = len(commands)
+	repr.RustPaths = len(rustWalkAll(absolute, *depth))
 
 	encoded, err := json.MarshalIndent(repr, "", "  ")
 	if err != nil {
@@ -223,14 +222,12 @@ func flagNames(help string) map[string]bool {
 	inOptions := false
 	for _, line := range strings.Split(help, "\n") {
 		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "Options:" || trimmed == "Flags:":
+		switch trimmed {
+		case "Options:", "Flags:":
 			inOptions = true
 			continue
-		case trimmed == "Commands:" || trimmed == "Available Commands:" || trimmed == "Arguments:":
-			if inOptions {
-				inOptions = false
-			}
+		case "Commands:", "Available Commands:", "Arguments:":
+			inOptions = false
 			continue
 		}
 		if !inOptions || !strings.HasPrefix(line, " ") {
@@ -244,7 +241,7 @@ func flagNames(help string) map[string]bool {
 }
 
 func rustWalk(binary string, depth int) []string {
-	all, _ := rustWalkAll(binary, depth)
+	all := rustWalkAll(binary, depth)
 	var only []string
 	for path := range all {
 		if path != "symvault" {
@@ -255,7 +252,7 @@ func rustWalk(binary string, depth int) []string {
 }
 
 // rustWalkAll walks the Rust binary's own command tree from its help pages.
-func rustWalkAll(binary string, depth int) (map[string]bool, error) {
+func rustWalkAll(binary string, depth int) map[string]bool {
 	seen := map[string]bool{}
 	var walk func(args []string)
 	walk = func(args []string) {
@@ -276,7 +273,7 @@ func rustWalkAll(binary string, depth int) (map[string]bool, error) {
 		}
 	}
 	walk(nil)
-	return seen, nil
+	return seen
 }
 
 // subcommands extracts child command names from a help page's command section,
@@ -286,14 +283,12 @@ func subcommands(help string) []string {
 	inCommands := false
 	for _, line := range strings.Split(help, "\n") {
 		trimmed := strings.TrimSpace(line)
-		switch {
-		case trimmed == "Commands:" || trimmed == "Available Commands:":
+		switch trimmed {
+		case "Commands:", "Available Commands:":
 			inCommands = true
 			continue
-		case trimmed == "Options:" || trimmed == "Flags:":
-			if inCommands {
-				inCommands = false
-			}
+		case "Options:", "Flags:":
+			inCommands = false
 			continue
 		}
 		if !inCommands || !strings.HasPrefix(line, "  ") || trimmed == "" {
