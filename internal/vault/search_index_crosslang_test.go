@@ -31,6 +31,13 @@ var searchIndexAdapterBuild struct {
 	err  error
 }
 
+// crosslangBuildTimeout bounds a cold Cargo build of the workspace example
+// adapters. Hosted runners compile the whole dependency graph without a cache,
+// which exceeded the two-minute adapter timeout and failed the macOS test job;
+// the bound is large enough not to depend on a warm cache and still catches a
+// hang well inside the package test timeout.
+const crosslangBuildTimeout = 15 * time.Minute
+
 func cargoTargetDir(repo string) string {
 	target := os.Getenv("CARGO_TARGET_DIR")
 	if target == "" {
@@ -63,7 +70,7 @@ func searchIndexAdapter(t testing.TB) string {
 		// operations themselves. The latter use runSearchIndexCommand's bounded
 		// two-minute timeout; applying it to dependency compilation makes the
 		// differential test depend on a warm cache rather than adapter behavior.
-		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "--manifest-path", filepath.Join(repo, "Cargo.toml"), "--locked", "-p", "symvault-store", "--example", "search-index-adapter")
+		output, err := runSearchIndexCommandWithTimeout(crosslangBuildTimeout, repo, target, "cargo", "build", "--manifest-path", filepath.Join(repo, "Cargo.toml"), "--locked", "-p", "symvault-store", "--example", "search-index-adapter")
 		if err != nil {
 			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s", err, output)
 			return

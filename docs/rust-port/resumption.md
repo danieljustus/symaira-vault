@@ -34,6 +34,27 @@
   HTTP/OAuth/Broker, native Biometrie/Session, Swift-Bridge, Rest-CLI/TUI,
   Release-/Value-/Rollback-Gates. Go bleibt Produktion; kein Cutover/Release.
 
+## Zwischenstand 2026-09-20 (nach `1d534410`)
+
+- **`main` war rot**: CI-Lauf 35505824525 (`1d534410`) scheiterte in
+  `Test (macos-latest)` und `Test (windows-latest)`, beide im Go-Testcode der
+  Migration, nicht im Produktcode.
+  - macOS: `entry_writer_crosslang_test.go:36: build Rust writer: context deadline
+    exceeded` — der kalte Cargo-Build der Store-Beispieladapter lief in das
+    2-Minuten-Limit des Adapter-Helfers. Alle vier Build-Aufrufe teilen jetzt
+    `crosslangBuildTimeout` (15 min); die 2 Minuten bleiben für das Ausführen
+    bereits gebauter Adapter.
+  - Windows: `sessiongen` legte ein Vault-Verzeichnis `special-<&>-U+2028` an,
+    das Windows ablehnt (`mkdir ... syntax is incorrect`). Der Generator entfernt
+    dort jetzt `<` und `>` genau wie `fixture_path` im Rust-Differential und
+    behält `&`/U+2028, weil darauf der JSON-Escaping-Vertrag beruht.
+- Fixture `testdata/port/cli/session.json` wurde bewusst mit dem gepinnten
+  Oracle `fca3f894` neu erzeugt; nur `generator_digest` ändert sich. Ein neuer
+  Test bindet diesen Digest, weil kein Make- oder Workflow-Ziel `sessiongen`
+  ausführt — die Datei konnte bisher unbemerkt veralten.
+- Kein Cutover, kein Release; Go bleibt Produktion. Native CI für den neuen Head
+  steht aus.
+
 ## Candidate and provenance
 
 - **Integration candidate before this handover document:** `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`; it is based on `origin/main` `81210de2720ee000fa26adda4da4080daae01677`.

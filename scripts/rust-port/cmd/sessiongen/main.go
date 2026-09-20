@@ -127,7 +127,7 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		if vaultDir == "" {
 			vaultDir = "missing-vault"
 		}
-		vault := filepath.Join(tempRoot, filepath.FromSlash(vaultDir))
+		vault := filepath.Join(tempRoot, vaultPathComponent(vaultDir))
 		profileVault := filepath.Join(tempRoot, "profile-vault")
 		if input.Initialized {
 			if err := os.MkdirAll(vault, 0o700); err != nil {
@@ -219,6 +219,26 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		_ = os.RemoveAll(tempRoot)
 	}
 	return cases, nil
+}
+
+// vaultPathComponent materializes a fixture vault directory name. Windows
+// cannot create a directory whose name contains the angle brackets the escaping
+// case uses; the Rust differential strips the same two characters from
+// synthetic paths, so the generator applies the identical transformation and
+// both sides stay comparable. Only the synthetic filesystem path changes: the
+// recorded arguments and expected output keep the hostile bytes on Unix.
+func vaultPathComponent(relative string) string {
+	if runtime.GOOS == "windows" {
+		relative = windowsSafePathComponent(relative)
+	}
+	return filepath.FromSlash(relative)
+}
+
+// windowsSafePathComponent removes the characters Windows rejects in a file or
+// directory name, keeping the ampersand and line-separator bytes that the JSON
+// escaping contract depends on.
+func windowsSafePathComponent(relative string) string {
+	return strings.NewReplacer("<", "", ">", "").Replace(relative)
 }
 
 func normalizeOutput(output []byte, tempRoot string) []byte {

@@ -61,7 +61,7 @@ func TestManifestSequenceGoRustDifferential(t *testing.T) {
 	repo := filepath.Clean(filepath.Join(filepath.Dir(mustManifestSource(t)), "../.."))
 	target := cargoTargetDir(repo)
 	manifestCargo := filepath.Join(repo, "crates", "symvault-store", "Cargo.toml")
-	if output, err := runSearchIndexCommand(repo, target, "cargo", "build", "--locked", "--manifest-path", manifestCargo, "--example", manifestSequenceAdapter); err != nil {
+	if output, err := runSearchIndexCommandWithTimeout(crosslangBuildTimeout, repo, target, "cargo", "build", "--locked", "--manifest-path", manifestCargo, "--example", manifestSequenceAdapter); err != nil {
 		t.Fatalf("build Rust adapter: %v\n%s", err, output)
 	}
 	binary := filepath.Join(target, "debug", "examples", manifestSequenceAdapter)

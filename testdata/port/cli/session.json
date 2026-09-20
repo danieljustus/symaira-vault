@@ -33,7 +33,7 @@
       "internal/session/touchid_darwin.go"
     ],
     "source_digest": "c3c566f6212ecbe8fafefc62e73a94da5f7dccc6bbd2e3a7227463e4a2802fc7",
-    "generator_digest": "b18ac2749238ec0da903b960e7d82d0d7faa4cf105d660102596922bf7aa3bf6"
+    "generator_digest": "b5a6a8720de2b4765ecb0c7ca6a0c760b3054cbb6b19e5f4dc163dbdfb102fca"
   },
   "cases": [
     {

@@ -30,7 +30,7 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 	}
 	repo := filepath.Clean(filepath.Join(filepath.Dir(source), "../.."))
 	target := cargoTargetDir(repo)
-	output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "--locked", "-p", "symvault-store", "--example", "reencrypt-journal-adapter")
+	output, err := runSearchIndexCommandWithTimeout(crosslangBuildTimeout, repo, target, "cargo", "build", "--locked", "-p", "symvault-store", "--example", "reencrypt-journal-adapter")
 	if err != nil {
 		t.Fatalf("build Rust re-encryption adapter: %v\n%s", err, output)
 	}
