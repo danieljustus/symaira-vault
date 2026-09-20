@@ -118,21 +118,51 @@ func runPseudonymizeMigration(v *vaultpkg.Vault) error {
 
 	cli.PrintlnQuietAware(fmt.Sprintf("Migrating %d entries to pseudonymized paths...", len(ageFiles)))
 
+	// Enable the pseudonymized storage mode before the first rewrite. Every
+	// entry write resolves its target through entryStoragePath(), which only
+	// returns the HMAC-derived path while the config flag is set. Enabling it
+	// afterwards made the loop rewrite each entry to its own plaintext path and
+	// then delete it, losing the whole vault.
+	if err := enablePseudonymizeConfig(vaultDir); err != nil {
+		return err
+	}
+
 	migrated := 0
 	for _, filePath := range ageFiles {
-		rel, relErr := filepath.Rel(filepath.Join(vaultDir, "entries"), filePath)
-		if relErr != nil {
-			return fmt.Errorf("compute relative path for %s: %w", filePath, relErr)
-		}
-		plainPath := strings.TrimSuffix(filepath.ToSlash(rel), ".age")
-
-		entry, readErr := vaultpkg.ReadEntry(vaultDir, plainPath, v.Identity)
+		// The file name only identifies the entry while paths are still
+		// plaintext. Read the ciphertext to learn the logical path, so already
+		// pseudonymized files are recognised instead of being hashed again.
+		entry, readErr := vaultpkg.ReadEntryFile(filePath, v.Identity)
 		if readErr != nil {
-			return fmt.Errorf("read entry %s: %w", plainPath, readErr)
+			return fmt.Errorf("read entry file %s: %w", filePath, readErr)
+		}
+		plainPath := entry.Path
+		if plainPath == "" {
+			rel, relErr := filepath.Rel(filepath.Join(vaultDir, "entries"), filePath)
+			if relErr != nil {
+				return fmt.Errorf("compute relative path for %s: %w", filePath, relErr)
+			}
+			plainPath = strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+		}
+
+		// An entry that already lives under its HMAC path is done; rewriting it
+		// would hash the derived name a second time and orphan the entry.
+		target := vaultpkg.EntryStoragePathForMigration(vaultDir, plainPath, v.Identity)
+		if target == filePath {
+			continue
 		}
 
 		if err := vaultpkg.WriteEntry(vaultDir, plainPath, entry, v.Identity); err != nil {
 			return fmt.Errorf("rewrite entry %s: %w", plainPath, err)
+		}
+
+		// Only drop the plaintext-named file once the migration target is
+		// confirmed present; otherwise the write silently failed to move it.
+		if _, statErr := os.Stat(target); statErr != nil {
+			return fmt.Errorf(
+				"rewrite entry %s: pseudonymized file %s missing after write: %w",
+				plainPath, target, statErr,
+			)
 		}
 
 		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {

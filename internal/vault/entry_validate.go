@@ -159,3 +159,18 @@ func entryStoragePathCached(vaultDir, path string, pseudoKey []byte) string {
 func isPseudonymizeEnabled(cfg *vaultconfig.Config) bool {
 	return cfg != nil && cfg.Vault != nil && cfg.Vault.PseudonymizePaths
 }
+
+// EntryStoragePathForMigration resolves the current on-disk path an entry
+// occupies under the vault's configured storage mode.
+//
+// A migration that rewrites entries MUST NOT delete the plaintext-named file
+// without first confirming the rewritten entry landed somewhere else. Both
+// paths are returned as cleaned absolute paths so callers can compare them
+// directly.
+func EntryStoragePathForMigration(vaultDir, path string, identity *age.X25519Identity) string {
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		cfg = nil
+	}
+	return entryStoragePath(vaultDir, path, identity, cfg)
+}
