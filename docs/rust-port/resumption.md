@@ -55,6 +55,32 @@
 - Kein Cutover, kein Release; Go bleibt Produktion. Native CI für den neuen Head
   steht aus.
 
+## Zwischenstand 2026-09-20, Teil 2 (nach `622ec619`)
+
+- `main` war rot (`Test (macos-latest)` und `Test (windows-latest)`). Ursache und
+  Fix in PR [#1078](https://github.com/danieljustus/symaira-vault/pull/1078),
+  gemergt als `622ec619`: das 2-Minuten-Limit des Adapter-Helfers traf kalte
+  Cargo-Builds, und `sessiongen` legte unter Windows einen unzulässigen
+  Verzeichnisnamen an. Native Abnahme im Dispatch-Lauf 35507740116 auf dem
+  PR-Head (beide Jobs grün).
+- CLI-Oberfläche neu und reproduzierbar gemessen: `scripts/rust-port/cmd/cligap`
+  vergleicht die Rust-CLI gegen den gepinnten Oracle-Baum
+  (`testdata/port/cli/command-tree.json`, `a518124f`) und braucht dafür kein
+  Oracle-Binary; Report in `target/resume-evidence/cli-gap-inventory.json`.
+  Ergebnis bei `1d534410`: 134 Oracle-Pfade, 89 Rust-Pfade, **46 fehlen**,
+  9 Flag-Lücken, **3 Alias-Lücken** (`get show`, `get cat`, `list ls`) und ein
+  Rust-only Pfad (`mcp serve`, eine Re-Pin-Entscheidung).
+  `docs/rust-port/cli-gap-inventory.md` ist damit ersetzt; `CLI-002`/`CLI-003`
+  zitieren die Messung und bleiben beide `TODO`.
+- Zwei delegierte Worker lieferten **keinen verwertbaren Beitrag**. Lane 1 schrieb
+  vier CLI-Module mit erfundenen Store-/Session-APIs, ohne Fixture und ohne
+  Differential (nicht kompilierbar); Lane 2 ein Werkzeug, das Hilfetexte als
+  Kommandopfade zählte (Go-Pfade 1, Rust-Pfade 44136). Beides liegt ungepusht auf
+  `hermes-subagent/subagent-sa-0-cebb4232` bzw. `-sa-1-52b3faea` als WIP und gilt
+  ausdrücklich nicht als Fortschritt. Lehre: Worker-Artefakte am Branch prüfen,
+  nicht am Abschlussbericht.
+- Kein Cutover, kein Release; Go bleibt Produktion.
+
 ## Candidate and provenance
 
 - **Integration candidate before this handover document:** `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`; it is based on `origin/main` `81210de2720ee000fa26adda4da4080daae01677`.
