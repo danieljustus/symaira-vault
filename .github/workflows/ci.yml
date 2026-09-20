@@ -751,6 +751,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Repository tests digest pinned oracle commits, so they need real
+          # history; a shallow checkout fails them with git exit 128.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -768,7 +771,13 @@ jobs:
 
       - name: Run integration tests
         run: |
-          go test -v -timeout=10m ./... -run Integration 2>&1
+          # TestReencryptJournalGoRustIntegration/rust_production_journal_go_open
+          # requires the Rust CLI path in SYMVAULT_RUST_BINARY and fails when it
+          # is absent by design; that binary is supplied only by the explicit
+          # cross-language gate (`make reencrypt-journal-differential`, part of
+          # `make port-contract` in the "Rust port contract" job). This job has
+          # no Rust toolchain, so it must not select that subtest.
+          go test -v -timeout=10m ./... -run Integration -skip 'ReencryptJournalGoRustIntegration' 2>&1
         env:
           CI: true
 
