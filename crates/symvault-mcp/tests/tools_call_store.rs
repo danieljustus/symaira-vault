@@ -634,9 +634,39 @@ fn get_entry_value_seals_redacts_and_blocks_sensitive_paths() {
         .expect("redacted payment get succeeds");
     assert!(!redacted.is_error);
     assert!(redacted.text.contains("[REDACTED]"));
-    assert!(!redacted.text.contains("4111111111111111"));
-    assert!(!redacted.text.contains("123"));
-    assert!(!redacted.text.contains("safe-note"));
+    // Compare the returned field values, never the whole document: every field
+    // carries a random DATA_<hex> nonce, so a document-wide check for a short
+    // literal fails whenever a nonce happens to contain it ("123" matches a
+    // 16-hex nonce in roughly one run out of a hundred).
+    let payload: serde_json::Value =
+        serde_json::from_str(&redacted.text).expect("redacted get returns JSON text");
+    for field in ["card_number", "cvc", "note"] {
+        let value = payload["data"][field]
+            .as_str()
+            .unwrap_or_else(|| panic!("{field} missing from the redacted payload"));
+        assert!(
+            value.contains("[REDACTED]"),
+            "{field} was not redacted: {value}"
+        );
+    }
+    assert!(
+        !payload["data"]["card_number"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("4111111111111111")
+    );
+    assert!(
+        !payload["data"]["cvc"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("123")
+    );
+    assert!(
+        !payload["data"]["note"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("safe-note")
+    );
 
     let (root, identity) = write_get_value_vault();
     let mut config = fixture_config();
