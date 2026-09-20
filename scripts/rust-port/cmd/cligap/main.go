@@ -21,6 +21,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -62,6 +64,8 @@ type report struct {
 	Tool          string   `json:"tool"`
 	GeneratedAt   string   `json:"generated_at"`
 	RustBinary    string   `json:"rust_binary"`
+	RustBinaryID  string   `json:"rust_binary_sha256"`
+	RustBuiltAt   string   `json:"rust_binary_modified"`
 	Tree          string   `json:"oracle_tree"`
 	OracleCommit  string   `json:"oracle_commit"`
 	OracleRelease string   `json:"oracle_release"`
@@ -123,6 +127,15 @@ func run(args []string) error {
 		return fmt.Errorf("resolve binary path: %w", err)
 	}
 	repr.RustBinary = absolute
+	// Pin the probed artifact: a stale target/debug binary reports a different
+	// surface (an unrebuilt checkout listed 126 missing paths instead of 46), so
+	// the report must identify the exact file it measured.
+	binaryHash, binaryMTime, err := identify(absolute)
+	if err != nil {
+		return fmt.Errorf("identify rust binary: %w", err)
+	}
+	repr.RustBinaryID = binaryHash
+	repr.RustBuiltAt = binaryMTime
 
 	scoped := make([]treeCommand, 0, len(oracle.Commands))
 	for _, command := range oracle.Commands {
@@ -187,9 +200,25 @@ func run(args []string) error {
 		return fmt.Errorf("write report: %w", err)
 	}
 	fmt.Printf("WROTE %s\n", *output)
+	fmt.Printf("probed %s (sha256 %s, built %s)\n", repr.RustBinary, repr.RustBinaryID[:12], repr.RustBuiltAt)
 	fmt.Printf("oracle paths %d, rust paths %d, missing %d, flag gaps %d, alias gaps %d, rust-only %d\n",
 		repr.OraclePaths, repr.RustPaths, len(repr.MissingPaths), len(repr.FlagGaps), len(repr.AliasGaps), len(repr.RustOnlyPaths))
 	return nil
+}
+
+// identify returns the SHA-256 and modification time of the probed binary, so a
+// measurement can be tied to the artifact that produced it.
+func identify(path string) (string, string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", "", err
+	}
+	content, err := os.ReadFile(path) // #nosec G304 -- the operator supplied --binary path
+	if err != nil {
+		return "", "", err
+	}
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:]), info.ModTime().UTC().Format(time.RFC3339), nil
 }
 
 func aliasPathFor(path, alias string) string {

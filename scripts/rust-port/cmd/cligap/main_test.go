@@ -131,6 +131,9 @@ func TestRunReportsSurfaceGaps(t *testing.T) {
 	if got.Depth != 3 || got.OracleCommit != "deadbeef" || got.Tool == "" {
 		t.Errorf("metadata not carried over: %+v", got)
 	}
+	if len(got.RustBinaryID) != 64 || got.RustBuiltAt == "" {
+		t.Errorf("report does not pin the probed binary: sha=%q modified=%q", got.RustBinaryID, got.RustBuiltAt)
+	}
 	if len(got.MissingPaths) != 1 || got.MissingPaths[0].Path != "symvault gone" {
 		t.Errorf("missing paths = %+v, want only symvault gone", got.MissingPaths)
 	}
@@ -241,5 +244,109 @@ func TestProbeReportsTheFirstDiagnosticLine(t *testing.T) {
 	}
 	if detail == "" {
 		t.Error("want a diagnostic line for an unreachable command")
+	}
+}
+
+// edgeCLI answers with a self-referential tree: root lists get, list and a
+// broken command, and get lists list again — so the walker meets an already
+// visited path, a command whose help fails, and a depth cut-off.
+const edgeCLI = `#!/bin/sh
+case "$*" in
+"--help")
+cat <<'EOF'
+Edge CLI
+
+Usage: edge [OPTIONS] [COMMAND]
+
+Commands:
+  get     Read an entry
+  list    List entries
+  broken  Advertised but unusable
+  get     Duplicate line, as a defensive parser case
+EOF
+;;
+"get --help")
+cat <<'EOF'
+Read an entry
+
+Commands:
+  list  List entries
+EOF
+;;
+"list --help")
+cat <<'EOF'
+List entries
+
+Options:
+  -h, --help  Print help
+EOF
+;;
+*)
+exit 3
+;;
+esac
+`
+
+func edgeBinary(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the edge CLI is a POSIX shell script")
+	}
+	path := filepath.Join(t.TempDir(), "edge-cli")
+	if err := os.WriteFile(path, []byte(edgeCLI), 0o700); err != nil {
+		t.Fatalf("write edge cli: %v", err)
+	}
+	return path
+}
+
+func TestWalkHandlesCyclesBrokenCommandsAndDepth(t *testing.T) {
+	binary := edgeBinary(t)
+	if _, ok := probe(binary, "symvault broken"); ok {
+		t.Fatal("want the advertised but unusable command to be unreachable")
+	}
+	// A command that fails silently still yields a diagnostic.
+	detail, ok := probe(binary, "symvault broken")
+	if ok || detail == "" {
+		t.Errorf("silent failure must still carry a diagnostic, got %q", detail)
+	}
+
+	out := filepath.Join(t.TempDir(), "report.json")
+	if err := run([]string{"--binary", binary, "--tree", oracleTree(t), "--output", out, "--depth", "1"}); err != nil {
+		t.Fatalf("run with depth 1: %v", err)
+	}
+	got := readReport(t, out)
+	// symvault, get, list, broken, and the back edge symvault get list: the
+	// walker records a path before it applies the depth cut-off, and the
+	// duplicated root entry must not walk get twice.
+	if got.RustPaths != 5 {
+		t.Errorf("rust paths at depth 1 = %d, want 5", got.RustPaths)
+	}
+}
+
+func TestIdentifyRejectsUnreadableTargets(t *testing.T) {
+	if _, _, err := identify(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Error("want an error for a missing binary")
+	}
+	if _, _, err := identify(t.TempDir()); err == nil {
+		t.Error("want an error when the binary path is a directory")
+	}
+}
+
+func TestRunFailsOnUnwritableReportPaths(t *testing.T) {
+	binary := fakeBinary(t)
+	tree := oracleTree(t)
+
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	if err := run([]string{"--binary", binary, "--tree", tree, "--output", filepath.Join(blocker, "sub", "report.json")}); err == nil {
+		t.Error("want an error when the report directory cannot be created")
+	}
+	if err := run([]string{"--binary", binary, "--tree", tree, "--output", t.TempDir()}); err == nil {
+		t.Error("want an error when the report path is a directory")
+	}
+	if err := run([]string{"--binary", t.TempDir(), "--tree", tree, "--output", filepath.Join(t.TempDir(), "report.json")}); err == nil {
+		t.Error("want an error when the probed binary is a directory")
 	}
 }
