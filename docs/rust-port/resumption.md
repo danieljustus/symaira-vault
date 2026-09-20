@@ -1,5 +1,46 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-20, Teil 4 (nach `c60e3be5`) — P0 im Oracle, Slice pausiert
+
+**Der nächste geplante Slice (`migrate pseudonymize`) ist als Oracle unbrauchbar:
+die Go-Produktion löscht dabei den ganzen Vault.** Gefunden bei der
+Voruntersuchung des Slice, gemeldet als
+[#1088](https://github.com/danieljustus/symaira-vault/issues/1088), Fix in
+[PR #1089](https://github.com/danieljustus/symaira-vault/pull/1089).
+
+Gemessen mit dem gepinnten Oracle-Build (`target/port/symvault-go`), isoliertes
+`HOME`, Memory-Keyring, 2 Einträge:
+
+- `migrate pseudonymize -y` meldet „Migrating 2 entries… / Migration complete.“
+  und **Exit 0**, danach existiert **keine einzige Eintragsdatei** mehr:
+  `find entries -name '*.age'` → 0, `list` leer, `get` → not found,
+  `config.yaml` trägt `pseudonymize_paths: true`.
+- Ursache: `cmd/admin/migrate.go` ruft `enablePseudonymizeConfig` **nach** der
+  Schleife. `WriteEntry` lädt die Config selbst, `entryStoragePath()` liefert den
+  HMAC-Pfad nur bei gesetztem Flag — also schreibt jede Iteration auf
+  `entries/<plain>.age` zurück und das folgende `os.Remove` löscht sie.
+
+Drei weitere Defekte derselben Stelle beim Fix gefunden und mitbehoben:
+Pfadableitung aus dem Dateinamen (zweiter Lauf hasht den HMAC-Namen erneut),
+`PrepareEntryForWrite(pseudonymize=false)` (logischer Pfad landet nie im
+Ciphertext), und `ReadEntry`/`readEntryInner` ohne Fallback auf
+`entries/<plain>.age` (Vault mit Flag und Plaintext-Namen liest sich als leer —
+genau der Zustand nach einem fehlerhaften Lauf).
+
+- Fixture-Pins vorgerückt (`internal/vault/entry_readwrite.go` ist gepinnte
+  Oracle-Quelle): `metadata.json` und `manifest-keys.json` neu eingefroren,
+  **nur Provenance geändert**, alle 8 bzw. 16 Vektoren byte-identisch. Pins in
+  `manifestkeygen`, `storemetagen`-Test, `Makefile` und den zwei Rust-Consumern
+  (`symvault-store/src/metadata.rs`, `tests/manifest_keys.rs`) auf `fd55bb73`.
+  Der `gitio`-Pin bleibt (`internal/git`, unberührt).
+- **Slice-Entscheidung:** `migrate pseudonymize` nicht portieren, solange das
+  Oracle den Defekt trägt. Byte-identische stdout/stderr-Fixture hätte die
+  Datenlöschung als Vertrag eingefroren. Der Slice bleibt `blocked` bis #1089
+  gemergt ist.
+- Go bleibt Produktion; kein Cutover, kein Release.
+- **Native CI für `fd55bb73`/`18ceab98` steht aus**; CI-Evidenz ist nicht
+  behauptet, bis der Lauf gegen den exakten Head beobachtet ist.
+
 ## Zwischenstand 2026-09-20, Teil 3 (nach `72c14890`)
 
 **Gemessen: die macOS-Testflakes sind eine Uhr-Auflösung, kein Vertragsproblem.**
