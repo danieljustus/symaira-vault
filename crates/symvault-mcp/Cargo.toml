@@ -1,0 +1,26 @@
+[package]
+name = "symvault-mcp"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+getrandom = "=0.3.3"
+serde.workspace = true
+symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
+serde_json = { workspace = true, features = ["raw_value"] }
+# Go 1.26 selects Unicode 15 tables; ICU 2.3 normalizes newer codepoints differently.
+unicode-normalization = "=0.1.22"
+symvault-core = { path = "../symvault-core", version = "=0.0.0" }
+symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+symvault-store = { path = "../symvault-store", version = "=0.0.0" }
+symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
+symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
+time = { version = "=0.3.47", features = ["formatting"] }
+
+[dev-dependencies]
+sha2 = "=0.10.9"
+tempfile = "=3.27.0"

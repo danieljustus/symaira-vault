@@ -196,6 +196,10 @@ jobs:
   port-contract:
     name: Rust port contract
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -215,6 +219,10 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -231,9 +239,6 @@ jobs:
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
-      - name: Install pinned nightly Miri toolchain
-        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
-
       - name: Install Rust verification tools
         uses: taiki-e/install-action@84f5ac3124727fb3d284d4d22ee9ab3654fd09a6 # v2.87.7
         with:
@@ -243,8 +248,29 @@ jobs:
       - name: Install pinned cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 
+      # The interpreter-heavy Miri pass runs in the parallel `rust-miri` job;
+      # `rust-gates-core` is every remaining staged gate.
       - name: Run Rust gates and Go differential contract
-        run: make rust-gates
+        run: make rust-gates-core
+
+  rust-miri:
+    name: Rust Miri
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt
+
+      - name: Install pinned nightly Miri toolchain
+        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
+
+      - name: Run symvault-core tests under Miri
+        run: make rust-miri
 
   rust-fuzz:
     name: Rust fuzz (main/schedule)
@@ -266,10 +292,15 @@ jobs:
       - name: Run bounded main/scheduled Rust fuzz pass
         run: make rust-fuzz
 
+  # Keep native Rust in the PR run so migration batches need no duplicate
+  # workflow_dispatch of the entire Go/CI matrix.
   rust-native:
     name: Rust native (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     strategy:
       fail-fast: false
       matrix:
@@ -289,15 +320,12 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
 
+      # Clippy checks the same targets; cargo test already includes doctests.
       - name: Check and lint
-        run: |
-          cargo check --workspace --all-targets --all-features --locked
-          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
       - name: Test including doctests
-        run: |
-          cargo test --workspace --all-features --locked
-          cargo test --workspace --doc --all-features --locked
+        run: cargo test --workspace --all-features --locked
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
@@ -326,7 +354,10 @@ jobs:
           CGO_ENABLED: '1'
           SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
         run: |
-          go test -v -timeout=15m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
+          go test -v -timeout=15m -coverprofile=coverage.out -skip 'TestFlow|TestBinaryE2E|Integration' ./...
+
+      - name: Check coverage threshold
+        run: ./scripts/check-go-coverage.sh
 
   windows-process-tree:
     name: Process tree (Windows)
@@ -373,6 +404,12 @@ jobs:
           go test -v -timeout=5m
           -run "TestCommandTimedOutRequiresEffectiveTreeCancellation|TestRunNaturalNonzeroExitIsNotTimedOut|TestRunDeadlineWithoutEffectiveTreeCancellationPreservesNaturalExit|TestRunPreservesWaitDelayWhenTreeIsAlreadyGone|TestRunAssignmentFailureCleansUpSynchronously|TestRunAssignmentFailureKillsUnassignedSuspendedProcess|TestWindowsClassifyAlreadyGoneWaitDelayEINVAL|TestRunTimeoutKillsDescendantJobObject|TestRunTimeoutWaitsForInheritedPipeCleanup|TestWindowsProcessTreeLifecycleAndErrors|TestWindowsProcessTreeKillReportsActiveJob|TestWindowsProcessTreeKillReportsEmptyJob"
           ./scripts/rust-port/internal/diff
+
+      - name: Run production Git Windows process-tree regression
+        run: >-
+          go test -count=1 -v -timeout=5m
+          -run "^Test(ConfigureProcessTree|StartProcessTree|KillProcessTree|PushWithSystemGit|GitPushTimeout)"
+          ./internal/git
 
       - name: Run store004gen Windows job-object regression
         run: >-
@@ -603,55 +640,7 @@ jobs:
 
       - name: Check coverage threshold
         if: matrix.os == 'ubuntu-latest'
-        run: |
-          echo "=== Total coverage check ==="
-          COVERAGE_THRESHOLD=63.5
-          echo "Threshold: ${COVERAGE_THRESHOLD}%"
-          TOTAL_LINE=$(go tool cover -func=coverage.out | grep "total:")
-          echo "Coverage line: $TOTAL_LINE"
-          COVERAGE=$(echo "$TOTAL_LINE" | grep -oE '[0-9]+\.[0-9]+' | tail -1)
-          echo "Total coverage: ${COVERAGE}%"
-          if awk "BEGIN {exit !($COVERAGE < $COVERAGE_THRESHOLD)}"; then
-            echo "FAIL: Total coverage ${COVERAGE}% is below threshold of ${COVERAGE_THRESHOLD}%"
-            exit 1
-          fi
-          echo "PASS: Total coverage ${COVERAGE}% meets threshold of ${COVERAGE_THRESHOLD}%"
-
-          echo ""
-          echo "=== Per-package coverage checks for security-critical packages ==="
-          # Derived from the main coverage.out (single test pass): the default
-          # -coverpkg scopes each test binary to its own package, so filtering
-          # profile lines by full package path equals a dedicated per-package
-          # run (verified locally: crypto 87.2, session 70.9, auth 91.5,
-          # serverbootstrap 84.4 — identical; vault 85.0 vs 84.9 rounding).
-          # NOTE: filter by FULL path — "/auth/" alone would also match cmd/auth.
-          PKG_COV_TMP=$(mktemp -d)
-          for PACKAGE in "internal/crypto" \
-                         "internal/session" \
-                         "internal/vault" \
-                         "internal/mcp/auth" \
-                         "internal/mcp/serverbootstrap"; do
-            PKG_NAME=$(basename "$PACKAGE")
-            PKG_PROFILE="$PKG_COV_TMP/${PKG_NAME}.out"
-            { head -1 coverage.out; grep "symaira-vault/${PACKAGE}/" coverage.out || true; } > "$PKG_PROFILE"
-            PKG_COV=$(go tool cover -func="$PKG_PROFILE" | grep '^total:' | grep -oE '[0-9]+\.[0-9]+' | tail -1)
-            [ -z "$PKG_COV" ] && PKG_COV=0
-            case "$PKG_NAME" in
-              crypto)          PKG_THRESHOLD=85.0 ;;
-              session)         PKG_THRESHOLD=70.0 ;;
-              vault)           PKG_THRESHOLD=72.0 ;;
-              auth)            PKG_THRESHOLD=82.0 ;;
-              serverbootstrap) PKG_THRESHOLD=78.0 ;;
-              *)               PKG_THRESHOLD=65.0 ;;
-            esac
-            echo "${PKG_NAME}: ${PKG_COV}% (threshold: ${PKG_THRESHOLD}%)"
-            if awk "BEGIN {exit !($PKG_COV < $PKG_THRESHOLD)}"; then
-              echo "FAIL: ${PKG_NAME} coverage ${PKG_COV}% is below threshold of ${PKG_THRESHOLD}%"
-              exit 1
-            fi
-            echo "PASS: ${PKG_NAME} coverage ${PKG_COV}% meets threshold of ${PKG_THRESHOLD}%"
-          done
-          rm -rf "$PKG_COV_TMP"
+        run: ./scripts/check-go-coverage.sh
 
       - name: Run smoke tests
         shell: bash
@@ -864,6 +853,8 @@ jobs:
       - flake-vendorhash
       - port-contract
       - rust
+      - rust-miri
+      - rust-native
       - test-pr
       - windows-process-tree
       - build-pr
@@ -896,6 +887,8 @@ jobs:
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
           RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_RUST: ${{ needs.rust.result }}
+          RES_RUST_MIRI: ${{ needs.rust-miri.result }}
+          RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
@@ -924,6 +917,8 @@ jobs:
           check_required "$RES_FLAKE_VENDORHASH" flake-vendorhash
           check_required "$RES_PORT_CONTRACT" port-contract
           check_required "$RES_RUST" rust
+          check_required "$RES_RUST_MIRI" rust-miri
+          check_required "$RES_RUST_NATIVE" rust-native
           check_required "$RES_TEST_PR" test-pr
           check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
           check_required "$RES_BUILD_PR" build-pr

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f894",
+    "source_files": [
+      "cmd/admin/export.go",
+      "internal/exporter/csv.go",
+      "internal/exporter/json.go",
+      "internal/importer/importer.go"
+    ],
+    "source_digest": "2372ca0df22b5e733a62559a07e53cda0715aec80a00ebd7290265c564f348eb",
+    "generator_files": [
+      "cmd/admin/export_fixture_test.go"
+    ],
+    "generator_digest": "e34b999042fa4d7459ad55d49ede8a736c146e42c9d1962ace115fca020a3b1f"
+  },
+  "cases": [
+    {
+      "name": "json_mapping",
+      "format": "json",
+      "mapping": "username=user,password=secret",
+      "output": "[\n  {\n    \"data\": {\n      \"note\": \"a,b\",\n      \"secret\": \"fixture-pass\",\n      \"user\": \"alice\"\n    },\n    \"path\": \"work/example\"\n  },\n  {\n    \"data\": {\n      \"otp\": null,\n      \"user\": \"bob\"\n    },\n    \"path\": \"empty/otp\"\n  }\n]\n"
+    },
+    {
+      "name": "csv_mapping",
+      "format": "csv",
+      "mapping": "username=user,password=secret",
+      "output": "path,note,otp,secret,user\nwork/example,\"a,b\",,fixture-pass,alice\nempty/otp,,\u003cnil\u003e,,bob\n"
+    },
+    {
+      "name": "json_empty",
+      "format": "json",
+      "mapping": "",
+      "output": "[]"
+    },
+    {
+      "name": "csv_empty",
+      "format": "csv",
+      "mapping": "",
+      "output": ""
+    }
+  ],
+  "invalid": {
+    "mapping_error": "invalid mapping pair: \"username\"",
+    "format_error": "unsupported export format: yaml"
+  },
+  "cancel": {
+    "stderr": "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.\nExport canceled.\n",
+    "output_still_absent": true
+  }
+}

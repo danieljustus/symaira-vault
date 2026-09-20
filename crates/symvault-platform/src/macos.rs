@@ -7,18 +7,15 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
 
-use symvault_core::{
-    platform::{
-        Autotype, Clipboard, Daemon, Notifier, PlatformError, PlatformErrorKind, SecureUi, TouchId,
-    },
-    session::{Keyring, SessionError, split_keyring_key},
+use symvault_core::platform::{
+    Autotype, Clipboard, Daemon, Notifier, PlatformError, PlatformErrorKind, SecureUi, TouchId,
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -61,50 +58,135 @@ fn run_stdin_command(
     input: &[u8],
     timeout: Duration,
 ) -> Result<Vec<u8>, PlatformError> {
+    let output = run_native_process(program, args, input, timeout)?;
+    if output.status.success() {
+        Ok(output.stdout)
+    } else {
+        Err(failed("native macOS helper returned an error"))
+    }
+}
+
+pub(crate) fn run_native_process(
+    program: &str,
+    args: &[&str],
+    input: &[u8],
+    timeout: Duration,
+) -> Result<std::process::Output, PlatformError> {
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+    use std::os::unix::process::CommandExt;
+
+    let deadline = Instant::now()
+        .checked_add(bounded_timeout(timeout))
+        .ok_or_else(|| failed("native macOS helper timeout out of range"))?;
     let mut command = Command::new(program);
     command
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Preserve private-home keychain routing in the disposable native runner.
+    // No credential-bearing environment variables reach native helpers.
+    if let Some(home) = std::env::var_os("HOME") {
+        command.env("HOME", home);
+    }
     let mut child = command
         .spawn()
         .map_err(|_| unavailable("native macOS helper unavailable"))?;
-    if let Some(mut stdin) = child.stdin.take()
-        && stdin.write_all(input).is_err()
-    {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(failed("native macOS helper input failed"));
-    }
-    let deadline = Instant::now() + bounded_timeout(timeout);
-    loop {
-        match child
-            .try_wait()
-            .map_err(|_| failed("native macOS helper status failed"))?
-        {
-            Some(status) => {
-                let output = child
-                    .wait_with_output()
-                    .map_err(|_| failed("native macOS helper output failed"))?;
-                if status.success() {
-                    return Ok(output.stdout);
+    let result = (|| {
+        let mut stdin = child.stdin.take();
+        let mut stdout = child.stdout.take().expect("piped stdout");
+        let mut stderr = child.stderr.take().expect("piped stderr");
+        // All three pipes must make progress together. Secrets stay in memory,
+        // and a helper that never reads stdin cannot bypass the deadline.
+        for fd in [
+            std::os::fd::AsFd::as_fd(stdin.as_ref().expect("piped stdin")),
+            std::os::fd::AsFd::as_fd(&stdout),
+            std::os::fd::AsFd::as_fd(&stderr),
+        ] {
+            let flags = fcntl_getfl(fd).map_err(|_| failed("native helper pipe setup failed"))?;
+            fcntl_setfl(fd, flags | OFlags::NONBLOCK)
+                .map_err(|_| failed("native helper pipe setup failed"))?;
+        }
+        let mut written = 0;
+        let mut output = Vec::new();
+        let mut diagnostic = Vec::new();
+        let (mut stdout_done, mut stderr_done) = (false, false);
+        let mut status = None;
+        loop {
+            if let Some(pipe) = stdin.as_mut() {
+                match pipe.write(&input[written..]) {
+                    Ok(count) => written += count,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(_) => return Err(failed("native macOS helper input failed")),
                 }
-                return Err(failed("native macOS helper returned an error"));
+                if written == input.len() {
+                    stdin.take();
+                }
             }
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+            for (pipe, done, captured) in [
+                (&mut stdout as &mut dyn Read, &mut stdout_done, &mut output),
+                (
+                    &mut stderr as &mut dyn Read,
+                    &mut stderr_done,
+                    &mut diagnostic,
+                ),
+            ] {
+                if *done {
+                    continue;
+                }
+                let mut buffer = [0_u8; 8192];
+                match pipe.read(&mut buffer) {
+                    Ok(0) => *done = true,
+                    Ok(count) => captured.extend_from_slice(&buffer[..count]),
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(_) => return Err(failed("native macOS helper output failed")),
+                }
+            }
+            if status.is_none() {
+                status = child
+                    .try_wait()
+                    .map_err(|_| failed("native macOS helper status failed"))?;
+            }
+            if let Some(status) = status
+                && stdout_done
+                && stderr_done
+                && stdin.is_none()
+            {
+                return Ok(std::process::Output {
+                    status,
+                    stdout: output,
+                    stderr: diagnostic,
+                });
+            }
+            if Instant::now() >= deadline {
                 return Err(PlatformError {
                     kind: PlatformErrorKind::TimedOut,
                     message: "native macOS helper timed out".to_owned(),
                 });
             }
-            None => thread::sleep(Duration::from_millis(10)),
+            thread::sleep(Duration::from_millis(1));
         }
+    })();
+    if result.is_err() {
+        let group = format!("-{}", child.id());
+        let _ = Command::new("/bin/kill")
+            .args(["-KILL", "--", &group])
+            .output();
+        let _ = child.kill();
     }
+    let _ = child.wait();
+    result
 }
 
 fn run_jxa(script: &str, timeout: Duration) -> Result<Vec<u8>, PlatformError> {
@@ -117,74 +199,14 @@ fn run_jxa(script: &str, timeout: Duration) -> Result<Vec<u8>, PlatformError> {
 }
 
 fn js_string(value: &str) -> String {
-    let mut result = String::with_capacity(value.len() + 2);
-    result.push('"');
-    for ch in value.chars() {
-        match ch {
-            '\\' => result.push_str("\\\\"),
-            '"' => result.push_str("\\\""),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            ch if ch.is_control() => {
-                result.push_str(&format!("\\u{:04x}", ch as u32));
-            }
-            ch => result.push(ch),
-        }
-    }
-    result.push('"');
-    result
+    serde_json::to_string(value)
+        .expect("strings always serialize")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
-/// macOS Keychain Services through the maintained `keyring` adapter. This is
-/// intentionally a separate type from the in-memory test keyring.
-#[derive(Default)]
-pub struct MacOsKeyring;
-
-impl MacOsKeyring {
-    fn entry(key: &str) -> Result<keyring::Entry, SessionError> {
-        // The split itself is the shared contract, pinned by SESSION-002 and
-        // implemented once in symvault_core so the native backend cannot drift
-        // from it.
-        let Some((service, account)) = split_keyring_key(key) else {
-            return Err(SessionError::Keyring("invalid keyring key".to_owned()));
-        };
-        keyring::Entry::new(service, account)
-            .map_err(|_| SessionError::Keyring("native macOS keychain unavailable".to_owned()))
-    }
-
-    fn unavailable(_error: keyring::Error) -> SessionError {
-        // Do not copy provider diagnostics into session errors: some keychain
-        // implementations include account or path details in their display.
-        SessionError::Keyring("native macOS keychain operation failed".to_owned())
-    }
-}
-
-impl Keyring for MacOsKeyring {
-    fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
-        Self::entry(key)?.get_secret().map_err(|error| {
-            if matches!(error, keyring::Error::NoEntry) {
-                SessionError::NotFound
-            } else {
-                Self::unavailable(error)
-            }
-        })
-    }
-
-    fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
-        Self::entry(key)?
-            .set_secret(value)
-            .map_err(Self::unavailable)
-    }
-
-    fn delete(&self, key: &str) -> Result<(), SessionError> {
-        match Self::entry(key)?.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(error) => Err(Self::unavailable(error)),
-        }
-    }
-}
+/// Backward-compatible macOS name for the shared native OS keyring adapter.
+pub use crate::os_keyring::OsKeyring as MacOsKeyring;
 
 /// Touch ID availability and authentication using LocalAuthentication via
 /// JavaScript for Automation. The authenticator returns only a decision.
@@ -254,6 +276,22 @@ impl MacOsPlatform {
 
 impl Autotype for MacOsPlatform {
     fn type_text(&self, text: &str) -> Result<(), PlatformError> {
+        crate::focus::guard(
+            &std::env::var_os("SYMVAULT_AUTOTYPE_STRICT_FOCUS")
+                .map(|value| value.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            || {
+                let output = run_stdin_command(
+                    "/usr/bin/osascript",
+                    &["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"],
+                    b"", DEFAULT_TIMEOUT,
+                ).map_err(|_| crate::focus::unavailable())?;
+                Ok(format!(
+                    "process:{}",
+                    String::from_utf8_lossy(&output).trim()
+                ))
+            },
+        )?;
         let script = format!(
             "Application('System Events').keystroke({});",
             js_string(text)
@@ -451,9 +489,42 @@ fn xml_text(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symvault_core::session::{Keyring, SessionError};
+
+    #[test]
+    fn native_helper_drains_pipes_and_bounds_blocked_input_and_descendants() {
+        let input = vec![b'x'; 256 * 1024];
+        let output = run_stdin_command(
+            "/bin/sh",
+            &["-c", "head -c 131072 /dev/zero >&2; cat"],
+            &input,
+            Duration::from_secs(5),
+        )
+        .expect("large bidirectional pipe traffic completes");
+        assert_eq!(output, input);
+        for (script, bytes) in [
+            ("sleep 30", input.as_slice()),
+            ("sleep 30 & exit 0", &[][..]),
+        ] {
+            let start = Instant::now();
+            let error = run_stdin_command(
+                "/bin/sh",
+                &["-c", script],
+                bytes,
+                Duration::from_millis(100),
+            )
+            .expect_err("blocked helper fails");
+            assert_eq!(error.kind, PlatformErrorKind::TimedOut);
+            assert!(start.elapsed() < Duration::from_secs(3));
+        }
+    }
 
     #[test]
     fn jxa_strings_are_escaped_without_changing_content() {
+        let source = "line\u{2028}paragraph\u{2029}literal\\u2028";
+        let encoded = js_string(source);
+        assert!(!encoded.contains(['\u{2028}', '\u{2029}']));
+        assert_eq!(serde_json::from_str::<String>(&encoded).unwrap(), source);
         assert_eq!(js_string("a\\\"\n\t"), "\"a\\\\\\\"\\n\\t\"");
     }
 

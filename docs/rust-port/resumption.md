@@ -1,5 +1,39 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-18 (nach `56e0c83c`, ersetzt nichts darunter)
+
+- **Gepusht:** `56e0c83c` auf `migration/rust-batch-20260916`, Draft PR #1069.
+- **Drei native CI-Fehler von `dce458bf` root-cause-behoben** (`d9bc4f0f`):
+  Windows-XDG-Pfad parität zu Go komponentenweise gejoint (`xdg_base`/`xdg_root`),
+  `share revoke`-Differential sortiert jetzt (Go iteriert eine Map: 3 verschiedene
+  Reihenfolgen in 12 Läufen des gepinnten Oracles, also kein Vertrag), macOS
+  `ShareStore::read_verified` gegen Symlink-Präfix kanonisiert (Reproduktion:
+  Fehler `ENOTDIR` mit Symlink-`TMPDIR`, identisch zum CI-Fehler).
+- **Human-TTY-Approval portiert** (`e89a633c`, `bc44b3b6`): `crates/symvault-platform/src/approval.rs`
+  mit Prompt-Renderer, Go-Duration-Text, Timeout, Raw-Mode-Restore und
+  `/dev/tty`-Zugriff über `rustix` (Crate bleibt `#![deny(unsafe_code)]`).
+  Review hat drei Abweichungen gefunden und korrigiert: Enter kommt im Raw-Mode als
+  `\r` (nicht `\n`), Cooked-Mode wird vor dem Acknowledge wiederhergestellt,
+  Zeilen werden nach Runen (nicht Bytes) gepolstert.
+- **MCP `approve_share` verbunden** (`0d5abe96`): menschliche Bestätigung
+  verpflichtend, Selbstfreigabe vor dem Prompt verweigert, fehlende TTY fail-closed,
+  Grant wird unter Sperre erneut geprüft, Nicht-Bestätigung lehnt ab (wie Go).
+  8 neue Protokolltests; Workspace 655/655 grün.
+- **CI-Laufzeit gemessen und halbiert** (`56e0c83c`): Der Job `Rust` war mit 33,7 min
+  der kritische Pfad, davon ~22 min Miri. Miri läuft jetzt als eigener paralleler
+  Job; `make rust-gates` behält seine Bedeutung (`rust-gates-core` + `rust-miri`).
+  Basis: `docs/rust-port/ci-runtime.md`. Erwartung ~22 min; nächster Hebel ist die
+  Per-Test-Messung der Miri-Laufzeit (läuft).
+- **CLI-Lückeninventur erzeugt** (`docs/rust-port/cli-gap-inventory.md`): 11 von 45
+  Top-Level-Gruppen fehlen komplett, dazu 30+ Subkommandos und 11 Flag-Lücken.
+  Zwei Worker-Lanes laufen dagegen: Agent-Token-Mutationen (`new`/`revoke`/`rotate`)
+  und `auth set`/`auth rotate-passphrase`/`audit rotate-key`/`config validate`.
+- **Offene, bewusste Lücke:** Windows-TTY-Approval fehlt (fail-closed „deny“,
+  `ponytail:`-Kommentar nennt den Upgrade-Pfad `CONIN$`/`CONOUT$` + `SetConsoleMode`).
+- Verbleibend: 13 von 35 MCP-Tools ohne Handler (davon 7 GUI-/Biometrie-abhängig),
+  HTTP/OAuth/Broker, native Biometrie/Session, Swift-Bridge, Rest-CLI/TUI,
+  Release-/Value-/Rollback-Gates. Go bleibt Produktion; kein Cutover/Release.
+
 ## Candidate and provenance
 
 - **Integration candidate before this handover document:** `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`; it is based on `origin/main` `81210de2720ee000fa26adda4da4080daae01677`.
@@ -50,3 +84,11 @@ The current local `golangci-lint run` and locally installed gosec `2.29.0` repor
 - Record each native CI run against its exact head SHA before changing matrix status. A configured workflow is not evidence of execution.
 - Preserve any re-discovered parallel worktrees/branches and the checkpoint object above. Do not reset, clean, delete, or bulk-commit them.
 - **Conclusion at this checkpoint:** `STABILER TEILSTAND, MIGRATION NOCH OFFEN`. The storage/index candidate has native Ubuntu/macOS/Windows evidence and is a bounded behavior-preserving module-move input; it is not release-, cutover-, or consolidation-ready while the listed RUST-005 and later-slice gaps remain.
+
+## Continuation checkpoint: 2026-09-18, HEAD `f929e819`
+
+The active integration branch is `codex/vault-rust-resume-20260917`; the pushed PR branch is `migration/rust-batch-20260916`, PR #1069 remains Draft. Agent profile edit, token listing, audit display, read-only `agent doctor`, signed pending share requests, share lifecycle persistence, and the grant-signing-key loader are connected. `agent doctor` checks the configured profile, skill path, YAML frontmatter, `managed_by: symaira` sentinel, and body SHA-256 drift without modifying files.
+
+The prior general CI failure was reduced to a Clippy `write_literal` warning in the token-table heading. Commit `f929e819` fixes that warning; local workspace Clippy, three focused doctor tests, token/audit differential tests, and 22 sharing tests pass. New CI for `f929e819` must still be observed at the exact head before claiming native acceptance.
+
+Next bounded work: implement the human TTY approval primitive and wire MCP `approve_share` only after safe terminal/timeout tests; then continue remaining agent token mutations and MCP/HTTP/Broker slices. Keep Go production and preserve rollback. Estimated total migration progress remains 50–55% by effort, not an acceptance percentage. All local build/test/cache/temp paths remain on the external NVMe.

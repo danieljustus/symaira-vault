@@ -77,7 +77,12 @@ pub fn validate_totp_secret(secret: &str) -> Result<(), TotpError> {
 }
 
 /// Validates RFC 6238 algorithm, digits, and period bounds.
-pub fn validate_totp_params(algorithm: &str, digits: i32, period: i32) -> Result<(), TotpError> {
+pub fn validate_totp_params(
+    algorithm: &str,
+    digits: impl Into<i64>,
+    period: impl Into<i64>,
+) -> Result<(), TotpError> {
+    let (digits, period) = (digits.into(), period.into());
     let algorithm_upper = algorithm.to_ascii_uppercase();
     if !algorithm_upper.is_empty()
         && !matches!(algorithm_upper.as_str(), "SHA1" | "SHA256" | "SHA512")
@@ -184,8 +189,21 @@ fn normalize_secret(secret: &str) -> String {
 }
 
 fn decode_secret(secret: &str) -> Option<Zeroizing<Vec<u8>>> {
-    let decoded = base32::decode(base32::Alphabet::Rfc4648 { padding: true }, secret)
-        .or_else(|| base32::decode(base32::Alphabet::Rfc4648 { padding: false }, secret))?;
+    // encoding/base32 ignores CR/LF but rejects incomplete final quanta;
+    // the base32 crate otherwise accepts lengths such as three characters.
+    let secret: String = secret
+        .chars()
+        .filter(|c| !matches!(c, '\r' | '\n'))
+        .collect();
+    let unpadded = secret.trim_end_matches('=');
+    let remainder = unpadded.len() % 8;
+    if !matches!(remainder, 0 | 2 | 4 | 5 | 7)
+        || (secret.len() != unpadded.len()
+            && (remainder == 0 || secret.len() - unpadded.len() != 8 - remainder))
+    {
+        return None;
+    }
+    let decoded = base32::decode(base32::Alphabet::Rfc4648 { padding: false }, unpadded)?;
     (!decoded.is_empty()).then(|| Zeroizing::new(decoded))
 }
 

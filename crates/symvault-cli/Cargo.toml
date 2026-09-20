@@ -12,14 +12,25 @@ name = "symvault"
 path = "src/main.rs"
 
 [dependencies]
+base64 = "=0.22.1"
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "=0.10.9"
 serde_yaml_ng = "=0.10.0"
+yaml-edit = { version = "=0.3.1", default-features = false }
 rpassword = "=7.5.4"
 symaira-core-version.workspace = true
 symvault-core.workspace = true
+symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
+time = { version = "=0.3.47", features = ["parsing"] }
+symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+symvault-mcp = { path = "../symvault-mcp", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
+url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"

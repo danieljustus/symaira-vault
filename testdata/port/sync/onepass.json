@@ -1,0 +1,213 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "sources": [
+    "internal/crypto/totp.go",
+    "internal/importer/importer.go",
+    "internal/importer/onepux.go",
+    "internal/importer/pass.go",
+    "internal/importer/totp.go",
+    "internal/secrets/filter.go"
+  ],
+  "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
+  "generator_digest": "e5c2104b3d12f2a4b35445a5d7c4db9b2537bc9d62fb7a59fcf58268d7b203c7",
+  "cases": [
+    {
+      "name": "pass_adapter_recursive_and_warning",
+      "kind": "pass",
+      "files": [
+        {
+          "path": "work/example.gpg",
+          "content": "example-secret\nusername:  example-user\nurl: https://example.test\ncomment line\n"
+        },
+        {
+          "path": "work/invalid.gpg",
+          "content": "invalid-secret\notpauth://totp/example?secret=bad\n"
+        },
+        {
+          "path": "work/slash\\name.gpg",
+          "content": "pw\n"
+        }
+      ],
+      "expected": [
+        {
+          "path": "work/example",
+          "data": {
+            "notes": "comment line",
+            "password": "example-secret",
+            "url": "https://example.test",
+            "username": "example-user"
+          },
+          "warnings": null
+        },
+        {
+          "path": "work/invalid",
+          "data": {
+            "password": "invalid-secret"
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        },
+        {
+          "path": "work/slashname",
+          "data": {
+            "password": "pw"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_duplicate_and_first_totp",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAASAAAAbmVzdGVkL2V4cG9ydC5qc29ujJJLq9swEIX3/hWXs/Z9lLvTruW29AUxTUJaiheqNXFEZMlII7vF+L8X2SkYJ5S70sxwzjcPNEBWlYuWA8TPAZ2M5hJqpiZF2YBKMtXO/9lHrSDw9PQGOVizIQgcnD/ffXW1tsihiKU2AWKASaUPmoy6UBQFXVvJ2lkIxEDeyoaQo5MmJpIz6j6VMeZr9f5aban/p76CtzKE3nm1gqfyDXjxdrs9bL69rOCzuswzWMcUCiN1Uk8JcgSqkn8+1nGxJ0OgioFds7jSxtL9Tjd0VyxGS2dy3ELg87vt4cfzS/H+Y/HlufherHOM05apPyfHZH6FqxzLMc/gOvKdpj41jN7MM0dvIHBiboN4fKTfsmkNPTAFTluDZZ106J0/o5z7//cj7LwMp5SnlxQE+0i3bD39OjrfhIeaLHldLRifaus8KYxZOc3+NwAA//9QSwcI82UJpkwBAACfAgAAUEsBAhQAFAAIAAgAAAAAAPNlCaZMAQAAnwIAABIAAAAAAAAAAAAAAAAAAAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAQABAEAAAACMAQAAAAA=",
+      "expected": [
+        {
+          "path": "Work Login",
+          "data": {
+            "notes": "notes",
+            "password": "new-pass",
+            "tags": [
+              "work"
+            ],
+            "totp": {
+              "algorithm": "SHA1",
+              "digits": 6,
+              "period": 30,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            },
+            "url": "https://example.test",
+            "username": "new-user"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_first_invalid_totp",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kjL0KwjAYRfc+hdw5Q6VbRlHwZzCgoiIdYhLlg5iI/RqQkHcXtZNO99wznAxtTOwDd5CnjKR7PyCxu72pyjCa3TU+nrueLCTqegwBJvYOEouQtCc7Wm8VBKxjTb6DzOicYYrhW7uQ83bIBUhw5DsEEiTO2qKIf7+cbPbHZqpmc7Vq1EH9fpS2tKVU7WdfAQAA//9QSwcIX9ttoZMAAADJAAAAUEsBAhQAFAAIAAgAAAAAAF/bbaGTAAAAyQAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAMwAAAAAAA==",
+      "expected": [
+        {
+          "path": "Invalid OTP",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_null_fields",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26MjrEKwjAQhvc+hfxzhrrmAdwUFydxiOlRDq4JJJeKhL67FBvUTW757zi+769w3scSNMNeK2ZXZIusNK2pq/BOaYzpeSk8wKLv9zBQViFYnIrI7sAkQ4bBQOpYMmwoIgZxpjQzPd77Yv6CHWm6U/qhVUgcOWyaDR6iUj6L49AumbxyDLnpvvwVJX16qRvb09LdlnVeAQAA//9QSwcI4TTfQZkAAAAKAQAAUEsBAhQAFAAIAAgAAAAAAOE030GZAAAACgEAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAANIAAAAAAA==",
+      "expected": [
+        {
+          "path": "Null Fields",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        },
+        {
+          "path": "Null Members",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_null_elements",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25UjEGqAyEQRK/yqbWL+VsPkBtkFVyI0xkaehS0NQTx7sFAgqFWD+q9Dh9CqlEL7C1WEdPRfJWVWelcMHilI+XntfIOi237h4GyCsFifv5I6KSZNNhJPUuB7ZB0cLwwyf6JOYNCQTnFJX//eQw3DFKj3Jges1KzLLr646tOgBvDvfcKAAD//1BLBwiDBkxZhgAAANkAAABQSwECFAAUAAgACAAAAAAAgwZMWYYAAADZAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAvwAAAAAA",
+      "expected": [
+        {
+          "path": "null elements",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [
+              "",
+              "tag"
+            ],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_duplicate_export_uses_first",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpbTMouISpdpYMAQEAAD//1BLBwhuj2g1RwAAAE4AAABQSwMEFAAIAAgAAAAAAAAAAAAAAAAAAAAAABIAAABuZXN0ZWQvZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpeLU5Py8FKXaWDAEBAAA//9QSwcIrY5aCEgAAABPAAAAUEsBAhQAFAAIAAgAAAAAAG6PaDVHAAAATgAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsBAhQAFAAIAAgAAAAAAK2OWghIAAAATwAAABIAAAAAAAAAAAAAAAAAgAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAgACAHkAAAAIAQAAAAA=",
+      "expected": [
+        {
+          "path": "first",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_missing_export",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAKAAAAb3RoZXIuanNvbqquBQQAAP//UEsHCEO/pqMIAAAAAgAAAFBLAQIUABQACAAIAAAAAABDv6ajCAAAAAIAAAAKAAAAAAAAAAAAAAAAAAAAAABvdGhlci5qc29uUEsFBgAAAAABAAEAOAAAAEAAAAAAAA==",
+      "expected": [],
+      "failed": true,
+      "error_contains": "export.json not found in 1pux zip"
+    },
+    {
+      "name": "onepux_malformed_zip",
+      "kind": "onepux",
+      "input_base64": "bm90IGEgemlwIGFyY2hpdmU=",
+      "expected": [],
+      "failed": true,
+      "error_contains": "zip"
+    },
+    {
+      "name": "onepux_suffix_boundary",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAOAAAAZm9vZXhwb3J0Lmpzb26qrgUEAAD//1BLBwhDv6ajCAAAAAIAAABQSwECFAAUAAgACAAAAAAAQ7+mowgAAAACAAAADgAAAAAAAAAAAAAAAAAAAAAAZm9vZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA8AAAARAAAAAAA",
+      "expected": [],
+      "failed": true,
+      "error_contains": "export.json not found"
+    },
+    {
+      "name": "onepux_trailing_json",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qrlWorgUEAAD//1BLBwjetUcLCwAAAAUAAABQSwECFAAUAAgACAAAAAAA3rVHCwsAAAAFAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAARAAAAAAA",
+      "expected": [],
+      "failed": true,
+      "error_contains": "parse export.json"
+    }
+  ]
+}

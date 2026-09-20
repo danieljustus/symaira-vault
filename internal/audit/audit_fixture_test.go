@@ -1,10 +1,14 @@
+//go:build darwin || linux || windows
+
 package audit
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,7 +34,7 @@ var auditOracleSources = []string{
 
 var auditGeneratorSources = []string{"internal/audit/audit_fixture_test.go"}
 
-const auditOracleCommit = "a57f565a"
+const auditOracleCommit = "fca3f894"
 
 type auditFixture struct {
 	SchemaVersion int                  `json:"schema_version"`
@@ -41,6 +45,7 @@ type auditFixture struct {
 	Negatives     []auditNegativeCase  `json:"negative_cases"`
 	Export        auditExportFixture   `json:"export"`
 	Rotation      auditRotationFixture `json:"rotation"`
+	Keystore      auditKeystoreFixture `json:"keystore"`
 }
 
 type auditOracleMeta struct {
@@ -80,6 +85,21 @@ type auditRotationFixture struct {
 	ArchivePrefix string `json:"archive_prefix"`
 	ArchiveKid    string `json:"archive_kid"`
 	Bootstrap     bool   `json:"bootstrap"`
+}
+
+// auditKeystoreFixture records the observable OS-keyring path used by the Go
+// implementation while keeping the disposable directory itself out of the
+// portable fixture. The test binary starts with the process-memory keyring, so
+// this exercises the same CI/test contract as the production migration path
+// without touching a developer's real keychain.
+type auditKeystoreFixture struct {
+	KeyringService       string `json:"keyring_service"`
+	KeyringAccountPrefix string `json:"keyring_account_prefix"`
+	StoredHex            string `json:"stored_hex"`
+	LegacyKeyHex         string `json:"legacy_key_hex"`
+	MigratedKeyHex       string `json:"migrated_key_hex"`
+	LegacyFileRemoved    bool   `json:"legacy_file_removed"`
+	ReopenedMatches      bool   `json:"reopened_matches"`
 }
 
 func auditRepoRoot() string {
@@ -159,6 +179,10 @@ func buildAuditFixture(root string) (auditFixture, error) {
 	if len(oldKey) != 32 || len(newKey) != 32 {
 		return auditFixture{}, errors.New("fixture keys must be exactly 32 bytes")
 	}
+	keystore, err := buildAuditKeystoreFixture(oldKey)
+	if err != nil {
+		return auditFixture{}, err
+	}
 	keys := []auditFixtureKey{
 		{Name: "old", Hex: hex.EncodeToString(oldKey), Kid: KeyFingerprint(oldKey)},
 		{Name: "new", Hex: hex.EncodeToString(newKey), Kid: KeyFingerprint(newKey)},
@@ -221,7 +245,57 @@ func buildAuditFixture(root string) (auditFixture, error) {
 	)
 	endTruncated := append([]json.RawMessage(nil), entries[:len(entries)-1]...)
 	negatives = append(negatives, makeCase("end_truncation_is_undetectable", endTruncated))
-	return auditFixture{SchemaVersion: 1, Oracle: oracle, Keys: keys, Entries: entries, Legacy: legacy, Negatives: negatives, Export: auditExportFixture{Action: "set", FailedOnly: true, RedactedPath: RedactPath("safe/password"), Total: 1}, Rotation: auditRotationFixture{ArchivePrefix: "audit-hmac-key.rotated.", ArchiveKid: KeyFingerprint(oldKey), Bootstrap: true}}, nil
+	return auditFixture{SchemaVersion: 1, Oracle: oracle, Keys: keys, Entries: entries, Legacy: legacy, Negatives: negatives, Export: auditExportFixture{Action: "set", FailedOnly: true, RedactedPath: RedactPath("safe/password"), Total: 1}, Rotation: auditRotationFixture{ArchivePrefix: "audit-hmac-key.rotated.", ArchiveKid: KeyFingerprint(oldKey), Bootstrap: true}, Keystore: keystore}, nil
+}
+
+func buildAuditKeystoreFixture(legacyKey []byte) (auditKeystoreFixture, error) {
+	if len(legacyKey) != hmacKeySize {
+		return auditKeystoreFixture{}, fmt.Errorf("legacy fixture key has length %d, want %d", len(legacyKey), hmacKeySize)
+	}
+	if !isFallbackActive() {
+		return auditKeystoreFixture{}, errors.New("audit keystore fixture requires the process-memory keyring")
+	}
+	auditDir, err := os.MkdirTemp("", "symvault-audit-oracle-")
+	if err != nil {
+		return auditKeystoreFixture{}, err
+	}
+	defer os.RemoveAll(auditDir)
+	keyPath := filepath.Join(auditDir, hmacKeyFileName)
+	if err := os.WriteFile(keyPath, legacyKey, 0o600); err != nil {
+		return auditKeystoreFixture{}, err
+	}
+
+	keystore := NewKeystore(auditDir, nil)
+	migrated, err := keystore.LoadHMACKey()
+	if err != nil {
+		return auditKeystoreFixture{}, fmt.Errorf("load legacy key: %w", err)
+	}
+	if !bytes.Equal(migrated, legacyKey) {
+		return auditKeystoreFixture{}, errors.New("legacy migration changed key bytes")
+	}
+	_, statErr := os.Stat(keyPath)
+	legacyFileRemoved := errors.Is(statErr, os.ErrNotExist)
+	if statErr != nil && !legacyFileRemoved {
+		return auditKeystoreFixture{}, fmt.Errorf("stat migrated key file: %w", statErr)
+	}
+
+	reopened, err := NewKeystore(auditDir, nil).LoadOrCreateHMACKey()
+	if err != nil {
+		return auditKeystoreFixture{}, fmt.Errorf("reopen migrated key: %w", err)
+	}
+	storedHex, err := getFallback().Get(keyringService, keyringAccount(auditDir))
+	if err != nil {
+		return auditKeystoreFixture{}, fmt.Errorf("read memory keyring fixture value: %w", err)
+	}
+	return auditKeystoreFixture{
+		KeyringService:       keyringService,
+		KeyringAccountPrefix: keyringAccountPrefix + ":",
+		StoredHex:            storedHex,
+		LegacyKeyHex:         hex.EncodeToString(legacyKey),
+		MigratedKeyHex:       hex.EncodeToString(migrated),
+		LegacyFileRemoved:    legacyFileRemoved,
+		ReopenedMatches:      bytes.Equal(reopened, legacyKey),
+	}, nil
 }
 
 func auditEntryLineFromMap(value map[string]any) json.RawMessage {
@@ -337,5 +411,14 @@ func TestAuditFixture(t *testing.T) {
 	}
 	if !strings.HasPrefix(parsed.Rotation.ArchivePrefix, "audit-hmac-key.rotated.") {
 		t.Fatal("rotation archive contract drift")
+	}
+	if parsed.Keystore.KeyringService != keyringService || parsed.Keystore.KeyringAccountPrefix != keyringAccountPrefix+":" {
+		t.Fatal("keystore keyring address contract drift")
+	}
+	if parsed.Keystore.StoredHex != parsed.Keystore.LegacyKeyHex || parsed.Keystore.StoredHex != parsed.Keystore.MigratedKeyHex {
+		t.Fatal("keystore migration value drift")
+	}
+	if !parsed.Keystore.LegacyFileRemoved || !parsed.Keystore.ReopenedMatches {
+		t.Fatal("keystore legacy migration lifecycle drift")
 	}
 }

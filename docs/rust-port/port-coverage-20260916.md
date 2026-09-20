@@ -28,9 +28,18 @@ magnitude, and the structural facts below are what actually matter.
 ## The structural facts
 
 **`internal/mcp` is the largest subsystem in the repository — 15,054 lines —
-and nothing of it is ported.** No JSON-RPC handler, no tool surface, no stdio
-transport. Rows MCP-001 through MCP-004 are `TODO` because the implementation
-does not exist, not because a contract is missing.
+and almost none of it is ported.** Rows MCP-001 through MCP-004 were all `TODO`
+because the implementation did not exist, not because a contract was missing.
+
+MCP-001 and MCP-004 have since been ported: the `symvault-mcp` crate implements
+the JSON-RPC envelope, the `initialize` handshake, the line-framed stdio
+dispatch loop and its hygiene behavior under hostile input, against 45 cases
+generated from the pinned oracle. That is the handshake and the frame loop only. **Update 2026-09-17:** a native registry and `tools/list` slice now preserve 35
+Go schemas and 11 injected profile/runtime cases. `tools/call` and full runtime/
+authorization integration remain absent. The original inventory found that `internal/mcp/server/tool_registry.go`
+alone is 837 lines against the 35 tool definitions MCP-002 enumerates. Reading
+"MCP has started" as "MCP is close" would repeat exactly the error this page
+exists to correct.
 
 **There is no HTTP server in the Rust workspace at all.** No `axum`, no
 `hyper`, no listener. Rows HTTP-001 through HTTP-004 likewise.
@@ -41,9 +50,11 @@ because config and profile resolution is not wired into it — the binary says s
 itself when you omit the flag. CLI-001 is `PASS` because the version surface is
 genuinely pinned; CLI-002 through CLI-007 cover the other 133.
 
-**Eleven subsystems have no Rust counterpart of any kind**: `mcp`, `ui`,
+**These subsystems have no Rust counterpart of any kind**: `ui`,
 `health`, `cli`, `importer`, `intake`, `secureui`, `dynamicsecret`, `approval`,
-`broker`, `agentskill`, `daemon`, `secrets`, `update`.
+`broker`, `agentskill`, `daemon`, `secrets`, `update`. `mcp` has left this list
+as of MCP-001, but only by its handshake and transport; the count of *fully*
+ported subsystems among them is still zero.
 
 ## What this means for the remaining rows
 
@@ -89,6 +100,25 @@ find crates -path '*/src/*' -name '*.rs' | xargs wc -l | tail -1
 python3 -c "import json;print(len(json.load(open('testdata/port/cli/command-tree.json'))['commands']))"
 
 # MCP and HTTP in the Rust workspace
-grep -rn 'jsonrpc\|tools/call' crates/*/src/          # no matches
+grep -rn 'jsonrpc\|tools/call' crates/*/src/          # inspect implemented protocol seams
 grep -rn 'axum\|hyper\|TcpListener' crates/*/Cargo.toml  # no matches
 ```
+
+2026-09-17 continuation: native raw `config list` now has 13 real Go CLI cases; config get/set and complete CLI parity remain open. See [continuation](resume-20260917.md).
+
+## 2026-09-17 implementation checkpoint
+
+The inventory and line counts above describe the original snapshot, not current
+coverage. The integration branch now additionally includes raw `config list`,
+`lock`, `auth status`, `unlock --check`, and passphrase session unlock. Complete
+CLI coverage is still open, including Touch ID unlock and command integration.
+CSV/browser/Bitwarden/1Password/pass/CXF import libraries and expanded JSON/CSV
+export are implemented with source-bound Go cases; that does not establish full
+import/export command parity. MCP additionally supports the tool registry,
+`tools/list`, prompt list/get, and shared output sanitization; productive tool
+execution and HTTP/OAuth remain under development.
+
+Native keyring Go-to-Rust-to-Go interoperability passed on Linux, macOS and
+Windows in run 35249056550, for head bc62c5cb (merge 3fab62b9). Later local
+session/export changes require their own checks. No percentage is inferred
+from the count of passing contract rows.

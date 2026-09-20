@@ -149,7 +149,29 @@ fn backup_restore_preserves_manifest_modes_and_rejects_traversal() {
             .find(|x| x.path == "entries/a.age")
             .unwrap()
             .mode
+            & 0o600
     );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&archive_path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::metadata(dst.join("entries/a.age"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        let link = t.path().join("redirect.tar.gz");
+        std::os::unix::fs::symlink(&archive_path, &link).unwrap();
+        let before = fs::read(&archive_path).unwrap();
+        assert!(archive::backup(&src, &link, false).is_err());
+        assert_eq!(fs::read(&archive_path).unwrap(), before);
+    }
     let evil = t.path().join("evil.tar.gz");
     let f = fs::File::create(&evil).unwrap();
     let mut gz = GzEncoder::new(f, Compression::default());
@@ -494,6 +516,11 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
             .iter()
             .find(|entry| entry.path == expected["path"].as_str().unwrap())
             .unwrap();
+        // Unix permission bits are only asserted on native Unix, as in
+        // crates/symvault-store/tests/manifest_keys.rs: the Go-generated fixture
+        // records modes measured on a POSIX host, and Windows has no POSIX mode
+        // bits to preserve or compare.
+        #[cfg(unix)]
         assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
         assert_eq!(actual.size, expected["size"].as_u64().unwrap());
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
@@ -506,8 +533,42 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
             .find(|entry| entry.path == expected["path"].as_str().unwrap())
             .unwrap();
         assert!(!actual.directory);
+        // Same POSIX-mode convention as the archive members above.
+        #[cfg(unix)]
         assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
         assert_eq!(actual.size, expected["size"].as_u64().unwrap());
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_does_not_follow_predictable_temporary_symlink() {
+    use std::os::unix::fs::symlink;
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    let destination = root.path().join("destination");
+    fs::create_dir(&source).unwrap();
+    fs::create_dir(&destination).unwrap();
+    fs::write(source.join("entry.age"), b"restored ciphertext").unwrap();
+    let victim = root.path().join("unrelated");
+    fs::write(&victim, b"untouched").unwrap();
+    let predictable = destination.join(format!("entry.tmp-{}", std::process::id()));
+    symlink(&victim, &predictable).unwrap();
+    let archive = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive, false).unwrap();
+    archive::restore(&archive, &destination, false).unwrap();
+    assert_eq!(fs::read(&victim).unwrap(), b"untouched");
+    assert!(
+        fs::symlink_metadata(predictable)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        fs::read(destination.join("entry.age")).unwrap(),
+        b"restored ciphertext"
+    );
+    assert!(archive::restore(&archive, &destination, false).is_err());
+    archive::restore(&archive, &destination, true).unwrap();
 }
