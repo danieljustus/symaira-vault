@@ -49,6 +49,10 @@ dist/
 coverage/
 .build/
 /target/
+# The rule above only matches a real directory. A developer may replace the
+# build directory with a symlink to a faster volume, which reports as an
+# untracked file; ignore that form too so the checkout stays clean.
+/target
 fuzz/artifacts/
 fuzz/target/
 .gobind/
