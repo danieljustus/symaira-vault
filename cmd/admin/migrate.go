@@ -131,7 +131,7 @@ func runPseudonymizeMigration(v *vaultpkg.Vault) error {
 	for _, filePath := range ageFiles {
 		// The file name only identifies the entry while paths are still
 		// plaintext. Read the ciphertext to learn the logical path, so already
-		// pseudonymized files are recognised instead of being hashed again.
+		// pseudonymized files are recognized instead of being hashed again.
 		entry, readErr := vaultpkg.ReadEntryFile(filePath, v.Identity)
 		if readErr != nil {
 			return fmt.Errorf("read entry file %s: %w", filePath, readErr)
