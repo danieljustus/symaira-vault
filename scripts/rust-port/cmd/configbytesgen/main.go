@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"runtime"
 	"sort"
+	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
@@ -36,6 +37,9 @@ var productionSources = []string{
 	"internal/config/config_merge.go",
 	"internal/config/config_save.go",
 	"internal/config/config_validate.go",
+	// The writer's VaultConfig/GitConfig/ClipboardConfig field types and YAML
+	// tags are part of the SaveTo contract exercised below.
+	"internal/config/schema.go",
 	// Carries the warning texts the contract pins.
 	"internal/config/warn.go",
 }
@@ -83,6 +87,63 @@ type bytesCase struct {
 	RoundTripsTo string `json:"round_trips_to,omitempty"`
 }
 
+// writerCase records a real Go SaveTo followed by Load. The saved bytes are
+// the oracle; loaded is deliberately limited to fields Rust models, while
+// omittedFields documents fields that Go's SaveTo currently does not copy.
+// This makes omissions visible without pretending that the Rust model has
+// parity for every wider Config field.
+type writerCase struct {
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	Requested     writerSnapshot `json:"requested"`
+	SavedYAML     string         `json:"saved_yaml"`
+	Loaded        writerSnapshot `json:"loaded"`
+	OmittedFields []string       `json:"omitted_fields,omitempty"`
+}
+
+type writerSnapshot struct {
+	Vault     *writerVaultSnapshot     `json:"vault,omitempty"`
+	Git       *writerGitSnapshot       `json:"git,omitempty"`
+	Clipboard *writerClipboardSnapshot `json:"clipboard,omitempty"`
+}
+
+type writerVaultSnapshot struct {
+	Path               string   `json:"path"`
+	DefaultRecipients  []string `json:"default_recipients"`
+	ConfirmRemove      bool     `json:"confirm_remove"`
+	AuthMethod         string   `json:"auth_method"`
+	UseTouchID         bool     `json:"use_touch_id"`
+	LegacyMode         *bool    `json:"legacy_mode,omitempty"`
+	SearchIndex        bool     `json:"search_index"`
+	SearchWorkers      int      `json:"search_workers"`
+	SearchIndexCache   bool     `json:"search_index_cache"`
+	ConfigCacheEntries int      `json:"config_cache_entries"`
+	PseudonymizePaths  bool     `json:"pseudonymize_paths"`
+	ScryptWorkFactor   int      `json:"scrypt_work_factor"`
+	AutoMigrateKDF     bool     `json:"auto_migrate_kdf"`
+	AutoHealZeroKey    bool     `json:"auto_heal_zero_key"`
+	LastRotated        string   `json:"last_rotated"`
+	FormatVersion      int      `json:"format_version"`
+	Argon2idTime       int      `json:"argon2id_time"`
+	Argon2idMemory     int      `json:"argon2id_memory"`
+	Argon2idThreads    int      `json:"argon2id_threads"`
+	ListingCacheTTL    string   `json:"listing_cache_ttl"`
+	ManifestGeneration int      `json:"manifest_generation"`
+	SyncMethod         string   `json:"sync_method"`
+}
+
+type writerGitSnapshot struct {
+	AutoPush         bool   `json:"auto_push"`
+	AutoPull         bool   `json:"auto_pull"`
+	AutoPullInterval string `json:"auto_pull_interval"`
+	CommitTemplate   string `json:"commit_template"`
+}
+
+type writerClipboardSnapshot struct {
+	AutoClearDuration int  `json:"auto_clear_duration"`
+	CopyByDefault     bool `json:"copy_by_default"`
+}
+
 // modeContract records the permissions the writer leaves behind. Unix only:
 // Windows does not carry these bits, and pretending otherwise would make the
 // row unverifiable there.
@@ -96,6 +157,7 @@ type fixture struct {
 	SchemaVersion int          `json:"schema_version"`
 	Oracle        oracle       `json:"oracle"`
 	Cases         []bytesCase  `json:"cases"`
+	WriterCases   []writerCase `json:"writer_cases,omitempty"`
 	Modes         modeContract `json:"modes"`
 }
 
@@ -118,6 +180,7 @@ func inputs() []struct{ name, description, input string } {
 		{"scalar_document", "a bare scalar is not a config mapping", "just-a-string\n"},
 		{"sequence_document", "a sequence is not a config mapping", "- one\n- two\n"},
 		{"null_document", "an explicit null yields the defaults", "null\n"},
+		{"null_optional_sections", "null optional sections are skipped like absent sections", "vault: null\ngit: null\nmcp: null\nupdate: null\nclipboard: null\n"},
 		{"multiple_documents", "a second document is rejected, not silently dropped", "defaultAgent: a\n---\ndefaultAgent: b\n"},
 		{"bom_prefixed", "a leading byte-order mark does not prevent parsing", "\ufeffdefaultAgent: a\n"},
 
@@ -127,6 +190,97 @@ func inputs() []struct{ name, description, input string } {
 		{"negative_max_lifetime", "the rule covers sessionMaxLifetime too", "sessionMaxLifetime: -1h\n"},
 		{"large_duration", "a very large duration is accepted verbatim", "sessionTimeout: 100000h\n"},
 	}
+}
+
+func boolValue(value bool) *bool { return &value }
+
+func writerVaultSnapshotOf(v *configpkg.VaultConfig) *writerVaultSnapshot {
+	if v == nil {
+		return nil
+	}
+	snapshot := &writerVaultSnapshot{
+		Path: v.Path, DefaultRecipients: append([]string(nil), v.DefaultRecipients...),
+		ConfirmRemove: v.ConfirmRemove, AuthMethod: v.AuthMethod, UseTouchID: v.UseTouchID,
+		LegacyMode: v.LegacyMode, SearchIndex: v.SearchIndex, SearchWorkers: v.SearchWorkers,
+		SearchIndexCache: v.SearchIndexCache, ConfigCacheEntries: v.ConfigCacheEntries,
+		PseudonymizePaths: v.PseudonymizePaths, ScryptWorkFactor: v.ScryptWorkFactor,
+		AutoMigrateKDF: v.AutoMigrateKDF, AutoHealZeroKey: v.AutoHealZeroKey,
+		FormatVersion: v.FormatVersion, Argon2idTime: v.Argon2idTime,
+		Argon2idMemory: v.Argon2idMemory, Argon2idThreads: v.Argon2idThreads,
+		ListingCacheTTL: v.ListingCacheTTL.String(), ManifestGeneration: v.ManifestGeneration,
+	}
+	if !v.LastRotated.IsZero() {
+		snapshot.LastRotated = v.LastRotated.UTC().Format(time.RFC3339Nano)
+	}
+	if v.Sync != nil {
+		snapshot.SyncMethod = v.Sync.Method
+	}
+	return snapshot
+}
+
+func writerGitSnapshotOf(v *configpkg.GitConfig) *writerGitSnapshot {
+	if v == nil {
+		return nil
+	}
+	return &writerGitSnapshot{AutoPush: v.AutoPush, AutoPull: v.AutoPull,
+		AutoPullInterval: v.AutoPullInterval.String(), CommitTemplate: v.CommitTemplate}
+}
+
+func writerClipboardSnapshotOf(v *configpkg.ClipboardConfig) *writerClipboardSnapshot {
+	if v == nil {
+		return nil
+	}
+	return &writerClipboardSnapshot{AutoClearDuration: v.AutoClearDuration, CopyByDefault: v.CopyByDefault}
+}
+
+func buildWriterCase(workDir, name, description string, cfg *configpkg.Config, omitted []string) (writerCase, error) {
+	cfg.VaultDir = fixtureVaultDir
+	path := filepath.Join(workDir, name+"-saved.yaml")
+	if err := cfg.SaveTo(path); err != nil {
+		return writerCase{}, fmt.Errorf("save writer case %s: %w", name, err)
+	}
+	saved, err := os.ReadFile(path) // #nosec G304 -- generator-owned temporary path
+	if err != nil {
+		return writerCase{}, err
+	}
+	loaded, err := configpkg.Load(path)
+	if err != nil {
+		return writerCase{}, fmt.Errorf("reload writer case %s: %w", name, err)
+	}
+	return writerCase{
+		Name: name, Description: description,
+		Requested:     writerSnapshot{Vault: writerVaultSnapshotOf(cfg.Vault), Git: writerGitSnapshotOf(cfg.Git), Clipboard: writerClipboardSnapshotOf(cfg.Clipboard)},
+		SavedYAML:     string(saved),
+		Loaded:        writerSnapshot{Vault: writerVaultSnapshotOf(loaded.Vault), Git: writerGitSnapshotOf(loaded.Git), Clipboard: writerClipboardSnapshotOf(loaded.Clipboard)},
+		OmittedFields: omitted,
+	}, nil
+}
+
+func buildWriterCases(workDir string) ([]writerCase, error) {
+	all := configpkg.Default()
+	all.Vault = &configpkg.VaultConfig{
+		Path: "/fixture/nested", DefaultRecipients: []string{"age1fixture"}, ConfirmRemove: true,
+		AuthMethod: configpkg.AuthMethodTouchID, UseTouchID: true, LegacyMode: boolValue(false),
+		SearchIndex: true, SearchWorkers: 4, SearchIndexCache: true, ConfigCacheEntries: 12,
+		PseudonymizePaths: true, ScryptWorkFactor: 22, AutoMigrateKDF: true, AutoHealZeroKey: true,
+		LastRotated: time.Date(2025, 6, 7, 8, 9, 10, 123456789, time.UTC), FormatVersion: 7,
+		Argon2idTime: 3, Argon2idMemory: 65536, Argon2idThreads: 2,
+		ListingCacheTTL: 45 * time.Minute, ManifestGeneration: 9,
+		Sync: &configpkg.SyncConfig{Method: configpkg.SyncMethodICloudDrive},
+	}
+	first, err := buildWriterCase(workDir, "vault_all_modeled_fields", "SaveTo preserves the modeled vault and KDF fields", all,
+		[]string{"vault.listing_cache_ttl", "vault.manifest_generation", "vault.sync"})
+	if err != nil {
+		return nil, err
+	}
+	falseSections := configpkg.Default()
+	falseSections.Git = &configpkg.GitConfig{AutoPush: false, AutoPull: false, AutoPullInterval: 0, CommitTemplate: ""}
+	falseSections.Clipboard = &configpkg.ClipboardConfig{AutoClearDuration: 0, CopyByDefault: false, PrintByDefault: false}
+	second, err := buildWriterCase(workDir, "explicit_false_sections", "SaveTo writes empty sections for explicit false values", falseSections, nil)
+	if err != nil {
+		return nil, err
+	}
+	return []writerCase{first, second}, nil
 }
 
 func snapshotOf(cfg *configpkg.Config) *snapshot {
@@ -257,6 +411,10 @@ func main() {
 	if err != nil {
 		fatal("build cases: %v", err)
 	}
+	writerCases, err := buildWriterCases(workDir)
+	if err != nil {
+		fatal("build writer cases: %v", err)
+	}
 	modes, err := buildModes(workDir)
 	if err != nil {
 		fatal("probe modes: %v", err)
@@ -268,7 +426,7 @@ func main() {
 			Commit: commitLabel, CommitSHA: resolved, Release: releaseLabel,
 			SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest,
 		},
-		Cases: cases,
+		Cases: cases, WriterCases: writerCases,
 		Modes: modes,
 	})
 	if err != nil {
@@ -282,7 +440,7 @@ func main() {
 		if !bytes.Equal(existing, content) {
 			fatal("fixture is stale; run make cfg-bytes-fixtures-generate")
 		}
-		fmt.Printf("PASS CFG-003 config-bytes fixture (%d cases)\n", len(cases))
+		fmt.Printf("PASS CFG-003 config-bytes fixture (%d cases, %d writer cases)\n", len(cases), len(writerCases))
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {
@@ -291,7 +449,7 @@ func main() {
 	if err := os.WriteFile(*output, content, 0o600); err != nil {
 		fatal("write fixture: %v", err)
 	}
-	fmt.Printf("WROTE %s (%d cases)\n", *output, len(cases))
+	fmt.Printf("WROTE %s (%d cases, %d writer cases)\n", *output, len(cases), len(writerCases))
 }
 
 func resolveOracle(check bool, commit, release string) (string, string, error) {

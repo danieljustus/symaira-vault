@@ -14,8 +14,25 @@ pub mod quota;
 pub mod redact;
 pub mod secret_ref;
 pub mod session;
+pub mod test_support;
 pub mod tier;
 pub mod totp;
+
+/// Lowercases the way Go's `strings.ToLower` does: one replacement rune per
+/// input rune.
+///
+/// Rust's `str::to_lowercase` applies *full* Unicode case mapping, which can
+/// expand one char into several — U+0130 (LATIN CAPITAL LETTER I WITH DOT
+/// ABOVE) becomes `i` plus a combining dot, where Go yields a bare `i`. That
+/// expansion inserts a character into the middle of the haystack and can break
+/// a marker match that the oracle would have made, so the classifier would
+/// disagree with the oracle on an error message containing such a character.
+pub fn go_to_lower(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| ch.to_lowercase().next().unwrap_or(ch))
+        .collect()
+}
 
 /// Public binary and protocol tool name.
 pub const TOOL_NAME: &str = "symvault";

@@ -204,6 +204,45 @@ fn fixture_covers_every_install_state_and_override_shape() {
     assert!(cases.iter().any(|case| case.expected.legacy_dir.is_empty()));
 }
 
+/// Go builds the XDG defaults with one `filepath.Join` component per segment
+/// (`filepath.Join(home, ".local", "share")`), so the resolved path renders with
+/// host separators throughout. Preparing `.local/share` as a single literal
+/// segment instead keeps `/` inside the middle of the path on Windows, which is
+/// invisible to `PathBuf` equality (Windows parses both separators) but visible
+/// in the bytes the CLI prints, so compare rendered strings against the same
+/// component-wise join.
+#[test]
+fn xdg_defaults_render_with_host_separators_throughout() {
+    let home = "/fixture/home/probe";
+    let resolved = resolve_paths(&PathEnvironment {
+        home: home.to_owned(),
+        ..PathEnvironment::default()
+    });
+    for (actual, expected) in [
+        (
+            &resolved.config_dir,
+            Path::new(home).join(".config").join("symaira-vault"),
+        ),
+        (
+            &resolved.data_dir,
+            Path::new(home)
+                .join(".local")
+                .join("share")
+                .join("symaira-vault"),
+        ),
+        (
+            &resolved.cache_dir,
+            Path::new(home).join(".cache").join("symaira-vault"),
+        ),
+    ] {
+        assert_eq!(
+            actual.to_string_lossy(),
+            expected.to_string_lossy(),
+            "resolved XDG default must join one component at a time"
+        );
+    }
+}
+
 /// A legacy install must read its config from the legacy directory. Resolving
 /// config_path against the XDG directory instead would silently miss an
 /// existing user's configuration.

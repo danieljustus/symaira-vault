@@ -1,0 +1,353 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "commit_sha": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/transport/stdio.go",
+      "internal/mcp/transport/transport.go"
+    ],
+    "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
+    "generator_digest": "e4a64c19cc29676dd209d7f2f5e59e343c5832ac39612ad363d1c7f55298b2cc"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-fixture",
+  "runtime_text_sentinel": "<runtime-error-text>",
+  "input_is_bounded": false,
+  "max_accepted_nesting_depth": 10000,
+  "cases": [
+    {
+      "name": "unterminated_frame_is_discarded",
+      "why": "a frame with no trailing newline is never dispatched: ReadString returns it together with io.EOF and the loop returns on EOF first. The client gets silence, not an error",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}",
+      "stdout_raw": "",
+      "frames": [],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "unterminated_frame_after_complete_frame",
+      "why": "the terminated frame is answered and the unterminated remainder is dropped, so a client that forgets the last newline loses exactly one request",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "crlf_line_ending",
+      "why": "a CRLF client works: the carriage return stays on the line and the JSON decoder skips it as trailing whitespace",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\r\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "leading_whitespace",
+      "why": "leading whitespace before the frame is tolerated by the decoder",
+      "input": "   {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "trailing_whitespace",
+      "why": "trailing whitespace after the frame is tolerated by the decoder",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}   \n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "nul_byte_in_frame",
+      "why": "an embedded NUL is a decode failure, answered as -32700 rather than crashing the reader",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":\u0000,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"invalid character '\\\\x00' looking for beginning of value\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "two_objects_on_one_line",
+      "why": "frames are newline-delimited, not self-delimiting: a second object on the same line is trailing garbage",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"error\":{\"data\":\"invalid character '{' after top-level value\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "array_frame",
+      "why": "a non-object top-level frame is -32700, not a crash",
+      "input": "[1,2,3]\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal array into Go value of type transport.Message\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "bare_string_frame",
+      "why": "a bare JSON string is -32700",
+      "input": "\"hello\"\n",
+      "stdout_raw": "{\"error\":{\"data\":\"json: cannot unmarshal string into Go value of type transport.Message\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "null_frame",
+      "why": "literal null decodes to a zero-valued message whose jsonrpc is empty, so it is -32600 and not -32700",
+      "input": "null\n",
+      "stdout_raw": "{\"error\":{\"data\":\"jsonrpc must be 2.0\",\"message\":\"Invalid Request\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "data": "jsonrpc must be 2.0",
+            "message": "Invalid Request",
+            "code": -32600
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "only_newlines",
+      "why": "each blank line is its own parse error; three blank lines produce three frames",
+      "input": "\n\n\n",
+      "stdout_raw": "{\"error\":{\"data\":\"unexpected end of JSON input\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n{\"error\":{\"data\":\"unexpected end of JSON input\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n{\"error\":{\"data\":\"unexpected end of JSON input\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "frames": [
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        },
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        },
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": true
+    },
+    {
+      "name": "empty_stream",
+      "why": "an empty stream writes nothing and shuts down cleanly",
+      "input": "",
+      "stdout_raw": "",
+      "frames": [],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "unicode_method_name",
+      "why": "a non-ASCII method name round-trips into the not-found message without escaping",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"pïng✓\"}\n",
+      "stdout_raw": "{\"error\":{\"message\":\"Method not found: pïng✓\",\"code\":-32601},\"jsonrpc\":\"2.0\",\"id\":1}\n",
+      "frames": [
+        {
+          "error": {
+            "message": "Method not found: pïng✓",
+            "code": -32601
+          },
+          "id": 1,
+          "jsonrpc": "2.0"
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "bignum_id_preserved_verbatim",
+      "why": "an ID far beyond int64 is echoed back byte-for-byte because it is never decoded into a number",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":123456789012345678901234567890,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":123456789012345678901234567890,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 123456789012345678901234567890,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": false
+    },
+    {
+      "name": "interleaved_valid_and_invalid",
+      "why": "a hostile client cannot desynchronise the stream: every frame is answered in order regardless of the failures between them",
+      "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\"}\ngarbage\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n[]\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n",
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n{\"error\":{\"data\":\"invalid character 'g' looking for beginning of value\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}\n{\"error\":{\"data\":\"json: cannot unmarshal array into Go value of type transport.Message\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}\n",
+      "frames": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {}
+        },
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "result": {}
+        },
+        {
+          "error": {
+            "code": -32700,
+            "data": "\u003cruntime-error-text\u003e",
+            "message": "Parse error"
+          },
+          "jsonrpc": "2.0"
+        },
+        {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {}
+        }
+      ],
+      "runtime_text_masked": true
+    }
+  ],
+  "bounds": [
+    {
+      "name": "oversized_five_megabyte_frame",
+      "why": "input is NOT bounded: the oracle's reader grows without limit and answers a five-megabyte frame normally. The row's 'bounded input' wording describes an intent the oracle does not implement",
+      "prefix": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\",\"pad\":\"",
+      "fill_rune": "x",
+      "fill_count": 5000000,
+      "close_rune": "",
+      "close_count": 0,
+      "suffix": "\"}\n",
+      "input_bytes": 5000050,
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}\n",
+      "masked": false
+    },
+    {
+      "name": "brackets_inside_a_string_are_not_nesting",
+      "why": "a payload of bracket CHARACTERS inside a string literal is depth 1, not deep nesting. The oracle dispatches it, so a depth guard that scans without tracking string state would reject a frame the oracle accepts",
+      "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":\"",
+      "fill_rune": "[",
+      "fill_count": 10001,
+      "close_rune": "",
+      "close_count": 0,
+      "suffix": "\"}\n",
+      "input_bytes": 10049,
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "masked": false
+    },
+    {
+      "name": "escaped_quote_before_bracket_fill_is_still_a_string",
+      "why": "the depth scanner has to track backslash escapes, not just quotes: after an escaped quote the scanner is STILL inside the string, so these brackets are characters and the frame is dispatched. A scanner that treated the escaped quote as closing the string would count them as nesting and wrongly reject",
+      "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":\"\\\"",
+      "fill_rune": "[",
+      "fill_count": 10001,
+      "close_rune": "",
+      "close_count": 0,
+      "suffix": "\"}\n",
+      "input_bytes": 10051,
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "masked": false
+    },
+    {
+      "name": "pathological_nesting_is_rejected",
+      "why": "nesting is the one real bound, and it comes from encoding/json rather than the transport: past its max depth the frame is -32700 instead of exhausting the stack",
+      "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":",
+      "fill_rune": "[",
+      "fill_count": 20000,
+      "close_rune": "]",
+      "close_count": 20000,
+      "suffix": "}\n",
+      "input_bytes": 40046,
+      "stdout_raw": "{\"error\":{\"data\":\"invalid character '[' exceeded max depth\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+      "masked": true
+    }
+  ],
+  "divergences": [
+    {
+      "name": "duplicate_object_keys_last_wins",
+      "oracle_behavior": "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A key duplicated inside params is -32602 here rather than -32700, and a duplicate inside an id or an unknown top-level key is still accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. The tool-call payload an intermediary would audit is therefore NOT yet covered; closing it belongs with MCP-002/003.",
+      "oracle_stdout_note": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}",
+      "rust_behavior": "Rust answers -32700 and does not dispatch the frame.",
+      "rationale": "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision."
+    },
+    {
+      "name": "invalid_utf8_id_echoed_verbatim",
+      "oracle_behavior": "The oracle accepts a frame whose id contains invalid UTF-8 and echoes those bytes back on stdout unchanged, because json.RawMessage is []byte and Go strings are not required to be valid UTF-8. Verified by executing it in this generator, which fails if it stops reproducing.",
+      "oracle_stdout_note": "not embedded: the byte sequence is not valid UTF-8 and so cannot be carried in this JSON fixture",
+      "rust_behavior": "Rust answers -32700 and emits no invalid bytes.",
+      "rationale": "serde_json's RawValue is backed by str and cannot hold invalid UTF-8, so byte-verbatim echo is not reachable without replacing the JSON envelope wholesale. The adjudicated behavior is to reject fail-closed, which is also the stricter of the two: the oracle's behavior puts attacker-chosen invalid bytes onto the same stdout stream the client parses as framing. This is a deliberate, recorded divergence and not a silent one; reversing it is a coordinator decision."
+    }
+  ]
+}

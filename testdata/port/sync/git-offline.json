@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "commit_sha": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/git/git.go",
+      "internal/git/git_offline.go"
+    ],
+    "source_digest": "c7cb6dd1f0296c3c5e3f1d739e10c587e490a567efbb04dca6c739d77875a883",
+    "generator_digest": "acdddc1b046cc4ec3550f705219b8fcc7414719d876cab1a6b1b36d4578b511c"
+  },
+  "network_message": "network error - please check your connection",
+  "markers": [
+    "no route to host",
+    "connection refused",
+    "connection timed out",
+    "operation timed out",
+    "i/o timeout",
+    "no such host",
+    "could not resolve hostname",
+    "name or service not known",
+    "network is unreachable",
+    "host is unreachable",
+    "connection reset by peer",
+    "timed out",
+    "timeout",
+    "connection",
+    "refused",
+    "network",
+    "tls",
+    "eof"
+  ],
+  "subsumed_markers": [
+    "connection refused",
+    "connection reset by peer",
+    "connection timed out",
+    "i/o timeout",
+    "network is unreachable",
+    "operation timed out"
+  ],
+  "offline_cases": [
+    {
+      "name": "no_route_to_host",
+      "why": "ssh/net marker",
+      "message": "dial tcp 10.0.0.1:22: connect: no route to host",
+      "offline": true
+    },
+    {
+      "name": "connection_refused",
+      "why": "ssh/net marker",
+      "message": "dial tcp 127.0.0.1:22: connect: connection refused",
+      "offline": true
+    },
+    {
+      "name": "connection_timed_out",
+      "why": "ssh/net marker",
+      "message": "dial tcp: connection timed out",
+      "offline": true
+    },
+    {
+      "name": "operation_timed_out",
+      "why": "ssh/net marker",
+      "message": "ssh: operation timed out",
+      "offline": true
+    },
+    {
+      "name": "io_timeout",
+      "why": "ssh/net marker",
+      "message": "read tcp 10.0.0.2:22: i/o timeout",
+      "offline": true
+    },
+    {
+      "name": "no_such_host",
+      "why": "dns marker",
+      "message": "dial tcp: lookup git.example.com: no such host",
+      "offline": true
+    },
+    {
+      "name": "could_not_resolve_hostname",
+      "why": "dns marker",
+      "message": "ssh: Could not resolve hostname git.example.com",
+      "offline": true
+    },
+    {
+      "name": "name_or_service_not_known",
+      "why": "dns marker",
+      "message": "getaddrinfo: Name or service not known",
+      "offline": true
+    },
+    {
+      "name": "network_is_unreachable",
+      "why": "net marker",
+      "message": "connect: network is unreachable",
+      "offline": true
+    },
+    {
+      "name": "host_is_unreachable",
+      "why": "net marker",
+      "message": "connect: host is unreachable",
+      "offline": true
+    },
+    {
+      "name": "connection_reset_by_peer",
+      "why": "net marker",
+      "message": "read: connection reset by peer",
+      "offline": true
+    },
+    {
+      "name": "bare_timed_out",
+      "why": "generic marker",
+      "message": "the request timed out",
+      "offline": true
+    },
+    {
+      "name": "bare_timeout",
+      "why": "generic marker",
+      "message": "context deadline exceeded: timeout",
+      "offline": true
+    },
+    {
+      "name": "generic_connection",
+      "why": "deliberately broad marker kept for parity with the older per-package classifiers",
+      "message": "unexpected connection state",
+      "offline": true
+    },
+    {
+      "name": "generic_refused",
+      "why": "deliberately broad marker",
+      "message": "the server refused it",
+      "offline": true
+    },
+    {
+      "name": "generic_network",
+      "why": "deliberately broad marker",
+      "message": "network subsystem failure",
+      "offline": true
+    },
+    {
+      "name": "generic_tls",
+      "why": "deliberately broad marker",
+      "message": "tls: handshake failure",
+      "offline": true
+    },
+    {
+      "name": "generic_eof",
+      "why": "deliberately broad marker",
+      "message": "EOF",
+      "offline": true
+    },
+    {
+      "name": "uppercase_marker",
+      "why": "matching lowercases the message first, so an all-caps error still classifies",
+      "message": "CONNECTION REFUSED",
+      "offline": true
+    },
+    {
+      "name": "mixed_case_marker",
+      "why": "mixed case must match too",
+      "message": "No Route To Host",
+      "offline": true
+    },
+    {
+      "name": "auth_failure_is_not_offline",
+      "why": "an authentication failure is a configuration problem, not a connectivity one",
+      "message": "authentication failed",
+      "offline": false
+    },
+    {
+      "name": "bad_credentials_is_not_offline",
+      "why": "credentials problems are not connectivity",
+      "message": "invalid credentials supplied",
+      "offline": false
+    },
+    {
+      "name": "http_401_is_not_offline",
+      "why": "an HTTP 401 is an auth problem",
+      "message": "error: 401 Unauthorized",
+      "offline": false
+    },
+    {
+      "name": "http_403_is_not_offline",
+      "why": "an HTTP 403 is an auth problem",
+      "message": "error: 403 Forbidden",
+      "offline": false
+    },
+    {
+      "name": "known_hosts_is_not_offline",
+      "why": "a known_hosts problem is an SSH configuration error",
+      "message": "knownhosts: key mismatch",
+      "offline": false
+    },
+    {
+      "name": "non_fast_forward_is_not_offline",
+      "why": "a diverged history is a normal git outcome",
+      "message": "non-fast-forward update",
+      "offline": false
+    },
+    {
+      "name": "repository_not_found_is_not_offline",
+      "why": "a missing repository is not a connectivity failure",
+      "message": "remote: Repository not found",
+      "offline": false
+    },
+    {
+      "name": "empty_message",
+      "why": "an empty message matches no marker",
+      "message": "",
+      "offline": false
+    },
+    {
+      "name": "auth_failure_mentioning_connection",
+      "why": "the broad 'connection' marker wins over the word 'authentication': substring matching has no notion of which token is the subject",
+      "message": "authentication failed on connection to host",
+      "offline": true
+    },
+    {
+      "name": "auth_failure_mentioning_network",
+      "why": "same shape via the 'network' marker",
+      "message": "authentication failed: network path",
+      "offline": true
+    }
+  ],
+  "format_cases": [
+    {
+      "name": "with_cause",
+      "why": "the rendered form nests the cause after the message",
+      "message": "network error - please check your connection",
+      "cause": "dial tcp: i/o timeout",
+      "has_cause": true,
+      "rendered": "push failed: network error - please check your connection: dial tcp: i/o timeout"
+    },
+    {
+      "name": "without_cause",
+      "why": "a bare message renders without the cause segment",
+      "message": "no 'origin' remote configured",
+      "cause": "",
+      "has_cause": false,
+      "rendered": "push failed: no 'origin' remote configured"
+    },
+    {
+      "name": "auth_message_with_cause",
+      "why": "the auth message as the user actually sees it",
+      "message": "authentication failed - please check your credentials",
+      "cause": "error: 401 Unauthorized",
+      "has_cause": true,
+      "rendered": "push failed: authentication failed - please check your credentials: error: 401 Unauthorized"
+    }
+  ],
+  "unpinned_scope": [
+    "classifyPushError precedence is NOT pinned here: it is unexported and only reachable through a real failing remote.",
+    "The two call sites disagree and this is deliberate to record, not to reproduce blindly. classifyPushError tests known_hosts, then authentication, then IsOfflineError. PullWithResult tests IsOfflineError FIRST, then authentication.",
+    "Consequence: an error containing both 'authentication' and a connectivity marker is reported as an auth failure on push and as a network failure on pull. Pinning that asymmetry needs a network-failure harness and is left to the GIT-002 completion slice.",
+    "network_message is restated from errNetworkMessage rather than lifted, because that constant is unexported. If it changes, this fixture will not notice on its own."
+  ]
+}

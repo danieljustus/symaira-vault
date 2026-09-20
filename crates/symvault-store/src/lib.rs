@@ -26,13 +26,23 @@ use zeroize::{Zeroize, Zeroizing};
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
 
+/// Go-compatible grant signing key persistence.
+pub mod grant_key;
+
 /// Pure fixed-clock write metadata preparation.
 pub mod metadata;
 
 /// Thread-safe process-local ownership of encrypted search indexes.
 pub mod search_index_store;
 
+/// Go-compatible MCP share metadata and atomic lifecycle updates.
+pub mod sharing;
+
+/// Go-compatible agent-scoped MCP token registry mutations.
+pub mod token_registry;
+
 mod publication;
+mod reencrypt_journal;
 
 #[cfg(unix)]
 mod rooted;
@@ -354,9 +364,11 @@ pub struct Store {
 }
 
 impl Store {
-    /// Opens an existing vault without changing any filesystem state.
-    pub fn open(root: impl AsRef<Path>, _identity: &Identity) -> Result<Self, StoreError> {
-        Self::open_with_root_acquisition(root, |_: &Path| {})
+    /// Opens an existing vault and completes any pending re-encryption journal.
+    pub fn open(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
+        let store = Self::open_with_root_acquisition(root, |_: &Path| {})?;
+        reencrypt_journal::recover_if_present(&store, identity)?;
+        Ok(store)
     }
 
     fn open_with_root_acquisition(
@@ -527,61 +539,14 @@ impl Store {
     }
 
     fn acquire_write_lock(&self) -> Result<fs::File, StoreError> {
-        let path = self.root.join(LOCK_FILE);
-        #[cfg(unix)]
-        let file = rooted::open_lock(&self.root_cap, &path)?;
-        #[cfg(not(unix))]
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-            .map_err(|source| StoreError::Write {
-                path: path.clone(),
-                source,
-            })?;
-        set_private_permissions(&file).map_err(|source| StoreError::Write {
-            path: path.clone(),
-            source,
-        })?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        loop {
-            match file.try_lock_exclusive() {
-                Ok(true) => return Ok(file),
-                Ok(false) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Ok(false) => {
-                    return Err(StoreError::Write {
-                        path,
-                        source: io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "vault is currently locked by another process, try again in a moment",
-                        ),
-                    });
-                }
-                Err(source)
-                    if source.kind() == io::ErrorKind::WouldBlock
-                        && std::time::Instant::now() < deadline =>
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
-                    return Err(StoreError::Write {
-                        path,
-                        source: io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "vault is currently locked by another process, try again in a moment",
-                        ),
-                    });
-                }
-                Err(source) => return Err(StoreError::Write { path, source }),
-            }
-        }
+        open_root_write_lock(&self.root_cap, &self.root)
     }
 
-    fn with_write_lock<T>(
+    /// Runs an operation while holding the vault's cross-process write lock.
+    ///
+    /// Callers that need to combine several store and filesystem mutations may
+    /// use this boundary to keep the lock held across the complete operation.
+    pub fn with_write_lock<T>(
         &self,
         operation: impl FnOnce(&Self) -> Result<T, StoreError>,
     ) -> Result<T, StoreError> {
@@ -596,6 +561,12 @@ impl Store {
                 source,
             }),
         }
+    }
+
+    /// Completes a pending re-encryption journal while the caller already
+    /// holds this store's write lock.
+    pub fn recover_reencrypt_journal_locked(&self, identity: &Identity) -> Result<(), StoreError> {
+        reencrypt_journal::recover_locked_if_present(self, identity)
     }
 
     fn entry_candidates(&self) -> Result<Vec<Candidate>, StoreError> {
@@ -1626,7 +1597,8 @@ fn mode_bits(_metadata: &fs::Metadata) -> u32 {
     0
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+/// Returns the lowercase hexadecimal SHA-256 digest used by manifest entries.
+pub fn sha256_hex(bytes: &[u8]) -> String {
     let mut digest = Sha256::new();
     digest.update(bytes);
     digest
@@ -2129,7 +2101,8 @@ impl Store {
             .join(format!("{path}{ENTRY_EXTENSION}")))
     }
 
-    fn configured_entry_path(
+    /// Resolves a validated logical path to the configured ciphertext location.
+    pub fn configured_entry_path(
         &self,
         path: &str,
         identity: &Identity,
@@ -2234,10 +2207,11 @@ impl Store {
 
     /// Rebuilds the manifest from regular fresh-layout entry files.
     pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
-        self.with_write_lock(|store| store.rebuild_manifest_unlocked(identity))
+        self.with_write_lock(|store| store.rebuild_manifest_locked(identity))
     }
 
-    fn rebuild_manifest_unlocked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+    /// Rebuilds the manifest while the caller already holds `with_write_lock`.
+    pub fn rebuild_manifest_locked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
             // Go's writeManifest increments a newly rebuilt manifest before
@@ -2692,7 +2666,7 @@ impl SearchIndex {
             let identity_error = StoreError::Config("search index is not loaded".into());
             return Err(identity_error);
         }
-        let query = needle.to_lowercase();
+        let query = symvault_core::go_to_lower(needle);
         let allowed: BTreeSet<_> = candidates.iter().cloned().collect();
         Ok(self
             .doc
@@ -2753,14 +2727,108 @@ impl SearchIndex {
     }
 }
 
+fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, StoreError> {
+    let path = root.join(LOCK_FILE);
+    #[cfg(unix)]
+    let file = rooted::open_lock(root_cap, &path)?;
+    #[cfg(not(unix))]
+    {
+        let _ = root_cap;
+    }
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&path)
+            .map_err(|source| StoreError::Write {
+                path: path.clone(),
+                source,
+            })?
+    };
+    #[cfg(all(not(unix), not(windows)))]
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|source| StoreError::Write {
+            path: path.clone(),
+            source,
+        })?;
+    let metadata = file.metadata().map_err(|source| StoreError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+        if metadata.file_type().is_symlink()
+            || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        {
+            return Err(StoreError::Symlink(path));
+        }
+    }
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path));
+    }
+    set_private_permissions(&file).map_err(|source| StoreError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(true) => return Ok(file),
+            Ok(false) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(false) => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source)
+                if source.kind() == io::ErrorKind::WouldBlock
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source) => return Err(StoreError::Write { path, source }),
+        }
+    }
+}
+
 fn collect_index_strings(values: &mut Vec<String>, field: &str, value: &serde_json::Value) {
     match value {
         serde_json::Value::String(value) if field == "backup_codes" => value
             .split('\n')
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .for_each(|value| values.push(value.to_lowercase())),
-        serde_json::Value::String(value) if !value.is_empty() => values.push(value.to_lowercase()),
+            .for_each(|value| values.push(symvault_core::go_to_lower(value))),
+        serde_json::Value::String(value) if !value.is_empty() => {
+            values.push(symvault_core::go_to_lower(value))
+        }
         serde_json::Value::Array(values_array) => values_array
             .iter()
             .for_each(|value| collect_index_strings(values, "", value)),

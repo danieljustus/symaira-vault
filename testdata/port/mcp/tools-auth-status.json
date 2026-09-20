@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f894",
+    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "source_files": [
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_auth.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/mcptypes.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/session/session.go",
+      "internal/session/biometric.go",
+      "internal/session/oskeyring.go"
+    ],
+    "source_hash": "30f8c524c7ee29c07915a5d9945582304f0967043a417ba25c2306b3342a46dd",
+    "generator_hash": "d0f869adeaacbdf5b77016e5cd981170934c099a79b056f66c3c72458144df5e"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-auth-status-fixture",
+  "cases": [
+    {
+      "name": "passphrase",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"get_auth_status\"}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-auth-status-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "{\"cache\":{\"backend\":\"memory\",\"persistent\":false,\"message\":\"OS keyring unavailable. Sessions are stored in process memory only.\"},\"method\":\"passphrase\",\"touchIDAvailable\":false}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "touchid",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"get_auth_status\"}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-auth-status-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "result": {
+            "content": [
+              {
+                "text": "{\"cache\":{\"backend\":\"memory\",\"persistent\":false,\"message\":\"OS keyring unavailable. Sessions are stored in process memory only.\"},\"method\":\"touchid\",\"touchIDAvailable\":false}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    }
+  ]
+}

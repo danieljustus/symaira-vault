@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto", "crates/symvault-platform", "crates/symvault-store", "crates/symvault-sync"]
+members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto", "crates/symvault-gojson", "crates/symvault-mcp", "crates/symvault-platform", "crates/symvault-store", "crates/symvault-sync"]
 resolver = "3"
 
 [workspace.package]
@@ -20,3 +20,16 @@ codegen-units = 1
 lto = "thin"
 panic = "abort"
 strip = true
+
+# Keep real KDF parameters in integration tests without debug-mode crypto cost.
+[profile.test.package.scrypt]
+opt-level = 3
+
+[profile.test.package.salsa20]
+opt-level = 3
+
+[profile.test.package.argon2]
+opt-level = 3
+
+[profile.test.package.blake2]
+opt-level = 3
