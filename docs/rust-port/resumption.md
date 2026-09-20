@@ -137,10 +137,12 @@ Implementierung noch nicht begonnen:
 - Zwei delegierte Worker lieferten **keinen verwertbaren Beitrag**. Lane 1 schrieb
   vier CLI-Module mit erfundenen Store-/Session-APIs, ohne Fixture und ohne
   Differential (nicht kompilierbar); Lane 2 ein Werkzeug, das Hilfetexte als
-  Kommandopfade zählte (Go-Pfade 1, Rust-Pfade 44136). Beides liegt ungepusht auf
-  `hermes-subagent/subagent-sa-0-cebb4232` bzw. `-sa-1-52b3faea` als WIP und gilt
-  ausdrücklich nicht als Fortschritt. Lehre: Worker-Artefakte am Branch prüfen,
-  nicht am Abschlussbericht.
+  Kommandopfade zählte (Go-Pfade 1, Rust-Pfade 44136). Beides lag ungepusht als
+  WIP auf den damaligen Worker-Branches (`subagent-sa-0-cebb4232` und
+  `-sa-1-52b3faea`) und gilt ausdrücklich nicht als Fortschritt. Diese Branches
+  wurden am 2026-09-20 entfernt; die Inhalte liegen als `git bundle` unter
+  `…/recovery/symaira-vault-cleanup-20260920/` (Commits `a6f58fc6`, `df87dadf`).
+  Lehre: Worker-Artefakte am Branch prüfen, nicht am Abschlussbericht.
 - Kein Cutover, kein Release; Go bleibt Produktion.
 
 ## Candidate and provenance
