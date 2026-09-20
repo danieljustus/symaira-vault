@@ -1,9 +1,20 @@
 # CLI surface gap (measured)
 
-Measured on **2026-09-20** against the Rust CLI at `1d534410` and the pinned Go
-oracle command tree in `testdata/port/cli/command-tree.json` (`a518124f`,
-release `unreleased`), depth 3. The previous inventory in this file walked a
-different Rust revision by hand and is superseded below.
+Measured on **2026-09-20** against the Rust CLI built from `main` at `72c14890`
+and the pinned Go oracle command tree in `testdata/port/cli/command-tree.json`
+(`a518124f`, release `unreleased`), depth 3. The previous inventory in this file
+walked a different Rust revision by hand and is superseded below.
+
+The report pins the probed artifact: `rust_binary_sha256` and
+`rust_binary_modified` name the exact file the numbers came from. The numbers
+below come from a binary with sha256 `9b332d8e10dd…`, modified
+`2026-09-20T15:11:21Z`.
+
+**Rebuild before measuring.** An unrebuilt checkout holds an old
+`target/debug/symvault` and reports a smaller Rust surface — the stale binary
+still in this repository's target directory on 2026-09-20 (built 2026-09-16)
+listed **126** missing paths instead of 46. The hash in the report is what makes
+that visible instead of indistinguishable from a regression.
 
 Reproduce (no Go oracle binary required — the frozen tree is the oracle side):
 
