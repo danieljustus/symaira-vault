@@ -62,7 +62,10 @@
   gemergt als `622ec619`: das 2-Minuten-Limit des Adapter-Helfers traf kalte
   Cargo-Builds, und `sessiongen` legte unter Windows einen unzulässigen
   Verzeichnisnamen an. Native Abnahme im Dispatch-Lauf 35507740116 auf dem
-  PR-Head (beide Jobs grün).
+  PR-Head (beide Jobs grün). Die `main`-CI auf dem Merge-Commit `622ec619`
+  (Lauf 35509590715) bestätigt `Test (windows-latest)` und
+  `Test (macos-latest)` als erfolgreich; `Test (ubuntu-latest)` und `Rust Miri`
+  liefen zum Zeitpunkt dieser Notiz noch.
 - CLI-Oberfläche neu und reproduzierbar gemessen: `scripts/rust-port/cmd/cligap`
   vergleicht die Rust-CLI gegen den gepinnten Oracle-Baum
   (`testdata/port/cli/command-tree.json`, `a518124f`) und braucht dafür kein
