@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
 // The helper is a subprocess probe of the harness, not a replacement Go oracle.
@@ -83,5 +86,48 @@ func TestHarnessIsolatesHomeAndPreservesFailureAndBytes(t *testing.T) {
 	}
 	if _, err := buildCases(filepath.Join(t.TempDir(), "missing-oracle"), root); err == nil {
 		t.Fatal("missing subprocess accepted")
+	}
+}
+
+// Windows rejects the angle brackets the escaping case uses in a file name.
+// The Rust differential strips exactly these two characters from synthetic
+// paths, so the generator must not keep them without that transformation.
+func TestWindowsSafePathComponentKeepsEscapingRelevantBytes(t *testing.T) {
+	if got := windowsSafePathComponent("special-<&>-\u2028"); got != "special-&-\u2028" {
+		t.Fatalf("windows-safe component = %q", got)
+	}
+	want := filepath.FromSlash("special-<&>-\u2028")
+	if runtime.GOOS == "windows" {
+		want = filepath.FromSlash("special-&-\u2028")
+	}
+	if got := vaultPathComponent("special-<&>-\u2028"); got != want {
+		t.Fatalf("vault path component = %q, want %q", got, want)
+	}
+}
+
+// The committed fixture records the digest of this generator, but no Makefile
+// or workflow target regenerates or checks it, so a generator edit used to
+// leave the recorded provenance stale and invisible. Compare it here instead of
+// trusting the file: this needs no Go oracle binary and runs on every platform.
+func TestCommittedFixtureRecordsTheCurrentGenerator(t *testing.T) {
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/sessiongen/main.go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "testdata", "port", "cli", "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var committed fixture
+	if err := json.Unmarshal(content, &committed); err != nil {
+		t.Fatal(err)
+	}
+	if committed.Oracle.GeneratorDigest != current {
+		t.Fatalf("committed generator digest %q does not match %q; regenerate the fixture deliberately",
+			committed.Oracle.GeneratorDigest, current)
 	}
 }

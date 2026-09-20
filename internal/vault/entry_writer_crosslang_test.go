@@ -31,7 +31,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 	}
 	repo := filepath.Clean(filepath.Join(filepath.Dir(source), "../.."))
 	target := cargoTargetDir(repo)
-	output, err := runSearchIndexCommand(repo, target, "cargo", "build", "--locked", "-p", "symvault-store", "--example", "entry-writer-adapter")
+	output, err := runSearchIndexCommandWithTimeout(crosslangBuildTimeout, repo, target, "cargo", "build", "--locked", "-p", "symvault-store", "--example", "entry-writer-adapter")
 	if err != nil {
 		t.Fatalf("build Rust writer: %v\n%s", err, output)
 	}
