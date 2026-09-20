@@ -1,0 +1,108 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "source_files": [
+    "internal/autotype/focus.go",
+    "go.mod",
+    "go.sum"
+  ],
+  "source_hash": "0275988fd997d05f77b374a2e4f856065e6a6818dd8bd752bdc7407626d7dfdf",
+  "generator_hash": "5ebdcaac8918fd7e52b80d29a35d3d8122327f575cbc3bc653bd3d0e4202b51b",
+  "cases": [
+    {
+      "name": "stable",
+      "strict": "",
+      "captures": [
+        "process:a",
+        "process:a"
+      ],
+      "error": "",
+      "calls": 2
+    },
+    {
+      "name": "changed",
+      "strict": "",
+      "captures": [
+        "process:a",
+        "process:b"
+      ],
+      "error": "autotype: active window changed between capture and send — aborting to prevent typing into the wrong app",
+      "calls": 2
+    },
+    {
+      "name": "empty_first",
+      "strict": "",
+      "captures": [
+        "",
+        "process:b"
+      ],
+      "error": "",
+      "calls": 2
+    },
+    {
+      "name": "empty_second",
+      "strict": "",
+      "captures": [
+        "process:a",
+        ""
+      ],
+      "error": "",
+      "calls": 2
+    },
+    {
+      "name": "unavailable_default",
+      "strict": "",
+      "captures": [
+        "unavailable"
+      ],
+      "error": "",
+      "calls": 1
+    },
+    {
+      "name": "unavailable_zero",
+      "strict": "0",
+      "captures": [
+        "unavailable"
+      ],
+      "error": "",
+      "calls": 1
+    },
+    {
+      "name": "unavailable_strict",
+      "strict": "false",
+      "captures": [
+        "unavailable"
+      ],
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": 1
+    },
+    {
+      "name": "first_failed",
+      "strict": "",
+      "captures": [
+        "failed"
+      ],
+      "error": "capture failed",
+      "calls": 1
+    },
+    {
+      "name": "second_failed",
+      "strict": "",
+      "captures": [
+        "process:a",
+        "failed"
+      ],
+      "error": "capture failed",
+      "calls": 2
+    },
+    {
+      "name": "second_unavailable_strict",
+      "strict": "1",
+      "captures": [
+        "process:a",
+        "unavailable"
+      ],
+      "error": "",
+      "calls": 2
+    }
+  ]
+}

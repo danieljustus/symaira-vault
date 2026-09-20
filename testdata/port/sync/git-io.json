@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "28fd35315cf4989821a96bb08279c999c693e8d9",
+    "release": "unreleased",
+    "source_files": [
+      "internal/git/device_id.go",
+      "internal/git/git.go",
+      "internal/git/git_offline.go",
+      "internal/git/git_pull.go",
+      "internal/git/git_push.go",
+      "internal/git/git_remote.go",
+      "internal/git/git_staging.go",
+      "internal/git/git_util.go",
+      "internal/git/process_tree_unix.go",
+      "internal/git/process_tree_windows.go",
+      "internal/git/separate_gitdir.go",
+      "internal/git/syncer.go"
+    ],
+    "source_digest": "42e21b213538c1b3765506ffdd5427dfc490036cfe23da66738749b33ed2318d",
+    "generator": "scripts/rust-port/cmd/gitio/main.go",
+    "generator_digest": "ef42691057a5e278f8a8316fbbb32ebf55e0b9169e552dba60778cc9b0cd75a4"
+  },
+  "cases": [
+    {
+      "id": "GIT-002-go-offline",
+      "seam": "GIT-002",
+      "input": {
+        "remote": "http://127.0.0.1:1/unreachable.git"
+      },
+      "expected": {
+        "error_class": "offline",
+        "has_remote": true,
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-go-auth",
+      "seam": "GIT-002",
+      "input": {
+        "status": 401
+      },
+      "expected": {
+        "error_class": "authentication",
+        "has_remote": true,
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-go-ssh-precedence",
+      "seam": "GIT-002",
+      "input": {
+        "remote": "ssh://git@example.invalid/repo.git"
+      },
+      "expected": {
+        "error_class": "ssh_configuration",
+        "has_remote": true,
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-go-askpass",
+      "seam": "GIT-002",
+      "input": {
+        "askpass_env": "inherited",
+        "remote": "ssh://git@example.invalid/repo.git",
+        "terminal_prompt": "0"
+      },
+      "expected": {
+        "error_class": "other",
+        "has_remote": true,
+        "observed": "askpass=inherited\nterminal_prompt=0",
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-go-timeout",
+      "seam": "GIT-002",
+      "input": {
+        "remote": "ssh://git@example.invalid/repo.git",
+        "timeout_seconds": 20
+      },
+      "expected": {
+        "descendant_cleanup": true,
+        "error_class": "timeout",
+        "has_remote": true,
+        "skipped": false,
+        "success": false,
+        "timed_out": true
+      }
+    }
+  ]
+}

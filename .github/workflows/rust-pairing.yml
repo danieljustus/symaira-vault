@@ -2,16 +2,18 @@ name: Rust pairing differential
 
 on:
   push:
-    # Integration branches are included, as in rust-store.yml: this workflow
-    # does not exist on the default branch yet, so workflow_dispatch cannot
-    # reach it, and a branch push is the only way to obtain native evidence
-    # before the single bundled pull request.
-    branches: [ main, 'migration/**' ]
+    # Pull requests already run the same native matrix before merge.
+    # Limit push events to main so each migration batch runs it once.
+    branches: [ main ]
     # Explicit allowlist rather than ci.yml's docs-only paths-ignore: a change
     # to the handshake contract must execute this gate instead of producing an
     # untested claim.
     paths:
       - 'crates/symvault-core/**'
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/cmd/nativekeyringinterop/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
@@ -41,6 +43,10 @@ on:
     branches: [ main ]
     paths:
       - 'crates/symvault-core/**'
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/cmd/nativekeyringinterop/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
@@ -80,11 +86,14 @@ concurrency:
 env:
   GOTOOLCHAIN: go1.26.6
   RUSTUP_TOOLCHAIN: 1.98.0
+  CARGO_BUILD_JOBS: '2'
+  GOMAXPROCS: '2'
 
 jobs:
   pairing-native:
     name: Pairing differential (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       # PAIRING-001 claims all platforms, so all three native runners execute

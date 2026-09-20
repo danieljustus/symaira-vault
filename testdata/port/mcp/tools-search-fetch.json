@@ -1,0 +1,697 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f894",
+    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "source_files": [
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_find.go",
+      "internal/mcp/server/tools_get.go",
+      "internal/mcp/server/tools_search_openai.go",
+      "internal/mcp/server/render.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/mcptypes.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/search.go",
+      "internal/vault/taint/taint.go"
+    ],
+    "source_hash": "971f3fb2823f8f472b81f583fe7b612a4736cbee2f13831285274dbba6fd9aea",
+    "generator_hash": "f015f7969e62756aa7f72913e637155379fcba3d6482af13328599d159213247"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-search-fetch-fixture",
+  "cases": [
+    {
+      "name": "search_metadata_only",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"search\",\"arguments\":{\"query\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "[{\"content\":\"Matching fields: path\",\"id\":\"secret\",\"title\":\"secret\",\"url\":\"symvault://entry/secret\"},{\"content\":\"Matching fields: password\",\"id\":\"classified\",\"title\":\"classified\",\"url\":\"symvault://entry/classified\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "results": [
+                {
+                  "content": "Matching fields: path",
+                  "id": "secret",
+                  "title": "secret",
+                  "url": "symvault://entry/secret"
+                },
+                {
+                  "content": "Matching fields: password",
+                  "id": "classified",
+                  "title": "classified",
+                  "url": "symvault://entry/classified"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "search_missing_query",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"search\",\"arguments\":{}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "missing string argument \"query\"",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_metadata_only",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret"
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_values_allowed",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\",\"values\":{\"password\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=password --\\u003etestpass123\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret",
+              "values": {
+                "password": "\u003c!-- DATA_\u003cMARKER_1\u003e label=password --\u003etestpass123\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e"
+              }
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "fetch_default_sealed",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"classification\":\"secret\",\"handle\":\"op://secret/password\",\"note\":\"Use secret_unseal tool to reveal the value\",\"usage\":{\"note\":\"The raw value is never returned to agents. Pass \\\"secret.password\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\",\"run_command\":{\"env\":{\"\\u003cVAR_NAME\\u003e\":\"secret.password\"}}}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_redacted_before_seal",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 10,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\",\"values\":{\"password\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=password --\\u003e[REDACTED]\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret",
+              "values": {
+                "password": "\u003c!-- DATA_\u003cMARKER_1\u003e label=password --\u003e[REDACTED]\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e"
+              }
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "fetch_session_limit",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\",\"values\":{\"password\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=password --\\u003etestpass123\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret",
+              "values": {
+                "password": "\u003c!-- DATA_\u003cMARKER_1\u003e label=password --\u003etestpass123\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e"
+              }
+            }
+          }
+        },
+        {
+          "id": 12,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "max secrets per session exceeded (2/1)",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        2,
+        0
+      ]
+    },
+    {
+      "name": "fetch_expose_false_can_read_true",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 13,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret"
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_only_allowed_registry",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"id\":\"secret\",\"metadata\":{\"created\":\"\\u003cfixture-time\\u003e\",\"type\":\"\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"title\":\"secret\",\"url\":\"symvault://entry/secret\",\"values\":{\"password\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=password --\\u003etestpass123\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "id": "secret",
+              "metadata": {
+                "created": "\u003cfixture-time\u003e",
+                "type": "",
+                "updated": "\u003cfixture-time\u003e",
+                "version": 1
+              },
+              "title": "secret",
+              "url": "symvault://entry/secret",
+              "values": {
+                "password": "\u003c!-- DATA_\u003cMARKER_1\u003e label=password --\u003etestpass123\u003c!-- /DATA_\u003cMARKER_1\u003e --\u003e"
+              }
+            }
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        2
+      ]
+    },
+    {
+      "name": "fetch_scope_denied",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"secret\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "access denied: path \"secret\" outside allowed scope",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_quarantine_denied",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"quarantine/bad\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "entry is in quarantine — run 'symvault import review promote' to make it accessible",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_missing_id",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 9,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "missing string argument \"id\"",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fetch_missing_entry",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch\",\"arguments\":{\"id\":\"missing\"}}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-search-fetch-fixture"
+            }
+          }
+        },
+        {
+          "id": 15,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "Entry \"\" not found",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0
+      ]
+    }
+  ]
+}
