@@ -1,5 +1,64 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-20, Teil 3 (nach `72c14890`)
+
+**Gemessen: die macOS-Testflakes sind eine Uhr-Auflösung, kein Vertragsproblem.**
+
+- `SystemTime::now().as_nanos()` liefert auf macOS Mikrosekunden-Schritte. Messung
+  (Wegwerf-Test, 2026-09-20): 30 Samples → 9 verschiedene Werte, **alle** enden auf
+  `000`; vier synchron per `Barrier` gestartete Threads bekamen 3 verschiedene
+  Werte, zwei denselben. Tests **eines** Binaries benennen ihre Temp-Ordner so und
+  landen beim Start im selben Verzeichnis.
+- Folge: doppeltes `git init` in einem Ordner → `fatal: cannot copy
+  '.../git-core/templates/info/exclude' … File exists`, Exit 128. Das traf am
+  2026-09-20 dreimal `Rust native (macos-latest)` (`history_commands.rs:27` und
+  `:89`), jeweils ohne Bezug zur geprüften Änderung: Issues #1082, #1085.
+- **Behoben:** `crates/symvault-cli/tests/history_commands.rs` nutzt jetzt eine
+  `tempfile::TempDir`-Wache plus nicht existierenden Wurzelpfad (PR #1084, Fixes
+  #1082). **Offen:** dasselbe Muster in 21 weiteren Dateien unter
+  `crates/symvault-cli/tests/` (Liste in #1085) — solange das offen ist, kann der
+  macOS-Rust-Job jederzeit ohne Codebezug rot werden; ein Rerun hilft, ist aber
+  kein Vertragssignal.
+- **Nicht-Vertrag:** `Rust Miri` und `Rust native (macos-latest)` sind die
+  langsamsten Jobs (~20 min bzw. ~6 min) und die einzigen, die in dieser Sitzung
+  unabhängig von Änderungen rot wurden. Bewertung: natives Gate bleibt Pflicht,
+  Flakes werden als Flakes behandelt und nicht als Evidenz.
+
+**Nächster Slice: `symvault migrate pseudonymize`.** Voruntersuchung abgeschlossen,
+Implementierung noch nicht begonnen:
+
+- Der Rust-Store kann die Arbeit bereits: `Store::write_entry_at(..., pseudonymize)`,
+  `Store::configured_entry_path`, `Store::delete_entry`, `symvault_crypto::pseudonymize_path`,
+  Manifest-Pflege — alles vorhanden (`crates/symvault-store/src/lib.rs:1897-2141`).
+  Zu portieren ist also die CLI-Schicht, nicht der Kern.
+- Go-Oracle: `cmd/admin/migrate.go:46-153`. Vertragspunkte: Abbruch ohne `--yes` gibt
+  `Canceled` auf stderr und Exit 0; leerer Vault gibt „No entries to migrate.
+  Enabling pseudonymize_paths in config.“ und setzt den Config-Schalter trotzdem;
+  sonst „Migrating N entries to pseudonymized paths...“, Fortschritt `\r`-Zeilen auf
+  stderr, danach „Migration complete. All entries now use pseudonymized paths.“;
+  jede Datei wird gelesen, mit `pseudonymize_paths` neu geschrieben und die
+  Plaintext-Datei entfernt; `config.yaml` bekommt `vault.pseudonymize_paths: true`.
+- Vorlage für die Rust-Seite: `crates/symvault-cli/src/migrate_kdf_commands.rs`
+  (Mutation-Grenze) und die Verdrahtung in `main.rs` (`run_migrate_kdf`, um Zeile 3104).
+- **Befund:** `crates/symvault-cli/tests/migrate_kdf_differential.rs` ist
+  `#[ignore]` und braucht `SYMVAULT_GO_BINARY`; **kein** Makefile-/Workflow-Ziel setzt
+  diese Variable (geprüft). Der Go↔Rust-Vergleich für `migrate kdf` läuft also nur
+  manuell und ist kein Gate. Für `migrate pseudonymize` deshalb einen Fixture-Weg
+  bauen, der ohne Umgebungsvariable läuft: Generator unter
+  `scripts/rust-port/cmd/` (Muster `sessiongen`/`portgen`, Ziel
+  `testdata/port/cli/migrate-pseudonymize.json`), Provenance-Digest-Test wie bei
+  `sessiongen`, und ein nicht-ignorierter Contract-Test in
+  `crates/symvault-cli/tests/`. Oracle-Binary bauen:
+  `make port-contract`-Mechanik (`make`-Ziel baut `target/port/symvault-go` aus dem
+  Checkout, `PORT_GO_BINARY`), dann den Generator dagegen laufen lassen.
+- Akzeptanz für den Slice: (1) Fixture aus dem gepinnten Oracle mit Digest-Bindung,
+  (2) Rust-CLI gibt byte-identischen stdout/stderr-Text wie das Fixture, (3) nach dem
+  Lauf liegen alle Einträge unter HMAC-Pfaden und kein Plaintext-Name bleibt übrig,
+  (4) `config.yaml` trägt `pseudonymize_paths: true`, (5) zweiter Lauf ist ein
+  No-op mit der Leer-Vault-Meldung, (6) Abbruch ohne `--yes` lässt Vault und Config
+  unverändert, (7) `cargo test -p symvault-cli` und `cargo fmt/clippy` grün.
+- Kein Cutover, kein Release: Go bleibt Oracle und Produktion.
+
 ## Zwischenstand 2026-09-18 (nach `56e0c83c`, ersetzt nichts darunter)
 
 - **Gepusht:** `56e0c83c` auf `migration/rust-batch-20260916`, Draft PR #1069.
