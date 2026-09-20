@@ -27,19 +27,38 @@ Ciphertext), und `ReadEntry`/`readEntryInner` ohne Fallback auf
 `entries/<plain>.age` (Vault mit Flag und Plaintext-Namen liest sich als leer —
 genau der Zustand nach einem fehlerhaften Lauf).
 
-- Fixture-Pins vorgerückt (`internal/vault/entry_readwrite.go` ist gepinnte
-  Oracle-Quelle): `metadata.json` und `manifest-keys.json` neu eingefroren,
-  **nur Provenance geändert**, alle 8 bzw. 16 Vektoren byte-identisch. Pins in
-  `manifestkeygen`, `storemetagen`-Test, `Makefile` und den zwei Rust-Consumern
-  (`symvault-store/src/metadata.rs`, `tests/manifest_keys.rs`) auf `fd55bb73`.
-  Der `gitio`-Pin bleibt (`internal/git`, unberührt).
+- Fixture-Pins vorgerückt. Der Fix berührt zwei Dateien, die Generatoren als
+  gepinnte Oracle-Quelle binden und gegen den Working Tree vergleichen:
+  `internal/vault/entry_readwrite.go` (manifestkeygen, storemetagen, 6
+  MCP-Generatoren, `cxfgen` über den ganzen `internal/vault`-Closure) und
+  `cmd/admin/migrate.go` (`portgen` bindet jede Nicht-Test-Datei unter `cmd/`).
+  Betroffene Fixtures neu eingefroren — **alle nur Provenance geändert**, alle
+  Vektoren/Cases byte-identisch: `store/metadata.json` (8), 
+  `store/manifest-keys.json` (16), `mcp/tools-{delete-entry,generate-totp,
+  get-value,list-entries,search-fetch,set-entry}.json`, `import/cxf.json` (19),
+  `cli/command-tree.json` (135 Kommandos). Rust-Seite nachgezogen:
+  `symvault-store/{src/metadata.rs,tests/manifest_keys.rs}` und die sechs
+  `symvault-mcp/tests/tools_*.rs` (inkl. `source_hash`).
+  `portgen`/`cxfgen` vergleichen gegen den Pin, konnten also nur eine Revision
+  mit sauberem Tree nennen und wurden zusammen mit dem Re-Freeze vorgerückt.
+  Geprüft und **unberührt**: `storegen`, `store004gen` (lesen gepinnte Blobs,
+  nicht den Working Tree), `configclicasesgen`, `exportgen`, `import1passgen`,
+  `importcsvgen`, `mcprendergen`, `sessiongen`, `gitio` (`internal/git`).
+- **Vorbestehende, nicht durch diesen Fix verursachte rote Gates** (auf
+  pristine `origin/main` bestätigt): `rust-007-fixtures-check`
+  („`config/contract.json` is stale“) und `config-cli-differential`
+  (Temp-Dir-Kollision in `agent_token_mutations_differential`, der
+  Mikrosekunden-Takt aus #1085; allein ausgeführt grün).
 - **Slice-Entscheidung:** `migrate pseudonymize` nicht portieren, solange das
   Oracle den Defekt trägt. Byte-identische stdout/stderr-Fixture hätte die
   Datenlöschung als Vertrag eingefroren. Der Slice bleibt `blocked` bis #1089
   gemergt ist.
 - Go bleibt Produktion; kein Cutover, kein Release.
-- **Native CI für `fd55bb73`/`18ceab98` steht aus**; CI-Evidenz ist nicht
-  behauptet, bis der Lauf gegen den exakten Head beobachtet ist.
+- **Native CI für `0a123084` stand am Ende dieser Sitzung noch aus** (Rust/Rust
+  Miri liefen). Bis der Lauf gegen den exakten Head beobachtet ist, ist keine
+  native CI-Evidenz behauptet; lokal sind alle Go-Gates, `cargo test` für
+  store/sync/mcp und der volle `port-contract`-Satz grün (bis auf die oben
+  genannten vorbestehenden zwei).
 
 ## Zwischenstand 2026-09-20, Teil 3 (nach `72c14890`)
 
