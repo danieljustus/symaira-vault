@@ -80,22 +80,32 @@ type gap struct {
 }
 
 func main() {
-	binary := flag.String("binary", filepath.Join("target", "debug", "symvault"), "Rust CLI binary to probe")
-	treePath := flag.String("tree", filepath.Join("testdata", "port", "cli", "command-tree.json"), "frozen oracle command tree")
-	output := flag.String("output", filepath.Join("target", "resume-evidence", "cli-gap-inventory.json"), "report path")
-	depth := flag.Int("depth", 3, "maximum command depth to probe")
-	flag.Parse()
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintf(os.Stderr, "FAIL %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	fs := flag.NewFlagSet("cligap", flag.ContinueOnError)
+	binary := fs.String("binary", filepath.Join("target", "debug", "symvault"), "Rust CLI binary to probe")
+	treePath := fs.String("tree", filepath.Join("testdata", "port", "cli", "command-tree.json"), "frozen oracle command tree")
+	output := fs.String("output", filepath.Join("target", "resume-evidence", "cli-gap-inventory.json"), "report path")
+	depth := fs.Int("depth", 3, "maximum command depth to probe")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	if _, err := os.Stat(*binary); err != nil {
-		fatal("rust binary %s: %v (build it first: cargo build -p symvault-cli)", *binary, err)
+		return fmt.Errorf("rust binary %s: %w (build it first: cargo build -p symvault-cli)", *binary, err)
 	}
 	content, err := os.ReadFile(*treePath)
 	if err != nil {
-		fatal("read oracle tree: %v", err)
+		return fmt.Errorf("read oracle tree: %w", err)
 	}
 	var oracle tree
 	if unmarshalErr := json.Unmarshal(content, &oracle); unmarshalErr != nil {
-		fatal("parse oracle tree: %v", unmarshalErr)
+		return fmt.Errorf("parse oracle tree: %w", unmarshalErr)
 	}
 
 	repr := report{
@@ -110,7 +120,7 @@ func main() {
 	}
 	absolute, err := filepath.Abs(*binary)
 	if err != nil {
-		fatal("resolve binary path: %v", err)
+		return fmt.Errorf("resolve binary path: %w", err)
 	}
 	repr.RustBinary = absolute
 
@@ -165,20 +175,21 @@ func main() {
 
 	encoded, err := json.MarshalIndent(repr, "", "  ")
 	if err != nil {
-		fatal("encode report: %v", err)
+		return fmt.Errorf("encode report: %w", err)
 	}
 	encoded = append(encoded, '\n')
 	if dir := filepath.Dir(*output); dir != "." {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
-			fatal("create report directory: %v", err)
+			return fmt.Errorf("create report directory: %w", err)
 		}
 	}
 	if err := os.WriteFile(*output, encoded, 0o600); err != nil {
-		fatal("write report: %v", err)
+		return fmt.Errorf("write report: %w", err)
 	}
 	fmt.Printf("WROTE %s\n", *output)
 	fmt.Printf("oracle paths %d, rust paths %d, missing %d, flag gaps %d, alias gaps %d, rust-only %d\n",
 		repr.OraclePaths, repr.RustPaths, len(repr.MissingPaths), len(repr.FlagGaps), len(repr.AliasGaps), len(repr.RustOnlyPaths))
+	return nil
 }
 
 func aliasPathFor(path, alias string) string {
@@ -198,6 +209,8 @@ func probe(binary, path string) (string, bool) {
 		parts = parts[1:]
 	}
 	args := append(append([]string{}, parts...), "--help")
+	// #nosec G204 -- the probed binary is an explicit operator argument of this
+	// measurement tool (--binary), never untrusted input.
 	cmd := exec.Command(binary, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -301,9 +314,4 @@ func subcommands(help string) []string {
 		names = append(names, name)
 	}
 	return names
-}
-
-func fatal(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "FAIL "+format+"\n", args...)
-	os.Exit(1)
 }
