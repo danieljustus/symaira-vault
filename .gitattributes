@@ -7,6 +7,11 @@ CLAUDE.md export-ignore
 *.tmpl text eol=lf
 *.golden text eol=lf
 *.go text eol=lf
+# The Go module files feed the same working-tree provenance digests as the
+# sources above (provenance.Digest reads the checkout, not the blob), so a
+# Windows CRLF checkout makes exportgen's oracle digest disagree with the pin.
+go.mod text eol=lf
+go.sum text eol=lf
 # The detached Go oracle programs are carried as .txt so they do not compile
 # with the generator; their bytes feed a provenance digest, so a Windows CRLF
 # checkout would make that digest disagree with every other platform.
