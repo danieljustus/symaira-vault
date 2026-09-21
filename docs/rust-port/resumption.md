@@ -1,5 +1,36 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 11 (nach `e6e0dc0d`) — `agent skill*` gemergt, naechster Slice `agent install`
+
+- **PR [#1102](https://github.com/danieljustus/symaira-vault/pull/1102) squash-gemergt
+  als `e6e0dc0d`.** Alle Checks gruen im Lauf `35629952769` (`Rust`, `Rust Miri`,
+  `Rust native` macOS+Windows, `Rust port contract`, `Pairing differential` und
+  `Audit differential` auf drei Plattformen, `Test (ubuntu) — PR`, `govulncheck`,
+  `osv-scanner`, `Process tree (Windows)`, `Flake vendorHash`, `Vaultcore (macOS)`).
+  Worktree und Branch danach entfernt, `main`-Checkout sauber.
+- **Stand der Luecken:** fehlende Oracle-Pfade **35 → 32**, Rust-Pfade 94 → 97,
+  Flag-Luecken 9, Alias-Luecken 0, Rust-only 1 (Oracle 134).
+- **Zwei CI-Funde wurden vor dem Merge behoben, beide echte Bugs im neuen Test,
+  nicht Flakes:**
+  1. `Rust native (windows-latest)` rot: die ueber `include_str!` gelesenen
+     Fixtures waren im CRLF-Checkout konvertiert, der Renderer liefert LF.
+     Fix: `.gitattributes` pinnt `crates/symvault-cli/tests/fixtures/**` auf
+     `text eol=lf` **und** beide Loader normalisieren CRLF (`16919297`).
+  2. `Rust native (macos-latest)` rot: der Byte-Vergleich nach einem *legitimen*
+     Rewrite war zeitabhaengig, weil der Rewrite einen frischen
+     `managed_installed_at`-Stempel setzt (`16:58:40` vs `16:58:41`). Fix: volle
+     Byte-Gleichheit nur dort, wo **kein** Schreiben erwartet wird; sonst
+     Vergleich ohne die Zeitstempel-Zeile (`b856b7dd`).
+  Beide Lehren stehen jetzt in
+  `symskills/library/go-to-rust-migration/references/porting-pitfalls.md`.
+- **Naechster Slice spezifiziert:** `docs/rust-port/next-slice-agent-install.md`
+  (`agent install`, optional `agent upgrade`; Ziel 32 → 31). Offline, setzt auf
+  dem in Teil 10 gebauten Skill-Writer und dem portierten Token-Store auf;
+  `agent setup` bleibt wegen Netzwerk-Downloads ausgeschlossen.
+- **Verbleibende Blocker unveraendert:** `update check`/`apply` (kein HTTP-Client
+  im Workspace), `device approval-pair` (kontaktiert den laufenden Server),
+  `CLI-005` (Oracle druckt jeden Fehler doppelt — reproduziert, nicht behoben).
+
 ## Zwischenstand 2026-09-21, Teil 10 (nach `6649caf0`) — `agent skill*` gebaut
 
 - **Gebaut in `feat/agent-skill-commands`** (Worktree
