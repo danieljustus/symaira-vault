@@ -476,7 +476,23 @@ fn refresh_skips_an_unchanged_file_and_backs_up_a_changed_one() {
         std::fs::read_to_string(format!("{}.bak", target.to_string_lossy())).expect("backup"),
         String::from_utf8(tampered).expect("utf8")
     );
-    assert_eq!(std::fs::read(&target).expect("read"), installed);
+    // A legitimate rewrite stamps a fresh install time, so the comparison
+    // ignores that one frontmatter line; everything else must be identical to
+    // what the export produced.
+    assert_eq!(
+        without_install_time(&std::fs::read_to_string(&target).expect("read")),
+        without_install_time(&String::from_utf8(installed).expect("utf8"))
+    );
+}
+
+/// Drops the `managed_installed_at` line: it records when the file was written
+/// and therefore legitimately changes on every rewrite.
+fn without_install_time(content: &str) -> String {
+    content
+        .lines()
+        .filter(|line| !line.starts_with("managed_installed_at: "))
+        .map(|line| format!("{line}\n"))
+        .collect()
 }
 
 #[test]
