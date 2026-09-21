@@ -7,10 +7,14 @@ Scope spec, measured on `09961118` (after PR #1100). Repo
 
 - `approval-list` and `approval-revoke` (`cmd/device_approval.go:192-292`) are
   file-backed, offline and byte-comparable.
-- `approval-pair` (`cmd/device_approval.go:41-119`) renders a QR code
-  (`ui.RenderQRCodeForWidth`) and prints LAN addresses, so it is a separate
-  dependency/platform decision — deliberately **not** part of this slice. Track
-  it as its own blocked row.
+- `approval-pair` (`cmd/device_approval.go:41-119`) is **not** merely a QR
+  rendering question, as was first assumed here: measured, it calls the
+  already-running `symvault serve` over `https://127.0.0.1:<port>` with the
+  enrollment secret from `serverbootstrap.EnsureEnrollSecret(vaultDir)`
+  (`mintApprovalEnrollCode`) **and** renders a QR code
+  (`ui.RenderQRCodeForWidth`) with the LAN addresses. Both are their own
+  dependency/platform decision. Deliberately **not** part of this slice; track it
+  as its own blocked row.
 
 ## Core gap: `internal/pairing/devicesession.go` (385 lines) has no Rust counterpart
 

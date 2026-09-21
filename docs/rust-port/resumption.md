@@ -1,5 +1,38 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 8 (nach `09961118`) — `device approval-*` gebaut
+
+- **Gebaut in `feat/device-approval-registry`** (Worktree
+  `symaira-vault-wt-device-approval`): `crates/symvault-cli/src/device_approval.rs`
+  portiert `internal/pairing/devicesession.go` (Register) und
+  `cmd/device_approval.go` (`approval-list`, `approval-revoke`), plus zwei Zeilen
+  Verdrahtung in `main.rs` und ein additives
+  `GoTime::from_offset_datetime` in `crates/symvault-sync/src/pairing.rs`.
+- **cligap gemessen:** fehlende Oracle-Pfade **37 → 35**, Rust-Pfade 92 → 94,
+  Alias-Luecken 0, Rust-only 1.
+- **Byte-Differential:** 12/12 Faelle identisch in Exit-Code, stdout, stderr **und**
+  den Bytes der geschriebenen `device-sessions.json` (leerer Store, aktiv/revoked/expired,
+  `--quiet`, `-y`, `--yes`, Abbruch `n`, `  Y  `, unbekannte ID, zwei/keine Argumente).
+  Zwei Abweichungen sind dabei ausdruecklich normalisiert und benannt, nicht stillgelegt.
+- **`CLI-005` erneut belegt und bewusst nicht behoben:** der Oracle-Root-Handler druckt
+  jeden zurueckgegebenen Fehler **zweimal** (`Error: …` in zwei Zeilen) und formuliert
+  „vault not initialized" anders; reproduziert auch bei `device revoke -y nope`, also
+  querschnittlich und vorbestehend. Der Port druckt einmal. Die Fehlertexte selbst stimmen
+  (`approval device "x" not found`, `accepts 1 arg(s), received N`, Exit 1).
+- **Go-Map-Reihenfolge** der Liste ist kein Vertrag: der Contract-Test vergleicht Zeilen
+  als Menge, die deterministische `BTreeMap`-Ordnung des Ports ist eine dokumentierte
+  Abweichung.
+- **Gates lokal:** `cargo fmt --all --check` 0, `cargo clippy -p symvault-cli --all-targets
+  -- -D warnings` 0, `cargo test -p symvault-cli` exit 0 (45 Suiten), `cargo test -p
+  symvault-sync` exit 0. Neuer Contract-Test `tests/cli_device_approval.rs` (8 Tests,
+  `tempfile`-Wurzeln wegen #1085) plus 8 Unittests im Modul; Negativprobe (Meldung
+  absichtlich gebrochen → 1 Test rot, restauriert → gruen).
+- **Weiter offen:** `approval-pair` ruft den laufenden Server
+  (`https://127.0.0.1:<port>`, Enroll-Secret) und rendert einen QR-Code — eigener
+  Dependency-/Plattform-Entscheid. `Enroll`/`Validate`/`CleanupExpired` des Registers
+  gehoeren auf den Server-Pfad (`internal/approval/enroll.go`, `internal/approval`), nicht
+  zur CLI; `enroll` ist portiert und als ungenutzt markiert.
+
 ## Zwischenstand 2026-09-21, Teil 7 (nach `09961118`) — Alias-/Stub-Slice ist gemergt
 
 - **PR [#1100](https://github.com/danieljustus/symaira-vault/pull/1100) squash-gemergt

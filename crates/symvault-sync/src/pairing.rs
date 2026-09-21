@@ -117,7 +117,12 @@ impl GoTime {
 
     /// Captures the current wall-clock time in UTC as a GoTime.
     pub fn now() -> Self {
-        let dt = time::OffsetDateTime::now_utc();
+        Self::from_offset_datetime(time::OffsetDateTime::now_utc())
+    }
+
+    /// Builds a GoTime from a `time::OffsetDateTime`, keeping its offset the way
+    /// Go keeps a `time.Time`'s location through JSON.
+    pub fn from_offset_datetime(dt: time::OffsetDateTime) -> Self {
         Self {
             year: dt.year(),
             month: dt.month() as u8,
@@ -126,7 +131,7 @@ impl GoTime {
             minute: dt.minute(),
             second: dt.second(),
             nanosecond: dt.nanosecond(),
-            offset_seconds: 0,
+            offset_seconds: dt.offset().whole_seconds(),
         }
     }
 
