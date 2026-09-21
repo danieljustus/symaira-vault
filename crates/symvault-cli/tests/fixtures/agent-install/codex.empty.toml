@@ -1,0 +1,5 @@
+[mcp_servers]
+[mcp_servers.symvault]
+args = ['--vault', '/Users/daniel/.hermes/cache/scratch/cx.yqLdZc/vault', 'mcp', '--stdio', '--agent', 'codex']
+command = 'symvault'
+timeout = 120

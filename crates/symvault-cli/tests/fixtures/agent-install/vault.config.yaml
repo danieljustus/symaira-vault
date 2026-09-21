@@ -1,0 +1,53 @@
+agents:
+    claude-code:
+        approvalMode: deny
+        canWrite: true
+        canRunCommands: true
+        exposeValueTools: true
+        autoUnseal: false
+        skillPath: ~/.claude/skills/symvault/SKILL.md
+    codex:
+        approvalMode: deny
+        canWrite: false
+        canRunCommands: true
+        exposeValueTools: true
+        autoUnseal: false
+        skillPath: ~/.codex/skills/symvault/AGENTS.md
+    default:
+        approvalMode: deny
+        canWrite: false
+        canRunCommands: false
+        exposeValueTools: true
+        autoUnseal: false
+    hermes:
+        tier: safe
+        approvalMode: deny
+        canWrite: false
+        canRunCommands: false
+        canManageConfig: false
+        canUseClipboard: false
+        canUseAutotype: false
+        canReadValues: false
+        exposeValueTools: false
+        autoUnseal: false
+        requireApproval: false
+        skillPath: ~/.hermes/skills/symvault/SKILL.md
+    openclaw:
+        approvalMode: deny
+        canWrite: true
+        canRunCommands: true
+        exposeValueTools: true
+        autoUnseal: false
+        skillPath: ~/.openclaw/skills/symvault/SKILL.md
+    opencode:
+        approvalMode: deny
+        canWrite: false
+        canRunCommands: true
+        exposeValueTools: true
+        autoUnseal: false
+        skillPath: ~/.opencode/skills/symvault/SKILL.md
+vaultDir: /var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/installcase-q6d3bkob/vault
+defaultAgent: default
+sessionTimeout: 15m0s
+sessionMaxLifetime: 8h0m0s
+authMethod: passphrase

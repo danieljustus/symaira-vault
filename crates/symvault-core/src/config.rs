@@ -1842,33 +1842,54 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
         name,
         "default" | "claude-code" | "codex" | "hermes" | "openclaw" | "opencode"
     );
+    let tiered = p.tier.as_deref().is_some_and(|t| !t.is_empty());
     // ponytail: Go types these as `*bool`, so a key that was present in the
     // input is written back even when it is false (pinned Go contract:
     // `config_session_contract.rs` expects `exposeValueTools: false` for a
     // non-builtin `custom` profile), while an absent key writes no line at all.
-    // Rust stores plain `bool`, so presence cannot be recovered here: builtins
-    // always carry the preset set, everything else always carries canWrite and
-    // exposeValueTools. Measured consequence: a profile whose YAML only sets
-    // `tier` renders two extra lines. Upgrade path: type them `Option<bool>`.
+    // Rust stores plain `bool`, so presence cannot be recovered here, except
+    // through the `tier` marker: builtins always carry the preset set, tiered
+    // profiles carry the full Go-declared preset field set (Go holds non-nil
+    // preset pointers after `ApplyTierPreset` and writes them back even when
+    // false), everything else carries canWrite and exposeValueTools.
     out.push_str(&format!("        canWrite: {}\n", p.can_write));
-    if builtin || p.can_run_commands {
+    if builtin || tiered || p.can_run_commands {
         out.push_str(&format!("        canRunCommands: {}\n", p.can_run_commands));
     }
+    if tiered {
+        out.push_str(&format!("        canManageConfig: {}", p.can_manage_config));
+        out.push('\n');
+        out.push_str(&format!("        canUseClipboard: {}", p.can_use_clipboard));
+        out.push('\n');
+        out.push_str(&format!("        canUseAutotype: {}", p.can_use_autotype));
+        out.push('\n');
+        out.push_str(&format!("        canReadValues: {}", p.can_read_values));
+        out.push('\n');
+    }
     out.push_str(&format!(
-        "        exposeValueTools: {}\n",
+        "        exposeValueTools: {}",
         p.expose_value_tools
     ));
+    out.push('\n');
     if p.expose_payment_values {
         out.push_str("        exposePaymentValues: true\n");
     }
-    if p.require_approval || p.approval_mode.as_deref() == Some("none") {
+    if builtin || tiered {
+        out.push_str(&format!("        autoUnseal: {}", p.auto_unseal));
+        out.push('\n');
+    }
+    if tiered || p.require_approval || p.approval_mode.as_deref() == Some("none") {
         out.push_str(&format!(
             "        requireApproval: {}\n",
             p.require_approval
         ));
     }
-    if builtin {
-        out.push_str(&format!("        autoUnseal: {}\n", p.auto_unseal));
+    if !p.allowed_executables.is_empty() {
+        out.push_str("        allowedExecutables:\n");
+        for exe in &p.allowed_executables {
+            out.push_str(&format!("            - {exe}"));
+            out.push('\n');
+        }
     }
     if !p.skill_path.is_empty() {
         out.push_str(&format!(

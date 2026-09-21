@@ -573,10 +573,21 @@ pub(crate) fn refresh(vault: &Path, agent: &str) -> Result<(), String> {
 
 /// Go `agentskill.Install`.
 fn install(vault: &Path, agent: &str, target: &str, force: bool) -> Result<(), String> {
+    install_with_tier(vault, agent, target, force, PROFILE_TIER)
+}
+
+pub(crate) fn install_with_tier(
+    vault: &Path,
+    agent: &str,
+    target: &str,
+    force: bool,
+    tier: &str,
+) -> Result<(), String> {
     if has_traversal(target) {
         return Err(format!("target path contains traversal: {target}"));
     }
-    let vars = template_vars(agent, vault, now_rfc3339());
+    let mut vars = template_vars(agent, vault, now_rfc3339());
+    vars.profile_tier = tier.to_owned();
     let rendered = render(agent, &vars).map_err(|error| format!("render skill: {error}"))?;
     let target = clean_path(target);
 
@@ -636,7 +647,7 @@ fn body_hash(data: &[u8]) -> Result<String, String> {
 
 /// Go's `getSkillTargetPath`: the agent's `skillPath` from the vault config,
 /// empty when the config cannot be loaded, or when the agent has no entry.
-fn skill_target(vault: &Path, agent: &str) -> String {
+pub(crate) fn skill_target(vault: &Path, agent: &str) -> String {
     let Ok(config) = Config::load(vault.join("config.yaml")) else {
         return String::new();
     };

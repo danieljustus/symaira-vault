@@ -1551,12 +1551,16 @@ fn open_nofollow_kind(path: &Path, final_directory: bool) -> io::Result<fs::File
             }
         };
         let is_last = components.peek().is_none();
+        // Only the final component is opened with NOFOLLOW: intermediate
+        // symlinks (e.g. macOS `/var` -> `/private/var`) must resolve like
+        // the Go oracle's plain `os.Open` does. Symlink-safety of the target
+        // itself is preserved by the final NOFOLLOW open.
         let flags = if is_last && final_directory {
             OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
         } else if is_last {
             OFlags::RDONLY | OFlags::NOFOLLOW
         } else {
-            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
+            OFlags::RDONLY | OFlags::DIRECTORY
         };
         let opened = openat(&dir, name, flags, Mode::empty())?;
         if is_last {
