@@ -1,5 +1,59 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 5 (nach `e30789d0`) — `migrate`-Slice integriert, Alias-/Stub-Slice ausgelagert
+
+- **`migrate v4`/`migrate session` sind auf `main`.** PR #1098
+  (`bdcdc782`) squash-gemergt als `e30789d0`; der PR war vorher vollständig
+  grün (CI-Lauf `35608327679` success, `Rust pairing differential`
+  `35608327529` success, alle 18 relevanten Jobs pass, `mergeStateStatus`
+  CLEAN). Der Diff berührte **keine** Fixture und keinen Pin (nur
+  `crates/symvault-cli/src/main.rs`, `crates/symvault-core/src/session.rs`,
+  `crates/symvault-cli/tests/migrate_v4_differential.rs`, `resumption.md`) —
+  es gab also nichts neu einzufrieren, und die Pin-Falle aus Teil „2026-09-21
+  (nach `a28b6a09`)“ war hier nicht im Spiel. Native CI auf dem Merge-Commit:
+  Lauf `35610080000` (`CI`) gestartet, `Rust pairing differential`
+  `35610079785` success.
+- **CLI-Lücke neu gemessen bei `e30789d0`** (`cargo build -p symvault-cli` +
+  `go run ./scripts/rust-port/cmd/cligap`, Binary sha256 `18bfa533cd91`):
+  **43 fehlende** Oracle-Pfade (134 Oracle, 92 Rust), 9 Flag-Lücken,
+  **3 Alias-Lücken**, 1 Rust-only Pfad (`mcp serve`). Deckungsgleich mit Teil 4.
+  Die 43 verteilen sich auf `agent` (6), `serve` (8), `mcp token*`/`mcp-config`/
+  `mcp-token-rotate` (6), `update` (4), `approval` (3), `device approval-*` (3),
+  `intake` (3), `import review` (2), `dynamic` (2), `broker`, `generate manpages`,
+  `help`, `setup`, `startup-profile`, `ui` (je 1).
+- **CLI-005-Beleg (neu, ohne Statuswechsel der Zeile).** Der gepinnte Oracle
+  und die Rust-CLI unterscheiden sich in Exit-Code und stderr-Dialekt, wenn der
+  Vault fehlt: Oracle `symvault list` → Exit **3**, stderr dreizeilig
+  (`Error: …` doppelt plus `Run 'symvault init' for a quick start, or 'symvault
+  setup' for the guided wizard.`); Rust → Exit **1**, eine `Error:`-Zeile.
+  Bei den (noch) fehlenden Subkommandos trifft clap-Robustheit auf Cobra:
+  `mcp token` → Oracle Exit **2** mit Deprecation-Warnung und `Try:`-Hinweis,
+  Rust Exit **1** mit `unrecognized subcommand`. Beides bleibt unter `CLI-005`
+  (`TODO`, „exit codes 0–10“); hier ist nur die Messung, keine neue Zusage.
+- **Ausgelagerter Slice (koordiniert, nicht im Haupt-Checkout gebaut).**
+  Worktree `/Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/Repos/symaira-vault-wt-cli-aliases`,
+  Branch `feat/cli-aliases-deprecated-stubs` auf `e30789d0`; ein Worker
+  (`deleg_1d28d938`) baut: (1) die drei **Top-Level-Aliase** aus der
+  Oracle-Baum-Datei — `get` → `show`, `cat`; `list` → `ls` (Cobra-Aliase wirken
+  top-level, also `symvault show X` ≡ `symvault get X`; `symvault get show X`
+  ist dagegen **kein** Vertrag, das Oracle lehnt es mit „accepts 1 arg(s),
+  received 2“ ab), (2) die vier **deprecated, versteckten** `mcp token`-Stubs
+  (`token`, `create`, `list`, `revoke`) byte-genau: stdout leer, Exit 2, vier
+  stderr-Zeilen (Warnung, `Error:` doppelt, `Try:`-Hinweis); (3) neuen
+  Fixture-Generator `scripts/rust-port/cmd/deprecstubgen` mit Provenance und
+  Digest-Test plus einen nicht-ignorierten Rust-Contract-Test. Erwartung:
+  Alias-Lücken 3 → 0, fehlende Pfade 43 → 39. Der Slice ist bewusst klein
+  gewählt, weil er vollständig offline und byte-genau prüfbar ist.
+- **Entscheidung (nicht portiert, begründet):** `symvault help` bleibt offen.
+  Das Oracle-`help` ist Cobras eingebauter Hilfe-Befehl und gibt den
+  **kompletten Go-Root-Hilfetext** aus (Exit 0, stdout). Byte-Parität würde das
+  Nachbauen von Cobras Renderer verlangen; die Rust-CLI bietet stattdessen
+  `--help`. Bleibt als Nicht-Zusage dokumentiert, kein stiller Skip.
+- Geladene Skills dieser Sitzung: `go-to-rust-migration` (SKILL.md).
+  `go-rust-port-parity` und `references/porting-pitfalls.md` wurden noch nicht
+  geladen — bei der nächsten Invocation zuerst laden, nicht erneut inventarisieren.
+- Kein Cutover, kein Release; Go bleibt Produktion und Oracle.
+
 ## Zwischenstand 2026-09-21, Teil 4 (nach `b1e1c69f`) — alle drei `migrate`-Subkommandos portiert
 
 `migrate` ist in der Rust-CLI vollständig: `pseudonymize` (Teil 3), `v4` und
