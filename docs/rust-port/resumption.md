@@ -1,5 +1,40 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21 (nach `a28b6a09`) — P0 gefixt, Squash-Pin behoben
+
+- **Native CI beobachtet.** `0a123084` → Lauf `35539515206` grün;
+  Merge `3232e31f` (PR #1089, Squash) → Lauf `35569092279` **rot**.
+- **Squash-Merge hat die Pins zerstört** (eigener Fehler): die Fixtures waren auf
+  Branch-Commits (`fd55bb73`, `c7309b0f`) eingefroren. Der Squash entfernte diese
+  Objekte; danach schlug auf `main` jedes Gate fehl, das den Pin auflöst
+  (`Rust storage differential`, `make port-fixtures-check` — „command-tree fixture
+  is stale“), weil `git ls-tree <pin>` ins Leere greift. Ursache ist nicht der Fix,
+  sondern die Pin-Wahl.
+- **Behoben und wieder grün:** PR
+  [#1090](https://github.com/danieljustus/symaira-vault/pull/1090), Squash-Merge
+  `a28b6a09`. Alle 19 Pin-Stellen zeigen jetzt auf `3232e31f` — die Revision, die
+  dauerhaft auf `main` erreichbar ist (`git merge-base --is-ancestor 3232e31f
+  origin/main` ✓). Fixtures erneut eingefroren, weiterhin **provenance-only**.
+  Kein Oracle-Quellcode in diesem Fix, deshalb bleibt der Pin inhaltlich korrekt.
+- **Native CI für den Merge beobachtet:** `a28b6a09` → `CI` Lauf `35571433190`
+  **success**, keine Fehler; `Rust storage differential` `35571433195` und
+  `Rust pairing differential` `35571433199` success. Lokal auf `main` zusätzlich
+  `port-fixtures-check`, `store-metadata-fixtures-check` (8 Vektoren),
+  `cxfgen -check` (19 Cases) und `cargo test -p symvault-store -p symvault-mcp`
+  (32 Suites ok) grün.
+- **Regel für den nächsten Merge:** Ein Fixture-Pin darf nur eine Revision nennen,
+  die von der Basis-Branch dauerhaft erreichbar ist, und das Re-Freeze muss **im
+  selben PR** landen. Vor jedem Merge `git merge-base --is-ancestor <pin>
+  origin/main` prüfen; schlägt das fehl, ist der Pin eine Zeitbombe. In
+  `references/porting-pitfalls.md` festgehalten.
+- Go bleibt Produktion; kein Cutover, kein Release. Kein Branch-/Tag-Ereignis.
+- **Vorbestehende, nicht durch diese Arbeit verursachte rote Gates** (auf
+  pristine `origin/main` bestätigt): `rust-007-fixtures-check` und
+  `config-cli-differential` (Temp-Dir-Kollision in
+  `agent_token_mutations_differential`, Mikrosekunden-Takt aus #1085; allein
+  ausgeführt grün). Zusätzlich lokal: `auth_commands` zwei Fälle, ebenfalls auf
+  pristine `origin/main` identisch rot.
+
 ## Zwischenstand 2026-09-20, Teil 4 (nach `c60e3be5`) — P0 im Oracle, Slice pausiert
 
 **Der nächste geplante Slice (`migrate pseudonymize`) ist als Oracle unbrauchbar:
@@ -51,14 +86,14 @@ genau der Zustand nach einem fehlerhaften Lauf).
   Mikrosekunden-Takt aus #1085; allein ausgeführt grün).
 - **Slice-Entscheidung:** `migrate pseudonymize` nicht portieren, solange das
   Oracle den Defekt trägt. Byte-identische stdout/stderr-Fixture hätte die
-  Datenlöschung als Vertrag eingefroren. Der Slice bleibt `blocked` bis #1089
-  gemergt ist.
+  Datenlöschung als Vertrag eingefroren. #1089 ist inzwischen gemergt (`3232e31f`)
+  — der Slice ist damit **wieder freigegeben**, die Voruntersuchung unten gilt
+  weiter, und der Fix selbst muss noch verifiziert werden (die Akzeptanzpunkte
+  unten nennen „zweiter Lauf ist ein No-op", was der Fix erst herstellt).
 - Go bleibt Produktion; kein Cutover, kein Release.
-- **Native CI für `0a123084` stand am Ende dieser Sitzung noch aus** (Rust/Rust
-  Miri liefen). Bis der Lauf gegen den exakten Head beobachtet ist, ist keine
-  native CI-Evidenz behauptet; lokal sind alle Go-Gates, `cargo test` für
-  store/sync/mcp und der volle `port-contract`-Satz grün (bis auf die oben
-  genannten vorbestehenden zwei).
+- **Native CI für `0a123084` inzwischen beobachtet: grün** (Lauf `35539515206`).
+  Der Merge-Lauf `35569092279` war rot, weil der Squash die Pins zerstörte; das ist
+  oben behoben und mit `a28b6a09` (Lauf `35571433190`, success) belegt.
 
 ## Zwischenstand 2026-09-20, Teil 3 (nach `72c14890`)
 
