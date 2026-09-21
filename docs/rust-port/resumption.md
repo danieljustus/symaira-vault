@@ -1,5 +1,51 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 4 (nach `b1e1c69f`) — alle drei `migrate`-Subkommandos portiert
+
+`migrate` ist in der Rust-CLI vollständig: `pseudonymize` (Teil 3), `v4` und
+`session`. Die CLI-Lücke schrumpfte über beide Teile von 46 auf **43** fehlende
+Oracle-Pfade; kein `migrate`-Pfad steht mehr in `missing_paths`.
+
+- **`migrate v4`** (`crates/symvault-cli/src/main.rs`): weist Agent-Profilen ohne
+  Tier-Feld ein Tier zu — `can_run_commands` → `admin`, `can_write` → `standard`,
+  sonst `safe` — legt vorher eine Sicherung
+  `config.yaml.v3-backup-<unix-stamp>` an und schreibt erst danach. Dry-Run
+  schreibt nichts, ein zweiter Lauf meldet „All profiles already have tier
+  fields." und legt keine weitere Sicherung an (idempotent).
+- **`migrate session`**: aktualisiert eine zwischengespeicherte Passphrase vom
+  Legacy-Klartextformat auf die verschlüsselte Form. Zwei neue
+  `SessionManager`-Methoden in `crates/symvault-core/src/session.rs`:
+  `has_legacy_plaintext_session` (fehlender Eintrag = „kein Legacy“, leerer
+  Klartext zählt nicht) und `migrate_session` (Wrap-Key bei Bedarf, Klartext
+  wird vor dem Serialisieren verworfen und per `zeroize` gelöscht,
+  `max_lifetime_ns` wird auf 8 h defaulted, zweiter Lauf ist ein No-Op). Das
+  Flag `--dry-run` erkennt den Legacy-Zustand und schreibt nichts.
+- **Tests.** `crates/symvault-core/src/session.rs`: zwei Einheiten-Tests
+  (Migration + Idempotenz + Defaulting; No-Op ohne Legacy-Eintrag) — 9/9
+  Session-Tests grün. `crates/symvault-cli/tests/migrate_v4_differential.rs`
+  vergleicht direkt gegen das gepinnte Go-Oracle (`SYMVAULT_GO_BINARY`).
+- **Bewusste Abweichung, im Test dokumentiert:** das Oracle iteriert
+  `cfg.Agents`, eine Go-Map, also ist die Reihenfolge der
+  `  <name> → <tier>`-Zeilen nicht-deterministisch; Rust läuft über eine
+  `BTreeMap` und ist sortiert. Byte-Parität ist dort ohne Nachbau der
+  Map-Iteration nicht erreichbar, deshalb vergleicht der Test die **Menge** der
+  Zuordnungen plus die stabilen Rahmenzeilen wörtlich. Verifiziert
+  nicht-vakuos: ein absichtlich gebrochener `can_write`-Zweig macht den Test rot
+  (`cli → safe` statt `cli → standard`), restauriert ist er grün; die
+  Zuordnungsmenge wird explizit auf 7 Einträge geprüft.
+- **End-to-End am Binary:** `migrate v4 --dry-run` schreibt nichts;
+  der echte Lauf vergibt 7 Tiers und legt genau eine Sicherung an, die nachweislich
+  die Vor-Migrations-Config ohne `tier:`-Zeilen enthält; der zweite Lauf ist ein
+  No-Op. `migrate session` meldet ohne Legacy-Eintrag „No legacy plaintext
+  session found. Nothing to migrate." — der Legacy-Pfad selbst ist
+  cross-process nicht darstellbar, weil der Test-Keyring prozesslokal ist
+  (gilt für Go genauso), und wird deshalb durch die Einheiten-Tests belegt.
+- **Gate-Sweep** über alle 24 `port-contract`-Voraussetzungen: **23 PASS**;
+  einziger FAIL ist weiterhin der macOS-Temp-Dir-Flake
+  [#1085](https://github.com/danieljustus/symaira-vault/issues/1085), auf pristine
+  `origin/main` identisch reproduziert.
+- Kein Cutover, kein Release; Go bleibt Produktion.
+
 ## Zwischenstand 2026-09-21, Teil 3 (nach `71af9eb0`) — `migrate pseudonymize` portiert
 
 Der nächste freigegebene Slice aus `RUST-009` ist gebaut: `symvault migrate

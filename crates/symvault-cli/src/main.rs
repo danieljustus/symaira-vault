@@ -816,6 +816,18 @@ enum MigrateCommand {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Migrate agent profiles and config to the v4.0 tier format.
+    V4 {
+        #[arg(short = 'y', long)]
+        yes: bool,
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+    },
+    /// Upgrade a cached session from the legacy plaintext format.
+    Session {
+        #[arg(long = "dry-run")]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1733,6 +1745,23 @@ fn run_cli() -> ExitCode {
         Some(Command::Migrate {
             command: MigrateCommand::Kdf { yes },
         }) => run_migrate_kdf(cli.vault.as_deref(), cli._profile.as_deref(), yes),
+        Some(Command::Migrate {
+            command: MigrateCommand::V4 { yes, dry_run },
+        }) => run_migrate_v4(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            yes,
+            dry_run,
+            cli.quiet,
+        ),
+        Some(Command::Migrate {
+            command: MigrateCommand::Session { dry_run },
+        }) => run_migrate_session(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            dry_run,
+            cli.quiet,
+        ),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -3109,6 +3138,163 @@ fn run_export(
         } else if !quiet {
             println!("Exported {} entries", exported.entries);
         }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_migrate_session(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    dry_run: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        let runtime = runtime_session_manager();
+        let vault_string = vault
+            .to_str()
+            .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+
+        let legacy = runtime
+            .manager
+            .has_legacy_plaintext_session(vault_string)
+            .map_err(|error| format!("inspect session: {error}"))?;
+        if !legacy {
+            println_quiet_aware(
+                quiet,
+                "No legacy plaintext session found. Nothing to migrate.",
+            );
+            return Ok(());
+        }
+
+        if dry_run {
+            println_quiet_aware(
+                quiet,
+                "Dry-run: legacy plaintext session detected. Re-run without --dry-run to upgrade.",
+            );
+            return Ok(());
+        }
+
+        let upgraded = runtime
+            .manager
+            .migrate_session(vault_string)
+            .map_err(|error| format!("migrate session: {error}"))?;
+        if !upgraded {
+            println_quiet_aware(
+                quiet,
+                "No legacy plaintext session found. Nothing to migrate.",
+            );
+            return Ok(());
+        }
+
+        println_quiet_aware(
+            quiet,
+            "Session upgraded. The cached passphrase is now stored encrypted in the OS keyring.",
+        );
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_migrate_v4(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    yes: bool,
+    dry_run: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        let config_path = vault.join("config.yaml");
+        let mut config =
+            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+
+        // Tier assignment mirrors the oracle: profiles that already carry a
+        // non-empty tier are left alone, which makes the migration idempotent.
+        let mut pending: Vec<(String, &'static str)> = Vec::new();
+        for (name, agent) in &config.agents {
+            if agent.tier.as_deref().is_some_and(|tier| !tier.is_empty()) {
+                continue;
+            }
+            let tier = if agent.can_run_commands {
+                "admin"
+            } else if agent.can_write {
+                "standard"
+            } else {
+                "safe"
+            };
+            pending.push((name.clone(), tier));
+        }
+
+        if pending.is_empty() {
+            println_quiet_aware(quiet, "All profiles already have tier fields.");
+            return Ok(());
+        }
+
+        println_quiet_aware(
+            quiet,
+            &format!(
+                "Found {} agent profile(s) without tier fields:",
+                pending.len()
+            ),
+        );
+        for (name, tier) in &pending {
+            println_quiet_aware(quiet, &format!("  {name} \u{2192} {tier}"));
+        }
+
+        if dry_run {
+            println_quiet_aware(quiet, "Dry-run: no changes written.");
+            return Ok(());
+        }
+
+        if !yes {
+            eprint!("Migrate agent profiles to v4.0 format (y/N): ");
+            io::stderr().flush().map_err(|error| error.to_string())?;
+            let mut answer = String::new();
+            if io::stdin()
+                .read_line(&mut answer)
+                .map_err(|error| format!("read confirmation: {error}"))?
+                == 0
+            {
+                return Err("read confirmation: EOF".to_owned());
+            }
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                eprintln!("Canceled");
+                return Ok(());
+            }
+        }
+
+        // Back up the original bytes before touching the file. The oracle keeps
+        // the pre-migration config verbatim under a timestamped name.
+        let original = symvault_sync::safeio::read(&config_path)
+            .map_err(|error| format!("read config for backup: {error}"))?
+            .ok_or_else(|| "configuration is missing".to_owned())?;
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| format!("clock: {error}"))?
+            .as_secs();
+        let backup_path = vault.join(format!("config.yaml.v3-backup-{stamp}"));
+        symvault_sync::safeio::write_atomic(&backup_path, &original)
+            .map_err(|error| format!("write backup: {error}"))?;
+        println_quiet_aware(quiet, &format!("Backup created: {}", backup_path.display()));
+
+        for (name, tier) in &pending {
+            if let Some(agent) = config.agents.get_mut(name) {
+                agent.tier = Some((*tier).to_owned());
+            }
+        }
+
+        config
+            .save_to(&config_path)
+            .map_err(|error| format!("save migrated config: {error}"))?;
+        println_quiet_aware(
+            quiet,
+            &format!(
+                "Migrated {} agent profile(s) to v4.0 format.",
+                pending.len()
+            ),
+        );
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
