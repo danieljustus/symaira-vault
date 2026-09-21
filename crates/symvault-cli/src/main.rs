@@ -14,6 +14,7 @@ mod backup_commands;
 mod config;
 mod daemon_commands;
 mod device;
+mod device_approval;
 mod doctor_commands;
 mod edit_commands;
 mod export_commands;
@@ -820,6 +821,19 @@ enum DeviceCommand {
     },
     /// Revoke a device and re-encrypt all entries.
     Revoke {
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+    },
+    /// List devices enrolled as approval devices.
+    ApprovalList {
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
+    },
+    /// Revoke an approval device's ability to approve/deny requests.
+    ApprovalRevoke {
         /// Skip confirmation prompt.
         #[arg(short = 'y', long = "yes")]
         yes: bool,
@@ -1867,6 +1881,14 @@ fn run_cli() -> ExitCode {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))
                     } else {
                         device::revoke(vault, &args[0], yes, cli.quiet)
+                    }
+                }
+                DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
+                DeviceCommand::ApprovalRevoke { yes, args } => {
+                    if args.len() != 1 {
+                        Err(format!("accepts 1 arg(s), received {}", args.len()))
+                    } else {
+                        device_approval::revoke(vault, &args[0], yes, cli.quiet)
                     }
                 }
             };
