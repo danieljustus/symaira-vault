@@ -41,11 +41,22 @@ func Digest(root string, files []string) (string, error) {
 // digest of files against the same digest taken from that commit's blobs.
 // It returns the resolved object name, or an error naming both digests when
 // they differ.
+//
+// Dependency manifests are deliberately excluded from the enforced set. A pin
+// that binds go.mod/go.sum turns every dependency bump — Dependabot or manual —
+// into a red gate, because the manifests change while the behavior the fixture
+// captures does not. The revision is still recorded as commit/commit_sha, so the
+// dependency set stays documented; it is simply not asserted. Enforce the source
+// files whose behavior the fixture actually captures.
 func Verify(root, commit string, files []string) (string, error) {
 	if commit == "" {
 		return "", fmt.Errorf("oracle commit is required for provenance verification")
 	}
-	working, err := Digest(root, files)
+	enforced := EnforcedSources(files)
+	if len(enforced) == 0 {
+		return "", fmt.Errorf("no behavior-bearing sources to verify for commit %s", commit)
+	}
+	working, err := Digest(root, enforced)
 	if err != nil {
 		return "", fmt.Errorf("hash working tree sources: %w", err)
 	}
@@ -56,7 +67,7 @@ func Verify(root, commit string, files []string) (string, error) {
 	resolved := strings.TrimSpace(string(resolvedRaw))
 
 	hash := sha256.New()
-	for _, name := range files {
+	for _, name := range enforced {
 		content, err := gitOutput(root, "cat-file", "blob", resolved+":"+name)
 		if err != nil {
 			return "", fmt.Errorf("read %s at oracle commit %s: %w", name, resolved, err)
@@ -73,6 +84,19 @@ func Verify(root, commit string, files []string) (string, error) {
 			working, commit, resolved, pinned)
 	}
 	return resolved, nil
+}
+
+// EnforcedSources drops dependency manifests from a declared source list.
+// They stay in the fixture's recorded provenance but must not gate the build.
+func EnforcedSources(files []string) []string {
+	out := make([]string, 0, len(files))
+	for _, name := range files {
+		if name == "go.mod" || name == "go.sum" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 func writeEntry(hash interface{ Write([]byte) (int, error) }, name string, content []byte) {

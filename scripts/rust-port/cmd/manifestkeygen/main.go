@@ -62,8 +62,14 @@ func repoRoot() string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 }
 
-// Bind the entire tracked internal production tree and module dependencies to
-// the actual pinned revision, rather than trusting a caller-supplied label.
+// Bind the entire tracked internal production tree to the actual pinned
+// revision, rather than trusting a caller-supplied label.
+//
+// Dependency manifests stay in the digest (they are read from the pinned
+// revision, so the digest is stable across dependency bumps), but they are
+// excluded from the working-tree equality check: a pin that gates on go.mod
+// turns every dependency bump — Dependabot or manual — into a red gate while
+// the behavior under test is unchanged.
 func sourceDigest(root string) (string, error) {
 	cmd := exec.Command("git", "ls-tree", "-r", "--name-only", revision, "--", "internal", "go.mod", "go.sum")
 	cmd.Dir = root
@@ -88,7 +94,11 @@ func sourceDigest(root string) (string, error) {
 		}
 		// Git's Windows checkout may normalize LF blobs to CRLF. Compare
 		// normalized bytes, but bind the digest to the revision's blob bytes.
-		if !bytes.Equal(bytes.ReplaceAll(pinned, []byte("\r\n"), []byte("\n")), bytes.ReplaceAll(current, []byte("\r\n"), []byte("\n"))) {
+		// Dependency manifests are exempt from the equality check: a bumped
+		// go.mod is not an oracle divergence, and binding it would redden every
+		// dependency update.
+		if name != "go.mod" && name != "go.sum" &&
+			!bytes.Equal(bytes.ReplaceAll(pinned, []byte("\r\n"), []byte("\n")), bytes.ReplaceAll(current, []byte("\r\n"), []byte("\n"))) {
 			return "", fmt.Errorf("production source differs from %s: %s", revision, name)
 		}
 		h.Write([]byte(name + "\x00"))

@@ -7,8 +7,8 @@
     "go.mod",
     "go.sum"
   ],
-  "source_digest": "32fe46ce92da0c058d5ca97aa5617f99aa6c500616ca39fcf796b45bb1d06a76",
-  "generator_digest": "e7f18465b555c70b570bf0530a18824dd89a414959f0f2f3ef49ac00ef604379",
+  "source_digest": "f66b591659363d8befc7698103f189250536f8e03c62ac7f65f752d2f1c33e02",
+  "generator_digest": "1f9cc5b370f775bf6da80d415ec6559dbbcfacb35df3cbc7283fca8284ce13c6",
   "cases": [
     {
       "name": "empty",

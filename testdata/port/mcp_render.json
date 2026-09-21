@@ -5,8 +5,8 @@
     "go.sum",
     "internal/mcp/server/render.go"
   ],
-  "source_digest": "25f9596d4493f405ae61e9806923bb95071db07a0b98bf0eff7a68d851cc014e",
-  "generator_digest": "e14eeb829dc229bbb5096fff752db64561d683e3de6df35ca8ba29cfd499275e",
+  "source_digest": "af73a6ea1f4fccac22cab81885ae606814d4f880d5deff51ab959d419aebd4f8",
+  "generator_digest": "65fc01fb36d9db53fc0d0e861a84c9fa14554779b794ad63a8da402fa2078fcb",
   "cases": [
     {
       "input": "",
