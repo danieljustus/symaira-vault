@@ -5,8 +5,8 @@
     "go.mod",
     "go.sum"
   ],
-  "source_hash": "0275988fd997d05f77b374a2e4f856065e6a6818dd8bd752bdc7407626d7dfdf",
-  "generator_hash": "5ebdcaac8918fd7e52b80d29a35d3d8122327f575cbc3bc653bd3d0e4202b51b",
+  "source_hash": "a61039b5db6ba2fc0b7c5fa19e6b8b726fea29242db514152755efbd4ae3da99",
+  "generator_hash": "2f5d1900155d6c422afca815b8129bb685a4ccffa704144ab00c286a28f309c3",
   "cases": [
     {
       "name": "stable",

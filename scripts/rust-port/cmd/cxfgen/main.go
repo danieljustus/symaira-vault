@@ -469,9 +469,14 @@ func runOracle(root string) ([]fixtureCase, error) {
 	}
 	cmd := exec.Command("go", "run", "./cmd/cxforacle")
 	cmd.Dir = tree
-	out, err := cmd.CombinedOutput()
+	// Keep stdout and stderr apart: `go run` reports progress ("go: downloading
+	// …") on stderr, and with a cold module cache that text precedes the JSON
+	// payload. CombinedOutput would splice it in and the parse fails.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("detached CXF oracle: %w: %s", err, out)
+		return nil, fmt.Errorf("detached CXF oracle: %w: %s", err, stderr.String())
 	}
 	var cases []fixtureCase
 	if err = json.Unmarshal(out, &cases); err != nil {

@@ -408,9 +408,15 @@ func runOracle(root string) ([]Case, error) {
 	}
 	cmd := exec.Command("go", "run", "./cmd/syncoracle")
 	cmd.Dir = tree
-	out, e := cmd.CombinedOutput()
+	// Capture stdout separately: `go run` writes progress ("go: downloading …")
+	// to stderr, and with a cold module cache that text arrives ahead of the
+	// JSON payload. CombinedOutput would splice it into the document and the
+	// parse fails with "invalid character 'g'". stderr is kept for diagnostics.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, e := cmd.Output()
 	if e != nil {
-		return nil, fmt.Errorf("detached oracle: %w: %s", e, out)
+		return nil, fmt.Errorf("detached oracle: %w: %s", e, stderr.String())
 	}
 	var raw struct {
 		Cases []struct {

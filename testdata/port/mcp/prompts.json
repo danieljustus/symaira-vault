@@ -13,8 +13,8 @@
       "go.mod",
       "go.sum"
     ],
-    "source_hash": "53adc4306411ca6173a63d47c2465ab4ea45d4ac34ce3d9c06561cb3aed3966d",
-    "generator_hash": "7344abb75d4843c2f63a7bf1d452880629db754253d599bb93fe9d01c8ea64be"
+    "source_hash": "2618f6d5ea600393fc64d7fd4779228e7251e3db1ec5f8843e7e36e1bb40f61b",
+    "generator_hash": "d967eb5c5f7af8046edb01e714e5009f93db892cd9fd60b01cb4b9d0c00fc6c5"
   },
   "cases": [
     {
