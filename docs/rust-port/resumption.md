@@ -1,5 +1,60 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 3 (nach `71af9eb0`) — `migrate pseudonymize` portiert
+
+Der nächste freigegebene Slice aus `RUST-009` ist gebaut: `symvault migrate
+pseudonymize` existiert jetzt nativ in Rust und verhält sich wie das gefixte
+Go-Oracle (`cmd/admin/migrate.go`, Order-Fix aus #1088).
+
+- **Store-API** `Store::migrate_pseudonymize(&Identity) -> PseudonymizeSummary`
+  (`crates/symvault-store/src/lib.rs`). Sie wandelt alle `entries/**/*.age` in
+  HMAC-abgeleitete Pfade um. Der logische Pfad kommt aus dem Ciphertext
+  (`entry.path`), nicht aus dem Dateinamen — nach der ersten Migration ist der
+  Dateiname kein Identifikator mehr. Bereits abgeleitete Ziele werden
+  übersprungen; würde man den abgeleiteten Namen erneut hashen, verwaiste der
+  Eintrag. Die Klartextdatei wird erst entfernt, **nachdem** das Ziel bestätigt
+  auf der Platte liegt; fehlt es, bricht die Migration mit Fehler ab, statt still
+  zu löschen.
+- **Die P0-Lehre ist jetzt strukturell abgesichert, nicht nur nachgeahmt.**
+  `migrate_pseudonymize` **verweigert** die Arbeit mit `StoreError::Config`,
+  solange `pseudonymize_paths` nicht gesetzt ist. Genau die umgekehrte
+  Reihenfolge — Flag erst nach dem Rewrite-Loop setzen — hatte in Go jeden
+  Eintrag auf seinen eigenen Klartextpfad geschrieben und dann gelöscht (#1088).
+  Die CLI aktiviert das Flag deshalb **vor** dem ersten Schreibvorgang und öffnet
+  den Store danach neu.
+- **CLI** `crates/symvault-cli/src/main.rs`: Subkommando in der `MigrateCommand`-
+  Enum, Dispatcher-Zweig und `run_migrate_pseudonymize` mit
+  `-y/--yes`-Bestätigung; ohne `-y` fragt es interaktiv „Migrate all entries to
+  pseudonymized paths. Make a backup first (y/N)" und bricht bei `n` mit
+  „Canceled" ab — deckungsgleich mit `cli.ConfirmInteractive` im Oracle.
+- **Tests** `crates/symvault-store/tests/pseudonymize_migration.rs` (3 Fälle,
+  grün): Migration erhält jeden Eintrag und lässt keine klartextbenannte Datei
+  zurück; zweiter Lauf ist ein No-Op (`migrated == 0`, Dateizahl unverändert);
+  ohne Flag wird mit `StoreError::Config` verweigert und der Vault bleibt
+  unberührt.
+- **End-to-End am echten Binary** (`target/debug/symvault`, temporärer Vault):
+  3 Einträge angelegt (`example.one`, `work/nested/two`, `deep/a/b/c/three`),
+  migriert („Migrating 3 entries to pseudonymized paths..."), alle drei unter
+  ihrem logischen Pfad lesbar, Dateizahl 3 vor und nach der Migration, zweiter
+  Lauf schreibt 0 Einträge um, `list` liefert weiter alle drei. Abbruchpfad mit
+  `n` verifiziert.
+- **CLI-Lücke gemessen** (`scripts/rust-port/cmd/cligap`): 134 Oracle-Pfade,
+  90 Rust-Pfade, **45 fehlen** (vorher 46), 9 Flag-Lücken, 3 Alias-Lücken,
+  1 Rust-only Pfad. `migrate pseudonymize` ist nicht mehr in
+  `missing_paths`. `CLI-002`/`CLI-003` bleiben `TODO`: Oberflächen-Erreichbarkeit
+  ist keine Verhaltensparität und hebt keine Matrix-Zeile an.
+- **Gate-Sweep** über alle 24 `port-contract`-Voraussetzungen: **23 PASS**. Der
+  einzige FAIL ist der bekannte macOS-Temp-Dir-Flake
+  [#1085](https://github.com/danieljustus/symaira-vault/issues/1085)
+  (`config-cli-differential`, `Not a directory (os error 20)`) und **auf pristine
+  `origin/main` identisch reproduziert** — kein Regress dieses Slices.
+- Ein früherer `rust-007-fixtures-check`-FAIL war **selbstverschuldet**: ein
+  exportiertes `SYMVAULT_VAULT` aus einem vorherigen E2E-Lauf erbte in
+  `configgen` und backte den echten Vault-Pfad statt `/fixture/root/...` in die
+  Fixture. Mit sauberer Umgebung grün; Fixtures unverändert. Lehre: nach
+  E2E-Läufen `SYMVAULT_*` vollständig `unset`, bevor Fixture-Generatoren laufen.
+- Kein Cutover, kein Release; Go bleibt Produktion.
+
 ## Zwischenstand 2026-09-21, Teil 2 (nach `c218771c`) — Dependency-Bumps blockieren die Pins nicht mehr
 
 Der zuvor strukturell blockierte Dependabot-Bump ist gemergt. Zwei voneinander

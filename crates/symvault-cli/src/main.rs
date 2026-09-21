@@ -806,6 +806,11 @@ enum MigrateCommand {
     /// Preview legacy-to-XDG paths without writing.
     #[command(alias = "xdg")]
     Paths,
+    /// Migrate vault entries to pseudonymized storage paths.
+    Pseudonymize {
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
     /// Re-encrypt a legacy scrypt identity using Argon2id.
     Kdf {
         #[arg(short = 'y', long)]
@@ -1717,6 +1722,14 @@ fn run_cli() -> ExitCode {
             }
             finish_vault_result(result)
         }
+        Some(Command::Migrate {
+            command: MigrateCommand::Pseudonymize { yes },
+        }) => run_migrate_pseudonymize(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            yes,
+            cli.quiet,
+        ),
         Some(Command::Migrate {
             command: MigrateCommand::Kdf { yes },
         }) => run_migrate_kdf(cli.vault.as_deref(), cli._profile.as_deref(), yes),
@@ -3095,6 +3108,77 @@ fn run_export(
             }
         } else if !quiet {
             println!("Exported {} entries", exported.entries);
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_migrate_pseudonymize(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    yes: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        if !yes {
+            eprint!("Migrate all entries to pseudonymized paths. Make a backup first (y/N): ");
+            io::stderr().flush().map_err(|error| error.to_string())?;
+            let mut answer = String::new();
+            if io::stdin()
+                .read_line(&mut answer)
+                .map_err(|error| format!("read confirmation: {error}"))?
+                == 0
+            {
+                return Err("read confirmation: EOF".to_owned());
+            }
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                eprintln!("Canceled");
+                return Ok(());
+            }
+        }
+
+        // The flag must be on before the first rewrite. Every write resolves
+        // its target through the configured storage mode, so enabling it
+        // afterwards rewrites each entry onto its own plaintext path and then
+        // deletes it — the Go command lost the whole vault that way (#1088).
+        let config_path = vault.join("config.yaml");
+        let mut config =
+            Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+        let section = config.vault.get_or_insert_with(Default::default);
+        if !section.pseudonymize_paths {
+            section.pseudonymize_paths = true;
+            config
+                .save_to(&config_path)
+                .map_err(|error| format!("save config: {error}"))?;
+        }
+
+        let identity = device::unlock_vault(&vault)?;
+        let store = symvault_store::Store::open(&vault, &identity)
+            .map_err(|error| format!("open vault: {error}"))?;
+        let summary = store
+            .migrate_pseudonymize(&identity)
+            .map_err(|error| format!("migrate pseudonymize: {error}"))?;
+
+        if summary.scanned == 0 {
+            println_quiet_aware(
+                quiet,
+                "No entries to migrate. Enabling pseudonymize_paths in config.",
+            );
+        } else {
+            println_quiet_aware(
+                quiet,
+                &format!(
+                    "Migrating {} entries to pseudonymized paths...",
+                    summary.scanned
+                ),
+            );
+            println_quiet_aware(
+                quiet,
+                "Migration complete. All entries now use pseudonymized paths.",
+            );
         }
         Ok::<(), String>(())
     })();
