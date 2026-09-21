@@ -24,7 +24,7 @@ import (
 const (
 	mcpPromptsOracleCommit     = "fca3f894"
 	mcpPromptsOracleCommitSHA  = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
-	mcpPromptsPinnedSourceHash = "53adc4306411ca6173a63d47c2465ab4ea45d4ac34ce3d9c06561cb3aed3966d"
+	mcpPromptsPinnedSourceHash = "2618f6d5ea600393fc64d7fd4779228e7251e3db1ec5f8843e7e36e1bb40f61b"
 	mcpPromptRuntimeData       = "<runtime-error-text>"
 )
 
@@ -329,11 +329,25 @@ func normalizeMCPPromptText(t *testing.T, text string) (string, int) {
 	return out.String(), count
 }
 
+// mcpPromptsEnforcedFiles returns the sources whose behavior the fixture
+// captures. go.mod/go.sum stay recorded in source_files as provenance but are
+// not hashed: binding them makes every dependency bump look like oracle drift.
+func mcpPromptsEnforcedFiles() []string {
+	out := make([]string, 0, len(mcpPromptsSourceFiles))
+	for _, name := range mcpPromptsSourceFiles {
+		if name == "go.mod" || name == "go.sum" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
 func mcpPromptsSourceHash(t *testing.T) string {
 	t.Helper()
 	root := mcpPromptsRepoRoot(t)
 	h := sha256.New()
-	for _, name := range mcpPromptsSourceFiles {
+	for _, name := range mcpPromptsEnforcedFiles() {
 		data, err := os.ReadFile(filepath.Join(root, name))
 		if err != nil {
 			t.Fatalf("read source %s: %v", name, err)
@@ -348,7 +362,7 @@ func mcpPromptsGitSourceHash(t *testing.T) string {
 	t.Helper()
 	root := mcpPromptsRepoRoot(t)
 	h := sha256.New()
-	for _, name := range mcpPromptsSourceFiles {
+	for _, name := range mcpPromptsEnforcedFiles() {
 		cmd := exec.Command("git", "show", mcpPromptsOracleCommit+":"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
