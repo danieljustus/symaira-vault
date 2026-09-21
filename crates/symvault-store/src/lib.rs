@@ -353,6 +353,15 @@ pub struct AttachmentInfo {
     pub sha256: String,
 }
 
+/// Outcome of a vault-wide pseudonymize migration.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PseudonymizeSummary {
+    /// Encrypted entry files discovered under `entries/`.
+    pub scanned: usize,
+    /// Entries rewritten to their HMAC-derived path.
+    pub migrated: usize,
+}
+
 /// A read-only vault handle.
 #[derive(Clone, Debug)]
 pub struct Store {
@@ -2000,6 +2009,78 @@ impl Store {
         identity: &Identity,
     ) -> Result<(), StoreError> {
         self.delete_entry_at(path, Some(identity))
+    }
+
+    /// Rewrites every entry under `entries/` to its HMAC-derived path.
+    ///
+    /// `pseudonymize_paths` must already be enabled in the vault config. Every
+    /// write resolves its target through the configured storage mode, so a
+    /// migration that flipped the flag afterwards would rewrite each entry to
+    /// its own plaintext path and then delete it — the Go command lost the
+    /// whole vault exactly that way (#1088). The caller enables the flag and
+    /// reopens the store before calling this.
+    ///
+    /// A file name only identifies an entry while paths are still plaintext, so
+    /// the logical path is read out of the ciphertext. Entries already living
+    /// under their derived path are left alone: hashing a derived name a second
+    /// time would orphan them. The plaintext-named file is removed only after
+    /// the rewritten target is confirmed on disk.
+    pub fn migrate_pseudonymize(
+        &self,
+        identity: &Identity,
+    ) -> Result<PseudonymizeSummary, StoreError> {
+        if !self.config.pseudonymize_paths {
+            return Err(StoreError::Config(
+                "pseudonymize_paths must be enabled before migrating".into(),
+            ));
+        }
+        let mut migrated = 0usize;
+        let mut scanned = 0usize;
+        for candidate in self.entry_candidates()? {
+            // The Go command walks `entries/` only; legacy root-level entries
+            // are out of scope for this migration.
+            if !candidate.fresh {
+                continue;
+            }
+            if candidate.relative.extension().and_then(|v| v.to_str()) != Some("age") {
+                continue;
+            }
+            scanned += 1;
+            let entry = self.read_candidate(&candidate, identity)?;
+            let plain = if entry.path.is_empty() {
+                candidate.logical.clone()
+            } else {
+                entry.path.clone()
+            };
+            let target = self.configured_entry_path(&plain, identity)?;
+            if target == candidate.path {
+                continue;
+            }
+            let now = utc_now_string(&target)?;
+            self.write_entry_at(&plain, &entry, identity, &now, true, None)?;
+            if !self.entry_exists(&plain, identity)? {
+                return Err(StoreError::Entry {
+                    path: plain,
+                    detail: format!(
+                        "pseudonymized file {} missing after write",
+                        target.display()
+                    ),
+                });
+            }
+            #[cfg(unix)]
+            {
+                rooted::remove(&self.root_cap, &candidate.relative, &candidate.path)?;
+            }
+            #[cfg(not(unix))]
+            {
+                fs::remove_file(&candidate.path).map_err(|source| StoreError::Write {
+                    path: candidate.path.clone(),
+                    source,
+                })?;
+            }
+            migrated += 1;
+        }
+        Ok(PseudonymizeSummary { scanned, migrated })
     }
 
     /// Reports whether the configured identity-derived entry exists.
