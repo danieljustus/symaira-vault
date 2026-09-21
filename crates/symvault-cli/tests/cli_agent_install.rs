@@ -63,6 +63,10 @@ fn run(args: &[&str], roots: &Roots) -> Output {
     Command::new(rust_binary())
         .args(args)
         .env("HOME", &roots.home)
+        // Windows: Go's `os.UserHomeDir` (mirrored by `expand_tilde`) reads
+        // `%USERPROFILE%`, ignoring `HOME` — sandbox it too, or the default
+        // `~/.hermes/...` skill path escapes the throwaway home.
+        .env("USERPROFILE", &roots.home)
         .env("XDG_CONFIG_HOME", roots.home.join(".config"))
         .env("XDG_DATA_HOME", roots.home.join(".local/share"))
         .env("SYMVAULT_VAULT", &roots.vault)
@@ -92,6 +96,9 @@ fn root_of(roots: &Roots) -> String {
 /// IDs, 64-hex secrets, RFC3339 timestamps and digest lines.
 fn normalize(text: &str, root: &str) -> String {
     let mut out = text.replace(root, "<ROOT>");
+    // Windows prints native `\` separators (fixtures are Unix `/`); no
+    // fixture contains a backslash, so a global fold is safe.
+    out = out.replace('\\', "/");
     out = regex_replace(&out);
     out
 }
