@@ -1,5 +1,50 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 6 (nach `55f7023a`) — Alias-/Stub-Slice gebaut (PR #1100)
+
+- **Gebaut in `feat/cli-aliases-deprecated-stubs`** (Worktree
+  `symaira-vault-wt-cli-aliases`, Commit `1664712f`, PR
+  [#1100](https://github.com/danieljustus/symaira-vault/pull/1100)):
+  (1) die drei Cobra-Aliase aus der Oracle-Baumdatei — `get` → `show`, `cat`;
+  `list` → `ls` —, (2) sechs versteckte deprecated v4.0-Befehle byte-genau:
+  `mcp token`, `mcp token create|list|revoke`, `mcp-config`,
+  `mcp-token-rotate` (stdout leer, Exit 2, vier stderr-Zeilen).
+- **Gemessen, nicht angenommen, zwei Oracle-Eigenheiten:**
+  - `mcp token <unbekannt>` druckt die **Gruppen**-Meldung: Cobra hat keine
+    `Args`-Schranke und fällt auf den Parent-`RunE` zurück. Deshalb ist das
+    Rust-`Token` ein Catch-all mit Wort-Dispatch statt clap-Subkommandos.
+  - `--quiet` unterdrückt **keine** der vier Zeilen (gleicher stderr mit und
+    ohne `--quiet`).
+- **Belege:** Differential gegen das gepinnte Oracle-Binary mit isolierten
+  HOME/XDG-Wurzeln — **14/14** Aufrufe byte-identisch in Exit-Code, stdout und
+  stderr (inkl. `--quiet`- und Argument-Varianten). `cligap`: fehlende
+  Oracle-Pfade **43 → 37**, Alias-Lücken **3 → 0**, Rust-only 1 unverändert.
+  Neuer, nicht ignorierter Contract-Test
+  `crates/symvault-cli/tests/cli_alias_deprecated_stubs.rs` (4 Tests);
+  Negativprobe: verfälschte Meldung → 2 Tests rot, restauriert grün.
+  `cargo fmt --all --check` und `cargo clippy -p symvault-cli --all-targets`
+  grün.
+- **Bewusst nicht im Slice:** der vorbestehende Exit-Code-Dialekt bei „vault not
+  initialized“ (Oracle Exit 3 + dreizeilige stderr, Rust Exit 1 + eine Zeile),
+  identisch für Aliase **und** kanonische Befehle, bleibt `CLI-005` (`TODO`);
+  `symvault help` bleibt dokumentierte Nicht-Zusage.
+- **Worker-Ausfall, als Lehre notiert:** `deleg_1d28d938` (`sa-0-8a9ab152`)
+  lieferte **nichts**. Hermes legte dem Worker einen *eigenen* Worktree
+  `.worktrees/subagent-sa-0-8a9ab152` an; der Worker editierte dort, verlor die
+  Orientierung (Ende in `/Users/daniel`), meldete `files_changed: []`,
+  `branch: "main"` und `commit: 55f7023a` (mein Ledger-Commit) und der Worktree
+  wurde beim Beenden entfernt — die Arbeit war weg, nichts war committet.
+  Konsequenz: Wer in einem **vorgegebenen** Worktree dispatcht, muss dem Kind
+  ausdrücklich sagen, dass es nicht in einen eigenen Worktree wechseln darf,
+  und den ersten Commit verlangen, sobald ein Test grün ist (bestehende Regel,
+  hier nicht eingehalten). Der Slice wurde danach vom Koordinator selbst im
+  isolierten Worktree gebaut.
+- **`main`-CI:** Rerun von Lauf `35610080000` (attempt 2) **success** → der
+  Windows-Fehlschlag aus attempt 1 ist als Flake bestätigt
+  ([#1099](https://github.com/danieljustus/symaira-vault/issues/1099),
+  Kommentar am Issue).
+- Kein Cutover, kein Release; Go bleibt Produktion und Oracle.
+
 ## Zwischenstand 2026-09-21, Teil 5 (nach `e30789d0`) — `migrate`-Slice integriert, Alias-/Stub-Slice ausgelagert
 
 - **`migrate v4`/`migrate session` sind auf `main`.** PR #1098
