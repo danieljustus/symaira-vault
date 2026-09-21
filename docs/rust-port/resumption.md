@@ -1,5 +1,35 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 7 (nach `09961118`) — Alias-/Stub-Slice ist gemergt
+
+- **PR [#1100](https://github.com/danieljustus/symaira-vault/pull/1100) squash-gemergt
+  als `09961118`.** Alle Checks gruen, darunter `Rust`, `Rust Miri`,
+  `Rust native (macos-latest)`, `Rust native (windows-latest)`,
+  `Rust port contract`, `Pairing differential` auf allen drei Plattformen,
+  `Test (ubuntu) — PR`, `Lint`, `govulncheck`, `osv-scanner`, `Flake vendorHash`.
+  Lokal zusaetzlich `cargo test -p symvault-cli` (44 Suiten, exit 0), clippy und
+  `cargo fmt --all --check`.
+- **cligap gemessen vor/nach dem Slice:** fehlende Oracle-Pfade **43 → 37**,
+  Alias-Luecken **3 → 0**, Rust-only unveraendert 1 (`mcp serve`).
+- **Byte-Beleg:** 14/14 Stub-Aufrufe identisch in Exit-Code, stdout und stderr, mit
+  isolierten HOME/XDG-Wurzeln; zusaetzlich Negativprobe (eine Meldung absichtlich
+  gebrochen → 2 Tests rot, restauriert → gruen).
+- **Flake-Beitrag vermieden:** der neue Test nutzt `tempfile::TempDir` statt
+  `as_nanos()`-Namen. `vault_commands.rs` (von diesem Diff nicht beruehrt) blieb
+  beim ersten Kaltstart einmal an der #1085-Kollision haengen und lief danach
+  dreimal isoliert gruen — vorbestehend, keine Regression.
+- **Worker-Lehre, erneut bestaetigt:** der delegierte Worker `sa-0-8a9ab152`
+  (`deleg_1d28d938`) lieferte nichts. Hermes legte einen *eigenen* Worktree
+  `.worktrees/subagent-sa-0-8a9ab152` an, der Bericht kam leer zurueck
+  (`files_changed: []`, `branch: "main"`, `commit: 55f7023a` = Ledger-Commit),
+  der Worktree war danach entfernt. Konsequenz fuer die naechste Karte: der
+  absoluten Ziel-Worktree-Pfad gehoert explizit in den Prompt, und der Worker muss
+  committen, sobald der erste Test gruen ist.
+- **Naechster Slice, vermessen und spezifiziert:** `device approval-list` +
+  `approval-revoke`, Vertrag und Acceptance in
+  [`next-slice-device-approval.md`](next-slice-device-approval.md).
+  `approval-pair` bleibt bewusst draussen (QR-Rendering, LAN-IPs).
+
 ## Zwischenstand 2026-09-21, Teil 6 (nach `55f7023a`) — Alias-/Stub-Slice gebaut (PR #1100)
 
 - **Gebaut in `feat/cli-aliases-deprecated-stubs`** (Worktree
