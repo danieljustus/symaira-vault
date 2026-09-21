@@ -3,6 +3,7 @@
 mod add_commands;
 mod agent_audit_commands;
 mod agent_doctor_commands;
+mod agent_install_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
 mod agent_skill_commands;
@@ -563,6 +564,40 @@ enum AgentCommand {
         /// exits 0 (`AgentSkillCommand` is optional on purpose).
         #[command(subcommand)]
         command: Option<AgentSkillCommand>,
+    },
+    /// Install the MCP server entry, skill package and token for an AI agent.
+    Install {
+        /// Validated by hand so the messages match Cobra's arg validator
+        /// (exact-1-arg or `--auto-detect` without a name).
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+        /// Install every supported agent that is detected on this machine.
+        #[arg(long)]
+        auto_detect: bool,
+        /// Permission tier: safe, standard or admin (default safe).
+        #[arg(long, default_value = "safe")]
+        tier: String,
+        /// Use HTTP transport instead of stdio.
+        #[arg(long)]
+        http: bool,
+        /// Validate and render, but do not write anything.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip the agent's MCP config file and only install the skill.
+        #[arg(long)]
+        skill_only: bool,
+        /// Skip the skill file and only update the agent's MCP config.
+        #[arg(long)]
+        config_only: bool,
+        /// Overwrite an existing agent profile in the vault config.
+        #[arg(long)]
+        force: bool,
+        /// Suppress the success line.
+        #[arg(long)]
+        quiet: bool,
+        /// Output format: text, json or yaml (default text).
+        #[arg(long, default_value = "text")]
+        output: String,
     },
 }
 
@@ -1562,6 +1597,49 @@ fn run_cli() -> ExitCode {
                     // the help text stays empty.
                     None => Ok(()),
                 }
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Install {
+                    args,
+                    auto_detect,
+                    tier,
+                    http,
+                    dry_run,
+                    skill_only,
+                    config_only,
+                    force,
+                    quiet,
+                    output,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let home = cli_home_directory()?;
+                let mut output_stream = io::stdout().lock();
+                agent_install_commands::run(
+                    &vault,
+                    &home,
+                    &args,
+                    &agent_install_commands::InstallFlags {
+                        auto_detect,
+                        tier,
+                        http,
+                        dry_run,
+                        skill_only,
+                        config_only,
+                        force,
+                        quiet,
+                        output,
+                    },
+                    &mut output_stream,
+                    &mut io::stderr().lock(),
+                )
             })();
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");

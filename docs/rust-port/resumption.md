@@ -1,5 +1,54 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 12 — `agent install` gebaut (32 → 31), PR offen
+
+- **Gebaut in `feat/agent-install`** (Worktree
+  `symaira-vault-wt-agent-install`): `crates/symvault-cli/src/agent_install_commands.rs`
+  portiert `cmd/mcp/agent_install.go`, `cmd/mcp/mcp_install.go`
+  (`buildServerConfig`, `stdioArgs`, `ResolveHTTPPort`) und
+  `internal/mcp/install/*` (Detect-Tabelle, YAML/JSON/TOML-Injektoren,
+  `BackupConfig`, `Install`), inklusive Token-Erzeugung im Registry-Store
+  (`agent-install-*`-Display-Token plus zweites gescopetes `mcp-install-*`-Token
+  fuer HTTP-Bearer), `health_check` per TCP+`GET /health`, Auto-Detect
+  (`install_single → (InstallResult, Result<(), String>)` wie Go) und
+  Skill-Install via `install_with_tier`/`profile_tier`-Template-Var. Kein
+  `toml`-Crate: der TOML-Header/Array-Injektor ist handgerollt (quote-aware
+  Klammertiefe). Dazu `AgentCommand::Install` plus Dispatch in `main.rs`.
+- **Scope-Entscheidungen (sichtbar):** `getrandom = "=0.3.3"` neu in
+  `crates/symvault-cli/Cargo.toml` (32-Byte-Secret-Paritaet);
+  `PINNED_TOOL_REGISTRY_HASH` als Konstante (Go berechnet sha256 ueber die
+  kompilierten MCP-Tools in `server.init()`, der Port hat kein Aequivalent —
+  Upgrade-Pfad im Kommentar); `symvault-store/src/lib.rs`: `open_nofollow_kind`
+  oeffnet nur noch die finale Komponente mit `NOFOLLOW` (macOS `/var` →
+  `/private/var` scheiterte sonst mit ENOTDIR — echter Port-Bug, Go nutzt
+  plain `os.Open`); `config.rs`-Writer: `autoUnseal` vor `requireApproval`.
+- **cligap gemessen:** Oracle-Pfade 134, Rust-Pfade 97 → 98, **fehlend 32 → 31**,
+  Flag-Luecken 9, Alias 0, Rust-only 1.
+- **Differential-Befunde (alle verifiziert, keine offenen Diffs):** Vault-
+  `config.yaml` stdio+http byte-gleich; Agent-Dateien (YAML/JSON/TOML) byte-
+  gleich nach Random-Normalisierung; alle Exits stdout/stderr gleich.
+  Geklaert und dokumentiert: (1) Oracle schreibt das **volle** 64-Hex-Bearer
+  in die Agent-YAML (vermeintliches `first6...last4` war ein
+  Terminal-Display-Artefakt — Lehre in `porting-pitfalls.md`); (2)
+  `vaultDir` im gespeicherten Config ist der Resolver-Default bzw. `vDir` bei
+  frischer Config, nie `--vault`-Flag-Magie; (3) Multi-Agent-Auto-Detect-
+  Reihenfolge ist in Go map-zufaellig — der Port geht deterministisch in
+  Definitionsreihenfolge (Single-Agent-Faelle byte-identisch); (4) Backup wird
+  auch fuer leere Seeds geschrieben (0-Byte-`.backup` plus `Backup:`-Zeile);
+  (5) builtin Default-Profile zaehlen als "already exists" ohne `--force`.
+- **Repo-Test:** `crates/symvault-cli/tests/cli_agent_install.rs` (13 Tests,
+  nicht ignoriert, ohne Umgebungsvariablen, `tempfile::TempDir`, restricted
+  `PATH=/usr/bin:/bin` wie die Captures), 12 Fixtures unter
+  `crates/symvault-cli/tests/fixtures/agent-install/` (Oracle-Bytes, frisch
+  re-captured: `codex` braucht Empty-Seed statt `{}`).
+- **Gates gruen:** `cargo fmt --all --check`, `cargo clippy --workspace
+  --all-targets --all-features --locked -- -D warnings`,
+  `cargo nextest run --workspace --all-features --locked` (805 passed,
+  4 skipped), Doc-Tests. Session-Env-Lehre: `SYMVAULT_VAULT`-Leak im
+  Terminal bricht `config_session_contract` — vor Gates `unset`ten.
+- **Naechster Schritt:** committen, PR stellen, CI gruen abwarten, squash-mergen,
+  Ledger-Teil-13 mit Merge-SHA.
+
 ## Zwischenstand 2026-09-21, Teil 11 (nach `e6e0dc0d`) — `agent skill*` gemergt, naechster Slice `agent install`
 
 - **PR [#1102](https://github.com/danieljustus/symaira-vault/pull/1102) squash-gemergt

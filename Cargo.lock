@@ -2586,6 +2586,7 @@ dependencies = [
  "base64",
  "clap",
  "flate2",
+ "getrandom 0.3.3",
  "rpassword",
  "serde",
  "serde_json",

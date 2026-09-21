@@ -1,0 +1,10 @@
+mcp_servers:
+    symvault:
+        connect_timeout: 30
+        headers:
+            Accept: application/json, text/event-stream
+            Authorization: Bearer 4e4add9ebc2ca1d06700ee582909724e9056d972c822fdcad11f7b6129cdb569
+            MCP-Protocol-Version: "2025-11-25"
+            X-Symaira-Agent: hermes
+        timeout: 120
+        url: http://127.0.0.1:8080/mcp

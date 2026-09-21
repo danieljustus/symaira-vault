@@ -1,0 +1,3 @@
+[mcp_servers]
+[mcp_servers.other]
+command = 'other'

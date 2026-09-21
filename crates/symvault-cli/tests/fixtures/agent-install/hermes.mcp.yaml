@@ -1,0 +1,11 @@
+mcp_servers:
+    symvault:
+        args:
+            - --vault
+            - /var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/installcase-q6d3bkob/vault
+            - mcp
+            - --stdio
+            - --agent
+            - hermes
+        command: symvault
+        timeout: 120
