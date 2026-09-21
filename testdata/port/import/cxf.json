@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fd55bb7350e67350f709cf60aea1b827cdadd40c",
-    "commit_sha": "fd55bb7350e67350f709cf60aea1b827cdadd40c",
+    "commit": "3232e31fb91362b6e6202774f7e95f6d477305d2",
+    "commit_sha": "3232e31fb91362b6e6202774f7e95f6d477305d2",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -98,7 +98,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "3025fc63e3c0734f447e54c2b7371d2c421801a483e831fea79a71a7e70b6096"
+    "generator_digest": "c154b26735dacac9c965f8d8ca373c87ca25aa41fcea4a2d5452121df56adfd0"
   },
   "cases": [
     {
