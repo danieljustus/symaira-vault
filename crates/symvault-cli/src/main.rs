@@ -5,6 +5,7 @@ mod agent_audit_commands;
 mod agent_doctor_commands;
 mod agent_list_commands;
 mod agent_profile_commands;
+mod agent_skill_commands;
 mod agent_token_commands;
 mod agent_uninstall_commands;
 mod agent_whoami_commands;
@@ -555,6 +556,31 @@ enum AgentCommand {
         /// Skip confirmation prompt.
         #[arg(long)]
         yes: bool,
+    },
+    /// Export or refresh embedded skill packages for AI agents.
+    Skill {
+        /// Omitted entirely: the oracle prints the command group's help and
+        /// exits 0 (`AgentSkillCommand` is optional on purpose).
+        #[command(subcommand)]
+        command: Option<AgentSkillCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AgentSkillCommand {
+    /// Write the skill package as a tar.gz archive.
+    Export {
+        /// Output file (default symvault-<agent>-skill.tar.gz).
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+        /// Validated by hand so the message matches Cobra's `ExactArgs(1)`.
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+    },
+    /// Re-render an installed skill file in place.
+    Refresh {
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
     },
 }
 
@@ -1504,6 +1530,38 @@ fn run_cli() -> ExitCode {
                     option_env!("SYMVAULT_VERSION").unwrap_or("dev"),
                     &mut io::stdout().lock(),
                 )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::Skill { command },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                match command {
+                    Some(AgentSkillCommand::Export { output, args }) => {
+                        if args.len() != 1 {
+                            Err(format!("accepts 1 arg(s), received {}", args.len()))
+                        } else {
+                            agent_skill_commands::export(&vault, &args[0], output.as_deref())
+                        }
+                    }
+                    Some(AgentSkillCommand::Refresh { args }) => {
+                        if args.len() != 1 {
+                            Err(format!("accepts 1 arg(s), received {}", args.len()))
+                        } else {
+                            agent_skill_commands::refresh(&vault, &args[0])
+                        }
+                    }
+                    // The oracle prints the Cobra help here and exits 0. Cobra's
+                    // help rendering is a documented non-goal of this port (same
+                    // class as `symvault help`), so the exit status is matched and
+                    // the help text stays empty.
+                    None => Ok(()),
+                }
             })();
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");

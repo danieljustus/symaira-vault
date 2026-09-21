@@ -2585,6 +2585,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "clap",
+ "flate2",
  "rpassword",
  "serde",
  "serde_json",
@@ -2598,6 +2599,7 @@ dependencies = [
  "symvault-platform",
  "symvault-store",
  "symvault-sync",
+ "tar",
  "tempfile",
  "time",
  "url",

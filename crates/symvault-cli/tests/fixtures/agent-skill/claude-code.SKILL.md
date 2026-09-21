@@ -1,0 +1,154 @@
+---
+name: symaira
+description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
+managed_by: symaira
+managed_version: {{VERSION}}
+managed_hash: {{BODY_HASH}}
+managed_installed_at: "{{INSTALLED_AT}}"
+managed_profile_tier: safe
+---
+
+# Symaira Vault (claude-code)
+
+Symaira Vault is the credential store. Use native MCP tools when they are available.
+Do not use terminal commands for credential reads or writes unless the user
+explicitly asks for CLI debugging.
+
+## Bootstrap
+
+First, call `mcp__symaira__symaira_whoami` to learn your permissions and which
+vault you are connected to.
+
+Vault path: `{{VAULT}}`
+Agent profile: **claude-code** (tier: safe)
+
+## Preferred Tools
+
+Canonical Symaira Vault MCP tool names (claude-code prefix: `mcp__symaira__`):
+
+- `mcp__symaira__list_entries`
+- `mcp__symaira__find_entries`
+- `mcp__symaira__get_entry`
+- `mcp__symaira__get_entry_metadata` — metadata only, no secrets
+- `mcp__symaira__set_entry_field`
+- `mcp__symaira__generate_password`
+- `mcp__symaira__generate_totp`
+- `mcp__symaira__delete_entry`
+- `mcp__symaira__copy_to_clipboard`
+- `mcp__symaira__execute_with_secret`
+- `mcp__symaira__request_credential`
+
+Some MCP clients prepend an additional namespace. If canonical names are
+unavailable, inspect the client's MCP tool list and map to these equivalents.
+
+## Permissions
+
+Your current profile tier is **safe**.
+
+
+⚠️ **Limited access**: You only have metadata tools (list, find, metadata).
+For `get_entry` and write access, ask the user to run:
+  symaira agent upgrade claude-code --tier standard
+
+
+## Cache Validation
+
+For agents that cache credentials locally, use `get_entry_metadata` to validate
+cache freshness before fetching full entries:
+
+1. Cache the entry version when first retrieving a credential.
+2. Before using a cached credential, call `get_entry_metadata` to get the
+   current version.
+3. If versions differ, the credential was updated — fetch fresh data with
+   `get_entry`.
+4. This prevents using stale credentials that may cause HTTP 401 errors.
+
+Example:
+```
+1. get_entry_metadata("api/kimi-key")
+   → {version: 5, updated: "2026-05-17T10:00:00Z"}
+
+2. cached version was 3 → fetch: get_entry("api/kimi-key")
+
+3. Use fresh credential. If 401 persists, credential is truly invalid.
+```
+
+## Decision Matrix: CLI vs MCP
+
+| Situation | Recommended | Why |
+|---|---|---|
+| Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
+| Write a credential | `set_entry_field` MCP tool | Same as above |
+| Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
+| Bulk import / export | Terminal `symaira add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `symaira doctor` | Detailed diagnostic output |
+| Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
+
+## Error Code Map
+
+| Error | Meaning | Agent action |
+|---|---|---|
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp__symaira__symaira_whoami` |
+| `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
+| `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
+| `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
+
+## Usage Rules
+
+- Search or list before reading if the exact path is unknown.
+- Read only the entry needed for the task.
+- Write credentials with `set_entry_field`; keep paths stable and descriptive.
+- Generate passwords with `generate_password` instead of inventing them.
+- Generate TOTP codes with `generate_totp`; do not expose the stored secret.
+- Do not echo secrets, tokens, or passphrases in chat unless the user
+  explicitly asks to reveal them.
+
+## Missing Credentials
+
+If a task requires a credential that is not in the vault, do NOT ask the user
+to type the secret in chat. Call `mcp__symaira__request_credential` instead:
+
+- Provide the target path, field name, and a one-sentence human-readable reason.
+- Symaira Vault opens a native dialog. You receive only a confirmation, never the
+  value itself.
+- Continue the task using `mcp__symaira__execute_with_secret`,
+  `mcp__symaira__copy_to_clipboard`, or `mcp__symaira__autotype` — never
+  re-derive or re-print the secret.
+
+## Expected Entry Shape
+
+Entries are JSON-like objects. Common fields:
+
+- `username`
+- `password`
+- `url`
+- `notes`
+- `totp`
+
+For TOTP, call `generate_totp` instead of reading the `totp` secret directly.
+
+## Anti-Patterns
+
+- Never echo a secret value in chat — not even to confirm.
+- Never `cat` vault files.
+- Never `git log` the vault directory.
+- Never share credentials via chat.
+- Never ask the user to type a secret in chat — use `request_credential`.
+
+## Slash Commands
+
+This agent supports slash commands via `/mcp__symaira__` prefix. Available
+commands can be discovered through the agent's native command discovery.
+
+## Agent-Specific: Claude Code
+
+Claude Code uses the `mcp__symaira__` tool prefix and `/mcp__symaira__`
+slash prefix.
+
+To install Symaira Vault MCP in Claude Code:
+```
+symaira mcp-config claude-code
+```
+
+Claude Code supports native MCP tool discovery. If tools are missing,
+re-run the configuration command above.

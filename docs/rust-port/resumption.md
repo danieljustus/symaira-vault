@@ -1,5 +1,54 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 10 (nach `6649caf0`) — `agent skill*` gebaut
+
+- **Gebaut in `feat/agent-skill-commands`** (Worktree
+  `symaira-vault-wt-agent-skill`): `crates/symvault-cli/src/agent_skill_commands.rs`
+  portiert `cmd/mcp/agent_skill.go` und `internal/agentskill`
+  (`skill.go`, `install.go`, `manifest.go`), inklusive einer kleinen
+  `text/template`-Teilmenge (`define`/`template "…" .`/`if eq`/`{{.Field}}`,
+  Trim-Marker `{{-` und `-}}`), des Frontmatter-Schreibers, des `tar.gz`-Exports
+  und von `refresh` (Sentinel-Pruefung, Body-Digest, `.bak`-Backup, 0750/0600,
+  Traversal-Ablehnung). Dazu die sechs Template-Assets als byte-identische
+  Kopien unter `crates/symvault-cli/assets/agent-skill/**`, eine `mod`-Zeile,
+  `AgentCommand::Skill`/`AgentSkillCommand` und ein Dispatch-Arm in `main.rs`
+  sowie `flate2`/`tar` in `crates/symvault-cli/Cargo.toml`.
+- **Additiv wiederverwendet:** `agent_token_commands::display_rfc3339` ist jetzt
+  `pub(crate)` und formatiert `InstalledAt` (Go nutzt dort `time.RFC3339`,
+  Sekundenauflösung — der erste Versuch mit `to_rfc3339_nano` erzeugte 6–10
+  Byte zu viel pro Skill-Datei und wurde im Differential gefunden).
+- **cligap gemessen:** fehlende Oracle-Pfade **35 → 32**, Rust-Pfade 94 → 97,
+  Alias-Luecken 0, Flag-Luecken 9, Rust-only 1 (Oracle 134).
+- **Byte-Differential gegen die gepinnte Oracle: 18/19 Faelle identisch**
+  in Exit-Code, stdout, stderr, Archiv-Inhalt (Mitglieder, Modi, mtime, uid,
+  Nutzdaten) sowie den Bytes der geschriebenen und gesicherten Skill-Datei:
+  alle fuenf Agenten, unbekannter Agent, 0/2 Argumente, `-o/--output`,
+  Default-Dateiname, `--quiet`, `refresh` fuer fehlende/identische/geaenderte/
+  unverwaltete/Traversal-Ziele und fehlende Config.
+- **Bewusst normalisiert und benannt, nicht stillgelegt:** (1) `managed_version`,
+  `managed_installed_at` und der Versionsstring in `INSTALL.md` sind build- bzw.
+  zeitabhaengig (Sekundengenauigkeit und Quoting werden stattdessen im
+  Repo-Test geprueft, und `managed_version` wird gegen die Version derselben
+  Binary gehalten); (2) `managed_hash` deckt einen Body ab, der den Vault-Pfad
+  enthaelt; (3) die Tar-Reihenfolge ist sortiert, weil die Oracle eine Go-Map
+  iteriert; (4) die gzip-Stream-Bytes unterscheiden sich zwischen Go und Rust
+  (Deflate-Implementierungen) — verglichen werden die extrahierten Inhalte.
+- **Einzige verbleibende Abweichung:** `agent skill` ohne Subcommand druckt in
+  der Oracle Cobras Hilfe und exitet 0; die Cobra-Hilfe ist ein dokumentiertes
+  Nicht-Ziel dieses Ports (wie `symvault help`), also wird nur der Exit-Status
+  angeglichen.
+- **Repo-Test:** `crates/symvault-cli/tests/cli_agent_skill.rs` (12 Tests, nicht
+  ignoriert, ohne Umgebungsvariablen, `tempfile::TempDir` statt Zeitstempel —
+  Issue-#1085-Typ), Fixtures sind die Oracle-Ausgaben selbst unter
+  `crates/symvault-cli/tests/fixtures/agent-skill/`. Negativprobe: falscher
+  Output-Name fuer `codex` → Contract-Test rot, restauriert gruen.
+- **Gates gruen:** `cargo fmt --all --check`, `cargo clippy -p symvault-cli
+  --all-targets -- -D warnings`, `cargo test -p symvault-cli` (46 Suiten),
+  `cargo test -p symvault-sync`.
+- **Delegation-Wand:** der Worker `sa-0-eba56320` (`CLI-AGENT-SKILL-001`) lieferte
+  wegen HTTP 429 (Codex-Abo-Limit, Reset in ~27 h) nichts; der Slice wurde wie
+  schon beim Alias-/device-Slice vom Koordinator selbst gebaut.
+
 ## Zwischenstand 2026-09-21, Teil 9 (nach `6649caf0`) — `device approval-*` gemergt, naechster Slice gewaehlt
 
 - **PR [#1101](https://github.com/danieljustus/symaira-vault/pull/1101) squash-gemergt
@@ -35,6 +84,7 @@
   `~/.symaira/bin` und mutieren damit die Maschine) und `serve`/`approval`/`broker`/`intake`
   (Dienste, TLS, Netz).
 
+||||||| parent of 8c25ef94 (feat(cli): port `agent skill`, `agent skill export` and `agent skill refresh`)
 ## Zwischenstand 2026-09-21, Teil 8 (nach `09961118`) — `device approval-*` gebaut
 
 - **Gebaut in `feat/device-approval-registry`** (Worktree
