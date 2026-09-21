@@ -49,6 +49,18 @@
   **kompletten Go-Root-Hilfetext** aus (Exit 0, stdout). Byte-Parität würde das
   Nachbauen von Cobras Renderer verlangen; die Rust-CLI bietet stattdessen
   `--help`. Bleibt als Nicht-Zusage dokumentiert, kein stiller Skip.
+- **Main-CI auf dem Merge-Commit war rot — nicht wegen des Merges.** Lauf
+  `35610080000` (`e30789d0`, attempt 1) scheiterte **ausschließlich** in
+  `Rust native (windows-latest)` (Job `106366704731`):
+  `divergent_pull_matches_go_oracle_projection` bricht in
+  `crates/symvault-sync/tests/git_io_gaps.rs:254` beim `GitRepository::init(&local)`
+  mit `Io(Os { code: 5, kind: PermissionDenied })` ab; die anderen 4 Tests
+  derselben Suite und alle übrigen Jobs des Laufs waren grün. Der Diff des
+  Merges berührt `symvault-sync` nicht → kein Regress aus #1098. Erfasst als
+  [#1099](https://github.com/danieljustus/symaira-vault/issues/1099); Rerun
+  (attempt 2 desselben Laufs) gestartet, Ergebnis beim Schreiben offen. Die
+  vorherigen `main`-Läufe (`71af9eb0`, `b1e1c69f`) waren alle grün, also ist
+  das ein Flake-Kandidat und kein Dauerzustand.
 - **Nächste Slices (geplant, noch nicht dispatcht).**
   - `update` (4 Pfade) ist **nicht** sofort baubar: der Rust-Workspace hat
     überhaupt keinen HTTP-Client (`Cargo.lock` enthält kein `reqwest`/`ureq`/
