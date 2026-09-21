@@ -1,5 +1,31 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 13 (nach `489a3a85`) — `agent install` gemergt (#1103), 32 → 31
+
+- **PR [#1103](https://github.com/danieljustus/symaira-vault/pull/1103) squash-gemergt
+  als `489a3a85`**: `agent install` byte-identisch zur gepinnten Oracle
+  (Exits/stdout/stderr, Vault-`config.yaml` stdio+http, Agent-Dateien
+  YAML/JSON/TOML nach Random-Normalisierung, alle Fehler inkl.
+  CLI-005-Dopplung). Contract-Test `cli_agent_install.rs` (13 Tests) gegen 12
+  gefrorene Oracle-Fixtures.
+- **cligap auf `main` (frisch gebaut):** Oracle-Pfade 134, Rust-Pfade 97 → 98,
+  **fehlend 32 → 31**, Flag-Luecken 9, Alias 0, Rust-only 1.
+- **Windows-CI-Lehren (3 Fix-Runden, alle testseitig — der Port ist Go-treu):**
+  (1) `run()` setzt zusaetzlich `USERPROFILE` aufs Throwaway-Home — Go
+  `os.UserHomeDir` (vom Port-`expand_tilde` gespiegelt) ignoriert `HOME` auf
+  Windows, sonst entkommt der Default-`~/.hermes/...`-Skill-Pfad ins echte
+  Runner-Profil. (2) `normalize()` faltet `\` → `/` (kein Fixture enthaelt
+  Backslash). (3) JSON escapt `\` als `\\` — escaped-Root zuerst ersetzen,
+  danach alle `//`-Runs kollabieren außer `://` (URL-sicher).
+  Verlauf: 4/13 → 11/13 → 12/13 → 13/13, danach 22/22 Checks gruen.
+- **Scope-Entscheidungen (sichtbar in PR/Teil 12):** `getrandom` in
+  CLI-`Cargo.toml`, `PINNED_TOOL_REGISTRY_HASH`-Konstante,
+  `open_nofollow_kind`-Fix (macOS `/var`), Writer `autoUnseal`-zuerst.
+- **Naechster Slice:** naechster Oracle-Pfad aus `cligap`-missing angreifen;
+  `agent setup` (Netzwerk-Downloads), `update check/apply` (kein HTTP-Client,
+  cosign) und `device approval-pair` (Server-Roundtrip) bleiben blockiert.
+  CLI-005 (doppelte `Error:`-Zeilen) weiter offen, absichtlich nicht mitgefixt.
+
 ## Zwischenstand 2026-09-21, Teil 12 — `agent install` gebaut (32 → 31), PR offen
 
 - **Gebaut in `feat/agent-install`** (Worktree
