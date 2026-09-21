@@ -265,7 +265,7 @@ fn write_token_summary(
 /// `time.Time.Format(time.RFC3339)` display call does: second precision,
 /// with any sub-second fraction dropped (unlike the nanosecond-preserving
 /// JSON storage format).
-fn display_rfc3339(value: &str) -> String {
+pub(crate) fn display_rfc3339(value: &str) -> String {
     time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .map(|parsed| {
             let parsed = parsed.to_offset(time::UtcOffset::UTC);

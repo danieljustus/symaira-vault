@@ -22,3 +22,7 @@ Cargo.lock text eol=lf
 rust-toolchain.toml text eol=lf
 deny.toml text eol=lf
 testdata/port/** text eol=lf
+# The agent-skill contract fixtures are byte-compared through `include_str!`
+# against the bytes the renderer produces, so a Windows CRLF checkout would
+# make every comparison fail there.
+crates/symvault-cli/tests/fixtures/** text eol=lf
