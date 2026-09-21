@@ -95,7 +95,10 @@ fn root_of(roots: &Roots) -> String {
 /// Normalizes everything that varies run to run: the throwaway root, token
 /// IDs, 64-hex secrets, RFC3339 timestamps and digest lines.
 fn normalize(text: &str, root: &str) -> String {
-    let mut out = text.replace(root, "<ROOT>");
+    // JSON files escape `\` as `\\`: replace that form first, then the
+    // native form (identical on Unix), then fold stray separators.
+    let mut out = text.replace(&root.replace('\\', "\\\\"), "<ROOT>");
+    out = out.replace(root, "<ROOT>");
     // Windows prints native `\` separators (fixtures are Unix `/`); no
     // fixture contains a backslash, so a global fold is safe.
     out = out.replace('\\', "/");
