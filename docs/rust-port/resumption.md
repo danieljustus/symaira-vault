@@ -49,6 +49,23 @@
   **kompletten Go-Root-Hilfetext** aus (Exit 0, stdout). Byte-Parität würde das
   Nachbauen von Cobras Renderer verlangen; die Rust-CLI bietet stattdessen
   `--help`. Bleibt als Nicht-Zusage dokumentiert, kein stiller Skip.
+- **Nächste Slices (geplant, noch nicht dispatcht).**
+  - `update` (4 Pfade) ist **nicht** sofort baubar: der Rust-Workspace hat
+    überhaupt keinen HTTP-Client (`Cargo.lock` enthält kein `reqwest`/`ureq`/
+    `hyper`; `symvault-sync` spricht Git, nicht HTTP). Das Oracle nutzt
+    stdlib `net/http` (`internal/update/checker.go`, `cosign.go`) plus
+    cosign-Verifikation für `update apply`. Ohne neue Dependency ist nur
+    `update info` (Install-Method-Erkennung aus dem Binary-Pfad) und der bare
+    `update`-Hilfetext offline portierbar; `check`/`apply` sind bis zu einer
+    bewussten HTTP-Transport- und Cosign-Entscheidung als `blocked` zu führen,
+    nicht stillschweigend zu vereinfachen. Das ist die kleinste ehrliche
+    Variante: Offline-Teil zuerst, Rest explizit blockiert.
+  - `device approval-list`, `approval-pair`, `approval-revoke`
+    (`cmd/device_approval.go`, ca. 300 Zeilen, dateibasiert, kein Netz) ist der
+    nächste vollständig offline prüfbare Kandidat nach dem Alias-/Stub-Slice.
+  - Danach der Rest der 43: `serve` (8), `agent` (6), `intake` (3),
+    `approval` (3), `dynamic` (2), `import review` (2), `broker`, `ui`,
+    `setup`, `startup-profile`, `generate manpages`, `help`.
 - Geladene Skills dieser Sitzung: `go-to-rust-migration` (SKILL.md).
   `go-rust-port-parity` und `references/porting-pitfalls.md` wurden noch nicht
   geladen — bei der nächsten Invocation zuerst laden, nicht erneut inventarisieren.
