@@ -27,7 +27,9 @@ func main() {
 	sources := []string{"go.mod", "go.sum", "internal/mcp/server/render.go"}
 	_, err = provenance.Verify(root, pinnedOracleCommit, sources)
 	must(err)
-	digest, err := provenance.Digest(root, sources)
+	// Digest the enforced subset so a dependency bump does not restamp the
+	// fixture; source_files still records the full claimed provenance.
+	digest, err := provenance.Digest(root, provenance.EnforcedSources(sources))
 	must(err)
 	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/mcprendergen/main.go"})
 	must(err)
