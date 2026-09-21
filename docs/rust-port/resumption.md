@@ -1,5 +1,59 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 14 (nach `f80ef938`) — `agent upgrade` gemergt (#1104), 31 → 30
+
+- **PR [#1104](https://github.com/danieljustus/symaira-vault/pull/1104) squash-gemergt
+  als `f80ef938`**: `agent upgrade <name> --tier <tier>` byte-identisch zur
+  gepinnten Oracle (Exits/stdout/stderr plus Datei-Baeume nach
+  Label-verankerter Random-Normalisierung). Alle Checks gruen
+  (`Rust`, `Rust Miri`, `Rust native` macOS+Windows, `Rust port contract`,
+  `Pairing differential`, `Test (ubuntu) — PR`, `govulncheck`, `osv-scanner`,
+  `Vaultcore (macOS)`, `Process tree (Windows)`). Worktree/Branch danach
+  entfernt, `main`-Checkout sauber.
+- **cligap auf `main` (frisch gebaut):** Oracle-Pfade 134, Rust-Pfade 98 → 99,
+  **fehlend 31 → 30**, Flag-Luecken 9, Alias 0, Rust-only 1.
+- **Portiert (`agent_upgrade_commands.rs`, neu):** Tier-Validierung
+  (`safe`-Alias, `--tier`-Pflicht), explizite Tier-Diff-Tabelle auf stderr,
+  Biometrie-Gate (`--yes` braucht `--reason`; ohne `--no-biometric` nimmt der
+  Port Go's Unavailable-Branch), interaktiver Confirm (piped stdin bricht ab,
+  Exit 0), Profil-Save mit Tier, optional `--rotate-token` (Revoke-all +
+  Create + Token-Datei), Skill-Refresh mit dem neuen Tier.
+  Contract-Test `cli_agent_upgrade.rs` (11 Tests, TempDir, Throwaway
+  HOME/USERPROFILE, restricted PATH).
+- **Scope-Entscheidungen (sichtbar):** `apply_tier_preset_to_profile` in
+  symvault-core jetzt `pub` (Upgrade legt das Preset ueber das geladene
+  Profil, wie der Install-Writer); `map_scoped_token_error` /
+  `write_agent_token_file` / `PINNED_TOOL_REGISTRY_HASH` sind `pub(crate)`;
+  neuer Library-Einstieg `refresh_target_with_tier` (explizites Target, kein
+  Lookup).
+- **Drive-by-Parity-Fix in der Skill-Library:** Refresh-Fehlertexte sind auf
+  Library-Ebene jetzt nackt (das `skill refresh`-Kommando setzt das
+  `refresh skill: `-Praefix nur um `agentskill.Refresh`, Empty-Target-Fehler
+  bleibt praefixlos) — entspricht Go `cmd/mcp/agent_skill.go`. Bestehende
+  Skill-Tests weiter gruen.
+- **Differential-Befunde (alle verifiziert):** 13/14 Faelle byte-identisch.
+  (1) Auf einem TouchID-Mac zeigt Go einen echten TouchID-Prompt und folgt
+  ihm — der Port nimmt den Unavailable-Branch (Warnung + Confirm bzw. Fehler
+  mit `--yes`); auf Linux/Windows/allen CI-Runnern identisch, Contract-Tests
+  nutzen ueberall `--no-biometric`. Kein Repo-Test deckt den Pfad ab (auf
+  TouchID-Macs nicht deterministisch). (2) Go `TierPresets` kennt kein
+  `"safe"` — der Loader wendet bei handgeschriebenem `tier: safe` kein Preset
+  an (altes `canWrite: true`); `get_preset("safe") → None` repliziert den
+  Miss. (3) Registry-Keys sind zufaellige ID-Suffixe (Sortierung variiert pro
+  Lauf) — Normalisierung label-verankert statt positionsbasiert; Token-`prefix`
+  und Tool-Registry-Hash flach normalisiert. (4) `vault/.lock`-Leftover ist
+  Pre-existing (alle Store-Writes, flock-Stil; Go kennt keine Lock-Dateien) —
+  separat als Issue [#1105](https://github.com/danieljustus/symaira-vault/issues/1105)
+  angelegt, Differential ignoriert die Datei.
+- **Gates auf dem Branch:** `cargo fmt --check`, `cargo clippy --workspace
+  --all-targets --all-features --locked -- -D warnings` (0 Fehler),
+  `cargo nextest run --workspace --all-features --locked` (**816 passed**,
+  4 skipped — 805 + 11 neue), Doc-Tests.
+- **Naechster Slice:** naechster Oracle-Pfad aus `cligap`-missing angreifen;
+  `agent setup` (Netzwerk-Downloads), `update check/apply` (kein HTTP-Client,
+  cosign) und `device approval-pair` (Server-Roundtrip) bleiben blockiert.
+  CLI-005 (doppelte `Error:`-Zeilen) weiter offen, absichtlich nicht mitgefixt.
+
 ## Zwischenstand 2026-09-21, Teil 13 (nach `489a3a85`) — `agent install` gemergt (#1103), 32 → 31
 
 - **PR [#1103](https://github.com/danieljustus/symaira-vault/pull/1103) squash-gemergt
