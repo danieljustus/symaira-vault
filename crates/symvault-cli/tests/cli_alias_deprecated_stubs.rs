@@ -17,18 +17,27 @@
 //! `ExitNotFound` error rendered twice with an `Error: ` prefix, and the generic
 //! not-found hint — empty stdout, exit status 2.
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-fn temporary_root(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    env::temp_dir().join(format!("symvault-cli-alias-stub-{name}-{suffix}"))
+/// A guard owning a unique temporary directory plus the disposable roots inside
+/// it.
+///
+/// `tempfile` is used instead of `SystemTime::now().as_nanos()`: that clock is
+/// only microsecond-coarse on macOS (see `history_commands.rs`, issue #1085), so
+/// tests of one binary collide on the same directory name. This file must not
+/// join that list.
+fn disposable_roots() -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let guard = tempfile::Builder::new()
+        .prefix("symvault-cli-alias-stub-")
+        .tempdir()
+        .expect("temp dir");
+    let home = guard.path().join("home");
+    let root = guard.path().join("vault");
+    std::fs::create_dir_all(&home).expect("home");
+    (guard, home, root)
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
@@ -97,9 +106,7 @@ const STUB_CASES: &[(&[&str], &str)] = &[
 #[test]
 fn deprecated_stubs_reproduce_the_oracle_bytes() {
     let binary = rust_binary();
-    let home = temporary_root("stub-home");
-    let root = temporary_root("stub-vault");
-    fs::create_dir_all(&home).expect("home");
+    let (_guard, home, root) = disposable_roots();
 
     for (args, message) in STUB_CASES {
         let output = run(&binary, args, &root, &home);
@@ -117,8 +124,6 @@ fn deprecated_stubs_reproduce_the_oracle_bytes() {
             "{label} stderr"
         );
     }
-
-    fs::remove_dir_all(home).expect("cleanup home");
 }
 
 /// The oracle prints the four lines even with `--quiet`, so the port must not
@@ -126,9 +131,7 @@ fn deprecated_stubs_reproduce_the_oracle_bytes() {
 #[test]
 fn deprecated_stubs_ignore_quiet_like_the_oracle() {
     let binary = rust_binary();
-    let home = temporary_root("quiet-home");
-    let root = temporary_root("quiet-vault");
-    fs::create_dir_all(&home).expect("home");
+    let (_guard, home, root) = disposable_roots();
 
     for (args, message) in STUB_CASES {
         let mut args_with_quiet = vec!["--quiet"];
@@ -142,8 +145,6 @@ fn deprecated_stubs_ignore_quiet_like_the_oracle() {
             "quiet stderr for {args:?}"
         );
     }
-
-    fs::remove_dir_all(home).expect("cleanup home");
 }
 
 /// The Go tree declares `get -> [show, cat]` and `list -> [ls]` as top-level
@@ -151,9 +152,7 @@ fn deprecated_stubs_ignore_quiet_like_the_oracle() {
 #[test]
 fn top_level_aliases_match_their_canonical_commands() {
     let binary = rust_binary();
-    let home = temporary_root("alias-home");
-    let root = temporary_root("alias-vault");
-    fs::create_dir_all(&home).expect("home");
+    let (_guard, home, root) = disposable_roots();
 
     let init = run(
         &binary,
@@ -214,18 +213,13 @@ fn top_level_aliases_match_their_canonical_commands() {
         "list did not show the entry: {:?}",
         String::from_utf8_lossy(&listing.stdout)
     );
-
-    fs::remove_dir_all(home).expect("cleanup home");
-    fs::remove_dir_all(root).expect("cleanup vault");
 }
 
 /// Hidden stays hidden: the compatibility commands must not reappear in help.
 #[test]
 fn deprecated_stubs_stay_hidden_from_help() {
     let binary = rust_binary();
-    let home = temporary_root("help-home");
-    let root = temporary_root("help-vault");
-    fs::create_dir_all(&home).expect("home");
+    let (_guard, home, root) = disposable_roots();
 
     let root_help = run(&binary, &["--help"], &root, &home);
     let mcp_help = run(&binary, &["mcp", "--help"], &root, &home);
@@ -235,6 +229,4 @@ fn deprecated_stubs_stay_hidden_from_help() {
             assert!(!text.contains(needle), "{label} exposes {needle}: {text}");
         }
     }
-
-    fs::remove_dir_all(home).expect("cleanup home");
 }
