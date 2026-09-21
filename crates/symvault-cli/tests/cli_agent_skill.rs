@@ -101,6 +101,12 @@ fn stderr_of(output: &Output) -> String {
 }
 
 fn fixture(name: &str) -> String {
+    // `.gitattributes` pins these files to LF; normalizing again keeps the
+    // comparison honest in checkouts that ignore that setting.
+    load_fixture(name).replace("\r\n", "\n")
+}
+
+fn load_fixture(name: &str) -> String {
     match name {
         "hermes.SKILL.md" => include_str!("fixtures/agent-skill/hermes.SKILL.md").to_owned(),
         "claude-code.SKILL.md" => {

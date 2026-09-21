@@ -687,7 +687,13 @@ mod tests {
         }
     }
 
-    fn fixture(name: &str) -> &'static str {
+    /// `.gitattributes` pins these files to LF; normalizing again keeps the
+    /// comparison honest in checkouts that ignore that setting.
+    fn fixture(name: &str) -> String {
+        load_fixture(name).replace("\r\n", "\n")
+    }
+
+    fn load_fixture(name: &str) -> &'static str {
         match name {
             "hermes.SKILL.md" => include_str!("../tests/fixtures/agent-skill/hermes.SKILL.md"),
             "claude-code.SKILL.md" => {
@@ -712,7 +718,7 @@ mod tests {
             ("openclaw", "openclaw.SKILL.md"),
         ] {
             let vars = vars_for(agent);
-            let expected = fill(fixture(fixture_name), &vars);
+            let expected = fill(&fixture(fixture_name), &vars);
             let rendered = String::from_utf8(render(agent, &vars).expect("render")).expect("utf8");
             assert_eq!(rendered, expected, "{agent}");
         }
@@ -727,7 +733,7 @@ mod tests {
             let vars = vars_for(agent);
             let files = render_for_export(agent, &vars).expect("export");
             let install = String::from_utf8(files["INSTALL.md"].clone()).expect("utf8");
-            assert_eq!(install, fill(fixture(fixture_name), &vars), "{agent}");
+            assert_eq!(install, fill(&fixture(fixture_name), &vars), "{agent}");
         }
     }
 
