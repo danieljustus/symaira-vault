@@ -100,8 +100,13 @@ fn normalize(text: &str, root: &str) -> String {
     let mut out = text.replace(&root.replace('\\', "\\\\"), "<ROOT>");
     out = out.replace(root, "<ROOT>");
     // Windows prints native `\` separators (fixtures are Unix `/`); no
-    // fixture contains a backslash, so a global fold is safe.
+    // fixture contains a backslash, so a global fold is safe. An escaped
+    // root leaves `<ROOT>\\…`, which folds to a double slash — collapse it
+    // (targeted at `<ROOT>`, so `http://` URLs are untouched).
     out = out.replace('\\', "/");
+    while out.contains("<ROOT>//") {
+        out = out.replace("<ROOT>//", "<ROOT>/");
+    }
     out = regex_replace(&out);
     out
 }
