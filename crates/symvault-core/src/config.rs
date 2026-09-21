@@ -1292,7 +1292,7 @@ where
 /// loaded profile carries plain `bool`; an absent preset field means `false`,
 /// exactly as Go's `BoolPtr(p != nil && *p)` does. An unknown tier changes
 /// nothing, and the tier name is still recorded by the caller.
-fn apply_tier_preset_to_profile(profile: &mut AgentProfile, tier: &str) -> bool {
+pub fn apply_tier_preset_to_profile(profile: &mut AgentProfile, tier: &str) -> bool {
     let Some(preset) = crate::tier::get_preset(tier) else {
         return false;
     };

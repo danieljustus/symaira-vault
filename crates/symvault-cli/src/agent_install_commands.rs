@@ -1646,7 +1646,11 @@ fn create_agent_token_in_registry(
 }
 
 /// Go `writeAgentTokenFile` (`cmd/mcp/agent.go`).
-fn write_agent_token_file(vault: &Path, name: &str, raw_token: &str) -> Result<String, String> {
+pub(crate) fn write_agent_token_file(
+    vault: &Path,
+    name: &str,
+    raw_token: &str,
+) -> Result<String, String> {
     validate_agent_name(name)?;
     let dir = vault.join("mcp-tokens");
     create_private_dir(&dir).map_err(|error| format!("create token directory: {error}"))?;
@@ -1686,7 +1690,7 @@ struct HttpConfig {
 // MCP tool definitions; the Rust port has no equivalent registry hash yet, so
 // the install slice pins the Oracle-observed constant. Upgrade path: compute
 // the hash from the Rust tool definitions and share it with the store.
-const PINNED_TOOL_REGISTRY_HASH: &str =
+pub(crate) const PINNED_TOOL_REGISTRY_HASH: &str =
     "01c5ea5101379933ab1ffba00f6b11b0f71afed220890cd7cb3460aeedcbb77f";
 
 // Remembers that `SYMVAULT_MCP_TOKEN` was consumed. Go calls
@@ -1958,7 +1962,10 @@ fn build_http_server_config(
 /// Go splits registry failures into load/create/save stages; the Rust
 /// single-call create maps read-side failures to the load stage and write
 /// failures to the save stage, everything else to the caller's create stage.
-fn map_scoped_token_error(error: &symvault_store::StoreError, create_prefix: &str) -> String {
+pub(crate) fn map_scoped_token_error(
+    error: &symvault_store::StoreError,
+    create_prefix: &str,
+) -> String {
     match error {
         symvault_store::StoreError::Read { .. } | symvault_store::StoreError::MissingFile(_) => {
             format!("load token registry: {error}")
