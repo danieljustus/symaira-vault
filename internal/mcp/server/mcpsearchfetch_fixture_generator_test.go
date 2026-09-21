@@ -244,12 +244,12 @@ func TestGenerateMCPSearchFetchFixture(t *testing.T) {
 
 	sourceHash := mcpSearchFetchSourceHash(t, mcpSearchFetchSourceFiles)
 	if pinned := mcpSearchFetchGitSourceHash(t, mcpSearchFetchSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go search/fetch sources differ from fca3f894: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go search/fetch sources differ from fd55bb73: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpSearchFetchFixture{
 		SchemaVersion: 1,
 		Oracle: mcpSearchFetchOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "fd55bb73", CommitSHA: "fd55bb7350e67350f709cf60aea1b827cdadd40c",
 			SourceFiles: mcpSearchFetchSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpSearchFetchGeneratorHash(t),
 		},
@@ -303,7 +303,7 @@ func mcpSearchFetchGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpSearchFetchRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "fca3f894:"+name)
+		cmd := exec.Command("git", "show", "fd55bb73:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

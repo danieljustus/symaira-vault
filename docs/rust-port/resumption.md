@@ -1,5 +1,65 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-20, Teil 4 (nach `c60e3be5`) — P0 im Oracle, Slice pausiert
+
+**Der nächste geplante Slice (`migrate pseudonymize`) ist als Oracle unbrauchbar:
+die Go-Produktion löscht dabei den ganzen Vault.** Gefunden bei der
+Voruntersuchung des Slice, gemeldet als
+[#1088](https://github.com/danieljustus/symaira-vault/issues/1088), Fix in
+[PR #1089](https://github.com/danieljustus/symaira-vault/pull/1089).
+
+Gemessen mit dem gepinnten Oracle-Build (`target/port/symvault-go`), isoliertes
+`HOME`, Memory-Keyring, 2 Einträge:
+
+- `migrate pseudonymize -y` meldet „Migrating 2 entries… / Migration complete.“
+  und **Exit 0**, danach existiert **keine einzige Eintragsdatei** mehr:
+  `find entries -name '*.age'` → 0, `list` leer, `get` → not found,
+  `config.yaml` trägt `pseudonymize_paths: true`.
+- Ursache: `cmd/admin/migrate.go` ruft `enablePseudonymizeConfig` **nach** der
+  Schleife. `WriteEntry` lädt die Config selbst, `entryStoragePath()` liefert den
+  HMAC-Pfad nur bei gesetztem Flag — also schreibt jede Iteration auf
+  `entries/<plain>.age` zurück und das folgende `os.Remove` löscht sie.
+
+Drei weitere Defekte derselben Stelle beim Fix gefunden und mitbehoben:
+Pfadableitung aus dem Dateinamen (zweiter Lauf hasht den HMAC-Namen erneut),
+`PrepareEntryForWrite(pseudonymize=false)` (logischer Pfad landet nie im
+Ciphertext), und `ReadEntry`/`readEntryInner` ohne Fallback auf
+`entries/<plain>.age` (Vault mit Flag und Plaintext-Namen liest sich als leer —
+genau der Zustand nach einem fehlerhaften Lauf).
+
+- Fixture-Pins vorgerückt. Der Fix berührt zwei Dateien, die Generatoren als
+  gepinnte Oracle-Quelle binden und gegen den Working Tree vergleichen:
+  `internal/vault/entry_readwrite.go` (manifestkeygen, storemetagen, 6
+  MCP-Generatoren, `cxfgen` über den ganzen `internal/vault`-Closure) und
+  `cmd/admin/migrate.go` (`portgen` bindet jede Nicht-Test-Datei unter `cmd/`).
+  Betroffene Fixtures neu eingefroren — **alle nur Provenance geändert**, alle
+  Vektoren/Cases byte-identisch: `store/metadata.json` (8), 
+  `store/manifest-keys.json` (16), `mcp/tools-{delete-entry,generate-totp,
+  get-value,list-entries,search-fetch,set-entry}.json`, `import/cxf.json` (19),
+  `cli/command-tree.json` (135 Kommandos). Rust-Seite nachgezogen:
+  `symvault-store/{src/metadata.rs,tests/manifest_keys.rs}` und die sechs
+  `symvault-mcp/tests/tools_*.rs` (inkl. `source_hash`).
+  `portgen`/`cxfgen` vergleichen gegen den Pin, konnten also nur eine Revision
+  mit sauberem Tree nennen und wurden zusammen mit dem Re-Freeze vorgerückt.
+  Geprüft und **unberührt**: `storegen`, `store004gen` (lesen gepinnte Blobs,
+  nicht den Working Tree), `configclicasesgen`, `exportgen`, `import1passgen`,
+  `importcsvgen`, `mcprendergen`, `sessiongen`, `gitio` (`internal/git`).
+- **Vorbestehende, nicht durch diesen Fix verursachte rote Gates** (auf
+  pristine `origin/main` bestätigt): `rust-007-fixtures-check`
+  („`config/contract.json` is stale“) und `config-cli-differential`
+  (Temp-Dir-Kollision in `agent_token_mutations_differential`, der
+  Mikrosekunden-Takt aus #1085; allein ausgeführt grün).
+- **Slice-Entscheidung:** `migrate pseudonymize` nicht portieren, solange das
+  Oracle den Defekt trägt. Byte-identische stdout/stderr-Fixture hätte die
+  Datenlöschung als Vertrag eingefroren. Der Slice bleibt `blocked` bis #1089
+  gemergt ist.
+- Go bleibt Produktion; kein Cutover, kein Release.
+- **Native CI für `0a123084` stand am Ende dieser Sitzung noch aus** (Rust/Rust
+  Miri liefen). Bis der Lauf gegen den exakten Head beobachtet ist, ist keine
+  native CI-Evidenz behauptet; lokal sind alle Go-Gates, `cargo test` für
+  store/sync/mcp und der volle `port-contract`-Satz grün (bis auf die oben
+  genannten vorbestehenden zwei).
+
 ## Zwischenstand 2026-09-20, Teil 3 (nach `72c14890`)
 
 **Gemessen: die macOS-Testflakes sind eine Uhr-Auflösung, kein Vertragsproblem.**

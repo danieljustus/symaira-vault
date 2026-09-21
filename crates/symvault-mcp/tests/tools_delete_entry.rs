@@ -90,15 +90,15 @@ fn delete_entry_matches_source_bound_go_fixture_and_persists() {
         "../../../testdata/port/mcp/tools-delete-entry.json"
     ))
     .expect("valid Go delete_entry fixture");
-    assert_eq!(fixture.oracle.commit, "fca3f894");
+    assert_eq!(fixture.oracle.commit, "fd55bb73");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+        "fd55bb7350e67350f709cf60aea1b827cdadd40c"
     );
     assert_eq!(fixture.oracle.source_files.len(), 9);
     assert_eq!(
         fixture.oracle.source_hash,
-        "3a3229354e809bb4099a2dbdbe1a00e815864bc2e426b763d5e9ce1ad47613ef"
+        "1e416d61d73516ea70ce1ea43c42265be200a489cbd99f12a6c7a50d6f4fe8d1"
     );
 
     for case in fixture.cases {

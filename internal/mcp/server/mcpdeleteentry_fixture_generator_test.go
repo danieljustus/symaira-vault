@@ -150,12 +150,12 @@ func TestGenerateMCPDeleteEntryFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpDeleteEntrySourceFiles)
 	pinned := mcpDeleteEntryGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go delete_entry sources differ from fca3f894: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go delete_entry sources differ from fd55bb73: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpDeleteEntryFixture{
 		SchemaVersion: 1,
 		Oracle: mcpDeleteEntryOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "fd55bb73", CommitSHA: "fd55bb7350e67350f709cf60aea1b827cdadd40c",
 			SourceFiles: mcpDeleteEntrySourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpDeleteEntryGeneratorHash(t),
 		},
@@ -204,7 +204,7 @@ func mcpDeleteEntryGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpDeleteEntrySourceFiles {
-		cmd := exec.Command("git", "show", "fca3f894:"+name)
+		cmd := exec.Command("git", "show", "fd55bb73:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

@@ -61,6 +61,14 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	raw, err := SafeReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
+		// A vault may still hold entries under their plaintext names while
+		// pseudonymize_paths is already enabled — an interrupted or previously
+		// buggy migration leaves exactly that state. Reading must fall back to
+		// the entries/<plain>.age layout, not only to the pre-entries/ legacy
+		// root, or the entries become unreachable even though they exist.
+		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+	}
+	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
@@ -109,6 +117,11 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}
 	raw, err := SafeReadFile(filePath)
+	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
+		// See ReadEntry: an entry may still live under its plaintext name in
+		// entries/ while pseudonymize_paths is enabled.
+		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
@@ -236,6 +249,39 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	_ = searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity)
 	listCacheFor(vaultDir).Invalidate()
 	return nil
+}
+
+// ReadEntryFile decrypts one entry directly from its file inside the vault.
+//
+// Migration walks the entries/ tree, where the file name no longer identifies
+// the entry once paths are pseudonymized; only the ciphertext's embedded
+// logical path does. Callers that need to migrate a file whose name is not
+// (or no longer) derivable from a logical path must read it this way.
+func ReadEntryFile(filePath string, identity *age.X25519Identity) (*Entry, error) {
+	if identity == nil {
+		return nil, errors.New("nil identity")
+	}
+	raw, err := SafeReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	recordDuration("decrypt", time.Since(start))
+	if err != nil {
+		return nil, err
+	}
+	var entry Entry
+	if err := json.Unmarshal(plaintext, &entry); err != nil {
+		vaultcrypto.Wipe(plaintext)
+		return nil, err
+	}
+	vaultcrypto.Wipe(plaintext)
+	if entry.Data == nil {
+		entry.Data = map[string]any{}
+	}
+	MigrateBackupCodes(&entry)
+	return &entry, nil
 }
 
 // DeleteEntry removes an entry from the vault
