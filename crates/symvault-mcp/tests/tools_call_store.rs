@@ -634,38 +634,42 @@ fn get_entry_value_seals_redacts_and_blocks_sensitive_paths() {
         .expect("redacted payment get succeeds");
     assert!(!redacted.is_error);
     assert!(redacted.text.contains("[REDACTED]"));
-    // Compare the returned field values, never the whole document: every field
-    // carries a random DATA_<hex> nonce, so a document-wide check for a short
-    // literal fails whenever a nonce happens to contain it ("123" matches a
-    // 16-hex nonce in roughly one run out of a hundred).
+    // Each field value is wrapped in its own randomized `<!-- DATA_<16 hex>
+    // label=... -->…<!-- /DATA_<16 hex> -->` boundary. Match the *payload*
+    // between the tags, never the whole wrapped string: a document- or
+    // field-wide substring check for a short literal such as the CVC "123"
+    // fails whenever the nonce itself happens to contain it (~1 run in 150 for
+    // "123", since the marker appears twice per value). #1081 narrowed this
+    // from the document to the field but left the nonce inside the haystack.
+    fn unwrap_data(value: &str) -> &str {
+        let Some(open_end) = value.find("-->") else {
+            return value;
+        };
+        let body = &value[open_end + 3..];
+        match body.find("<!--") {
+            Some(close) => &body[..close],
+            None => body,
+        }
+    }
     let payload: serde_json::Value =
         serde_json::from_str(&redacted.text).expect("redacted get returns JSON text");
     for field in ["card_number", "cvc", "note"] {
-        let value = payload["data"][field]
+        let raw = payload["data"][field]
             .as_str()
             .unwrap_or_else(|| panic!("{field} missing from the redacted payload"));
+        let value = unwrap_data(raw);
         assert!(
             value.contains("[REDACTED]"),
             "{field} was not redacted: {value}"
         );
     }
     assert!(
-        !payload["data"]["card_number"]
-            .as_str()
-            .unwrap_or_default()
+        !unwrap_data(payload["data"]["card_number"].as_str().unwrap_or_default())
             .contains("4111111111111111")
     );
+    assert!(!unwrap_data(payload["data"]["cvc"].as_str().unwrap_or_default()).contains("123"));
     assert!(
-        !payload["data"]["cvc"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("123")
-    );
-    assert!(
-        !payload["data"]["note"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("safe-note")
+        !unwrap_data(payload["data"]["note"].as_str().unwrap_or_default()).contains("safe-note")
     );
 
     let (root, identity) = write_get_value_vault();
