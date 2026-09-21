@@ -536,17 +536,32 @@ fn has_traversal(path: &str) -> bool {
 
 /// `agent skill refresh <agent>`.
 pub(crate) fn refresh(vault: &Path, agent: &str) -> Result<(), String> {
+    // Go `newAgentSkillRefreshCmd`: the empty-target error is returned bare,
+    // only library (`agentskill.Refresh`) errors get the `refresh skill: `
+    // stage prefix.
     let target = skill_target(vault, agent);
     if target.is_empty() {
         return Err(format!("no skill path configured for agent {agent:?}"));
     }
-    let target = require_tilde_expansion(&target);
+    let target = refresh_target_with_tier(vault, agent, &target, PROFILE_TIER)
+        .map_err(|error| format!("refresh skill: {error}"))?;
+    println!("Refreshed skill for {agent} at {target}");
+    Ok(())
+}
+
+/// Go `agentskill.Refresh(agentName, targetPath, vars)`: `targetPath` is used
+/// verbatim (only `~` is expanded); no config lookup.
+pub(crate) fn refresh_target_with_tier(
+    vault: &Path,
+    agent: &str,
+    target: &str,
+    tier: &str,
+) -> Result<String, String> {
+    let target = require_tilde_expansion(target);
 
     // Go's `expandTilde` keeps the path untouched when `~` cannot be resolved.
     if has_traversal(&target) {
-        return Err(format!(
-            "refresh skill: target path contains traversal: {target}"
-        ));
+        return Err(format!("target path contains traversal: {target}"));
     }
     let target = clean_path(&target);
 
@@ -554,26 +569,23 @@ pub(crate) fn refresh(vault: &Path, agent: &str) -> Result<(), String> {
         Ok(existing) => {
             if !find_sentinel(&existing) {
                 return Err(format!(
-                    "refresh skill: skill file exists without managed sentinel: {target}"
+                    "skill file exists without managed sentinel: {target}"
                 ));
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            // Go surfaces the raw `os.ReadFile` PathError (`open <path>: no
+            // such file or directory`); Rust's Display would append
+            // `(os error 2)` and capitalizes differently, so render Go's bytes.
             return Err(format!(
-                "refresh skill: skill not installed: open {target}: no such file or directory"
+                "skill not installed: open {target}: no such file or directory"
             ));
         }
-        Err(error) => return Err(format!("refresh skill: read existing skill: {error}")),
+        Err(error) => return Err(format!("read existing skill: {error}")),
     }
 
-    install(vault, agent, &target, false).map_err(|error| format!("refresh skill: {error}"))?;
-    println!("Refreshed skill for {agent} at {target}");
-    Ok(())
-}
-
-/// Go `agentskill.Install`.
-fn install(vault: &Path, agent: &str, target: &str, force: bool) -> Result<(), String> {
-    install_with_tier(vault, agent, target, force, PROFILE_TIER)
+    install_with_tier(vault, agent, &target, false, tier)?;
+    Ok(target)
 }
 
 pub(crate) fn install_with_tier(
@@ -659,7 +671,7 @@ pub(crate) fn skill_target(vault: &Path, agent: &str) -> String {
 }
 
 /// Go's `expandTilde` keeps the path untouched when `~` cannot be resolved.
-fn require_tilde_expansion(path: &str) -> String {
+pub(crate) fn require_tilde_expansion(path: &str) -> String {
     expand_tilde(path)
         .map(|expanded| expanded.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.to_owned())
@@ -843,13 +855,13 @@ mod tests {
         let tmp = tempfile::TempDir::new().expect("tmp");
         let target = tmp.path().join("nested").join("SKILL.md");
         let target = target.to_string_lossy().into_owned();
-        install(tmp.path(), "hermes", &target, false).expect("install");
+        install_with_tier(tmp.path(), "hermes", &target, false, PROFILE_TIER).expect("install");
         let written = std::fs::read(&target).expect("read");
         assert!(find_sentinel(&written));
 
         // Same body hash: no rewrite, and therefore no backup file.
         let before = written.clone();
-        install(tmp.path(), "hermes", &target, false).expect("refresh");
+        install_with_tier(tmp.path(), "hermes", &target, false, PROFILE_TIER).expect("refresh");
         assert_eq!(std::fs::read(&target).expect("read"), before);
         assert!(!Path::new(&format!("{target}{BACKUP_SUFFIX}")).exists());
     }
@@ -859,7 +871,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().expect("tmp");
         let target = tmp.path().join("SKILL.md");
         let target = target.to_string_lossy().into_owned();
-        install(tmp.path(), "hermes", &target, false).expect("install");
+        install_with_tier(tmp.path(), "hermes", &target, false, PROFILE_TIER).expect("install");
         let tampered = std::fs::read(&target)
             .expect("read")
             .into_iter()
@@ -867,7 +879,7 @@ mod tests {
             .collect::<Vec<u8>>();
         std::fs::write(&target, &tampered).expect("write");
 
-        install(tmp.path(), "hermes", &target, false).expect("refresh");
+        install_with_tier(tmp.path(), "hermes", &target, false, PROFILE_TIER).expect("refresh");
         assert_eq!(
             std::fs::read(format!("{target}{BACKUP_SUFFIX}")).expect("backup"),
             tampered

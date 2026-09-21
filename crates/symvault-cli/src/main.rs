@@ -9,6 +9,7 @@ mod agent_profile_commands;
 mod agent_skill_commands;
 mod agent_token_commands;
 mod agent_uninstall_commands;
+mod agent_upgrade_commands;
 mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
@@ -557,6 +558,30 @@ enum AgentCommand {
         /// Skip confirmation prompt.
         #[arg(long)]
         yes: bool,
+    },
+    /// Upgrade an agent's security tier with interactive confirmation.
+    Upgrade {
+        /// Validated by hand so the message matches Cobra's `ExactArgs(1)`.
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+        /// Target security tier (safe, standard, admin; 'read-only' accepted as alias for 'safe').
+        #[arg(long, default_value = "")]
+        tier: String,
+        /// Show diff without applying changes.
+        #[arg(long)]
+        dry_run: bool,
+        /// Non-interactive mode (requires --reason).
+        #[arg(long)]
+        yes: bool,
+        /// Audit reason for the upgrade (required with --yes).
+        #[arg(long, default_value = "")]
+        reason: String,
+        /// Rotate the agent's MCP token on upgrade.
+        #[arg(long)]
+        rotate_token: bool,
+        /// Skip biometric verification (not recommended).
+        #[arg(long)]
+        no_biometric: bool,
     },
     /// Export or refresh embedded skill packages for AI agents.
     Skill {
@@ -1638,6 +1663,41 @@ fn run_cli() -> ExitCode {
                         output,
                     },
                     &mut output_stream,
+                    &mut io::stderr().lock(),
+                )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Upgrade {
+                    args,
+                    tier,
+                    dry_run,
+                    yes,
+                    reason,
+                    rotate_token,
+                    no_biometric,
+                },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let stdin = io::stdin();
+                agent_upgrade_commands::run(
+                    &vault,
+                    &args,
+                    &agent_upgrade_commands::UpgradeFlags {
+                        tier,
+                        dry_run,
+                        yes,
+                        reason,
+                        rotate_token,
+                        no_biometric,
+                    },
+                    &mut stdin.lock(),
                     &mut io::stderr().lock(),
                 )
             })();
