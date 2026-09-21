@@ -12,6 +12,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
+use zeroize::Zeroize;
 
 pub const SESSION_ACCOUNT: &str = "session";
 pub const IDENTITY_ACCOUNT: &str = "identity";
@@ -538,6 +539,63 @@ impl SessionManager {
         }
         Ok(())
     }
+
+    /// Reports whether the cached session still holds a plaintext passphrase.
+    ///
+    /// Mirrors Go's `Manager.HasLegacyPlaintextSession`: a missing cache entry is
+    /// "no legacy session", not an error. An empty plaintext field does not count
+    /// — only a non-empty one is the pre-encryption format.
+    pub fn has_legacy_plaintext_session(&self, vault: &str) -> Result<bool, SessionError> {
+        match self.keyring.get(&Self::key(vault, SESSION_ACCOUNT)) {
+            Ok(raw) => {
+                let session: StoredSession = serde_json::from_slice(&raw)
+                    .map_err(|e| SessionError::Malformed(e.to_string()))?;
+                Ok(session
+                    .passphrase
+                    .as_deref()
+                    .is_some_and(|value| !value.is_empty()))
+            }
+            Err(SessionError::NotFound) => Ok(false),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Upgrades a cached plaintext session to the encrypted form.
+    ///
+    /// Returns `Ok(false)` when there is nothing to do, matching Go: no entry, an
+    /// empty plaintext field, or an already-encrypted session are all no-ops. The
+    /// wrap key is created on demand, the passphrase is encrypted under it, the
+    /// plaintext is dropped, and `max_lifetime_ns` is defaulted when unset. The
+    /// rewritten payload replaces the cache entry only after it is fully built.
+    pub fn migrate_session(&self, vault: &str) -> Result<bool, SessionError> {
+        let raw = match self.keyring.get(&Self::key(vault, SESSION_ACCOUNT)) {
+            Ok(raw) => raw,
+            Err(SessionError::NotFound) => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        let mut session: StoredSession =
+            serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        let plaintext = match session.passphrase.as_deref() {
+            Some(value) if !value.is_empty() => value.to_owned(),
+            _ => return Ok(false),
+        };
+        let (encrypted, nonce) = self.encrypt(vault, plaintext.as_bytes())?;
+        session.encrypted_passphrase = Some(encrypted);
+        session.nonce = Some(nonce);
+        if session.max_lifetime_ns <= 0 {
+            session.max_lifetime_ns = duration_ns(DEFAULT_MAX_LIFETIME);
+        }
+        // Drop the plaintext before the payload is serialised so it cannot leak
+        // into the stored JSON; `zeroize` clears the heap copy we no longer need.
+        let mut plaintext = plaintext;
+        plaintext.zeroize();
+        session.passphrase = None;
+        let payload =
+            serde_json::to_vec(&session).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        self.keyring
+            .set(&Self::key(vault, SESSION_ACCOUNT), &payload)?;
+        Ok(true)
+    }
 }
 fn duration_ns(d: Duration) -> i64 {
     d.as_nanos().min(i64::MAX as u128) as i64
@@ -658,5 +716,96 @@ mod tests {
     fn numeric_timestamp_is_rejected_like_go_time_time() {
         let raw = br#"{"saved_at":1,"last_access":"2099-01-01T00:00:00Z","ttl_ns":1}"#;
         assert!(serde_json::from_slice::<StoredSession>(raw).is_err());
+    }
+
+    /// Writes a legacy plaintext session into the keyring by hand, the way an
+    /// older Symaira Vault build would have left it.
+    fn seed_legacy_session(keyring: &MemoryKeyring, vault: &str, plaintext: &str) {
+        let key = SessionManager::key(vault, SESSION_ACCOUNT);
+        // Timestamps sit at the fake clock's epoch-plus-100s, so the seeded
+        // session is fresh for a FakeClock parked there.
+        let payload = serde_json::json!({
+            "saved_at": "1970-01-01T00:01:40Z",
+            "last_access": "1970-01-01T00:01:40Z",
+            "passphrase": plaintext,
+            "ttl_ns": 1_000_000_000_000i64,
+            "max_lifetime_ns": 0i64,
+        });
+        keyring
+            .set(&key, &serde_json::to_vec(&payload).unwrap())
+            .unwrap();
+    }
+
+    #[test]
+    fn migrate_session_encrypts_the_plaintext_and_is_idempotent() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        seed_legacy_session(&keyring, "v", "legacy-secret");
+
+        assert!(manager.has_legacy_plaintext_session("v").unwrap());
+        assert!(manager.migrate_session("v").unwrap(), "first run migrates");
+
+        // The upgraded payload must no longer carry the plaintext, and the
+        // encrypted form must round-trip back to the original bytes.
+        assert!(!manager.has_legacy_plaintext_session("v").unwrap());
+        assert_eq!(manager.load_passphrase("v").unwrap(), b"legacy-secret");
+        let stored: serde_json::Value = serde_json::from_slice(
+            &keyring
+                .get(&SessionManager::key("v", SESSION_ACCOUNT))
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(
+            stored["passphrase"].is_null(),
+            "plaintext survived the migration: {stored}"
+        );
+        assert_eq!(
+            stored["max_lifetime_ns"], 28_800_000_000_000i64,
+            "unset max lifetime must default to 8h like Go"
+        );
+
+        // A second run is a no-op and must not disturb the encrypted payload.
+        let before = keyring
+            .get(&SessionManager::key("v", SESSION_ACCOUNT))
+            .unwrap();
+        assert!(
+            !manager.migrate_session("v").unwrap(),
+            "second run reported work"
+        );
+        assert_eq!(
+            keyring
+                .get(&SessionManager::key("v", SESSION_ACCOUNT))
+                .unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn migrate_session_is_a_noop_without_a_legacy_entry() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+
+        // No cache entry at all.
+        assert!(!manager.has_legacy_plaintext_session("v").unwrap());
+        assert!(!manager.migrate_session("v").unwrap());
+
+        // An already-encrypted session.
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(60),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        assert!(!manager.has_legacy_plaintext_session("v").unwrap());
+        assert!(!manager.migrate_session("v").unwrap());
+
+        // An empty plaintext field is not the legacy format.
+        seed_legacy_session(&keyring, "w", "");
+        assert!(!manager.has_legacy_plaintext_session("w").unwrap());
+        assert!(!manager.migrate_session("w").unwrap());
     }
 }
