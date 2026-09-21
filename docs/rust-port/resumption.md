@@ -1,5 +1,40 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 9 (nach `6649caf0`) — `device approval-*` gemergt, naechster Slice gewaehlt
+
+- **PR [#1101](https://github.com/danieljustus/symaira-vault/pull/1101) squash-gemergt
+  als `6649caf0`.** Alle Checks gruen (`Rust`, `Rust Miri`, `Rust native` macOS+Windows,
+  `Rust port contract`, `Pairing differential` auf drei Plattformen, `Test (ubuntu) — PR`,
+  `Lint`, `govulncheck`, `osv-scanner`, `Flake vendorHash`). Worktree und Branch danach
+  entfernt; `git status` im Haupt-Checkout sauber.
+- **Stand der Luecken (cligap am integrierten `main`, Binary sha256 `8e21342d1835`):**
+  Oracle-Pfade 134, Rust-Pfade 94, **fehlend 35**, Flag-Luecken 9, Alias-Luecken 0,
+  Rust-only 1. Von 43 → 37 → 35 in zwei Slices.
+- **Die 35 verbleibenden Pfade, gruppiert (aus `target/resume-evidence/cli-gap-inventory.json`):**
+  `serve` 8 (inkl. `install`, `status`, `token create|list|revoke`, `uninstall`),
+  `agent` 7 (`install`, `setup`, `skill`, `skill export`, `skill refresh`, `upgrade`),
+  `update` 4 (`info`, `check`, `apply`, Root), `approval` 3 (`decide`, `list`, Root),
+  `intake` 3 (`watch`, `watch disable`, Root), `broker`, `dynamic`, `dynamic generate`,
+  `setup`, `startup-profile`, `ui`, `help`, `generate manpages`, `device approval-pair`,
+  `import review list`, `import review promote`.
+  Flag-Luecken: `import --quarantine`; `mcp --bind/--port/--tls-ca/--tls-cert/--tls-key`;
+  `run --broker/--broker-passthrough/--broker-strict`.
+- **Naechster Slice: `agent skill`, `agent skill export`, `agent skill refresh`** (35 → 32).
+  Begruendung aus Evidenz: rein offline und deterministisch (Rendering eingebetteter
+  Go-Templates + Hash-Vergleich, kein Netz, kein Daemon, keine Plattform), mit
+  `internal/agentskill/skill_test.go` (993 Zeilen) als reicher Oracle-Fixture-Quelle.
+  Die Abhaengigkeiten sind bereits im Workspace: `tar` und `flate2` liegen in `Cargo.lock`
+  und werden von `crates/symvault-sync/src/archive.rs` benutzt; ein Template-Renderer
+  existiert als `crates/symvault-sync/src/template.rs`. `expand_tilde` und
+  Skill-Pfadauflösung sind in `crates/symvault-cli/src/agent_uninstall_commands.rs` schon
+  portiert und sollen wiederverwendet werden.
+  **Bewusste Grenze:** Go's `compress/gzip`-Strom ist nicht byte-vergleichbar; export
+  vergleicht deshalb den **Archivinhalt** (Eintragsnamen, Modi, Nutzlast-Bytes) und nicht
+  die gzip-Bytes — das wird im Test und im PR benannt, nicht verschwiegen.
+  **Nicht in diesem Slice:** `agent install`, `agent setup`, `agent upgrade` (schreiben in
+  `~/.symaira/bin` und mutieren damit die Maschine) und `serve`/`approval`/`broker`/`intake`
+  (Dienste, TLS, Netz).
+
 ## Zwischenstand 2026-09-21, Teil 8 (nach `09961118`) — `device approval-*` gebaut
 
 - **Gebaut in `feat/device-approval-registry`** (Worktree
