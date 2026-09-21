@@ -3,6 +3,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -352,9 +353,14 @@ func runOracle(root string, legacy bool) (vaultFixture, error) {
 	}
 	cmd := exec.Command("go", args...)
 	cmd.Dir = tree
-	out, err := cmd.CombinedOutput()
+	// Keep stdout and stderr apart: `go run` reports progress ("go: downloading
+	// …") on stderr, and with a cold module cache that text precedes the JSON
+	// payload. CombinedOutput would splice it in and the parse fails.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return vaultFixture{}, fmt.Errorf("detached oracle: %w: %s", err, out)
+		return vaultFixture{}, fmt.Errorf("detached oracle: %w: %s", err, stderr.String())
 	}
 	var v vaultFixture
 	if err = json.Unmarshal(out, &v); err != nil {
