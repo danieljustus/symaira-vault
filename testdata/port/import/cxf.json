@@ -98,7 +98,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "c154b26735dacac9c965f8d8ca373c87ca25aa41fcea4a2d5452121df56adfd0"
+    "generator_digest": "087a0f08e49d48c55494b97b9972d599e754f98b47d1ce20e96eed5b19bd4d96"
   },
   "cases": [
     {
