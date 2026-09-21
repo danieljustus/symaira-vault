@@ -205,11 +205,13 @@ enum Command {
         editor: Option<String>,
     },
     /// List password entries.
+    #[command(alias = "ls")]
     List {
         #[arg(value_name = "PREFIX")]
         prefix: Option<String>,
     },
     /// Get a password entry or field.
+    #[command(alias = "show", alias = "cat")]
     Get {
         #[arg(value_name = "PATH[.FIELD]")]
         query: String,
@@ -367,6 +369,21 @@ enum Command {
         #[arg(long)]
         allow_locked: bool,
     },
+    /// Deprecated: use `symvault agent install <agent> --config-only`.
+    ///
+    /// Kept as a hidden compatibility command because `cmd/mcp/mcp_config.go`
+    /// exposes it in the oracle; it only prints the deprecation notice.
+    #[command(name = "mcp-config", hide = true)]
+    McpConfig {
+        #[arg(value_name = "AGENT", num_args = 0..)]
+        _args: Vec<String>,
+    },
+    /// Deprecated: use `symvault agent token rotate <name>`.
+    #[command(name = "mcp-token-rotate", hide = true)]
+    McpTokenRotate {
+        #[arg(num_args = 0..)]
+        _args: Vec<String>,
+    },
     /// Set a password entry or field.
     Set {
         #[arg(value_name = "PATH[.FIELD]")]
@@ -462,6 +479,16 @@ enum McpAction {
     Status,
     /// Remove the MCP server background service.
     Uninstall,
+    /// Deprecated: use `symvault agent token <action> <name>`.
+    ///
+    /// Deliberately a catch-all instead of clap subcommands: the oracle's
+    /// `mcp token <unknown>` still runs the group handler (Cobra falls through
+    /// to the parent `RunE`), so the words after `token` are dispatched here.
+    #[command(hide = true)]
+    Token {
+        #[arg(value_name = "ARGS", num_args = 0..)]
+        args: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1622,7 +1649,14 @@ fn run_cli() -> ExitCode {
                 allow_locked,
                 cli.quiet,
             ),
+            Some(McpAction::Token { args }) => {
+                deprecated_stub_message(deprecated_token_message(args.first().map(String::as_str)))
+            }
         },
+        Some(Command::McpConfig { .. }) => deprecated_stub_message(DEPRECATED_MCP_CONFIG),
+        Some(Command::McpTokenRotate { .. }) => {
+            deprecated_stub_message(DEPRECATED_MCP_TOKEN_ROTATE)
+        }
         Some(Command::Set {
             query,
             value,
@@ -3909,6 +3943,57 @@ fn finish_session_result(
             }
         }
     }
+}
+
+/// Deprecation notices of the hidden v4.0 compatibility commands.
+///
+/// Copied verbatim from `cmd/mcp/mcp_token.go` and `cmd/mcp/mcp_config.go` in
+/// the pinned oracle (`3232e31f`, release `unreleased`) and re-verified against
+/// the built oracle binary; see `tests/cli_alias_deprecated_stubs.rs` for the
+/// byte-exact capture and the reproduction command.
+const DEPRECATED_MCP_TOKEN_GROUP: &str =
+    "This command is deprecated in v4.0. Use: symvault agent token <new|list|revoke|rotate> <name>";
+const DEPRECATED_MCP_TOKEN_CREATE: &str =
+    "This command is deprecated in v4.0. Use: symvault agent token new <name>";
+const DEPRECATED_MCP_TOKEN_LIST: &str =
+    "This command is deprecated in v4.0. Use: symvault agent token list <name>";
+const DEPRECATED_MCP_TOKEN_REVOKE: &str =
+    "This command is deprecated in v4.0. Use: symvault agent token revoke <name> <token-id>";
+const DEPRECATED_MCP_CONFIG: &str =
+    "This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only";
+const DEPRECATED_MCP_TOKEN_ROTATE: &str =
+    "This command is deprecated in v4.0. Use: symvault agent token rotate <name>";
+
+/// Maps the words after `mcp token` to the notice the oracle prints.
+///
+/// Cobra has no `Args` restriction on the group or its subcommands, so an
+/// unknown word (`mcp token bogus`) falls through to the group handler and
+/// prints the group notice — verified against the pinned oracle.
+fn deprecated_token_message(first: Option<&str>) -> &'static str {
+    match first {
+        Some("create") => DEPRECATED_MCP_TOKEN_CREATE,
+        Some("list") => DEPRECATED_MCP_TOKEN_LIST,
+        Some("revoke") => DEPRECATED_MCP_TOKEN_REVOKE,
+        _ => DEPRECATED_MCP_TOKEN_GROUP,
+    }
+}
+
+/// Reproduces the oracle's output for a deprecated compatibility command.
+///
+/// Go's `cliout.Warnf` prints the deprecation notice first, the returned
+/// `ExitNotFound` error is rendered by the command runner and again by the root
+/// handler (hence the duplicated `Error: ` line, same as `print_error_like_go`),
+/// and `HintForError` falls back to the generic not-found hint. All four lines
+/// are printed, and `--quiet` does **not** silence them — verified against the
+/// pinned oracle: empty stdout, exit status 2, identical stderr with and without
+/// `--quiet`.
+fn deprecated_stub_message(message: &str) -> ExitCode {
+    let mut stderr = io::stderr();
+    let _ = writeln!(stderr, "{message}");
+    let _ = writeln!(stderr, "Error: {message}");
+    let _ = writeln!(stderr, "Error: {message}");
+    let _ = writeln!(stderr, "Try: symvault find <search-term>");
+    ExitCode::from(2)
 }
 
 /// Prints one error line the way Go's CLI does.
