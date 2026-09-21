@@ -1,5 +1,61 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-21, Teil 2 (nach `c218771c`) — Dependency-Bumps blockieren die Pins nicht mehr
+
+Der zuvor strukturell blockierte Dependabot-Bump ist gemergt. Zwei voneinander
+unabhängige Kopplungen mussten dafür fallen — die zweite war beim ersten Anlauf
+nicht sichtbar und ist der eigentliche Fund.
+
+- **Kopplung 1 — `go.mod`/`go.sum` im erzwungenen Digest.** Der Bump ließ
+  `TestManifestKeyProductionFixture` mit „production source differs from
+  `3232e31f`: **go.mod**" scheitern: fünf Fixtures banden die
+  Dependency-Manifeste in den *erzwungenen* Quellcode-Digest. Behoben in
+  [#1094](https://github.com/danieljustus/symaira-vault/pull/1094) (`b5e5de32`):
+  neuer `EnforcedSources`-Helfer, `go.mod`/`go.sum` bleiben als Provenance in
+  `source_files` dokumentiert, gaten aber nicht mehr. Betroffen waren
+  `mcprendergen`, `exportgen`, `manifestkeygen`, `configprofilegen` (blieb grün),
+  `focus` und `mcpprompts`.
+- **Kopplung 2 — Oracle-Harness parste `CombinedOutput` als JSON.** Nach dem
+  Bump wurde `Rust port contract` rot, obwohl lokal alles grün war. Ursache ist
+  **nicht** der Bump: `go run` schreibt Modul-Downloads und Build-Diagnostik nach
+  stderr, und bei **kaltem Modul-Cache** landen diese Zeilen *vor* der
+  JSON-Payload. Wer `CombinedOutput` an `json.Unmarshal` gibt, liest dann
+  `go: downloading …` als Dokument und stirbt mit
+  `invalid character 'g' looking for beginning of value`. Ein Bump erzwingt
+  genau diesen kalten Pfad — deshalb sah es wie ein Bump-Regress aus.
+  `syncgen`, `storegen` und `cxfgen` trennen die Ströme jetzt
+  (`cmd.Output()` plus erfasstes `stderr` für die Fehlermeldung). Reproduziert
+  wurde der Fehler absichtlich mit `GOMODCACHE=$(mktemp -d) go test ./...`.
+- **Folge: drei Fixtures provenance-only neu eingefroren.** `syncgen`,
+  `storegen` und `cxfgen` führen ihre **eigene** `main.go` in
+  `generator_files`; jede Änderung an ihnen bewegt den `generator_digest`.
+  Betroffen: `testdata/port/{sync/sync,import/cxf,store/store}.json` — je genau
+  eine Zeile (`generator_digest`), Bodies und `source_digest` byte-identisch.
+  Kein Full-Re-Freeze: der würde zusätzlich Eintrags-Zeitstempel und
+  Encryption-Nonces umschreiben (#1015 bleibt dafür offen).
+- **Gemessen auf `00f42edb` (PR [#1095](https://github.com/danieljustus/symaira-vault/pull/1095),
+  Squash-Merge `c218771c`).** CI: 18/18 relevante Jobs grün, keine Failures —
+  inklusive `Rust port contract` (pass, 7m5s), `Test (ubuntu) — PR` (pass, 5m6s),
+  `Rust native (windows-latest)` (pass, 7m58s), `Flake vendorHash` (pass) und
+  `Rust` (pass). Lokal mit kaltem Modul-Cache: 24 von 26 `port-contract`-Targets
+  grün; `rust-gates-core` grün.
+- **Vorbestehend rot bleibt ausschließlich** `config-cli-differential` (#1085,
+  macOS-Temp-Dir-Kollision, `os error 20`, dreimal sequenziell reproduziert,
+  auch mit kaltem Cache); der Job läuft in CI auf ubuntu und ist dort grün.
+  `Rust native (windows-latest)` traf den bekannten #1071-Timeout in einer
+  früheren Runde und war danach grün — `symvault-sync` ist von diesem Branch
+  nicht berührt.
+- **Issues geschlossen:** [#1058](https://github.com/danieljustus/symaira-vault/pull/1058)
+  (durch #1095 ersetzt) und [#1093](https://github.com/danieljustus/symaira-vault/issues/1093).
+  Pin `3232e31f` hat den Squash erneut überlebt (`merge-base --is-ancestor` ✓).
+- **Regel für die Zukunft:** Wer einen Generator anfasst, der seine eigene
+  Quelldatei in `generator_files` führt, muss die Fixture-Digests im **selben**
+  PR nachziehen und den Re-Freeze provenance-only halten. Vor dem Editieren
+  `generator_files` aller `testdata/port/**/*.json` gegen die eigene Diff-Liste
+  prüfen. In `references/porting-pitfalls.md` festgehalten (zwei Einträge).
+- Go bleibt Produktion; kein Cutover, kein Release. Nächster Slice unverändert
+  `migrate pseudonymize` (RUST-009; in Rust noch nicht vorhanden).
+
 ## Zwischenstand 2026-09-21 (nach `a28b6a09`) — P0 gefixt, Squash-Pin behoben
 
 - **Native CI beobachtet.** `0a123084` → Lauf `35539515206` grün;
