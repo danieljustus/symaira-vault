@@ -28,12 +28,20 @@
   origin/main` prüfen; schlägt das fehl, ist der Pin eine Zeitbombe. In
   `references/porting-pitfalls.md` festgehalten.
 - Go bleibt Produktion; kein Cutover, kein Release. Kein Branch-/Tag-Ereignis.
-- **Vorbestehende, nicht durch diese Arbeit verursachte rote Gates** (auf
-  pristine `origin/main` bestätigt): `rust-007-fixtures-check` und
-  `config-cli-differential` (Temp-Dir-Kollision in
+- **Korrektur früherer Fehleinordnungen** (eigene Fehler, ausdrücklich richtiggestellt):
+  - `rust-007-fixtures-check` ist **nicht** vorbestehend rot. Er ist auf `c60e3be5`
+    (alte Basis) und auf `f034f061` (jetzt) grün — der ursprüngliche „`config/contract.json`
+    is stale"-Befund war ein Fehlschluss aus einem `git stash`-Test, der nichts
+    zurückgesetzt hat, weil die Arbeit bereits committet war. `rust-007-differential`
+    (6 Fälle) ebenfalls grün, `config-profile-fixtures-check` 62 Cases PASS.
+  - `auth_commands` (2 Fälle) ist **nicht** vorbestehend rot. Vollständiger Lauf:
+    auf `c60e3be5` 3 passed/0 failed, auf `f034f061` 3 passed/0 failed, dreimal
+    sequenziell reproduzierbar grün. Der frühere Fehlschlag war eine
+    Parallel-Last-Erscheinung, kein Vertragsproblem und kein Baseline-Rot.
+- **Bestätigt vorbestehend rot** ist nur `config-cli-differential`:
+  auf `c60e3be5` reproduziert mit `os error 20` (Temp-Dir-Kollision in
   `agent_token_mutations_differential`, Mikrosekunden-Takt aus #1085; allein
-  ausgeführt grün). Zusätzlich lokal: `auth_commands` zwei Fälle, ebenfalls auf
-  pristine `origin/main` identisch rot.
+  ausgeführt grün). Das ist die einzige rote Baseline, die ich behaupten darf.
 
 ## Zwischenstand 2026-09-20, Teil 4 (nach `c60e3be5`) — P0 im Oracle, Slice pausiert
 
@@ -80,10 +88,12 @@ genau der Zustand nach einem fehlerhaften Lauf).
   nicht den Working Tree), `configclicasesgen`, `exportgen`, `import1passgen`,
   `importcsvgen`, `mcprendergen`, `sessiongen`, `gitio` (`internal/git`).
 - **Vorbestehende, nicht durch diesen Fix verursachte rote Gates** (auf
-  pristine `origin/main` bestätigt): `rust-007-fixtures-check`
-  („`config/contract.json` is stale“) und `config-cli-differential`
+  pristine `origin/main` bestätigt): `config-cli-differential`
   (Temp-Dir-Kollision in `agent_token_mutations_differential`, der
   Mikrosekunden-Takt aus #1085; allein ausgeführt grün).
+  **Korrektur:** `rust-007-fixtures-check` wurde hier ursprünglich mit
+  „`config/contract.json` is stale“ als vorbestehend rot geführt. Das war falsch
+  und ist oben richtiggestellt: das Gate ist auf der alten wie der neuen Basis grün.
 - **Slice-Entscheidung:** `migrate pseudonymize` nicht portieren, solange das
   Oracle den Defekt trägt. Byte-identische stdout/stderr-Fixture hätte die
   Datenlöschung als Vertrag eingefroren. #1089 ist inzwischen gemergt (`3232e31f`)
