@@ -1,0 +1,12 @@
+{
+  "tag": "v0.17.0",
+  "commit": "0c2c7769ac6074264e1c02fcdf903188b4f3fa08",
+  "artifact": "evidence/artifact/symvault-rollback-v0.22.1",
+  "artifact_sha256": "ef91189e52fb63a2aa9c9d6e4b72c70c816b2d570165a2774704d4bac80d5ff5",
+  "observed": {
+    "command": "env -i PATH=/usr/bin:/bin HOME=/var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/ev-home-h4czv9n1 /Users/daniel/.hermes/cache/scratch/evidence-wt/symaira-vault/evidence/artifact/symvault-rollback-v0.22.1 version",
+    "exit_code": 0,
+    "stdout": "symvault dev\n",
+    "stderr": ""
+  }
+}
