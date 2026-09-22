@@ -1,5 +1,53 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
+
+- **Basis:** `main` @ `d4aa2b13` (Merge `b9a48ac7` + Ledger `d4aa2b13`);
+  cligap-Baseline **missing 28**, Flag-Lücken 9, Alias 0, Rust-only 1
+  (Binary `f711a275b1c0`).
+- **Slice gewählt: `update`-Catch-all (Import-Muster): `update` (bare,
+  Help), `update info` sowie — Surface-only über die Eltern-Hilfe —
+  `update check`/`update apply` (**28 → 24** messbare Pfade; Flag-Lücken
+  9 → 12, weil `check --force`, `apply --force`, `apply --dry-run` jetzt
+  als unportiert auftauchen — ehrlich sichtbar, Runtime bleibt blocked:
+  HTTP-Check bzw. cosign).
+  Komplett offline (Versions-/Build-Infos, kein Vault-Zugang), Go-Referenz
+  `cmd/admin/update.go`. `update check`/`update apply` bleiben blocked-Rows
+  (HTTP-Check, cosign-Verify) und werden bewusst NICHT als clap-Subcommands
+  deklariert, solange die Runtime unportiert ist — Help-Erreichbarkeit
+  ohne Runtime würde die cligap-Zahl schöner machen, als sie ist.
+- **Worktree:** `symaira-vault-wt-update-info`, Branch `feat/update-info`
+  @ `d4aa2b13`, ein Schreiber (Selbst-Bau, 429-Dispatch entfällt).
+- **Gate-Reparatur parallel:** `make port-contract` scheiterte auf macOS
+  lokal am Doppelslash-Paritätsbug in `agent whoami` (Go `filepath.Clean`
+  vs. Rust roher Pfad; Ubuntu-CI grün, weil dort TMPDIR keinen
+  Trailing-Slash hat) — Issue #1108, PR #1109 **gemergt `23dab1b9`**;
+  der Baseline-Lauf läuft danach weiter bis #1111 (s. u.).
+- **Fund unterwegs:** `make config-cli-differential` scheitert lokal auf
+  macOS deterministisch (Go meldet `/private/var/…`, Rust `/var/…`;
+  Issue #1111) — pre-existing, unabhängig von Slice und #1109, in der
+  Ubuntu-CI unsichtbar; lokaler `port-contract`-Lauf endet dort,
+  kanonisches Gate = CI. Windows-Clippy-Fix `b78bd4b1` (`Path`-Import
+  in `update_commands` unix-gated, Platform-Gated-Import-Falle).
+- **Fixture:** 13 Cases, Oracle `d4aa2b13` (`target/port/symvault-go`,
+  sha256 `7b9ad076…`), Provenanz-Digest über 6 Go-Dateien +
+  corekit-Pin `v0.17.1-0.20260904101640-f3d3eb79b9b1`;
+  `platform: unix` für die vier Binary-Path-Cases (Windows-Fallback ist
+  `build-from-source`, dort eigener cfg-Unit-Test).
+- **Bewusste Nicht-Ziele:** Help-Rendering-Klasse wie zuvor (Rust zeigt
+  kein Cobra-Hilfetext), CLI-005 unverändert.
+- **Ergebnis (2026-09-22):** PR #1110 **gemergt `42e3218e`**
+  (`65a1db83` Implementierung, `b78bd4b1` Windows-Clippy-Fix
+  `Path`-Import). CI vollständig grün inkl. `Rust native
+  (windows-latest)` nach Rerun eines `symvault-sync`-Flakes
+  (`Access is denied` beim Git-Spawn, testunabhängig). Gates am
+  integrierten HEAD `42e3218e`: build/clippy `-D warnings`/`fmt --check` ✅,
+  `cargo test --workspace --all-features --locked` 0 Fehler ✅, cligap
+  **missing 24**, Flag-Lücken 12, Alias 0, Rust-only 1 ✅. Lokaler
+  `make port-contract` endet weiter an #1111 (`config-cli-differential`,
+  macOS-only) — kanonisches Gate = Ubuntu-CI (Job `Rust port contract`
+  grün, 6m21s).
+
 ## Zwischenstand 2026-09-22, Teil 15 — Slice `import review` gemergt (30 → 28)
 
 - **Basis:** `main` @ `a226a6f7`, Checkout sauber, kein fremder WIP, keine
