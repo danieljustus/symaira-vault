@@ -95,10 +95,22 @@ fn run(binary: &str, args: &[String], roots: &Roots) -> Output {
         .env("SYMVAULT_VAULT", &roots.vault)
         .env("SYMVAULT_PASSPHRASE", PASSPHRASE)
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("PATH", "/usr/bin:/bin")
         .env_remove("SYMVAULT_MCP_TOKEN")
         .env_remove("SYMVAULT_NO_ENV_WARNING")
         .env_remove("SYMVAULT_PROFILE")
+        // The oracle capture pinned PATH=/usr/bin:/bin (fixture-generation
+        // rule); Windows has no such directories and needs its inherited
+        // PATH so `init` can find git.
+        .env("PATH", {
+            #[cfg(unix)]
+            {
+                "/usr/bin:/bin"
+            }
+            #[cfg(not(unix))]
+            {
+                std::env::var_os("PATH").unwrap_or_default()
+            }
+        })
         .output()
         .expect("run symvault")
 }
