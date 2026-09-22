@@ -8,6 +8,13 @@ use std::{
 use zeroize::Zeroizing;
 
 static PIPE_WARNING_EMITTED: AtomicBool = AtomicBool::new(false);
+static QUIET: AtomicBool = AtomicBool::new(false);
+
+/// Mirrors Go's `cli.QuietMode`: `--quiet` also suppresses the environment
+/// passphrase warning (`WarnEnvPassphrase` returns early under QuietMode).
+pub(crate) fn set_quiet(quiet: bool) {
+    QUIET.store(quiet, Ordering::Relaxed);
+}
 
 pub(crate) fn read_passphrase(prompt: &str) -> Result<Zeroizing<String>, String> {
     eprint!("{prompt}");
@@ -89,9 +96,11 @@ pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<St
             {
                 return Err("environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
             }
-            eprintln!(
-                "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps."
-            );
+            if !QUIET.load(Ordering::Relaxed) {
+                eprintln!(
+                    "SYMVAULT_PASSPHRASE is active \u{2014} environment passphrases are visible in process listings and crash dumps."
+                );
+            }
             return Ok(pass);
         }
     }

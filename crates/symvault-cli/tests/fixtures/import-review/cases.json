@@ -1,0 +1,498 @@
+{
+ "schema": 1,
+ "slice": "import-review",
+ "oracle": {
+  "commit": "a226a6f74d406f6fb121992068638a9a03cba1d1",
+  "binary": "target/port/symvault-go",
+  "sha256": "76e3641fe631c59256891f192200a3e60eac2674e623b49bc8e2f5a805b887e3",
+  "captured": "2026-09-22",
+  "source_files": [
+    "cmd/admin/import.go",
+    "internal/cli/cli.go",
+    "internal/cli/terminal.go"
+  ],
+  "source_digest": "171520c95821f13a04d4bed00347e85a6f3fec7dde4750240cf326d7ccd46839"
+ },
+ "notes": [
+  "Every case ran the pinned Go oracle in its own throwaway HOME/XDG/vault root.",
+  "post_argv re-runs the oracle `list` after the main argv to pin the vault side effects.",
+  "The 'SYMVAULT_PASSPHRASE is active' stderr line is part of the oracle bytes on purpose."
+ ],
+ "cases": [
+  {
+   "id": "list-empty",
+   "desc": "no quarantine entries",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "list"
+   ],
+   "exit": 0,
+   "stdout": "No quarantined imports found.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "list-one-batch",
+   "desc": "single batch, count 2",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site2",
+     "--value",
+     "Val-Alpha-002"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "list"
+   ],
+   "exit": 0,
+   "stdout": "import-alpha  (2 entries)\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "list-two-batches-sorted",
+   "desc": "two batches sorted, normal entry excluded",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "quarantine/import-beta/db",
+     "--value",
+     "Val-Beta-0001"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ],
+    [
+     "add",
+     "work/normal",
+     "--value",
+     "Val-Normal-01"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "list"
+   ],
+   "exit": 0,
+   "stdout": "import-alpha  (1 entries)\nimport-beta  (1 entries)\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "list-quiet",
+   "desc": "quiet suppresses stdout",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "list",
+    "--quiet"
+   ],
+   "exit": 0,
+   "stdout": "",
+   "stderr": "",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "list-extra-arg",
+   "desc": "cobra.NoArgs message",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "list",
+    "oops"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: unknown command \"oops\" for \"symvault import review list\"\nError: unknown command \"oops\" for \"symvault import review list\"\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "review-bare",
+   "desc": "bare group prints help, exit 0",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review"
+   ],
+   "exit": 0,
+   "stdout": "Review and manage quarantined imports\n\nUsage:\n  symvault import review [command]\n\nAvailable Commands:\n  list        List quarantined import batches\n  promote     Promote quarantined entries to their final vault paths\n\nFlags:\n  -h, --help   help for review\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault import review [command] --help\" for more information about a command.\n",
+   "stderr": "",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "promote-success",
+   "desc": "promotes both, order lexical, work/keep untouched",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site2",
+     "--value",
+     "Val-Alpha-002"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ],
+    [
+     "add",
+     "work/keep",
+     "--value",
+     "Val-Keep-0001"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "import-alpha"
+   ],
+   "exit": 0,
+   "stdout": "Promoted: site1\nPromoted: site2\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "site1\nsite2\nwork/keep\n"
+  },
+  {
+   "id": "promote-nested-dest",
+   "desc": "dest work/aws needs parent dir",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/work/aws",
+     "--value",
+     "Val-Nested-1"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "import-alpha"
+   ],
+   "exit": 0,
+   "stdout": "Promoted: work/aws\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "work/aws\n"
+  },
+  {
+   "id": "promote-skip-existing",
+   "desc": "site1 skipped with warning, site2 promoted, exit 1",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "site1",
+     "--value",
+     "Val-Dest-Exist"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site2",
+     "--value",
+     "Val-Alpha-002"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "import-alpha"
+   ],
+   "exit": 1,
+   "stdout": "Warning: skipping site1 — destination already exists (use --overwrite)\nPromoted: site2\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: some entries could not be promoted\nError: some entries could not be promoted\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "quarantine/import-alpha/site1\nsite1\nsite2\n"
+  },
+  {
+   "id": "promote-overwrite",
+   "desc": "overwrite promotes both",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "site1",
+     "--value",
+     "Val-Dest-Exist"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site2",
+     "--value",
+     "Val-Alpha-002"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "import-alpha",
+    "--overwrite"
+   ],
+   "exit": 0,
+   "stdout": "Promoted: site1\nPromoted: site2\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "site1\nsite2\n"
+  },
+  {
+   "id": "promote-unknown",
+   "desc": "unknown id, doubled error, exit 1",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "work/normal",
+     "--value",
+     "Val-Normal-01"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "nope"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"nope\"\nError: no quarantined entries found for import-id \"nope\"\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "work/normal\n"
+  },
+  {
+   "id": "promote-zero-args",
+   "desc": "cobra.ExactArgs(1) message",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "promote-two-args",
+   "desc": "cobra.ExactArgs(1) message",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "a",
+    "b"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "promote-quiet-skip",
+   "desc": "quiet suppresses warning on stdout, error still doubled",
+   "seed": [
+    [
+     "init"
+    ],
+    [
+     "add",
+     "site1",
+     "--value",
+     "Val-Dest-Exist"
+    ],
+    [
+     "add",
+     "quarantine/import-alpha/site1",
+     "--value",
+     "Val-Alpha-001"
+    ]
+   ],
+   "argv": [
+    "import",
+    "review",
+    "promote",
+    "import-alpha",
+    "--quiet"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: some entries could not be promoted\nError: some entries could not be promoted\n",
+   "post_argv": [
+    "list"
+   ],
+   "post_exit": 0,
+   "post_stdout": "quarantine/import-alpha/site1\nsite1\n"
+  },
+  {
+   "id": "import-bare",
+   "desc": "cobra.ExactArgs(1) on parent import",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "import-two-args",
+   "desc": "cobra.ExactArgs(1) on import parent, two positionals",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "file.csv",
+    "extra"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  },
+  {
+   "id": "import-source-then-review",
+   "desc": "cobra finds only first non-flag arg as subcommand: ExactArgs(1) received 2",
+   "seed": [
+    [
+     "init"
+    ]
+   ],
+   "argv": [
+    "import",
+    "file.csv",
+    "review"
+   ],
+   "exit": 1,
+   "stdout": "",
+   "stderr": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n",
+   "post_argv": null,
+   "post_exit": null,
+   "post_stdout": ""
+  }
+ ]
+}
