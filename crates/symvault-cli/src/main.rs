@@ -4402,9 +4402,19 @@ fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
         let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
-        return Ok(PathBuf::from(home).join(raw.strip_prefix("~/").unwrap_or("")));
+        if raw == "~" {
+            // Go returns os.UserHomeDir() untouched for a bare "~".
+            return Ok(PathBuf::from(home));
+        }
+        // Go filepath.Join applies filepath.Clean to the joined result.
+        return Ok(agent_list_commands::clean_path(
+            &PathBuf::from(home).join(&raw[2..]),
+        ));
     }
-    Ok(PathBuf::from(raw))
+    // Go ExpandVaultDir ends in filepath.Clean (internal/cli/vaultpath.go);
+    // without it a duplicated separator (macOS TMPDIR-style `//`) leaks into
+    // rendered paths where Go normalizes it — github.com/danieljustus/symaira-vault/issues/1108.
+    Ok(agent_list_commands::clean_path(&PathBuf::from(raw)))
 }
 
 struct RuntimeSession {
@@ -4521,4 +4531,21 @@ fn write_unknown_version_flag() -> ExitCode {
         return ExitCode::from(1);
     }
     ExitCode::from(1)
+}
+
+#[cfg(test)]
+mod expand_vault_path_tests {
+    use super::*;
+
+    #[test]
+    fn expand_vault_path_cleans_like_go_filepath_clean() {
+        assert_eq!(
+            expand_vault_path(Path::new("/tmp//vault/./")).unwrap(),
+            PathBuf::from("/tmp/vault")
+        );
+        assert_eq!(
+            expand_vault_path(Path::new("a/../b")).unwrap(),
+            PathBuf::from("b")
+        );
+    }
 }

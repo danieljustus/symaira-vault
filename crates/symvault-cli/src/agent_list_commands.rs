@@ -212,7 +212,7 @@ fn expand_and_clean(home: &Path, raw_path: &str) -> PathBuf {
     clean_path(&expanded)
 }
 
-fn clean_path(path: &Path) -> PathBuf {
+pub(crate) fn clean_path(path: &Path) -> PathBuf {
     let mut clean = PathBuf::new();
     for component in path.components() {
         match component {
