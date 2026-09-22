@@ -24,6 +24,7 @@ mod export_commands;
 mod file_commands;
 mod history_commands;
 mod import_commands;
+mod import_review_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
@@ -417,8 +418,10 @@ enum Command {
     },
     /// Import entries from another password manager.
     Import {
-        #[arg(value_name = "SOURCE")]
-        source: PathBuf,
+        /// Catch-all: cobra validates exact-1-arg on the parent, and the
+        /// first non-flag word may name the `review` group (Find semantics).
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<OsString>,
         #[arg(long)]
         format: Option<String>,
         #[arg(long)]
@@ -1013,6 +1016,8 @@ fn run_cli() -> ExitCode {
             return ExitCode::from(code);
         }
     };
+
+    session_input::set_quiet(cli.quiet);
 
     match cli.command {
         Some(Command::Init { vault_dir, auth }) => {
@@ -1898,25 +1903,48 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Import {
-            source,
+            args,
             format,
             dry_run,
             prefix,
             skip_existing,
             overwrite,
             mapping,
-        }) => run_import(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            &source,
-            format.as_deref(),
-            dry_run,
-            &prefix,
-            skip_existing,
-            overwrite,
-            &mapping,
-            cli.quiet,
-        ),
+        }) => {
+            // cobra Find: only the FIRST non-flag word can name a
+            // subcommand, so `import file.csv review` is a parent call
+            // with two args — validated here before any vault access.
+            if args
+                .first()
+                .is_some_and(|arg| arg.to_str() == Some("review"))
+            {
+                run_import_review(
+                    &args[1..],
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    overwrite,
+                    cli.quiet,
+                )
+            } else if args.len() != 1 {
+                let error = format!("accepts 1 arg(s), received {}", args.len());
+                let _ = writeln!(io::stderr(), "Error: {error}");
+                let _ = writeln!(io::stderr(), "Error: {error}");
+                ExitCode::from(1)
+            } else {
+                run_import(
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    Path::new(&args[0]),
+                    format.as_deref(),
+                    dry_run,
+                    &prefix,
+                    skip_existing,
+                    overwrite,
+                    &mapping,
+                    cli.quiet,
+                )
+            }
+        }
         Some(Command::Version(_)) => {
             write_version(cli.output.as_deref().unwrap_or("text"), cli.json)
         }
@@ -3932,6 +3960,62 @@ fn run_delete(
         }
         Ok::<(), String>(())
     })();
+    finish_vault_result(result)
+}
+
+/// `symvault import review <list|promote>` — the word dispatch mirrors
+/// cobra's Find on the first non-flag argument. Arg validation runs before
+/// any vault access, matching cobra's Args validators (the fixture's arg
+/// errors carry no passphrase warning).
+fn run_import_review(
+    rest: &[OsString],
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    overwrite: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        match rest.first().map(|word| word.to_string_lossy()) {
+            // Bare `review`: the oracle prints the cobra group help and
+            // exits 0. Help rendering is a documented non-goal (same class
+            // as `symvault help`); exit status and silence are matched.
+            None => Ok(()),
+            Some(word) if word == "list" => {
+                if rest.len() > 1 {
+                    return Err(format!(
+                        "unknown command {:?} for \"symvault import review list\"",
+                        rest[1].to_string_lossy()
+                    ));
+                }
+                let vault = resolve_vault(explicit_vault, profile)?;
+                require_initialized(&vault)?;
+                let identity = device::unlock_vault(&vault)?;
+                import_review_commands::list(&vault, &identity, quiet)
+            }
+            Some(word) if word == "promote" => {
+                let promote_args = &rest[1..];
+                if promote_args.len() != 1 {
+                    return Err(format!("accepts 1 arg(s), received {}", promote_args.len()));
+                }
+                // ponytail: import ids are generated ASCII; a non-UTF-8 id
+                // is rejected instead of lossy-mangled (Go keeps raw
+                // os.Args bytes). Upgrade path: carry OsStr into the prefix.
+                let import_id = promote_args[0]
+                    .to_str()
+                    .ok_or_else(|| "import id is not valid UTF-8".to_owned())?;
+                let vault = resolve_vault(explicit_vault, profile)?;
+                require_initialized(&vault)?;
+                let identity = device::unlock_vault(&vault)?;
+                import_review_commands::promote(&vault, &identity, import_id, overwrite, quiet)
+            }
+            Some(word) => Err(format!(
+                "unknown command {word:?} for \"symvault import review\""
+            )),
+        }
+    })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 
