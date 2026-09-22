@@ -1,5 +1,41 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-22, Teil 15 — Slice `import review` gemergt (30 → 28)
+
+- **Basis:** `main` @ `a226a6f7`, Checkout sauber, kein fremder WIP, keine
+  Rest-Worktrees. Toolchain: Go 1.27.1, Rust/Cargo 1.98.0.
+- **cligap frisch auf `a226a6f7`** (`cargo build -p symvault-cli` + `go run
+  ./scripts/rust-port/cmd/cligap`, Binary sha256 `67a4a00077d4`): Oracle-Pfade
+  134, Rust-Pfade 99, **fehlend 30**, Flag-Lücken 9, Alias 0, Rust-only 1 —
+  deckungsgleich mit Teil 14.
+- **Slice gewählt: `import review list` + `import review promote` (30 → 28).**
+  Begründung: rein offline (`cli.WithVault` + `ListEntries/GetEntry/WriteEntry/
+  DeleteEntry`, alles bereits portiert), deterministisch (sortierte Import-IDs),
+  volle Byte-Prüfbarkeit inkl. Vault-Seiteneffekte. Go-Referenz
+  `cmd/admin/import.go` ~370–478.
+- **Blocked-Rows (bewusst, mit Wand):** `approval` + `approval list/decide`
+  (3 Pfade, loopback-HTTP gegen laufenden Server, kein HTTP-Client im
+  Workspace — dieselbe Wand wie `update check/apply`); `dynamic`/`dynamic
+  generate` (2, braucht PostgreSQL/AWS-Backends); `agent setup`
+  (Netzwerk-Downloads); `device approval-pair` (Server-Roundtrip);
+  `update check`/`update apply` (kein HTTP-Client, cosign). Offline-Teil
+  `update info` + `update`-Hilfetext bleibt freier Kandidat für den Folge-Slice.
+  `CLI-005` (doppelte `Error:`-Zeilen, Exit-Dialekt) weiter offen, absichtlich
+  nicht mitgefixt.
+- **Dispatch:** Worktree
+  `/Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/Repos/symaira-vault-wt-import-review`,
+  Branch `feat/import-review` @ `a226a6f7`, ein Worker
+  (`CLI-IMPORT-REVIEW-001`), Fixed-Field-Set aus `references/worker-dispatch.md`,
+  required skills `go-rust-port-parity`, `code-editing`. Koordinator alleiniger
+  Schreiber von Ledger, gemeinsamen Manifests und CI.
+- **Geladene Skills dieser Sitzung (nicht erneut laden):** `go-to-rust-migration`
+  (SKILL.md + `references/worker-dispatch.md`), `guard-repo`,
+  `go-rust-port-parity` + `references/workflow.md`, `autonomous-coding-agents`,
+  `parallel-repo-agents`, `code-editing`. `contract-matrix.md`,
+  `differential-testing.md`, `rust-stack.md`, `references/porting-pitfalls.md`
+  noch **nicht** geladen — nur bei Bedarf nachladen.
+- Kein Cutover, kein Release; Go bleibt Produktion und Oracle.
+
 ## Zwischenstand 2026-09-21, Teil 14 (nach `f80ef938`) — `agent upgrade` gemergt (#1104), 31 → 30
 
 - **PR [#1104](https://github.com/danieljustus/symaira-vault/pull/1104) squash-gemergt
