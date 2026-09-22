@@ -2,9 +2,9 @@
   "tag": "v0.17.0",
   "commit": "0c2c7769ac6074264e1c02fcdf903188b4f3fa08",
   "artifact": "evidence/artifact/symvault",
-  "artifact_sha256": "be66826a6789dba9351323a3cfc1b84731f999bd737f9080a870e0bbeccf5ca2",
+  "artifact_sha256": "33073a67707b653c189506d9f899c85db334b274136fbf7cdcac52ff6c9b2c69",
   "observed": {
-    "command": "env -i PATH=/usr/bin:/bin HOME=/var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/ev-home-lpi1dd8i /Users/daniel/.hermes/cache/scratch/evidence-wt/symaira-vault/evidence/artifact/symvault version",
+    "command": "env -i PATH=/usr/bin:/bin HOME=/var/folders/7v/7bpq0fjn44lflpxdylsx8qs40000gn/T/ev-vault-3fz6ro0_ /Volumes/1TB_NVMe_SN850X/Dev/Symaira_Dev/Repos/symaira-vault/evidence/artifact/symvault version",
     "exit_code": 0,
     "stdout": "symvault dev\n",
     "stderr": ""
