@@ -1,0 +1,187 @@
+{
+  "oracle": {
+    "commit": "d4aa2b13",
+    "binary": "target/port/symvault-go",
+    "sha256": "7b9ad076cf5866fc1bf41cf2cc6df71231826541ff5b415c17cd27a10d4f216d",
+    "captured": "2026-09-22",
+    "generated_on": "darwin",
+    "source_files": [
+      "cmd/admin/update.go",
+      "internal/cli/cli.go",
+      "internal/cli/output.go",
+      "internal/cli/output/output.go",
+      "internal/update/apply.go",
+      "internal/update/installmethod/detect.go"
+    ],
+    "source_digest": "df594d5bc1f7d2df2fcd0ee3f06ded391c93195d39e24c72147e8161ba1468bd",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "env": "HOME/XDG/TMP throwaway, PATH=/usr/bin:/bin, SYMVAULT_* unset, HOMEBREW_PREFIX/GOPATH/GOMODCACHE unset, LANG=C, TZ=UTC"
+  },
+  "cases": [
+    {
+      "id": "update-bare",
+      "desc": "update bare",
+      "argv": [
+        "update"
+      ],
+      "exit": 0,
+      "stdout": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n",
+      "stderr": "",
+      "platform": "any"
+    },
+    {
+      "id": "update-help",
+      "desc": "update help",
+      "argv": [
+        "update",
+        "--help"
+      ],
+      "exit": 0,
+      "stdout": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n",
+      "stderr": "",
+      "platform": "any"
+    },
+    {
+      "id": "update-parent-output-text",
+      "desc": "update parent output text",
+      "argv": [
+        "update",
+        "--output",
+        "text"
+      ],
+      "exit": 0,
+      "stdout": "Check for Symaira Vault updates\n\nUsage:\n  symvault update [flags]\n  symvault update [command]\n\nExamples:\n  symvault update check\n\nAvailable Commands:\n  apply       Apply the latest Symaira Vault self-update\n  check       Check GitHub for a newer Symaira Vault release\n  info        Show Symaira Vault installation method info\n\nFlags:\n  -h, --help   help for update\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault update [command] --help\" for more information about a command.\n",
+      "stderr": "",
+      "platform": "any"
+    },
+    {
+      "id": "update-parent-output-json",
+      "desc": "update parent output json",
+      "argv": [
+        "update",
+        "--output",
+        "json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "Error: output format \"json\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n",
+      "platform": "any"
+    },
+    {
+      "id": "update-parent-output-yaml",
+      "desc": "update parent output yaml",
+      "argv": [
+        "update",
+        "--output",
+        "yaml"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "Error: output format \"yaml\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"yaml\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n",
+      "platform": "any"
+    },
+    {
+      "id": "update-unknown-flag-parent",
+      "desc": "update unknown flag parent",
+      "argv": [
+        "update",
+        "--json"
+      ],
+      "exit": 9,
+      "stdout": "",
+      "stderr": "Error: output format \"json\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault update' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n",
+      "platform": "any"
+    },
+    {
+      "id": "update-unknown-sub",
+      "desc": "update unknown sub",
+      "argv": [
+        "update",
+        "bogus"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: unknown command \"bogus\" for \"symvault update\"\nError: unknown command \"bogus\" for \"symvault update\"\n",
+      "platform": "any"
+    },
+    {
+      "id": "update-info",
+      "desc": "update info",
+      "argv": [
+        "update",
+        "info"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Installation method: direct-download\nBinary path: {{BINARY}}\nSelf-update: supported\nGuidance: Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\n",
+      "platform": "unix"
+    },
+    {
+      "id": "update-info-json",
+      "desc": "update info json",
+      "argv": [
+        "update",
+        "info",
+        "--json"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"direct-download\",\n  \"binary_path\": \"{{BINARY}}\",\n  \"self_update_supported\": true,\n  \"guidance\": \"Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\"\n}\n",
+      "stderr": "",
+      "platform": "unix"
+    },
+    {
+      "id": "update-info-output-json",
+      "desc": "update info output json",
+      "argv": [
+        "update",
+        "info",
+        "--output",
+        "json"
+      ],
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"direct-download\",\n  \"binary_path\": \"{{BINARY}}\",\n  \"self_update_supported\": true,\n  \"guidance\": \"Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\"\n}\n",
+      "stderr": "",
+      "platform": "unix"
+    },
+    {
+      "id": "update-info-output-yaml",
+      "desc": "update info output yaml",
+      "argv": [
+        "update",
+        "info",
+        "--output",
+        "yaml"
+      ],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Installation method: direct-download\nBinary path: {{BINARY}}\nSelf-update: supported\nGuidance: Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh\n",
+      "platform": "unix"
+    },
+    {
+      "id": "update-info-extra",
+      "desc": "update info extra",
+      "argv": [
+        "update",
+        "info",
+        "extra"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: unknown command \"extra\" for \"symvault update info\"\n",
+      "platform": "any"
+    },
+    {
+      "id": "update-unknown-flag-info",
+      "desc": "update unknown flag info",
+      "argv": [
+        "update",
+        "info",
+        "--bogus"
+      ],
+      "exit": 1,
+      "stdout": "",
+      "stderr": "Error: unknown flag: --bogus\n",
+      "platform": "any"
+    }
+  ]
+}

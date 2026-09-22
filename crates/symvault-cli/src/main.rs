@@ -40,6 +40,7 @@ mod session_input;
 mod share_commands;
 mod sync_commands;
 mod template_commands;
+mod update_commands;
 mod utility_commands;
 mod vault_commands;
 mod verify_commands;
@@ -456,6 +457,13 @@ enum Command {
         /// Session duration override (for example, 30m or 1h).
         #[arg(long, value_name = "DURATION")]
         ttl: Option<String>,
+    },
+    /// Check for Symaira Vault updates or show installation-method info.
+    Update {
+        /// Catch-all: cobra Find dispatches on the first non-flag word
+        /// (`info`); unknown words reach the runner for byte-exact errors.
+        #[arg(value_name = "COMMAND", num_args = 0..)]
+        args: Vec<OsString>,
     },
     /// Manage vault authentication and session status.
     Auth {
@@ -2034,6 +2042,9 @@ fn run_cli() -> ExitCode {
             dry_run,
             cli.quiet,
         ),
+        Some(Command::Update { args }) => {
+            update_commands::run(&args, cli.output.as_deref().unwrap_or("text"), cli.json)
+        }
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
