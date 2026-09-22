@@ -13,7 +13,7 @@
 
 use std::ffi::OsString;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use serde::Serialize;
@@ -303,6 +303,10 @@ fn detect_from_writability(_abs_path: &str) -> &'static str {
 #[cfg(unix)]
 fn detect_from_writability(abs_path: &str) -> &'static str {
     use std::os::unix::fs::MetadataExt;
+    // Platform-gated: `Path` is only used on unix (windows takes &str),
+    // so the import lives inside this cfg to keep -D unused-imports green
+    // on every target.
+    use std::path::Path;
 
     let dir = Path::new(abs_path)
         .parent()
