@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
 - Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
 
-## [Unreleased]
+## [v0.23.0] - 2026-09-22
 
 ### Changed (breaking)
 - The config loader now rejects a session duration the operator set to a
@@ -37,6 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default. Only hand-edited files are affected — the writer has never emitted
   either form. Migration and a grep to find affected files:
   [docs/rust-port/consumer-handoff-config-20260915.md](docs/rust-port/consumer-handoff-config-20260915.md).
+
+### Added
+- `symvault update info` and the update surface are ported against the frozen
+  Go oracle (28 → 24 known oracle gaps), with the CFG-003 step-two rejections
+  pinned by new oracle tests.
+
+## [Unreleased]
+
+> **Editorial note (2026-09-22):** bullets below this line predate the
+> v0.21.0–v0.22.1 releases, which never received their own sections — they
+> have already shipped, attribution pending. Tracked in #1115.
 
 ### Fixed
 - MCP HTTP startup no longer fails intermittently with `bad file descriptor`
