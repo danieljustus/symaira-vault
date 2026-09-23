@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"filippo.io/age"
+
 	"github.com/danieljustus/symaira-vault/internal/config"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 	"github.com/danieljustus/symaira-vault/internal/vault"
