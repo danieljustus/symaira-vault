@@ -3530,7 +3530,7 @@ fn run_get(
     }
     let result = (|| -> Result<(), CliError> {
         let vault = resolve_vault(explicit_vault, profile).map_err(CliError::internal)?;
-        require_initialized(&vault).map_err(CliError::internal)?;
+        require_initialized(&vault).map_err(|_| CliError::vault_not_initialized())?;
         let identity = device::unlock_vault_for_cli(&vault)?;
         let result = vault_commands::get(&vault, &identity, query);
         if length || digest || metadata {
@@ -3684,6 +3684,13 @@ fn finish_get_result(result: Result<(), CliError>) -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             let _ = writeln!(io::stderr(), "Error: {error}");
+            if error.effective_exit_code() == symvault_core::error::ExitCode::NotInitialized {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+                let _ = writeln!(
+                    io::stderr(),
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+            }
             if let Some(hint) = error.hint() {
                 let _ = writeln!(io::stderr(), "Hint: {hint}");
             }

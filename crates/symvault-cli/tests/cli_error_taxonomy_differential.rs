@@ -45,6 +45,35 @@ fn assert_error_streams(output: &Output, case: &str) {
 }
 
 #[test]
+fn get_on_uninitialized_vault_matches_go_exit_and_hint() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
+    let home = tempfile::tempdir().expect("isolated home");
+    let vault = home.path().join("missing-vault");
+    let go = run(
+        Path::new(&go_binary),
+        &["get", "ghost", "--print"],
+        &vault,
+        home.path(),
+        false,
+    );
+    let rust = run(
+        rust_binary,
+        &["get", "ghost", "--print"],
+        &vault,
+        home.path(),
+        false,
+    );
+    assert_eq!(go.status.code(), Some(3));
+    assert_eq!(rust.status, go.status);
+    assert_eq!(rust.stdout, go.stdout);
+    assert_eq!(rust.stderr, go.stderr);
+}
+
+#[test]
 fn invalid_config_auth_and_not_found_follow_go_exit_taxonomy() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
