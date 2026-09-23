@@ -205,6 +205,16 @@ fn parse_timestamp(v: &str) -> Option<i128> {
     if m == 0 || m > 12 || d == 0 || d > 31 || h > 23 || min > 59 || sec > 60 {
         return None;
     };
+    let leap_year = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let days_in_month = match m {
+        2 if leap_year => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if d > days_in_month {
+        return None;
+    }
     let (frac, end) = if b[19] == b'.' || b[19] == b',' {
         let end = 20
             + b[20..]
@@ -884,6 +894,9 @@ mod tests {
         );
         assert_eq!(parse_timestamp("1970-01-01T00:00:00,000Z"), Some(0));
         assert_eq!(parse_timestamp("2026-09-23T12:00:00++1:00"), None);
+        assert!(parse_timestamp("2024-02-29T00:00:00Z").is_some());
+        assert_eq!(parse_timestamp("2023-02-29T00:00:00Z"), None);
+        assert_eq!(parse_timestamp("2099-02-30T00:00:00Z"), None);
     }
     #[test]
     fn identity_round_trip_and_max_lifetime() {

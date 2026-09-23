@@ -63,10 +63,12 @@ type sessionFixture struct {
 }
 
 type sessionCase struct {
-	Name       string   `json:"name"`
-	Operations []string `json:"operations"`
-	Expected   string   `json:"expected"`
-	ErrorClass string   `json:"error_class,omitempty"`
+	Name        string          `json:"name"`
+	Operations  []string        `json:"operations"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	Expected    string          `json:"expected"`
+	ErrorClass  string          `json:"error_class,omitempty"`
+	NonMutating bool            `json:"non_mutating,omitempty"`
 }
 
 type quotaFixture struct {
@@ -116,7 +118,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 5)
+	cases := make([]sessionCase, 0, 8)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -148,6 +150,24 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	malformed := &fakeKeyring{values: map[string]string{key: "not-json"}}
 	_, err = session.NewManager(malformed, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("malformed", []string{"load_passphrase"}, err))
+
+	// encoding/json rejects impossible calendar dates in time.Time fields.
+	// Probes treat that record as expired without rewriting or evicting it.
+	const invalidCalendarTimestamp = `{"saved_at":"2099-02-30T00:00:00Z","last_access":"2099-02-30T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"x","nonce":"x"}`
+	probe := &fakeKeyring{values: map[string]string{key: invalidCalendarTimestamp}}
+	if !session.NewManager(probe, nil).IsSessionExpired(v) {
+		panic("invalid calendar timestamp was not expired")
+	}
+	if probe.values[key] != invalidCalendarTimestamp {
+		panic("expiry probe mutated malformed session")
+	}
+	cases = append(cases, sessionCase{
+		Name:        "invalid_calendar_timestamp_probe",
+		Operations:  []string{"is_session_expired"},
+		Input:       json.RawMessage(invalidCalendarTimestamp),
+		Expected:    "expired",
+		NonMutating: true,
+	})
 	cases = append(cases, identityMetadataCases()...)
 	_ = meta
 	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}

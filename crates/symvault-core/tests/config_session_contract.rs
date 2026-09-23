@@ -232,6 +232,10 @@ struct SessionCase {
     name: String,
     expected: String,
     error_class: Option<String>,
+    #[serde(default)]
+    input: Option<serde_json::Value>,
+    #[serde(default)]
+    non_mutating: bool,
 }
 
 fn session_fixture() -> SessionFixture {
@@ -252,7 +256,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 7);
+    assert_eq!(fixture.cases.len(), 8);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -309,6 +313,23 @@ fn generated_session_cases_match_rust_manager() {
         .unwrap_err();
     assert_eq!(malformed.error_class.as_deref(), Some("malformed"));
     assert!(matches!(error, SessionError::Malformed(_)));
+
+    let invalid_calendar = cases
+        .iter()
+        .find(|case| case.name == "invalid_calendar_timestamp_probe")
+        .unwrap();
+    assert_eq!(invalid_calendar.expected, "expired");
+    assert!(invalid_calendar.non_mutating);
+    let raw = serde_json::to_vec(invalid_calendar.input.as_ref().unwrap()).unwrap();
+    let keyring = Arc::new(MemoryKeyring::new());
+    keyring.set(&key("session"), &raw).unwrap();
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    assert!(manager.is_session_expired("fixture-vault"));
+    assert_eq!(
+        keyring.get(&key("session")).unwrap(),
+        raw,
+        "Go's expiry probe must not mutate the malformed record"
+    );
 
     let keyring = Arc::new(MemoryKeyring::new());
     let manager = SessionManager::with_system_clock(keyring.clone());

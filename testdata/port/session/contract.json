@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "28a0fbaa88e373a8bdb74632752297a553d52db275f262be6dc97460d2eb02e4"
+    "generator_digest": "a3187f7e114fb9768d0076ebd6a5d38bc61a197b591d13ef8a627101edbc6c56"
   },
   "cases": [
     {
@@ -57,6 +57,21 @@
       ],
       "expected": "error",
       "error_class": "malformed"
+    },
+    {
+      "name": "invalid_calendar_timestamp_probe",
+      "operations": [
+        "is_session_expired"
+      ],
+      "input": {
+        "saved_at": "2099-02-30T00:00:00Z",
+        "last_access": "2099-02-30T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "x",
+        "nonce": "x"
+      },
+      "expected": "expired",
+      "non_mutating": true
     },
     {
       "name": "identity_refreshes_shared_session",
