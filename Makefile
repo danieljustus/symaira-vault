@@ -1,4 +1,15 @@
 .PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: dist-archive-metadata-test dist-archive-metadata-check
+
+DIST_VERSION ?=
+RUST_DIST_DIR ?= dist/rust
+
+dist-archive-metadata-test:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/distcontract -count=1
+
+dist-archive-metadata-check: dist-archive-metadata-test
+	test -n "$(DIST_VERSION)" || { echo "set DIST_VERSION to the staged Rust release version" >&2; exit 2; }
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/distcontract --repo . --rust-dir "$(RUST_DIST_DIR)" --version "$(DIST_VERSION)"
 
 # Variables
 BINARY_NAME := symvault
