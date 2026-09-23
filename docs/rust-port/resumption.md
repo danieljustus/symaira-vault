@@ -41,6 +41,11 @@
   HTTP/1.0-Initialisierung wurde entlang des vorhandenen Go-Fixtures ergänzt;
   der neue Rust-Replay ist vor dem CI-Lauf noch nicht ausgeführt. HTTP/1.0-
   Fehlerantworten und `Connection: keep-alive` bleiben offen.
+  `ui --print-keybindings` und der `intake`-Elternbefehl mit Dry-run,
+  Datei-/Byte-Limit und OCR-Text sind als Quelländerungen integriert. Ihre
+  gepinnten Go-Differentiale laufen im nächsten nativen CLI-Gate; am neuen
+  Head liegen noch keine Runtime-Ergebnisse vor. `--move-to-trash` bleibt
+  auf macOS offen und wird dort von Rust nicht ausgeführt.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,

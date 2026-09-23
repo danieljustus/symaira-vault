@@ -103,15 +103,13 @@ fn render_parent_output(
     quiet: bool,
 ) -> Result<(), String> {
     if json {
-        let mut value = serde_json::Map::new();
-        if !import_id.is_empty() {
-            value.insert("import_id".into(), serde_json::json!(import_id));
+        #[derive(serde::Serialize)]
+        struct Output<'a> {
+            #[serde(skip_serializing_if = "str::is_empty")]
+            import_id: &'a str,
+            results: &'a [FileResult],
         }
-        value.insert(
-            "results".into(),
-            serde_json::to_value(results).map_err(|error| error.to_string())?,
-        );
-        serde_json::to_writer_pretty(io::stdout().lock(), &value)
+        serde_json::to_writer_pretty(io::stdout().lock(), &Output { import_id, results })
             .map_err(|error| format!("encode intake output: {error}"))?;
         println!();
         return Ok(());
