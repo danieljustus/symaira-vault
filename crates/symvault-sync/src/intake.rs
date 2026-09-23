@@ -52,6 +52,8 @@ pub struct FileResult {
     pub reason: Option<String>,
     pub provenance: Option<Provenance>,
     pub suggestions: Vec<Suggestion>,
+    #[serde(skip)]
+    pub spool_path: Option<PathBuf>,
 }
 #[derive(Debug, Error)]
 pub enum IntakeError {
@@ -59,6 +61,8 @@ pub enum IntakeError {
     InvalidSource(String),
     #[error("source exceeds limit")]
     Limit,
+    #[error("staged copy verification failed")]
+    Verification,
     #[error("I/O failed: {0}")]
     Io(#[from] io::Error),
 }
@@ -243,7 +247,7 @@ impl Spool {
         &self,
         path: impl AsRef<Path>,
         limit: u64,
-    ) -> Result<(Vec<u8>, Provenance), IntakeError> {
+    ) -> Result<(Vec<u8>, Provenance, PathBuf), IntakeError> {
         let path = path.as_ref();
         let m =
             fs::symlink_metadata(path).map_err(|e| IntakeError::InvalidSource(e.to_string()))?;
@@ -296,30 +300,26 @@ impl Spool {
         staged.write_all(&data)?;
         staged.flush()?;
         if fs::read(staged.path())? != data {
-            return Err(IntakeError::InvalidSource(
-                "staged copy verification failed".into(),
-            ));
+            return Err(IntakeError::Verification);
         }
-        staged.keep().map_err(|e| IntakeError::Io(e.error))?;
-        Ok((
-            data.clone(),
-            Provenance {
-                source_path: path.to_string_lossy().into(),
-                source_name: path
-                    .file_name()
-                    .and_then(|x| x.to_str())
-                    .unwrap_or("entry")
-                    .into(),
-                source_type: source_type(&path.to_string_lossy(), &data),
-                size: data.len() as u64,
-                sha256: sha(&data),
-                mtime: after
-                    .modified()
-                    .ok()
-                    .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                    .map_or(0, |d| d.as_secs()),
-            },
-        ))
+        let (_, staged_path) = staged.keep().map_err(|e| IntakeError::Io(e.error))?;
+        let provenance = Provenance {
+            source_path: path.to_string_lossy().into(),
+            source_name: path
+                .file_name()
+                .and_then(|x| x.to_str())
+                .unwrap_or("entry")
+                .into(),
+            source_type: source_type(&path.to_string_lossy(), &data),
+            size: data.len() as u64,
+            sha256: sha(&data),
+            mtime: after
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_secs()),
+        };
+        Ok((data, provenance, staged_path))
     }
 }
 
@@ -357,7 +357,7 @@ impl Default for Options {
 pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileResult {
     let path = path.as_ref();
     match spool.stage(path, opts.max_file_size) {
-        Ok((data, mut p)) => {
+        Ok((data, mut p, spool_path)) => {
             p.source_type = source_type(&p.source_name, &data);
             FileResult {
                 file: path.to_string_lossy().into(),
@@ -365,6 +365,7 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
                 reason: None,
                 provenance: Some(p.clone()),
                 suggestions: suggestions(&data, p.source_type, &p.source_name),
+                spool_path: Some(spool_path),
             }
         }
         Err(IntakeError::Limit) => FileResult {
@@ -373,13 +374,20 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
             reason: Some("source exceeds limit".into()),
             provenance: None,
             suggestions: Vec::new(),
+            spool_path: None,
         },
         Err(e) => FileResult {
             file: path.to_string_lossy().into(),
-            status: "skipped".into(),
+            status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {
+                "error"
+            } else {
+                "skipped"
+            }
+            .into(),
             reason: Some(e.to_string()),
             provenance: None,
             suggestions: Vec::new(),
+            spool_path: None,
         },
     }
 }
@@ -427,6 +435,18 @@ pub fn quarantine<S: QuarantineSink>(
     }
     Ok(written)
 }
+/// One poll's public JSON and the private results needed for a later batch write.
+#[derive(Default, Serialize)]
+pub struct ScanResult {
+    pub scanned: usize,
+    pub staged: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub skipped: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub errors: Vec<String>,
+    #[serde(skip)]
+    pub staged_results: Vec<FileResult>,
+}
 #[derive(Clone, Debug)]
 pub struct Watcher {
     pub dir: PathBuf,
@@ -454,13 +474,60 @@ impl Watcher {
         now: SystemTime,
         spool: &Spool,
     ) -> Result<Vec<FileResult>, IntakeError> {
+        self.scan_internal(now, spool, true)
+            .map(|(_, results)| results)
+    }
+    pub fn scan_result_at(
+        &mut self,
+        now: SystemTime,
+        spool: &Spool,
+    ) -> Result<ScanResult, IntakeError> {
+        self.scan_internal(now, spool, false)
+            .map(|(summary, _)| summary)
+    }
+    pub fn scan_result(&mut self, spool: &Spool) -> Result<ScanResult, IntakeError> {
+        self.scan_result_at(SystemTime::now(), spool)
+    }
+    fn scan_internal(
+        &mut self,
+        now: SystemTime,
+        spool: &Spool,
+        strict_metadata: bool,
+    ) -> Result<(ScanResult, Vec<FileResult>), IntakeError> {
+        let mut res = ScanResult::default();
         let mut paths = Vec::new();
-        for e in fs::read_dir(&self.dir)? {
-            let e = e?;
-            if e.file_name().to_string_lossy().starts_with('.') || !e.file_type()?.is_file() {
+        let mut entries = fs::read_dir(&self.dir)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by_key(fs::DirEntry::file_name);
+        for e in entries {
+            let name = e.file_name();
+            if name.to_string_lossy().starts_with('.') {
                 continue;
             }
-            let m = e.metadata()?;
+            let file_type = match e.file_type() {
+                Ok(file_type) => file_type,
+                Err(error) => {
+                    if strict_metadata {
+                        return Err(error.into());
+                    }
+                    res.errors
+                        .push(format!("{}: {error}", name.to_string_lossy()));
+                    continue;
+                }
+            };
+            if !file_type.is_file() {
+                continue;
+            }
+            let m = match e.metadata() {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    if strict_metadata {
+                        return Err(error.into());
+                    }
+                    res.errors
+                        .push(format!("{}: {error}", name.to_string_lossy()));
+                    continue;
+                }
+            };
             if now
                 .duration_since(m.modified().unwrap_or(now))
                 .unwrap_or_default()
@@ -473,17 +540,33 @@ impl Watcher {
                 continue;
             }
             paths.push((e.path(), key));
+            res.scanned += 1;
         }
         paths.sort_by(|a, b| a.0.cmp(&b.0));
         let mut out = Vec::new();
         for (p, key) in paths {
             let r = process(spool, &p, &self.options);
             if let Some(prov) = r.provenance.as_ref().filter(|_| r.status == "ok") {
+                let staged_path = r.spool_path.as_ref().ok_or_else(|| {
+                    IntakeError::InvalidSource("successful intake has no staged copy".into())
+                })?;
                 self.seen.insert(key, prov.sha256.clone());
+                res.staged
+                    .get_or_insert_with(Vec::new)
+                    .push(staged_path.to_string_lossy().into_owned());
+                res.staged_results.push(r.clone());
+            } else {
+                let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("entry");
+                let message = format!("{name}: {}", r.reason.as_deref().unwrap_or_default());
+                if r.status == "error" {
+                    res.errors.push(message);
+                } else {
+                    res.skipped.push(message);
+                }
             }
             out.push(r);
         }
-        Ok(out)
+        Ok((res, out))
     }
     pub fn scan(&mut self, spool: &Spool) -> Result<Vec<FileResult>, IntakeError> {
         self.scan_at(SystemTime::now(), spool)

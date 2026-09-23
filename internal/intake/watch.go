@@ -139,6 +139,10 @@ func (w *Watcher) Scan() (ScanResult, error) {
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", filepath.Base(path), err))
 			continue
 		}
+		if fr.Status == StatusError {
+			res.Errors = append(res.Errors, fmt.Sprintf("%s: %s", filepath.Base(path), fr.Reason))
+			continue
+		}
 		if fr.Status != StatusOK {
 			res.Skipped = append(res.Skipped, fmt.Sprintf("%s: %s", filepath.Base(path), fr.Reason))
 			continue
