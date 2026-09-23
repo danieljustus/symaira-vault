@@ -21,6 +21,8 @@ pub enum ImportError {
     Limit(usize),
     #[error("import parse failed: {0}")]
     Parse(String),
+    #[error("distinct CSV paths collapse to the same UTF-8 path: {0}")]
+    PathCollision(String),
     #[error("import I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -145,6 +147,7 @@ pub fn parse_csv_profile(
     }
     let mut result = Vec::new();
     let mut used = std::collections::BTreeSet::new();
+    let mut emitted_paths = BTreeMap::<String, Vec<u8>>::new();
     let mut row = csv::ByteRecord::new();
     while reader
         .read_byte_record(&mut row)
@@ -197,11 +200,12 @@ pub fn parse_csv_profile(
             path = normalize_path(&host_from_url(url).to_lowercase());
             path_key = Some(normalize_path_key(path.as_bytes()));
         }
+        let raw_path_key = path_key
+            .clone()
+            .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
         if format != Format::Csv && !path.is_empty() {
             let base = path.clone();
-            let base_key = path_key
-                .take()
-                .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
+            let base_key = raw_path_key.clone();
             let mut candidate_key = base_key.clone();
             let mut suffix = 2;
             while used.contains(&candidate_key) {
@@ -210,6 +214,15 @@ pub fn parse_csv_profile(
                 suffix += 1;
             }
             used.insert(candidate_key);
+        }
+        if !path.is_empty() {
+            if let Some(previous_key) = emitted_paths.get(&path) {
+                if previous_key != &raw_path_key {
+                    return Err(ImportError::PathCollision(path));
+                }
+            } else {
+                emitted_paths.insert(path.clone(), raw_path_key);
+            }
         }
         result.push(ImportedEntry {
             path,

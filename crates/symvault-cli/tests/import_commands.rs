@@ -105,7 +105,7 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     fs::write(&malformed, b"title,password\n\"unterminated,secret\n").expect("malformed");
     let malformed_options = import_commands::ImportOptions {
         source: malformed,
-        ..options
+        ..options.clone()
     };
     let mut malformed_writes = 0;
     let error = import_commands::run_import(
@@ -122,6 +122,33 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     .expect_err("malformed import must fail");
     assert!(error.contains("parse import source"));
     assert_eq!(malformed_writes, 0);
+
+    let collision = root.join("collision.csv");
+    fs::write(
+        &collision,
+        b"name,url,username,password,note\n\xFF,https://one.example,u1,p1,\n\xFE,https://two.example,u2,p2,\n",
+    )
+    .expect("collision source");
+    let collision_options = import_commands::ImportOptions {
+        source: collision,
+        format: Some("chrome".into()),
+        ..options
+    };
+    let mut collision_writes = 0;
+    let error = import_commands::run_import(
+        &root,
+        &identity,
+        &collision_options,
+        |_, _, _, _| {
+            collision_writes += 1;
+            Ok(())
+        },
+        |_, _, _, _| Ok(()),
+        |_, _, _, _| panic!("unexpected secret metadata"),
+    )
+    .expect_err("colliding paths must fail before writes");
+    assert!(error.contains("distinct CSV paths"));
+    assert_eq!(collision_writes, 0);
     assert!(
         Store::open(&root, &identity)
             .unwrap()
