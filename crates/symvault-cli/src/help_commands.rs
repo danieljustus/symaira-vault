@@ -82,6 +82,7 @@ pub fn write<W: Write>(mut root: clap::Command, path: &[String], output: &mut W)
         ["dynamic"] => Some(DYNAMIC_HELP),
         ["dynamic", "generate"] => Some(DYNAMIC_GENERATE_HELP),
         ["setup"] => Some(SETUP_HELP),
+        ["update", command] => crate::update_commands::command_help(command),
         _ => None,
     };
     if let Some(help) = frozen {

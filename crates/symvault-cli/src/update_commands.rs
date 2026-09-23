@@ -320,7 +320,7 @@ fn print_command_help(command: &str) {
     print!("{}", command_help(command).expect("known update command"));
 }
 
-fn command_help(command: &str) -> Option<&'static str> {
+pub(crate) fn command_help(command: &str) -> Option<&'static str> {
     Some(match command {
         "info" => {
             "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
