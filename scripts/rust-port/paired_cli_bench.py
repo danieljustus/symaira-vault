@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure a paired read command on disposable Go-created vault copies.
+"""Measure paired CLI startup and read timings on disposable Go-created vault copies.
 
 Both binaries must already be built. The Go binary must identify itself as
 the frozen v0.22.1 oracle. Command output is captured and discarded; only
@@ -190,20 +190,32 @@ def build_report(
             side_home.mkdir()
         command_args = ["get", measured_entry, "--output", "json"]
 
-        def read_once(label: str) -> None:
-            env = isolated_env(homes[label], root, vaults[label], passphrase)
-            run_captured([str(binaries[label]), *command_args], env, f"{label} read")
+        def timed_once(label: str, args: list[str], operation: str) -> float:
+            start = time.perf_counter_ns()
+            env = (
+                isolated_env(homes[label], root)
+                if operation == "startup"
+                else isolated_env(homes[label], root, vaults[label], passphrase)
+            )
+            run_captured([str(binaries[label]), *args], env, f"{label} {operation}")
+            return (time.perf_counter_ns() - start) / 1_000_000
 
+        startup_args = ["version"]
+        startup_samples: dict[str, list[float]] = {"go": [], "rust": []}
+        read_samples: dict[str, list[float]] = {"go": [], "rust": []}
+        adjusted_samples: dict[str, list[float]] = {"go": [], "rust": []}
         for _ in range(warmups):
-            read_once("go")
-            read_once("rust")
-        samples: dict[str, list[float]] = {"go": [], "rust": []}
+            for label in ("go", "rust"):
+                timed_once(label, startup_args, "startup")
+                timed_once(label, command_args, "read")
         for index in range(runs):
             order = ("go", "rust") if index % 2 == 0 else ("rust", "go")
             for label in order:
-                start = time.perf_counter_ns()
-                read_once(label)
-                samples[label].append((time.perf_counter_ns() - start) / 1_000_000)
+                startup_ms = timed_once(label, startup_args, "startup")
+                read_ms = timed_once(label, command_args, "read")
+                startup_samples[label].append(startup_ms)
+                read_samples[label].append(read_ms)
+                adjusted_samples[label].append(read_ms - startup_ms)
 
         rss: dict[str, tuple[int | None, str | None]] = {"go": (None, None), "rust": (None, None)}
         if include_rss:
@@ -211,8 +223,10 @@ def build_report(
                 env = isolated_env(homes[label], root, vaults[label], passphrase)
                 rss[label] = rss_sample(binaries[label], command_args, env, label)
 
-        go_p95 = percentile(samples["go"], 95)
-        rust_p95 = percentile(samples["rust"], 95)
+        go_p95 = percentile(read_samples["go"], 95)
+        rust_p95 = percentile(read_samples["rust"], 95)
+        go_adjusted_p95 = percentile(adjusted_samples["go"], 95)
+        rust_adjusted_p95 = percentile(adjusted_samples["rust"], 95)
         return {
             "schema_version": 1,
             "benchmark": "paired-cli-get",
@@ -227,6 +241,13 @@ def build_report(
                 "runs_per_binary": runs,
                 "warmups_per_binary": warmups,
                 "latency_method": "subprocess wall time via perf_counter_ns, including startup",
+                "timing_decomposition": {
+                    "startup_command": "version",
+                    "startup_adjusted_remainder": "paired get duration minus version duration; includes Argon2 unlock, store read/decrypt, and JSON rendering",
+                    "remainder_isolated": False,
+                    "runs_per_binary": runs,
+                    "warmups_per_binary": warmups,
+                },
                 "p95_method": "nearest-rank",
                 "rss_samples_per_binary": 1 if include_rss else 0,
                 "rss_method": rss["go"][1] or rss["rust"][1],
@@ -237,8 +258,12 @@ def build_report(
             },
             "measurements": {
                 label: {
-                    "read_p50_ms": round(statistics.median(samples[label]), 3),
-                    "read_p95_ms": round(percentile(samples[label], 95), 3),
+                    "startup_p50_ms": round(statistics.median(startup_samples[label]), 3),
+                    "startup_p95_ms": round(percentile(startup_samples[label], 95), 3),
+                    "read_p50_ms": round(statistics.median(read_samples[label]), 3),
+                    "read_p95_ms": round(percentile(read_samples[label], 95), 3),
+                    "startup_adjusted_read_p50_ms": round(statistics.median(adjusted_samples[label]), 3),
+                    "startup_adjusted_read_p95_ms": round(percentile(adjusted_samples[label], 95), 3),
                     "max_rss_bytes": rss[label][0],
                 }
                 for label in binaries
@@ -246,6 +271,9 @@ def build_report(
             "comparison": {
                 "rust_binary_size_ratio": rust_binary.stat().st_size / go_binary.stat().st_size,
                 "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
+                "rust_startup_adjusted_read_p95_ratio": (
+                    rust_adjusted_p95 / go_adjusted_p95 if go_adjusted_p95 > 0 else None
+                ),
             },
             "value_gate_claim": "sample_only_not_a_cutover_verdict",
         }
