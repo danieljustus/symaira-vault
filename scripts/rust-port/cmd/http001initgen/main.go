@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,10 +96,10 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
-	const token = "http001-fixture-token"
-	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
 	registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
 	check(registry.Load())
+	_, token, err := registry.Create("baseline", []string{"*"}, "default", time.Hour)
+	check(err)
 	tokens := map[string]string{}
 	for _, scoped := range []struct {
 		name  string

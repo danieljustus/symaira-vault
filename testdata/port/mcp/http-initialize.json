@@ -121,6 +121,99 @@
         ],
         "body": "unauthorized\n"
       }
+    },
+    {
+      "name": "authenticated_allowed_health_tool",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "188",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n"
+      }
+    },
+    {
+      "name": "token_agent_mismatch_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "other",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "61",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "forbidden: token agent does not match X-Symaira-Agent header\n"
+      }
+    },
+    {
+      "name": "authenticated_tool_scope_denied",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "limited",
+        "token_agent": "default",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"get_entry\",\"arguments\":{\"path\":\"fixture\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "137",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"Tool \\\"get_entry\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n"
+      }
     }
   ]
 }
