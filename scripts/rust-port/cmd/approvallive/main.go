@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -202,6 +203,72 @@ func run(binary string) (runErr error) {
 		if entry.Status != want || entry.DecidedBy != "local-cli" {
 			return fmt.Errorf("queue state for %s = %+v, want %s by local-cli", id, entry, want)
 		}
+	}
+	return runMTLS(absoluteBinary, vault, queue, handler, certPath, serverCert)
+}
+
+func runMTLS(binary, vault string, queue *approval.Queue, handler http.Handler, certPath string, serverCert tls.Certificate) error {
+	fixtureDir, err := filepath.Abs(filepath.Join("crates", "symvault-cli", "tests", "fixtures", "approval-mtls"))
+	if err != nil {
+		return fmt.Errorf("resolve synthetic mTLS fixtures: %w", err)
+	}
+	caPath := filepath.Join(fixtureDir, "client-ca.pem")
+	clientCertPath := filepath.Join(fixtureDir, "approval-client.pem")
+	clientKeyPath := filepath.Join(fixtureDir, "approval-client.key")
+	caPEM, err := os.ReadFile(caPath) // #nosec G304 -- fixed repository test fixture path.
+	if err != nil {
+		return fmt.Errorf("read synthetic client CA: %w", err)
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(caPEM) {
+		return errors.New("parse synthetic client CA")
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: clientCAs, MinVersion: tls.VersionTLS12}
+	server.StartTLS()
+	defer server.Close()
+	port, err := serverPort(server)
+	if err != nil {
+		return err
+	}
+	if err := cli.SaveRuntimePort(vault, "127.0.0.1", port); err != nil {
+		return fmt.Errorf("write mTLS runtime port: %w", err)
+	}
+	id, err := enqueue(queue, "rust-mtls-approve")
+	if err != nil {
+		return err
+	}
+	if err := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, "", "", true); err != nil {
+		return fmt.Errorf("write missing mTLS identity: %w", err)
+	}
+	missing, err := runRustRaw(binary, vault, "--output", "json", "approval", "list")
+	if err != nil || missing.ExitCode != 1 || !bytes.Contains(missing.Stderr, []byte("dedicated local approval client certificate")) {
+		return fmt.Errorf("missing approval identity was accepted: exit=%d err=%v stderr=%q", missing.ExitCode, err, missing.Stderr)
+	}
+	if err := cli.SaveRuntimeTLSConfig(vault, certPath, filepath.Join(fixtureDir, "rotated-client-ca.pem"), clientCertPath, clientKeyPath, true); err != nil {
+		return fmt.Errorf("write rotated mTLS CA: %w", err)
+	}
+	rotated, err := runRustRaw(binary, vault, "--output", "json", "approval", "list")
+	if err != nil || rotated.ExitCode != 1 || !bytes.Contains(rotated.Stderr, []byte("verify local approval client identity")) {
+		return fmt.Errorf("rotated approval CA was accepted: exit=%d err=%v stderr=%q", rotated.ExitCode, err, rotated.Stderr)
+	}
+	if err := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, clientCertPath, clientKeyPath, true); err != nil {
+		return fmt.Errorf("write dedicated mTLS identity: %w", err)
+	}
+	list, err := runRust[listOutput](binary, vault, "--output", "json", "approval", "list")
+	if err != nil {
+		return fmt.Errorf("mTLS approval list: %w", err)
+	}
+	if len(list.Requests) != 1 || list.Requests[0].ID != id || list.Requests[0].Status != approval.StatusPending {
+		return fmt.Errorf("mTLS approval list = %+v, want pending %s", list, id)
+	}
+	decision, err := runRust[outcomeOutput](binary, vault, "--output", "json", "approval", "decide", id, "--approve")
+	if err != nil {
+		return fmt.Errorf("mTLS approval decide: %w", err)
+	}
+	entry, err := queue.Get(id)
+	if err != nil || entry.Status != approval.StatusApproved || entry.DecidedBy != "local-cli" || decision.Outcome.ID != id {
+		return fmt.Errorf("mTLS approval queue = %+v, outcome = %+v, err = %v", entry, decision, err)
 	}
 	return nil
 }
