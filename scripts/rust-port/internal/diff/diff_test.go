@@ -473,19 +473,20 @@ func TestIsolatedEnvRejectsSandboxAndKeyringOverrides(t *testing.T) {
 }
 
 func TestIsolatedEnvSuppressesTimestampedFreeBSDStartupLog(t *testing.T) {
+	isFreeBSD := runtime.GOOS == "freebsd"
 	env, err := isolatedEnv("/isolated/home", "/isolated/tmp", "/isolated/runtime", "/isolated/state", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, entry := range env {
 		if entry == "SYMVAULT_LOG_LEVEL=error" {
-			if runtime.GOOS != "freebsd" {
+			if !isFreeBSD {
 				t.Fatal("unexpected log-level override outside FreeBSD")
 			}
 			return
 		}
 	}
-	if runtime.GOOS == "freebsd" {
+	if isFreeBSD {
 		t.Fatal("FreeBSD must suppress timestamped startup logging")
 	}
 }
