@@ -28,6 +28,8 @@
   Nach einem erzwungenen Neubau des gemeinsam genutzten Cargo-Targets bestand
   `make config-cli-differential` vollständig, einschließlich der neuen
   `get`-Ausgabe- und Intake-Fälle sowie des ignorierten KDF-Migrationsfalls.
+  Ein zusätzlicher Go-generierter Exportfall belegt doppelte CSV-Spaltennamen
+  bei kollidierenden Feld-Mappings; der Rust-Export-Replay besteht lokal.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,

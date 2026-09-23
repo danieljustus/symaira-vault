@@ -61,6 +61,7 @@ func main() {
 		{Name: "nested", Entries: []exporter.ExportEntry{{Path: "nested", Data: map[string]any{"array": []any{"a", nil, true, []any{"b"}}, "map": map[string]any{"z": []any{"x", "y"}, "a": map[string]any{"b": "c"}}, "nil": nil, "number": 42}}}},
 		{Name: "attachments", Entries: []exporter.ExportEntry{{Path: "with-files", Data: map[string]any{"file_b64_0": "c3ludGhldGlj", "chunk_count": 1, "chunk_size": 9, "name": "fixture"}}, {Path: "only-files", Data: map[string]any{"file_b64_1": "c3ludGhldGlj"}}}},
 		{Name: "mapping", Entries: []exporter.ExportEntry{{Path: "first", Data: map[string]any{"username": "fixture", "field": "value"}}, {Path: "second", Data: map[string]any{"extra": "optional"}}}, Mapping: map[string]string{"username": " name", "extra": "", "field": "renamed"}},
+		{Name: "csv_header_collision", Entries: []exporter.ExportEntry{{Path: "first", Data: map[string]any{"alpha": "one"}}, {Path: "second", Data: map[string]any{"beta": "two"}}}, Mapping: map[string]string{"alpha": "same", "beta": "same"}},
 		{Name: "numbers", Entries: []exporter.ExportEntry{{Path: "numbers", Data: map[string]any{"zero": oracleFloat(0), "negative_zero": oracleFloat(math.Copysign(0, -1)), "whole_float": oracleFloat(42), "fraction": oracleFloat(42.5), "fixed_lower": oracleFloat(0.0001), "exponent_lower": oracleFloat(0.00001), "fixed_upper": oracleFloat(999999), "exponent_upper": oracleFloat(1e6), "large": oracleFloat(1e20), "rounded": oracleFloat(9007199254740993), "subnormal": oracleFloat(math.SmallestNonzeroFloat64), "max": oracleFloat(math.MaxFloat64)}}}},
 	}
 	for i := range cases {
@@ -98,7 +99,7 @@ func main() {
 		if !bytes.Equal(actual, encoded) {
 			must(fmt.Errorf("export fixture stale"))
 		}
-		fmt.Println("PASS export oracle (6 cases)")
+		fmt.Println("PASS export oracle (7 cases)")
 		return
 	}
 	must(os.WriteFile(path, encoded, 0600))
