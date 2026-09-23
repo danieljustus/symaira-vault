@@ -73,6 +73,20 @@ for variant in "$STAGED_FRAMEWORK"/ios-*; do
     "$variant/Modules/module.modulemap"
 done
 
+swift_smoke() {
+  local sdk="$1" target="$2" variant="$3" library="$4"
+  xcrun --sdk "$sdk" swiftc \
+    -target "$target" -sdk "$(xcrun --sdk "$sdk" --show-sdk-path)" \
+    -I "$STAGED_FRAMEWORK/$variant/Headers" \
+    "$ROOT/crates/symvault-ffi/tests/ios_smoke.swift" \
+    "$STAGED_FRAMEWORK/$variant/$library" \
+    -framework Security -framework CoreFoundation \
+    -o "$SCRATCH/smoke-$target"
+}
+swift_smoke iphoneos arm64-apple-ios17.0 ios-arm64 libsymvault_ffi.a
+swift_smoke iphonesimulator arm64-apple-ios17.0-simulator ios-arm64_x86_64-simulator libsymvault_ffi-simulator.a
+swift_smoke iphonesimulator x86_64-apple-ios17.0-simulator ios-arm64_x86_64-simulator libsymvault_ffi-simulator.a
+
 if [[ -e "$OUTPUT" || -L "$OUTPUT" ]]; then
   echo "refusing to replace existing output: $OUTPUT" >&2
   exit 1
