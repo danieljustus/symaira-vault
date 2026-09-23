@@ -120,7 +120,10 @@ pub(crate) fn unlock_passphrase_for_session_typed(
             {
                 return Err(PassphraseInputError::Other("environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned()));
             }
-            if !QUIET.load(Ordering::Relaxed) {
+            if !QUIET.load(Ordering::Relaxed)
+                && !std::env::var("SYMVAULT_NO_ENV_WARNING")
+                    .is_ok_and(|value| !value.is_empty() && value != "0")
+            {
                 eprintln!(
                     "SYMVAULT_PASSPHRASE is active \u{2014} environment passphrases are visible in process listings and crash dumps."
                 );

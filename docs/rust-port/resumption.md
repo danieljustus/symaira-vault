@@ -56,6 +56,12 @@
   `audit_rotate_key_cli_flow` und fand eine fehlende Passphrase in dessen
   isoliertem Testprozess. Der Test setzt sie nun explizit; die erneute
   FreeBSD-Ausführung steht aus.
+  Gepinnte Go-Hilfeseiten für `dynamic`, `dynamic generate` und `setup`
+  wurden bytegleich erfasst; der Rust-Lauf ist im nächsten CLI-Gate vorgesehen.
+  Der Linux-Portvertrag am vorherigen Head erreichte `cli_dynamic_generate`:
+  Rust zeigte trotz `SYMVAULT_NO_ENV_WARNING=1` eine Warnung, die Go korrekt
+  unterdrückt. Der gemeinsame Rust-Entsperrpfad beachtet diese Variable nun;
+  der neue Head muss den Differentialtest erneut ausführen.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
