@@ -1,0 +1,518 @@
+//! Source-bound HTTP subset of Go's API-template and egress broker contract.
+//! Oracle sources: proxy/auth at `ba4dc0680878870bfb30ccd39a0b973b960d3e09`,
+//! and `internal/ssrf/ssrf.go` at `c7c6d04b6dc6349800d12d87d605ae55081bf694`.
+//!
+//! This deliberately supports plain HTTP only. The full Go broker's TLS MITM,
+//! template catalog loading, vault lookup, substitutions, audit, and response
+//! pattern sanitizer remain separate migration work.
+
+use std::{
+    collections::BTreeMap,
+    io::{BufRead, BufReader, Read, Write},
+    net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs},
+    time::Duration,
+};
+
+const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
+const IO_TIMEOUT: Duration = Duration::from_secs(60);
+
+#[derive(Clone, Debug)]
+pub struct ApiTemplate {
+    pub base_url: String,
+    pub allowed_endpoints: Vec<String>,
+    pub allowed_methods: Vec<String>,
+    pub default_headers: BTreeMap<String, String>,
+    pub allow_private: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ApiResponse {
+    pub status: u16,
+    pub body: Vec<u8>,
+}
+
+/// Send one template-bound HTTP request. Redirects are returned as responses,
+/// never followed, so credentials cannot be redirected to a different host.
+pub fn execute_http(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+    bearer: Option<&str>,
+) -> Result<ApiResponse, String> {
+    let target = Target::parse(&template.base_url, endpoint)?;
+    if !template.allowed_endpoints.is_empty()
+        && !template
+            .allowed_endpoints
+            .iter()
+            .any(|pattern| endpoint_matches(pattern, target.endpoint_path))
+    {
+        return Err("endpoint not allowed by template".into());
+    }
+    if !template.allowed_methods.is_empty()
+        && !template
+            .allowed_methods
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(method))
+    {
+        return Err("method not allowed by template".into());
+    }
+    if !is_http_token(method) {
+        return Err("invalid request method".into());
+    }
+    if body.len() > MAX_RESPONSE_BYTES {
+        return Err("request body too large".into());
+    }
+    let addresses = resolve_and_check(&target.connect_authority, template.allow_private)?;
+    let mut stream = connect(&addresses)?;
+    stream
+        .set_read_timeout(Some(IO_TIMEOUT))
+        .and_then(|()| stream.set_write_timeout(Some(IO_TIMEOUT)))
+        .map_err(|_| "cannot configure upstream connection")?;
+
+    let mut outgoing = BTreeMap::new();
+    for (name, value) in headers.iter().chain(template.default_headers.iter()) {
+        validate_header(name, value)?;
+        if matches!(
+            name.to_ascii_lowercase().as_str(),
+            "host" | "content-length" | "transfer-encoding" | "connection" | "proxy-connection"
+        ) {
+            return Err("request header is controlled by the broker".into());
+        }
+        outgoing.insert(name.to_ascii_lowercase(), (name.as_str(), value.as_str()));
+    }
+    if let Some(token) = bearer.filter(|token| !token.is_empty()) {
+        if validate_header("Authorization", &format!("Bearer {token}")).is_err() {
+            return Err("invalid credential value".into());
+        }
+        outgoing.insert("authorization".into(), ("Authorization", ""));
+    } else if bearer.is_some() {
+        return Err("credential value is empty".into());
+    }
+
+    write!(
+        stream,
+        "{method} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
+        target.path, target.host_header
+    )
+    .map_err(|_| "cannot write upstream request")?;
+    for (key, (name, value)) in outgoing {
+        if key == "authorization" && bearer.is_some() {
+            write!(stream, "{name}: Bearer {}\r\n", bearer.unwrap_or_default())
+                .map_err(|_| "cannot write upstream request")?;
+        } else {
+            write!(stream, "{name}: {value}\r\n").map_err(|_| "cannot write upstream request")?;
+        }
+    }
+    write!(stream, "Content-Length: {}\r\n\r\n", body.len())
+        .and_then(|()| stream.write_all(body))
+        .map_err(|_| "cannot write upstream request")?;
+
+    let (status, mut response_body) = read_response(stream)?;
+    if let Some(token) = bearer.filter(|token| !token.is_empty()) {
+        response_body = replace_bytes(&response_body, token.as_bytes(), b"***");
+    }
+    Ok(ApiResponse {
+        status,
+        body: response_body,
+    })
+}
+
+struct Target<'a> {
+    connect_authority: String,
+    host_header: String,
+    path: String,
+    endpoint_path: &'a str,
+}
+
+impl<'a> Target<'a> {
+    fn parse(base_url: &str, endpoint: &'a str) -> Result<Self, String> {
+        let base = base_url.strip_prefix("http://").ok_or_else(|| {
+            "only http template URLs are supported by this broker slice".to_owned()
+        })?;
+        let (authority, base_path) = base.split_once('/').unwrap_or((base, ""));
+        if authority.is_empty()
+            || authority.contains('@')
+            || authority.contains('?')
+            || authority.contains('#')
+            || authority
+                .bytes()
+                .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'\\')
+        {
+            return Err("invalid template URL".into());
+        }
+        if base_path.contains('?') || base_path.contains('#') {
+            return Err("invalid template URL".into());
+        }
+        if !endpoint.starts_with('/')
+            || endpoint.bytes().any(|b| b.is_ascii_control() || b == b' ')
+            || endpoint.contains('#')
+        {
+            return Err("invalid endpoint".into());
+        }
+        let endpoint_path = endpoint.split('?').next().unwrap_or(endpoint);
+        let base_path = base_path.trim_end_matches('/');
+        let (path, query) = endpoint.split_once('?').unwrap_or((endpoint, ""));
+        let path = format!("{base_path}{path}");
+        let path = if query.is_empty() {
+            path
+        } else {
+            format!("{path}?{query}")
+        };
+        if !path.starts_with('/') || path.contains('\r') || path.contains('\n') {
+            return Err("invalid endpoint".into());
+        }
+        let has_port = authority.rsplit_once(':').is_some_and(|(_, port)| {
+            !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit())
+        });
+        let connect_authority = if has_port {
+            authority.to_owned()
+        } else {
+            format!("{authority}:80")
+        };
+        Ok(Self {
+            connect_authority,
+            host_header: authority.to_owned(),
+            path,
+            endpoint_path,
+        })
+    }
+}
+
+fn endpoint_matches(pattern: &str, path: &str) -> bool {
+    if pattern.ends_with("/*") {
+        let prefix = pattern.trim_end_matches("/*");
+        return (prefix.is_empty() || prefix == "/") && path.starts_with('/')
+            || path.starts_with(&format!("{prefix}/"));
+    }
+    let mut pattern_parts = pattern.split('/');
+    let mut path_parts = path.split('/');
+    loop {
+        match (pattern_parts.next(), path_parts.next()) {
+            (None, None) => return true,
+            (Some(p), Some(v)) if p == "*" || p == v => {}
+            _ => return false,
+        }
+    }
+}
+
+fn resolve_and_check(authority: &str, allow_private: bool) -> Result<Vec<SocketAddr>, String> {
+    let addresses = authority
+        .to_socket_addrs()
+        .map_err(|_| "cannot resolve upstream host")?
+        .collect::<Vec<_>>();
+    if addresses.is_empty() {
+        return Err("cannot resolve upstream host".into());
+    }
+    if !allow_private && addresses.iter().any(|addr| private_or_local(addr.ip())) {
+        return Err("blocked private or local upstream host".into());
+    }
+    Ok(addresses)
+}
+
+fn private_or_local(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+        }
+        IpAddr::V6(ip) => {
+            ip.to_ipv4_mapped()
+                .is_some_and(|mapped| private_or_local(IpAddr::V4(mapped)))
+                || ip.is_loopback()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+        }
+    }
+}
+
+fn connect(addresses: &[SocketAddr]) -> Result<TcpStream, String> {
+    for address in addresses {
+        if let Ok(stream) = TcpStream::connect_timeout(address, IO_TIMEOUT) {
+            return Ok(stream);
+        }
+    }
+    Err("cannot connect to upstream host".into())
+}
+
+fn is_http_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+fn validate_header(name: &str, value: &str) -> Result<(), String> {
+    if !is_http_token(name)
+        || value
+            .bytes()
+            .any(|byte| (byte < b' ' && byte != b'\t') || byte == 0x7f)
+    {
+        return Err("invalid request header".into());
+    }
+    Ok(())
+}
+
+fn read_response(stream: TcpStream) -> Result<(u16, Vec<u8>), String> {
+    let mut reader = BufReader::new(stream);
+    let status_line =
+        read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|status| status.parse::<u16>().ok())
+        .filter(|status| *status >= 100)
+        .ok_or("invalid upstream response")?;
+    let mut content_length = None;
+    let mut chunked = false;
+    let mut header_bytes = status_line.len();
+    loop {
+        let line = read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+        header_bytes += line.len();
+        if header_bytes > 64 * 1024 {
+            return Err("upstream response headers too large".into());
+        }
+        if line == "\r\n" {
+            break;
+        }
+        let (name, value) = line
+            .trim_end_matches(&['\r', '\n'][..])
+            .split_once(':')
+            .ok_or("invalid upstream response")?;
+        if name.eq_ignore_ascii_case("content-length") {
+            let parsed = value
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| "invalid upstream response")?;
+            if content_length.replace(parsed).is_some() {
+                return Err("invalid upstream response".into());
+            }
+        }
+        if name.eq_ignore_ascii_case("transfer-encoding") {
+            chunked = value
+                .split(',')
+                .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"));
+        }
+    }
+    if chunked && content_length.is_some() {
+        return Err("invalid upstream response".into());
+    }
+    let body = if chunked {
+        read_chunked(&mut reader)?
+    } else if let Some(length) = content_length {
+        if length > MAX_RESPONSE_BYTES {
+            return Err("upstream response too large".into());
+        }
+        let mut body = vec![0; length];
+        reader
+            .read_exact(&mut body)
+            .map_err(|_| "invalid upstream response")?;
+        body
+    } else {
+        let mut body = Vec::new();
+        reader
+            .take((MAX_RESPONSE_BYTES + 1) as u64)
+            .read_to_end(&mut body)
+            .map_err(|_| "upstream request failed")?;
+        if body.len() > MAX_RESPONSE_BYTES {
+            return Err("upstream response too large".into());
+        }
+        body
+    };
+    Ok((status, body))
+}
+
+fn read_chunked(reader: &mut BufReader<TcpStream>) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    loop {
+        let line = read_line_limited(reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+        let size = usize::from_str_radix(
+            line.trim_end_matches(&['\r', '\n'][..])
+                .split(';')
+                .next()
+                .ok_or("invalid upstream response")?,
+            16,
+        )
+        .map_err(|_| "invalid upstream response")?;
+        if size == 0 {
+            let mut trailer_bytes = 0;
+            loop {
+                let line =
+                    read_line_limited(reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+                trailer_bytes += line.len();
+                if trailer_bytes > 64 * 1024 {
+                    return Err("upstream response headers too large".into());
+                }
+                if line == "\r\n" || line.is_empty() {
+                    return Ok(body);
+                }
+            }
+        }
+        if body.len().saturating_add(size) > MAX_RESPONSE_BYTES {
+            return Err("upstream response too large".into());
+        }
+        let old_len = body.len();
+        body.resize(old_len + size, 0);
+        reader
+            .read_exact(&mut body[old_len..])
+            .map_err(|_| "invalid upstream response")?;
+        let mut crlf = [0; 2];
+        reader
+            .read_exact(&mut crlf)
+            .map_err(|_| "invalid upstream response")?;
+        if crlf != *b"\r\n" {
+            return Err("invalid upstream response".into());
+        }
+    }
+}
+
+fn read_line_limited<R: BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> Result<Option<String>, String> {
+    let mut bytes = Vec::new();
+    loop {
+        let available = reader.fill_buf().map_err(|_| "upstream request failed")?;
+        if available.is_empty() {
+            return if bytes.is_empty() {
+                Ok(None)
+            } else {
+                Err("invalid upstream response".into())
+            };
+        }
+        let take = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |index| index + 1);
+        if bytes.len() + take > max_bytes {
+            return Err("upstream response line too large".into());
+        }
+        let done = available[take - 1] == b'\n';
+        bytes.extend_from_slice(&available[..take]);
+        reader.consume(take);
+        if done {
+            return String::from_utf8(bytes)
+                .map(Some)
+                .map_err(|_| "invalid upstream response".into());
+        }
+    }
+}
+
+fn replace_bytes(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
+    if needle.is_empty() {
+        return haystack.to_vec();
+    }
+    let mut result = Vec::with_capacity(haystack.len());
+    let mut rest = haystack;
+    while let Some(index) = rest
+        .windows(needle.len())
+        .position(|window| window == needle)
+    {
+        result.extend_from_slice(&rest[..index]);
+        result.extend_from_slice(replacement);
+        rest = &rest[index + needle.len()..];
+    }
+    result.extend_from_slice(rest);
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{net::TcpListener, thread};
+
+    #[test]
+    fn loopback_transcript_injects_then_redacts_bearer() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut content_length = 0;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line.to_ascii_lowercase().starts_with("content-length:") {
+                    content_length = line
+                        .split_once(':')
+                        .and_then(|(_, value)| value.trim().parse::<usize>().ok())
+                        .unwrap_or_default();
+                }
+                request.extend_from_slice(line.as_bytes());
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            assert!(
+                String::from_utf8_lossy(&request).contains("Authorization: Bearer fixture-secret")
+            );
+            assert!(String::from_utf8_lossy(&request).contains("X-Mode: default"));
+            assert!(!String::from_utf8_lossy(&request).contains("X-Mode: caller"));
+            let mut request_body = vec![0; content_length];
+            reader.read_exact(&mut request_body).unwrap();
+            assert_eq!(request_body, b"{}");
+            let response = b"HTTP/1.1 200 OK\r\nContent-Length: 19\r\nConnection: close\r\n\r\nfixture-secret:ok!!";
+            stream.write_all(response).unwrap();
+        });
+        let template = ApiTemplate {
+            base_url: format!("http://{address}"),
+            allowed_endpoints: vec!["/v1/*".into()],
+            allowed_methods: vec!["POST".into()],
+            default_headers: BTreeMap::from([("X-Mode".into(), "default".into())]),
+            allow_private: true,
+        };
+        let response = execute_http(
+            &template,
+            "POST",
+            "/v1/items?x=1",
+            &BTreeMap::from([("X-Mode".into(), "caller".into())]),
+            b"{}",
+            Some("fixture-secret"),
+        )
+        .unwrap();
+        server.join().unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"***:ok!!");
+    }
+
+    #[test]
+    fn denied_target_and_endpoint_do_not_echo_credential() {
+        let template = ApiTemplate {
+            base_url: "http://127.0.0.1:9".into(),
+            allowed_endpoints: vec!["/safe/*".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: false,
+        };
+        let denied = execute_http(
+            &template,
+            "GET",
+            "/safe/item",
+            &BTreeMap::new(),
+            b"",
+            Some("must-not-leak"),
+        )
+        .unwrap_err();
+        assert!(!denied.contains("must-not-leak"));
+
+        let denied = execute_http(
+            &template,
+            "GET",
+            "/unsafe",
+            &BTreeMap::new(),
+            b"",
+            Some("must-not-leak"),
+        )
+        .unwrap_err();
+        assert_eq!(denied, "endpoint not allowed by template");
+        assert!(!denied.contains("must-not-leak"));
+    }
+}
