@@ -372,7 +372,7 @@ func doRawRequest(addr, token string, scopedTokens map[string]string, req reques
 	}
 	fmt.Fprintf(&wire, "X-Symaira-Agent: %s\r\nContent-Type: %s\r\nAccept: %s\r\nMCP-Protocol-Version: %s\r\nContent-Length: %d\r\n", req.Agent, req.ContentType, req.Accept, req.ProtocolVersion, len(body))
 	if req.DuplicateContentLength {
-		fmt.Fprintf(&wire, "Content-Length: %d\r\n", len(body))
+		fmt.Fprintf(&wire, "Content-Length: %d\r\n", len(body)+1)
 	}
 	wire.WriteString("Connection: close\r\n\r\n")
 	wire.WriteString(body)
