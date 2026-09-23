@@ -43,6 +43,9 @@ fn run_cli(vault: &Path, home: &Path, args: &[&str]) -> Output {
         .env("SYMVAULT_VAULT", vault)
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
+        .env("SYMVAULT_PASSPHRASE", "test-passphrase-123")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .env("SYMVAULT_NO_ENV_WARNING", "1")
         .env("NO_COLOR", "1")
         .output()
         .expect("run symvault CLI")
@@ -88,7 +91,7 @@ fn audit_rotate_key_cli_flow() {
 
     // 2. First rotation bootstraps because no key exists yet
     let out1 = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
-    assert_eq!(out1.status.code(), Some(0));
+    assert_eq!(out1.status.code(), Some(0), "{:?}", out1.stderr);
     let stderr1 = String::from_utf8_lossy(&out1.stderr);
     assert!(stderr1.contains("New key: "));
     assert!(stderr1.contains("(first 4 bytes)"));
