@@ -189,7 +189,13 @@ fn parse_timestamp(v: &str) -> Option<i128> {
     {
         return None;
     }
-    let n = |a: usize, z: usize| std::str::from_utf8(&b[a..z]).ok()?.parse::<u64>().ok();
+    let n = |a: usize, z: usize| {
+        let digits = b.get(a..z)?;
+        if !digits.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        std::str::from_utf8(digits).ok()?.parse::<u64>().ok()
+    };
     let y = n(0, 4)? as i64;
     let m = n(5, 7)? as i64;
     let d = n(8, 10)? as i64;
@@ -199,7 +205,7 @@ fn parse_timestamp(v: &str) -> Option<i128> {
     if m == 0 || m > 12 || d == 0 || d > 31 || h > 23 || min > 59 || sec > 60 {
         return None;
     };
-    let (frac, end) = if b[19] == b'.' {
+    let (frac, end) = if b[19] == b'.' || b[19] == b',' {
         let end = 20
             + b[20..]
                 .iter()
@@ -858,6 +864,8 @@ mod tests {
             parse_timestamp("1970-01-01T00:00:00.1234567891Z"),
             Some(123_456_789)
         );
+        assert_eq!(parse_timestamp("1970-01-01T00:00:00,000Z"), Some(0));
+        assert_eq!(parse_timestamp("2026-09-23T12:00:00++1:00"), None);
     }
     #[test]
     fn identity_round_trip_and_max_lifetime() {

@@ -105,6 +105,19 @@ func TestSessionPortTimestampBoundaryContract(t *testing.T) {
 	if !time.Date(1, 1, 1, 1, 0, 0, 0, time.FixedZone("+01:00", 3600)).IsZero() {
 		t.Fatal("RFC3339 offsets must not change the Go zero instant")
 	}
+	for _, tc := range []struct {
+		input string
+		valid bool
+	}{
+		{`"1970-01-01T00:00:00,000Z"`, true},
+		{`"2026-09-23T12:00:00++1:00"`, false},
+	} {
+		var parsed time.Time
+		err := json.Unmarshal([]byte(tc.input), &parsed)
+		if (err == nil) != tc.valid {
+			t.Fatalf("Go timestamp decode %s: valid=%v error=%v", tc.input, tc.valid, err)
+		}
+	}
 	mgr, keyring := newTestManager(t)
 	vault := "pre-epoch-port-contract"
 	key := keyFor(serviceNameForVault(vault), sessionAccount)
