@@ -329,7 +329,7 @@ func subcommands(help string) []string {
 		case "Commands:", "Available Commands:":
 			inCommands = true
 			continue
-		case "Options:", "Flags:":
+		case "Options:", "Flags:", "Arguments:":
 			inCommands = false
 			continue
 		}
