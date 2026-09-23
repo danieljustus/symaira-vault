@@ -1,5 +1,15 @@
 # CLI surface gap (measured)
 
+## Integrated candidate, 2026-09-23
+
+After the quarantine import slice, `cligap` probed a fresh Rust binary
+(`e7ac14658a52d2de6f59f1532658b30656a1fe12f59bba3872c27639e7151058`)
+against the same pinned 134-path Go tree: 100 Rust paths, 24 missing oracle
+paths, 11 missing flags, zero missing aliases, and one Rust-only path. The
+remaining flags are five on `mcp`, three on `run`, two on `update apply`, and
+one on `update check`. This is a command-surface inventory; it does not prove
+behavioral parity. The measurement below is retained as its dated baseline.
+
 Measured on **2026-09-20** against the Rust CLI built from `main` at `72c14890`
 and the pinned Go oracle command tree in `testdata/port/cli/command-tree.json`
 (`a518124f`, release `unreleased`), depth 3. The previous inventory in this file
