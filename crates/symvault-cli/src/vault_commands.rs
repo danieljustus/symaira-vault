@@ -249,6 +249,14 @@ pub fn write_list<W: Write>(
             writeln!(output, "{}", entry.path).map_err(|error| error.to_string())
         }),
         "json" => {
+            // Go's ListEntryInfos returns a nil slice for an empty vault, so
+            // PrintResult emits JSON null rather than an empty array.
+            if entries.is_empty() {
+                output
+                    .write_all(b"null\n")
+                    .map_err(|error| error.to_string())?;
+                return Ok(());
+            }
             serde_json::to_writer(&mut *output, entries).map_err(|error| error.to_string())?;
             writeln!(output).map_err(|error| error.to_string())
         }
