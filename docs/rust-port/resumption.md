@@ -3,29 +3,27 @@
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
 - **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
-  Der gepushte Stand `9b17470` enthält die HTTP-Token-Fixture, den
-  age-kompatiblen BSD-Audit-Key-Fallback, CLI-Inventar-Gate sowie FFI- und
-  CI-Korrekturen. Go bleibt Produktionspfad. Release, Cutover, Go-Abbau und
-  destruktives Aufräumen sind nicht autorisiert.
-- **Ausführbare lokale Evidenz:** `make rust-007-differential` mit 18
-  Go-Session-Fällen und `make config-cli-differential` mit Go-Schreiben auf
-  einer Kopie eines Rust-Vaults bestanden vor den erweiterten Baumproben.
-  Die neun HTTP-Fälle wurden aus dem Go-Server erzeugt und durch
-  `http001initgen --check` geprüft; Rust-Replay auf dem neuen Stand steht aus.
-- **Native Evidenz:** Auf `7ccc1dc` bestand FreeBSD die CLI-, Audit- und
-  kopierte-Vault-Rollback-Tests bis zum Oracle-Reachability-Gate. Dort fehlte
-  Bash in der VM; `9b17470` installiert es für den nächsten Lauf. Die
-  bisherigen Audit-, Pairing- und iOS-Erfolge stammen von früheren SHAs;
-  eine genaue Auswertung der erforderlichen Zielplattformen am integrierten
-  Stand bleibt offen.
+  Der lokale Stand enthält sechzehn quellgebundene HTTP-Fälle, typisierte
+  `get`-Exitcodes, `intake watch disable`, aktualisierte FFI-Provenienz und
+  den FreeBSD-`O_NOFOLLOW`-Fix. Go bleibt Produktionspfad. Release, Cutover,
+  Go-Abbau und destruktives Aufräumen sind nicht autorisiert.
+- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, zehn Rust-HTTP-Unit-
+  und drei Replay-Tests, FFI-KDF-Fixture sowie fünf Safe-I/O-Tests bestanden.
+  Der CLI-Differentiallauf erreichte mit gepinntem Go-Oracle grüne `get`-
+  Fehlerkategorien und `intake watch disable`; der gesamte Lauf endete erst
+  danach wegen vollem externem Build-Volume (`ENOSPC`).
+- **Native Evidenz:** Am vorherigen Head `57cf1a0` bestanden macOS und
+  Windows native Rust-Tests sowie Audit/Pairing; FreeBSD deckte den abweichenden
+  `O_NOFOLLOW`-Fehler `EMLINK` auf. Der Fix und alle neuen Slices benötigen
+  erneut Ausführung am exakten integrierten Head auf ihren Zielplattformen.
 - **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
   Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
   auf `7ccc1dc` 134 Go-Pfade, 102 Rust-Pfade, 21 fehlende Pfade, drei
   Broker-Flag-Lücken und keine Alias-Lücke. Diese Oberflächenmessung belegt
   keine Verhaltensparität. Ein grüner PR oder Slice erfüllt das Ziel nicht.
-- **Nächster Schritt:** CI und native Zielplattformen am exakten Head
-  auswerten, Befunde beheben und weitere implementierbare Ledger-Zeilen
-  bearbeiten.
+- **Nächster Schritt:** Den neuen Head integrieren, CI und native
+  Zielplattformen auswerten, Befunde beheben und weitere implementierbare
+  Ledger-Zeilen bearbeiten.
 
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
