@@ -16,6 +16,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::PathBuf,
+    process::Command,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use symvault_crypto::SecretBytes;
@@ -200,6 +201,30 @@ fn quarantine_prefix_uses_go_import_id_shape_and_rejects_prefix() {
         import_commands::resolve_import_prefix("work", false).unwrap(),
         ("work".into(), None)
     );
+}
+
+#[test]
+fn import_format_error_precedes_quarantine_conflict() {
+    let binary = std::env::var_os("CARGO_BIN_EXE_symvault").expect("Rust CLI binary");
+    let output = Command::new(binary)
+        .args([
+            "import",
+            "source.csv",
+            "--format",
+            "unknown",
+            "--quarantine",
+            "--prefix",
+            "work",
+        ])
+        .output()
+        .expect("run import");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("unsupported import format: unknown"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("--quarantine and --prefix"), "{stderr}");
 }
 
 #[test]

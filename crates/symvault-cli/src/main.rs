@@ -4055,6 +4055,9 @@ fn run_import(
     mapping: &str,
     quiet: bool,
 ) -> ExitCode {
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
     if skip_existing && overwrite {
         return finish_vault_result(Err(
             "--skip-existing and --overwrite cannot be used together".into(),
