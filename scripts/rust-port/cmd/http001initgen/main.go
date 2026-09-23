@@ -63,6 +63,7 @@ type oracle struct {
 type request struct {
 	Method          string   `json:"method"`
 	Path            string   `json:"path"`
+	Host            string   `json:"host,omitempty"`
 	Origin          string   `json:"origin,omitempty"`
 	ContentType     string   `json:"content_type"`
 	Accept          string   `json:"accept"`
@@ -73,6 +74,8 @@ type request struct {
 	AllowedTools    []string `json:"allowed_tools,omitempty"`
 	Authenticated   bool     `json:"authenticated"`
 	Body            string   `json:"body"`
+	BodyRepeat      int      `json:"body_repeat,omitempty"`
+	HeaderRepeat    int      `json:"header_repeat,omitempty"`
 }
 
 type response struct {
@@ -186,6 +189,41 @@ func main() {
 			GoAuthenticated: true,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "limited", TokenAgent: "default", AllowedTools: []string{"list_entries"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_entry","arguments":{"path":"fixture"}}}`},
 		},
+		{
+			Name:            "foreign_origin_rejected",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "https://attacker.example", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":10,"method":"initialize"}`},
+		},
+		{
+			Name:            "malformed_origin_rejected",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://%", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":11,"method":"initialize"}`},
+		},
+		{
+			Name:            "matching_host_and_origin_reaches_authentication",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "attacker.example", Origin: "https://attacker.example", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":12,"method":"initialize"}`},
+		},
+		{
+			Name:            "malformed_content_type_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: `application/json; charset="broken`, Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":13,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "malformed_accept_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: `text/event-stream, application/json; q="broken`, ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":14,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "oversized_body_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, BodyRepeat: (1 << 20) + 1},
+		},
+		{
+			Name:            "oversized_header_reaches_mcp_handler",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, HeaderRepeat: 17 * 1024, Body: `{"jsonrpc":"2.0","id":15,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+		},
 	}
 	for i := range requests {
 		requests[i].Response = doRequest(client, listener.Addr().String(), token, tokens, requests[i].Request)
@@ -214,8 +252,15 @@ func main() {
 }
 
 func doRequest(client *http.Client, addr, token string, scopedTokens map[string]string, req request) response {
-	httpReq, err := http.NewRequest(req.Method, "http://"+addr+req.Path, strings.NewReader(req.Body))
+	body := req.Body
+	if req.BodyRepeat > 0 {
+		body = strings.Repeat("x", req.BodyRepeat)
+	}
+	httpReq, err := http.NewRequest(req.Method, "http://"+addr+req.Path, strings.NewReader(body))
 	check(err)
+	if req.Host != "" {
+		httpReq.Host = req.Host
+	}
 	httpReq.Header.Set("Content-Type", req.ContentType)
 	httpReq.Header.Set("Accept", req.Accept)
 	httpReq.Header.Set("MCP-Protocol-Version", req.ProtocolVersion)
@@ -230,6 +275,9 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 		httpReq.Header.Set("Origin", req.Origin)
 	}
 	httpReq.Header.Set("X-Symaira-Agent", req.Agent)
+	if req.HeaderRepeat > 0 {
+		httpReq.Header.Set("X-Rust-Port-Fixture", strings.Repeat("x", req.HeaderRepeat))
+	}
 	httpResp, err := client.Do(httpReq)
 	check(err)
 	body, err := io.ReadAll(httpResp.Body)

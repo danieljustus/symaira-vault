@@ -444,6 +444,7 @@ mcp-http-init-fixtures-check:
 		--check --output $(PORT_MCP_HTTP_INIT_FIXTURE)
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
+	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
 
 mcp-stdio-fixtures-check:
