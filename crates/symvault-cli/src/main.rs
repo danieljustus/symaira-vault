@@ -11,6 +11,7 @@ mod agent_token_commands;
 mod agent_uninstall_commands;
 mod agent_upgrade_commands;
 mod agent_whoami_commands;
+mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
@@ -541,6 +542,11 @@ enum Command {
     Device {
         #[command(subcommand)]
         command: DeviceCommand,
+    },
+    /// List and decide pending agent approval requests.
+    Approval {
+        #[command(subcommand)]
+        command: ApprovalCommand,
     },
     /// Inspect the YAML configuration file.
     Config {
@@ -1133,6 +1139,12 @@ enum DeviceCommand {
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum ApprovalCommand {
+    /// List pending approval requests.
+    List,
 }
 
 #[derive(Debug, Subcommand)]
@@ -2549,6 +2561,21 @@ fn run_cli() -> ExitCode {
                     println!("{rendered}");
                 }
                 Ok::<(), String>(())
+            })();
+            finish_vault_result(result)
+        }
+        Some(Command::Approval {
+            command: ApprovalCommand::List,
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&vault)?;
+                approval_commands::list(
+                    &vault,
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    cli.quiet,
+                )
             })();
             finish_vault_result(result)
         }
