@@ -377,14 +377,29 @@ fn auth_server(status: &str) -> (u16, mpsc::Sender<()>, thread::JoinHandle<()>) 
                 thread::sleep(Duration::from_millis(10));
                 continue;
             };
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
-            let mut request = [0u8; 1024];
-            let _ = stream.read(&mut request);
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+            // Drain the complete header before replying: closing with unread
+            // request bytes can reset the connection on Windows before Git
+            // receives the 401. Read one byte at a time so header bytes are
+            // not left queued when the connection closes.
+            let mut request = Vec::with_capacity(1024);
+            let mut byte = [0u8; 1];
+            loop {
+                if stream.read_exact(&mut byte).is_err() {
+                    break;
+                }
+                request.push(byte[0]);
+                if request.ends_with(b"\r\n\r\n") || request.len() >= 16 * 1024 {
+                    break;
+                }
+            }
+            if !request.ends_with(b"\r\n\r\n") {
+                continue;
+            }
             let response = format!(
                 "HTTP/1.1 {status}\r\nWWW-Authenticate: Basic realm=fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             );
             let _ = stream.write_all(response.as_bytes());
-            break;
         }
     });
     (port, stop, handle)
