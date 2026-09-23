@@ -516,6 +516,11 @@ config-session-differential: rust-007-differential config-profile-differential
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
 
+# Record the integrated CLI surface after the differential has built the binary.
+.PHONY: cli-gap-inventory
+cli-gap-inventory: config-cli-differential
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cligap --binary $(RUST_BINARY)
+
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
@@ -596,7 +601,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check ffi-kdf-fixtures-check ffi-mobile-json-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential cli-gap-inventory mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check ffi-kdf-fixtures-check ffi-mobile-json-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
