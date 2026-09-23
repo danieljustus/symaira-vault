@@ -327,6 +327,10 @@ jobs:
       - name: Test including doctests
         run: cargo test --workspace --all-features --locked
 
+      - name: Test mobile FFI C ABI
+        if: matrix.os == 'macos-latest'
+        run: make ffi-abi-smoke
+
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
   test-pr:

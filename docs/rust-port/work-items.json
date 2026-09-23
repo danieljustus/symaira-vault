@@ -94,6 +94,7 @@
     {
       "id": "RUST-011",
       "title": "Port MCP HTTP/SSE, OAuth, broker, and execution",
+      "note": "A source-bound raw-bearer token lookup/scope fixture is integrated, but HTTP transport authorization, OAuth and broker behavior remain open. The blocked whole-item status is unchanged.",
       "status": "blocked",
       "depends_on": ["RUST-010"],
       "contract_rows": ["HTTP-001", "HTTP-002", "HTTP-003", "HTTP-004", "APPROVAL-001", "BROKER-001", "BROKER-002"],
@@ -102,6 +103,7 @@
     {
       "id": "RUST-012",
       "title": "Replace gomobile bridge with Rust Swift bridge",
+      "note": "A seven-function crypto C ABI subset has native macOS C-caller evidence. Store/JSON functions, Swift consumption, XCFramework packaging, iOS device evidence and whole-item dependencies remain open.",
       "status": "blocked",
       "depends_on": ["RUST-006", "RUST-007"],
       "contract_rows": ["FFI-001", "FFI-002"],

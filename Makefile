@@ -364,6 +364,16 @@ token-lookup-differential:
 	SYMAIRA_CHECK_TOKEN_PORT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/auth -run '^TestTokenPortFixture$$' -count=1
 	$(CARGO) test -p symvault-store --lib token_registry::tests --locked
 
+.PHONY: ffi-crypto-contract ffi-abi-smoke
+ffi-crypto-contract:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mobilebind ./pkg/mobilebind -run '^(TestMobileBind_CryptoEndToEnd|TestPkgMobilebindReexport)$$' -count=1
+	$(CARGO) test -p symvault-ffi --lib --locked
+
+ffi-abi-smoke:
+	$(CARGO) build -p symvault-ffi --locked
+	$(CC) -Wall -Wextra -Werror -I crates/symvault-ffi/include crates/symvault-ffi/tests/abi_smoke.c $(CARGO_TARGET_DIR)/debug/libsymvault_ffi.a -framework Security -framework CoreFoundation -o $(CARGO_TARGET_DIR)/debug/symvault-ffi-abi-smoke
+	$(CARGO_TARGET_DIR)/debug/symvault-ffi-abi-smoke
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
@@ -570,7 +580,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential sync-io-differential differential-go-selftest crypto-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
