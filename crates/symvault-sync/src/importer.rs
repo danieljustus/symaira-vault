@@ -9,6 +9,7 @@ pub use totp::parse_totp;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -478,8 +479,12 @@ struct BwField {
     value: String,
 }
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let repaired = replace_invalid_utf8_in_json_strings(bytes);
-    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(&repaired))
+    let repaired = if std::str::from_utf8(bytes).is_ok() {
+        Cow::Borrowed(bytes)
+    } else {
+        Cow::Owned(replace_invalid_utf8_in_json_strings(bytes))
+    };
+    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(repaired.as_ref()))
         .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?
         .unwrap_or_default();
     let folders: xhash::HashMap<String, String> = x
