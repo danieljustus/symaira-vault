@@ -62,6 +62,14 @@
   Rust zeigte trotz `SYMVAULT_NO_ENV_WARNING=1` eine Warnung, die Go korrekt
   unterdrückt. Der gemeinsame Rust-Entsperrpfad beachtet diese Variable nun;
   der neue Head muss den Differentialtest erneut ausführen.
+  Windows fand außerdem im `agent list`-Differential ein unvollständig
+  isoliertes Home: Go liest `USERPROFILE`, Rust las `HOME`. Der Test setzt
+  beide auf dasselbe temporäre Verzeichnis. Direkte `--help`-Aufrufe für
+  `dynamic`, `dynamic generate` und `setup` laufen nun ebenfalls durch den
+  gepinnten Go-Vergleich. Ein Go-Produktionshandler-Test und Rust-Listener-
+  Test prüfen HTTP/1.0-Fehler samt Standard-Close und explizitem Keep-Alive.
+  Das echte HTTP-401-Git-Differential ist nach lokaler Deaktivierung geerbter
+  Credential-Helper auch unter Windows aktiviert. Native Ausführung steht aus.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
