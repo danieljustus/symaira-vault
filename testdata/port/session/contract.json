@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "b36cdb81711b3d422891a961b7b09d7318ac80c01dcd9e660e1dc43f2cd9a50a"
+    "generator_digest": "782335c6caeb7fb4019d993539905876d5e4ef3da8ceedfdbd9f3e89e3339ee3"
   },
   "cases": [
     {
@@ -120,6 +120,22 @@
       },
       "expected": "expired_and_evicted",
       "error_class": "expired"
+    },
+    {
+      "name": "go_base64_wrap_key_load",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2000-01-01T00:00:00Z",
+        "last_access": "2000-01-01T00:00:00Z",
+        "ttl_ns": 9223372036854775807,
+        "max_lifetime_ns": 9223372036854775807,
+        "encrypted_passphrase": "JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=",
+        "nonce": "AAECAwQFBgcICQoL"
+      },
+      "wrap_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": "cross-language-passphrase"
     },
     {
       "name": "clear_all_accounts_twice",

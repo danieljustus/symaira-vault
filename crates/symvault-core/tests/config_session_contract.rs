@@ -235,6 +235,8 @@ struct SessionCase {
     #[serde(default)]
     input: Option<serde_json::Value>,
     #[serde(default)]
+    wrap_key: Option<String>,
+    #[serde(default)]
     non_mutating: bool,
 }
 
@@ -256,7 +258,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 12);
+    assert_eq!(fixture.cases.len(), 13);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -369,6 +371,29 @@ fn generated_session_cases_match_rust_manager() {
         keyring.get(&key("session")),
         Err(SessionError::NotFound)
     ));
+
+    let go_key = cases
+        .iter()
+        .find(|case| case.name == "go_base64_wrap_key_load")
+        .unwrap();
+    let keyring = Arc::new(MemoryKeyring::new());
+    keyring
+        .set(
+            &key("wrap-key"),
+            go_key.wrap_key.as_ref().unwrap().as_bytes(),
+        )
+        .unwrap();
+    keyring
+        .set(
+            &key("session"),
+            &serde_json::to_vec(go_key.input.as_ref().unwrap()).unwrap(),
+        )
+        .unwrap();
+    let manager = SessionManager::with_system_clock(keyring);
+    assert_eq!(
+        manager.load_passphrase("fixture-vault").unwrap(),
+        go_key.expected.as_bytes()
+    );
 
     let cleared = cases
         .iter()

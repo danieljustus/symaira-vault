@@ -66,6 +66,7 @@ type sessionCase struct {
 	Name        string          `json:"name"`
 	Operations  []string        `json:"operations"`
 	Input       json.RawMessage `json:"input,omitempty"`
+	WrapKey     string          `json:"wrap_key,omitempty"`
 	Expected    string          `json:"expected"`
 	ErrorClass  string          `json:"error_class,omitempty"`
 	NonMutating bool            `json:"non_mutating,omitempty"`
@@ -118,7 +119,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 12)
+	cases := make([]sessionCase, 0, 13)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -189,6 +190,20 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	maxResult.Input = json.RawMessage(maxExpired)
 	maxResult.Expected = "expired_and_evicted"
 	cases = append(cases, maxResult)
+	const goWrapKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	const goEncrypted = `{"saved_at":"2000-01-01T00:00:00Z","last_access":"2000-01-01T00:00:00Z","ttl_ns":9223372036854775807,"max_lifetime_ns":9223372036854775807,"encrypted_passphrase":"JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=","nonce":"AAECAwQFBgcICQoL"}`
+	goBackend := &fakeKeyring{values: map[string]string{
+		key: goEncrypted,
+		"symvault:" + v + "|wrap-key": goWrapKey,
+	}}
+	goLoaded, err := session.NewManager(goBackend, nil).LoadPassphrase(v)
+	if err != nil || string(goLoaded) != "cross-language-passphrase" {
+		panic(fmt.Sprintf("Go cannot load its base64 keyring session: %q %v", goLoaded, err))
+	}
+	cases = append(cases, sessionCase{
+		Name: "go_base64_wrap_key_load", Operations: []string{"load_passphrase"},
+		Input: json.RawMessage(goEncrypted), WrapKey: goWrapKey, Expected: string(goLoaded),
+	})
 
 	clearBackend := &fakeKeyring{values: map[string]string{}}
 	clearManager := session.NewManager(clearBackend, nil)

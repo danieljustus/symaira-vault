@@ -319,14 +319,23 @@ impl SessionManager {
     }
     fn wrap_key(&self, vault: &str, create: bool) -> Result<[u8; 32], SessionError> {
         match self.keyring.get(&Self::key(vault, WRAP_KEY_ACCOUNT)) {
-            Ok(raw) => raw
-                .try_into()
-                .map_err(|_| SessionError::Malformed("wrap key must be 32 bytes".into())),
+            Ok(raw) => {
+                if let Ok(decoded) = B64.decode(&raw)
+                    && let Ok(key) = decoded.try_into()
+                {
+                    return Ok(key);
+                }
+                // Earlier Rust port builds stored the raw key; keep those caches readable.
+                raw.try_into()
+                    .map_err(|_| SessionError::Malformed("wrap key must be 32 bytes".into()))
+            }
             Err(SessionError::NotFound) if create => {
                 let mut raw = [0; 32];
                 fill(&mut raw).map_err(|e| SessionError::Crypto(e.to_string()))?;
-                self.keyring
-                    .set(&Self::key(vault, WRAP_KEY_ACCOUNT), &raw)?;
+                self.keyring.set(
+                    &Self::key(vault, WRAP_KEY_ACCOUNT),
+                    B64.encode(raw).as_bytes(),
+                )?;
                 Ok(raw)
             }
             Err(e) => Err(e),
@@ -677,6 +686,26 @@ mod tests {
             m.load_passphrase("v"),
             Err(SessionError::Expired(_))
         ));
+    }
+    #[test]
+    fn new_wrap_key_uses_go_text_format_and_reads_earlier_rust_cache() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let manager = SessionManager::with_system_clock(keyring.clone());
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(60),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        let account = SessionManager::key("v", WRAP_KEY_ACCOUNT);
+        let encoded = keyring.get(&account).unwrap();
+        assert_eq!(encoded.len(), 44);
+        let raw = B64.decode(encoded).unwrap();
+        assert_eq!(raw.len(), 32);
+        keyring.set(&account, &raw).unwrap();
+        assert_eq!(manager.load_passphrase("v").unwrap(), b"secret");
     }
     #[test]
     fn zero_and_elapsed_ttl_precede_legacy_and_match_eviction() {
