@@ -48,5 +48,11 @@ jobs:
               rustc --version | grep -q "^rustc 1[.]98[.]0 "
               go version | grep -q "^go version go1[.]26[.]6 "
               gmake port-contract
+              gmake pairing-fixtures-check store-differential audit-fixtures-check
+              go test ./internal/vault -run "^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$" -count=1 -timeout=20m
+              mkdir -p target/audit
+              cargo run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
+              test -s target/audit/rust-output.jsonl
+              go run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
               cargo test --workspace --all-features --locked
             '
