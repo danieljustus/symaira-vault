@@ -1494,22 +1494,28 @@ fn run_cli() -> ExitCode {
                 let _ = writeln!(io::stderr(), "Error: watch directory is required");
                 return ExitCode::from(9);
             };
-            if !once {
-                let _ = writeln!(
-                    io::stderr(),
-                    "Error: continuous intake watch is not implemented"
-                );
-                return ExitCode::from(1);
-            }
-            match intake_commands::watch_once(
-                &directory,
-                interval,
-                debounce,
-                cli.json,
-                cli.quiet,
-                cli.vault.as_deref(),
-                cli._profile.as_deref(),
-            ) {
+            let result = if once {
+                intake_commands::watch_once(
+                    &directory,
+                    interval,
+                    debounce,
+                    cli.json,
+                    cli.quiet,
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                )
+            } else {
+                intake_commands::watch_continuous(
+                    &directory,
+                    interval,
+                    debounce,
+                    cli.json,
+                    cli.quiet,
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                )
+            };
+            match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let code =

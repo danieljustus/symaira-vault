@@ -4,10 +4,29 @@ use std::{
     process::{Command, Output},
 };
 
+#[cfg(unix)]
+use std::{
+    process::{Child, Stdio},
+    time::{Duration, Instant},
+};
+
 use tempfile::TempDir;
 
 fn run(binary: &Path, home: &Path, tmp: &Path, vault: &Path, args: &[&str]) -> Output {
-    Command::new(binary)
+    configured_command(binary, home, tmp, vault, args)
+        .output()
+        .expect("run intake watch --once")
+}
+
+fn configured_command(
+    binary: &Path,
+    home: &Path,
+    tmp: &Path,
+    vault: &Path,
+    args: &[&str],
+) -> Command {
+    let mut command = Command::new(binary);
+    command
         .arg("--vault")
         .arg(vault)
         .args(args)
@@ -21,9 +40,8 @@ fn run(binary: &Path, home: &Path, tmp: &Path, vault: &Path, args: &[&str]) -> O
         .env("SYMVAULT_PASSPHRASE", "fixture-passphrase-123")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
         .env("SYMVAULT_NO_ENV_WARNING", "1")
-        .env_remove("SYMVAULT_VAULT")
-        .output()
-        .expect("run intake watch --once")
+        .env_remove("SYMVAULT_VAULT");
+    command
 }
 
 fn initialize(binary: &Path, home: &Path, tmp: &Path, vault: &Path) {
@@ -57,7 +75,13 @@ fn assert_same(go: &Output, rust: &Output) {
     assert_eq!(rust.stderr, go.stderr);
 }
 
-fn quarantine_entry_path(binary: &Path, home: &Path, tmp: &Path, vault: &Path, go: bool) -> String {
+fn quarantine_entry_paths(
+    binary: &Path,
+    home: &Path,
+    tmp: &Path,
+    vault: &Path,
+    go: bool,
+) -> Vec<String> {
     let args = if go {
         vec!["--output", "json", "list", "quarantine/"]
     } else {
@@ -70,15 +94,27 @@ fn quarantine_entry_path(binary: &Path, home: &Path, tmp: &Path, vault: &Path, g
         String::from_utf8_lossy(&listed.stderr)
     );
     let entries: serde_json::Value = serde_json::from_slice(&listed.stdout).unwrap();
-    let paths = entries
-        .as_array()
-        .expect("JSON list is an array")
+    let Some(entries) = entries.as_array() else {
+        assert!(
+            entries.is_null(),
+            "JSON list is an array or null: {entries}"
+        );
+        return Vec::new();
+    };
+    entries
         .iter()
         .filter_map(|entry| entry["path"].as_str())
+        .map(str::to_owned)
+        .collect::<Vec<_>>()
+}
+
+fn quarantine_entry_path(binary: &Path, home: &Path, tmp: &Path, vault: &Path, go: bool) -> String {
+    let paths = quarantine_entry_paths(binary, home, tmp, vault, go)
+        .into_iter()
         .filter(|path| path.ends_with("/stable"))
         .collect::<Vec<_>>();
-    assert_eq!(paths.len(), 1, "one stable quarantine entry: {entries}");
-    paths[0].to_owned()
+    assert_eq!(paths.len(), 1, "one stable quarantine entry: {paths:?}");
+    paths[0].clone()
 }
 
 #[test]
@@ -350,4 +386,213 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
     );
     assert_eq!(fs::read(go_source).unwrap(), contents);
     assert_eq!(fs::read(rust_source).unwrap(), contents);
+}
+
+#[cfg(unix)]
+fn wait_for_entry(
+    child: &mut Child,
+    binary: &Path,
+    home: &Path,
+    tmp: &Path,
+    vault: &Path,
+    go: bool,
+) -> String {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().expect("poll continuous watcher") {
+            panic!("continuous watcher exited before intake: {status}");
+        }
+        if let Some(path) = quarantine_entry_paths(binary, home, tmp, vault, go)
+            .into_iter()
+            .find(|path| path.ends_with("/late"))
+        {
+            return path;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "continuous watcher intake timed out"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(unix)]
+fn stop_with_sigterm(child: &Child) {
+    let status = Command::new("kill")
+        .args(["-TERM", &child.id().to_string()])
+        .status()
+        .expect("send SIGTERM to watcher");
+    assert!(status.success(), "send SIGTERM: {status}");
+}
+
+#[cfg(unix)]
+fn finish_with_timeout(mut child: Child) -> Output {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if child.try_wait().expect("poll watcher shutdown").is_some() {
+            return child.wait_with_output().expect("collect watcher output");
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            panic!("watcher did not stop within five seconds after SIGTERM");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[cfg(unix)]
+fn normalized_batch(output: &Output) -> Vec<serde_json::Value> {
+    let mut batches = output
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice::<serde_json::Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    for batch in &mut batches {
+        let import_id = batch["import_id"].as_str().unwrap().to_owned();
+        batch["import_id"] = "<import-id>".into();
+        for path in batch["written"].as_array_mut().unwrap() {
+            *path = path
+                .as_str()
+                .unwrap()
+                .replace(&import_id, "<import-id>")
+                .into();
+        }
+    }
+    batches
+}
+
+#[cfg(unix)]
+#[test]
+fn continuous_watch_intakes_late_file_and_stops_on_sigterm_like_go() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
+    let temp = TempDir::new().expect("temporary test root");
+    let go_home = temp.path().join("go-home");
+    let rust_home = temp.path().join("rust-home");
+    let go_tmp = temp.path().join("go-tmp");
+    let rust_tmp = temp.path().join("rust-tmp");
+    let go_vault = temp.path().join("go-vault");
+    let rust_vault = temp.path().join("rust-vault");
+    let go_folder = temp.path().join("go-intake");
+    let rust_folder = temp.path().join("rust-intake");
+    for dir in [
+        &go_home,
+        &rust_home,
+        &go_tmp,
+        &rust_tmp,
+        &go_folder,
+        &rust_folder,
+    ] {
+        fs::create_dir_all(dir).expect("create throwaway directory");
+    }
+    initialize(rust_binary, &go_home, &go_tmp, &go_vault);
+    initialize(rust_binary, &rust_home, &rust_tmp, &rust_vault);
+
+    let go_args = [
+        "intake",
+        "watch",
+        go_folder.to_str().unwrap(),
+        "--interval",
+        "50ms",
+        "--debounce",
+        "1ns",
+        "--quiet",
+        "--json",
+    ];
+    let rust_args = [
+        "intake",
+        "watch",
+        rust_folder.to_str().unwrap(),
+        "--interval",
+        "50ms",
+        "--debounce",
+        "1ns",
+        "--quiet",
+        "--json",
+    ];
+
+    let mut go_child = configured_command(&go_binary, &go_home, &go_tmp, &go_vault, &go_args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start Go watcher");
+    let go_source = go_folder.join("late.txt");
+    fs::write(&go_source, "token: after-start").expect("create Go source after start");
+    let go_entry = wait_for_entry(
+        &mut go_child,
+        &go_binary,
+        &go_home,
+        &go_tmp,
+        &go_vault,
+        true,
+    );
+    stop_with_sigterm(&go_child);
+    let go = finish_with_timeout(go_child);
+    assert!(
+        fs::read_dir(&go_tmp).unwrap().next().is_none(),
+        "Go spool cleanup"
+    );
+
+    let mut rust_child =
+        configured_command(rust_binary, &rust_home, &rust_tmp, &rust_vault, &rust_args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("start Rust watcher");
+    let rust_source = rust_folder.join("late.txt");
+    fs::write(&rust_source, "token: after-start").expect("create Rust source after start");
+    let rust_entry = wait_for_entry(
+        &mut rust_child,
+        rust_binary,
+        &rust_home,
+        &rust_tmp,
+        &rust_vault,
+        false,
+    );
+    stop_with_sigterm(&rust_child);
+    let rust = finish_with_timeout(rust_child);
+    assert!(
+        fs::read_dir(&rust_tmp).unwrap().next().is_none(),
+        "Rust spool cleanup"
+    );
+
+    assert_eq!(go.status.code(), Some(0));
+    assert_eq!(rust.status.code(), Some(0));
+    assert_eq!(rust.stderr, go.stderr);
+    assert_eq!(normalized_batch(&rust), normalized_batch(&go));
+    assert_eq!(normalized_batch(&go).len(), 1);
+    let go_batch: serde_json::Value = serde_json::from_slice(&go.stdout).unwrap();
+    let rust_batch: serde_json::Value = serde_json::from_slice(&rust.stdout).unwrap();
+    assert_eq!(go_entry, go_batch["written"][0]);
+    assert_eq!(rust_entry, rust_batch["written"][0]);
+    assert_eq!(fs::read(go_source).unwrap(), b"token: after-start");
+    assert_eq!(fs::read(rust_source).unwrap(), b"token: after-start");
+
+    for (binary, home, tmp, vault, entry_path) in [
+        (go_binary.as_path(), &go_home, &go_tmp, &go_vault, &go_entry),
+        (
+            go_binary.as_path(),
+            &rust_home,
+            &rust_tmp,
+            &rust_vault,
+            &rust_entry,
+        ),
+        (rust_binary, &go_home, &go_tmp, &go_vault, &go_entry),
+        (rust_binary, &rust_home, &rust_tmp, &rust_vault, &rust_entry),
+    ] {
+        let persisted = run(binary, home, tmp, vault, &["--json", "get", entry_path]);
+        assert!(
+            persisted.status.success(),
+            "read continuous quarantine entry {entry_path}: {}",
+            String::from_utf8_lossy(&persisted.stderr)
+        );
+        let value: serde_json::Value = serde_json::from_slice(&persisted.stdout).unwrap();
+        assert_eq!(value["Fields"]["token"], "after-start");
+        assert_eq!(value["Fields"]["attachment"], "dG9rZW46IGFmdGVyLXN0YXJ0");
+    }
 }

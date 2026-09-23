@@ -7,7 +7,12 @@ use std::{
     io::{self, Write as _},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::Duration,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 use crate::{require_initialized, resolve_vault};
@@ -25,6 +30,7 @@ pub(crate) enum WatchOnceError {
     Scan(symvault_sync::intake::IntakeError),
     Vault(String),
     Batch(String),
+    Signal(io::Error),
     Output(io::Error),
 }
 
@@ -35,21 +41,13 @@ impl std::fmt::Display for WatchOnceError {
             Self::Scan(error) => write!(f, "scan: {error}"),
             Self::Vault(error) => write!(f, "open vault for intake batch: {error}"),
             Self::Batch(error) => write!(f, "write intake batch: {error}"),
+            Self::Signal(error) => write!(f, "watch signal handler: {error}"),
             Self::Output(error) => write!(f, "write scan output: {error}"),
         }
     }
 }
 
-pub(crate) fn watch_once(
-    dir: &Path,
-    interval: Duration,
-    debounce: Duration,
-    json: bool,
-    quiet: bool,
-    explicit_vault: Option<&Path>,
-    profile: Option<&str>,
-) -> Result<(), WatchOnceError> {
-    let _interval = interval; // Poll intervals do not affect a single scan.
+fn make_watcher(dir: &Path, debounce: Duration) -> Result<(Watcher, Spool), WatchOnceError> {
     match fs::metadata(dir) {
         Ok(metadata) if !metadata.is_dir() => {
             return Err(WatchOnceError::InvalidDirectory(format!(
@@ -72,8 +70,22 @@ pub(crate) fn watch_once(
         },
         ..Options::default()
     };
-    let mut watcher = Watcher::new(dir, options).map_err(WatchOnceError::Scan)?;
+    let watcher = Watcher::new(dir, options).map_err(WatchOnceError::Scan)?;
     let spool = Spool::new(std::env::temp_dir()).map_err(WatchOnceError::Scan)?;
+    Ok((watcher, spool))
+}
+
+pub(crate) fn watch_once(
+    dir: &Path,
+    interval: Duration,
+    debounce: Duration,
+    json: bool,
+    quiet: bool,
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+) -> Result<(), WatchOnceError> {
+    let _interval = interval; // Poll intervals do not affect a single scan.
+    let (mut watcher, spool) = make_watcher(dir, debounce)?;
     let result = watcher.scan_result(&spool).map_err(WatchOnceError::Scan)?;
     let scan_output = scan_summary(&result, json, quiet)?;
     let batch_output = if result.staged_results.is_empty() {
@@ -96,6 +108,74 @@ pub(crate) fn watch_once(
         stdout.write_all(&output).map_err(WatchOnceError::Output)?;
     }
     Ok(())
+}
+
+pub(crate) fn watch_continuous(
+    dir: &Path,
+    interval: Duration,
+    debounce: Duration,
+    json: bool,
+    quiet: bool,
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+) -> Result<(), WatchOnceError> {
+    let (mut watcher, spool) = make_watcher(dir, debounce)?;
+    let stop = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))
+        .map_err(WatchOnceError::Signal)?;
+    #[cfg(unix)]
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop))
+        .map_err(WatchOnceError::Signal)?;
+
+    if !quiet {
+        let mut stdout = io::stdout().lock();
+        writeln!(
+            stdout,
+            "Watching {} (interval {:?}, debounce {:?}). Ctrl-C to stop.",
+            dir.display(),
+            interval,
+            debounce
+        )
+        .and_then(|()| stdout.flush())
+        .map_err(WatchOnceError::Output)?;
+    }
+
+    loop {
+        if stop.load(Ordering::Acquire) {
+            break;
+        }
+        let result = watcher.scan_result(&spool).map_err(WatchOnceError::Scan)?;
+        if !result.staged_results.is_empty() {
+            let vault = resolve_vault(explicit_vault, profile).map_err(WatchOnceError::Vault)?;
+            require_initialized(&vault).map_err(WatchOnceError::Vault)?;
+            let identity = crate::device::unlock_vault(&vault).map_err(WatchOnceError::Vault)?;
+            let store = Store::open(&vault, &identity)
+                .map_err(|error| WatchOnceError::Vault(format!("cannot open vault: {error}")))?;
+            let (import_id, written) = write_batch(&store, &identity, &result)?;
+            let output = render_batch_output(&import_id, &written, json, quiet)?;
+            let mut stdout = io::stdout().lock();
+            stdout.write_all(&output).map_err(WatchOnceError::Output)?;
+            stdout.flush().map_err(WatchOnceError::Output)?;
+        }
+        if wait_for_interval(&stop, interval) {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn wait_for_interval(stop: &AtomicBool, interval: Duration) -> bool {
+    let started = Instant::now();
+    loop {
+        if stop.load(Ordering::Acquire) {
+            return true;
+        }
+        let elapsed = started.elapsed();
+        if elapsed >= interval {
+            return false;
+        }
+        thread::sleep((interval - elapsed).min(Duration::from_millis(50)));
+    }
 }
 
 fn scan_summary(result: &ScanResult, json: bool, quiet: bool) -> Result<Vec<u8>, WatchOnceError> {
