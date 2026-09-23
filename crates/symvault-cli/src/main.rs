@@ -1501,7 +1501,15 @@ fn run_cli() -> ExitCode {
                 );
                 return ExitCode::from(1);
             }
-            match intake_commands::watch_once(&directory, interval, debounce, cli.json, cli.quiet) {
+            match intake_commands::watch_once(
+                &directory,
+                interval,
+                debounce,
+                cli.json,
+                cli.quiet,
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+            ) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let code =
