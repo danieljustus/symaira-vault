@@ -113,7 +113,7 @@ print(next(device["udid"] for runtime, items in devices.items()
            for device in items if device["isAvailable"] and device["name"].startswith("iPhone")))
 ')"
   fi
-  if ! xcrun simctl list devices | grep -F "$SIMULATOR_UDID (Booted)" >/dev/null; then
+  if ! xcrun simctl list devices | grep -F "$SIMULATOR_UDID) (Booted)" >/dev/null; then
     xcrun simctl boot "$SIMULATOR_UDID"
     SIMULATOR_TO_SHUTDOWN="$SIMULATOR_UDID"
   fi
