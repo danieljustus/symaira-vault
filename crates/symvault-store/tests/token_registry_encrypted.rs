@@ -1,11 +1,23 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, process::Command};
 
+use base64::Engine;
+use serde::Deserialize;
 use symvault_crypto::{encrypt, generate_identity, parse_recipient, recipient_string};
 use symvault_store::token_registry::{TokenRecord, load_read_only, lookup_raw_bearer};
 use time::OffsetDateTime;
 
 const PLAINTEXT_BEARER: &str = "fixture-plaintext-bearer";
 const ENCRYPTED_BEARER: &str = "fixture-encrypted-bearer";
+
+#[derive(Deserialize)]
+struct GoEncryptedFixture {
+    identity: String,
+    raw_token: String,
+    token_id: String,
+    agent_name: String,
+    allowed_tools: Vec<String>,
+    registry_age_base64: String,
+}
 
 fn record(bearer: &str, agent: &str) -> TokenRecord {
     TokenRecord {
@@ -112,4 +124,54 @@ fn encrypted_registry_read_is_bounded_and_rejects_symlinks() {
         std::os::unix::fs::symlink(&outside, &encrypted_path).expect("link encrypted registry");
         assert!(load_read_only(vault.path(), Some(&identity)).is_err());
     }
+}
+
+#[test]
+#[ignore = "runs the pinned Go encrypted-registry writer; invoke explicitly for interop evidence"]
+fn go_generated_envelope_loads_with_rust_age_identity() {
+    let temporary = tempfile::tempdir().expect("temporary fixture directory");
+    let fixture_path = temporary.path().join("go-encrypted-registry.json");
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let output = Command::new("go")
+        .args([
+            "test",
+            "./internal/mcp/auth",
+            "-run",
+            "^TestWriteGoEncryptedRegistryRustFixture$",
+            "-count=1",
+        ])
+        .current_dir(repository)
+        .env("SYMAIRA_GO_ENCRYPTED_REGISTRY_FIXTURE", &fixture_path)
+        .output()
+        .expect("run pinned Go registry fixture writer");
+    assert!(
+        output.status.success(),
+        "Go fixture writer failed (stdout: {}, stderr: {})",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let fixture: GoEncryptedFixture =
+        serde_json::from_slice(&fs::read(&fixture_path).expect("read private Go fixture"))
+            .expect("parse Go fixture");
+    let identity = symvault_crypto::parse_identity(&fixture.identity).expect("parse Go identity");
+    let ciphertext = base64::engine::general_purpose::STANDARD
+        .decode(&fixture.registry_age_base64)
+        .expect("decode Go age envelope");
+    let vault = tempfile::tempdir().expect("disposable vault");
+    let encrypted_path = vault.path().join("registry.age");
+    fs::write(&encrypted_path, &ciphertext).expect("write Go encrypted registry");
+
+    let entries = load_read_only(vault.path(), Some(&identity)).expect("load Go age registry");
+    let token = lookup_raw_bearer(&entries, &fixture.raw_token, OffsetDateTime::now_utc())
+        .expect("lookup Go-issued bearer")
+        .expect("Go-issued bearer is active");
+    assert_eq!(token.id, fixture.token_id);
+    assert_eq!(token.agent_name, fixture.agent_name);
+    assert_eq!(
+        token.allowed_tools.as_deref(),
+        Some(fixture.allowed_tools.as_slice())
+    );
+    assert_eq!(fs::read(&encrypted_path).unwrap(), ciphertext);
+    assert!(!vault.path().join("mcp-tokens.json").exists());
 }
