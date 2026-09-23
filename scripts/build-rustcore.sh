@@ -123,6 +123,9 @@ print(next(device["udid"] for runtime, items in devices.items()
   SMOKE_APP="$SCRATCH/RustCoreSmoke.app"
   mkdir -p "$SMOKE_APP"
   cp "$SIMULATOR_BINARY" "$SMOKE_APP/RustCoreSmoke"
+  mkdir -p "$SMOKE_APP/Fixtures"
+  cp "$ROOT/testdata/port/crypto/age-kdf.json" "$SMOKE_APP/Fixtures/age-kdf.json"
+  cp "$ROOT/testdata/port/store/store.json" "$SMOKE_APP/Fixtures/store.json"
   chmod 755 "$SMOKE_APP/RustCoreSmoke"
   cat > "$SMOKE_APP/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -151,11 +154,11 @@ PLIST
     sleep 1
   done
   [[ -f "$SMOKE_MARKER" ]] || { echo "iOS simulator FFI smoke did not complete" >&2; exit 1; }
-  [[ "$(cat "$SMOKE_MARKER")" == "identity-generation-ok" ]] || {
+  [[ "$(cat "$SMOKE_MARKER")" == "go-fixture-contracts-ok" ]] || {
     echo "iOS simulator FFI smoke returned unexpected result" >&2
     exit 1
   }
-  echo "PASS iOS simulator Rust FFI smoke ($HOST_ARCH)"
+  echo "PASS iOS simulator Go-fixture Rust FFI contracts ($HOST_ARCH)"
 fi
 
 if [[ -e "$OUTPUT" || -L "$OUTPUT" ]]; then
