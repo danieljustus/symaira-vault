@@ -57,10 +57,16 @@ pub struct ExportResult {
 pub(crate) fn audit_export(
     vault: &Path,
     keyring: &dyn symvault_core::session::Keyring,
+    identity: &Identity,
 ) -> Result<(), String> {
-    let mut logger =
-        audit::open_with_keyring("symvault", vault, keyring, RotationConfig::default())
-            .map_err(|error| format!("open audit log: {error}"))?;
+    let mut logger = audit::open_with_keyring_and_identity(
+        "symvault",
+        vault,
+        keyring,
+        Some(identity),
+        RotationConfig::default(),
+    )
+    .map_err(|error| format!("open audit log: {error}"))?;
     logger
         .append(LogEntry {
             timestamp: go_timestamp_seconds(),
@@ -140,7 +146,7 @@ pub fn run_export<Confirm, Unlock, Audit>(
 where
     Confirm: FnOnce() -> Result<bool, String>,
     Unlock: FnOnce() -> Result<Identity, String>,
-    Audit: FnOnce(&Path, usize) -> Result<(), String>,
+    Audit: FnOnce(&Path, usize, &Identity) -> Result<(), String>,
 {
     const WARNING: &str =
         "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext.";
@@ -192,7 +198,7 @@ where
     }
     let output = render(options.format, &entries, &options.mapping)?;
     write_output(options.output.as_deref(), &output)?;
-    if let Err(error) = audit(vault, entries.len()) {
+    if let Err(error) = audit(vault, entries.len(), &identity) {
         eprintln!("Warning: audit log write failed: {error}");
     }
     Ok(ExportResult {

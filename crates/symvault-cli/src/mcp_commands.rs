@@ -122,10 +122,11 @@ fn build_handler(
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
 ) -> Result<ProtocolHandler, String> {
-    let audit = symvault_store::audit::open_with_keyring(
+    let audit = symvault_store::audit::open_with_keyring_and_identity(
         agent_name,
         root,
         keyring,
+        Some(&identity),
         symvault_store::audit::RotationConfig::default(),
     )
     .map_err(|error| format!("open audit logger: {error}"))?;

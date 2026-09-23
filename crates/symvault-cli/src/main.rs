@@ -2583,8 +2583,22 @@ fn run_audit_export(
                 .keyring
                 .as_deref()
                 .ok_or_else(|| "audit keyring unavailable".to_owned())?;
-            let key = symvault_store::audit::load_or_create_key_for_platform(&vault, keyring)
-                .map_err(|error| format!("load HMAC key: {error}"))?;
+            let identity = if cfg!(any(
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            )) {
+                require_initialized(&vault)?;
+                Some(device::unlock_vault(&vault)?)
+            } else {
+                None
+            };
+            let key = symvault_store::audit::load_or_create_key_for_platform(
+                &vault,
+                keyring,
+                identity.as_ref(),
+            )
+            .map_err(|error| format!("load HMAC key: {error}"))?;
             let kid = key.fingerprint();
             let keys = BTreeMap::from([(kid.clone(), key)]);
             audit_export_commands::export_with_keys(
@@ -2676,8 +2690,18 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
             .keyring
             .as_deref()
             .ok_or_else(|| "audit keyring unavailable".to_owned())?;
+        let identity = if cfg!(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )) && vault.join("identity.age").is_file()
+        {
+            Some(device::unlock_vault(&vault)?)
+        } else {
+            None
+        };
         let (new_key, archive_path) =
-            symvault_store::audit::rotate_key_for_platform(&vault, keyring)
+            symvault_store::audit::rotate_key_for_platform(&vault, keyring, identity.as_ref())
                 .map_err(|error| format!("rotate HMAC key: {error}"))?;
         let mut stderr = io::stderr().lock();
         writeln!(stderr, "New key: {} (first 4 bytes)", new_key.preview_hex())
@@ -2946,10 +2970,11 @@ fn run_auth_rotate_passphrase(
         }
 
         if let Some(keyring) = runtime.keyring.as_deref()
-            && let Ok(mut logger) = symvault_store::audit::open_with_keyring(
+            && let Ok(mut logger) = symvault_store::audit::open_with_keyring_and_identity(
                 "symvault",
                 &vault,
                 keyring,
+                Some(&identity),
                 symvault_store::audit::RotationConfig::default(),
             )
         {
@@ -3556,13 +3581,13 @@ fn run_export(
                 require_initialized(&vault)?;
                 device::unlock_vault(&vault)
             },
-            |root, _entries| {
+            |root, _entries, identity| {
                 let runtime = runtime_session_manager();
                 let keyring = runtime
                     .keyring
                     .as_deref()
                     .ok_or_else(|| "audit keyring unavailable".to_owned())?;
-                export_commands::audit_export(root, keyring)
+                export_commands::audit_export(root, keyring, identity)
             },
         )?;
         if exported.canceled {

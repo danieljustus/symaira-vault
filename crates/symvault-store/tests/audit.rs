@@ -599,3 +599,59 @@ fn encrypted_local_fallback_migrates_legacy_plaintext_before_archiving() {
         AuditKey::new(legacy).unwrap()
     );
 }
+
+#[test]
+fn age_encrypted_fallback_loads_rotates_and_fails_closed() {
+    use symvault_store::audit::load_or_create_key_with_local_fallback_and_identity;
+
+    let root = tempfile::tempdir().unwrap();
+    let identity = symvault_crypto::generate_identity();
+    let wrong_identity = symvault_crypto::generate_identity();
+    let recipient =
+        symvault_crypto::parse_recipient(&symvault_crypto::recipient_string(&identity)).unwrap();
+    let old_bytes = [0x5a; 32];
+    let old_ciphertext = symvault_crypto::encrypt(&old_bytes, &[recipient]).unwrap();
+    let key_path = root.path().join("audit-hmac-key");
+    fs::write(&key_path, &old_ciphertext).unwrap();
+
+    let loaded =
+        load_or_create_key_with_local_fallback_and_identity(root.path(), Some(&identity)).unwrap();
+    assert_eq!(loaded.fingerprint(), key_fingerprint(&old_bytes));
+    assert_eq!(fs::read(&key_path).unwrap(), old_ciphertext);
+
+    let (rotated, archive) = symvault_store::audit::rotate_key_with_local_fallback_and_identity(
+        root.path(),
+        Some(&identity),
+    )
+    .unwrap();
+    let archive = archive.unwrap();
+    assert_eq!(fs::read(&archive).unwrap(), old_ciphertext);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for path in [&archive, &key_path] {
+            assert_eq!(
+                fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+    }
+    assert_eq!(
+        symvault_crypto::decrypt(&fs::read(&archive).unwrap(), &identity).unwrap(),
+        old_bytes
+    );
+    let new_ciphertext = fs::read(&key_path).unwrap();
+    let new_bytes = symvault_crypto::decrypt(&new_ciphertext, &identity).unwrap();
+    assert_eq!(new_bytes.len(), 32);
+    assert_eq!(rotated.fingerprint(), key_fingerprint(&new_bytes));
+    assert_ne!(new_bytes, old_bytes);
+    assert!(!root.path().join("audit-hmac-key.kek").exists());
+
+    let before = fs::read(&key_path).unwrap();
+    assert!(load_or_create_key_with_local_fallback_and_identity(root.path(), None).is_err());
+    assert!(
+        load_or_create_key_with_local_fallback_and_identity(root.path(), Some(&wrong_identity),)
+            .is_err()
+    );
+    assert_eq!(fs::read(&key_path).unwrap(), before);
+}

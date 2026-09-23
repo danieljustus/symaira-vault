@@ -16,6 +16,7 @@ use std::{
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use symvault_crypto::Identity;
 use zeroize::Zeroize;
 
 const HMAC_KEY_BYTES: usize = 32;
@@ -331,13 +332,26 @@ pub fn open_with_keyring(
     keyring: &dyn symvault_core::session::Keyring,
     rotation: RotationConfig,
 ) -> io::Result<Logger> {
+    open_with_keyring_and_identity(agent, directory, keyring, None, rotation)
+}
+
+/// Opens the production audit log with an optional unlocked vault identity.
+/// BSD fallback storage uses the identity to read and write Go-compatible
+/// age-encrypted HMAC key files.
+pub fn open_with_keyring_and_identity(
+    agent: &str,
+    directory: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+    identity: Option<&Identity>,
+    rotation: RotationConfig,
+) -> io::Result<Logger> {
     if agent.contains(['/', '\\']) || agent.contains("..") || agent == "." {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "invalid audit agent name",
         ));
     }
-    let key = load_or_create_key_for_platform(directory, keyring)?;
+    let key = load_or_create_key_for_platform(directory, keyring, identity)?;
     Logger::open(
         directory.join(format!("{LOG_PREFIX}{agent}{LOG_SUFFIX}")),
         key,
@@ -397,14 +411,16 @@ pub fn load_or_create_key_with_keyring(
 pub fn load_or_create_key_for_platform(
     directory: &Path,
     keyring: &dyn symvault_core::session::Keyring,
+    identity: Option<&Identity>,
 ) -> io::Result<AuditKey> {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
     {
         let _ = keyring;
-        return load_or_create_key_with_local_fallback(directory);
+        return load_or_create_key_with_local_fallback_and_identity(directory, identity);
     }
     #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
     {
+        let _ = identity;
         load_or_create_key_with_keyring(directory, keyring)
     }
 }
@@ -413,24 +429,35 @@ pub fn load_or_create_key_for_platform(
 /// are encrypted with a separate random 32-byte local KEK; neither the live
 /// key nor archives are persisted as plaintext.
 pub fn load_or_create_key_with_local_fallback(directory: &Path) -> io::Result<AuditKey> {
+    load_or_create_key_with_local_fallback_and_identity(directory, None)
+}
+
+/// Identity-aware variant of [`load_or_create_key_with_local_fallback`].
+/// Age-encrypted files are decrypted with the unlocked identity, and newly
+/// created or migrated keys use Go's `SaveEncryptedKey` envelope.
+pub fn load_or_create_key_with_local_fallback_and_identity(
+    directory: &Path,
+    identity: Option<&Identity>,
+) -> io::Result<AuditKey> {
     ensure_audit_directory(directory)?;
     let path = directory.join(KEY_FILE);
     match fs::read(&path) {
         Ok(stored) => {
             set_private_mode_path(&path)?;
-            let key = decode_local_key_file(directory, &stored)?;
+            let key = decode_local_key_file(directory, &stored, identity)?;
             let audit_key = AuditKey::new(&*key)?;
-            if !stored.starts_with(LOCAL_KEY_MARKER) {
+            if !stored.starts_with(LOCAL_KEY_MARKER) && !stored.starts_with(b"age-encryption.org/")
+            {
                 // Migrate legacy plaintext in place only after its length is
                 // validated and the encrypted replacement was written.
-                write_local_key_file(directory, &path, &key)?;
+                write_local_key_file(directory, &path, &key, identity)?;
             }
             Ok(audit_key)
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
             getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
-            write_local_key_file(directory, &path, &bytes)?;
+            write_local_key_file(directory, &path, &bytes, identity)?;
             AuditKey::new(&*bytes)
         }
         Err(error) => Err(error),
@@ -569,16 +596,27 @@ pub fn rotate_key_with_keyring(
 /// Rotates the audit key using the Go-compatible durable local fallback.
 /// Existing encrypted key files are renamed unchanged to the archive path.
 pub fn rotate_key_with_local_fallback(directory: &Path) -> io::Result<(AuditKey, Option<PathBuf>)> {
+    rotate_key_with_local_fallback_and_identity(directory, None)
+}
+
+/// Identity-aware variant of [`rotate_key_with_local_fallback`]. The current
+/// key is decrypted before archival; the archive retains its original bytes,
+/// and the replacement uses age encryption when an identity is supplied.
+pub fn rotate_key_with_local_fallback_and_identity(
+    directory: &Path,
+    identity: Option<&Identity>,
+) -> io::Result<(AuditKey, Option<PathBuf>)> {
     ensure_audit_directory(directory)?;
     let current = directory.join(KEY_FILE);
     let old_key = match fs::read(&current) {
         Ok(stored) => {
             set_private_mode_path(&current)?;
-            let bytes = decode_local_key_file(directory, &stored)?;
+            let bytes = decode_local_key_file(directory, &stored, identity)?;
             let _old_key = AuditKey::new(&*bytes)?;
-            if !stored.starts_with(LOCAL_KEY_MARKER) {
+            if !stored.starts_with(LOCAL_KEY_MARKER) && !stored.starts_with(b"age-encryption.org/")
+            {
                 // Encrypt legacy plaintext before it can become an archive.
-                write_local_key_file(directory, &current, &bytes)?;
+                write_local_key_file(directory, &current, &bytes, identity)?;
             }
             Some(bytes)
         }
@@ -604,7 +642,7 @@ pub fn rotate_key_with_local_fallback(directory: &Path) -> io::Result<(AuditKey,
         }
         return Err(io::Error::other(error.to_string()));
     }
-    if let Err(error) = write_local_key_file(directory, &current, &new_bytes) {
+    if let Err(error) = write_local_key_file(directory, &current, &new_bytes, identity) {
         if let Some(path) = &archive {
             let _ = fs::rename(path, &current);
         }
@@ -658,6 +696,7 @@ fn get_or_create_local_kek(directory: &Path) -> io::Result<zeroize::Zeroizing<Ve
 fn decode_local_key_file(
     directory: &Path,
     stored: &[u8],
+    identity: Option<&Identity>,
 ) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
     if let Some(ciphertext) = stored.strip_prefix(LOCAL_KEY_MARKER) {
         let kek = get_or_create_local_kek(directory)?;
@@ -667,15 +706,37 @@ fn decode_local_key_file(
         return Ok(zeroize::Zeroizing::new(bytes));
     }
     if stored.starts_with(b"age-encryption.org/") {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "encrypted audit key requires an age identity",
-        ));
+        let identity = identity.ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "encrypted audit key requires an age identity",
+            )
+        })?;
+        let bytes = symvault_crypto::decrypt(stored, identity).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "cannot decrypt age-encrypted audit key",
+            )
+        })?;
+        return Ok(zeroize::Zeroizing::new(bytes));
     }
     Ok(zeroize::Zeroizing::new(stored.to_vec()))
 }
 
-fn write_local_key_file(directory: &Path, path: &Path, key: &[u8]) -> io::Result<()> {
+fn write_local_key_file(
+    directory: &Path,
+    path: &Path,
+    key: &[u8],
+    identity: Option<&Identity>,
+) -> io::Result<()> {
+    if let Some(identity) = identity {
+        let recipient = symvault_crypto::recipient_string(identity);
+        let recipient = symvault_crypto::parse_recipient(&recipient)
+            .map_err(|_| io::Error::other("cannot derive audit key recipient"))?;
+        let ciphertext = symvault_crypto::encrypt(key, &[recipient])
+            .map_err(|_| io::Error::other("cannot encrypt audit key for vault identity"))?;
+        return write_private_atomic(path, &ciphertext, true);
+    }
     let kek = get_or_create_local_kek(directory)?;
     let ciphertext = symvault_crypto::encrypt_with_key(key, &kek)
         .map_err(|_| io::Error::other("cannot encrypt local audit key"))?;
@@ -745,14 +806,16 @@ fn set_private_mode_path(_path: &Path) -> io::Result<()> {
 pub fn rotate_key_for_platform(
     directory: &Path,
     keyring: &dyn symvault_core::session::Keyring,
+    identity: Option<&Identity>,
 ) -> io::Result<(AuditKey, Option<PathBuf>)> {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
     {
         let _ = keyring;
-        return rotate_key_with_local_fallback(directory);
+        return rotate_key_with_local_fallback_and_identity(directory, identity);
     }
     #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
     {
+        let _ = identity;
         rotate_key_with_keyring(directory, keyring)
     }
 }
