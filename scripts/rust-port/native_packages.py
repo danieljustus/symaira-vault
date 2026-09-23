@@ -121,7 +121,7 @@ def rpm_fields(package: Path) -> dict[str, str]:
     if len(values) != 7:
         raise ValueError(f"unexpected rpm query output for {package}")
     fields = dict(zip(("name", "version", "architecture", "vendor", "homepage", "description", "license"), values))
-    fields["recommends"] = output(["rpm", "-qpR", str(package)]).splitlines()
+    fields["recommends"] = output(["rpm", "-qp", "--recommends", str(package)]).splitlines()
     return fields
 
 
