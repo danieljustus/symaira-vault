@@ -14,6 +14,15 @@ allow = [
   "Unicode-3.0",
   "Zlib",
 ]
+exceptions = [
+  # ureq's pinned rustls backend uses these crates for TLS validation and
+  # crypto. Keep the ISC and root-certificate data license approvals scoped
+  # to the exact versions in the current lockfile.
+  { crate = "ring@0.17.14", allow = ["ISC"] },
+  { crate = "rustls-webpki@0.103.15", allow = ["ISC"] },
+  { crate = "untrusted@0.9.0", allow = ["ISC"] },
+  { crate = "webpki-roots@1.0.9", allow = ["CDLA-Permissive-2.0"] },
+]
 
 [bans]
 multiple-versions = "warn"

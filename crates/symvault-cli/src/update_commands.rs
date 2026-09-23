@@ -1,5 +1,6 @@
 //! `symvault update` — `update check`, `update info`, and the root
-//! output-format gate. `update apply` remains blocked on the update verifier.
+//! output-format gate. `update apply --dry-run` previews the checker result;
+//! applying a downloaded release remains intentionally unavailable here.
 //!
 //! Go references: `cmd/admin/update.go`, `internal/update/checker.go`, and
 //! corekit's `updatecheck/updatecheck.go` and install-method detector.
@@ -60,6 +61,15 @@ pub(crate) fn run(
         }
         Some(word) => {
             let word = word.to_string_lossy();
+            if matches!(word.as_ref(), "info" | "check" | "apply")
+                && rest
+                    .iter()
+                    .skip(1)
+                    .any(|arg| matches!(arg.to_string_lossy().as_ref(), "--help" | "-h"))
+            {
+                print_command_help(&word);
+                return ExitCode::SUCCESS;
+            }
             if word == "--json" && rest.len() == 1 {
                 return output_gate(output_format, true).unwrap_or(ExitCode::SUCCESS);
             }
@@ -114,6 +124,42 @@ pub(crate) fn run(
                     local_quiet,
                 );
             }
+            if word == "apply" {
+                let mut dry_run = false;
+                let mut force = false;
+                let mut local_json = json_flag || output_format == "json";
+                let mut args = rest.iter().skip(1);
+                while let Some(arg) = args.next() {
+                    match arg.to_string_lossy().as_ref() {
+                        "--dry-run" => dry_run = true,
+                        "--force" => force = true,
+                        "--json" => local_json = true,
+                        "--output=json" => local_json = true,
+                        "--output=text" | "--output=yaml" => {}
+                        "--output" => {
+                            let Some(value) = args.next() else {
+                                return unknown_command("symvault update apply", "--output", false);
+                            };
+                            local_json |= value == "json";
+                        }
+                        other => {
+                            return unknown_command("symvault update apply", other, false);
+                        }
+                    }
+                }
+                if !dry_run {
+                    let _ = writeln!(
+                        std::io::stderr(),
+                        "Error: update apply currently requires --dry-run in the Rust CLI"
+                    );
+                    return ExitCode::from(1);
+                }
+                return apply_dry_run(
+                    crate::VERSION,
+                    force,
+                    local_json || json_flag || output_format == "json",
+                );
+            }
             unknown_command("symvault update", &word, true)
         }
     }
@@ -131,22 +177,28 @@ struct CheckJson<'a> {
 }
 
 fn check(current_version: &str, force: bool, json: bool, quiet: bool) -> ExitCode {
+    match check_result(current_version, force) {
+        Ok(result) => report_check(result, json, quiet),
+        Err(error) => {
+            let _ = writeln!(std::io::stderr(), "Error: check for updates: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn check_result(current_version: &str, force: bool) -> Result<CheckResult, String> {
     let current_text = current_version.trim();
     let Some(current) = StableVersion::parse(current_text) else {
-        return report_check(
-            CheckResult {
-                current_version: current_text.to_owned(),
-                latest_version: None,
-                release_url: None,
-                checkable: false,
-                update_available: false,
-            },
-            json,
-            quiet,
-        );
+        return Ok(CheckResult {
+            current_version: current_text.to_owned(),
+            latest_version: None,
+            release_url: None,
+            checkable: false,
+            update_available: false,
+        });
     };
 
-    let result = check_latest(
+    check_result_with(
         current_text,
         current,
         force,
@@ -155,7 +207,18 @@ fn check(current_version: &str, force: bool, json: bool, quiet: bool) -> ExitCod
         cache_ttl(),
         &agent(true),
     )
-    .map(|release| {
+}
+
+fn check_result_with(
+    current_text: &str,
+    current: StableVersion,
+    force: bool,
+    url: &str,
+    cache_path: &Path,
+    ttl: Duration,
+    http: &Agent,
+) -> Result<CheckResult, String> {
+    check_latest(current_text, current, force, url, cache_path, ttl, http).map(|release| {
         let update_available = release.is_some();
         let latest_text = release
             .as_ref()
@@ -170,15 +233,106 @@ fn check(current_version: &str, force: bool, json: bool, quiet: bool) -> ExitCod
             checkable: true,
             update_available,
         }
-    });
+    })
+}
 
-    match result {
-        Ok(result) => report_check(result, json, quiet),
+#[derive(Serialize)]
+struct ApplyDryRunJson<'a> {
+    method: &'static str,
+    old_version: &'a str,
+    new_version: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backup_path: Option<&'a str>,
+    binary_path: &'static str,
+    dry_run: bool,
+}
+
+fn apply_dry_run(current_version: &str, force: bool, json: bool) -> ExitCode {
+    let result = match check_result(current_version, force) {
+        Ok(result) => result,
         Err(error) => {
             let _ = writeln!(std::io::stderr(), "Error: check for updates: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    match render_apply_dry_run(&result, json) {
+        Ok(text) => {
+            if json {
+                print!("{text}");
+            } else {
+                let _ = std::io::stderr().lock().write_all(text.as_bytes());
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            let _ = writeln!(std::io::stderr(), "Error: encode JSON output: {error}");
             ExitCode::from(1)
         }
     }
+}
+
+fn render_apply_dry_run(result: &CheckResult, json: bool) -> Result<String, serde_json::Error> {
+    let new_version = if result.update_available {
+        result.latest_version.as_deref().unwrap_or_default()
+    } else {
+        &result.current_version
+    };
+    if json {
+        let output = ApplyDryRunJson {
+            method: "",
+            old_version: &result.current_version,
+            new_version,
+            backup_path: None,
+            binary_path: "",
+            dry_run: true,
+        };
+        return serde_json::to_string_pretty(&output)
+            .map(|text| format!("{}\n", go_json_escape(&text)));
+    }
+    let text = if !result.checkable {
+        format!(
+            "Update checks are only available for stable release builds. Current version: {}\n",
+            result.current_version
+        )
+    } else if result.update_available {
+        format!(
+            "Update available: {} -> {} (use --dry-run to preview)\n",
+            result.current_version, new_version
+        )
+    } else {
+        format!(
+            "Symaira Vault is up to date ({}).\n",
+            result.current_version
+        )
+    };
+    Ok(text)
+}
+
+fn go_json_escape(text: &str) -> String {
+    text.replace('&', "\\u0026")
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
+}
+
+fn print_command_help(command: &str) {
+    print!("{}", command_help(command).expect("known update command"));
+}
+
+fn command_help(command: &str) -> Option<&'static str> {
+    Some(match command {
+        "info" => {
+            "Detects how Symaira Vault was installed and shows whether self-update\nis supported, along with upgrade guidance for the detected method.\n\nUsage:\n  symvault update info [flags]\n\nFlags:\n  -h, --help   help for info\n      --json   output info as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+        }
+        "check" => {
+            "Check GitHub for a newer Symaira Vault release\n\nUsage:\n  symvault update check [flags]\n\nFlags:\n      --force   bypass cache and force a fresh check\n  -h, --help    help for check\n      --json    output update check result as JSON (deprecated: use --output=json)\n      --quiet   suppress non-essential output (exit code 1 if update available)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+        }
+        "apply" => {
+            "Downloads, verifies, and applies the latest Symaira Vault release.\n\nSupports direct-download installations only. When run via Homebrew, go install,\nor a package manager, self-update is disabled and guidance is shown instead.\n\nUsage:\n  symvault update apply [flags]\n\nFlags:\n      --dry-run   preview update without applying\n      --force     bypass cache and force a fresh check\n  -h, --help      help for apply\n      --json      output apply result as JSON (deprecated: use --output=json)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n"
+        }
+        _ => return None,
+    })
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -890,6 +1044,57 @@ mod tests {
         assert!(request.contains("accept: application/vnd.github+json\r\n"));
         assert!(request.contains("user-agent: symaira-updatecheck/0.4.0\r\n"));
         server.join().expect("oracle server thread");
+    }
+
+    #[test]
+    fn update_apply_dry_run_force_previews_fresh_local_release() {
+        let temp = tempfile::tempdir().expect("cache temp dir");
+        let cache = temp.path().join("cache.json");
+        let timestamp = OffsetDateTime::now_utc().format(&Rfc3339).unwrap();
+        std::fs::write(
+            &cache,
+            format!(
+                r#"{{"timestamp":"{timestamp}","release":{{"TagName":"v0.4.0","Body":"cached","HTMLURL":"https://example.test/old","Assets":[]}}}}"#
+            ),
+        )
+        .unwrap();
+
+        let body = r#"{"tag_name":"v0.5.0","html_url":"https://example.test/releases/v0.5.0","body":"local oracle","draft":false,"prerelease":false,"assets":[]}"#;
+        let (url, request_rx, server) = local_oracle(body);
+        let current = StableVersion::parse("0.4.0").unwrap();
+        let http = Agent::new_with_config(
+            Agent::config_builder()
+                .https_only(false)
+                .max_redirects(0)
+                .timeout_global(Some(Duration::from_secs(2)))
+                .http_status_as_error(false)
+                .build(),
+        );
+
+        let preview = check_result_with(
+            "0.4.0",
+            current,
+            true,
+            &url,
+            &cache,
+            UPDATE_CACHE_TTL,
+            &http,
+        )
+        .expect("forced local release check");
+        assert!(preview.update_available);
+        assert_eq!(preview.latest_version.as_deref(), Some("0.5.0"));
+        assert_eq!(
+            render_apply_dry_run(&preview, false).unwrap(),
+            "Update available: 0.4.0 -> 0.5.0 (use --dry-run to preview)\n"
+        );
+        assert_eq!(
+            render_apply_dry_run(&preview, true).unwrap(),
+            "{\n  \"method\": \"\",\n  \"old_version\": \"0.4.0\",\n  \"new_version\": \"0.5.0\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n"
+        );
+        let request = request_rx.recv().expect("local oracle received request");
+        assert!(request.starts_with("get /releases/latest http/1.1\r\n"));
+        assert!(request.contains("user-agent: symaira-updatecheck/0.4.0\r\n"));
+        server.join().expect("local oracle thread");
     }
 
     fn local_oracle(body: &str) -> (String, mpsc::Receiver<String>, thread::JoinHandle<()>) {
