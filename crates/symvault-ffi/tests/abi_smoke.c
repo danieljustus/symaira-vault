@@ -24,6 +24,15 @@ int main(void) {
     SymvaultResult list = symvault_list_entries_json(path, sizeof path - 1, path, sizeof path - 1, bad_identity, sizeof bad_identity - 1);
     SymvaultResult verify = symvault_verify_manifest_integrity(path, sizeof path - 1, bad_identity, sizeof bad_identity - 1);
     if (!code && (read.error.len == 0 || list.error.len == 0 || verify.error.len == 0)) code = 5;
+    const uint8_t entry_path[] = "services/example";
+    const uint8_t invalid_json[] = "{";
+    SymvaultResult write = symvault_write_entry_json(
+        path, sizeof path - 1,
+        entry_path, sizeof entry_path - 1,
+        invalid_json, sizeof invalid_json - 1,
+        id.output.data, id.output.len);
+    if (!code && (write.error.len == 0 || write.output.len != 0)) code = 6;
+    release(write);
     release(verify);
     release(list);
     release(read);

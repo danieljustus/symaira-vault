@@ -12,11 +12,11 @@ crate-type = ["staticlib"]
 
 [dependencies]
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+serde_json.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 zeroize = "=1.8.2"
 
 [dev-dependencies]
 base64 = "=0.22.1"
-serde_json.workspace = true
 tempfile = "=3.27.0"

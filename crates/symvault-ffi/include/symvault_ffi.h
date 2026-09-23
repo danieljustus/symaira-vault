@@ -39,6 +39,12 @@ SymvaultResult symvault_read_entry_json(
     const uint8_t *vault_dir, size_t vault_dir_len,
     const uint8_t *entry_path, size_t entry_path_len,
     const uint8_t *identity, size_t identity_len);
+/* Success returns empty output/error buffers; failures return a nonempty error. */
+SymvaultResult symvault_write_entry_json(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *entry_path, size_t entry_path_len,
+    const uint8_t *entry_json, size_t entry_json_len,
+    const uint8_t *identity, size_t identity_len);
 SymvaultResult symvault_list_entries_json(
     const uint8_t *vault_dir, size_t vault_dir_len,
     const uint8_t *prefix, size_t prefix_len,
