@@ -115,6 +115,7 @@ func (f *fakeKeyring) Get(key string) (string, error) {
 func (f *fakeKeyring) Set(key, value string) error { f.values[key] = value; return nil }
 func (f *fakeKeyring) Delete(key string) error     { delete(f.values, key); return nil }
 
+//nolint:gocyclo // Each branch records a separate production Go session contract case.
 func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"

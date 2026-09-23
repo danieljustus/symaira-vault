@@ -1010,7 +1010,7 @@ fn go_float_json_token(float: f64) -> Result<String, String> {
     let number = serde_json::Number::from_f64(float)
         .ok_or_else(|| "entry data number cannot be represented as float64".to_owned())?;
     let raw = number.to_string();
-    let Some(exponent_at) = raw.find(|character| character == 'e' || character == 'E') else {
+    let Some(exponent_at) = raw.find(['e', 'E']) else {
         return Ok(raw.strip_suffix(".0").unwrap_or(&raw).to_owned());
     };
     let (mantissa, exponent) = raw.split_at(exponent_at);
