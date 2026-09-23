@@ -771,6 +771,47 @@ mod tests {
             .clone()
     }
 
+    #[test]
+    fn source_bound_notification_returns_202_and_keeps_session_initialized() {
+        let mut handler = ProtocolHandler::new("symaira", "1.0.0");
+        for name in [
+            "initialize",
+            "authenticated_initialized_notification_accepted",
+            "authenticated_prompts_list_after_initialized_notification",
+        ] {
+            let case = go_http_case(name);
+            let request = &case["request"];
+            let response = handle_request(
+                HttpRequest {
+                    method: request["method"].as_str().expect("fixture method"),
+                    path: request["path"].as_str().expect("fixture path"),
+                    content_type: request["content_type"]
+                        .as_str()
+                        .expect("fixture content type"),
+                    accept: request["accept"].as_str().expect("fixture Accept"),
+                    protocol_version: request["protocol_version"]
+                        .as_str()
+                        .expect("fixture protocol version"),
+                    body: request["body"].as_str().expect("fixture body"),
+                },
+                &mut handler,
+            )
+            .expect("handle fixture request");
+            assert_eq!(
+                response.status,
+                case["response"]["status"].as_u64().expect("fixture status") as u16,
+                "{name} status"
+            );
+            assert_eq!(
+                String::from_utf8(response.body).expect("UTF-8 response"),
+                case["response"]["body"]
+                    .as_str()
+                    .expect("fixture response body"),
+                "{name} body"
+            );
+        }
+    }
+
     fn raw_status(response: &str) -> u16 {
         response
             .split_whitespace()
