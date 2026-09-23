@@ -124,11 +124,11 @@ fn audit_rotate_key_cli_flow() {
     #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
     {
         assert!(vault.join("audit-hmac-key").is_file());
-        assert!(vault.join("audit-hmac-key.kek").is_file());
+        assert!(!vault.join("audit-hmac-key.kek").exists());
         assert!(
             fs::read(vault.join("audit-hmac-key"))
                 .unwrap()
-                .starts_with(b"sv-local-v1:")
+                .starts_with(b"age-encryption.org/")
         );
     }
     #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
