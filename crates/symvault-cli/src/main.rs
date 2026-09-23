@@ -4067,10 +4067,8 @@ fn run_import(
         Ok(value) => value,
         Err(error) => return finish_vault_result(Err(error)),
     };
-    if !quiet {
-        if let Some(import_id) = &import_id {
-            println!("Quarantine import ID: {import_id}");
-        }
+    if !quiet && let Some(import_id) = &import_id {
+        println!("Quarantine import ID: {import_id}");
     }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
