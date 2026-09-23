@@ -122,6 +122,33 @@
       }
     },
     {
+      "name": "authenticated_sse_get_rejected_with_allow_post",
+      "go_authenticated": true,
+      "request": {
+        "method": "GET",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": ""
+      },
+      "response": {
+        "status": 405,
+        "headers": {
+          "Allow": "POST",
+          "Content-Length": "73",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"method not allowed\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
       "name": "authenticated_unsupported_protocol_version",
       "go_authenticated": true,
       "request": {

@@ -170,6 +170,11 @@ func main() {
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":21,"method":"prompts/list"}`},
 		},
 		{
+			Name:            "authenticated_sse_get_rejected_with_allow_post",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodGet, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: ""},
+		},
+		{
 			Name:            "authenticated_unsupported_protocol_version",
 			GoAuthenticated: true,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "1999-01-01", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":3,"method":"prompts/list"}`},
@@ -339,6 +344,9 @@ func captureResponse(httpResp *http.Response) response {
 	headers := map[string]string{"Content-Length": strconv.FormatInt(httpResp.ContentLength, 10)}
 	if value := httpResp.Header.Get("Content-Type"); value != "" {
 		headers["Content-Type"] = value
+	}
+	if value := httpResp.Header.Get("Allow"); value != "" {
+		headers["Allow"] = value
 	}
 	absent := []string{}
 	if httpResp.Header.Get("MCP-Protocol-Version") == "" {

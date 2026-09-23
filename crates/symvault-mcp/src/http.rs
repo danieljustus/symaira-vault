@@ -812,6 +812,29 @@ mod tests {
         }
     }
 
+    #[test]
+    fn source_bound_authenticated_sse_get_matches_go_method_rejection() {
+        let go = go_http_case("authenticated_sse_get_rejected_with_allow_post");
+        assert_eq!(go["response"]["status"], 405);
+        assert_eq!(go["response"]["headers"]["Allow"], "POST");
+        let response = round_trip_wire(&format!(
+            "GET /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: 0\r\n\r\n"
+        ));
+        assert_eq!(
+            raw_status(&response),
+            go["response"]["status"].as_u64().expect("Go status") as u16
+        );
+        assert!(response.contains("Allow: POST\r\n"), "{response}");
+        assert!(
+            response.contains("Content-Type: application/json\r\n"),
+            "{response}"
+        );
+        assert_eq!(
+            raw_body(&response),
+            go["response"]["body"].as_str().expect("Go response body")
+        );
+    }
+
     fn raw_status(response: &str) -> u16 {
         response
             .split_whitespace()
