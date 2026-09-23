@@ -5,6 +5,10 @@ use std::io::{self, Write};
 const ROOT_HELP: &str = include_str!("help-root.txt");
 const GET_HELP: &str = include_str!("help-get.txt");
 const LIST_HELP: &str = include_str!("help-list.txt");
+// Captured from the pinned fca3f894 Go binary (SHA-256 7023771750c3915d0e7144598a12aac3dfbd242847a587eedd335466aecd1e31).
+const DYNAMIC_HELP: &str = include_str!("help-dynamic.txt");
+const DYNAMIC_GENERATE_HELP: &str = include_str!("help-dynamic-generate.txt");
+const SETUP_HELP: &str = include_str!("help-setup.txt");
 const ROOT_HELP_FLAG: &str = "  -h, --help              help for symvault\n";
 
 /// Find direct `get --help` / `list --help` requests before clap renders its
@@ -51,6 +55,16 @@ pub fn write_nested<W: Write>(topic: &str, output: &mut W) -> io::Result<()> {
 pub fn write<W: Write>(mut root: clap::Command, path: &[String], output: &mut W) -> io::Result<()> {
     if path.is_empty() {
         return output.write_all(ROOT_HELP.as_bytes());
+    }
+    let topic = path.iter().map(String::as_str).collect::<Vec<_>>();
+    let frozen = match topic.as_slice() {
+        ["dynamic"] => Some(DYNAMIC_HELP),
+        ["dynamic", "generate"] => Some(DYNAMIC_GENERATE_HELP),
+        ["setup"] => Some(SETUP_HELP),
+        _ => None,
+    };
+    if let Some(help) = frozen {
+        return output.write_all(help.as_bytes());
     }
 
     if path.len() == 1 {
