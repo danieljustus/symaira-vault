@@ -46,28 +46,33 @@ func main() {
 	fmt.Println("PASS live Go/Rust approval list and decide differential")
 }
 
-func run(binary string) error {
+//nolint:gocyclo // This is one linear live acceptance scenario.
+func run(binary string) (runErr error) {
 	absoluteBinary, err := filepath.Abs(binary)
 	if err != nil {
 		return fmt.Errorf("resolve Rust binary: %w", err)
 	}
-	if info, err := os.Stat(absoluteBinary); err != nil || info.IsDir() {
-		if err == nil {
-			err = errors.New("path is a directory")
+	if info, statErr := os.Stat(absoluteBinary); statErr != nil || info.IsDir() {
+		if statErr == nil {
+			statErr = errors.New("path is a directory")
 		}
-		return fmt.Errorf("Rust binary %q is unavailable: %w", absoluteBinary, err)
+		return fmt.Errorf("rust binary %q is unavailable: %w", absoluteBinary, statErr)
 	}
 
 	vault, err := os.MkdirTemp("", "symvault-approval-live-")
 	if err != nil {
 		return fmt.Errorf("create disposable vault: %w", err)
 	}
-	defer os.RemoveAll(vault)
-	if err := os.WriteFile(filepath.Join(vault, "identity.age"), []byte("integration marker\n"), 0o600); err != nil {
-		return fmt.Errorf("write initialized vault marker: %w", err)
+	defer func() {
+		if cleanupErr := os.RemoveAll(vault); cleanupErr != nil && runErr == nil {
+			runErr = fmt.Errorf("remove disposable vault: %w", cleanupErr)
+		}
+	}()
+	if writeErr := os.WriteFile(filepath.Join(vault, "identity.age"), []byte("integration marker\n"), 0o600); writeErr != nil {
+		return fmt.Errorf("write initialized vault marker: %w", writeErr)
 	}
-	if err := os.WriteFile(filepath.Join(vault, "config.yaml"), []byte("{}\n"), 0o600); err != nil {
-		return fmt.Errorf("write initialized vault config: %w", err)
+	if writeErr := os.WriteFile(filepath.Join(vault, "config.yaml"), []byte("{}\n"), 0o600); writeErr != nil {
+		return fmt.Errorf("write initialized vault config: %w", writeErr)
 	}
 
 	queue := approval.NewQueue()
@@ -84,21 +89,21 @@ func run(binary string) error {
 
 	certPath := filepath.Join(vault, "loopback-server.pem")
 	if len(server.TLS.Certificates) != 1 || len(server.TLS.Certificates[0].Certificate) == 0 {
-		return errors.New("Go TLS test server did not expose its certificate")
+		return errors.New("go TLS test server did not expose its certificate")
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.TLS.Certificates[0].Certificate[0]})
-	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
-		return fmt.Errorf("write loopback server certificate: %w", err)
+	if writeErr := os.WriteFile(certPath, certPEM, 0o600); writeErr != nil {
+		return fmt.Errorf("write loopback server certificate: %w", writeErr)
 	}
 	port, err := serverPort(server)
 	if err != nil {
 		return err
 	}
-	if err := cli.SaveRuntimePort(vault, "127.0.0.1", port); err != nil {
-		return fmt.Errorf("write runtime port record: %w", err)
+	if saveErr := cli.SaveRuntimePort(vault, "127.0.0.1", port); saveErr != nil {
+		return fmt.Errorf("write runtime port record: %w", saveErr)
 	}
-	if err := cli.SaveRuntimeTLSConfig(vault, certPath, "", "", "", false); err != nil {
-		return fmt.Errorf("write runtime TLS record: %w", err)
+	if saveErr := cli.SaveRuntimeTLSConfig(vault, certPath, "", "", "", false); saveErr != nil {
+		return fmt.Errorf("write runtime TLS record: %w", saveErr)
 	}
 
 	goApproveID, err := enqueue(queue, "go-approve")
@@ -123,15 +128,15 @@ func run(binary string) error {
 		return err
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("Go list returned HTTP %d: %s", status, strings.TrimSpace(string(goListBody)))
+		return fmt.Errorf("go list returned HTTP %d: %s", status, strings.TrimSpace(string(goListBody)))
 	}
 	var goList listOutput
-	if err := json.Unmarshal(goListBody, &goList); err != nil {
-		return fmt.Errorf("decode Go list result: %w", err)
+	if decodeErr := json.Unmarshal(goListBody, &goList); decodeErr != nil {
+		return fmt.Errorf("decode go list result: %w", decodeErr)
 	}
 	rustList, err := runRust[listOutput](absoluteBinary, vault, "--output", "json", "approval", "list")
 	if err != nil {
-		return fmt.Errorf("Rust approval list: %w", err)
+		return fmt.Errorf("rust approval list: %w", err)
 	}
 	if !sameList(goList, rustList) {
 		return fmt.Errorf("approval list differs: Go=%s Rust=%+v", bytes.TrimSpace(goListBody), rustList)
@@ -139,11 +144,11 @@ func run(binary string) error {
 
 	goApprove, err := goDecision(server, secret, goApproveID, "approve")
 	if err != nil {
-		return fmt.Errorf("Go approve: %w", err)
+		return fmt.Errorf("go approve: %w", err)
 	}
 	rustApprove, err := runRust[outcomeOutput](absoluteBinary, vault, "--output", "json", "approval", "decide", rustApproveID, "--approve")
 	if err != nil {
-		return fmt.Errorf("Rust approve: %w", err)
+		return fmt.Errorf("rust approve: %w", err)
 	}
 	if !sameOutcome(goApproveID, goApprove, rustApproveID, rustApprove.Outcome) {
 		return fmt.Errorf("approve result differs: Go=%+v Rust=%+v", goApprove, rustApprove)
@@ -151,11 +156,11 @@ func run(binary string) error {
 
 	goDeny, err := goDecision(server, secret, goDenyID, "deny")
 	if err != nil {
-		return fmt.Errorf("Go deny: %w", err)
+		return fmt.Errorf("go deny: %w", err)
 	}
 	rustDeny, err := runRust[outcomeOutput](absoluteBinary, vault, "--output", "json", "approval", "decide", rustDenyID, "--deny")
 	if err != nil {
-		return fmt.Errorf("Rust deny: %w", err)
+		return fmt.Errorf("rust deny: %w", err)
 	}
 	if !sameOutcome(goDenyID, goDeny, rustDenyID, rustDeny.Outcome) {
 		return fmt.Errorf("deny result differs: Go=%+v Rust=%+v", goDeny, rustDeny)
@@ -166,21 +171,21 @@ func run(binary string) error {
 		return err
 	}
 	if goConflictStatus != http.StatusConflict {
-		return fmt.Errorf("Go repeat decision returned HTTP %d, want 409", goConflictStatus)
+		return fmt.Errorf("go repeat decision returned HTTP %d, want 409", goConflictStatus)
 	}
 	conflictOutput, err := runRustRaw(absoluteBinary, vault, "--output", "json", "approval", "decide", rustApproveID, "--approve")
 	if err != nil {
-		return fmt.Errorf("Rust repeat decision process: %w", err)
+		return fmt.Errorf("rust repeat decision process: %w", err)
 	}
 	var goConflict struct {
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal(goConflictBody, &goConflict); err != nil {
-		return fmt.Errorf("decode Go conflict body: %w", err)
+	if decodeErr := json.Unmarshal(goConflictBody, &goConflict); decodeErr != nil {
+		return fmt.Errorf("decode go conflict body: %w", decodeErr)
 	}
 	wantConflict := "Error: approval server: " + goConflict.Error
 	if conflictOutput.ExitCode != 1 || !strings.Contains(string(conflictOutput.Stderr), wantConflict) {
-		return fmt.Errorf("Rust repeat decision mismatch: exit=%d stderr=%q, want Go conflict %q", conflictOutput.ExitCode, conflictOutput.Stderr, wantConflict)
+		return fmt.Errorf("rust repeat decision mismatch: exit=%d stderr=%q, want go conflict %q", conflictOutput.ExitCode, conflictOutput.Stderr, wantConflict)
 	}
 
 	for id, want := range map[string]approval.Status{
@@ -190,8 +195,11 @@ func run(binary string) error {
 		rustDenyID:    approval.StatusDenied,
 	} {
 		entry, err := queue.Get(id)
-		if err != nil || entry.Status != want || entry.DecidedBy != "local-cli" {
-			return fmt.Errorf("queue state for %s = (%+v, %v), want %s by local-cli", id, entry, err, want)
+		if err != nil {
+			return fmt.Errorf("read queue state for %s: %w", id, err)
+		}
+		if entry.Status != want || entry.DecidedBy != "local-cli" {
+			return fmt.Errorf("queue state for %s = %+v, want %s by local-cli", id, entry, want)
 		}
 	}
 	return nil
@@ -232,7 +240,7 @@ func goRequest(server *httptest.Server, secret []byte, method, path string) ([]b
 	if err != nil {
 		return nil, 0, fmt.Errorf("send Go local approval request: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes))
 	if err != nil {
 		return nil, response.StatusCode, fmt.Errorf("read Go local approval response: %w", err)
@@ -277,7 +285,8 @@ type processOutput struct {
 }
 
 func runRustRaw(binary, vault string, args ...string) (processOutput, error) {
-	commandArgs := []string{"--vault", vault}
+	commandArgs := make([]string, 0, 2+len(args))
+	commandArgs = append(commandArgs, "--vault", vault)
 	commandArgs = append(commandArgs, args...)
 	command := exec.Command(binary, commandArgs...)
 	stdout := &bytes.Buffer{}

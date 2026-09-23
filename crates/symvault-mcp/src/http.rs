@@ -172,6 +172,7 @@ impl Drop for ActiveHttpConnection {
     }
 }
 
+#[cfg(test)]
 fn serve_connection_authenticated<F>(
     stream: TcpStream,
     registry_path: &Path,
