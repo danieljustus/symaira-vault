@@ -27,6 +27,7 @@ mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod intake_commands;
 mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
@@ -149,6 +150,11 @@ enum Command {
         timeout: Option<String>,
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Manage local credential intake.
+    Intake {
+        #[command(subcommand)]
+        command: IntakeCommand,
     },
     /// Manage secret sharing between agents.
     Share {
@@ -599,6 +605,19 @@ enum ShareCommand {
         #[arg(long, default_value = "")]
         path: String,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeCommand {
+    Watch {
+        #[command(subcommand)]
+        command: IntakeWatchCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeWatchCommand {
+    Disable,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1417,6 +1436,12 @@ fn run_cli() -> ExitCode {
             }
             finish_vault_result(result)
         }
+        Some(Command::Intake {
+            command:
+                IntakeCommand::Watch {
+                    command: IntakeWatchCommand::Disable,
+                },
+        }) => finish_vault_result(intake_commands::watch_disable(cli.quiet)),
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
         }) => {
