@@ -52,6 +52,25 @@ struct RuntimeTls {
     client_key: String,
 }
 
+#[derive(Debug, Default, Deserialize)]
+struct ConfigTlsFallback {
+    mcp: Option<ConfigMcpTlsFallback>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ConfigMcpTlsFallback {
+    #[serde(default)]
+    tls_cert_file: String,
+    #[serde(default)]
+    tls_client_ca_file: String,
+    #[serde(default)]
+    approval_tls_cert_file: String,
+    #[serde(default)]
+    approval_tls_key_file: String,
+    #[serde(default)]
+    mtls_enabled: bool,
+}
+
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct ApprovalList {
     requests: Vec<ApprovalEntry>,
@@ -254,15 +273,37 @@ fn runtime_server(vault: &Path) -> Result<(u16, String), String> {
 
 fn load_runtime_tls(vault: &Path) -> Result<RuntimeTls, String> {
     let path = vault.join(RUNTIME_TLS);
-    let data = symvault_sync::safeio::read_bounded(&path, 64 * 1024)
-        .map_err(|error| format!("read running server TLS metadata: {error}"))?
-        .ok_or_else(|| "could not find the running server TLS certificate metadata".to_owned())?;
-    let record: RuntimeTls = serde_json::from_slice(&data)
-        .map_err(|_| "could not find the running server TLS certificate metadata".to_owned())?;
-    if record.certificate.trim().is_empty() {
-        return Err("could not find the running server TLS certificate metadata".to_owned());
+    if let Ok(Some(data)) = symvault_sync::safeio::read_bounded(&path, 64 * 1024)
+        && let Ok(record) = serde_json::from_slice::<RuntimeTls>(&data)
+        && !record.certificate.trim().is_empty()
+    {
+        return Ok(record);
     }
-    Ok(record)
+
+    // Go cmd/approval.go falls back to config.yaml when the runtime snapshot
+    // is absent or malformed. Keep that fallback, but leave the identity
+    // verifier below responsible for rejecting incomplete mTLS credentials.
+    let config_path = vault.join("config.yaml");
+    let config_data = symvault_sync::safeio::read_bounded(&config_path, 1024 * 1024)
+        .map_err(|_| "could not find valid running server TLS metadata or config.yaml".to_owned())?
+        .ok_or_else(|| {
+            "could not find valid running server TLS metadata or config.yaml".to_owned()
+        })?;
+    let config: ConfigTlsFallback = serde_yaml_ng::from_slice(&config_data).map_err(|_| {
+        "could not find valid running server TLS metadata or config.yaml".to_owned()
+    })?;
+    let mcp = config.mcp.unwrap_or_default();
+    let certificate = match mcp.tls_cert_file.trim() {
+        "" => vault.join("mcp-server.crt").to_string_lossy().into_owned(),
+        value => value.to_owned(),
+    };
+    Ok(RuntimeTls {
+        certificate,
+        client_auth_required: mcp.mtls_enabled,
+        client_ca_file: mcp.tls_client_ca_file.trim().to_owned(),
+        client_certificate: mcp.approval_tls_cert_file.trim().to_owned(),
+        client_key: mcp.approval_tls_key_file.trim().to_owned(),
+    })
 }
 
 fn parse_certificate_chain(pem: &[u8], error: &str) -> Result<Vec<Certificate<'static>>, String> {
@@ -446,7 +487,7 @@ mod tests {
 
     use super::{
         ApprovalDecision, RuntimeTls, decode_api_response, enroll_proof,
-        load_approval_client_identity, parse_certificate_chain,
+        load_approval_client_identity, load_runtime_tls, parse_certificate_chain,
     };
     use ureq::tls::Certificate;
 
@@ -518,6 +559,67 @@ mod tests {
         assert!(GO_APPROVAL_SOURCE.contains("tls.LoadX509KeyPair(clientCertFile, clientKeyFile)"));
         assert!(GO_APPROVAL_SOURCE.contains("clientLeaf.Verify(x509.VerifyOptions"));
         assert!(GO_MTLS_E2E_SOURCE.contains("old CA/client was accepted after rotation"));
+    }
+
+    #[test]
+    fn missing_or_malformed_runtime_tls_uses_go_config_paths() {
+        assert!(GO_APPROVAL_SOURCE.contains("cli.LoadRuntimeTLSConfig(vaultDir)"));
+        assert!(
+            GO_APPROVAL_SOURCE.contains("configpkg.Load(filepath.Join(vaultDir, \"config.yaml\"))")
+        );
+        for key in [
+            "TLSCertFile",
+            "TLSClientCAFile",
+            "ApprovalTLSCertFile",
+            "ApprovalTLSKeyFile",
+            "MTLSEnabled",
+        ] {
+            assert!(GO_APPROVAL_SOURCE.contains(&format!("cfg.MCP.{key}")));
+        }
+
+        let vault = tempfile::tempdir().expect("temporary vault");
+        fs::write(
+            vault.path().join("config.yaml"),
+            "mcp:\n  tls_cert_file: ' /server/cert.pem '\n  tls_client_ca_file: ' /clients/ca.pem '\n  approval_tls_cert_file: ' /clients/approval.pem '\n  approval_tls_key_file: ' /clients/approval.key '\n  mtls_enabled: true\n",
+        )
+        .expect("write Go-compatible fallback config");
+
+        let missing_snapshot =
+            load_runtime_tls(vault.path()).expect("config fallback for missing snapshot");
+        assert_eq!(missing_snapshot.certificate, "/server/cert.pem");
+        assert_eq!(missing_snapshot.client_ca_file, "/clients/ca.pem");
+        assert_eq!(missing_snapshot.client_certificate, "/clients/approval.pem");
+        assert_eq!(missing_snapshot.client_key, "/clients/approval.key");
+        assert!(missing_snapshot.client_auth_required);
+
+        fs::write(vault.path().join(RUNTIME_TLS), "{malformed").expect("write malformed snapshot");
+        let malformed_snapshot =
+            load_runtime_tls(vault.path()).expect("config fallback for malformed snapshot");
+        assert_eq!(malformed_snapshot.certificate, missing_snapshot.certificate);
+        assert_eq!(
+            malformed_snapshot.client_ca_file,
+            missing_snapshot.client_ca_file
+        );
+        assert_eq!(
+            malformed_snapshot.client_certificate,
+            missing_snapshot.client_certificate
+        );
+        assert_eq!(malformed_snapshot.client_key, missing_snapshot.client_key);
+        assert!(malformed_snapshot.client_auth_required);
+    }
+
+    #[test]
+    fn config_fallback_keeps_mtls_identity_validation_fail_closed() {
+        let vault = tempfile::tempdir().expect("temporary vault");
+        fs::write(
+            vault.path().join("config.yaml"),
+            "mcp:\n  tls_cert_file: /server/cert.pem\n  mtls_enabled: true\n",
+        )
+        .expect("write incomplete mTLS config");
+        let runtime_tls = load_runtime_tls(vault.path()).expect("parse TLS fallback");
+        let error = load_approval_client_identity(&Certificate::from_der(&[]), &runtime_tls)
+            .expect_err("incomplete configured identity must fail closed");
+        assert!(error.contains("dedicated local approval client certificate"));
     }
 
     #[test]
