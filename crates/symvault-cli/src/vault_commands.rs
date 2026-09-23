@@ -329,6 +329,10 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => {
+                let text = value_text(value);
+                serde_yaml_ng::to_writer(output, &text).map_err(|e| e.to_string())
+            }
             other => Err(format!(
                 "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
