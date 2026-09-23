@@ -21,6 +21,21 @@ fn run(binary: &Path, home: &Path) -> Output {
         .expect("run intake watch disable")
 }
 
+#[cfg(not(target_os = "macos"))]
+fn run_without_home(binary: &Path, working_directory: &Path) -> Output {
+    Command::new(binary)
+        .args(["intake", "watch", "disable"])
+        .current_dir(working_directory)
+        .env("HOME", "")
+        .env("XDG_CONFIG_HOME", working_directory.join(".config"))
+        .env("XDG_DATA_HOME", working_directory.join(".local/share"))
+        .env("XDG_CACHE_HOME", working_directory.join(".cache"))
+        .env_remove("SYMVAULT_VAULT")
+        .env_remove("SYMVAULT_PASSPHRASE")
+        .output()
+        .expect("run intake watch disable without HOME")
+}
+
 #[test]
 fn watch_disable_matches_go_in_throwaway_home() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -72,6 +87,21 @@ fn watch_disable_matches_go_in_throwaway_home() {
         assert!(
             plist.exists(),
             "non-macOS disable must leave the plist intact"
+        );
+
+        let relative_plist = home
+            .path()
+            .join("Library/LaunchAgents/com.symaira.vault-intake.plist");
+        fs::create_dir_all(relative_plist.parent().unwrap()).expect("create relative LaunchAgents");
+        fs::write(&relative_plist, b"must remain in cwd").expect("seed relative plist");
+        let go = run_without_home(&go_binary, home.path());
+        let rust = run_without_home(rust_binary, home.path());
+        assert_eq!(rust.status.code(), go.status.code());
+        assert_eq!(rust.stdout, go.stdout);
+        assert_eq!(rust.stderr, go.stderr);
+        assert_eq!(
+            fs::read(relative_plist).expect("relative plist remains untouched"),
+            b"must remain in cwd"
         );
     }
 }
