@@ -61,17 +61,26 @@ func decrypt(_ ciphertext: Data, with identity: String) throws -> Data {
   }
 }
 
-func decrypt(_ ciphertext: Data, withPassphrase passphrase: String) throws -> Data {
+func decrypt(_ ciphertext: Data, withPassphrase passphrase: String, argon2id: Bool = false)
+  throws -> Data
+{
   let passphraseBytes = Data(passphrase.utf8)
   return try passphraseBytes.withUnsafeBytes { passphraseRaw in
     try ciphertext.withUnsafeBytes { ciphertextRaw in
-      try output(
+      let passphrasePointer = passphraseRaw.bindMemory(to: UInt8.self).baseAddress
+      let ciphertextPointer = ciphertextRaw.bindMemory(to: UInt8.self).baseAddress
+      let result = if argon2id {
+        symvault_decrypt_with_passphrase_argon2id(
+          passphrasePointer, passphraseBytes.count,
+          ciphertextPointer, ciphertext.count
+        )
+      } else {
         symvault_decrypt_with_passphrase(
-          passphraseRaw.bindMemory(to: UInt8.self).baseAddress,
-          passphraseBytes.count,
-          ciphertextRaw.bindMemory(to: UInt8.self).baseAddress,
-          ciphertext.count
-        ))
+          passphrasePointer, passphraseBytes.count,
+          ciphertextPointer, ciphertext.count
+        )
+      }
+      return try output(result)
     }
   }
 }
@@ -127,6 +136,21 @@ func verifyCryptoFixture() throws -> String {
       == Data(scryptPlaintext.utf8)
   else {
     throw SmokeFailure.contract("Rust FFI did not decrypt the Go scrypt fixture")
+  }
+  guard
+    let argonCases = crypto["argon2id_cases"] as? [[String: Any]],
+    let argonCase = argonCases.first(where: { $0["name"] as? String == "current_tiny_fixture_params" }),
+    let argonPlaintext = argonCase["plaintext"] as? String,
+    let encodedArgon = argonCase["ciphertext"] as? String,
+    let argonCiphertext = Data(base64Encoded: encodedArgon)
+  else {
+    throw SmokeFailure.fixture("Go crypto fixture is missing Argon2id fields")
+  }
+  guard
+    try decrypt(argonCiphertext, withPassphrase: "rust-interop-fixture-passphrase-v1", argon2id: true)
+      == Data(argonPlaintext.utf8)
+  else {
+    throw SmokeFailure.contract("Rust FFI did not decrypt the Go Argon2id fixture")
   }
   guard let reencryptCases = crypto["reencrypt_cases"] as? [[String: Any]],
     reencryptCases.count == 2
