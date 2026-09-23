@@ -2,30 +2,33 @@
 
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
-- **Basis dieses Zwischenstands:** Branch `codex/rust-migration-integration` lokal auf
-  `ea2ee555`, zuletzt gepusht `30e3303f`, Draft-PR #1137. Go bleibt
-  Produktionspfad. Kein Release, Cutover oder Go-Abbau autorisiert.
-- **Lokal geprüft:** `make rust-007-differential` mit 18 Go-Session-Fällen;
-  `make config-cli-differential` einschließlich Audit-Bootstrap auf macOS;
-  FFI-ABI-Smoke einschließlich erfolgreichem Schreiben/Auflisten/Manifest;
-  MCP-HTTP-Loopback mit Initialize, Sitzungsfortsetzung und Versionsablehnung.
-  CLI `update check --force` und `update apply --dry-run` haben lokale Go/Rust-
-  Vergleiche; die tatsächliche Installation bleibt offen.
-- **Native Evidenz auf `30e3303f`:** iOS-Simulator, Audit und Pairing grün;
-  Windows- und macOS-Rust-Jobs sowie Rust-Port-Contract grün. CI-Lint scheiterte
-  an Go-Formatierung und Rust-Security an vier Lizenzdeklarationen der neuen
-  HTTPS-Abhängigkeit. FreeBSD passierte die vorherige Config-CLI-Stelle und
-  scheiterte an einem Audit-CLI-Test mit ungleichen Speicher-Voraussetzungen.
-  Die drei Befunde sind lokal korrigiert, native Wiederholung auf dem neuen
-  integrierten SHA steht aus.
-- **Ledger:** `contract-matrix.md` hält unbewiesene Zielplattformen offen.
-  Frischer `cligap` vom integrierten `ea2ee555`-Baum: 134 Go-Pfade,
-  102 Rust-Pfade, 21 fehlend, 8 Flag-Lücken, 0 Alias-Lücken.
-  Ein grüner Slice/PR beendet das Ziel nicht; alle anwendbaren Zeilen brauchen
-  ausführbare Evidenz am exakten integrierten SHA und Zielsystem.
-- **Nächste ausführbare Arbeit:** Branch pushen und native Jobs auswerten;
-  HTTP-Listener/Auth, mobile Auto-KDF-Migration, Audit-Fallback und weitere
-  CLI-/Ledger-Slices integrieren. Ein grüner Slice oder PR genügt nicht.
+- **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
+  Der zuletzt gepushte PR-Head ist `506c47e9`; die lokalen Folgecommits
+  bis `2f1d2460` enthalten CI-Fixes, strenge HTTP-Parsergrenzen, Agent-Auswahl,
+  mobile JSON-Zahlenparität und Ledger-Gates. Go bleibt Produktionspfad. Kein
+  Release, Cutover, Go-Abbau oder destruktives Aufräumen ist autorisiert.
+- **Ausführbare lokale Evidenz:** `make rust-007-differential` mit 18
+  Go-Session-Fällen und `make config-cli-differential` mit Go-Schreiben auf
+  einer Kopie eines Rust-Vaults bestanden vor der erweiterten Baumprobe.
+  `make ffi-kdf-fixtures-check`, `make ffi-mobile-json-fixtures-check` und
+  `make mcp-http-init-fixtures-check` bestehen auf der lokalen Integrationslinie;
+  die neuen Rust-Tests müssen CI und Zielplattformen noch ausführen.
+- **Native Evidenz:** Auf `c94d87f4` waren Audit, Pairing, iOS-Simulator,
+  Rust-Port-Contract, Rust, Miri und native macOS/Windows-Jobs grün; CI-Lint
+  und FreeBSD scheiterten an konkreten Go-Shadow- beziehungsweise
+  Audit-Fallback-Fehlern. Auf `506c47e9` laufen CI, FreeBSD und iOS noch;
+  Audit-Windows fand eine Verzeichnis-fsync-Operation, die lokal auf Unix
+  eingeschränkt wurde. Der neue KDF-Generator hatte Lint-Befunde; sie sind
+  lokal korrigiert und seine Fixture neu erzeugt. Keiner dieser Folgeschritte
+  gilt als nativ verifiziert, bevor ein exakter neuer PR-Head dort läuft.
+- **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
+  Broker-, Distributions-, Wert- und native Plattformzeilen. Der letzte
+  ausführbare CLI-Inventarlauf (`ea2ee555`) fand 21 fehlende Go-Pfade und
+  8 Flag-Lücken; fünf MCP-Flags wurden danach ergänzt, ein neuer Messlauf
+  fehlt. Ein grüner PR oder Slice erfüllt das Ziel nicht.
+- **Nächster Schritt:** Lokale Commits integrieren und pushen, alle CI- und
+  nativen Zielplattformjobs am exakten Head auswerten, Befunde beheben und
+  weitere implementierbare Ledger-Zeilen bearbeiten.
 
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
