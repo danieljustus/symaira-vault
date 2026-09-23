@@ -119,6 +119,11 @@ fn watcher_metadata_failure_is_reported_without_silencing_legacy_scan() {
     let mut summary_watcher = Watcher::new(&inbox, options).unwrap();
     let original = fs::metadata(&inbox).unwrap().permissions();
     fs::set_permissions(&inbox, fs::Permissions::from_mode(0o400)).unwrap();
+    if fs::metadata(&source).is_ok() {
+        fs::set_permissions(&inbox, original).unwrap();
+        eprintln!("metadata-denial case unavailable: directory search permission is bypassed");
+        return;
+    }
     let legacy_result = legacy.scan_at(SystemTime::now(), &spool);
     let summary_result = summary_watcher.scan_result_at(SystemTime::now(), &spool);
     fs::set_permissions(&inbox, original).unwrap();
