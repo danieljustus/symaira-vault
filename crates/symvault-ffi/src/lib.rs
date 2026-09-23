@@ -3,11 +3,18 @@
 //! Narrow C ABI for the mobile crypto slice. Returned buffers belong to Rust
 //! and must be released with [`symvault_buffer_free`]. Inputs are borrowed.
 
-use std::{path::Path, ptr, slice, str};
+use std::{
+    fs::{self, OpenOptions},
+    io::Write,
+    path::Path,
+    ptr, slice, str,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use symvault_crypto::{
-    SecretBytes, decrypt, decrypt_argon2id, decrypt_scrypt, encrypt, encrypt_scrypt, fingerprint,
-    generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
+    Argon2idParams, SecretBytes, decrypt, decrypt_argon2id, decrypt_identity, decrypt_scrypt,
+    encrypt, encrypt_identity_argon2id, encrypt_scrypt, fingerprint, generate_identity,
+    identity_string, parse_identity, parse_recipient, recipient_string,
 };
 use symvault_store::{Entry, Store, utc_now_string};
 use zeroize::Zeroize;
@@ -85,6 +92,58 @@ unsafe fn text<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a str, 
 
 unsafe fn utf8<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a str, String> {
     str::from_utf8(unsafe { input(data, len, label)? }).map_err(|_| format!("{label} is not UTF-8"))
+}
+
+fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let parent = path
+        .parent()
+        .ok_or_else(|| "vault path has no parent".to_owned())?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "vault path has an invalid filename".to_owned())?;
+    for _ in 0..32 {
+        let temporary = parent.join(format!(
+            ".{name}.tmp-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = match options.open(&temporary) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        let result = (|| {
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            fs::rename(&temporary, path)?;
+            Ok::<_, std::io::Error>(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        return result.map_err(|error| error.to_string());
+    }
+    Err("could not allocate a temporary vault file".to_owned())
+}
+
+fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(format!("{label} is a symlink: {}", path.display()))
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!("inspect {label}: {error}")),
+    }
 }
 
 /// Frees a buffer returned in a result. A zero-length buffer is a no-op.
@@ -266,6 +325,122 @@ pub unsafe extern "C" fn symvault_decrypt_with_passphrase_argon2id(
         }
         decrypt_argon2id(ciphertext, &SecretBytes::new(passphrase))
             .map_err(|error| error.to_string())
+    })
+}
+
+/// Initializes a Go-compatible mobile vault at `vault_dir` with an Argon2id
+/// protected master identity. Success returns empty output and error buffers.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_init_vault(
+    vault_dir: *const u8,
+    vault_dir_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let vault_dir = unsafe { utf8(vault_dir, vault_dir_len, "vault directory")? };
+        if vault_dir.is_empty() {
+            return Err("vaultDir is empty".to_owned());
+        }
+        let passphrase = unsafe { input(passphrase, passphrase_len, "passphrase")? };
+        if passphrase.is_empty() {
+            return Err("passphrase is empty".to_owned());
+        }
+        str::from_utf8(passphrase).map_err(|_| "passphrase is not UTF-8".to_owned())?;
+
+        let root = Path::new(vault_dir);
+        let entries = root.join("entries");
+        reject_symlink(root, "vault directory")?;
+        reject_symlink(&entries, "entries directory")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true).mode(0o700);
+            builder
+                .create(&entries)
+                .map_err(|error| format!("create vault dir: {error}"))?;
+        }
+        #[cfg(not(unix))]
+        fs::create_dir_all(&entries).map_err(|error| format!("create vault dir: {error}"))?;
+        reject_symlink(root, "vault directory")?;
+        reject_symlink(&entries, "entries directory")?;
+        let root = fs::canonicalize(root).map_err(|error| format!("create vault dir: {error}"))?;
+
+        let config_path =
+            serde_json::to_string(vault_dir).map_err(|error| format!("marshal config: {error}"))?;
+        let config = format!("vaultDir: {config_path}\nvault:\n  format_version: 2\n");
+        write_private_atomic(&root.join("config.yaml"), config.as_bytes())
+            .map_err(|error| format!("write config: {error}"))?;
+
+        let identity = generate_identity();
+        let ciphertext = encrypt_identity_argon2id(
+            &identity,
+            &SecretBytes::new(passphrase),
+            Argon2idParams::default(),
+        )
+        .map_err(|error| format!("save identity with argon2id: {error}"))?;
+        write_private_atomic(&root.join("identity.age"), &ciphertext)
+            .map_err(|error| format!("save identity: {error}"))?;
+        Ok(Vec::new())
+    })
+}
+
+/// Opens a Go-compatible vault with a passphrase and returns its master
+/// identity string in a Rust-owned buffer.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_open_vault_with_passphrase(
+    vault_dir: *const u8,
+    vault_dir_len: usize,
+    passphrase: *const u8,
+    passphrase_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let vault_dir = unsafe { utf8(vault_dir, vault_dir_len, "vault directory")? };
+        if vault_dir.is_empty() {
+            return Err("vaultDir is empty".to_owned());
+        }
+        let passphrase = unsafe { input(passphrase, passphrase_len, "passphrase")? };
+        if passphrase.is_empty() {
+            return Err("passphrase is empty".to_owned());
+        }
+        str::from_utf8(passphrase).map_err(|_| "passphrase is not UTF-8".to_owned())?;
+
+        reject_symlink(Path::new(vault_dir), "vault directory")?;
+        let root = fs::canonicalize(vault_dir).map_err(|error| format!("open vault: {error}"))?;
+        let identity_path = root.join("identity.age");
+        let metadata = fs::symlink_metadata(&identity_path)
+            .map_err(|error| format!("read identity file: {error}"))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "identity file is a symlink: {}",
+                identity_path.display()
+            ));
+        }
+        if !metadata.is_file() {
+            return Err(format!(
+                "identity file is not a regular file: {}",
+                identity_path.display()
+            ));
+        }
+        if metadata.len() > symvault_store::MAX_FILE_BYTES {
+            return Err(format!(
+                "identity file exceeds {} bytes",
+                symvault_store::MAX_FILE_BYTES
+            ));
+        }
+        let ciphertext =
+            fs::read(&identity_path).map_err(|error| format!("read identity file: {error}"))?;
+        let identity = decrypt_identity(&ciphertext, &SecretBytes::new(passphrase))
+            .map_err(|error| format!("load identity: {error}"))?;
+        Store::open(root, &identity).map_err(|error| error.to_string())?;
+        Ok(identity_string(&identity).as_bytes().to_vec())
     })
 }
 
@@ -456,6 +631,104 @@ mod tests {
             return Err(String::from_utf8(error).unwrap());
         }
         Ok(take(result.output))
+    }
+
+    #[test]
+    fn init_and_open_vault_with_passphrase_round_trip() {
+        let temp = tempfile::tempdir().unwrap();
+        let vault = temp.path().join("vault");
+        let vault_bytes = vault.to_str().unwrap().as_bytes();
+        let passphrase = b"ffi init test passphrase";
+        let initialized = unsafe {
+            output(symvault_init_vault(
+                vault_bytes.as_ptr(),
+                vault_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            ))
+        };
+        assert_eq!(initialized.unwrap(), b"");
+        assert!(vault.join("entries").is_dir());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(vault.join("entries"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+            for name in ["config.yaml", "identity.age"] {
+                assert_eq!(
+                    fs::metadata(vault.join(name)).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+            }
+        }
+
+        let identity = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                vault_bytes.as_ptr(),
+                vault_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            ))
+        }
+        .unwrap();
+        let identity = str::from_utf8(&identity).unwrap();
+        assert!(parse_identity(identity).is_ok());
+
+        let wrong_passphrase = b"wrong passphrase";
+        let failure = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                vault_bytes.as_ptr(),
+                vault_bytes.len(),
+                wrong_passphrase.as_ptr(),
+                wrong_passphrase.len(),
+            ))
+        };
+        assert!(failure.is_err());
+    }
+
+    #[test]
+    fn open_vault_with_passphrase_reads_go_mobile_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/go-mobile-vault.json"
+        )))
+        .unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let vault = temp.path().join("go-vault");
+        fs::create_dir_all(vault.join("entries")).unwrap();
+        let vault_string = vault.to_str().unwrap();
+        let quoted_path = serde_json::to_string(vault_string).unwrap();
+        fs::write(
+            vault.join("config.yaml"),
+            format!("vaultDir: {quoted_path}\nvault:\n  format_version: 2\n"),
+        )
+        .unwrap();
+        let identity_bytes = base64::engine::general_purpose::STANDARD
+            .decode(fixture["identity_age_base64"].as_str().unwrap())
+            .unwrap();
+        fs::write(vault.join("identity.age"), identity_bytes).unwrap();
+
+        let vault_bytes = vault_string.as_bytes();
+        let passphrase = fixture["passphrase"].as_str().unwrap().as_bytes();
+        let identity = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                vault_bytes.as_ptr(),
+                vault_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            ))
+        }
+        .unwrap();
+        assert_eq!(
+            str::from_utf8(&identity).unwrap(),
+            fixture["identity"].as_str().unwrap()
+        );
     }
 
     #[test]

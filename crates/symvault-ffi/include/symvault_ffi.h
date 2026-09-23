@@ -38,6 +38,14 @@ SymvaultResult symvault_decrypt_with_passphrase_argon2id(
     const uint8_t *passphrase, size_t passphrase_len,
     const uint8_t *ciphertext, size_t ciphertext_len);
 
+/* Init creates a Go-compatible vault; open returns the master identity bytes. */
+SymvaultResult symvault_init_vault(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *passphrase, size_t passphrase_len);
+SymvaultResult symvault_open_vault_with_passphrase(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *passphrase, size_t passphrase_len);
+
 /* JSON output matches the Go mobile bridge; manifest result is one byte (0 or 1). */
 SymvaultResult symvault_read_entry_json(
     const uint8_t *vault_dir, size_t vault_dir_len,

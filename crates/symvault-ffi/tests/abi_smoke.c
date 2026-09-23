@@ -1,5 +1,10 @@
 #include <stdint.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "symvault_ffi.h"
 
 static int ok(SymvaultResult r) { return r.error.len == 0 && r.output.len != 0; }
@@ -47,5 +52,26 @@ int main(void) {
     release(enc);
     release(pub);
     release(id);
+    const char *tmp_root = getenv("TMPDIR");
+    char vault[PATH_MAX];
+    if (!tmp_root || snprintf(vault, sizeof vault, "%s/symvault-ffi-abi-XXXXXX", tmp_root) >= (int)sizeof vault) return code ? code : 8;
+    if (!mkdtemp(vault)) return code ? code : 8;
+    const uint8_t init_passphrase[] = "C ABI fixture passphrase";
+    SymvaultResult initialized = symvault_init_vault(
+        (const uint8_t *)vault, strlen(vault), init_passphrase, sizeof init_passphrase - 1);
+    if (initialized.error.len != 0 || initialized.output.len != 0) code = code ? code : 9;
+    release(initialized);
+    SymvaultResult opened = symvault_open_vault_with_passphrase(
+        (const uint8_t *)vault, strlen(vault), init_passphrase, sizeof init_passphrase - 1);
+    if (!code && (!ok(opened) || opened.output.len == 0)) code = 10;
+    release(opened);
+    char cleanup_path[sizeof vault + sizeof "/identity.age"];
+    (void)snprintf(cleanup_path, sizeof cleanup_path, "%s/identity.age", vault);
+    (void)unlink(cleanup_path);
+    (void)snprintf(cleanup_path, sizeof cleanup_path, "%s/config.yaml", vault);
+    (void)unlink(cleanup_path);
+    (void)snprintf(cleanup_path, sizeof cleanup_path, "%s/entries", vault);
+    (void)rmdir(cleanup_path);
+    (void)rmdir(vault);
     return code;
 }
