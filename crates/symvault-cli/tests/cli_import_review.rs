@@ -99,10 +99,14 @@ fn run(binary: &str, args: &[String], roots: &Roots) -> Output {
         .env_remove("SYMVAULT_NO_ENV_WARNING")
         .env_remove("SYMVAULT_PROFILE")
         // The oracle capture pinned PATH=/usr/bin:/bin (fixture-generation
-        // rule); Windows has no such directories and needs its inherited
-        // PATH so `init` can find git.
+        // rule). FreeBSD installs git in /usr/local/bin; Windows needs its
+        // inherited PATH. Both need git for the init seed.
         .env("PATH", {
-            #[cfg(unix)]
+            #[cfg(target_os = "freebsd")]
+            {
+                "/usr/local/bin:/usr/bin:/bin"
+            }
+            #[cfg(all(unix, not(target_os = "freebsd")))]
             {
                 "/usr/bin:/bin"
             }
