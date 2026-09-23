@@ -462,6 +462,11 @@ impl SessionManager {
         {
             return Err(SessionError::LegacyPlaintext);
         }
+        if s.encrypted_passphrase.as_deref().is_none_or(str::is_empty)
+            || s.nonce.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(SessionError::Expired("no passphrase data available"));
+        }
         let value = self.decrypt(
             vault,
             s.encrypted_passphrase

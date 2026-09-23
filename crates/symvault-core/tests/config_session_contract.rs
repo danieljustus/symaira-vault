@@ -256,7 +256,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 8);
+    assert_eq!(fixture.cases.len(), 10);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -330,6 +330,22 @@ fn generated_session_cases_match_rust_manager() {
         raw,
         "Go's expiry probe must not mutate the malformed record"
     );
+
+    for name in ["empty_encrypted_passphrase", "empty_nonce"] {
+        let case = cases.iter().find(|case| case.name == name).unwrap();
+        assert_eq!(case.expected, "error", "{name}");
+        assert_eq!(case.error_class.as_deref(), Some("expired"), "{name}");
+        assert!(case.non_mutating, "{name}");
+        let raw = serde_json::to_vec(case.input.as_ref().unwrap()).unwrap();
+        let keyring = Arc::new(MemoryKeyring::new());
+        keyring.set(&key("session"), &raw).unwrap();
+        let manager = SessionManager::with_system_clock(keyring.clone());
+        assert!(matches!(
+            manager.load_passphrase("fixture-vault"),
+            Err(SessionError::Expired(_))
+        ));
+        assert_eq!(keyring.get(&key("session")).unwrap(), raw, "{name}");
+    }
 
     let keyring = Arc::new(MemoryKeyring::new());
     let manager = SessionManager::with_system_clock(keyring.clone());

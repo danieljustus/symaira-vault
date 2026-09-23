@@ -118,7 +118,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 8)
+	cases := make([]sessionCase, 0, 10)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -168,6 +168,17 @@ func buildSessionFixture(meta oracle) sessionFixture {
 		Expected:    "expired",
 		NonMutating: true,
 	})
+	for _, input := range []struct{ name, raw string }{
+		{"empty_encrypted_passphrase", `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"","nonce":"AAAAAAAAAAAAAAAA"}`},
+		{"empty_nonce", `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"eA==","nonce":""}`},
+	} {
+		backend := &fakeKeyring{values: map[string]string{key: input.raw}}
+		_, err := session.NewManager(backend, nil).LoadPassphrase(v)
+		item := resultCase(input.name, []string{"load_passphrase"}, err)
+		item.Input = json.RawMessage(input.raw)
+		item.NonMutating = backend.values[key] == input.raw
+		cases = append(cases, item)
+	}
 	cases = append(cases, identityMetadataCases()...)
 	_ = meta
 	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}

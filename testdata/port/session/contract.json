@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "a3187f7e114fb9768d0076ebd6a5d38bc61a197b591d13ef8a627101edbc6c56"
+    "generator_digest": "89b7bbdc404c9c3416325dac0312c4ac593339a0c642ff46cfa384114e2e7a61"
   },
   "cases": [
     {
@@ -71,6 +71,38 @@
         "nonce": "x"
       },
       "expected": "expired",
+      "non_mutating": true
+    },
+    {
+      "name": "empty_encrypted_passphrase",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2099-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "",
+        "nonce": "AAAAAAAAAAAAAAAA"
+      },
+      "expected": "error",
+      "error_class": "expired",
+      "non_mutating": true
+    },
+    {
+      "name": "empty_nonce",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2099-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "eA==",
+        "nonce": ""
+      },
+      "expected": "error",
+      "error_class": "expired",
       "non_mutating": true
     },
     {
