@@ -81,21 +81,30 @@ fn go_authenticated_http_session_matches_rust_adapter() {
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
     let addr = listener.local_addr().expect("loopback address");
-    let scopes = fixture
+    let token_cases = fixture
         .cases
         .iter()
         .filter(|case| case.go_authenticated)
-        .map(|case| case.request.allowed_tools.clone())
+        .map(|case| {
+            (
+                case.request.token_name.clone(),
+                case.request.allowed_tools.clone(),
+            )
+        })
         .collect::<Vec<_>>();
     let server_name = fixture.server_name.clone();
     let server_version = fixture.server_version.clone();
     let server = thread::spawn(move || {
         let runtime = FixtureRuntime;
-        let mut handler =
+        let template =
             ProtocolHandler::with_tool_call_runtime(server_name, server_version, Arc::new(runtime));
-        for allowed_tools in scopes {
+        let mut sessions = HashMap::new();
+        for (token_name, allowed_tools) in token_cases {
             let (stream, _) = listener.accept().expect("accept loopback request");
-            serve_one(stream, &mut handler, &allowed_tools);
+            let handler = sessions
+                .entry(token_name)
+                .or_insert_with(|| template.new_session());
+            serve_one(stream, handler, &allowed_tools);
         }
     });
 

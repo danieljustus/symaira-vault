@@ -123,6 +123,37 @@
       }
     },
     {
+      "name": "initialize_health_token",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1083",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
+    },
+    {
       "name": "authenticated_allowed_health_tool",
       "go_authenticated": true,
       "request": {
@@ -182,6 +213,37 @@
           "MCP-Protocol-Version"
         ],
         "body": "forbidden: token agent does not match X-Symaira-Agent header\n"
+      }
+    },
+    {
+      "name": "initialize_limited_token",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "limited",
+        "token_agent": "default",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1083",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
       }
     },
     {
