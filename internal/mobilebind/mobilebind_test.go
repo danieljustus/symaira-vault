@@ -1,7 +1,9 @@
 package mobilebind_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,39 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/mobilebind"
 )
+
+func TestMobileBind_OpenFrozenGoVaultFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../crates/symvault-ffi/tests/fixtures/go-mobile-vault.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Passphrase        string `json:"passphrase"`
+		Identity          string `json:"identity"`
+		IdentityAgeBase64 string `json:"identity_age_base64"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := base64.StdEncoding.DecodeString(fixture.IdentityAgeBase64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte(fmt.Sprintf("vaultDir: %q\nvault:\n  format_version: 2\n", vaultDir)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "identity.age"), encrypted, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mobilebind.OpenVaultWithPassphrase(vaultDir, fixture.Passphrase)
+	if err != nil || got != fixture.Identity {
+		t.Fatalf("Go mobile vault fixture = %q, %v", got, err)
+	}
+}
 
 func TestMobileBind_CryptoEndToEnd(t *testing.T) {
 	// 1. Generate identity

@@ -126,6 +126,7 @@ print(next(device["udid"] for runtime, items in devices.items()
   mkdir -p "$SMOKE_APP/Fixtures"
   cp "$ROOT/testdata/port/crypto/age-kdf.json" "$SMOKE_APP/Fixtures/age-kdf.json"
   cp "$ROOT/testdata/port/store/store.json" "$SMOKE_APP/Fixtures/store.json"
+  cp "$ROOT/crates/symvault-ffi/tests/fixtures/go-mobile-vault.json" "$SMOKE_APP/Fixtures/go-mobile-vault.json"
   chmod 755 "$SMOKE_APP/RustCoreSmoke"
   cat > "$SMOKE_APP/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

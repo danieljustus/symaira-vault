@@ -85,6 +85,23 @@ func decrypt(_ ciphertext: Data, withPassphrase passphrase: String, argon2id: Bo
   }
 }
 
+func callVault(_ vault: URL, passphrase: String, initialize: Bool) throws -> Data {
+  let path = Data(vault.path.utf8)
+  let secret = Data(passphrase.utf8)
+  return try path.withUnsafeBytes { pathRaw in
+    try secret.withUnsafeBytes { secretRaw in
+      let pathPointer = pathRaw.bindMemory(to: UInt8.self).baseAddress
+      let secretPointer = secretRaw.bindMemory(to: UInt8.self).baseAddress
+      let result = if initialize {
+        symvault_init_vault(pathPointer, path.count, secretPointer, secret.count)
+      } else {
+        symvault_open_vault_with_passphrase(pathPointer, path.count, secretPointer, secret.count)
+      }
+      return try output(result)
+    }
+  }
+}
+
 func verifyCryptoFixture() throws -> String {
   let crypto = try fixture("age-kdf.json")
   guard
@@ -363,9 +380,52 @@ func verifyStoreFixture(identity: String) throws {
   }
 }
 
+func verifyMobileVaultFixture() throws {
+  let mobile = try fixture("go-mobile-vault.json")
+  guard
+    let passphrase = mobile["passphrase"] as? String,
+    let identity = mobile["identity"] as? String,
+    let encoded = mobile["identity_age_base64"] as? String,
+    let encrypted = Data(base64Encoded: encoded)
+  else {
+    throw SmokeFailure.fixture("Go mobile fixture is incomplete")
+  }
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent("symvault-ios-mobile-\(UUID().uuidString)", isDirectory: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let goVault = root.appendingPathComponent("go-vault", isDirectory: true)
+  try FileManager.default.createDirectory(
+    at: goVault.appendingPathComponent("entries", isDirectory: true),
+    withIntermediateDirectories: true)
+  let quotedBytes = try JSONSerialization.data(
+    withJSONObject: goVault.path, options: .fragmentsAllowed)
+  guard let quotedPath = String(data: quotedBytes, encoding: .utf8) else {
+    throw SmokeFailure.fixture("Go mobile vault path is not UTF-8")
+  }
+  try Data("vaultDir: \(quotedPath)\nvault:\n  format_version: 2\n".utf8)
+    .write(to: goVault.appendingPathComponent("config.yaml"))
+  try encrypted.write(to: goVault.appendingPathComponent("identity.age"))
+  guard try callVault(goVault, passphrase: passphrase, initialize: false) == Data(identity.utf8) else {
+    throw SmokeFailure.contract("Rust FFI did not open the Go mobile vault")
+  }
+
+  let newVault = root.appendingPathComponent("rust-vault", isDirectory: true)
+  guard try callVault(newVault, passphrase: passphrase, initialize: true).isEmpty else {
+    throw SmokeFailure.contract("Rust FFI init returned data")
+  }
+  let opened = try callVault(newVault, passphrase: passphrase, initialize: false)
+  guard String(decoding: opened, as: UTF8.self).hasPrefix("AGE-SECRET-KEY-1") else {
+    throw SmokeFailure.contract("Rust FFI did not reopen its initialized vault")
+  }
+  guard (try? callVault(newVault, passphrase: "wrong passphrase", initialize: false)) == nil else {
+    throw SmokeFailure.contract("Rust FFI opened a vault with the wrong passphrase")
+  }
+}
+
 func runContracts() throws {
   let identity = try verifyCryptoFixture()
   try verifyStoreFixture(identity: identity)
+  try verifyMobileVaultFixture()
 }
 
 @MainActor @objc final class RustCoreSmokeAppDelegate: UIResponder, UIApplicationDelegate {
