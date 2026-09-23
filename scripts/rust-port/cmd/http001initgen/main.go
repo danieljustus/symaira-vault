@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -61,10 +62,12 @@ type oracle struct {
 type request struct {
 	Method          string `json:"method"`
 	Path            string `json:"path"`
+	Origin          string `json:"origin,omitempty"`
 	ContentType     string `json:"content_type"`
 	Accept          string `json:"accept"`
 	ProtocolVersion string `json:"protocol_version"`
 	Agent           string `json:"agent"`
+	Authenticated   bool   `json:"authenticated"`
 	Body            string `json:"body"`
 }
 
@@ -85,7 +88,7 @@ func main() {
 
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
-	defer os.RemoveAll(vaultDir)
+	defer func() { _ = os.RemoveAll(vaultDir) }()
 	const token = "http001-fixture-token"
 	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
 	cfg := config.Default()
@@ -104,9 +107,9 @@ func main() {
 	defer func() {
 		cancel()
 		select {
-		case err := <-done:
-			if err != nil && err != http.ErrServerClosed {
-				fmt.Fprintln(os.Stderr, err)
+		case serverErr := <-done:
+			if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
+				fmt.Fprintln(os.Stderr, serverErr)
 				os.Exit(1)
 			}
 		case <-time.After(3 * time.Second):
@@ -119,17 +122,22 @@ func main() {
 		{
 			Name:            "initialize",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
 		},
 		{
 			Name:            "authenticated_prompts_list_after_initialize",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":2,"method":"prompts/list"}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":2,"method":"prompts/list"}`},
 		},
 		{
 			Name:            "authenticated_unsupported_protocol_version",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "1999-01-01", Agent: "default", Body: `{"jsonrpc":"2.0","id":3,"method":"prompts/list"}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "1999-01-01", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":3,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "missing_bearer_rejected",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":4,"method":"initialize"}`},
 		},
 	}
 	for i := range requests {
@@ -155,7 +163,12 @@ func doRequest(client *http.Client, addr, token string, req request) response {
 	httpReq.Header.Set("Content-Type", req.ContentType)
 	httpReq.Header.Set("Accept", req.Accept)
 	httpReq.Header.Set("MCP-Protocol-Version", req.ProtocolVersion)
-	httpReq.Header.Set("Authorization", "Bearer "+token)
+	if req.Authenticated {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+	if req.Origin != "" {
+		httpReq.Header.Set("Origin", req.Origin)
+	}
 	httpReq.Header.Set("X-Symaira-Agent", req.Agent)
 	httpResp, err := client.Do(httpReq)
 	check(err)

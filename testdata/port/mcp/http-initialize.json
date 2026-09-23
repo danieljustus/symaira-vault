@@ -24,10 +24,12 @@
       "request": {
         "method": "POST",
         "path": "/mcp",
+        "origin": "http://127.0.0.1",
         "content_type": "application/json",
         "accept": "application/json, text/event-stream",
         "protocol_version": "2025-11-25",
         "agent": "default",
+        "authenticated": true,
         "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
       },
       "response": {
@@ -48,10 +50,12 @@
       "request": {
         "method": "POST",
         "path": "/mcp",
+        "origin": "http://127.0.0.1",
         "content_type": "application/json",
         "accept": "application/json, text/event-stream",
         "protocol_version": "2025-11-25",
         "agent": "default",
+        "authenticated": true,
         "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/list\"}"
       },
       "response": {
@@ -72,10 +76,12 @@
       "request": {
         "method": "POST",
         "path": "/mcp",
+        "origin": "http://127.0.0.1",
         "content_type": "application/json",
         "accept": "application/json, text/event-stream",
         "protocol_version": "1999-01-01",
         "agent": "default",
+        "authenticated": true,
         "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"prompts/list\"}"
       },
       "response": {
@@ -88,6 +94,32 @@
           "MCP-Protocol-Version"
         ],
         "body": "{\"error\":{\"message\":\"unsupported MCP-Protocol-Version\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":3}\n"
+      }
+    },
+    {
+      "name": "missing_bearer_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Length": "13",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "unauthorized\n"
       }
     }
   ]
