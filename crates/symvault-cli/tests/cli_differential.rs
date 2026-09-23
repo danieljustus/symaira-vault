@@ -31,7 +31,12 @@ impl Drop for TempFixture {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
+    run_from(binary, args, root, home, None)
+}
+
+fn run_from(binary: &Path, args: &[&str], root: &Path, home: &Path, cwd: Option<&Path>) -> Output {
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
@@ -40,9 +45,11 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_VAULT", root)
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+        .env("CI", "1");
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command.output().expect("run CLI")
 }
 
 // Compare search results against a freshly built Go index. The pinned Go
@@ -520,6 +527,28 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(
         first_json_output(&rust_generate, "Rust generate store"),
         first_json_output(&go_generate, "Go generate store")
+    );
+
+    let relative_vault = rust_root.file_name().unwrap().to_str().unwrap();
+    let args = [
+        "--vault",
+        relative_vault,
+        "generate",
+        "--length",
+        "16",
+        "--store",
+        "relative.password",
+        "--output",
+        "json",
+    ];
+    let cwd = rust_root.parent();
+    let go = run_from(&go_binary, &args, &rust_root, &home, cwd);
+    let rust = run_from(&rust_binary, &args, &rust_root, &home, cwd);
+    assert_success(&go, "Go generate through relative vault");
+    assert_success(&rust, "Rust generate through relative vault");
+    assert_eq!(
+        first_json_output(&rust, "Rust generate through relative vault"),
+        first_json_output(&go, "Go generate through relative vault")
     );
 
     let go_json = run(

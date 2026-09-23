@@ -1399,11 +1399,11 @@ fn run_cli() -> ExitCode {
                 let mut output = io::stderr().lock();
                 match command {
                     PolicyCommand::Validate { file } => {
-                        policy_commands::validate(&expand_vault_path(&file)?, &mut output)
+                        policy_commands::validate(&expand_policy_path(&file)?, &mut output)
                     }
                     PolicyCommand::Apply { file } => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
-                        policy_commands::apply(&root, &expand_vault_path(&file)?, &mut output)
+                        policy_commands::apply(&root, &expand_policy_path(&file)?, &mut output)
                     }
                     PolicyCommand::Remove { name } => {
                         let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
@@ -3328,6 +3328,10 @@ fn run_generate(
         let file = store
             .configured_entry_path(store_path, &identity)
             .map_err(|error| error.to_string())?;
+        let file = vault.join(
+            file.strip_prefix(store.root())
+                .map_err(|error| error.to_string())?,
+        );
         let file = file.to_string_lossy();
         utility_commands::render_stored(
             &mut io::stdout().lock(),
@@ -4403,6 +4407,21 @@ fn format_duration(duration: std::time::Duration) -> String {
     } else {
         format!("{seconds}s")
     }
+}
+
+fn expand_policy_path(path: &Path) -> Result<PathBuf, String> {
+    let raw = path
+        .to_str()
+        .ok_or_else(|| "policy path must be UTF-8".to_owned())?;
+    let Some(rest) = raw.strip_prefix('~') else {
+        return Ok(path.to_path_buf());
+    };
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "cannot determine home directory".to_owned())?;
+    Ok(agent_list_commands::clean_path(
+        &PathBuf::from(home).join(rest.trim_start_matches('/')),
+    ))
 }
 
 fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {

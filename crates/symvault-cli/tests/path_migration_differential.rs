@@ -21,7 +21,7 @@ fn run(binary: &Path, args: &[&str], home: &Path, xdg: (&Path, &Path, &Path)) ->
 
 fn fixture(name: &str) -> (TempDir, PathBuf, (PathBuf, PathBuf, PathBuf)) {
     let root = tempfile::tempdir().expect("fixture root");
-    let home = root.path().join(name);
+    let home = root.path().join(".").join(name);
     let config = root.path().join("xdg-config");
     let data = root.path().join("xdg-data");
     let cache = root.path().join("xdg-cache");
@@ -188,7 +188,11 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
         assert_same(&go, &rust, &format!("nested legacy symlink {args:?}"));
         assert!(!go.status.success(), "Go must reject nested legacy symlink");
         assert!(
-            String::from_utf8_lossy(&go.stderr).contains(nested_vault.to_string_lossy().as_ref()),
+            String::from_utf8_lossy(&go.stderr).contains(
+                PathBuf::from_iter(nested_vault.components())
+                    .to_string_lossy()
+                    .as_ref()
+            ),
             "Go nested symlink diagnostic should contain the absolute walked path: {:?}",
             go.stderr
         );

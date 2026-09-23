@@ -29,7 +29,7 @@ pub(crate) fn preview(
     quiet: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
-    let legacy = home.join(LEGACY_SUBDIR);
+    let legacy = crate::agent_list_commands::clean_path(&home.join(LEGACY_SUBDIR));
     let metadata = match fs::symlink_metadata(&legacy) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -47,9 +47,18 @@ pub(crate) fn preview(
         return write_no_migration(quiet, output);
     }
 
-    let config_dir = xdg_root(xdg_config_home, home, &[".config"]).join(APP_SUBDIR);
-    let data_dir = xdg_root(xdg_data_home, home, &[".local", "share"]).join(APP_SUBDIR);
-    let cache_dir = xdg_root(xdg_cache_home, home, &[".cache"]).join(APP_SUBDIR);
+    let config_dir =
+        crate::agent_list_commands::clean_path(&xdg_root(xdg_config_home, home, &[".config"]))
+            .join(APP_SUBDIR);
+    let data_dir = crate::agent_list_commands::clean_path(&xdg_root(
+        xdg_data_home,
+        home,
+        &[".local", "share"],
+    ))
+    .join(APP_SUBDIR);
+    let cache_dir =
+        crate::agent_list_commands::clean_path(&xdg_root(xdg_cache_home, home, &[".cache"]))
+            .join(APP_SUBDIR);
     let groups = [
         ("config.yaml", config_dir.join("config.yaml")),
         ("vault", data_dir.join("vault")),
