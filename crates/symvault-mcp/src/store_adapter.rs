@@ -1,19 +1,20 @@
 use crate::call::{
     ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
-    ToolCallResult, ToolCallRuntime,
+    ToolCallResult, ToolCallRuntime, normalize_scope_path,
 };
 use serde_json::Value;
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
+use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
-    self as approval_prompt, ApprovalRequest, ApprovalResult, format_go_duration,
+    self as approval_prompt, ApprovalRequest, ApprovalResult, RiskLevel, format_go_duration,
 };
 use symvault_store::{
     Entry, Store, StoreError, WriteRecord,
@@ -263,6 +264,10 @@ pub struct StoreReadOnlyRuntime {
     unavailable_tools: Vec<String>,
     now_unix: Option<i64>,
     approval: Arc<dyn ApprovalSeam>,
+    approval_cache: Mutex<HashSet<String>>,
+    approval_key_counter: std::sync::atomic::AtomicI64,
+    approval_mode: String,
+    require_approval: bool,
 }
 
 impl StoreReadOnlyRuntime {
@@ -294,6 +299,8 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let approval_mode = config.approval_mode.clone();
+        let require_approval = config.require_approval;
         let now_unix = config.now_unix;
         let unavailable_tools = config
             .unavailable_tools
@@ -316,6 +323,10 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            approval_cache: Mutex::new(HashSet::new()),
+            approval_key_counter: std::sync::atomic::AtomicI64::new(0),
+            approval_mode,
+            require_approval,
         })
     }
 
@@ -346,6 +357,8 @@ impl StoreReadOnlyRuntime {
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
+        let approval_mode = config.approval_mode.clone();
+        let require_approval = config.require_approval;
         let share_root = adapter.root().to_path_buf();
         let now_unix = config.now_unix;
         let unavailable_tools = config
@@ -369,6 +382,10 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            approval_cache: Mutex::new(HashSet::new()),
+            approval_key_counter: std::sync::atomic::AtomicI64::new(0),
+            approval_mode,
+            require_approval,
         })
     }
 
@@ -445,6 +462,8 @@ impl StoreReadOnlyRuntime {
             Ok(value) => value,
             Err(error) => return Ok(error),
         };
+        // Go's unseal handler misses path scope because it receives a handle;
+        // derive the path here so a handle cannot bypass the agent boundary.
         if !self.inner.scope_allows(path) {
             self.append_audit("share_request", path, false);
             return Err(format!(
@@ -681,20 +700,174 @@ impl StoreReadOnlyRuntime {
         }
     }
 
-    fn audit_target<'a>(name: &'a str, arguments: &'a Value) -> &'a str {
+    fn secret_unseal(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let handle_text = match crate::call::required_string(arguments, "handle") {
+            Ok(handle) => handle,
+            Err(result) => {
+                self.append_audit("secret_unseal", "<invalid>", false);
+                return Ok(result);
+            }
+        };
+        let Some(handle) = SecretHandle::parse(handle_text) else {
+            self.append_audit("secret_unseal", handle_text, false);
+            return Ok(ToolCallResult::error(format!(
+                "invalid handle format: {handle_text}"
+            )));
+        };
+        if handle.field.is_none() {
+            self.append_audit("secret_unseal", &handle.path, false);
+            return Ok(ToolCallResult::error(
+                "secret_unseal requires a field handle",
+            ));
+        }
+        let path = handle.path.as_str();
+        let entry_path = handle
+            .field
+            .as_deref()
+            .map_or_else(|| path.to_owned(), |field| format!("{path}/{field}"));
+        if !self.inner.scope_allows(path) {
+            self.append_audit("secret_unseal", &entry_path, false);
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+
+        let handle_key = format!("{}:secret_unseal:{handle_text}", self.agent_name);
+        let is_remembered = self
+            .approval_cache
+            .lock()
+            .is_ok_and(|cache| cache.contains(&handle_key));
+        if !is_remembered {
+            let mode = if self.approval_mode.is_empty() {
+                if self.require_approval {
+                    "prompt"
+                } else {
+                    "none"
+                }
+            } else {
+                self.approval_mode.as_str()
+            };
+            let remember_handle = match mode {
+                "none" | "auto" => false,
+                "deny" => {
+                    self.append_audit("approval.secret_unseal.denied", &entry_path, false);
+                    self.append_audit("secret_unseal", &entry_path, false);
+                    return Ok(ToolCallResult::error(
+                        "secret_unseal denied: approval mode is 'deny'",
+                    ));
+                }
+                "prompt" => match self.request_secret_unseal_approval(&entry_path) {
+                    Ok(remembered) => remembered,
+                    Err(error) => {
+                        self.append_audit("secret_unseal", &entry_path, false);
+                        return Ok(ToolCallResult::error(error));
+                    }
+                },
+                _ => {
+                    self.append_audit("secret_unseal", &entry_path, false);
+                    return Ok(ToolCallResult::error(
+                        "secret_unseal denied: invalid approval mode",
+                    ));
+                }
+            };
+            if remember_handle {
+                if let Ok(mut cache) = self.approval_cache.lock() {
+                    cache.insert(handle_key);
+                }
+                self.append_audit("secret_unseal_remembered", &entry_path, true);
+            }
+        }
+
+        let result = self.inner.secret_unseal(&handle)?;
+        if !result.is_error {
+            self.append_audit("secret_unseal", &entry_path, true);
+        } else if !result.text.starts_with("max secrets per session exceeded") {
+            self.append_audit("secret_unseal", &entry_path, false);
+        }
+        Ok(result)
+    }
+
+    fn request_secret_unseal_approval(&self, path: &str) -> Result<bool, String> {
+        let path_key = format!(
+            "{}:secret_unseal:{}",
+            self.agent_name,
+            normalize_scope_path(path)
+        );
+        let path_remembered = self
+            .approval_cache
+            .lock()
+            .is_ok_and(|cache| cache.contains(&path_key));
+        if path_remembered {
+            self.append_audit("approval.secret_unseal.remembered", path, true);
+            return Ok(true);
+        }
+        if !self.approval.is_tty_present() {
+            self.append_audit("approval.secret_unseal.denied", path, false);
+            return Err(
+                "secret_unseal requires approval but no TTY or GUI dialog available".into(),
+            );
+        }
+        self.append_audit("approval.secret_unseal.requested", path, true);
+        let details = path
+            .chars()
+            .filter(|character| !character.is_control())
+            .collect::<String>();
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "secret_unseal".into(),
+            details: format!("unseal secret on {details}"),
+            agent_name: self.agent_name.clone(),
+            risk_level: RiskLevel::High,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: true,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            return Err(format!("secret_unseal approval failed: {error}"));
+        }
+        if !approval.approved {
+            self.append_audit("approval.secret_unseal.denied", path, false);
+            return Err("secret_unseal denied: user did not approve".into());
+        }
+        if approval.remembered {
+            if let Ok(mut cache) = self.approval_cache.lock() {
+                cache.insert(path_key);
+            }
+            self.append_audit("approval.secret_unseal.remembered", path, true);
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit("approval.secret_unseal.granted", path, true);
+        Ok(approval.remembered)
+    }
+
+    fn audit_target(name: &str, arguments: &Value) -> String {
         match name {
             "fetch" => arguments
                 .get("id")
                 .and_then(Value::as_str)
-                .unwrap_or("<invalid>"),
+                .unwrap_or("<invalid>")
+                .to_owned(),
             "search" => arguments
                 .get("query")
                 .and_then(Value::as_str)
-                .unwrap_or("<invalid>"),
+                .unwrap_or("<invalid>")
+                .to_owned(),
+            "secret_unseal" => arguments
+                .get("handle")
+                .and_then(Value::as_str)
+                .and_then(SecretHandle::parse)
+                .map(|handle| match handle.field {
+                    Some(field) => format!("{}/{field}", handle.path),
+                    None => handle.path,
+                })
+                .unwrap_or_else(|| "<invalid>".into()),
             _ => arguments
                 .get("path")
                 .and_then(Value::as_str)
-                .unwrap_or(name),
+                .unwrap_or(name)
+                .to_owned(),
         }
     }
 
@@ -702,8 +875,14 @@ impl StoreReadOnlyRuntime {
         let Some(policy) = &self.policy else {
             return Ok(());
         };
+        let handle_path = (name == "secret_unseal")
+            .then(|| arguments.get("handle").and_then(Value::as_str))
+            .flatten()
+            .and_then(SecretHandle::parse)
+            .map(|handle| handle.path);
         let path = match name {
             "fetch" => arguments.get("id").and_then(Value::as_str),
+            "secret_unseal" => handle_path.as_deref(),
             _ => arguments.get("path").and_then(Value::as_str),
         }
         .unwrap_or_default();
@@ -989,7 +1168,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         if let Err(error) = self.inner.authorize(name, arguments) {
             let path = Self::audit_target(name, arguments);
             if !self.unavailable_tools.iter().any(|tool| tool == name) {
-                self.append_audit("tool_denied", path, false);
+                self.append_audit("tool_denied", &path, false);
             }
             return Err(error);
         }
@@ -1019,6 +1198,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.approve_share(arguments)
         } else if name == "revoke_share" {
             self.revoke_share(arguments)
+        } else if name == "secret_unseal" {
+            self.secret_unseal(arguments)
         } else {
             self.inner.call(name, arguments)
         };
@@ -1204,6 +1385,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry",
         "get_entry_value",
         "get_entry_metadata",
+        "secret_unseal",
         "symaira_delete",
         "list_shares",
         "approve_share",
