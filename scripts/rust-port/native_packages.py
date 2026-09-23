@@ -108,7 +108,7 @@ def deb_fields(package: Path) -> dict[str, str]:
     for key in ("Package", "Version", "Architecture", "Maintainer", "Description", "License", "Homepage", "Section", "Priority", "Recommends"):
         value = output(["dpkg-deb", "--field", str(package), key]).strip()
         if value:
-            fields[key.lower()] = value.splitlines()[0]
+            fields["name" if key == "Package" else key.lower()] = value.splitlines()[0]
     return fields
 
 
