@@ -212,8 +212,8 @@ func buildSessionFixture(meta oracle) sessionFixture {
 		panic(fmt.Sprintf("Go did not migrate legacy session: %v", err))
 	}
 	var migratedPayload map[string]any
-	if err := json.Unmarshal([]byte(legacyBackend.values[key]), &migratedPayload); err != nil {
-		panic(err)
+	if decodeErr := json.Unmarshal([]byte(legacyBackend.values[key]), &migratedPayload); decodeErr != nil {
+		panic(decodeErr)
 	}
 	if _, present := migratedPayload["passphrase"]; present || migratedPayload["max_lifetime_ns"] != float64(int64(8*time.Hour)) {
 		panic("Go migration retained plaintext or omitted default max lifetime")

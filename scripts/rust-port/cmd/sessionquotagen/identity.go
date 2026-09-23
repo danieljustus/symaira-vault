@@ -36,9 +36,9 @@ func identityMetadataCases() []sessionCase {
 		}
 		backend.values[key] = string(data)
 	}
-	old, err := json.Marshal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		panic(err)
+	old, marshalErr := json.Marshal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if marshalErr != nil {
+		panic(marshalErr)
 	}
 	for _, key := range []string{sessionKey, identityKey} {
 		value := decode(key)
