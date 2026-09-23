@@ -3,23 +3,28 @@
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
 - **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
-  Der lokale Stand enthält sechzehn quellgebundene HTTP-Fälle, typisierte
-  `get`-Exitcodes, `intake watch disable`, aktualisierte FFI-Provenienz und
-  den FreeBSD-`O_NOFOLLOW`-Fix. Go bleibt Produktionspfad. Release, Cutover,
+  Der lokale Stand enthält 22 quellgebundene HTTP-Fälle, typisierte
+  `get`-Exitcodes, `intake watch disable` und `--once`, aktualisierte
+  FFI-Provenienz sowie den FreeBSD-`O_NOFOLLOW`-Fix. Go bleibt Produktionspfad. Release, Cutover,
   Go-Abbau und destruktives Aufräumen sind nicht autorisiert.
-- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, zehn Rust-HTTP-Unit-
-  und drei Replay-Tests, FFI-KDF-Fixture sowie fünf Safe-I/O-Tests bestanden.
-  Der CLI-Differentiallauf erreichte mit gepinntem Go-Oracle grüne `get`-
-  Fehlerkategorien und `intake watch disable`; der gesamte Lauf endete erst
-  danach wegen vollem externem Build-Volume (`ENOSPC`).
-- **Native Evidenz:** Am vorherigen Head `57cf1a0` bestanden macOS und
-  Windows native Rust-Tests sowie Audit/Pairing; FreeBSD deckte den abweichenden
-  `O_NOFOLLOW`-Fehler `EMLINK` auf. Der Fix und alle neuen Slices benötigen
-  erneut Ausführung am exakten integrierten Head auf ihren Zielplattformen.
+- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 14 Rust-HTTP-Unit-
+  und drei Replay-Tests, FFI-KDF-Fixture und fünf Safe-I/O-Tests bestanden.
+  `make config-cli-differential` bestand vollständig mit dem gepinnten
+  Go-Oracle, einschließlich 75 Go-Fixture-Fällen, CLI-Differential und
+  ignoriertem KDF-Migrationsfall. Fokussierte `intake watch --once`- und
+  Rollback-Differentialtests bestanden ebenfalls. Die Annahme stabiler
+  Intake-Dateien ist bis zum Vault-Batch-Writer noch offen.
+- **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
+  macOS und Windows native Rust-Tests, Ubuntu-Go-Tests, iOS-Simulator sowie
+  Audit/Pairing. `port-contract` und FreeBSD stoppten am gleichen
+  Empty-`HOME`-Intake-Test; der plattformabhängige Go-Start-Exit ist lokal
+  korrigiert, aber noch nicht am integrierten Head ausgeführt. Der
+  FreeBSD-`O_NOFOLLOW`-Fix wurde dadurch in CI noch nicht erneut erreicht.
 - **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
   Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
-  auf `7ccc1dc` 134 Go-Pfade, 102 Rust-Pfade, 21 fehlende Pfade, drei
-  Broker-Flag-Lücken und keine Alias-Lücke. Diese Oberflächenmessung belegt
+  am lokalen Binary `e15b47a` nach Korrektur des Help-Parsers 134 Go-Pfade,
+  105 Rust-Pfade, 10 fehlende Pfade, acht Flag-Lücken und keine Alias-Lücke.
+  Diese Oberflächenmessung belegt
   keine Verhaltensparität. Ein grüner PR oder Slice erfüllt das Ziel nicht.
 - **Nächster Schritt:** Den neuen Head integrieren, CI und native
   Zielplattformen auswerten, Befunde beheben und weitere implementierbare
