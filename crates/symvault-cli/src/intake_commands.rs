@@ -1,5 +1,6 @@
 //! Offline intake watch commands.
 
+use std::io::Write as _;
 use std::{
     ffi::OsStr,
     fs, io,

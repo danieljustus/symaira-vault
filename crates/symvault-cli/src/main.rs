@@ -1510,7 +1510,9 @@ fn run_cli() -> ExitCode {
                         } else {
                             1
                         };
-                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    for _ in 0..2 {
+                        let _ = writeln!(io::stderr(), "Error: {error}");
+                    }
                     ExitCode::from(code)
                 }
             }
