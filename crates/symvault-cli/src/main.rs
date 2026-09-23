@@ -41,6 +41,7 @@ mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
 mod share_commands;
+mod startup_profile_commands;
 mod sync_commands;
 mod template_commands;
 mod update_commands;
@@ -370,6 +371,15 @@ enum Command {
         mapping: String,
         #[arg(short = 'y', long)]
         yes: bool,
+    },
+    /// Measure and report CLI startup time.
+    StartupProfile {
+        #[arg(short = 'n', long, default_value_t = 10)]
+        count: i64,
+        #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
+        top: i64,
+        #[arg(long)]
+        trace: Option<PathBuf>,
     },
     /// Start the MCP server for agent access.
     Mcp {
@@ -1879,6 +1889,28 @@ fn run_cli() -> ExitCode {
             yes,
             cli.quiet,
         ),
+        Some(Command::StartupProfile { count, top, trace }) => {
+            let format = if cli.json {
+                Some("json")
+            } else {
+                cli.output.as_deref()
+            };
+            if let Some(format) = format.filter(|format| *format != "text") {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Error: output format {format:?} is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
+                );
+                ExitCode::from(9)
+            } else {
+                match startup_profile_commands::run(count, top, trace.as_deref()) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        let _ = writeln!(io::stderr(), "Error: {error}");
+                        ExitCode::from(1)
+                    }
+                }
+            }
+        }
         Some(Command::Mcp {
             action,
             agent,
