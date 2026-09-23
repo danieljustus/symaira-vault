@@ -465,7 +465,7 @@ func TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive(t *testing.T) {
 		if _, err := io.WriteString(conn, request("")); err != nil {
 			t.Fatalf("write request: %v", err)
 		}
-		response, body := readResponse(t, bufio.NewReader(conn))
+		response, body := readResponse(t, bufio.NewReader(conn)) //nolint:bodyclose // helper closes the body
 		assertUnauthorized(t, response, body)
 		if !response.Close {
 			t.Error("HTTP/1.0 response without keep-alive must close")
@@ -489,7 +489,7 @@ func TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive(t *testing.T) {
 			if _, err := io.WriteString(conn, request("keep-alive")); err != nil {
 				t.Fatalf("write request %d: %v", i+1, err)
 			}
-			response, body := readResponse(t, reader)
+			response, body := readResponse(t, reader) //nolint:bodyclose // helper closes the body
 			assertUnauthorized(t, response, body)
 			if response.Close {
 				t.Fatalf("response %d unexpectedly closes HTTP/1.0 keep-alive", i+1)
