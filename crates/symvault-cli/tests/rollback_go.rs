@@ -84,6 +84,32 @@ fn go_mutates_copied_rust_vault_without_touching_source() {
         "copied vault differs from source"
     );
 
+    let corrupt_archive = temp.path().join("corrupt-backup.tar.gz");
+    fs::write(&corrupt_archive, b"not a valid gzip or tar archive").expect("corrupt archive");
+    let rejected = run(
+        go,
+        &copy,
+        &home,
+        &[
+            "restore",
+            corrupt_archive.to_str().expect("UTF-8 archive path"),
+        ],
+    );
+    assert!(
+        !rejected.status.success(),
+        "Go restore should reject corrupt archive: {rejected:?}"
+    );
+    assert_eq!(
+        snapshot(&copy),
+        original_tree,
+        "failed Go restore changed copied Rust vault"
+    );
+    assert_eq!(
+        snapshot(&source),
+        original_tree,
+        "failed Go restore changed source Rust vault"
+    );
+
     let written = run(
         go,
         &copy,
