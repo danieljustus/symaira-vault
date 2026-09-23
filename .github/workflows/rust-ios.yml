@@ -1,0 +1,53 @@
+name: Rust iOS simulator smoke
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/rust-ios.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'scripts/build-rustcore.sh'
+      - 'crates/symvault-ffi/tests/ios_smoke.swift'
+  push:
+    branches: [main, 'migration/**']
+    paths:
+      - '.github/workflows/rust-ios.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'scripts/build-rustcore.sh'
+      - 'crates/symvault-ffi/tests/ios_smoke.swift'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-simulator:
+    name: iOS simulator FFI smoke
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install pinned Rust targets
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal
+          rustup target add --toolchain 1.98.0 \
+            aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+
+      - name: Build and execute Swift FFI smoke on iOS Simulator
+        env:
+          RUSTUP_TOOLCHAIN: 1.98.0
+          SYMVAULT_RUN_IOS_SIMULATOR_SMOKE: '1'
+        run: scripts/build-rustcore.sh --output "$RUNNER_TEMP/SymvaultRustCore.xcframework"
