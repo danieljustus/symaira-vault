@@ -31,6 +31,9 @@ type oracleFloat float64
 
 func (n oracleFloat) MarshalJSON() ([]byte, error) {
 	value := float64(n)
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return nil, fmt.Errorf("cannot encode non-finite oracle float")
+	}
 	if value == 0 && math.Signbit(value) {
 		return []byte("-0.0"), nil
 	}

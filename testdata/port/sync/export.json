@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "f66b591659363d8befc7698103f189250536f8e03c62ac7f65f752d2f1c33e02",
-  "generator_digest": "a879df68dd9a7b24d192a7bda73961a159646c61220d660715af0c4287f07d9b",
+  "generator_digest": "17712780a58a6da4087ae9d2f1b91f6c3b8460b2e0005a7a9ff3fb0c107c31be",
   "cases": [
     {
       "name": "empty",
