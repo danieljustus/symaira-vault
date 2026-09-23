@@ -42,6 +42,7 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod setup_commands;
 mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
@@ -57,7 +58,7 @@ use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -511,6 +512,17 @@ enum Command {
         print_keybindings: bool,
         #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
         extra: Vec<String>,
+    },
+    /// Launch the interactive setup wizard.
+    Setup {
+        /// Do not resume setup after an abort.
+        #[arg(long = "no-resume")]
+        no_resume: bool,
+        /// Keep vault initialization artifacts when a later step fails.
+        #[arg(long = "keep-on-error")]
+        keep_on_error: bool,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -1348,6 +1360,16 @@ fn run_cli() -> ExitCode {
             print_keybindings,
             &extra,
             &mut io::stdout().lock(),
+            &mut io::stderr().lock(),
+        ),
+        Some(Command::Setup {
+            no_resume,
+            keep_on_error,
+            _extra: _,
+        }) => setup_commands::run(
+            no_resume,
+            keep_on_error,
+            io::stdin().is_terminal(),
             &mut io::stderr().lock(),
         ),
         Some(Command::Generate {
