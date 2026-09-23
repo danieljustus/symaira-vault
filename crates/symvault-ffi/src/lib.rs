@@ -950,21 +950,27 @@ fn coerce_go_json_any_numbers(value: &mut serde_json::Value) -> Result<(), Strin
 /// Go emits fixed notation for exponents from -6 through 20, while serde_json
 /// switches to scientific notation sooner for some values (for example 1e20).
 fn mobile_entry_json(entry: &Entry) -> Result<String, String> {
-    let mut value = serde_json::to_value(entry).map_err(|error| error.to_string())?;
-    let original = symvault_gojson::to_string(&value).map_err(|error| error.to_string())?;
-    let data = value
-        .get_mut("data")
-        .ok_or_else(|| "entry is missing data".to_owned())?;
+    let mut data = serde_json::to_value(&entry.data).map_err(|error| error.to_string())?;
+    let original = symvault_gojson::to_string(entry).map_err(|error| error.to_string())?;
+    let original_data =
+        symvault_gojson::to_string(&entry.data).map_err(|error| error.to_string())?;
     let mut replacements = Vec::new();
-    mark_go_float_numbers(data, &original, &mut replacements)?;
-    let mut json = symvault_gojson::to_string(&value).map_err(|error| error.to_string())?;
+    mark_go_float_numbers(&mut data, &original, &mut replacements)?;
+    let mut data_json = symvault_gojson::to_string(&data).map_err(|error| error.to_string())?;
     for (marker, token) in replacements {
         let quoted_marker = serde_json::to_string(&marker).map_err(|error| error.to_string())?;
-        if !json.contains(&quoted_marker) {
+        if !data_json.contains(&quoted_marker) {
             return Err("internal float marker missing from serialized entry".to_owned());
         }
-        json = json.replace(&quoted_marker, &token);
+        data_json = data_json.replace(&quoted_marker, &token);
     }
+    let field = format!("\"data\":{original_data}");
+    let start = original
+        .find(&field)
+        .ok_or_else(|| "entry is missing serialized data".to_owned())?
+        + "\"data\":".len();
+    let mut json = original;
+    json.replace_range(start..start + original_data.len(), &data_json);
     Ok(json)
 }
 
@@ -1913,14 +1919,20 @@ mod tests {
         let read: serde_json::Value = serde_json::from_str(&read_text).unwrap();
         assert_eq!(read["data"]["username"], "ffi-user");
         assert_eq!(read["data"]["password"], "ffi-secret");
-        assert_eq!(read["data"]["large_integer"].as_i64(), None);
+        assert_eq!(
+            read["data"]["large_integer"].as_i64(),
+            Some(9_007_199_254_740_992)
+        );
         assert_eq!(
             read["data"]["large_integer"].as_f64(),
             Some(9_007_199_254_740_992_f64)
         );
         assert_eq!(read["data"]["decimal"].as_f64(), Some(1.2345678901234567));
         assert_eq!(read["data"]["exponent"].as_f64(), Some(1e30));
-        assert_eq!(read["data"]["nested"]["integer"].as_i64(), None);
+        assert_eq!(
+            read["data"]["nested"]["integer"].as_i64(),
+            Some(9_007_199_254_740_992)
+        );
         assert_eq!(
             read["data"]["nested"]["integer"].as_f64(),
             Some(9_007_199_254_740_992_f64)
