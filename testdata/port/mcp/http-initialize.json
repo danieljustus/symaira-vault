@@ -276,6 +276,201 @@
         ],
         "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"Tool \\\"get_entry\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n"
       }
+    },
+    {
+      "name": "foreign_origin_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "https://attacker.example",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "76",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
+      "name": "malformed_origin_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://%",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "76",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
+      "name": "matching_host_and_origin_reaches_authentication",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "attacker.example",
+        "origin": "https://attacker.example",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Length": "13",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "unauthorized\n"
+      }
+    },
+    {
+      "name": "malformed_content_type_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json; charset=\"broken",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 415,
+        "headers": {
+          "Content-Length": "92",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Content-Type must be application/json\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
+      "name": "malformed_accept_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream, application/json; q=\"broken",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
+      "name": "oversized_body_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "",
+        "body_repeat": 1048577
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Length": "67",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid JSON\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n"
+      }
+    },
+    {
+      "name": "oversized_header_reaches_mcp_handler",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}",
+        "header_repeat": 17408
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1084",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":15,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
     }
   ]
 }

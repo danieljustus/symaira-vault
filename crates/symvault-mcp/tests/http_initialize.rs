@@ -151,6 +151,15 @@ fn go_authenticated_http_session_matches_rust_adapter() {
         )
         .expect("send initialize HTTP request");
         let (status, headers, body) = read_response(stream);
+        if case.name == "oversized_body_rejected" {
+            assert_eq!(case.response.status, 400, "Go body limit response");
+            assert_eq!(status, 413, "Rust rejects the body at its parser limit");
+            assert_eq!(
+                body,
+                "{\"error\":{\"message\":\"request body too large\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n"
+            );
+            continue;
+        }
         assert_eq!(status, case.response.status, "{} status", case.name);
         for (name, value) in &case.response.headers {
             assert_eq!(

@@ -280,7 +280,7 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 	}
 	httpResp, err := client.Do(httpReq)
 	check(err)
-	body, err := io.ReadAll(httpResp.Body)
+	responseBody, err := io.ReadAll(httpResp.Body)
 	_ = httpResp.Body.Close()
 	check(err)
 	headers := map[string]string{"Content-Length": strconv.FormatInt(httpResp.ContentLength, 10)}
@@ -292,7 +292,7 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 		absent = append(absent, "MCP-Protocol-Version")
 	}
 	sort.Strings(absent)
-	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(body)}
+	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody)}
 }
 
 func check(err error) {
