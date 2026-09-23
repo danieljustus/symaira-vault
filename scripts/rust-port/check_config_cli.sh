@@ -22,8 +22,12 @@ if [ -z "$oracle_binary" ]; then
     # Ordinary clones give Go reliable VCS metadata; nested worktrees do not.
     git clone --quiet --no-hardlinks --no-checkout --local "$repo_root" "$run_root/oracle"
     git -C "$run_root/oracle" checkout --quiet --detach "$oracle_commit"
-    (cd "$run_root/oracle" && "${GO:-go}" build -buildvcs=true -o "$run_root/symvault-go" .)
-    oracle_binary="$run_root/symvault-go"
+    oracle_suffix=
+    if [ "$("${GO:-go}" env GOOS)" = windows ]; then
+        oracle_suffix=.exe
+    fi
+    oracle_binary="$run_root/symvault-go$oracle_suffix"
+    (cd "$run_root/oracle" && "${GO:-go}" build -buildvcs=true -o "$oracle_binary" .)
 fi
 if ! "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
     --check --go-binary "$oracle_binary"; then
@@ -35,6 +39,6 @@ if ! "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
     exit 1
 fi
 SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test config_inspect --test cli_differential --test cli_error_taxonomy_differential --test list_output_differential --test get_output_differential --test rollback_go --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --test cli_intake_watch_disable --test cli_intake_watch_once --test daemon_status_differential --locked
+    -p symvault-cli --test config_inspect --test cli_differential --test cli_error_taxonomy_differential --test list_output_differential --test get_output_differential --test get_entry_output_differential --test get_empty_fields_differential --test rollback_go --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --test cli_intake_watch_disable --test cli_intake_watch_once --test daemon_status_differential --locked
 SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
     -p symvault-cli --test migrate_kdf_differential --locked -- --ignored
