@@ -25,6 +25,7 @@ use symvault_sync::{
     intake::{FileResult, Options, Provenance, QuarantineSink, ScanResult, Spool, Watcher},
 };
 
+#[allow(clippy::too_many_arguments)] // Direct CLI flag projection.
 pub(crate) fn intake_files(
     paths: &[PathBuf],
     dry_run: bool,

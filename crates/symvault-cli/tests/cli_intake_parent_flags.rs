@@ -1,6 +1,6 @@
 use std::{
     env, fs,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Output},
 };
 use tempfile::TempDir;
@@ -28,7 +28,7 @@ fn parent_dry_run_limits_and_ocr_match_go() {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
-    let go = go.into();
+    let go = PathBuf::from(go);
     let rust = Path::new(env!("CARGO_BIN_EXE_symvault"));
     let temp = TempDir::new().expect("create disposable root");
     let home = temp.path().join("home");
