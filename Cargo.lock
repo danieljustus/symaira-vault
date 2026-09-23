@@ -2726,6 +2726,7 @@ dependencies = [
  "hmac 0.12.1",
  "rpassword",
  "rustix",
+ "rustls",
  "serde",
  "serde_json",
  "serde_yaml_ng",

@@ -24,6 +24,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "=0.10.9"
 signal-hook = { version = "=0.3.18", default-features = false }
+rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 serde_yaml_ng = "=0.10.0"
 yaml-edit = { version = "=0.3.1", default-features = false }
 rpassword = "=7.5.4"

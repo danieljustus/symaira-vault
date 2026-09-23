@@ -5,13 +5,24 @@
 //! enrolled-device bearer API. The local queue is never reconstructed here;
 //! the running MCP server remains authoritative.
 
-use std::{net::IpAddr, path::Path, time::Duration};
+use std::{net::IpAddr, path::Path, sync::Arc, time::Duration};
 
 use hmac::{Hmac, Mac};
+use rustls::{
+    RootCertStore,
+    pki_types::{
+        CertificateDer, PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer,
+        UnixTime,
+    },
+    server::{ParsedCertificate, WebPkiClientVerifier, danger::ClientCertVerifier},
+    sign::CertifiedKey,
+};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Sha256;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use ureq::tls::{Certificate, RootCerts, TlsConfig};
+use ureq::tls::{
+    Certificate, ClientCert, KeyKind, PemItem, PrivateKey, RootCerts, TlsConfig, parse_pem,
+};
 use zeroize::Zeroizing;
 
 const RUNTIME_PORT: &str = ".runtime-port";
@@ -28,11 +39,17 @@ struct RuntimePort {
     bind: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct RuntimeTls {
     certificate: String,
     #[serde(default)]
     client_auth_required: bool,
+    #[serde(default)]
+    client_ca_file: String,
+    #[serde(default)]
+    client_certificate: String,
+    #[serde(default)]
+    client_key: String,
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -77,8 +94,8 @@ struct ApiError {
 }
 
 /// Fetch and render the live queue, preserving Go's loopback, TLS and
-/// vault-ownership-proof boundary. mTLS servers are rejected until the CLI
-/// can validate and present the dedicated approval client identity.
+/// vault-ownership-proof boundary. mTLS uses the dedicated local approval
+/// identity after validating its chain, client-auth usage, and distinct key.
 pub(crate) fn list(
     vault: &Path,
     output_format: &str,
@@ -122,16 +139,20 @@ fn approval_api_request<T: DeserializeOwned>(
     }
 
     let runtime_tls = load_runtime_tls(vault)?;
-    if runtime_tls.client_auth_required {
-        return Err("approval CLI cannot connect while the running MCP server requires mTLS; support for the dedicated local approval client identity is not available in this Rust command".to_owned());
-    }
-
     let certificate =
         symvault_sync::safeio::read_bounded(Path::new(&runtime_tls.certificate), 1024 * 1024)
             .map_err(|_| "read server TLS certificate".to_owned())?
             .ok_or_else(|| "read server TLS certificate".to_owned())?;
-    let certificate = Certificate::from_pem(&certificate)
-        .map_err(|_| "parse server TLS certificate".to_owned())?;
+    let server_certificates =
+        parse_certificate_chain(&certificate, "parse server TLS certificate")?;
+    let client_identity = if runtime_tls.client_auth_required {
+        Some(load_approval_client_identity(
+            &server_certificates[0],
+            &runtime_tls,
+        )?)
+    } else {
+        None
+    };
 
     let secret = symvault_sync::safeio::read_bounded(&vault.join(ENROLL_SECRET), 64)
         .map_err(|error| format!("load vault-ownership proof secret: {error}"))?
@@ -153,7 +174,8 @@ fn approval_api_request<T: DeserializeOwned>(
     };
     let url = format!("https://{host}:{port}{path}");
     let tls = TlsConfig::builder()
-        .root_certs(RootCerts::new_with_certs(&[certificate]))
+        .root_certs(RootCerts::new_with_certs(&server_certificates))
+        .client_cert(client_identity)
         .build();
     let agent = ureq::Agent::config_builder()
         .tls_config(tls)
@@ -241,6 +263,89 @@ fn load_runtime_tls(vault: &Path) -> Result<RuntimeTls, String> {
         return Err("could not find the running server TLS certificate metadata".to_owned());
     }
     Ok(record)
+}
+
+fn parse_certificate_chain(pem: &[u8], error: &str) -> Result<Vec<Certificate<'static>>, String> {
+    let mut certificates = Vec::new();
+    for item in parse_pem(pem) {
+        match item.map_err(|_| error.to_owned())? {
+            PemItem::Certificate(certificate) => certificates.push(certificate),
+            PemItem::PrivateKey(_) => {}
+        }
+    }
+    if certificates.is_empty() {
+        return Err(error.to_owned());
+    }
+    Ok(certificates)
+}
+
+fn load_approval_client_identity(
+    server_certificate: &Certificate<'static>,
+    runtime_tls: &RuntimeTls,
+) -> Result<ClientCert, String> {
+    if runtime_tls.client_certificate.trim().is_empty()
+        || runtime_tls.client_key.trim().is_empty()
+        || runtime_tls.client_ca_file.trim().is_empty()
+    {
+        return Err("approval CLI cannot connect while the running MCP server requires mTLS because the dedicated local approval client certificate, key, and CA must both be configured".to_owned());
+    }
+    let client_pem = symvault_sync::safeio::read_bounded(
+        Path::new(&runtime_tls.client_certificate),
+        1024 * 1024,
+    )
+    .map_err(|_| "read local approval client identity".to_owned())?
+    .ok_or_else(|| "read local approval client identity".to_owned())?;
+    let client_certificates =
+        parse_certificate_chain(&client_pem, "parse local approval client identity")?;
+    let server_der = CertificateDer::from(server_certificate.der().to_vec());
+    let client_der = client_certificates
+        .iter()
+        .map(|certificate| CertificateDer::from(certificate.der().to_vec()))
+        .collect::<Vec<_>>();
+    let server_parsed = ParsedCertificate::try_from(&server_der)
+        .map_err(|_| "inspect server TLS certificate".to_owned())?;
+    let client_parsed = ParsedCertificate::try_from(&client_der[0])
+        .map_err(|_| "parse local approval client identity".to_owned())?;
+    if server_parsed.subject_public_key_info() == client_parsed.subject_public_key_info() {
+        return Err("approval CLI refuses to reuse the MCP server certificate identity as the approval client identity".to_owned());
+    }
+
+    let ca_pem =
+        symvault_sync::safeio::read_bounded(Path::new(&runtime_tls.client_ca_file), 1024 * 1024)
+            .map_err(|_| "read approval client CA".to_owned())?
+            .ok_or_else(|| "read approval client CA".to_owned())?;
+    let ca_certificates = parse_certificate_chain(&ca_pem, "parse approval client CA")?;
+    let mut roots = RootCertStore::empty();
+    for certificate in ca_certificates {
+        roots
+            .add(CertificateDer::from(certificate.der().to_vec()))
+            .map_err(|_| "parse approval client CA".to_owned())?;
+    }
+    let verifier = WebPkiClientVerifier::builder(Arc::new(roots))
+        .build()
+        .map_err(|_| "parse approval client CA".to_owned())?;
+    // Go's x509.Verify is called without CRLs, so no revocation list is configured here.
+    verifier
+        .verify_client_cert(&client_der[0], &client_der[1..], UnixTime::now())
+        .map_err(|_| "verify local approval client identity".to_owned())?;
+
+    let key_pem = Zeroizing::new(
+        symvault_sync::safeio::read_bounded(Path::new(&runtime_tls.client_key), 1024 * 1024)
+            .map_err(|_| "load local approval client identity failed".to_owned())?
+            .ok_or_else(|| "load local approval client identity failed".to_owned())?,
+    );
+    let key = PrivateKey::from_pem(&key_pem)
+        .map_err(|_| "load local approval client identity failed".to_owned())?;
+    let rustls_key = match key.kind() {
+        KeyKind::Pkcs1 => PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(key.der().to_vec())),
+        KeyKind::Pkcs8 => PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.der().to_vec())),
+        KeyKind::Sec1 => PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(key.der().to_vec())),
+    };
+    let provider = rustls::crypto::ring::default_provider();
+    CertifiedKey::from_der(client_der, rustls_key, &provider)
+        .and_then(|identity| identity.keys_match())
+        .map_err(|_| "load local approval client identity failed".to_owned())?;
+    Ok(ClientCert::new_with_certs(&client_certificates, key))
 }
 
 fn enroll_proof(secret: &[u8], timestamp: &[u8]) -> String {
@@ -337,11 +442,20 @@ fn render_decision(
 
 #[cfg(test)]
 mod tests {
-    use super::{ApprovalDecision, decode_api_response, enroll_proof};
+    use std::{fs, path::PathBuf};
+
+    use super::{
+        ApprovalDecision, RuntimeTls, decode_api_response, enroll_proof,
+        load_approval_client_identity, parse_certificate_chain,
+    };
+    use ureq::tls::Certificate;
 
     const GO_ENROLL_SOURCE: &str = include_str!("../../../internal/approval/enroll.go");
     const GO_LOCAL_SOURCE: &str = include_str!("../../../internal/approval/local.go");
     const GO_QUEUE_SOURCE: &str = include_str!("../../../internal/approval/queue.go");
+    const GO_APPROVAL_SOURCE: &str = include_str!("../../../cmd/approval.go");
+    const GO_RUNTIME_TLS_SOURCE: &str = include_str!("../../../internal/cli/port_utils.go");
+    const GO_MTLS_E2E_SOURCE: &str = include_str!("../../../cmd/approval_mtls_e2e_test.go");
 
     #[test]
     fn enroll_proof_uses_go_hmac_sha256_bytes() {
@@ -379,5 +493,128 @@ mod tests {
             conflict,
             "approval server: approval request apr-test already approved"
         );
+    }
+
+    #[test]
+    fn runtime_mtls_paths_match_go_effective_tls_metadata() {
+        let metadata: RuntimeTls = serde_json::from_str(
+            r#"{"certificate":"server.pem","client_ca_file":"clients-ca.pem","client_certificate":"approval.pem","client_key":"approval.key","client_auth_required":true}"#,
+        )
+        .expect("parse Go runtime TLS snapshot");
+        assert!(metadata.client_auth_required);
+        assert_eq!(metadata.client_ca_file, "clients-ca.pem");
+        assert_eq!(metadata.client_certificate, "approval.pem");
+        assert_eq!(metadata.client_key, "approval.key");
+        for field in [
+            "client_ca_file",
+            "client_certificate",
+            "client_key",
+            "client_auth_required",
+        ] {
+            assert!(GO_RUNTIME_TLS_SOURCE.contains(field));
+        }
+        assert!(GO_APPROVAL_SOURCE.contains("validateApprovalClientIdentity"));
+        assert!(GO_APPROVAL_SOURCE.contains("x509.ExtKeyUsageClientAuth"));
+        assert!(GO_APPROVAL_SOURCE.contains("tls.LoadX509KeyPair(clientCertFile, clientKeyFile)"));
+        assert!(GO_APPROVAL_SOURCE.contains("clientLeaf.Verify(x509.VerifyOptions"));
+        assert!(GO_MTLS_E2E_SOURCE.contains("old CA/client was accepted after rotation"));
+    }
+
+    #[test]
+    fn mtls_refuses_missing_identity_paths_before_reading_files() {
+        let runtime_tls = RuntimeTls {
+            certificate: String::new(),
+            client_auth_required: true,
+            client_ca_file: String::new(),
+            client_certificate: String::new(),
+            client_key: String::new(),
+        };
+        let server_certificate = Certificate::from_der(&[]);
+        let error = load_approval_client_identity(&server_certificate, &runtime_tls)
+            .expect_err("missing identity paths must fail closed");
+        assert!(error.contains("dedicated local approval client certificate"));
+    }
+
+    #[test]
+    fn malformed_certificate_bundle_fails_closed() {
+        assert_eq!(
+            parse_certificate_chain(b"not a certificate", "parse client identity")
+                .expect_err("malformed PEM must fail closed"),
+            "parse client identity"
+        );
+    }
+
+    #[test]
+    fn client_identity_requires_client_auth_trust_distinct_key_and_matching_private_key() {
+        let vault = tempfile::tempdir().expect("temporary identity files");
+        let server_certificate =
+            Certificate::from_pem(include_bytes!("../tests/fixtures/approval-mtls/server.pem"))
+                .expect("parse server fixture");
+        let client_certificate = write_fixture(
+            vault.path(),
+            "approval-client.pem",
+            include_bytes!("../tests/fixtures/approval-mtls/approval-client.pem"),
+        );
+        let client_key = write_fixture(
+            vault.path(),
+            "approval-client.key",
+            include_bytes!("../tests/fixtures/approval-mtls/approval-client.key"),
+        );
+        let client_ca = write_fixture(
+            vault.path(),
+            "client-ca.pem",
+            include_bytes!("../tests/fixtures/approval-mtls/client-ca.pem"),
+        );
+        let runtime_tls = RuntimeTls {
+            certificate: "server.pem".to_owned(),
+            client_auth_required: true,
+            client_ca_file: client_ca.to_string_lossy().into_owned(),
+            client_certificate: client_certificate.to_string_lossy().into_owned(),
+            client_key: client_key.to_string_lossy().into_owned(),
+        };
+        assert!(load_approval_client_identity(&server_certificate, &runtime_tls).is_ok());
+
+        let server_identity = write_fixture(
+            vault.path(),
+            "server.pem",
+            include_bytes!("../tests/fixtures/approval-mtls/server.pem"),
+        );
+        let mut cloned_identity = RuntimeTls {
+            client_certificate: server_identity.to_string_lossy().into_owned(),
+            ..runtime_tls.clone()
+        };
+        let error = load_approval_client_identity(&server_certificate, &cloned_identity)
+            .expect_err("server key reuse must fail before CA or key loading");
+        assert!(error.contains("refuses to reuse the MCP server certificate identity"));
+
+        cloned_identity.client_certificate = client_certificate.to_string_lossy().into_owned();
+        cloned_identity.client_ca_file = write_fixture(
+            vault.path(),
+            "rotated-client-ca.pem",
+            include_bytes!("../tests/fixtures/approval-mtls/rotated-client-ca.pem"),
+        )
+        .to_string_lossy()
+        .into_owned();
+        let error = load_approval_client_identity(&server_certificate, &cloned_identity)
+            .expect_err("old CA identity must fail after CA rotation");
+        assert_eq!(error, "verify local approval client identity");
+
+        cloned_identity.client_ca_file = client_ca.to_string_lossy().into_owned();
+        cloned_identity.client_key = write_fixture(
+            vault.path(),
+            "wrong-client.key",
+            include_bytes!("../tests/fixtures/approval-mtls/server.key"),
+        )
+        .to_string_lossy()
+        .into_owned();
+        let error = load_approval_client_identity(&server_certificate, &cloned_identity)
+            .expect_err("mismatched private key must fail closed");
+        assert_eq!(error, "load local approval client identity failed");
+    }
+
+    fn write_fixture(directory: &std::path::Path, name: &str, contents: &[u8]) -> PathBuf {
+        let path = directory.join(name);
+        fs::write(&path, contents).expect("write test identity fixture");
+        path
     }
 }
