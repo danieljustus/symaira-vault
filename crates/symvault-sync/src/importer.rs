@@ -478,7 +478,8 @@ struct BwField {
     value: String,
 }
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(bytes))
+    let repaired = replace_invalid_utf8_in_json_strings(bytes);
+    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(&repaired))
         .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?
         .unwrap_or_default();
     let folders: xhash::HashMap<String, String> = x
@@ -557,6 +558,59 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
         });
     }
     Ok(out)
+}
+
+fn replace_invalid_utf8_in_json_strings(bytes: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(bytes.len());
+    let (mut index, mut in_string, mut escaped) = (0, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if !in_string {
+            result.push(byte);
+            in_string = byte == b'"';
+            index += 1;
+            continue;
+        }
+        if escaped {
+            result.push(byte);
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        match byte {
+            b'"' => {
+                result.push(byte);
+                in_string = false;
+                index += 1;
+            }
+            b'\\' => {
+                result.push(byte);
+                escaped = true;
+                index += 1;
+            }
+            0..=0x7f => {
+                result.push(byte);
+                index += 1;
+            }
+            _ => match std::str::from_utf8(&bytes[index..]) {
+                Ok(valid) => {
+                    result.extend_from_slice(valid.as_bytes());
+                    break;
+                }
+                Err(error) if error.valid_up_to() > 0 => {
+                    let end = index + error.valid_up_to();
+                    result.extend_from_slice(&bytes[index..end]);
+                    index = end;
+                }
+                Err(_) => {
+                    // Go encoding/json replaces each invalid byte inside a string.
+                    result.extend_from_slice(br"\uFFFD");
+                    index += 1;
+                }
+            },
+        }
+    }
+    result
 }
 fn insert_totp(
     data: &mut BTreeMap<String, Value>,

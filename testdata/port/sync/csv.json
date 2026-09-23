@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "b1fc71fdb3a0e8668bcde63dbdd743d3f0180bb3267192d2b6de1f67ad286823",
+  "generator_digest": "abb5bbd0f852f39bc404792c943b4a9238e8b4f418c078e8563332a6e9d7d64a",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -91,8 +91,8 @@
         {
           "path": "A",
           "data": {
-            "password": "\ufffd",
-            "username": "\ufffd\ufffd"
+            "password": "�",
+            "username": "��"
           },
           "warnings": null
         }
@@ -121,7 +121,7 @@
       "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKwygsdSxwCg==",
       "entries": [
         {
-          "path": "\ufffd(",
+          "path": "�(",
           "data": {
             "password": "p",
             "username": "u"
@@ -152,7 +152,7 @@
       "input_b64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vb25lLnRlc3QsdSxwLG4K/ixodHRwczovL3R3by50ZXN0LHUyLHAyLG4yCg==",
       "entries": [
         {
-          "path": "\ufffd",
+          "path": "�",
           "data": {
             "notes": "n",
             "password": "p",
@@ -162,7 +162,7 @@
           "warnings": null
         },
         {
-          "path": "\ufffd",
+          "path": "�",
           "data": {
             "notes": "n2",
             "password": "p2",
@@ -241,6 +241,51 @@
         }
       ],
       "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_in_string",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6Iv8ifX1dfQ==",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "�",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_truncated_utf8_in_string",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6IuKCIn19XX0=",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "��",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_outside_string",
+      "format": "bitwarden",
+      "input_b64": "e/8iaXRlbXMiOltdfQ==",
+      "entries": [],
+      "failed": true
     },
     {
       "name": "bw_empty_fields",
