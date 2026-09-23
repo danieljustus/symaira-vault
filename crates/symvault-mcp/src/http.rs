@@ -40,6 +40,7 @@ const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
+// ponytail: eight workers bound thread/socket use; revisit if real concurrent demand exceeds this.
 const MAX_HTTP_CONNECTIONS: usize = 8;
 
 #[derive(Clone, Copy)]
@@ -146,14 +147,19 @@ where
         let mut state = state
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
+        let HttpServerState {
+            handler_for_agent,
+            handlers,
+            sessions,
+        } = &mut *state;
         serve_one_authenticated(
             reader,
             request,
             keep_alive,
             registry_path,
-            &mut state.handler_for_agent,
-            &mut state.handlers,
-            &mut state.sessions,
+            handler_for_agent,
+            handlers,
+            sessions,
         )
     })
 }
