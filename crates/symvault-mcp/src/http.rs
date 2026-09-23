@@ -266,16 +266,7 @@ where
                 .iter()
                 .any(|value| value.eq_ignore_ascii_case("keep-alive"));
         let keep_alive = requested_keep_alive && !closes;
-        if let Some(response) = crate::oauth::registration_response(
-            &request.method,
-            &request.path,
-            &request.content_type,
-            &request.origin,
-            &request.host,
-            &request.body,
-        )
-        .or_else(|| well_known_response(&request, local))
-        {
+        if let Some(response) = well_known_response(&request, local) {
             write_http_response(
                 reader.get_mut(),
                 response,
@@ -633,7 +624,7 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
     Ok(registry)
 }
 
-pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
+fn allowed_origin(origin: &str, request_host: &str) -> bool {
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };
@@ -674,7 +665,6 @@ fn write_http_response(
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
-        201 => "Created",
         202 => "Accepted",
         400 => "Bad Request",
         403 => "Forbidden",
@@ -1063,117 +1053,15 @@ mod tests {
         assert!(body.get("authorization_servers").is_none());
     }
 
-    fn registration_request(method: &str, content_type: &str, origin: &str, body: &str) -> String {
-        format!(
-            "{method} /oauth/register HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: {content_type}\r\nOrigin: {origin}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+    #[test]
+    fn dynamic_registration_stays_unavailable_until_rust_can_persist_clients() {
+        let body = r#"{"redirect_uris":["http://localhost/callback"]}"#;
+        let request = format!(
+            "POST /oauth/register HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
-        )
-    }
-
-    #[test]
-    fn dynamic_registration_returns_public_client_identity_without_auth_flow_claims() {
-        let redirect = "http://localhost:43123/callback";
-        let response = round_trip_wire(&registration_request(
-            "POST",
-            "application/json; charset=utf-8",
-            "http://localhost:43123",
-            &format!(r#"{{"redirect_uris":["{redirect}"]}}"#),
-        ));
-        assert_eq!(raw_status(&response), 201, "{response}");
-        let body: serde_json::Value = serde_json::from_str(raw_body(&response)).unwrap();
-        let id = body["client_id"].as_str().expect("client id");
-        assert_eq!(id.len(), 32);
-        assert!(
-            id.bytes()
-                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
         );
-        assert_eq!(body["client_secret_expires_at"], 0);
-        assert!(body.get("token_endpoint_auth_method").is_none());
-        assert!(body.get("grant_types").is_none());
-        assert!(body.get("response_types").is_none());
-        assert_eq!(body["redirect_uris"], serde_json::json!([redirect]));
-    }
-
-    #[test]
-    fn dynamic_registration_rejects_invalid_metadata_redirects_origins_and_methods() {
-        let cases = [
-            (
-                "POST",
-                "application/json",
-                "",
-                "not json",
-                400,
-                "invalid_client_metadata",
-            ),
-            (
-                "POST",
-                "text/plain",
-                "",
-                r#"{"redirect_uris":["http://localhost/cb"]}"#,
-                400,
-                "invalid_client_metadata",
-            ),
-            (
-                "POST",
-                "application/json",
-                "",
-                "{}",
-                400,
-                "invalid_redirect_uri",
-            ),
-            (
-                "POST",
-                "application/json",
-                "",
-                r#"{"redirect_uris":[]}"#,
-                400,
-                "invalid_redirect_uri",
-            ),
-            (
-                "POST",
-                "application/json",
-                "",
-                r#"{"redirect_uris":["https://example.com/cb"]}"#,
-                400,
-                "invalid_redirect_uri",
-            ),
-            (
-                "POST",
-                "application/json",
-                "",
-                r#"{"redirect_uris":["http://user@localhost/cb"]}"#,
-                400,
-                "invalid_redirect_uri",
-            ),
-            (
-                "POST",
-                "application/json",
-                "https://attacker.example",
-                r#"{"redirect_uris":["http://localhost/cb"]}"#,
-                403,
-                "invalid Origin header",
-            ),
-            ("GET", "application/json", "", "", 405, ""),
-        ];
-        for (method, content_type, origin, body, status, error) in cases {
-            let response =
-                round_trip_wire(&registration_request(method, content_type, origin, body));
-            assert_eq!(
-                raw_status(&response),
-                status,
-                "{method} {content_type} {origin} {body}: {response}"
-            );
-            if !error.is_empty() && status != 403 {
-                let body: serde_json::Value = serde_json::from_str(raw_body(&response)).unwrap();
-                assert_eq!(body["error"], error, "{response}");
-            }
-            if status == 403 {
-                assert!(raw_body(&response).contains(error), "{response}");
-            }
-            if status == 405 {
-                assert!(response.contains("Allow: POST\r\n"), "{response}");
-            }
-        }
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 401, "{response}");
     }
 
     fn round_trip_wire_sequence(request: &str, count: usize) -> Vec<String> {

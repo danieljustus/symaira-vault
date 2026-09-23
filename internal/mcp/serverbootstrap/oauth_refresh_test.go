@@ -288,6 +288,8 @@ func TestOAuthRegisterValidationCases(t *testing.T) {
 		{"empty redirects", "application/json", `{"redirect_uris":[]}`, http.StatusBadRequest, "invalid_redirect_uri"},
 		{"external redirect", "application/json", `{"redirect_uris":["https://example.com/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
 		{"userinfo redirect", "application/json", `{"redirect_uris":["http://user@localhost/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"custom scheme userinfo", "application/json", `{"redirect_uris":["symvault://user@vault/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"first JSON value only", "application/json", `{"redirect_uris":["http://user@localhost/callback"]} trailing`, http.StatusBadRequest, "invalid_redirect_uri"},
 		{"wrong content type", "text/plain", `{"redirect_uris":["http://localhost/callback"]}`, http.StatusBadRequest, "invalid_client_metadata"},
 	}
 	for _, tc := range tests {
@@ -308,6 +310,30 @@ func TestOAuthRegisterValidationCases(t *testing.T) {
 				t.Fatalf("error = %v, want %q", response["error"], tc.wantError)
 			}
 		})
+	}
+}
+
+func TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo(t *testing.T) {
+	store := newOAuthClientStore()
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(`{"redirect_uris":["symvault:callback"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	handleOAuthRegister(store).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+	var response struct {
+		ClientID     string   `json:"client_id"`
+		RedirectURIs []string `json:"redirect_uris"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode registration response: %v", err)
+	}
+	if len(response.ClientID) != 32 || len(response.RedirectURIs) != 1 || response.RedirectURIs[0] != "symvault:callback" {
+		t.Fatalf("unexpected registration: %+v", response)
+	}
+	if _, ok := store.get(response.ClientID); !ok {
+		t.Fatal("accepted registration was not stored")
 	}
 }
 

@@ -1,4 +1,3 @@
-use crate::http::HttpResponse;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -6,84 +5,27 @@ struct RegistrationRequest {
     redirect_uris: Vec<String>,
 }
 
-/// RFC 7591 public-client registration. Authorization, consent, and token
-/// routes remain unavailable, so this endpoint is not advertised in metadata.
-pub(super) fn registration_response(
-    method: &str,
-    path: &str,
+/// Validates the metadata accepted by Go's dynamic client registration handler.
+/// Registration stays off the HTTP listener until Rust can persist and use it.
+pub(super) fn validate_registration(
     content_type: &str,
-    origin: &str,
-    host: &str,
     body: &str,
-) -> Option<HttpResponse> {
-    if path.split_once('?').map_or(path, |(path, _)| path) != "/oauth/register" {
-        return None;
-    }
-    if method != "POST" {
-        return Some(HttpResponse {
-            status: 405,
-            headers: vec![
-                ("Allow", "POST"),
-                ("Content-Type", "text/plain; charset=utf-8"),
-            ],
-            body: b"Method Not Allowed\n".to_vec(),
-        });
-    }
-    if !origin.is_empty() && !super::http::allowed_origin(origin, host) {
-        return Some(HttpResponse {
-            status: 403,
-            headers: vec![("Content-Type", "application/json")],
-            body: b"{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"invalid Origin header\"}}\n".to_vec(),
-        });
-    }
+) -> Result<Vec<String>, &'static str> {
     if !super::http::is_json_content_type(content_type) {
-        return Some(json_error(400, "invalid_client_metadata"));
+        return Err("invalid_client_metadata");
     }
-    let Ok(request) = serde_json::from_str::<RegistrationRequest>(body) else {
-        return Some(json_error(400, "invalid_client_metadata"));
-    };
+    let mut decoder = serde_json::Deserializer::from_str(body);
+    let request =
+        RegistrationRequest::deserialize(&mut decoder).map_err(|_| "invalid_client_metadata")?;
     if request.redirect_uris.is_empty()
         || !request
             .redirect_uris
             .iter()
             .all(|uri| allowed_redirect_uri(uri))
     {
-        return Some(json_error(400, "invalid_redirect_uri"));
+        return Err("invalid_redirect_uri");
     }
-
-    let mut id = [0_u8; 16];
-    if getrandom::fill(&mut id).is_err() {
-        return Some(json_error(500, "server_error"));
-    }
-    let client_id = id
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    let issued_at = time::OffsetDateTime::now_utc().unix_timestamp();
-    let mut body = serde_json::to_vec(&serde_json::json!({
-        "client_id": client_id,
-        "client_id_issued_at": issued_at,
-        "client_secret_expires_at": 0,
-        "redirect_uris": request.redirect_uris,
-    }))
-    .expect("registration response is serializable");
-    body.push(b'\n');
-    Some(HttpResponse {
-        status: 201,
-        headers: vec![("Content-Type", "application/json")],
-        body,
-    })
-}
-
-fn json_error(status: u16, error: &str) -> HttpResponse {
-    let mut body = serde_json::to_vec(&serde_json::json!({ "error": error }))
-        .expect("error response is serializable");
-    body.push(b'\n');
-    HttpResponse {
-        status,
-        headers: vec![("Content-Type", "application/json")],
-        body,
-    }
+    Ok(request.redirect_uris)
 }
 
 fn allowed_redirect_uri(value: &str) -> bool {
@@ -108,12 +50,19 @@ fn allowed_redirect_uri(value: &str) -> bool {
     {
         return false;
     }
+
+    if let Some(authority) = remainder.strip_prefix("//") {
+        let authority = authority.split(['/', '?', '#']).next().unwrap_or_default();
+        if authority.contains('@') {
+            return false;
+        }
+    }
     if scheme == "http" || scheme == "https" {
         let Some(authority) = remainder.strip_prefix("//") else {
             return false;
         };
         let authority = authority.split(['/', '?', '#']).next().unwrap_or_default();
-        if authority.is_empty() || authority.contains('@') {
+        if authority.is_empty() {
             return false;
         }
         let hostname = if let Some(bracketed) = authority.strip_prefix('[') {
@@ -122,7 +71,7 @@ fn allowed_redirect_uri(value: &str) -> bool {
             };
             if !tail.is_empty()
                 && !tail.strip_prefix(':').is_some_and(|port| {
-                    !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit())
+                    !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit())
                 })
             {
                 return false;
@@ -162,4 +111,61 @@ fn invalid_percent_escape(value: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_registration;
+
+    #[test]
+    fn validates_go_registration_metadata_and_custom_schemes() {
+        let body = r#"{"redirect_uris":["http://localhost/callback","symvault:callback"]}"#;
+        assert_eq!(
+            validate_registration("application/json; charset=utf-8", body),
+            Ok(vec![
+                "http://localhost/callback".to_owned(),
+                "symvault:callback".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_metadata_and_userinfo_for_every_scheme() {
+        let cases = [
+            (
+                "text/plain",
+                r#"{"redirect_uris":["http://localhost/cb"]}"#,
+                "invalid_client_metadata",
+            ),
+            ("application/json", "not json", "invalid_client_metadata"),
+            ("application/json", "{}", "invalid_redirect_uri"),
+            (
+                "application/json",
+                r#"{"redirect_uris":["https://example.com/cb"]}"#,
+                "invalid_redirect_uri",
+            ),
+            (
+                "application/json",
+                r#"{"redirect_uris":["http://user@localhost/cb"]}"#,
+                "invalid_redirect_uri",
+            ),
+            (
+                "application/json",
+                r#"{"redirect_uris":["http://user@localhost/cb"]} trailing"#,
+                "invalid_redirect_uri",
+            ),
+            (
+                "application/json",
+                r#"{"redirect_uris":["symvault://user@vault/callback"]}"#,
+                "invalid_redirect_uri",
+            ),
+        ];
+        for (content_type, body, expected) in cases {
+            assert_eq!(
+                validate_registration(content_type, body).unwrap_err(),
+                expected,
+                "body={body}"
+            );
+        }
+    }
 }
