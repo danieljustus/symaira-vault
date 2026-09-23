@@ -1626,7 +1626,7 @@ fn run_cli() -> ExitCode {
             ) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err((code, error)) => {
-                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    let _ = writeln!(io::stderr(), "Error: {error}\nError: {error}");
                     ExitCode::from(code)
                 }
             },
