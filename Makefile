@@ -426,6 +426,9 @@ mcp-init-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
 		--check --output $(PORT_MCP_INIT_FIXTURE)
 
+ffi-kdf-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/ffikdfgen --check
+
 # MCP-001 differential: the Go corpus replayed against the Rust transport.
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
@@ -580,7 +583,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check ffi-kdf-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

@@ -468,12 +468,13 @@ fn migrated_kdf_config(raw: &[u8]) -> Result<Vec<u8>, String> {
     }
     let replacement = format!("{}format_version: 2", " ".repeat(child_indent));
     if let Some(index) = format_index {
-        lines[index] = replacement;
-    } else {
-        lines.insert(header + 1, replacement);
+        lines[index] = replacement.clone();
     }
     for index in remove_indices.into_iter().rev() {
         lines.remove(index);
+    }
+    if format_index.is_none() {
+        lines.insert(header + 1, replacement);
     }
     let mut output = lines.join("\n").into_bytes();
     if text.ends_with('\n') {
@@ -1254,6 +1255,11 @@ mod tests {
 
     #[test]
     fn open_vault_migrates_go_scrypt_identity_only_when_opted_in() {
+        let without_format = b"vault:\n  scrypt_work_factor: 18\n  auto_migrate_kdf: true\n";
+        assert_eq!(
+            migrated_kdf_config(without_format).unwrap(),
+            b"vault:\n  format_version: 2\n  auto_migrate_kdf: true\n"
+        );
         let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../testdata/port/ffi/kdf-migration.json"
