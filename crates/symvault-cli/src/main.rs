@@ -23,6 +23,7 @@ mod doctor_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
+mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
@@ -452,6 +453,11 @@ enum Command {
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
+    /// Help about any command.
+    Help {
+        #[arg(value_name = "COMMAND", num_args = 0..)]
+        path: Vec<String>,
+    },
     /// Manage paired devices for multi-device vault access.
     Device {
         #[command(subcommand)]
@@ -1179,6 +1185,11 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Help { path }) => {
+            let result = help_commands::write(Cli::command(), &path, &mut io::stdout().lock())
+                .map_err(|error| format!("help: {error}"));
+            finish_vault_result(result)
+        }
         Some(Command::Doctor {
             no_network,
             strict,
