@@ -24,7 +24,7 @@ fn run(binary: &Path, args: &[&str], home: &Path, vault: &Path) -> Output {
 }
 
 #[test]
-fn list_text_and_json_match_go_for_empty_and_populated_vaults() {
+fn list_text_json_and_yaml_match_go_for_empty_and_populated_vaults() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
@@ -47,7 +47,7 @@ fn list_text_and_json_match_go_for_empty_and_populated_vaults() {
         initialized.stderr
     );
 
-    for format in ["text", "json"] {
+    for format in ["text", "json", "yaml"] {
         let args = ["list", "--output", format];
         let go = run(&go_binary, &args, home.path(), &vault);
         let rust = run(&rust_binary, &args, home.path(), &vault);
@@ -62,6 +62,8 @@ fn list_text_and_json_match_go_for_empty_and_populated_vaults() {
         assert_eq!(rust.stderr, go.stderr, "empty list {format} stderr differs");
         if format == "json" {
             assert_eq!(go.stdout, b"null\n");
+        } else if format == "yaml" {
+            assert_eq!(go.stdout, b"[]\n");
         }
     }
 
@@ -73,7 +75,7 @@ fn list_text_and_json_match_go_for_empty_and_populated_vaults() {
     );
     assert!(added.status.success(), "Go add failed: {:?}", added.stderr);
 
-    for format in ["text", "json"] {
+    for format in ["text", "json", "yaml"] {
         let args = ["list", "--output", format];
         let go = run(&go_binary, &args, home.path(), &vault);
         let rust = run(&rust_binary, &args, home.path(), &vault);

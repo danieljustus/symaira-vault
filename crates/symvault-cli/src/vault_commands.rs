@@ -37,6 +37,17 @@ pub struct ListEntryInfo {
     pub field_count: usize,
 }
 
+#[derive(Serialize)]
+struct ListEntryYaml<'a> {
+    path: &'a str,
+    #[serde(rename = "type")]
+    secret_type: &'a str,
+    usagehint: &'a str,
+    autorotate: bool,
+    hasvalue: bool,
+    fieldcount: usize,
+}
+
 fn is_zero(value: &usize) -> bool {
     *value == 0
 }
@@ -260,8 +271,22 @@ pub fn write_list<W: Write>(
             serde_json::to_writer(&mut *output, entries).map_err(|error| error.to_string())?;
             writeln!(output).map_err(|error| error.to_string())
         }
+        "yaml" => {
+            let yaml_entries: Vec<_> = entries
+                .iter()
+                .map(|entry| ListEntryYaml {
+                    path: &entry.path,
+                    secret_type: &entry.secret_type,
+                    usagehint: &entry.usage_hint,
+                    autorotate: entry.auto_rotate,
+                    hasvalue: entry.has_value,
+                    fieldcount: entry.field_count,
+                })
+                .collect();
+            serde_yaml_ng::to_writer(output, &yaml_entries).map_err(|error| error.to_string())
+        }
         other => Err(format!(
-            "unknown output format: {other:?} (valid: text, json)"
+            "unknown output format: {other:?} (valid: text, json, yaml)"
         )),
     }
 }
