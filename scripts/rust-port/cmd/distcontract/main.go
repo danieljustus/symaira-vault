@@ -78,7 +78,7 @@ func compare(repo, stage, version, target string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
+	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml")) // #nosec G304 -- operator-selected repository root and fixed config filename
 	if err != nil {
 		return fmt.Errorf("read GoReleaser config: %w", err)
 	}
@@ -181,18 +181,18 @@ func sourceFiles(root string, patterns []string) (map[string]string, error) {
 			return nil, fmt.Errorf("GoReleaser file pattern %q matched no files", pattern)
 		}
 		for _, path := range matches {
-			info, err := os.Stat(path)
+			relative, err := filepath.Rel(root, path)
+			if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("GoReleaser file pattern %q escapes repository root", pattern)
+			}
+			info, err := os.Lstat(path)
 			if err != nil {
 				return nil, err
 			}
 			if !info.Mode().IsRegular() {
 				continue
 			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil, err
-			}
-			relative, err := filepath.Rel(root, path)
+			data, err := os.ReadFile(path) // #nosec G304 -- regular matched source file verified inside operator-selected repository root
 			if err != nil {
 				return nil, err
 			}
@@ -227,7 +227,7 @@ func extension(format string) (string, error) {
 }
 
 func compareOne(path string, plan archivePlan) error {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- operator-selected stage directory plus validated GoReleaser archive name
 	if err != nil {
 		return fmt.Errorf("open staged archive: %w", err)
 	}

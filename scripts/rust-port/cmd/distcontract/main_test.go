@@ -110,6 +110,20 @@ func testRepoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(cwd, "..", "..", "..", ".."))
 }
 
+func TestSourceFilesRejectsEscape(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "repo")
+	if err := os.Mkdir(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "outside"), []byte("private"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sourceFiles(root, []string{"../outside"}); err == nil {
+		t.Fatal("source pattern escaped repository root")
+	}
+}
+
 func writeTarGz(t *testing.T, path, root string, plan archivePlan, extra bool) {
 	t.Helper()
 	f, err := os.Create(path)
