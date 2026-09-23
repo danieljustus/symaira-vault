@@ -43,7 +43,7 @@ def package_config(nfpm: dict, binary: Path, arch: str, package_format: str) -> 
         key: nfpm[key]
         for key in (
             "package_name", "vendor", "homepage", "maintainer", "description", "license",
-            "section", "priority", "recommends", "bindir",
+            "section", "priority", "recommends",
         )
         if key in nfpm
     }
