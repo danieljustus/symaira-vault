@@ -2,6 +2,7 @@ package session
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -121,7 +122,8 @@ func TestSessionPortTimestampBoundaryContract(t *testing.T) {
 	malformedMgr, malformedKeyring := newTestManager(t)
 	malformedVault := "malformed-offset-port-contract"
 	malformedKey := keyFor(serviceNameForVault(malformedVault), sessionAccount)
-	malformedPayload := `{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:00:00++1:00","ttl_ns":120000000000,"max_lifetime_ns":120000000000}`
+	malformedPayload := fmt.Sprintf(`{"saved_at":%q,"last_access":"1970-01-01T00:00:00++1:00","ttl_ns":%d,"max_lifetime_ns":%d}`,
+		time.Now().UTC().Format(time.RFC3339Nano), int64(time.Hour), int64(time.Hour))
 	if err := malformedKeyring.Set(malformedKey, malformedPayload); err != nil {
 		t.Fatal(err)
 	}
