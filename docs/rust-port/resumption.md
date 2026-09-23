@@ -30,6 +30,11 @@
   `get`-Ausgabe- und Intake-Fälle sowie des ignorierten KDF-Migrationsfalls.
   Ein zusätzlicher Go-generierter Exportfall belegt doppelte CSV-Spaltennamen
   bei kollidierenden Feld-Mappings; der Rust-Export-Replay besteht lokal.
+  `intake watch` verarbeitet nun fortlaufend Poll-Intervalle. Ein Prozess-
+  Differential legt nach dem Start eine Datei an, vergleicht Persistenz und
+  unveränderte Quelle und beendet Go und Rust per SIGTERM mit Exit 0 und
+  leerem Spool. Der Test ist Unix-only; Windows-Stop und die macOS-Mitteilung
+  im Nicht-JSON-Modus sind offen.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
