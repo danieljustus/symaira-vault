@@ -22,8 +22,178 @@ use symvault_crypto::Identity;
 use symvault_store::{AttachmentInfo, Entry, Store};
 use symvault_sync::{
     GoTime,
-    intake::{Options, Provenance, QuarantineSink, ScanResult, Spool, Watcher},
+    intake::{FileResult, Options, Provenance, QuarantineSink, ScanResult, Spool, Watcher},
 };
+
+pub(crate) fn intake_files(
+    paths: &[PathBuf],
+    dry_run: bool,
+    batch_limit: i64,
+    max_files: i64,
+    move_to_trash: bool,
+    ocr_text: Option<&Path>,
+    json: bool,
+    quiet: bool,
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+) -> Result<(), (u8, String)> {
+    if paths.is_empty() {
+        return Err((9, "intake: no input files".into()));
+    }
+    if move_to_trash && !cfg!(target_os = "macos") {
+        return Err((9, "--move-to-trash is only supported on macOS".into()));
+    }
+    if move_to_trash {
+        return Err((
+            9,
+            "--move-to-trash is not supported by the Rust CLI yet".into(),
+        ));
+    }
+    let spool = Spool::new(std::env::temp_dir()).map_err(|error| (1, error.to_string()))?;
+    let options = Options {
+        max_batch_size: if batch_limit <= 0 {
+            32 << 20
+        } else {
+            batch_limit as u64
+        },
+        max_files: if max_files <= 0 {
+            100
+        } else {
+            max_files as usize
+        },
+        ocr_text: ocr_text.map(Path::to_path_buf),
+        ..Options::default()
+    };
+    let results = symvault_sync::intake::process_files(&spool, paths, &options)
+        .map_err(|error| (9, format!("intake: {error}")))?;
+    if dry_run {
+        return render_parent_output(&results, "", true, json, quiet).map_err(|error| (1, error));
+    }
+    let staged = results
+        .iter()
+        .filter(|result| result.status == "ok")
+        .cloned()
+        .collect::<Vec<_>>();
+    let scan = ScanResult {
+        scanned: results.len(),
+        staged: Some(
+            staged
+                .iter()
+                .filter_map(|r| r.spool_path.as_ref().map(|p| p.display().to_string()))
+                .collect(),
+        ),
+        staged_results: staged,
+        ..ScanResult::default()
+    };
+    let vault = resolve_vault(explicit_vault, profile).map_err(|error| (1, error))?;
+    require_initialized(&vault).map_err(|error| (1, error))?;
+    let identity = crate::device::unlock_vault(&vault).map_err(|error| (1, error))?;
+    let store = Store::open(&vault, &identity)
+        .map_err(|error| (1, format!("cannot open vault: {error}")))?;
+    let (import_id, _) =
+        write_batch(&store, &identity, &scan).map_err(|error| (1, error.to_string()))?;
+    render_parent_output(&results, &import_id, false, json, quiet).map_err(|error| (1, error))
+}
+
+fn render_parent_output(
+    results: &[FileResult],
+    import_id: &str,
+    dry_run: bool,
+    json: bool,
+    quiet: bool,
+) -> Result<(), String> {
+    if json {
+        let mut value = serde_json::Map::new();
+        if !import_id.is_empty() {
+            value.insert("import_id".into(), serde_json::json!(import_id));
+        }
+        value.insert(
+            "results".into(),
+            serde_json::to_value(results).map_err(|error| error.to_string())?,
+        );
+        serde_json::to_writer_pretty(io::stdout().lock(), &value)
+            .map_err(|error| format!("encode intake output: {error}"))?;
+        println!();
+        return Ok(());
+    }
+    if quiet {
+        return if !dry_run && !results.iter().any(|result| result.status == "ok") {
+            Err("no files were accepted for intake".into())
+        } else {
+            Ok(())
+        };
+    }
+    let mut ok = 0;
+    for result in results {
+        match result.status.as_str() {
+            "ok" => {
+                ok += 1;
+                let provenance = result
+                    .provenance
+                    .as_ref()
+                    .expect("successful intake provenance");
+                println!(
+                    "OK    {}  ({}, {} bytes, sha256 {})",
+                    result.file,
+                    source_type_name(provenance),
+                    provenance.size,
+                    &provenance.sha256[..provenance.sha256.len().min(12)]
+                );
+                for suggestion in &result.suggestions {
+                    let label = if suggestion.attachment {
+                        "attachment"
+                    } else {
+                        "field"
+                    };
+                    let warning = suggestion
+                        .warning
+                        .as_deref()
+                        .map_or(String::new(), |message| format!("  [!] {message}"));
+                    println!(
+                        "      → {label}: {} (conf {:.2}){warning}",
+                        suggestion.field, suggestion.confidence
+                    );
+                }
+            }
+            "skipped" => println!(
+                "SKIP  {}  {}",
+                result.file,
+                result.reason.as_deref().unwrap_or_default()
+            ),
+            _ => println!(
+                "ERROR {}  {}",
+                result.file,
+                result.reason.as_deref().unwrap_or_default()
+            ),
+        }
+    }
+    if dry_run {
+        println!(
+            "Dry run: {} file(s) processed, nothing written.",
+            results.len()
+        );
+    } else if ok == 0 {
+        return Err("no files were accepted for intake".into());
+    } else {
+        println!("Quarantine import ID: {import_id}");
+        println!("Review and promote with: symvault import review promote {import_id}");
+    }
+    Ok(())
+}
+
+fn source_type_name(provenance: &Provenance) -> &'static str {
+    match provenance.source_type {
+        symvault_sync::intake::SourceType::Text => "text",
+        symvault_sync::intake::SourceType::Env => "env",
+        symvault_sync::intake::SourceType::Json => "json",
+        symvault_sync::intake::SourceType::Certificate => "certificate",
+        symvault_sync::intake::SourceType::Key => "key",
+        symvault_sync::intake::SourceType::Image => "image",
+        symvault_sync::intake::SourceType::Pdf => "pdf",
+        symvault_sync::intake::SourceType::Archive => "archive",
+        symvault_sync::intake::SourceType::Other => "other",
+    }
+}
 
 pub(crate) enum WatchOnceError {
     InvalidDirectory(String),

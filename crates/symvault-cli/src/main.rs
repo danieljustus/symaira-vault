@@ -153,9 +153,22 @@ enum Command {
         command: Vec<String>,
     },
     /// Manage local credential intake.
+    #[command(subcommand_precedence_over_arg = true)]
     Intake {
+        #[arg(value_name = "FILE", num_args = 0..)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value_t = 32 * 1024 * 1024)]
+        batch_limit: i64,
+        #[arg(long, default_value_t = 100)]
+        max_files: i64,
+        #[arg(long)]
+        move_to_trash: bool,
+        #[arg(long)]
+        ocr_text: Option<PathBuf>,
         #[command(subcommand)]
-        command: IntakeCommand,
+        command: Option<IntakeCommand>,
     },
     /// Manage secret sharing between agents.
     Share {
@@ -1520,70 +1533,109 @@ fn run_cli() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Intake {
-            command:
-                IntakeCommand::Watch {
-                    directory,
-                    once,
-                    interval,
-                    debounce,
-                    command,
-                },
-        }) => {
-            if matches!(command, Some(IntakeWatchCommand::Disable)) {
-                return match intake_commands::watch_disable(cli.quiet) {
+            files,
+            dry_run,
+            batch_limit,
+            max_files,
+            move_to_trash,
+            ocr_text,
+            command,
+        }) => match command {
+            None => match intake_commands::intake_files(
+                &files,
+                dry_run,
+                batch_limit,
+                max_files,
+                move_to_trash,
+                ocr_text.as_deref(),
+                cli.json,
+                cli.quiet,
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err((code, error)) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(code)
+                }
+            },
+            Some(IntakeCommand::Watch {
+                directory,
+                once,
+                interval,
+                debounce,
+                command,
+            }) => {
+                if dry_run
+                    || batch_limit != 32 * 1024 * 1024
+                    || max_files != 100
+                    || move_to_trash
+                    || ocr_text.is_some()
+                {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Error: intake parent flags cannot be used with intake watch"
+                    );
+                    return ExitCode::from(2);
+                }
+                if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                    return match intake_commands::watch_disable(cli.quiet) {
+                        Ok(()) => ExitCode::SUCCESS,
+                        Err(error) => {
+                            for _ in 0..2 {
+                                let _ = writeln!(io::stderr(), "Error: {error}");
+                            }
+                            ExitCode::from(match error {
+                                intake_commands::WatchDisableError::UnsupportedPlatform => 9,
+                                intake_commands::WatchDisableError::Remove(_) => 1,
+                            })
+                        }
+                    };
+                }
+                let Some(directory) = directory else {
+                    let _ = writeln!(io::stderr(), "Error: watch directory is required");
+                    return ExitCode::from(9);
+                };
+                let result = if once {
+                    intake_commands::watch_once(
+                        &directory,
+                        interval,
+                        debounce,
+                        cli.json,
+                        cli.quiet,
+                        cli.vault.as_deref(),
+                        cli._profile.as_deref(),
+                    )
+                } else {
+                    intake_commands::watch_continuous(
+                        &directory,
+                        interval,
+                        debounce,
+                        cli.json,
+                        cli.quiet,
+                        cli.vault.as_deref(),
+                        cli._profile.as_deref(),
+                    )
+                };
+                match result {
                     Ok(()) => ExitCode::SUCCESS,
                     Err(error) => {
-                        for _ in 0..2 {
-                            let _ = writeln!(io::stderr(), "Error: {error}");
-                        }
-                        ExitCode::from(match error {
-                            intake_commands::WatchDisableError::UnsupportedPlatform => 9,
-                            intake_commands::WatchDisableError::Remove(_) => 1,
-                        })
-                    }
-                };
-            }
-            let Some(directory) = directory else {
-                let _ = writeln!(io::stderr(), "Error: watch directory is required");
-                return ExitCode::from(9);
-            };
-            let result = if once {
-                intake_commands::watch_once(
-                    &directory,
-                    interval,
-                    debounce,
-                    cli.json,
-                    cli.quiet,
-                    cli.vault.as_deref(),
-                    cli._profile.as_deref(),
-                )
-            } else {
-                intake_commands::watch_continuous(
-                    &directory,
-                    interval,
-                    debounce,
-                    cli.json,
-                    cli.quiet,
-                    cli.vault.as_deref(),
-                    cli._profile.as_deref(),
-                )
-            };
-            match result {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    let code =
-                        if matches!(&error, intake_commands::WatchOnceError::InvalidDirectory(_)) {
+                        let code = if matches!(
+                            &error,
+                            intake_commands::WatchOnceError::InvalidDirectory(_)
+                        ) {
                             9
                         } else {
                             1
                         };
-                    for _ in 0..2 {
-                        let _ = writeln!(io::stderr(), "Error: {error}");
+                        for _ in 0..2 {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                        }
+                        ExitCode::from(code)
                     }
-                    ExitCode::from(code)
                 }
             }
-        }
+        },
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
         }) => {

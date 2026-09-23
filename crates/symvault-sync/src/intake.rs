@@ -15,6 +15,7 @@ pub const MAX_BATCH_SIZE: u64 = 32 << 20;
 pub const MAX_FILES: usize = 100;
 pub const ATTACHMENT_FIELD: &str = "attachment";
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SourceType {
     Text,
     Env,
@@ -33,7 +34,7 @@ pub struct Provenance {
     pub source_type: SourceType,
     pub size: u64,
     pub sha256: String,
-    pub mtime: u64,
+    pub mtime: String,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Suggestion {
@@ -42,15 +43,23 @@ pub struct Suggestion {
     pub confidence: f64,
     #[serde(skip)]
     pub(crate) value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
     pub attachment: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FileResult {
     pub file: String,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub suggestions: Vec<Suggestion>,
     #[serde(skip)]
     pub spool_path: Option<PathBuf>,
@@ -319,7 +328,16 @@ impl Spool {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_secs()),
+                .and_then(|duration| {
+                    time::OffsetDateTime::from_unix_timestamp_nanos(duration.as_nanos() as i128)
+                        .ok()
+                })
+                .and_then(|timestamp| {
+                    timestamp
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .ok()
+                })
+                .unwrap_or_else(|| "1970-01-01T00:00:00Z".into()),
         };
         Ok((data, provenance, staged_path))
     }
@@ -345,6 +363,7 @@ pub struct Options {
     pub max_batch_size: u64,
     pub max_files: usize,
     pub debounce: Duration,
+    pub ocr_text: Option<PathBuf>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -353,6 +372,7 @@ impl Default for Options {
             max_batch_size: MAX_BATCH_SIZE,
             max_files: MAX_FILES,
             debounce: Duration::from_secs(5),
+            ocr_text: None,
         }
     }
 }
@@ -361,12 +381,31 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
     match spool.stage(path, opts.max_file_size) {
         Ok((data, mut p, spool_path)) => {
             p.source_type = source_type(&p.source_name, &data);
+            let suggestions = if matches!(p.source_type, SourceType::Image | SourceType::Pdf)
+                && let Some(ocr_path) = opts.ocr_text.as_deref()
+            {
+                match fs::read(ocr_path) {
+                    Ok(ocr) => suggestions(&ocr, SourceType::Text, &p.source_name),
+                    Err(error) => {
+                        return FileResult {
+                            file: path.to_string_lossy().into(),
+                            status: "error".into(),
+                            reason: Some(format!("read OCR text: {error}")),
+                            provenance: Some(p),
+                            suggestions: Vec::new(),
+                            spool_path: Some(spool_path),
+                        };
+                    }
+                }
+            } else {
+                suggestions(&data, p.source_type, &p.source_name)
+            };
             FileResult {
                 file: path.to_string_lossy().into(),
                 status: "ok".into(),
                 reason: None,
                 provenance: Some(p.clone()),
-                suggestions: suggestions(&data, p.source_type, &p.source_name),
+                suggestions,
                 spool_path: Some(spool_path),
             }
         }
@@ -406,6 +445,56 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
             spool_path: None,
         },
     }
+}
+
+/// Processes an explicit file batch with the same file-count and total-byte
+/// limits as the Go intake command. Per-file failures remain reportable rows.
+pub fn process_files(
+    spool: &Spool,
+    paths: &[PathBuf],
+    opts: &Options,
+) -> Result<Vec<FileResult>, String> {
+    let max_files = if opts.max_files == 0 {
+        MAX_FILES
+    } else {
+        opts.max_files
+    };
+    let max_batch_size = if opts.max_batch_size == 0 {
+        MAX_BATCH_SIZE
+    } else {
+        opts.max_batch_size
+    };
+    if paths.is_empty() {
+        return Err("no input files".into());
+    }
+    if paths.len() > max_files {
+        return Err(format!(
+            "batch exceeds the {max_files} file limit ({} given)",
+            paths.len()
+        ));
+    }
+    let mut total = 0u64;
+    let mut results = Vec::with_capacity(paths.len());
+    for path in paths {
+        let mut result = process(spool, path, opts);
+        if let Some(provenance) = &result.provenance {
+            total = total.saturating_add(provenance.size);
+            if total > max_batch_size {
+                result = FileResult {
+                    file: path.to_string_lossy().into(),
+                    status: "skipped".into(),
+                    reason: Some(format!(
+                        "batch exceeds the {max_batch_size} byte total limit"
+                    )),
+                    provenance: None,
+                    suggestions: Vec::new(),
+                    spool_path: None,
+                };
+            }
+        }
+        results.push(result);
+    }
+    Ok(results)
 }
 /// A sink keeps quarantine writes testable without a vault, keychain, OCR, or network service.
 pub trait QuarantineSink {
@@ -649,7 +738,7 @@ mod quarantine_tests {
                 source_type: SourceType::Text,
                 size: 1,
                 sha256: format!("hash-{name}"),
-                mtime: 0,
+                mtime: "1970-01-01T00:00:00Z".into(),
             }),
             suggestions,
             spool_path: None,
