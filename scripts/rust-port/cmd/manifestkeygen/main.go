@@ -24,6 +24,11 @@ const revision = "3232e31fb91362b6e6202774f7e95f6d477305d2"
 const generator = "scripts/rust-port/cmd/manifestkeygen/main.go"
 const payload = "synthetic-manifest-value"
 
+// The exercised manifest APIs use vault locking/recipients, crypto, config,
+// and atomic filesystem writes. Unrelated packages such as intake are not
+// part of this oracle's behavior-bearing source tree.
+var sourceRoots = []string{"internal/config", "internal/crypto", "internal/fsutil", "internal/vault", "go.mod", "go.sum"}
+
 type record struct {
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
@@ -62,27 +67,40 @@ func repoRoot() string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 }
 
-// Bind the entire tracked internal production tree to the actual pinned
-// revision, rather than trusting a caller-supplied label.
+// Bind the manifest's production source tree to the actual pinned revision,
+// rather than trusting a caller-supplied label.
 //
 // Dependency manifests stay in the digest (they are read from the pinned
 // revision, so the digest is stable across dependency bumps), but they are
 // excluded from the working-tree equality check: a pin that gates on go.mod
 // turns every dependency bump — Dependabot or manual — into a red gate while
 // the behavior under test is unchanged.
-func sourceDigest(root string) (string, error) {
-	cmd := exec.Command("git", "ls-tree", "-r", "--name-only", revision, "--", "internal", "go.mod", "go.sum")
+func sourceNames(root string) ([]string, error) {
+	args := append([]string{"ls-tree", "-r", "--name-only", revision, "--"}, sourceRoots...)
+	cmd := exec.Command("git", args...) // #nosec G204 -- revision and sourceRoots are fixed in the generator
 	cmd.Dir = root
 	names, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	h := sha256.New()
+	var sources []string
 	for _, name := range strings.Fields(string(names)) {
 		if strings.HasSuffix(name, "_test.go") || (!strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum") {
 			continue
 		}
-		cmd = exec.Command("git", "show", revision+":"+name) // #nosec G204 -- revision is pinned and name comes only from git ls-tree
+		sources = append(sources, name)
+	}
+	return sources, nil
+}
+
+func sourceDigest(root string) (string, error) {
+	names, err := sourceNames(root)
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, name := range names {
+		cmd := exec.Command("git", "show", revision+":"+name) // #nosec G204 -- revision is pinned and name comes only from git ls-tree
 		cmd.Dir = root
 		pinned, err := cmd.Output()
 		if err != nil {

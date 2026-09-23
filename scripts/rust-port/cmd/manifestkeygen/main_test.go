@@ -6,12 +6,41 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"filippo.io/age"
 
 	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
+
+func TestManifestKeySourceScope(t *testing.T) {
+	names, err := sourceNames(repoRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := make(map[string]bool, len(names))
+	for _, name := range names {
+		if strings.HasPrefix(name, "internal/intake/") {
+			t.Fatalf("unrelated intake source bound to manifest fixture: %s", name)
+		}
+		bound[name] = true
+	}
+	for _, name := range []string{
+		"internal/vault/manifest.go",
+		"internal/vault/recipients.go",
+		"internal/vault/lock_unix.go",
+		"internal/vault/lock_windows.go",
+		"internal/crypto/age.go",
+		"internal/config/config_load.go",
+		"internal/fsutil/reexport.go",
+		"go.mod", "go.sum",
+	} {
+		if !bound[name] {
+			t.Fatalf("manifest dependency missing from oracle sources: %s", name)
+		}
+	}
+}
 
 func TestManifestKeyProductionFixture(t *testing.T) {
 	f, err := build(repoRoot())
