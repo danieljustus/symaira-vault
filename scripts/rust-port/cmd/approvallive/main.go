@@ -288,6 +288,7 @@ func runRustRaw(binary, vault string, args ...string) (processOutput, error) {
 	commandArgs := make([]string, 0, 2+len(args))
 	commandArgs = append(commandArgs, "--vault", vault)
 	commandArgs = append(commandArgs, args...)
+	// #nosec G204 -- The executable is the explicit --rust-binary test input, resolved and stat-checked in run.
 	command := exec.Command(binary, commandArgs...)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}

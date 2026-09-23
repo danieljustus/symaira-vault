@@ -158,7 +158,7 @@ def package_files(package: Path, package_format: str) -> set[str]:
         "sh", "-c", f"tar -tzf /work/{relative.as_posix()}",
     ]).splitlines()
     return {
-        line.strip().removeprefix("./")
+        "/" + line.strip().removeprefix("./")
         for line in lines
         if line.strip().startswith(("usr/", "bin/", "etc/", "opt/")) and not line.strip().endswith("/")
     }
