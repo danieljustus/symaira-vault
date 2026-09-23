@@ -10,6 +10,7 @@ use std::{
 use std::{
     io::{Read, Write},
     net::TcpListener,
+    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -362,14 +363,14 @@ fn pull_aborts_merge_state_created_by_this_invocation() {
     assert!(unresolved.is_empty(), "pull left unresolved index state");
 }
 
-fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
+fn auth_server(status: &str) -> (u16, mpsc::Sender<()>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind auth server");
     let port = listener.local_addr().unwrap().port();
     let status = status.to_owned();
+    let (stop, stopped) = mpsc::channel::<()>();
     let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(3);
         listener.set_nonblocking(true).expect("set nonblocking");
-        while Instant::now() < deadline {
+        while matches!(stopped.try_recv(), Err(mpsc::TryRecvError::Empty)) {
             let Ok((mut stream, _)) = listener.accept() else {
                 thread::sleep(Duration::from_millis(10));
                 continue;
@@ -384,7 +385,7 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
             break;
         }
     });
-    (port, handle)
+    (port, stop, handle)
 }
 
 #[test]
@@ -394,10 +395,11 @@ fn pull_projects_auth_failure_from_a_real_http_remote() {
     // An empty local helper value clears inherited helpers (including GCM),
     // so Git exposes the fixture's 401 instead of asking the host credential UI.
     git(repo.root(), &["config", "--local", "credential.helper", ""]);
-    let (port, server) = auth_server("401 Unauthorized");
+    let (port, stop, server) = auth_server("401 Unauthorized");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
     let result = repo.pull("origin");
+    drop(stop);
     server.join().expect("auth server");
     let error = result.error.as_ref().expect("auth error").to_string();
     assert_pull_projection(&result, &contract.expected);
@@ -467,7 +469,7 @@ fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
 #[test]
 fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
     let (root, repo, _remote) = pair();
-    let (port, server) = auth_server("401 Unauthorized");
+    let (port, stop, server) = auth_server("401 Unauthorized");
     let marker = root.path().join("askpass-called");
     let helper = root.path().join("askpass.sh");
     write_executable(
@@ -484,6 +486,7 @@ fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
         &["config", "core.askPass", helper.to_str().unwrap()],
     );
     let result = repo.pull("origin");
+    drop(stop);
     server.join().expect("auth server");
     assert!(result.error.is_some());
     assert_eq!(
