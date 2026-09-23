@@ -10,19 +10,14 @@ use std::{net::IpAddr, path::Path, sync::Arc, time::Duration};
 use hmac::{Hmac, Mac};
 use rustls::{
     RootCertStore,
-    pki_types::{
-        CertificateDer, PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer,
-        UnixTime,
-    },
-    server::{ParsedCertificate, WebPkiClientVerifier, danger::ClientCertVerifier},
+    pki_types::{CertificateDer, PrivateKeyDer, UnixTime, pem::PemObject},
+    server::{ParsedCertificate, WebPkiClientVerifier},
     sign::CertifiedKey,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Sha256;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use ureq::tls::{
-    Certificate, ClientCert, KeyKind, PemItem, PrivateKey, RootCerts, TlsConfig, parse_pem,
-};
+use ureq::tls::{Certificate, ClientCert, PemItem, PrivateKey, RootCerts, TlsConfig, parse_pem};
 use zeroize::Zeroizing;
 
 const RUNTIME_PORT: &str = ".runtime-port";
@@ -312,6 +307,7 @@ fn parse_certificate_chain(pem: &[u8], error: &str) -> Result<Vec<Certificate<'s
         match item.map_err(|_| error.to_owned())? {
             PemItem::Certificate(certificate) => certificates.push(certificate),
             PemItem::PrivateKey(_) => {}
+            _ => {}
         }
     }
     if certificates.is_empty() {
@@ -377,11 +373,8 @@ fn load_approval_client_identity(
     );
     let key = PrivateKey::from_pem(&key_pem)
         .map_err(|_| "load local approval client identity failed".to_owned())?;
-    let rustls_key = match key.kind() {
-        KeyKind::Pkcs1 => PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(key.der().to_vec())),
-        KeyKind::Pkcs8 => PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.der().to_vec())),
-        KeyKind::Sec1 => PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(key.der().to_vec())),
-    };
+    let rustls_key = PrivateKeyDer::from_pem_slice(&key_pem)
+        .map_err(|_| "load local approval client identity failed".to_owned())?;
     let provider = rustls::crypto::ring::default_provider();
     CertifiedKey::from_der(client_der, rustls_key, &provider)
         .and_then(|identity| identity.keys_match())
@@ -486,7 +479,7 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        ApprovalDecision, RuntimeTls, decode_api_response, enroll_proof,
+        ApprovalDecision, RUNTIME_TLS, RuntimeTls, decode_api_response, enroll_proof,
         load_approval_client_identity, load_runtime_tls, parse_certificate_chain,
     };
     use ureq::tls::Certificate;
