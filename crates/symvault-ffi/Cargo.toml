@@ -1,0 +1,15 @@
+[package]
+name = "symvault-ffi"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+zeroize = "=1.8.2"

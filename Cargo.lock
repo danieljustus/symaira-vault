@@ -2650,6 +2650,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "symvault-ffi"
+version = "0.0.0"
+dependencies = [
+ "symvault-crypto",
+ "zeroize",
+]
+
+[[package]]
 name = "symvault-gojson"
 version = "0.0.0"
 dependencies = [
