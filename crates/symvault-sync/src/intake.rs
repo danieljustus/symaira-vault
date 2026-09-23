@@ -253,14 +253,15 @@ impl Spool {
         if m.len() > limit {
             return Err(IntakeError::Limit);
         }
-        let mut options = fs::OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
-        }
-        let mut source = options.open(path)?;
+        // The shared reader refuses links and non-regular files without blocking
+        // if a concurrent writer replaces the preflight path with a FIFO.
+        let mut source = match crate::safeio::open_read(path) {
+            Ok(Some(source)) => source,
+            Ok(None) | Err(crate::safeio::SafeIoError::NotRegularFile) => {
+                return Err(IntakeError::InvalidSource(path.display().to_string()));
+            }
+            Err(crate::safeio::SafeIoError::Io(error)) => return Err(error.into()),
+        };
         let opened = source.metadata()?;
         if !opened.is_file() || !same_source(&m, &opened) {
             return Err(IntakeError::InvalidSource(
