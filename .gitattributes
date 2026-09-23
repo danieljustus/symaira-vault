@@ -26,3 +26,5 @@ testdata/port/** text eol=lf
 # against the bytes the renderer produces, so a Windows CRLF checkout would
 # make every comparison fail there.
 crates/symvault-cli/tests/fixtures/** text eol=lf
+# The captured Go root help is embedded byte-for-byte in the Rust CLI.
+crates/symvault-cli/src/help-root.txt text eol=lf
