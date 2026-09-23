@@ -2653,7 +2653,12 @@ dependencies = [
 name = "symvault-ffi"
 version = "0.0.0"
 dependencies = [
+ "base64",
+ "serde_json",
  "symvault-crypto",
+ "symvault-gojson",
+ "symvault-store",
+ "tempfile",
  "zeroize",
 ]
 

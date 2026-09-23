@@ -3,12 +3,13 @@
 //! Narrow C ABI for the mobile crypto slice. Returned buffers belong to Rust
 //! and must be released with [`symvault_buffer_free`]. Inputs are borrowed.
 
-use std::{ptr, slice, str};
+use std::{path::Path, ptr, slice, str};
 
 use symvault_crypto::{
     SecretBytes, decrypt, decrypt_scrypt, encrypt, encrypt_scrypt, fingerprint, generate_identity,
     identity_string, parse_identity, parse_recipient, recipient_string,
 };
+use symvault_store::Store;
 use zeroize::Zeroize;
 
 /// Owned byte buffer returned across the C ABI.
@@ -80,6 +81,10 @@ unsafe fn text<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a str, 
     str::from_utf8(unsafe { input(data, len, label)? })
         .map(str::trim)
         .map_err(|_| format!("{label} is not UTF-8"))
+}
+
+unsafe fn utf8<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a str, String> {
+    str::from_utf8(unsafe { input(data, len, label)? }).map_err(|_| format!("{label} is not UTF-8"))
 }
 
 /// Frees a buffer returned in a result. A zero-length buffer is a no-op.
@@ -235,9 +240,98 @@ pub unsafe extern "C" fn symvault_decrypt_with_passphrase(
     })
 }
 
+/// Reads a decrypted entry as Go-compatible JSON.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_read_entry_json(
+    vault_dir: *const u8,
+    vault_dir_len: usize,
+    entry_path: *const u8,
+    entry_path_len: usize,
+    identity: *const u8,
+    identity_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let vault_dir = unsafe { utf8(vault_dir, vault_dir_len, "vault directory")? };
+        let entry_path = unsafe { utf8(entry_path, entry_path_len, "entry path")? };
+        let identity = unsafe { text(identity, identity_len, "identity")? };
+        let identity = parse_identity(identity).map_err(|error| error.to_string())?;
+        let store =
+            Store::open(Path::new(vault_dir), &identity).map_err(|error| error.to_string())?;
+        let entry = store
+            .get(entry_path, &identity)
+            .map_err(|error| error.to_string())?;
+        symvault_gojson::to_string(&entry)
+            .map(String::into_bytes)
+            .map_err(|error| error.to_string())
+    })
+}
+
+/// Lists matching vault entry paths as a JSON array.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_list_entries_json(
+    vault_dir: *const u8,
+    vault_dir_len: usize,
+    prefix: *const u8,
+    prefix_len: usize,
+    identity: *const u8,
+    identity_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let vault_dir = unsafe { utf8(vault_dir, vault_dir_len, "vault directory")? };
+        let prefix = unsafe { utf8(prefix, prefix_len, "prefix")? };
+        let identity = unsafe { text(identity, identity_len, "identity")? };
+        let identity = parse_identity(identity).map_err(|error| error.to_string())?;
+        let store =
+            Store::open(Path::new(vault_dir), &identity).map_err(|error| error.to_string())?;
+        let paths = store.list(&identity).map_err(|error| error.to_string())?;
+        let paths: Vec<_> = paths
+            .into_iter()
+            .filter(|path| path.starts_with(prefix))
+            .collect();
+        symvault_gojson::to_string(&paths)
+            .map(String::into_bytes)
+            .map_err(|error| error.to_string())
+    })
+}
+
+/// Returns a single byte: one for intact manifest, zero for missing or tampered entries.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_verify_manifest_integrity(
+    vault_dir: *const u8,
+    vault_dir_len: usize,
+    identity: *const u8,
+    identity_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let vault_dir = unsafe { utf8(vault_dir, vault_dir_len, "vault directory")? };
+        let identity = unsafe { text(identity, identity_len, "identity")? };
+        let identity = parse_identity(identity).map_err(|error| error.to_string())?;
+        let store =
+            Store::open(Path::new(vault_dir), &identity).map_err(|error| error.to_string())?;
+        let checked = store
+            .verify_manifest(&identity)
+            .map_err(|error| error.to_string())?;
+        Ok(vec![u8::from(
+            checked.missing.is_empty() && checked.tampered.is_empty(),
+        )])
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use std::fs;
 
     fn take(buffer: SymvaultBuffer) -> Vec<u8> {
         if buffer.len == 0 {
@@ -426,5 +520,82 @@ mod tests {
             .unwrap_err()
         };
         assert_eq!(error, "public key is too large");
+    }
+
+    #[test]
+    fn mobile_read_bridge_replays_go_vault_fixture() {
+        const IDENTITY: &[u8] =
+            b"AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/store/store.json"
+        )))
+        .unwrap();
+        let vault = &fixture["vaults"][0];
+        let root = tempfile::tempdir().unwrap();
+        for file in vault["migration"]["after"]["files"].as_array().unwrap() {
+            let path = root.path().join(file["path"].as_str().unwrap());
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(
+                path,
+                STANDARD.decode(file["content"].as_str().unwrap()).unwrap(),
+            )
+            .unwrap();
+        }
+        let root_bytes = root.path().to_str().unwrap().as_bytes();
+        for expected in vault["entries"].as_array().unwrap() {
+            let entry_path = expected["path"].as_str().unwrap().as_bytes();
+            let entry = unsafe {
+                output(symvault_read_entry_json(
+                    root_bytes.as_ptr(),
+                    root_bytes.len(),
+                    entry_path.as_ptr(),
+                    entry_path.len(),
+                    IDENTITY.as_ptr(),
+                    IDENTITY.len(),
+                ))
+                .unwrap()
+            };
+            assert_eq!(
+                entry,
+                expected["expected_json"].as_str().unwrap().as_bytes()
+            );
+        }
+
+        let prefix = b"nested/";
+        let listed = unsafe {
+            output(symvault_list_entries_json(
+                root_bytes.as_ptr(),
+                root_bytes.len(),
+                prefix.as_ptr(),
+                prefix.len(),
+                IDENTITY.as_ptr(),
+                IDENTITY.len(),
+            ))
+            .unwrap()
+        };
+        assert_eq!(listed, br#"["nested/large"]"#);
+
+        let valid = unsafe {
+            output(symvault_verify_manifest_integrity(
+                root_bytes.as_ptr(),
+                root_bytes.len(),
+                IDENTITY.as_ptr(),
+                IDENTITY.len(),
+            ))
+            .unwrap()
+        };
+        assert_eq!(valid, [1]);
+        fs::write(root.path().join("entries/minimal.age"), b"tampered").unwrap();
+        let invalid = unsafe {
+            output(symvault_verify_manifest_integrity(
+                root_bytes.as_ptr(),
+                root_bytes.len(),
+                IDENTITY.as_ptr(),
+                IDENTITY.len(),
+            ))
+            .unwrap()
+        };
+        assert_eq!(invalid, [0]);
     }
 }

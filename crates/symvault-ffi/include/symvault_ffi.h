@@ -34,4 +34,17 @@ SymvaultResult symvault_decrypt_with_passphrase(
     const uint8_t *passphrase, size_t passphrase_len,
     const uint8_t *ciphertext, size_t ciphertext_len);
 
+/* JSON output matches the Go mobile bridge; manifest result is one byte (0 or 1). */
+SymvaultResult symvault_read_entry_json(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *entry_path, size_t entry_path_len,
+    const uint8_t *identity, size_t identity_len);
+SymvaultResult symvault_list_entries_json(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *prefix, size_t prefix_len,
+    const uint8_t *identity, size_t identity_len);
+SymvaultResult symvault_verify_manifest_integrity(
+    const uint8_t *vault_dir, size_t vault_dir_len,
+    const uint8_t *identity, size_t identity_len);
+
 #endif

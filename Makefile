@@ -366,7 +366,7 @@ token-lookup-differential:
 
 .PHONY: ffi-crypto-contract ffi-abi-smoke
 ffi-crypto-contract:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mobilebind ./pkg/mobilebind -run '^(TestMobileBind_CryptoEndToEnd|TestPkgMobilebindReexport)$$' -count=1
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mobilebind ./pkg/mobilebind -run '^(TestMobileBind_CryptoEndToEnd|TestMobileBind_VaultEndToEnd|TestPkgMobilebindReexport)$$' -count=1
 	$(CARGO) test -p symvault-ffi --lib --locked
 
 ffi-abi-smoke:
