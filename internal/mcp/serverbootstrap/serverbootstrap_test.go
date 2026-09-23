@@ -1,6 +1,7 @@
 package serverbootstrap
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/ecdsa"
@@ -394,6 +395,110 @@ func TestRunHTTPServer_MCPMethodNotAllowed(t *testing.T) {
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("GET /mcp status = %d, want %d", resp.StatusCode, http.StatusMethodNotAllowed)
 	}
+}
+
+func TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive(t *testing.T) {
+	startServer := func(t *testing.T) (int, func()) {
+		t.Helper()
+		v := newTestVault(t)
+		port := reserveFreePort(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
+		return port, func() {
+			cancel()
+			waitForServer()
+		}
+	}
+	request := func(connection string) string {
+		connectionHeader := ""
+		if connection != "" {
+			connectionHeader = "Connection: " + connection + "\r\n"
+		}
+		return "POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nX-Symaira-Agent: default\r\nContent-Length: 0\r\n" + connectionHeader + "\r\n"
+	}
+	readResponse := func(t *testing.T, reader *bufio.Reader) (*http.Response, string) {
+		t.Helper()
+		response, err := http.ReadResponse(reader, &http.Request{Method: http.MethodPost})
+		if err != nil {
+			t.Fatalf("read HTTP response: %v", err)
+		}
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Fatalf("read HTTP response body: %v", err)
+		}
+		if err := response.Body.Close(); err != nil {
+			t.Fatalf("close HTTP response body: %v", err)
+		}
+		return response, string(body)
+	}
+	assertUnauthorized := func(t *testing.T, response *http.Response, body string) {
+		t.Helper()
+		if response.Proto != "HTTP/1.0" {
+			t.Errorf("response protocol = %q, want HTTP/1.0", response.Proto)
+		}
+		if response.StatusCode != http.StatusUnauthorized {
+			t.Errorf("response status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
+		}
+		if got := response.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+			t.Errorf("Content-Type = %q, want text/plain; charset=utf-8", got)
+		}
+		if got := response.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("X-Content-Type-Options = %q, want nosniff", got)
+		}
+		if response.ContentLength != int64(len("unauthorized\n")) {
+			t.Errorf("Content-Length = %d, want %d", response.ContentLength, len("unauthorized\n"))
+		}
+		if body != "unauthorized\n" {
+			t.Errorf("body = %q, want unauthorized newline", body)
+		}
+	}
+
+	t.Run("default close", func(t *testing.T) {
+		port, stop := startServer(t)
+		defer stop()
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), time.Second)
+		if err != nil {
+			t.Fatalf("dial HTTP server: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		if _, err := io.WriteString(conn, request("")); err != nil {
+			t.Fatalf("write request: %v", err)
+		}
+		response, body := readResponse(t, bufio.NewReader(conn))
+		assertUnauthorized(t, response, body)
+		if !response.Close {
+			t.Error("HTTP/1.0 response without keep-alive must close")
+		}
+		if response.Header.Get("Connection") != "" {
+			t.Errorf("implicit HTTP/1.0 close unexpectedly emitted Connection: %q", response.Header.Get("Connection"))
+		}
+	})
+
+	t.Run("explicit keep-alive", func(t *testing.T) {
+		port, stop := startServer(t)
+		defer stop()
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), time.Second)
+		if err != nil {
+			t.Fatalf("dial HTTP server: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		reader := bufio.NewReader(conn)
+		for i := 0; i < 2; i++ {
+			if _, err := io.WriteString(conn, request("keep-alive")); err != nil {
+				t.Fatalf("write request %d: %v", i+1, err)
+			}
+			response, body := readResponse(t, reader)
+			assertUnauthorized(t, response, body)
+			if response.Close {
+				t.Fatalf("response %d unexpectedly closes HTTP/1.0 keep-alive", i+1)
+			}
+			if got := response.Header.Get("Connection"); got != "keep-alive" {
+				t.Fatalf("response %d Connection = %q, want keep-alive", i+1, got)
+			}
+		}
+	})
 }
 
 func TestRunHTTPServer_MCPMediaTypeAndAccept(t *testing.T) {

@@ -125,12 +125,20 @@ where
             }
             Err(error) => return Err(error),
         };
-        let keep_alive = request.http_version == "HTTP/1.1"
-            && served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION
-            && !request
-                .connection
-                .split(',')
-                .any(|value| value.trim().eq_ignore_ascii_case("close"));
+        let connection_tokens = request
+            .connection
+            .split(',')
+            .map(str::trim)
+            .collect::<Vec<_>>();
+        let closes = connection_tokens
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case("close"));
+        let requested_keep_alive = request.http_version == "HTTP/1.1"
+            || connection_tokens
+                .iter()
+                .any(|value| value.eq_ignore_ascii_case("keep-alive"));
+        let keep_alive =
+            served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION && requested_keep_alive && !closes;
         if !serve_one_authenticated(
             &mut reader,
             request,
@@ -161,31 +169,45 @@ where
     let stream = reader.get_mut();
     let response_version = request.http_version.as_str();
     if !allowed_origin(&request.origin, &request.host) {
-        write_json_error(stream, 403, "invalid Origin header")?;
-        return Ok(false);
+        write_json_error_for_request(
+            stream,
+            403,
+            "invalid Origin header",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
     }
     let Some(bearer) = request.authorization.strip_prefix("Bearer ") else {
-        write_plain_error(stream, 401, "unauthorized")?;
-        return Ok(false);
+        write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
+        return Ok(keep_alive);
     };
     let token = match lookup_token(registry_path, bearer) {
         Ok(Some(token)) => token,
         Ok(None) | Err(_) => {
-            write_plain_error(stream, 401, "unauthorized")?;
-            return Ok(false);
+            write_request_error(stream, 401, "unauthorized", response_version, keep_alive)?;
+            return Ok(keep_alive);
         }
     };
     if !token.agent_name.is_empty() && token.agent_name != request.agent {
-        write_plain_error(
+        write_request_error(
             stream,
             403,
             "forbidden: token agent does not match X-Symaira-Agent header",
+            response_version,
+            keep_alive,
         )?;
-        return Ok(false);
+        return Ok(keep_alive);
     }
     if request.agent.is_empty() {
-        write_plain_error(stream, 403, "forbidden: missing X-Symaira-Agent header")?;
-        return Ok(false);
+        write_request_error(
+            stream,
+            403,
+            "forbidden: missing X-Symaira-Agent header",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
     }
     if !handlers.contains_key(&request.agent) {
         match handler_for_agent(&request.agent) {
@@ -193,19 +215,31 @@ where
                 handlers.insert(request.agent.clone(), handler);
             }
             Ok(_) => {
-                write_http_error(stream, 503, "too many MCP agent handlers")?;
-                return Ok(false);
+                write_request_error(
+                    stream,
+                    503,
+                    "too many MCP agent handlers",
+                    response_version,
+                    keep_alive,
+                )?;
+                return Ok(keep_alive);
             }
             Err(error) => {
-                write_json_error(stream, 403, &error)?;
-                return Ok(false);
+                write_json_error_for_request(stream, 403, &error, response_version, keep_alive)?;
+                return Ok(keep_alive);
             }
         }
     }
     let session_key = format!("{}:{}", token.id, request.agent);
     if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
-        write_http_error(stream, 503, "too many MCP sessions")?;
-        return Ok(false);
+        write_request_error(
+            stream,
+            503,
+            "too many MCP sessions",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
     }
     let handler = sessions.entry(session_key).or_insert_with(|| {
         handlers
@@ -504,11 +538,21 @@ fn write_http_response(
         write!(stream, "{name}: {value}\r\n")?;
     }
     write!(stream, "Content-Length: {}\r\n", response.body.len())?;
-    if !keep_alive {
-        stream.write_all(b"Connection: close\r\n")?;
-    }
+    write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
     stream.write_all(&response.body)
+}
+
+fn write_connection_header(
+    stream: &mut TcpStream,
+    version: &str,
+    keep_alive: bool,
+) -> Result<(), std::io::Error> {
+    match (version, keep_alive) {
+        ("HTTP/1.0", true) => stream.write_all(b"Connection: keep-alive\r\n"),
+        ("HTTP/1.1", false) => stream.write_all(b"Connection: close\r\n"),
+        _ => Ok(()),
+    }
 }
 
 fn write_plain_error(
@@ -540,10 +584,35 @@ fn write_http_error(
     )
 }
 
-fn write_json_error(
+fn write_request_error(
     stream: &mut TcpStream,
     status: u16,
     message: &str,
+    version: &str,
+    keep_alive: bool,
+) -> Result<(), std::io::Error> {
+    let body = format!("{message}\n");
+    let reason = match status {
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        503 => "Service Unavailable",
+        _ => "Internal Server Error",
+    };
+    write!(
+        stream,
+        "{version} {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\n",
+        body.len()
+    )?;
+    write_connection_header(stream, version, keep_alive)?;
+    write!(stream, "\r\n{body}")
+}
+
+fn write_json_error_for_request(
+    stream: &mut TcpStream,
+    status: u16,
+    message: &str,
+    version: &str,
+    keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let body = format!(
         "{{\"jsonrpc\":\"2.0\",\"error\":{{\"code\":-32600,\"message\":{}}}}}\n",
@@ -551,9 +620,11 @@ fn write_json_error(
     );
     write!(
         stream,
-        "HTTP/1.1 {status} Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "{version} {status} Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\n",
         body.len()
-    )
+    )?;
+    write_connection_header(stream, version, keep_alive)?;
+    write!(stream, "\r\n{body}")
 }
 
 /// Handles the initialize-sized `/mcp` HTTP slice using the shared JSON-RPC
@@ -797,6 +868,39 @@ mod tests {
         drop(stream);
         server.join().expect("server thread");
         response
+    }
+
+    fn round_trip_wire_sequence(request: &str, count: usize) -> Vec<String> {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let mut handlers = HashMap::new();
+            let mut sessions = HashMap::new();
+            serve_connection_authenticated(
+                stream,
+                &registry_path,
+                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                &mut handlers,
+                &mut sessions,
+            )
+            .expect("serve connection sequence");
+        });
+        let stream = TcpStream::connect(address).expect("connect");
+        let mut reader = BufReader::new(stream);
+        let mut responses = Vec::with_capacity(count);
+        for _ in 0..count {
+            reader
+                .get_mut()
+                .write_all(request.as_bytes())
+                .expect("write request");
+            responses.push(read_http_response(&mut reader));
+        }
+        drop(reader);
+        server.join().expect("server thread");
+        responses
     }
 
     fn read_http_response(reader: &mut BufReader<TcpStream>) -> String {
@@ -1154,7 +1258,7 @@ mod tests {
         );
         let response = round_trip_wire(&request);
         assert!(response.starts_with("HTTP/1.0 200 OK\r\n"), "{response}");
-        assert!(response.contains("Connection: close\r\n"), "{response}");
+        assert!(!response.contains("Connection:"), "{response}");
         assert_eq!(
             raw_status(&response),
             go["response"]["status"].as_u64().expect("Go status") as u16
@@ -1173,6 +1277,37 @@ mod tests {
             "{response}"
         );
         assert!(response.contains("Content-Type: application/json\r\n"));
+    }
+
+    #[test]
+    fn source_bound_http_10_error_framing_and_explicit_keep_alive_match_go() {
+        let default_close = "POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nX-Symaira-Agent: default\r\nContent-Length: 0\r\n\r\n";
+        let response = round_trip_wire(default_close);
+        assert!(
+            response.starts_with("HTTP/1.0 401 Unauthorized\r\n"),
+            "{response}"
+        );
+        assert!(response.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+        assert!(response.contains("X-Content-Type-Options: nosniff\r\n"));
+        assert!(response.contains("Content-Length: 12\r\n"));
+        assert!(!response.contains("Connection:"), "{response}");
+        assert_eq!(raw_body(&response), "unauthorized\n");
+
+        let keep_alive = "POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nX-Symaira-Agent: default\r\nContent-Length: 0\r\nConnection: keep-alive\r\n\r\n";
+        let responses = round_trip_wire_sequence(keep_alive, 2);
+        assert_eq!(responses.len(), 2);
+        for response in responses {
+            assert!(
+                response.starts_with("HTTP/1.0 401 Unauthorized\r\n"),
+                "{response}"
+            );
+            assert!(
+                response.contains("Connection: keep-alive\r\n"),
+                "{response}"
+            );
+            assert!(response.contains("Content-Length: 12\r\n"));
+            assert_eq!(raw_body(&response), "unauthorized\n");
+        }
     }
 
     #[test]
