@@ -46,6 +46,11 @@
   gepinnten Go-Differentiale laufen im nächsten nativen CLI-Gate; am neuen
   Head liegen noch keine Runtime-Ergebnisse vor. `--move-to-trash` bleibt
   auf macOS offen und wird dort von Rust nicht ausgeführt.
+  Der versteckte, veraltete Befehl `agent setup` und `dynamic generate`
+  haben nun Quellimplementierungen und gepinnte Go-Differentiale. Go hat
+  im aktuellen CLI-Manager keine dynamischen Engines registriert; der
+  geprüfte Fehlerpfad ruft keinen externen Provider. Beide neuen Tests
+  warten auf einen nativen Lauf am integrierten Head.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
