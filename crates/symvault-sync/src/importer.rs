@@ -12,8 +12,6 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
-
 #[derive(Debug, Error)]
 pub enum ImportError {
     #[error("unsupported import format: {0}")]
@@ -66,9 +64,6 @@ pub fn apply_prefix(prefix: &str, path: &str) -> String {
 }
 
 pub fn parse(format: Format, bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    if bytes.len() > MAX_IMPORT_BYTES {
-        return Err(ImportError::Limit(MAX_IMPORT_BYTES));
-    }
     match format {
         Format::Cxf => parse_cxf(bytes),
         Format::Csv | Format::Apple | Format::Chrome | Format::Firefox => {
