@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::time::Instant;
 use std::{
     collections::BTreeSet,
     fs,
@@ -12,7 +14,7 @@ use std::{
     net::TcpListener,
     sync::mpsc,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use symvault_sync::NETWORK_MESSAGE;
 use symvault_sync::git::{CommitOptions, GitRepository};
