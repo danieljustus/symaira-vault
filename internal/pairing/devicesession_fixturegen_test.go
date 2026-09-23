@@ -49,7 +49,10 @@ type deviceSessionFixture struct {
 }
 
 func TestDeviceSessionFixture(t *testing.T) {
-	_, file, _, _ := runtime.Caller(0)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate device session fixture generator")
+	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../.."))
 	content := buildDeviceSessionFixture(t, root)
 	path := filepath.Join(root, "testdata/port/device_sessions/contract.json")
@@ -94,7 +97,10 @@ func buildDeviceSessionFixture(t *testing.T, root string) []byte {
 		parts = append(parts, append(append([]byte(name+"\x00"), pinned...), 0))
 	}
 	sourceDigest := sha256.Sum256(bytes.Join(parts, nil))
-	_, generatorPath, _, _ := runtime.Caller(0)
+	_, generatorPath, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate device session fixture generator")
+	}
 	generator, err := os.ReadFile(generatorPath)
 	if err != nil {
 		t.Fatal(err)
