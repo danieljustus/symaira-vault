@@ -10,8 +10,12 @@ permissions:
 
 jobs:
   rust-freebsd:
-    name: Rust native (FreeBSD amd64)
+    name: Rust native (FreeBSD ${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, aarch64]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -23,6 +27,7 @@ jobs:
         uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
         with:
           release: '15.1'
+          arch: ${{ matrix.arch }}
           copyback: false
           usesh: true
           prepare: |
@@ -31,9 +36,11 @@ jobs:
             pw groupadd symvault-ci
             pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
             su -l symvault-ci -c "/usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0"
-            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o /tmp/go1.26.6.freebsd-amd64.tar.gz https://go.dev/dl/go1.26.6.freebsd-amd64.tar.gz
-            test "$(sha256 -q /tmp/go1.26.6.freebsd-amd64.tar.gz)" = '9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7'
-            tar -C /usr/local -xzf /tmp/go1.26.6.freebsd-amd64.tar.gz
+            if [ "$(uname -m)" = 'x86_64' ]; then
+              /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o /tmp/go1.26.6.freebsd-amd64.tar.gz https://go.dev/dl/go1.26.6.freebsd-amd64.tar.gz
+              test "$(sha256 -q /tmp/go1.26.6.freebsd-amd64.tar.gz)" = '9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7'
+              tar -C /usr/local -xzf /tmp/go1.26.6.freebsd-amd64.tar.gz
+            fi
           run: |
             set -eu
             workspace="$(pwd -P)"
@@ -46,6 +53,11 @@ jobs:
               export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
               cd "$GITHUB_WORKSPACE"
               rustc --version | grep -q "^rustc 1[.]98[.]0 "
+              if [ "$(uname -m)" = "aarch64" ]; then
+                cargo build -p symvault-cli --bin symvault --locked
+                target/debug/symvault version
+                exit 0
+              fi
               go version | grep -q "^go version go1[.]26[.]6 "
               gmake port-contract
               gmake pairing-fixtures-check store-differential audit-fixtures-check
@@ -55,4 +67,6 @@ jobs:
               test -s target/audit/rust-output.jsonl
               go run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
               cargo test --workspace --all-features --locked
+              cargo build -p symvault-cli --bin symvault --locked
+              target/debug/symvault version
             '

@@ -253,6 +253,11 @@ jobs:
       - name: Run Rust gates and Go differential contract
         run: make rust-gates-core
 
+      - name: Smoke test Rust CLI binary
+        run: |
+          cargo build -p symvault-cli --bin symvault --locked
+          ./target/debug/symvault version
+
   rust-miri:
     name: Rust Miri
     runs-on: ubuntu-latest
@@ -304,7 +309,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        # macos-latest is Apple Silicon; keep an Intel macOS runner as well.
+        # These standard hosted ARM64 runners are free for public repositories.
+        os: [macos-latest, macos-15-intel, windows-latest, ubuntu-24.04-arm, windows-11-arm]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -333,12 +340,20 @@ jobs:
       - name: Test including doctests
         run: cargo test --workspace --all-features --locked
 
+      - name: Smoke test Rust CLI binary
+        shell: bash
+        run: |
+          cargo build -p symvault-cli --bin symvault --locked
+          binary=target/debug/symvault
+          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          "$binary" version
+
       - name: Run pinned Go/Rust CLI differential
         shell: bash
         run: bash scripts/rust-port/check_config_cli.sh
 
       - name: Test mobile FFI C ABI
-        if: matrix.os == 'macos-latest'
+        if: startsWith(matrix.os, 'macos-')
         run: make ffi-abi-smoke
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
