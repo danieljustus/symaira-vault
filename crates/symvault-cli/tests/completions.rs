@@ -1,5 +1,8 @@
+#[cfg(unix)]
 use std::io::Write;
-use std::process::{Command, Stdio};
+use std::process::Command;
+#[cfg(unix)]
+use std::process::Stdio;
 
 use serde_json::Value;
 
@@ -9,6 +12,7 @@ fn has_flag(command: &Value, kind: &str, name: &str) -> bool {
         .is_some_and(|flags| flags.iter().any(|flag| flag["name"] == name))
 }
 
+#[cfg(unix)]
 fn check_shell_syntax(shell: &str, script: &[u8]) {
     let mut child = match Command::new(shell)
         .arg("-n")
@@ -86,6 +90,9 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
                 "Rust {shell} script omits {expected}"
             );
         }
+        // A Windows runner may expose a bash shim that exits before reading
+        // stdin; shell syntax belongs to the Unix jobs.
+        #[cfg(unix)]
         if shell == "bash" || shell == "zsh" {
             check_shell_syntax(shell, script.as_bytes());
         }
