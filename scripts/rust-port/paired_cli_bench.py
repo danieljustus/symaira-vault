@@ -247,7 +247,7 @@ def build_report(
                 "rust_binary_size_ratio": rust_binary.stat().st_size / go_binary.stat().st_size,
                 "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
             },
-            "value_gate_claim": "not_evaluated_requires_native_macos_arm64_and_ci_samples",
+            "value_gate_claim": "sample_only_not_a_cutover_verdict",
         }
 
 
