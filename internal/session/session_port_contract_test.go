@@ -118,6 +118,19 @@ func TestSessionPortTimestampBoundaryContract(t *testing.T) {
 			t.Fatalf("Go timestamp decode %s: valid=%v error=%v", tc.input, tc.valid, err)
 		}
 	}
+	malformedMgr, malformedKeyring := newTestManager(t)
+	malformedVault := "malformed-offset-port-contract"
+	malformedKey := keyFor(serviceNameForVault(malformedVault), sessionAccount)
+	malformedPayload := `{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:00:00++1:00","ttl_ns":120000000000,"max_lifetime_ns":120000000000}`
+	if err := malformedKeyring.Set(malformedKey, malformedPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !malformedMgr.IsSessionExpired(malformedVault) {
+		t.Fatal("malformed last-access must fail closed, not fall back to saved-at")
+	}
+	if got, err := malformedKeyring.Get(malformedKey); err != nil || got != malformedPayload {
+		t.Fatal("expiry probe must not delete malformed session")
+	}
 	mgr, keyring := newTestManager(t)
 	vault := "pre-epoch-port-contract"
 	key := keyFor(serviceNameForVault(vault), sessionAccount)

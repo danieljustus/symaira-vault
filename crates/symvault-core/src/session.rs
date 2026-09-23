@@ -543,15 +543,12 @@ impl SessionManager {
                 } else {
                     (i.saved_at, i.last_access, i.ttl_ns, i.max_lifetime_ns)
                 };
-                self.now().map_or(true, |(n, _)| {
-                    Self::expired(
-                        saved.nanos().unwrap_or(GO_ZERO_NANOS),
-                        last.nanos().unwrap_or(GO_ZERO_NANOS),
-                        ttl,
-                        max,
-                        n,
-                    )
-                })
+                match (self.now(), saved.nanos(), last.nanos()) {
+                    (Ok((now, _)), Ok(saved), Ok(last)) => {
+                        Self::expired(saved, last, ttl, max, now)
+                    }
+                    _ => true,
+                }
             })
             .unwrap_or(true)
     }
@@ -560,17 +557,14 @@ impl SessionManager {
             .get(&Self::key(vault, SESSION_ACCOUNT))
             .ok()
             .and_then(|v| serde_json::from_slice::<StoredSession>(&v).ok())
-            .map(|s| {
-                self.now().map_or(true, |(n, _)| {
-                    Self::expired(
-                        s.saved_at.nanos().unwrap_or(GO_ZERO_NANOS),
-                        s.last_access.nanos().unwrap_or(GO_ZERO_NANOS),
-                        s.ttl_ns,
-                        s.max_lifetime_ns,
-                        n,
-                    )
-                })
-            })
+            .map(
+                |s| match (self.now(), s.saved_at.nanos(), s.last_access.nanos()) {
+                    (Ok((now, _)), Ok(saved), Ok(last)) => {
+                        Self::expired(saved, last, s.ttl_ns, s.max_lifetime_ns, now)
+                    }
+                    _ => true,
+                },
+            )
             .unwrap_or(true)
     }
     pub fn revoke(&self, vault: &str) -> Result<(), SessionError> {
@@ -768,6 +762,30 @@ mod tests {
             Err(SessionError::Expired(_))
         ));
         assert!(matches!(keyring.get(&key), Err(SessionError::NotFound)));
+    }
+    #[test]
+    fn malformed_last_access_fails_closed_in_both_expiry_probes() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:00:00++1:00","ttl_ns":120000000000,"max_lifetime_ns":120000000000}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(manager.is_session_expired("v"));
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(120),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        assert!(manager.is_identity_expired("v"));
+        assert_eq!(
+            keyring.get(&key).unwrap(),
+            payload,
+            "read-only probes must not evict"
+        );
     }
     #[test]
     fn identity_inherits_pre_epoch_session_origin() {
