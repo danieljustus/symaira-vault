@@ -1,9 +1,8 @@
-#include <stdint.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include "symvault_ffi.h"
 
@@ -54,7 +53,9 @@ int main(void) {
     release(id);
     const char *tmp_root = getenv("TMPDIR");
     char vault[PATH_MAX];
-    if (!tmp_root || snprintf(vault, sizeof vault, "%s/symvault-ffi-abi-XXXXXX", tmp_root) >= (int)sizeof vault) return code ? code : 8;
+    if (!tmp_root || snprintf(vault, sizeof vault, "%s/symvault-ffi-abi-XXXXXX", tmp_root) >= (int)sizeof vault) {
+        return code ? code : 8;
+    }
     if (!mkdtemp(vault)) return code ? code : 8;
     const uint8_t init_passphrase[] = "C ABI fixture passphrase";
     SymvaultResult initialized = symvault_init_vault(
@@ -64,6 +65,32 @@ int main(void) {
     SymvaultResult opened = symvault_open_vault_with_passphrase(
         (const uint8_t *)vault, strlen(vault), init_passphrase, sizeof init_passphrase - 1);
     if (!code && (!ok(opened) || opened.output.len == 0)) code = 10;
+    const uint8_t mobile_entry_path[] = "abi-smoke";
+    const uint8_t mobile_entry_json[] = "{\"data\":{\"username\":\"ffi-abi\"}}";
+    SymvaultResult written = symvault_write_entry_json(
+        (const uint8_t *)vault, strlen(vault),
+        mobile_entry_path, sizeof mobile_entry_path - 1,
+        mobile_entry_json, sizeof mobile_entry_json - 1,
+        opened.output.data, opened.output.len);
+    if (!code && (written.error.len != 0 || written.output.len != 0)) code = 11;
+    release(written);
+    const uint8_t empty_prefix[] = "";
+    SymvaultResult listed = symvault_list_entries_json(
+        (const uint8_t *)vault, strlen(vault),
+        empty_prefix, 0, opened.output.data, opened.output.len);
+    const uint8_t expected_list[] = "[\"abi-smoke\"]";
+    if (!code && (listed.error.len != 0 || listed.output.len != sizeof expected_list - 1 ||
+                  memcmp(listed.output.data, expected_list, sizeof expected_list - 1) != 0)) {
+        code = 12;
+    }
+    release(listed);
+    SymvaultResult manifest = symvault_verify_manifest_integrity(
+        (const uint8_t *)vault, strlen(vault), opened.output.data, opened.output.len);
+    if (!code && (manifest.error.len != 0 || manifest.output.len != 1 ||
+                  manifest.output.data[0] != 1)) {
+        code = 13;
+    }
+    release(manifest);
     release(opened);
     char cleanup_path[sizeof vault + sizeof "/identity.age"];
     (void)snprintf(cleanup_path, sizeof cleanup_path, "%s/identity.age", vault);
