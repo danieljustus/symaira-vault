@@ -22,6 +22,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 
 use crate::{StoreError, read_open_regular_with_metadata, sha256_hex};
@@ -32,6 +33,9 @@ use zeroize::Zeroizing;
 pub const TOKEN_REGISTRY_FILE: &str = "mcp-tokens.json";
 const TOKEN_REGISTRY_VERSION: i64 = 2;
 const MAX_READ_ONLY_REGISTRY_BYTES: u64 = 1024 * 1024;
+
+/// Separate Go-compatible store for dynamically registered OAuth clients.
+pub const OAUTH_CLIENTS_FILE: &str = "mcp-oauth-clients.json";
 
 /// Loads a token registry without changing it.
 ///
@@ -236,6 +240,129 @@ pub struct NewToken<'a> {
     pub tool_registry_hash: &'a str,
 }
 
+/// Public OAuth client metadata persisted by Go's serverbootstrap store.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct OAuthClient {
+    pub client_id: String,
+    pub redirect_uris: Vec<String>,
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttl_seconds: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct OAuthClientFile {
+    version: i64,
+    clients: BTreeMap<String, Option<OAuthClient>>,
+}
+
+/// Persists a registered OAuth client under the vault's standard file lock.
+pub fn register_oauth_client(
+    root: &Path,
+    redirect_uris: Vec<String>,
+    now: OffsetDateTime,
+) -> Result<OAuthClient, StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(OAUTH_CLIENTS_FILE);
+    let mut file = read_oauth_clients(&target)?;
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random)
+        .map_err(|error| StoreError::Config(format!("register oauth client: {error}")))?;
+    let client_id = encode_hex(&random);
+    let client = OAuthClient {
+        client_id: client_id.clone(),
+        redirect_uris,
+        created_at: go_rfc3339(now),
+        ttl_seconds: None,
+        expires_at: None,
+    };
+    file.version = 1;
+    file.clients.insert(client_id, Some(client.clone()));
+    write_oauth_clients(&root_cap, &target, &file)?;
+    Ok(client)
+}
+
+/// Loads a registered client, treating an expired record as unknown.
+pub fn get_oauth_client(
+    root: &Path,
+    client_id: &str,
+    now: OffsetDateTime,
+) -> Result<Option<OAuthClient>, StoreError> {
+    let file = read_oauth_clients(&root.join(OAUTH_CLIENTS_FILE))?;
+    let Some(Some(client)) = file.clients.get(client_id) else {
+        return Ok(None);
+    };
+    let expired = client
+        .expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid OAuth client expiry: {error}")))?
+        .is_some_and(|expires_at| now > expires_at);
+    Ok((!expired).then(|| client.clone()))
+}
+
+fn read_oauth_clients(path: &Path) -> Result<OAuthClientFile, StoreError> {
+    #[cfg(unix)]
+    let opened = crate::open_nofollow_kind(path, false);
+    #[cfg(not(unix))]
+    let opened = crate::open_nofollow(path);
+    let file = match opened {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(OAuthClientFile {
+                version: 1,
+                clients: BTreeMap::new(),
+            });
+        }
+        Err(error) => {
+            return Err(StoreError::Read {
+                path: path.to_path_buf(),
+                source: error,
+            });
+        }
+    };
+    let (bytes, _) = read_open_regular_with_metadata(file, path)?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| StoreError::Config(format!("parse OAuth client store: {error}")))
+}
+
+fn write_oauth_clients(
+    root_cap: &fs::File,
+    target: &Path,
+    file: &OAuthClientFile,
+) -> Result<(), StoreError> {
+    let mut bytes = serde_json::to_vec_pretty(file)
+        .map_err(|error| StoreError::Config(format!("marshal OAuth client store: {error}")))?;
+    bytes.push(b'\n');
+    crate::publication::replace(target, &bytes, root_cap)
+        .map_err(|error| StoreError::Config(format!("write OAuth client store: {error}")))
+}
+
+/// Checks the OAuth PKCE S256 verifier using the RFC 7636 base64url form.
+pub fn verify_s256_code_verifier(verifier: &str, challenge: &str) -> bool {
+    use base64::Engine as _;
+
+    if verifier.is_empty() || challenge.is_empty() {
+        return false;
+    }
+    let digest = Sha256::digest(verifier.as_bytes());
+    let expected = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    if expected.len() != challenge.len() {
+        return false;
+    }
+    expected
+        .bytes()
+        .zip(challenge.bytes())
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
+}
+
 #[derive(Default, Deserialize)]
 struct RawFile {
     #[serde(default)]
@@ -264,6 +391,127 @@ pub fn create(
     entries.insert(record.id.clone(), record.clone());
     write(&root_cap, &target, &entries)?;
     Ok((record, raw_token))
+}
+
+/// Creates an access token and paired refresh token, persisting only hashes.
+pub fn create_with_refresh(
+    root: &Path,
+    new: &NewToken<'_>,
+    refresh_ttl: Option<time::Duration>,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    let (mut record, raw_access) = new_record(new, now)?;
+    let mut refresh_bytes = [0_u8; 32];
+    getrandom::fill(&mut refresh_bytes).map_err(|error| {
+        StoreError::Config(format!("create token: generate refresh token: {error}"))
+    })?;
+    let raw_refresh = encode_hex(&refresh_bytes);
+    record.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
+    record.refresh_expires_at = refresh_ttl
+        .filter(|ttl| *ttl > time::Duration::ZERO)
+        .map(|ttl| go_rfc3339(now + ttl));
+    entries.insert(record.id.clone(), record.clone());
+    write(&root_cap, &target, &entries)?;
+    Ok((record, raw_access, raw_refresh))
+}
+
+/// Rotates a refresh token once, revoking its associated access token.
+pub fn rotate_via_refresh_token(
+    root: &Path,
+    raw_refresh_token: &str,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    rotate_via_refresh_token_inner(root, raw_refresh_token, None, now)
+}
+
+/// Rotates a refresh token and supplies a bounded access-token TTL when the
+/// prior access token has expired but the refresh token remains valid.
+pub fn rotate_via_refresh_token_with_access_ttl(
+    root: &Path,
+    raw_refresh_token: &str,
+    access_ttl_if_expired: time::Duration,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    if access_ttl_if_expired <= time::Duration::ZERO {
+        return Err(StoreError::Config(
+            "expired access-token replacement TTL must be positive".into(),
+        ));
+    }
+    rotate_via_refresh_token_inner(root, raw_refresh_token, Some(access_ttl_if_expired), now)
+}
+
+fn rotate_via_refresh_token_inner(
+    root: &Path,
+    raw_refresh_token: &str,
+    access_ttl_if_expired: Option<time::Duration>,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    let refresh_hash = sha256_hex(raw_refresh_token.as_bytes());
+    let Some(old) = entries
+        .values()
+        .find(|token| token.refresh_token_hash == refresh_hash && !token.revoked)
+        .cloned()
+    else {
+        return Err(StoreError::Config("invalid refresh token".into()));
+    };
+    let access_expiry = old
+        .expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid token expiry: {error}")))?;
+    let refresh_expiry = old
+        .refresh_expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid refresh expiry: {error}")))?;
+    if (access_expiry.is_some_and(|expiry| now >= expiry) && access_ttl_if_expired.is_none())
+        || refresh_expiry.is_some_and(|expiry| now >= expiry)
+    {
+        return Err(StoreError::Config("invalid refresh token: expired".into()));
+    }
+
+    let allowed_tools = old.allowed_tools.clone().unwrap_or_default();
+    let access_ttl = match access_expiry {
+        Some(expiry) if now >= expiry => access_ttl_if_expired,
+        Some(expiry) => Some(expiry - now),
+        None => None,
+    };
+    let refresh_ttl = refresh_expiry.map(|expiry| (expiry - now).max(time::Duration::ZERO));
+    let new = NewToken {
+        label: &old.label,
+        allowed_tools,
+        agent_name: &old.agent_name,
+        ttl: access_ttl,
+        tool_registry_hash: &old.tool_registry_hash,
+    };
+    let (mut rotated, raw_access) = new_record(&new, now)?;
+    let mut refresh_bytes = [0_u8; 32];
+    getrandom::fill(&mut refresh_bytes).map_err(|error| {
+        StoreError::Config(format!("rotate token: generate refresh token: {error}"))
+    })?;
+    let raw_refresh = encode_hex(&refresh_bytes);
+    rotated.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
+    rotated.refresh_expires_at = refresh_ttl
+        .filter(|ttl| *ttl > time::Duration::ZERO)
+        .map(|ttl| go_rfc3339(now + ttl));
+    let old_entry = entries
+        .get_mut(&old.id)
+        .expect("old refresh token remains in locked registry");
+    old_entry.revoked = true;
+    old_entry.revoked_at = Some(go_rfc3339(now));
+    entries.insert(rotated.id.clone(), rotated.clone());
+    write(&root_cap, &target, &entries)?;
+    Ok((rotated, raw_access, raw_refresh))
 }
 
 /// Revokes one token owned by `agent_name`. Returns `false` when no such
@@ -647,6 +895,115 @@ mod tests {
             rotate(&path, &new_token("fresh-agent"), now).expect("rotate unknown agent");
         assert_eq!(created.agent_name, "fresh-agent");
         assert!(!created.revoked);
+    }
+
+    #[test]
+    fn refresh_token_creation_persists_hashes_and_rotation_is_single_use() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let (original, raw_access, raw_refresh) = create_with_refresh(
+            &path,
+            &new_token("oauth"),
+            Some(time::Duration::hours(2)),
+            now,
+        )
+        .expect("create OAuth token pair");
+        assert_eq!(original.hash, sha256_hex(raw_access.as_bytes()));
+        assert_eq!(
+            original.refresh_token_hash,
+            sha256_hex(raw_refresh.as_bytes())
+        );
+        let on_disk = fs::read_to_string(path.join(TOKEN_REGISTRY_FILE)).expect("read registry");
+        assert!(!on_disk.contains(&raw_access));
+        assert!(!on_disk.contains(&raw_refresh));
+
+        let later = now + time::Duration::minutes(5);
+        let (rotated, new_access, new_refresh) =
+            rotate_via_refresh_token(&path, &raw_refresh, later).expect("rotate refresh token");
+        assert_ne!(new_access, raw_access);
+        assert_ne!(new_refresh, raw_refresh);
+        assert_eq!(
+            rotated.refresh_token_hash,
+            sha256_hex(new_refresh.as_bytes())
+        );
+        let stored = read(&path.join(TOKEN_REGISTRY_FILE)).expect("read rotated registry");
+        assert!(stored[&original.id].revoked);
+        assert_eq!(
+            stored[&original.id].revoked_at.as_deref(),
+            Some(go_rfc3339(later).as_str())
+        );
+        assert!(!stored[&rotated.id].revoked);
+        assert!(rotate_via_refresh_token(&path, &raw_refresh, later).is_err());
+        assert!(rotate_via_refresh_token(&path, &new_refresh, later).is_ok());
+    }
+
+    #[test]
+    fn oauth_refresh_after_access_expiry_gets_a_bounded_new_access_ttl() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let mut expiring = new_token("oauth");
+        expiring.ttl = Some(time::Duration::seconds(1));
+        let (_, _, refresh) =
+            create_with_refresh(&path, &expiring, Some(time::Duration::hours(2)), now)
+                .expect("create expiring OAuth token pair");
+
+        let later = now + time::Duration::seconds(2);
+        let (rotated, _, _) = rotate_via_refresh_token_with_access_ttl(
+            &path,
+            &refresh,
+            time::Duration::hours(24),
+            later,
+        )
+        .expect("valid refresh can renew expired access token");
+        assert_eq!(
+            rotated.expires_at.as_deref(),
+            Some(go_rfc3339(later + time::Duration::hours(24)).as_str())
+        );
+        assert_eq!(
+            rotated.refresh_expires_at.as_deref(),
+            Some(go_rfc3339(now + time::Duration::hours(2)).as_str())
+        );
+    }
+
+    #[test]
+    fn pkce_s256_matches_the_rfc_7636_vector_and_fails_closed() {
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        let challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+        assert!(verify_s256_code_verifier(verifier, challenge));
+        assert!(!verify_s256_code_verifier(verifier, "wrong"));
+        assert!(!verify_s256_code_verifier("", challenge));
+    }
+
+    #[test]
+    fn oauth_clients_persist_in_go_file_shape_and_reload() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let registered = register_oauth_client(
+            &path,
+            vec![
+                "http://localhost/callback".into(),
+                "symvault:callback".into(),
+            ],
+            now,
+        )
+        .expect("register client");
+        let source_file: serde_json::Value = serde_json::from_slice(
+            &fs::read(path.join(OAUTH_CLIENTS_FILE)).expect("read client store"),
+        )
+        .expect("parse client store");
+        assert_eq!(source_file["version"], 1);
+        assert_eq!(
+            source_file["clients"][&registered.client_id]["client_id"],
+            registered.client_id
+        );
+        assert_eq!(
+            source_file["clients"][&registered.client_id]["created_at"],
+            go_rfc3339(now)
+        );
+        assert_eq!(
+            get_oauth_client(&path, &registered.client_id, now).expect("reload client"),
+            Some(registered)
+        );
     }
 
     #[test]

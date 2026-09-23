@@ -463,6 +463,13 @@ mcp-http-init-differential: mcp-http-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
 
+# HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
+.PHONY: mcp-oauth-contract
+mcp-oauth-contract:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
+	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
+	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
+
 mcp-stdio-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
 		--check --output $(PORT_MCP_STDIO_FIXTURE)
@@ -618,7 +625,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: dist-archive-metadata-test reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential cli-gap-inventory mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check ffi-kdf-fixtures-check ffi-mobile-json-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential token-registry-encrypted-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
+port-contract: dist-archive-metadata-test reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential cli-gap-inventory mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-oauth-contract mcp-stdio-fixtures-check ffi-kdf-fixtures-check ffi-mobile-json-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential token-registry-encrypted-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
 
 # Run after building the Rust CLI; the helper starts the production Go local
 # approval handler on a disposable loopback TLS listener and invokes that binary.

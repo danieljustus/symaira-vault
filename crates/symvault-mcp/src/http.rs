@@ -82,18 +82,64 @@ pub fn serve_loopback<F>(
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
 {
+    serve_loopback_inner(listener, registry_path.as_ref(), handler_for_agent, None)
+}
+
+/// Serves MCP HTTP and the complete consent-gated OAuth code/PKCE/refresh
+/// flow. OAuth-issued tokens are bound to `oauth_agent_name`. The caller must
+/// provide a real human-consent callback; the listener does not enable OAuth
+/// when that callback is absent. Approval grants that agent's full tool scope,
+/// so the callback should make this privilege clear before returning `true`.
+pub fn serve_loopback_with_oauth<F, C>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: FnMut(&str, &str) -> bool + Send + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+        )),
+    )
+}
+
+fn serve_loopback_inner<F>(
+    listener: TcpListener,
+    registry_path: &Path,
+    handler_for_agent: F,
+    oauth: Option<crate::oauth::OAuthState>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+{
     if !listener.local_addr()?.ip().is_loopback() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "MCP HTTP listener must bind to loopback",
         ));
     }
-    load_token_registry(registry_path.as_ref())?;
-    let registry_path = registry_path.as_ref().to_path_buf();
+    load_token_registry(registry_path)?;
+    let registry_path = registry_path.to_path_buf();
     let state = Arc::new(Mutex::new(HttpServerState {
         handler_for_agent,
         handlers: HashMap::new(),
         sessions: HashMap::new(),
+        oauth,
     }));
     let active = Arc::new(AtomicUsize::new(0));
     thread::scope(|scope| {
@@ -132,6 +178,7 @@ struct HttpServerState<F> {
     handler_for_agent: F,
     handlers: HashMap<String, ProtocolHandler>,
     sessions: HashMap<String, ProtocolHandler>,
+    oauth: Option<crate::oauth::OAuthState>,
 }
 
 fn serve_connection_shared<F>(
@@ -151,7 +198,37 @@ where
             handler_for_agent,
             handlers,
             sessions,
+            oauth,
         } = &mut *state;
+        if let Some(oauth) = oauth.as_mut() {
+            let local = reader.get_ref().local_addr()?;
+            if let Some(response) = crate::oauth::handle(
+                oauth,
+                &request.method,
+                &request.path,
+                &request.content_type,
+                &request.origin,
+                &request.host,
+                &request.body,
+                local,
+            ) {
+                match response {
+                    crate::oauth::OAuthResponse::Http(response) => write_http_response(
+                        reader.get_mut(),
+                        response,
+                        &request.http_version,
+                        keep_alive,
+                    )?,
+                    crate::oauth::OAuthResponse::Redirect(location) => write_http_redirect(
+                        reader.get_mut(),
+                        &location,
+                        &request.http_version,
+                        keep_alive,
+                    )?,
+                }
+                return Ok(keep_alive);
+            }
+        }
         serve_one_authenticated(
             reader,
             request,
@@ -665,6 +742,7 @@ fn write_http_response(
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
+        201 => "Created",
         202 => "Accepted",
         400 => "Bad Request",
         403 => "Forbidden",
@@ -683,6 +761,20 @@ fn write_http_response(
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
     stream.write_all(&response.body)
+}
+
+fn write_http_redirect(
+    stream: &mut TcpStream,
+    location: &str,
+    version: &str,
+    keep_alive: bool,
+) -> Result<(), std::io::Error> {
+    write!(
+        stream,
+        "{version} 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\n"
+    )?;
+    write_connection_header(stream, version, keep_alive)?;
+    stream.write_all(b"\r\n")
 }
 
 fn write_connection_header(
@@ -995,9 +1087,20 @@ mod tests {
 
     fn registry(dir: &Path) -> std::path::PathBuf {
         let hash = symvault_store::sha256_hex(BEARER.as_bytes());
-        let bytes = format!(
-            r#"{{"version":2,"tokens":{{"tok-test":{{"id":"tok-test","hash":"{hash}","prefix":"http","allowed_tools":["*"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"}}}}}}"#
-        );
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "version": 2,
+            "tokens": {
+                "tok-test": {
+                    "id": "tok-test",
+                    "hash": hash,
+                    "prefix": "http",
+                    "allowed_tools": ["*"],
+                    "agent_name": "default",
+                    "created_at": "2026-01-01T00:00:00Z"
+                }
+            }
+        }))
+        .expect("serialize token registry fixture");
         let path = dir.join("mcp-tokens.json");
         fs::write(&path, bytes).expect("write token registry");
         path
@@ -1031,6 +1134,36 @@ mod tests {
         response
     }
 
+    fn round_trip_oauth_wire(request: &str) -> String {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let state = Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+            oauth: Some(crate::oauth::OAuthState::new(
+                dir.path().to_path_buf(),
+                "default".into(),
+                Box::new(|_, _| true),
+            )),
+        });
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
+                .expect("serve OAuth HTTP connection");
+        });
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream.write_all(request.as_bytes()).expect("write request");
+        let response = read_http_response(&mut BufReader::new(
+            stream.try_clone().expect("clone stream"),
+        ));
+        drop(stream);
+        server.join().expect("server thread");
+        response
+    }
+
     #[test]
     fn protected_resource_discovery_matches_go_response_without_authentication() {
         let response = round_trip_wire(
@@ -1051,6 +1184,33 @@ mod tests {
         );
         assert_eq!(body["resource_name"], "Symaira Vault MCP Server");
         assert!(body.get("authorization_servers").is_none());
+    }
+
+    #[test]
+    fn authorization_server_discovery_is_reachable_through_oauth_listener() {
+        let response = round_trip_oauth_wire(
+            "GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+        let body: serde_json::Value = serde_json::from_str(raw_body(&response)).unwrap();
+        assert_eq!(
+            body["response_types_supported"],
+            serde_json::json!(["code"])
+        );
+        assert_eq!(
+            body["code_challenge_methods_supported"],
+            serde_json::json!(["S256"])
+        );
+        assert_eq!(
+            body["grant_types_supported"],
+            serde_json::json!(["authorization_code", "refresh_token"])
+        );
+        assert!(
+            body["registration_endpoint"]
+                .as_str()
+                .unwrap()
+                .ends_with("/oauth/register")
+        );
     }
 
     #[test]
