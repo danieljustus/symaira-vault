@@ -35,6 +35,37 @@ pub struct ImportResult {
     pub skipped: usize,
 }
 
+/// Resolves the import prefix, assigning quarantined imports a Go-compatible batch ID.
+pub fn resolve_import_prefix(
+    prefix: &str,
+    quarantine: bool,
+) -> Result<(String, Option<String>), String> {
+    if quarantine {
+        if !prefix.is_empty() {
+            return Err("--quarantine and --prefix cannot be used together".into());
+        }
+        let now = time::OffsetDateTime::now_utc();
+        let mut random = [0_u8; 4];
+        let suffix = if getrandom::fill(&mut random).is_ok() {
+            format!(
+                "{:02x}{:02x}{:02x}{:02x}",
+                random[0], random[1], random[2], random[3]
+            )
+        } else {
+            let nanos = now.unix_timestamp_nanos().max(0) as u64 % 0x1_0000_0000;
+            format!("{nanos:08x}")
+        };
+        let import_id = format!(
+            "import-{:04}{:02}{:02}-{suffix}",
+            now.year(),
+            now.month() as u8,
+            now.day()
+        );
+        return Ok((format!("quarantine/{import_id}"), Some(import_id)));
+    }
+    Ok((prefix.to_owned(), None))
+}
+
 /// Resolves an explicit format or the formats that the Go command derives
 /// from a source extension without guessing which JSON exporter was used.
 pub fn resolve_format(explicit: Option<&str>, source: &Path) -> Result<Format, String> {
