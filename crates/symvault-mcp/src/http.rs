@@ -1,6 +1,6 @@
 //! Minimal Streamable HTTP request adapter for the existing MCP protocol handler.
 //! The socket listener stays with the caller; this module owns `/mcp` request
-//! checks and response framing for bounded HTTP/1.1 connections.
+//! checks and response framing for bounded HTTP/1.x connections.
 
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
@@ -125,7 +125,8 @@ where
             }
             Err(error) => return Err(error),
         };
-        let keep_alive = served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION
+        let keep_alive = request.http_version == "HTTP/1.1"
+            && served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION
             && !request
                 .connection
                 .split(',')
@@ -158,6 +159,7 @@ where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
     let stream = reader.get_mut();
+    let response_version = request.http_version.as_str();
     if !allowed_origin(&request.origin, &request.host) {
         write_json_error(stream, 403, "invalid Origin header")?;
         return Ok(false);
@@ -224,13 +226,14 @@ where
         handler,
     )
     .map_err(|error| std::io::Error::other(error.to_string()))?;
-    write_http_response(stream, response, keep_alive)?;
+    write_http_response(stream, response, response_version, keep_alive)?;
     Ok(keep_alive)
 }
 
 struct WireRequest {
     method: String,
     path: String,
+    http_version: String,
     host: String,
     origin: String,
     authorization: String,
@@ -255,13 +258,13 @@ fn read_wire_request(
     let version = parts.next().unwrap_or_default();
     if method.is_empty()
         || path.is_empty()
-        || version != "HTTP/1.1"
+        || !matches!(version, "HTTP/1.0" | "HTTP/1.1")
         || parts.next().is_some()
         || !method.bytes().all(is_http_token)
         || !path.starts_with('/')
         || path.bytes().any(|byte| byte <= 0x20 || byte == 0x7f)
     {
-        return Err(invalid_http("invalid HTTP/1.1 request line"));
+        return Err(invalid_http("invalid HTTP request line"));
     }
     let method = method.to_owned();
     let path = path.to_owned();
@@ -326,6 +329,7 @@ fn read_wire_request(
     Ok(Some(WireRequest {
         method,
         path,
+        http_version: version.to_owned(),
         host: get("host"),
         origin: get("origin"),
         authorization: get("authorization"),
@@ -481,6 +485,7 @@ fn loopback_host(host: &str) -> bool {
 fn write_http_response(
     stream: &mut TcpStream,
     response: HttpResponse,
+    version: &str,
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
@@ -494,7 +499,7 @@ fn write_http_response(
         415 => "Unsupported Media Type",
         _ => "Internal Server Error",
     };
-    write!(stream, "HTTP/1.1 {} {reason}\r\n", response.status)?;
+    write!(stream, "{version} {} {reason}\r\n", response.status)?;
     for (name, value) in response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
@@ -1124,16 +1129,50 @@ mod tests {
     }
 
     #[test]
-    fn source_bound_http_10_is_accepted_by_go_but_rejected_by_rust() {
+    fn source_bound_http_10_initialize_matches_go_and_closes_connection() {
         let go = go_http_case("http_10_initialize_accepted");
-        assert_eq!(go["response"]["status"], 200);
+        assert!(
+            !go["response"]["connection_reused"]
+                .as_bool()
+                .unwrap_or(false)
+        );
+        let request = &go["request"];
+        let body = request["body"].as_str().expect("Go request body");
         let request = format!(
-            "POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\n\r\n{BODY}",
-            BODY.len()
+            "{} {} HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: {}\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: {}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nContent-Length: {}\r\n\r\n{}",
+            request["method"].as_str().expect("Go method"),
+            request["path"].as_str().expect("Go path"),
+            request["origin"].as_str().expect("Go origin"),
+            request["agent"].as_str().expect("Go agent"),
+            request["content_type"].as_str().expect("Go content type"),
+            request["accept"].as_str().expect("Go Accept"),
+            request["protocol_version"]
+                .as_str()
+                .expect("Go protocol version"),
+            body.len(),
+            body,
         );
         let response = round_trip_wire(&request);
-        assert_eq!(raw_status(&response), 400);
-        assert_eq!(raw_body(&response), "bad request\n");
+        assert!(response.starts_with("HTTP/1.0 200 OK\r\n"), "{response}");
+        assert!(response.contains("Connection: close\r\n"), "{response}");
+        assert_eq!(
+            raw_status(&response),
+            go["response"]["status"].as_u64().expect("Go status") as u16
+        );
+        assert_eq!(
+            raw_body(&response),
+            go["response"]["body"].as_str().expect("Go response body")
+        );
+        assert!(
+            response.contains(&format!(
+                "Content-Length: {}\r\n",
+                go["response"]["headers"]["Content-Length"]
+                    .as_str()
+                    .expect("Go Content-Length")
+            )),
+            "{response}"
+        );
+        assert!(response.contains("Content-Type: application/json\r\n"));
     }
 
     #[test]
@@ -1299,8 +1338,8 @@ mod tests {
     }
 
     #[test]
-    fn loopback_parser_rejects_non_http11_before_authentication() {
-        let response = round_trip_wire("POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+    fn loopback_parser_rejects_unsupported_version_before_authentication() {
+        let response = round_trip_wire("POST /mcp HTTP/2.0\r\nHost: 127.0.0.1\r\n\r\n");
         assert!(
             response.starts_with("HTTP/1.1 400 Bad Request\r\n"),
             "{response}"
