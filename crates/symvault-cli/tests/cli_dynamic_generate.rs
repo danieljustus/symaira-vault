@@ -70,6 +70,10 @@ fn generate_matches_go_for_required_flags_and_missing_engine() {
     }
     initialize(&rust, &go_home, &temp, &go_vault);
     initialize(&rust, &rust_home, &temp, &rust_vault);
+    // Go's first open of a newly initialized vault writes its migration marker,
+    // manifest, and lock. Do that before measuring generate's side effects.
+    let opened = run(&go, &go_home, &temp, Some(&go_vault), &["list"]);
+    assert!(opened.status.success(), "Go first open: {opened:?}");
 
     // Both current Go engines fail before an external DB/AWS request because
     // the CLI manager does not register a backend.
