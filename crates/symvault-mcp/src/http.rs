@@ -12,6 +12,11 @@ use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{IpAddr, TcpListener, TcpStream},
     path::Path,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread,
     time::Duration,
 };
 
@@ -35,8 +40,7 @@ const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
-// ponytail: serial listener and 16-request cap; use concurrent connections if throughput matters.
-const MAX_HTTP_REQUESTS_PER_CONNECTION: usize = 16;
+const MAX_HTTP_CONNECTIONS: usize = 8;
 
 #[derive(Clone, Copy)]
 struct HttpTimeouts {
@@ -72,10 +76,10 @@ struct TokenRegistry {
 pub fn serve_loopback<F>(
     listener: TcpListener,
     registry_path: impl AsRef<Path>,
-    mut handler_for_agent: F,
+    handler_for_agent: F,
 ) -> Result<(), std::io::Error>
 where
-    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
 {
     if !listener.local_addr()?.ip().is_loopback() {
         return Err(std::io::Error::new(
@@ -84,18 +88,82 @@ where
         ));
     }
     load_token_registry(registry_path.as_ref())?;
-    let mut handlers = HashMap::new();
-    let mut sessions = HashMap::new();
-    for incoming in listener.incoming() {
-        serve_connection_authenticated(
-            incoming?,
-            registry_path.as_ref(),
-            &mut handler_for_agent,
-            &mut handlers,
-            &mut sessions,
-        )?;
+    let registry_path = registry_path.as_ref().to_path_buf();
+    let state = Arc::new(Mutex::new(HttpServerState {
+        handler_for_agent,
+        handlers: HashMap::new(),
+        sessions: HashMap::new(),
+    }));
+    let active = Arc::new(AtomicUsize::new(0));
+    thread::scope(|scope| {
+        for incoming in listener.incoming() {
+            let mut stream = incoming?;
+            if active
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                    (count < MAX_HTTP_CONNECTIONS).then_some(count + 1)
+                })
+                .is_err()
+            {
+                write_plain_error(&mut stream, 503, "server busy")?;
+                continue;
+            }
+            let state = Arc::clone(&state);
+            let active = Arc::clone(&active);
+            let registry_path = registry_path.clone();
+            if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
+                let _active = ActiveHttpConnection(active);
+                let _ = serve_connection_shared(
+                    stream,
+                    &registry_path,
+                    &state,
+                    HttpTimeouts::default(),
+                );
+            }) {
+                active.fetch_sub(1, Ordering::AcqRel);
+                return Err(error);
+            }
+        }
+        Ok(())
+    })
+}
+
+struct HttpServerState<F> {
+    handler_for_agent: F,
+    handlers: HashMap<String, ProtocolHandler>,
+    sessions: HashMap<String, ProtocolHandler>,
+}
+
+fn serve_connection_shared<F>(
+    stream: TcpStream,
+    registry_path: &Path,
+    state: &Mutex<HttpServerState<F>>,
+    timeouts: HttpTimeouts,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
+    serve_connection_with_timeouts(stream, timeouts, |reader, request, keep_alive| {
+        let mut state = state
+            .lock()
+            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
+        serve_one_authenticated(
+            reader,
+            request,
+            keep_alive,
+            registry_path,
+            &mut state.handler_for_agent,
+            &mut state.handlers,
+            &mut state.sessions,
+        )
+    })
+}
+
+struct ActiveHttpConnection(Arc<AtomicUsize>);
+
+impl Drop for ActiveHttpConnection {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
     }
-    Ok(())
 }
 
 fn serve_connection_authenticated<F>(
@@ -110,24 +178,28 @@ where
 {
     serve_connection_with_timeouts(
         stream,
-        registry_path,
-        handler_for_agent,
-        handlers,
-        sessions,
         HttpTimeouts::default(),
+        |reader, request, keep_alive| {
+            serve_one_authenticated(
+                reader,
+                request,
+                keep_alive,
+                registry_path,
+                handler_for_agent,
+                handlers,
+                sessions,
+            )
+        },
     )
 }
 
 fn serve_connection_with_timeouts<F>(
     mut stream: TcpStream,
-    registry_path: &Path,
-    handler_for_agent: &mut F,
-    handlers: &mut HashMap<String, ProtocolHandler>,
-    sessions: &mut HashMap<String, ProtocolHandler>,
     timeouts: HttpTimeouts,
+    mut serve_request: F,
 ) -> Result<(), std::io::Error>
 where
-    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+    F: FnMut(&mut BufReader<TcpStream>, WireRequest, bool) -> Result<bool, std::io::Error>,
 {
     let peer = stream.peer_addr()?;
     let local = stream.local_addr()?;
@@ -136,8 +208,9 @@ where
     }
     stream.set_write_timeout(Some(timeouts.write))?;
     let mut reader = BufReader::new(stream);
-    for served in 0..MAX_HTTP_REQUESTS_PER_CONNECTION {
-        let first_byte_timeout = if served == 0 {
+    let mut first_request = true;
+    loop {
+        let first_byte_timeout = if first_request {
             timeouts.initial_read
         } else {
             timeouts.keep_alive_idle
@@ -172,6 +245,7 @@ where
                 }
                 Err(error) => return Err(error),
             };
+        first_request = false;
         let connection_tokens = request
             .connection
             .split(',')
@@ -184,8 +258,7 @@ where
             || connection_tokens
                 .iter()
                 .any(|value| value.eq_ignore_ascii_case("keep-alive"));
-        let keep_alive =
-            served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION && requested_keep_alive && !closes;
+        let keep_alive = requested_keep_alive && !closes;
         if let Some(response) = well_known_response(&request, local) {
             write_http_response(
                 reader.get_mut(),
@@ -198,19 +271,10 @@ where
             }
             continue;
         }
-        if !serve_one_authenticated(
-            &mut reader,
-            request,
-            keep_alive,
-            registry_path,
-            handler_for_agent,
-            handlers,
-            sessions,
-        )? {
+        if !serve_request(&mut reader, request, keep_alive)? {
             return Ok(());
         }
     }
-    Ok(())
 }
 
 fn serve_one_authenticated<F>(
@@ -1037,15 +1101,22 @@ mod tests {
             let mut sessions = HashMap::new();
             serve_connection_with_timeouts(
                 stream,
-                &registry_path,
-                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
-                &mut handlers,
-                &mut sessions,
                 HttpTimeouts {
                     initial_read: Duration::from_secs(1),
                     request_read: Duration::from_secs(1),
                     keep_alive_idle: Duration::from_millis(100),
                     write: Duration::from_secs(1),
+                },
+                |reader, request, keep_alive| {
+                    serve_one_authenticated(
+                        reader,
+                        request,
+                        keep_alive,
+                        &registry_path,
+                        &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                        &mut handlers,
+                        &mut sessions,
+                    )
                 },
             )
             .expect("serve connection with short test idle timeout");
@@ -1066,6 +1137,70 @@ mod tests {
         assert_eq!(reader.read(&mut byte).expect("read connection close"), 0);
         drop(reader);
         server.join().expect("server thread");
+    }
+
+    #[test]
+    fn idle_connection_does_not_block_twenty_keep_alive_requests() {
+        let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        assert!(source.contains("IdleTimeout:       120 * time.Second"));
+        assert!(source.contains("serveErr = server.Serve(listener)"));
+        let state = Arc::new(Mutex::new(HttpServerState {
+            handler_for_agent: |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        }));
+        let registry_dir = tempfile::tempdir().expect("temporary token registry");
+        let registry_path = registry(registry_dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let timeouts = HttpTimeouts {
+            initial_read: Duration::from_secs(2),
+            request_read: Duration::from_secs(1),
+            keep_alive_idle: Duration::from_secs(1),
+            write: Duration::from_secs(1),
+        };
+
+        let idle_client = TcpStream::connect(address).expect("connect idle client");
+        let (idle_server, _) = listener.accept().expect("accept idle client");
+        let idle_registry = registry_path.clone();
+        let idle_state = Arc::clone(&state);
+        let idle = thread::spawn(move || {
+            serve_connection_shared(idle_server, &idle_registry, &idle_state, timeouts)
+                .expect("serve idle client")
+        });
+
+        let mut client = TcpStream::connect(address).expect("connect active client");
+        client
+            .set_read_timeout(Some(Duration::from_millis(800)))
+            .expect("set bounded client read");
+        let (active_server, _) = listener.accept().expect("accept active client");
+        let active_registry = registry_path;
+        let active_state = Arc::clone(&state);
+        let active = thread::spawn(move || {
+            serve_connection_shared(active_server, &active_registry, &active_state, timeouts)
+                .expect("serve active client")
+        });
+
+        for index in 0..20 {
+            let connection = if index == 19 {
+                "Connection: close\r\n"
+            } else {
+                ""
+            };
+            write!(
+                client,
+                "GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: {address}\r\nContent-Length: 0\r\n{connection}\r\n"
+            )
+            .expect("write sequential keep-alive request");
+            let response = read_http_response(&mut BufReader::new(
+                client.try_clone().expect("clone active client"),
+            ));
+            assert_eq!(raw_status(&response), 200, "request {index}");
+        }
+        drop(client);
+        active.join().expect("active connection worker");
+        drop(idle_client);
+        idle.join().expect("idle connection worker");
     }
 
     fn read_http_response(reader: &mut BufReader<TcpStream>) -> String {
