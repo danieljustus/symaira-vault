@@ -2,29 +2,29 @@
 
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
-- **Integriert:** Branch `codex/rust-migration-integration` auf `e00175eb`,
+- **Basis dieses Zwischenstands:** Branch `codex/rust-migration-integration` auf `120f164d`,
   Draft-PR #1137. Go bleibt Produktionspfad. Kein Release, Cutover oder
   Go-Abbau autorisiert.
-- **Lokal geprüft:** `make rust-007-differential` auf Session-Slice `230c918a`
-  grün; Go-gebundener Fixture-Check, Rust-Test, Clippy und unabhängiges Review
-  grün. FFI-Write-C-Export lief in `make ffi-crypto-contract` (8/8 Rust-Tests)
-  und `make ffi-abi-smoke`; Swift-Parser und `actionlint` grün.
-- **Native Evidenz:** Auf `c315f522` sind CI, macOS/Windows-Rust,
-  Portvertrag, Miri, Pairing/Audit und iOS-Simulator-Go-Fixtures grün
-  (CI 35891726829, iOS 35891726742). Die zusätzliche FreeBSD-VM scheiterte
-  vor dem Test am nicht gefolgten Go-Download-Redirect; auf `e00175eb`
-  korrigiert. Aktive e00175eb-Läufe: CI 35893895759,
-  FreeBSD 35893895551, iOS 35893895654, Audit 35893895899 und
-  Pairing 35893895933.
+- **Lokal geprüft:** `make rust-007-differential` mit 13 Go-Session-Fällen,
+  darunter absolute Ablaufzeit, idempotentes Leeren und Go-Base64-Wrap-Key;
+  Core-Tests und Clippy grün. FFI Init/Open: Go-Fixture in Go und Rust,
+  `make ffi-abi-smoke` und iOS-arm64-Simulator-Smoketest grün auf `05718b6b`.
+  MCP-HTTP-Initialize: Go-Loopback-Orakel und Rust-Loopback-Differential grün.
+  CLI `update check --force`: lokaler HTTP-Cache-Test grün; `apply` bleibt offen.
+- **Native Evidenz:** Auf `08c162e5` sind iOS und Audit grün; auf `07dc0c53`
+  ebenfalls iOS und Audit. FreeBSD `07dc0c53` passierte nun den Config-CLI-
+  Fixture-Check, scheiterte dann an einer zeitgestempelten Go-Paketwarnung
+  im CLI-Stderr; CI-Lint fand ein `err`-Shadowing. Beides ist auf `920cf558`
+  korrigiert; native Jobs auf dem neuen integrierten SHA stehen noch aus.
 - **Ledger:** `contract-matrix.md` stuft alle zuvor unbewiesenen FreeBSD- und
-  iOS-`PASS`-Claims zurück. `cligap` auf lokal gebautem `e00175eb`:
-  134 Go-Pfade, 101 Rust-Pfade, 22 fehlend, 11 Flag-Lücken, 0 Alias-Lücken.
+  iOS-`PASS`-Claims zurück. Letzter `cligap` auf gebautem `08c162e5`:
+  134 Go-Pfade, 102 Rust-Pfade, 21 fehlend, 11 Flag-Lücken, 0 Alias-Lücken.
   Ein grüner Slice/PR beendet das Ziel nicht; alle anwendbaren Zeilen brauchen
   ausführbare Evidenz am exakten integrierten SHA und Zielsystem.
-- **Nächste ausführbare Arbeit:** Native e00175eb-Läufe auswerten und
-  FreeBSD/Swift-Funde beheben; CLI `startup-profile` und FFI-JSON-Zahlenparität
-  werden isoliert bearbeitet. Fehlende MCP-HTTP/TLS-Laufzeit ist eine
-  implementierbare Voraussetzung für fünf CLI-Flags, keine externe Sperre.
+- **Nächste ausführbare Arbeit:** den aktualisierten Branch pushen, native Jobs auf exakt
+  diesem SHA auswerten, FreeBSD-CLI-Differential weiter durchlaufen lassen,
+  neue CLI-Oberfläche messen, HTTP-Listener/Auth und weitere FFI-/CLI-Slices
+  implementieren. Ein grüner Slice oder PR genügt nicht.
 
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
