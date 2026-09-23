@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::OffsetDateTime;
 
 use crate::pairing::{GoTime, PairingError, generate_token};
 use crate::safeio::{self, SafeIoError};
@@ -105,12 +105,13 @@ impl DeviceSessionStore {
         token: &str,
         created_at: &str,
     ) -> Result<(), DeviceSessionError> {
-        let created = OffsetDateTime::parse(created_at, &Rfc3339)
-            .map_err(|e| DeviceSessionError::Time(e.to_string()))?;
-        let expires_at = GoTime::from_offset_datetime(
-            created + time::Duration::seconds(DEFAULT_SESSION_TTL_SECONDS),
+        let created = GoTime::parse_rfc3339(created_at)?;
+        let expires = OffsetDateTime::from_unix_timestamp_nanos(
+            created.unix_timestamp_nanos()?
+                + i128::from(DEFAULT_SESSION_TTL_SECONDS) * 1_000_000_000,
         )
-        .to_rfc3339_nano();
+        .map_err(|error| DeviceSessionError::Time(error.to_string()))?;
+        let expires_at = GoTime::from_offset_datetime(expires).to_rfc3339_nano();
         let session = DeviceSession {
             prefix: token.chars().take(4).collect(),
             device_id: device_id.to_owned(),
@@ -145,9 +146,8 @@ impl DeviceSessionStore {
         if session.revoked {
             return Ok(None);
         }
-        let expires = OffsetDateTime::parse(&session.expires_at, &Rfc3339)
-            .map_err(|e| DeviceSessionError::Time(e.to_string()))?;
-        if OffsetDateTime::now_utc() > expires {
+        let expires = GoTime::parse_rfc3339(&session.expires_at)?.unix_timestamp_nanos()?;
+        if OffsetDateTime::now_utc().unix_timestamp_nanos() > expires {
             return Ok(None);
         }
         Ok(Some(session.device_id.clone()))
@@ -199,9 +199,10 @@ impl DeviceSessionStore {
             .lock()
             .map_err(|_| DeviceSessionError::Poisoned)?;
         let mut changed = self.merge_revocations(&mut sessions)?;
-        let now = OffsetDateTime::now_utc();
+        let now = OffsetDateTime::now_utc().unix_timestamp_nanos();
         sessions.retain(|_, session| {
-            let keep = OffsetDateTime::parse(&session.expires_at, &Rfc3339)
+            let keep = GoTime::parse_rfc3339(&session.expires_at)
+                .and_then(GoTime::unix_timestamp_nanos)
                 .is_ok_and(|expires| now <= expires);
             changed |= !keep;
             keep
@@ -232,10 +233,8 @@ impl DeviceSessionStore {
         let mut migrated = false;
         for (key, entry) in raw {
             let Some(mut entry) = entry else { continue };
-            OffsetDateTime::parse(&entry.created_at, &Rfc3339)
-                .map_err(|error| DeviceSessionError::Time(error.to_string()))?;
-            OffsetDateTime::parse(&entry.expires_at, &Rfc3339)
-                .map_err(|error| DeviceSessionError::Time(error.to_string()))?;
+            GoTime::parse_rfc3339(&entry.created_at)?;
+            GoTime::parse_rfc3339(&entry.expires_at)?;
             if looks_like_sha256_hex(&key) {
                 sessions.insert(key, entry);
             } else {

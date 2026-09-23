@@ -17,6 +17,8 @@ struct Case {
     after: String,
     raw_absent: bool,
     cleanup: bool,
+    #[serde(default)]
+    load_error: bool,
 }
 
 #[test]
@@ -24,13 +26,22 @@ fn replays_go_device_session_fixture() {
     let raw =
         include_str!("../../../testdata/port/device_sessions/contract.json").replace("\r\n", "\n");
     let fixture: Fixture = serde_json::from_str(&raw).expect("parse Go-generated fixture");
-    assert_eq!(fixture.cases.len(), 4);
+    assert_eq!(fixture.cases.len(), 6);
     for case in fixture.cases {
         let dir = tempfile::tempdir().expect("temp dir");
         let path = dir.path().join(".symvault/device-sessions.json");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, case.input.as_bytes()).unwrap();
-        let store = DeviceSessionStore::new(Some(dir.path())).unwrap();
+        let store = DeviceSessionStore::new(Some(dir.path()));
+        if case.load_error {
+            assert!(
+                store.is_err(),
+                "{} must reject malformed timestamp",
+                case.name
+            );
+            continue;
+        }
+        let store = store.unwrap();
         let actual = store.validate(&case.token).unwrap();
         assert_eq!(actual.is_some(), case.valid, "{} validity", case.name);
         assert_eq!(
