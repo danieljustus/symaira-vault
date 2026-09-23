@@ -14,6 +14,7 @@ mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod completion_commands;
 mod config;
 mod daemon_commands;
 mod device;
@@ -57,7 +58,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use symaira_core_version::new as new_version;
 #[cfg(target_os = "macos")]
 use symvault_core::platform::TouchId;
@@ -125,6 +126,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Generate a shell completion script.
+    Completion {
+        #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
+        shell: String,
+    },
     /// Run a command with secrets injected as environment variables.
     Run {
         #[arg(short = 'e', long = "env")]
@@ -1033,6 +1039,9 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Completion { shell }) => {
+            completion_commands::generate(&shell, Cli::command())
+        }
         Some(Command::Init { vault_dir, auth }) => {
             run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
         }
