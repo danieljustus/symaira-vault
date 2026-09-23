@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "b28589222a3339edef360c82ef6c98ac7149a61e9dc9a414bc445b017b4f86f5"
+    "generator_digest": "a460710c7b272aee88e7966107c5ee1492fab8a325f2bf68257c77a1e7ddd2be"
   },
   "cases": [
     {

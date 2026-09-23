@@ -258,7 +258,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 13);
+    assert_eq!(fixture.cases.len(), 14);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -393,6 +393,33 @@ fn generated_session_cases_match_rust_manager() {
     assert_eq!(
         manager.load_passphrase("fixture-vault").unwrap(),
         go_key.expected.as_bytes()
+    );
+
+    let legacy = cases
+        .iter()
+        .find(|case| case.name == "legacy_plaintext_migration")
+        .unwrap();
+    let keyring = Arc::new(MemoryKeyring::new());
+    keyring
+        .set(
+            &key("session"),
+            &serde_json::to_vec(legacy.input.as_ref().unwrap()).unwrap(),
+        )
+        .unwrap();
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    assert!(
+        manager
+            .has_legacy_plaintext_session("fixture-vault")
+            .unwrap()
+    );
+    assert!(manager.migrate_session("fixture-vault").unwrap());
+    let stored: serde_json::Value =
+        serde_json::from_slice(&keyring.get(&key("session")).unwrap()).unwrap();
+    assert!(stored.get("passphrase").is_none());
+    assert_eq!(stored["max_lifetime_ns"].as_i64(), Some(28_800_000_000_000));
+    assert_eq!(
+        manager.load_passphrase("fixture-vault").unwrap(),
+        legacy.expected.as_bytes()
     );
 
     let cleared = cases

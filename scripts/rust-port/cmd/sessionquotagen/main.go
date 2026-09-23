@@ -119,7 +119,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 13)
+	cases := make([]sessionCase, 0, 14)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -193,7 +193,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	const goWrapKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 	const goEncrypted = `{"saved_at":"2000-01-01T00:00:00Z","last_access":"2000-01-01T00:00:00Z","ttl_ns":9223372036854775807,"max_lifetime_ns":9223372036854775807,"encrypted_passphrase":"JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=","nonce":"AAECAwQFBgcICQoL"}`
 	goBackend := &fakeKeyring{values: map[string]string{
-		key: goEncrypted,
+		key:                           goEncrypted,
 		"symvault:" + v + "|wrap-key": goWrapKey,
 	}}
 	goLoaded, err := session.NewManager(goBackend, nil).LoadPassphrase(v)
@@ -203,6 +203,28 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	cases = append(cases, sessionCase{
 		Name: "go_base64_wrap_key_load", Operations: []string{"load_passphrase"},
 		Input: json.RawMessage(goEncrypted), WrapKey: goWrapKey, Expected: string(goLoaded),
+	})
+	const legacyWire = `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","passphrase":"fixture-legacy-passphrase","ttl_ns":3600000000000}`
+	legacyBackend := &fakeKeyring{values: map[string]string{key: legacyWire}}
+	legacyManager := session.NewManager(legacyBackend, nil)
+	migrated, err := legacyManager.MigrateSession(v)
+	if err != nil || !migrated {
+		panic(fmt.Sprintf("Go did not migrate legacy session: %v", err))
+	}
+	var migratedPayload map[string]any
+	if err := json.Unmarshal([]byte(legacyBackend.values[key]), &migratedPayload); err != nil {
+		panic(err)
+	}
+	if _, present := migratedPayload["passphrase"]; present || migratedPayload["max_lifetime_ns"] != float64(int64(8*time.Hour)) {
+		panic("Go migration retained plaintext or omitted default max lifetime")
+	}
+	loadedLegacy, err := legacyManager.LoadPassphrase(v)
+	if err != nil || string(loadedLegacy) != "fixture-legacy-passphrase" {
+		panic(fmt.Sprintf("Go could not load migrated legacy session: %q %v", loadedLegacy, err))
+	}
+	cases = append(cases, sessionCase{
+		Name: "legacy_plaintext_migration", Operations: []string{"migrate_session", "load_passphrase"},
+		Input: json.RawMessage(legacyWire), Expected: string(loadedLegacy),
 	})
 
 	clearBackend := &fakeKeyring{values: map[string]string{}}
