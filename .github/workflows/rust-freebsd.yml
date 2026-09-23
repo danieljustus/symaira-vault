@@ -15,7 +15,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, aarch64]
+        include:
+          - arch: x86_64
+            rust_host: x86_64-unknown-freebsd
+            go_arch: amd64
+            go_sha256: 9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
+          - arch: aarch64
+            rust_host: aarch64-unknown-freebsd
+            go_arch: arm64
+            go_sha256: 577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -23,7 +31,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Test in FreeBSD 15.1 VM
+      - name: Test in FreeBSD 15.1 ${{ matrix.arch }} VM
         uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
         with:
           release: '15.1'
@@ -32,29 +40,13 @@ jobs:
           usesh: true
           prepare: |
             set -eu
-            pkg install -y bash curl ca_root_nss git gmake
+            pkg install -y bash curl ca_root_nss git gmake rust
             pw groupadd symvault-ci
             pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
-            su -l symvault-ci -c "/usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0"
-            # SHA-256 values are from go.dev/dl/?mode=json&include=all for go1.26.6.
-            # Select from the action matrix: FreeBSD reports x86_64 as amd64.
-            case '${{ matrix.arch }}' in
-              x86_64)
-                go_arch=amd64
-                go_sha256=9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
-                ;;
-              aarch64)
-                go_arch=arm64
-                go_sha256=577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
-                ;;
-              *)
-                echo "Unsupported FreeBSD architecture: ${{ matrix.arch }}" >&2
-                exit 1
-                ;;
-            esac
-            go_archive="/tmp/go1.26.6.freebsd-${go_arch}.tar.gz"
-            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${go_arch}.tar.gz"
-            test "$(sha256 -q "$go_archive")" = "$go_sha256"
+            # SHA-256 values are from https://go.dev/dl/ for Go 1.26.6.
+            go_archive="/tmp/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            test "$(sha256 -q "$go_archive")" = '${{ matrix.go_sha256 }}'
             tar -C /usr/local -xzf "$go_archive"
           run: |
             set -eu
@@ -64,10 +56,11 @@ jobs:
             su -m symvault-ci -c '
               set -eu
               export HOME=/home/symvault-ci
-              export PATH="$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+              export PATH="/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin"
               export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
               cd "$GITHUB_WORKSPACE"
-              rustc --version | grep -q "^rustc 1[.]98[.]0 "
+              rustc --version | grep -Eq "^rustc 1[.]98[.]"
+              rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
               go version | grep -q "^go version go1[.]26[.]6 "
               gmake port-contract
               gmake pairing-fixtures-check store-differential audit-fixtures-check
