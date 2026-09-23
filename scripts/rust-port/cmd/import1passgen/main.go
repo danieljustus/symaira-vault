@@ -68,6 +68,10 @@ func main() {
 	cases := []importCase{
 		pass,
 		onePuxCase(),
+		onePuxInvalidUTF8Case(),
+		onePuxInvalidUTF8AfterEscapeCase(),
+		onePuxMalformedEscapedInvalidUTF8Case(),
+		onePuxInvalidUTF8OutsideStringCase(),
 		onePuxInvalidFirstTOTPCase(),
 		onePuxNullCase(),
 		onePuxNullElementsCase(),
@@ -121,6 +125,44 @@ func onePuxCase() importCase {
 	entries, err := parser.Parse(bytes.NewReader(input))
 	must(err)
 	return importCase{Name: "onepux_duplicate_and_first_totp", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxInvalidUTF8Case() importCase {
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[{"categoryUuid":"001","title":"bad`)
+	payload = append(payload, 0xff)
+	payload = append(payload, []byte(`title"}]}]}]}`)...)
+	input := zipBytes("export.json", payload)
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_invalid_utf8_in_string", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxInvalidUTF8AfterEscapeCase() importCase {
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[{"categoryUuid":"001","title":"ébad\\`)
+	payload = append(payload, 0xff)
+	payload = append(payload, []byte(`title"}]}]}]}`)...)
+	input := zipBytes("export.json", payload)
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_invalid_utf8_after_escaped_backslash", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxMalformedEscapedInvalidUTF8Case() importCase {
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[{"categoryUuid":"001","title":"ébad\`)
+	payload = append(payload, 0xff)
+	payload = append(payload, []byte(`title"}]}]}]}`)...)
+	return onePuxErrorCase("onepux_malformed_escaped_invalid_utf8", zipBytes("export.json", payload))
+}
+
+func onePuxInvalidUTF8OutsideStringCase() importCase {
+	payload := []byte(`{"accounts":`)
+	payload = append(payload, 0xff)
+	payload = append(payload, []byte(`}`)...)
+	return onePuxErrorCase("onepux_invalid_utf8_outside_string", zipBytes("export.json", payload))
 }
 
 func onePuxMissingExportCase() importCase {
@@ -216,6 +258,8 @@ func onePuxErrorCase(name string, input []byte) importCase {
 		errorContains = "parse export.json"
 	case "onepux_suffix_boundary":
 		errorContains = "export.json not found"
+	case "onepux_malformed_escaped_invalid_utf8", "onepux_invalid_utf8_outside_string":
+		errorContains = "parse export.json"
 	}
 	return importCase{
 		Name:          name,

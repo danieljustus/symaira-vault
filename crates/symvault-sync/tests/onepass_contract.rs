@@ -29,11 +29,13 @@ fn onepux_matches_source_bound_go_fixture() {
     )))
     .expect("parse source-bound fixture");
 
+    let mut executed = 0;
     for case in fixture
         .cases
         .into_iter()
         .filter(|case| case.kind == "onepux")
     {
+        executed += 1;
         let input = base64::engine::general_purpose::STANDARD
             .decode(case.input_base64.expect("onepux input"))
             .expect("decode onepux input");
@@ -55,6 +57,7 @@ fn onepux_matches_source_bound_go_fixture() {
             assert_eq!(actual, Value::Array(case.expected), "{}", case.name);
         }
     }
+    assert_eq!(executed, 13, "all source-bound 1pux cases must run");
 }
 
 #[cfg(unix)]

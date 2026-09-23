@@ -9,7 +9,7 @@
     "internal/secrets/filter.go"
   ],
   "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
-  "generator_digest": "e5c2104b3d12f2a4b35445a5d7c4db9b2537bc9d62fb7a59fcf58268d7b203c7",
+  "generator_digest": "819604fbc0d6de89a61ba97e9a6b12b62f969d6cf85f0142eb33e553eadf2f65",
   "cases": [
     {
       "name": "pass_adapter_recursive_and_warning",
@@ -61,7 +61,7 @@
     {
       "name": "onepux_duplicate_and_first_totp",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAASAAAAbmVzdGVkL2V4cG9ydC5qc29ujJJLq9swEIX3/hWXs/Z9lLvTruW29AUxTUJaiheqNXFEZMlII7vF+L8X2SkYJ5S70sxwzjcPNEBWlYuWA8TPAZ2M5hJqpiZF2YBKMtXO/9lHrSDw9PQGOVizIQgcnD/ffXW1tsihiKU2AWKASaUPmoy6UBQFXVvJ2lkIxEDeyoaQo5MmJpIz6j6VMeZr9f5aban/p76CtzKE3nm1gqfyDXjxdrs9bL69rOCzuswzWMcUCiN1Uk8JcgSqkn8+1nGxJ0OgioFds7jSxtL9Tjd0VyxGS2dy3ELg87vt4cfzS/H+Y/HlufherHOM05apPyfHZH6FqxzLMc/gOvKdpj41jN7MM0dvIHBiboN4fKTfsmkNPTAFTluDZZ106J0/o5z7//cj7LwMp5SnlxQE+0i3bD39OjrfhIeaLHldLRifaus8KYxZOc3+NwAA//9QSwcI82UJpkwBAACfAgAAUEsBAhQAFAAIAAgAAAAAAPNlCaZMAQAAnwIAABIAAAAAAAAAAAAAAAAAAAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAQABAEAAAACMAQAAAAA=",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAASAAAAbmVzdGVkL2V4cG9ydC5qc29ujJLNat0wEIX3fopw1spPyU67lrT0D2J6E25L8EK1Jo6ILF2kkd1i9O5lblIwbihZaWb4zhnNSAtM38cSOEPfLZhM8c+hYxolahb0hmmI6fdtcRYaFxdvoMCOPUFjH9Pjydc4uAAFS2ycz9ALvJQ+OPL22cVSdkMw7GKARsmUghkJCpPxRZyit6dSRlVb+vZfOtD8l262+MHkPMdkN+ZSfsG8fbvb7a+/Xa1oMX+iO9UgRKbceuOEPiZQyNSLXoZbcL+ak6HRl8xxXG3pOtDpjRvppF1dTdYU+QCNz+92+x+XV+37j+2Xy/Z7u81Rj1NKfxaFwvQqVVe7qhrEidLkaJaGJcn73B0DaDwwH7I+P6dfZjx4OmPKjNopsBmEwxzTI7qn/v/9CDfJ5AfJ5SQLzanQS7KZft7HNOazgQIl16/W9GkIMZFFbbra1a7+GQBQSwcI82UJpk8BAACfAgAAUEsBAhQAFAAIAAgAAAAAAPNlCaZPAQAAnwIAABIAAAAAAAAAAAAAAAAAAAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAQABAEAAAACPAQAAAAA=",
       "expected": [
         {
           "path": "Work Login",
@@ -86,9 +86,63 @@
       "failed": false
     },
     {
+      "name": "onepux_invalid_utf8_in_string",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24AUgCt/3siYWNjb3VudHMiOlt7InZhdWx0cyI6W3siaXRlbXMiOlt7ImNhdGVnb3J5VXVpZCI6IjAwMSIsInRpdGxlIjoiYmFk/3RpdGxlIn1dfV19XX0DAFBLBwgjDky/WQAAAFIAAABQSwECFAAUAAgACAAAAAAAIw5Mv1kAAABSAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAkgAAAAAA",
+      "expected": [
+        {
+          "path": "bad�title",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_invalid_utf8_after_escaped_backslash",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24AVgCp/3siYWNjb3VudHMiOlt7InZhdWx0cyI6W3siaXRlbXMiOlt7ImNhdGVnb3J5VXVpZCI6IjAwMSIsInRpdGxlIjoiw6liYWRcXP90aXRsZSJ9XX1dfV19AwBQSwcI6y1i010AAABWAAAAUEsBAhQAFAAIAAgAAAAAAOstYtNdAAAAVgAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAJYAAAAAAA==",
+      "expected": [
+        {
+          "path": "ébad\\�title",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_malformed_escaped_invalid_utf8",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24AVQCq/3siYWNjb3VudHMiOlt7InZhdWx0cyI6W3siaXRlbXMiOlt7ImNhdGVnb3J5VXVpZCI6IjAwMSIsInRpdGxlIjoiw6liYWRc/3RpdGxlIn1dfV19XX0DAFBLBwjcz1SnXAAAAFUAAABQSwECFAAUAAgACAAAAAAA3M9Up1wAAABVAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAlQAAAAAA",
+      "expected": [],
+      "failed": true,
+      "error_contains": "parse export.json"
+    },
+    {
+      "name": "onepux_invalid_utf8_outside_string",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24ADgDx/3siYWNjb3VudHMiOv99AwBQSwcIDaSq6xUAAAAOAAAAUEsBAhQAFAAIAAgAAAAAAA2kqusVAAAADgAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAE4AAAAAAA==",
+      "expected": [],
+      "failed": true,
+      "error_contains": "parse export.json"
+    },
+    {
       "name": "onepux_first_invalid_totp",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kjL0KwjAYRfc+hdw5Q6VbRlHwZzCgoiIdYhLlg5iI/RqQkHcXtZNO99wznAxtTOwDd5CnjKR7PyCxu72pyjCa3TU+nrueLCTqegwBJvYOEouQtCc7Wm8VBKxjTb6DzOicYYrhW7uQ83bIBUhw5DsEEiTO2qKIf7+cbPbHZqpmc7Vq1EH9fpS2tKVU7WdfAQAA//9QSwcIX9ttoZMAAADJAAAAUEsBAhQAFAAIAAgAAAAAAF/bbaGTAAAAyQAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAMwAAAAAAA==",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kzLGKAjEUheF+nmI5dYpZpku57MKqhQEVFUkRkygXYiLOnQEJ991lYCrt/nOKr8J5X4bMPfSpYnRDmpM43qZqKrzjeC2P526gAI22/YYCE6cIjUUeXaLwtd4aKITIjlIPXdFHz1TyZFRcKKYwcxkaXPgOhREaZxcg6vNf/mz2x+7X/P2bVWcO5n1DrFiRxooVK68BAFBLBwhf222hlQAAAMkAAABQSwECFAAUAAgACAAAAAAAX9ttoZUAAADJAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAzgAAAAAA",
       "expected": [
         {
           "path": "Invalid OTP",
@@ -109,7 +163,7 @@
     {
       "name": "onepux_null_fields",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26MjrEKwjAQhvc+hfxzhrrmAdwUFydxiOlRDq4JJJeKhL67FBvUTW757zi+769w3scSNMNeK2ZXZIusNK2pq/BOaYzpeSk8wKLv9zBQViFYnIrI7sAkQ4bBQOpYMmwoIgZxpjQzPd77Yv6CHWm6U/qhVUgcOWyaDR6iUj6L49AumbxyDLnpvvwVJX16qRvb09LdlnVeAQAA//9QSwcI4TTfQZkAAAAKAQAAUEsBAhQAFAAIAAgAAAAAAOE030GZAAAACgEAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAANIAAAAAAA==",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26MjjHKAjEQRvs9xc9Xp9i/zQHsFBsr2SJmh2VgNoFksiIhdxcxonZ2b4bhvalw3scSNMOeKzZXpCMrrQ8aKrxTWmK6nQrPsBjHfxgoqxAsDkXkb8ckc4bBTOpYMmwoIgZxo7QxXZ9zMz/J9rReKH3ZKiQuHHqmy0NUykdxHF6bTF45hn7RPvsVJb3/Urd0bm2Y2tSmdh8AUEsHCOE030GXAAAACgEAAFBLAQIUABQACAAIAAAAAADhNN9BlwAAAAoBAAALAAAAAAAAAAAAAAAAAAAAAABleHBvcnQuanNvblBLBQYAAAAAAQABADkAAADQAAAAAAA=",
       "expected": [
         {
           "path": "Null Fields",
@@ -139,7 +193,7 @@
     {
       "name": "onepux_null_elements",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25UjEGqAyEQRK/yqbWL+VsPkBtkFVyI0xkaehS0NQTx7sFAgqFWD+q9Dh9CqlEL7C1WEdPRfJWVWelcMHilI+XntfIOi237h4GyCsFifv5I6KSZNNhJPUuB7ZB0cLwwyf6JOYNCQTnFJX//eQw3DFKj3Jges1KzLLr646tOgBvDvfcKAAD//1BLBwiDBkxZhgAAANkAAABQSwECFAAUAAgACAAAAAAAgwZMWYYAAADZAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAvwAAAAAA",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25UzDGqwzAQhOGrPKZW4dfqALlBqrCFkDdmYS2BvXIIZu8eVDgo5Q8z34mUc23FdsRHaarhxJGaji3G65A5GS91e9+bzIiYpn8EmJgyIjrxx8ordzJgZkuiO+IJrYuUm7DOF0YBO2eTWgb++bNw8oB68HYIv7rSNr3GFGBp+V57gNzJyck/AwBQSwcIgwZMWYcAAADZAAAAUEsBAhQAFAAIAAgAAAAAAIMGTFmHAAAA2QAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAMAAAAAAAA==",
       "expected": [
         {
           "path": "null elements",
@@ -161,7 +215,7 @@
     {
       "name": "onepux_duplicate_export_uses_first",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpbTMouISpdpYMAQEAAD//1BLBwhuj2g1RwAAAE4AAABQSwMEFAAIAAgAAAAAAAAAAAAAAAAAAAAAABIAAABuZXN0ZWQvZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpeLU5Py8FKXaWDAEBAAA//9QSwcIrY5aCEgAAABPAAAAUEsBAhQAFAAIAAgAAAAAAG6PaDVHAAAATgAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsBAhQAFAAIAAgAAAAAAK2OWghIAAAATwAAABIAAAAAAAAAAAAAAAAAgAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAgACAHkAAAAIAQAAAAA=",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24ATgCx/3siYWNjb3VudHMiOlt7InZhdWx0cyI6W3siaXRlbXMiOlt7ImNhdGVnb3J5VXVpZCI6IjAwMSIsInRpdGxlIjoiZmlyc3QifV19XX1dfQMAUEsHCG6PaDVVAAAATgAAAFBLAwQUAAgACAAAAAAAAAAAAAAAAAAAAAAAEgAAAG5lc3RlZC9leHBvcnQuanNvbgBPALD/eyJhY2NvdW50cyI6W3sidmF1bHRzIjpbeyJpdGVtcyI6W3siY2F0ZWdvcnlVdWlkIjoiMDAxIiwidGl0bGUiOiJzZWNvbmQifV19XX1dfQMAUEsHCK2OWghWAAAATwAAAFBLAQIUABQACAAIAAAAAABuj2g1VQAAAE4AAAALAAAAAAAAAAAAAAAAAAAAAABleHBvcnQuanNvblBLAQIUABQACAAIAAAAAACtjloIVgAAAE8AAAASAAAAAAAAAAAAAAAAAI4AAABuZXN0ZWQvZXhwb3J0Lmpzb25QSwUGAAAAAAIAAgB5AAAAJAEAAAAA",
       "expected": [
         {
           "path": "first",
@@ -180,7 +234,7 @@
     {
       "name": "onepux_missing_export",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAKAAAAb3RoZXIuanNvbqquBQQAAP//UEsHCEO/pqMIAAAAAgAAAFBLAQIUABQACAAIAAAAAABDv6ajCAAAAAIAAAAKAAAAAAAAAAAAAAAAAAAAAABvdGhlci5qc29uUEsFBgAAAAABAAEAOAAAAEAAAAAAAA==",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAKAAAAb3RoZXIuanNvbgACAP3/e30DAFBLBwhDv6ajCQAAAAIAAABQSwECFAAUAAgACAAAAAAAQ7+mowkAAAACAAAACgAAAAAAAAAAAAAAAAAAAAAAb3RoZXIuanNvblBLBQYAAAAAAQABADgAAABBAAAAAAA=",
       "expected": [],
       "failed": true,
       "error_contains": "export.json not found in 1pux zip"
@@ -196,7 +250,7 @@
     {
       "name": "onepux_suffix_boundary",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAOAAAAZm9vZXhwb3J0Lmpzb26qrgUEAAD//1BLBwhDv6ajCAAAAAIAAABQSwECFAAUAAgACAAAAAAAQ7+mowgAAAACAAAADgAAAAAAAAAAAAAAAAAAAAAAZm9vZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA8AAAARAAAAAAA",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAOAAAAZm9vZXhwb3J0Lmpzb24AAgD9/3t9AwBQSwcIQ7+mowkAAAACAAAAUEsBAhQAFAAIAAgAAAAAAEO/pqMJAAAAAgAAAA4AAAAAAAAAAAAAAAAAAAAAAGZvb2V4cG9ydC5qc29uUEsFBgAAAAABAAEAPAAAAEUAAAAAAA==",
       "expected": [],
       "failed": true,
       "error_contains": "export.json not found"
@@ -204,7 +258,7 @@
     {
       "name": "onepux_trailing_json",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qrlWorgUEAAD//1BLBwjetUcLCwAAAAUAAABQSwECFAAUAAgACAAAAAAA3rVHCwsAAAAFAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAARAAAAAAA",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb24ABQD6/3t9IHt9AwBQSwcI3rVHCwwAAAAFAAAAUEsBAhQAFAAIAAgAAAAAAN61RwsMAAAABQAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAEUAAAAAAA==",
       "expected": [],
       "failed": true,
       "error_contains": "parse export.json"
