@@ -70,6 +70,12 @@
   Test prüfen HTTP/1.0-Fehler samt Standard-Close und explizitem Keep-Alive.
   Das echte HTTP-401-Git-Differential ist nach lokaler Deaktivierung geerbter
   Credential-Helper auch unter Windows aktiviert. Native Ausführung steht aus.
+  Die drei `run`-Broker-Flags werden nun geparst. Solange der Rust-Broker
+  fehlt, beendet `--broker` nach Vault-Prüfung explizit, bevor ein Kindprozess
+  startet; ein fokussierter Test prüft diese Sperre. Die Go-HTTP-Quelle hat
+  keinen SSE-Stream: Sie verhandelt `Accept`, schreibt aber vollständiges JSON
+  ohne Event-Framing oder Flush. SSE-Stream-Parität ist deshalb am gepinnten
+  Oracle derzeit nicht anwendbar; HTTP-Timeout und Shutdown bleiben offen.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,

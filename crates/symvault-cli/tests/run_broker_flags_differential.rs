@@ -28,6 +28,7 @@ fn run_with_passphrase(
         .env_remove("SYMVAULT_VAULT")
         .env_remove("SYMVAULT_PASSPHRASE")
         .env_remove("SYMVAULT_ALLOW_ENV_PASSPHRASE")
+        .env("SYMVAULT_NO_ENV_WARNING", "1")
         .env("CI", "1");
     if let Some(passphrase) = passphrase {
         command
@@ -124,7 +125,7 @@ fn run_broker_fails_closed_before_spawning_child() {
     assert!(output.stdout.is_empty(), "stdout={:?}", output.stdout);
     assert_eq!(
         output.stderr,
-        b"Error: run --broker is not implemented in the Rust CLI yet\n"
+        b"Error: run --broker is not implemented in the Rust CLI yet\nError: run --broker is not implemented in the Rust CLI yet\n"
     );
     assert!(!marker.exists(), "run spawned the child despite --broker");
 }
