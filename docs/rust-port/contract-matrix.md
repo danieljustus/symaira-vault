@@ -28,11 +28,17 @@ advances only its production-Go oracle to commit `f195aab` (release
 `CFG-001` pins its own production-Go oracle at `fc9eddc0`, the commit that
 introduces the pure `ResolvePaths` seam; `RUST-007`'s config/platform oracle is
 advanced from `caadd5e` to `31afe33c` because the old claim was never verified
-and four of its seven production sources already differed from `caadd5e`;
-`STORE-004`'s `manifestkeygen` revision is advanced to `1bc61ea6` only because
-it binds the whole `internal/` tree and its 16 vectors are byte-identical
-across every such advance; all other rows, including `PAIRING-001`, retain the
-baseline oracle.
+and four of its seven production sources already differed from `caadd5e`.
+At that audit, `STORE-004`'s `manifestkeygen` revision advanced to `1bc61ea6`
+because it then bound the whole `internal/` tree; its 16 vectors were unchanged.
+Other rows, including `PAIRING-001`, retained the baseline oracle at that time.
+
+The `STORE-004` manifest-key fixture originally bound every `internal/` Go
+source, including unrelated intake code. The #1126/#1127 change narrows
+that fixture's enforced source tree to `internal/vault`, `internal/crypto`,
+`internal/config`, and `internal/fsutil`. The immutable, main-reachable
+`3232e31f` oracle revision stays pinned; only provenance digests change,
+not the 16 behavior vectors.
 
 Oracle commits are no longer trusted as labels. Every fixture generator now
 resolves its claimed commit through git and compares the working tree against

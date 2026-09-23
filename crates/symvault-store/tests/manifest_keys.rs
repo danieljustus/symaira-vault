@@ -53,7 +53,10 @@ fn fixture() -> Fixture {
             "--name-only",
             REVISION,
             "--",
-            "internal",
+            "internal/config",
+            "internal/crypto",
+            "internal/fsutil",
+            "internal/vault",
             "go.mod",
             "go.sum",
         ])
