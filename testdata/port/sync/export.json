@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "f66b591659363d8befc7698103f189250536f8e03c62ac7f65f752d2f1c33e02",
-  "generator_digest": "1f9cc5b370f775bf6da80d415ec6559dbbcfacb35df3cbc7283fca8284ce13c6",
+  "generator_digest": "a879df68dd9a7b24d192a7bda73961a159646c61220d660715af0c4287f07d9b",
   "cases": [
     {
       "name": "empty",
@@ -120,6 +120,32 @@
       },
       "json": "[\n  {\n    \"data\": {\n      \" name\": \"fixture\",\n      \"renamed\": \"value\"\n    },\n    \"path\": \"first\"\n  },\n  {\n    \"data\": {\n      \"\": \"optional\"\n    },\n    \"path\": \"second\"\n  }\n]\n",
       "csv": "path,,renamed,\" name\"\nfirst,,value,fixture\nsecond,optional,,\n",
+      "notices": ""
+    },
+    {
+      "name": "numbers",
+      "entries": [
+        {
+          "path": "numbers",
+          "data": {
+            "exponent_lower": 1e-05,
+            "exponent_upper": 1e+06,
+            "fixed_lower": 0.0001,
+            "fixed_upper": 999999,
+            "fraction": 42.5,
+            "large": 1e+20,
+            "max": 1.7976931348623157e+308,
+            "negative_zero": -0.0,
+            "rounded": 9.007199254740992e+15,
+            "subnormal": 5e-324,
+            "whole_float": 42,
+            "zero": 0
+          }
+        }
+      ],
+      "mapping": null,
+      "json": "[\n  {\n    \"data\": {\n      \"exponent_lower\": 1e-05,\n      \"exponent_upper\": 1e+06,\n      \"fixed_lower\": 0.0001,\n      \"fixed_upper\": 999999,\n      \"fraction\": 42.5,\n      \"large\": 1e+20,\n      \"max\": 1.7976931348623157e+308,\n      \"negative_zero\": -0.0,\n      \"rounded\": 9.007199254740992e+15,\n      \"subnormal\": 5e-324,\n      \"whole_float\": 42,\n      \"zero\": 0\n    },\n    \"path\": \"numbers\"\n  }\n]\n",
+      "csv": "path,exponent_lower,exponent_upper,fixed_lower,fixed_upper,fraction,large,max,negative_zero,rounded,subnormal,whole_float,zero\nnumbers,1e-05,1e+06,0.0001,999999,42.5,1e+20,1.7976931348623157e+308,-0,9.007199254740992e+15,5e-324,42,0\n",
       "notices": ""
     }
   ]
