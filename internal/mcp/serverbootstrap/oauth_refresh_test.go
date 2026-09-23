@@ -275,6 +275,42 @@ func TestOAuthRegisterRejectsExternalRedirectURI(t *testing.T) {
 	}
 }
 
+func TestOAuthRegisterValidationCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		status      int
+		wantError   string
+	}{
+		{"malformed metadata", "application/json", `not json`, http.StatusBadRequest, "invalid_client_metadata"},
+		{"missing redirects", "application/json", `{}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"empty redirects", "application/json", `{"redirect_uris":[]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"external redirect", "application/json", `{"redirect_uris":["https://example.com/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"userinfo redirect", "application/json", `{"redirect_uris":["http://user@localhost/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"wrong content type", "text/plain", `{"redirect_uris":["http://localhost/callback"]}`, http.StatusBadRequest, "invalid_client_metadata"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newOAuthClientStore()
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			handleOAuthRegister(store).ServeHTTP(recorder, req)
+			if recorder.Code != tc.status {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tc.status, recorder.Body.String())
+			}
+			var response map[string]any
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response["error"] != tc.wantError {
+				t.Fatalf("error = %v, want %q", response["error"], tc.wantError)
+			}
+		})
+	}
+}
+
 func TestOAuthRefreshToken_WellKnownIncludesRefresh(t *testing.T) {
 	handler := handleOAuthAuthorizationServer("127.0.0.1", 9999)
 

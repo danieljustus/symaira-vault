@@ -20,6 +20,7 @@ use serde_json::value::RawValue;
 pub mod broker;
 mod call;
 pub mod http;
+mod oauth;
 mod prompts;
 pub mod render;
 pub mod store_adapter;
