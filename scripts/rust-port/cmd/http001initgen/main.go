@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -61,21 +62,25 @@ type oracle struct {
 }
 
 type request struct {
-	Method          string   `json:"method"`
-	Path            string   `json:"path"`
-	Host            string   `json:"host,omitempty"`
-	Origin          string   `json:"origin,omitempty"`
-	ContentType     string   `json:"content_type"`
-	Accept          string   `json:"accept"`
-	ProtocolVersion string   `json:"protocol_version"`
-	Agent           string   `json:"agent"`
-	TokenName       string   `json:"token_name,omitempty"`
-	TokenAgent      string   `json:"token_agent,omitempty"`
-	AllowedTools    []string `json:"allowed_tools,omitempty"`
-	Authenticated   bool     `json:"authenticated"`
-	Body            string   `json:"body"`
-	BodyRepeat      int      `json:"body_repeat,omitempty"`
-	HeaderRepeat    int      `json:"header_repeat,omitempty"`
+	Method                 string   `json:"method"`
+	Path                   string   `json:"path"`
+	Host                   string   `json:"host,omitempty"`
+	Origin                 string   `json:"origin,omitempty"`
+	ContentType            string   `json:"content_type"`
+	Accept                 string   `json:"accept"`
+	ProtocolVersion        string   `json:"protocol_version"`
+	Agent                  string   `json:"agent"`
+	TokenName              string   `json:"token_name,omitempty"`
+	TokenAgent             string   `json:"token_agent,omitempty"`
+	AllowedTools           []string `json:"allowed_tools,omitempty"`
+	Authenticated          bool     `json:"authenticated"`
+	Body                   string   `json:"body"`
+	BodyRepeat             int      `json:"body_repeat,omitempty"`
+	HeaderRepeat           int      `json:"header_repeat,omitempty"`
+	HTTPVersion            string   `json:"http_version,omitempty"`
+	RequestLineRepeat      int      `json:"request_line_repeat,omitempty"`
+	DuplicateAuthorization bool     `json:"duplicate_authorization,omitempty"`
+	DuplicateContentLength bool     `json:"duplicate_content_length,omitempty"`
 }
 
 type response struct {
@@ -207,12 +212,12 @@ func main() {
 		{
 			Name:            "malformed_content_type_rejected",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: `application/json; charset="broken`, Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":13,"method":"prompts/list"}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: `application/json; charset="broken;still`, Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":13,"method":"prompts/list"}`},
 		},
 		{
 			Name:            "malformed_accept_rejected",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: `text/event-stream, application/json; q="broken`, ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":14,"method":"prompts/list"}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: `text/event-stream, application/json; q="broken,still`, ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":14,"method":"prompts/list"}`},
 		},
 		{
 			Name:            "oversized_body_rejected",
@@ -224,9 +229,43 @@ func main() {
 			GoAuthenticated: false,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, HeaderRepeat: 17 * 1024, Body: `{"jsonrpc":"2.0","id":15,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
 		},
+		{
+			Name:            "content_type_quoted_semicolon_accepted",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: `application/json; profile="a;b"`, Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":16,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "accept_quoted_comma_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: `application/json; q="a,b", text/event-stream`, ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, Body: `{"jsonrpc":"2.0","id":17,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "duplicate_authorization_first_value_reaches_handler",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, DuplicateAuthorization: true, Body: `{"jsonrpc":"2.0","id":18,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "duplicate_content_length_rejected_by_go_parser",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", DuplicateContentLength: true, Body: ""},
+		},
+		{
+			Name:            "http_10_initialize_accepted",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, HTTPVersion: "HTTP/1.0", Body: `{"jsonrpc":"2.0","id":19,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+		},
+		{
+			Name:            "oversized_request_line_reaches_handler",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Host: "127.0.0.1", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", Authenticated: true, RequestLineRepeat: 16 * 1024, Body: `{"jsonrpc":"2.0","id":20,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+		},
 	}
 	for i := range requests {
-		requests[i].Response = doRequest(client, listener.Addr().String(), token, tokens, requests[i].Request)
+		if usesRawRequest(requests[i].Request) {
+			requests[i].Response = doRawRequest(listener.Addr().String(), token, tokens, requests[i].Request)
+		} else {
+			requests[i].Response = doRequest(client, listener.Addr().String(), token, tokens, requests[i].Request)
+		}
 	}
 
 	out := fixture{
@@ -280,6 +319,10 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 	}
 	httpResp, err := client.Do(httpReq)
 	check(err)
+	return captureResponse(httpResp)
+}
+
+func captureResponse(httpResp *http.Response) response {
 	responseBody, err := io.ReadAll(httpResp.Body)
 	_ = httpResp.Body.Close()
 	check(err)
@@ -293,6 +336,55 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 	}
 	sort.Strings(absent)
 	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody)}
+}
+
+func usesRawRequest(req request) bool {
+	return req.HTTPVersion != "" || req.RequestLineRepeat > 0 || req.DuplicateAuthorization || req.DuplicateContentLength
+}
+
+func doRawRequest(addr, token string, scopedTokens map[string]string, req request) response {
+	version := req.HTTPVersion
+	if version == "" {
+		version = "HTTP/1.1"
+	}
+	path := req.Path
+	if req.RequestLineRepeat > 0 {
+		path += "?x=" + strings.Repeat("x", req.RequestLineRepeat)
+	}
+	body := req.Body
+	if req.BodyRepeat > 0 {
+		body = strings.Repeat("x", req.BodyRepeat)
+	}
+	var wire strings.Builder
+	fmt.Fprintf(&wire, "%s %s %s\r\nHost: %s\r\n", req.Method, path, version, req.Host)
+	if req.Origin != "" {
+		fmt.Fprintf(&wire, "Origin: %s\r\n", req.Origin)
+	}
+	if req.Authenticated {
+		bearer := token
+		if req.TokenName != "" {
+			bearer = scopedTokens[req.TokenName]
+		}
+		fmt.Fprintf(&wire, "Authorization: Bearer %s\r\n", bearer)
+		if req.DuplicateAuthorization {
+			wire.WriteString("Authorization: Bearer invalid-second-value\r\n")
+		}
+	}
+	fmt.Fprintf(&wire, "X-Symaira-Agent: %s\r\nContent-Type: %s\r\nAccept: %s\r\nMCP-Protocol-Version: %s\r\nContent-Length: %d\r\n", req.Agent, req.ContentType, req.Accept, req.ProtocolVersion, len(body))
+	if req.DuplicateContentLength {
+		fmt.Fprintf(&wire, "Content-Length: %d\r\n", len(body))
+	}
+	wire.WriteString("Connection: close\r\n\r\n")
+	wire.WriteString(body)
+	conn, err := net.DialTimeout("tcp", addr, 4*time.Second)
+	check(err)
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetDeadline(time.Now().Add(4 * time.Second))
+	_, err = io.WriteString(conn, wire.String())
+	check(err)
+	httpResp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: req.Method})
+	check(err)
+	return captureResponse(httpResp)
 }
 
 func check(err error) {

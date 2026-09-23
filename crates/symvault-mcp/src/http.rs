@@ -787,6 +787,64 @@ mod tests {
     }
 
     #[test]
+    fn source_bound_duplicate_authorization_is_rejected_before_authentication() {
+        let go = go_http_case("duplicate_authorization_first_value_reaches_handler");
+        assert_eq!(go["response"]["status"], 200);
+        // Go's Header.Get uses the first duplicate value. Rust rejects duplicate
+        // headers before auth so request-smuggling ambiguities fail closed.
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nAuthorization: Bearer invalid-second-value\r\nContent-Length: {}\r\n\r\n{BODY}",
+            BODY.len()
+        );
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 400);
+        assert_eq!(raw_body(&response), "bad request\n");
+    }
+
+    #[test]
+    fn source_bound_duplicate_content_length_matches_go_rejection_status() {
+        let go = go_http_case("duplicate_content_length_rejected_by_go_parser");
+        assert_eq!(go["response"]["status"], 400);
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nContent-Length: {}\r\n\r\n{BODY}",
+            BODY.len(),
+            BODY.len()
+        );
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 400);
+        // Go's net/http parser owns its generated error page; the Rust listener
+        // deliberately keeps a small stable parser-error body.
+        assert_eq!(raw_body(&response), "bad request\n");
+    }
+
+    #[test]
+    fn source_bound_http_10_is_accepted_by_go_but_rejected_by_rust() {
+        let go = go_http_case("http_10_initialize_accepted");
+        assert_eq!(go["response"]["status"], 200);
+        let request = format!(
+            "POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\n\r\n{BODY}",
+            BODY.len()
+        );
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 400);
+        assert_eq!(raw_body(&response), "bad request\n");
+    }
+
+    #[test]
+    fn source_bound_request_line_limit_is_stricter_than_go_server_limit() {
+        let go = go_http_case("oversized_request_line_reaches_handler");
+        assert_eq!(go["response"]["status"], 200);
+        let request = format!(
+            "POST /mcp?x={} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\n\r\n{BODY}",
+            "x".repeat(16 * 1024),
+            BODY.len()
+        );
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 413);
+        assert_eq!(raw_body(&response), "request too large\n");
+    }
+
+    #[test]
     fn authenticated_loopback_listener_dispatches_initialize() {
         let response = round_trip(true, "http://127.0.0.1");
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");

@@ -54,7 +54,24 @@ struct Request {
     body_repeat: usize,
     #[serde(default)]
     header_repeat: usize,
+    #[serde(default)]
+    http_version: String,
+    #[serde(default)]
+    request_line_repeat: usize,
+    #[serde(default)]
+    duplicate_authorization: bool,
+    #[serde(default)]
+    duplicate_content_length: bool,
     body: String,
+}
+
+impl Request {
+    fn is_wire_case(&self) -> bool {
+        !self.http_version.is_empty()
+            || self.request_line_repeat > 0
+            || self.duplicate_authorization
+            || self.duplicate_content_length
+    }
 }
 
 #[derive(Deserialize)]
@@ -92,7 +109,7 @@ fn go_authenticated_http_session_matches_rust_adapter() {
     let token_cases = fixture
         .cases
         .iter()
-        .filter(|case| case.go_authenticated)
+        .filter(|case| case.go_authenticated && !case.request.is_wire_case())
         .map(|case| {
             (
                 case.request.token_name.clone(),
@@ -117,7 +134,7 @@ fn go_authenticated_http_session_matches_rust_adapter() {
     });
 
     for case in &fixture.cases {
-        if !case.go_authenticated {
+        if !case.go_authenticated || case.request.is_wire_case() {
             continue;
         }
         let body = if case.request.body_repeat > 0 {
