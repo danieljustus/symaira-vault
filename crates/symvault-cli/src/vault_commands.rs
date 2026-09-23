@@ -85,6 +85,14 @@ struct GetEntryOutput<'a> {
     modified: String,
 }
 
+#[derive(Serialize)]
+struct GetEntryYaml<'a> {
+    fields: &'a BTreeMap<String, serde_json::Value>,
+    totp: Option<&'a TotpOutput>,
+    path: &'a str,
+    modified: &'a str,
+}
+
 /// Opens an existing vault using a caller-provided unlocked identity.
 pub fn open_vault(root: &Path, identity: &Identity) -> Result<Store, String> {
     Store::open(root, identity).map_err(|error| format!("cannot open vault: {error}"))
@@ -371,8 +379,30 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, &value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => {
+                if quiet {
+                    return Ok(());
+                }
+                let modified = modified_text(&entry.metadata.updated);
+                let totp = entry_totp(entry, unix_time).ok().flatten();
+                let value = GetEntryYaml {
+                    fields: &entry.data,
+                    totp: totp.as_ref(),
+                    path,
+                    modified: &modified,
+                };
+                let yaml = serde_yaml_ng::to_string(&value).map_err(|error| error.to_string())?;
+                for line in yaml.lines() {
+                    let indent = line.len() - line.trim_start().len();
+                    for _ in 0..indent * 2 {
+                        output.write_all(b" ").map_err(|error| error.to_string())?;
+                    }
+                    writeln!(output, "{}", line.trim_start()).map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            }
             other => Err(format!(
-                "unknown output format: {other:?} (valid: text, json)"
+                "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
         },
     }
