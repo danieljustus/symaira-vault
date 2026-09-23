@@ -2,29 +2,30 @@
 
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
-- **Basis dieses Zwischenstands:** Branch `codex/rust-migration-integration` auf `120f164d`,
-  Draft-PR #1137. Go bleibt Produktionspfad. Kein Release, Cutover oder
-  Go-Abbau autorisiert.
-- **Lokal geprüft:** `make rust-007-differential` mit 13 Go-Session-Fällen,
-  darunter absolute Ablaufzeit, idempotentes Leeren und Go-Base64-Wrap-Key;
-  Core-Tests und Clippy grün. FFI Init/Open: Go-Fixture in Go und Rust,
-  `make ffi-abi-smoke` und iOS-arm64-Simulator-Smoketest grün auf `05718b6b`.
-  MCP-HTTP-Initialize: Go-Loopback-Orakel und Rust-Loopback-Differential grün.
-  CLI `update check --force`: lokaler HTTP-Cache-Test grün; `apply` bleibt offen.
-- **Native Evidenz:** Auf `08c162e5` sind iOS und Audit grün; auf `07dc0c53`
-  ebenfalls iOS und Audit. FreeBSD `07dc0c53` passierte nun den Config-CLI-
-  Fixture-Check, scheiterte dann an einer zeitgestempelten Go-Paketwarnung
-  im CLI-Stderr; CI-Lint fand ein `err`-Shadowing. Beides ist auf `920cf558`
-  korrigiert; native Jobs auf dem neuen integrierten SHA stehen noch aus.
-- **Ledger:** `contract-matrix.md` stuft alle zuvor unbewiesenen FreeBSD- und
-  iOS-`PASS`-Claims zurück. Letzter `cligap` auf gebautem `08c162e5`:
-  134 Go-Pfade, 102 Rust-Pfade, 21 fehlend, 11 Flag-Lücken, 0 Alias-Lücken.
+- **Basis dieses Zwischenstands:** Branch `codex/rust-migration-integration` lokal auf
+  `ea2ee555`, zuletzt gepusht `30e3303f`, Draft-PR #1137. Go bleibt
+  Produktionspfad. Kein Release, Cutover oder Go-Abbau autorisiert.
+- **Lokal geprüft:** `make rust-007-differential` mit 18 Go-Session-Fällen;
+  `make config-cli-differential` einschließlich Audit-Bootstrap auf macOS;
+  FFI-ABI-Smoke einschließlich erfolgreichem Schreiben/Auflisten/Manifest;
+  MCP-HTTP-Loopback mit Initialize, Sitzungsfortsetzung und Versionsablehnung.
+  CLI `update check --force` und `update apply --dry-run` haben lokale Go/Rust-
+  Vergleiche; die tatsächliche Installation bleibt offen.
+- **Native Evidenz auf `30e3303f`:** iOS-Simulator, Audit und Pairing grün;
+  Windows- und macOS-Rust-Jobs sowie Rust-Port-Contract grün. CI-Lint scheiterte
+  an Go-Formatierung und Rust-Security an vier Lizenzdeklarationen der neuen
+  HTTPS-Abhängigkeit. FreeBSD passierte die vorherige Config-CLI-Stelle und
+  scheiterte an einem Audit-CLI-Test mit ungleichen Speicher-Voraussetzungen.
+  Die drei Befunde sind lokal korrigiert, native Wiederholung auf dem neuen
+  integrierten SHA steht aus.
+- **Ledger:** `contract-matrix.md` hält unbewiesene Zielplattformen offen.
+  Frischer `cligap` vom integrierten `ea2ee555`-Baum: 134 Go-Pfade,
+  102 Rust-Pfade, 21 fehlend, 8 Flag-Lücken, 0 Alias-Lücken.
   Ein grüner Slice/PR beendet das Ziel nicht; alle anwendbaren Zeilen brauchen
   ausführbare Evidenz am exakten integrierten SHA und Zielsystem.
-- **Nächste ausführbare Arbeit:** den aktualisierten Branch pushen, native Jobs auf exakt
-  diesem SHA auswerten, FreeBSD-CLI-Differential weiter durchlaufen lassen,
-  neue CLI-Oberfläche messen, HTTP-Listener/Auth und weitere FFI-/CLI-Slices
-  implementieren. Ein grüner Slice oder PR genügt nicht.
+- **Nächste ausführbare Arbeit:** Branch pushen und native Jobs auswerten;
+  HTTP-Listener/Auth, mobile Auto-KDF-Migration, Audit-Fallback und weitere
+  CLI-/Ledger-Slices integrieren. Ein grüner Slice oder PR genügt nicht.
 
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
