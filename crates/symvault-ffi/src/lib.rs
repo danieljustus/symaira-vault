@@ -379,7 +379,7 @@ fn mobile_kdf_migration_settings(
 ) -> Result<Option<MobileKdfMigrationSettings>, String> {
     let raw = read_private_regular(&root.join("config.yaml"), "vault config")?;
     let text = str::from_utf8(&raw).map_err(|_| "vault config is not UTF-8".to_owned())?;
-    let values = vault_yaml_scalars(text);
+    let values = vault_yaml_scalars(text)?;
     let enabled = match values.get("auto_migrate_kdf").map(String::as_str) {
         Some(value) if value.eq_ignore_ascii_case("true") => true,
         Some(value) if value.eq_ignore_ascii_case("false") => false,
@@ -483,7 +483,7 @@ fn migrated_kdf_config(raw: &[u8]) -> Result<Vec<u8>, String> {
     Ok(output)
 }
 
-fn vault_yaml_scalars(text: &str) -> HashMap<String, String> {
+fn vault_yaml_scalars(text: &str) -> Result<HashMap<String, String>, String> {
     let mut scalars = HashMap::new();
     let mut vault_indent = None;
     let mut child_indent = None;
@@ -514,9 +514,11 @@ fn vault_yaml_scalars(text: &str) -> HashMap<String, String> {
         }
         let value = value.split('#').next().unwrap_or_default().trim();
         let value = value.trim_matches(['"', '\'']);
-        scalars.insert(key.to_owned(), value.to_owned());
+        if scalars.insert(key.to_owned(), value.to_owned()).is_some() {
+            return Err(format!("vault config contains duplicate key {key}"));
+        }
     }
-    scalars
+    Ok(scalars)
 }
 
 /// Frees a buffer returned in a result. A zero-length buffer is a no-op.
@@ -863,9 +865,7 @@ pub unsafe extern "C" fn symvault_read_entry_json(
         let entry = store
             .get(entry_path, &identity)
             .map_err(|error| error.to_string())?;
-        symvault_gojson::to_string(&entry)
-            .map(String::into_bytes)
-            .map_err(|error| error.to_string())
+        mobile_entry_json(&entry).map(String::into_bytes)
     })
 }
 
@@ -944,6 +944,105 @@ fn coerce_go_json_any_numbers(value: &mut serde_json::Value) -> Result<(), Strin
         _ => {}
     }
     Ok(())
+}
+
+/// Marshals Entry using Go's float64 JSON formatting for values in Data.
+/// Go emits fixed notation for exponents from -6 through 20, while serde_json
+/// switches to scientific notation sooner for some values (for example 1e20).
+fn mobile_entry_json(entry: &Entry) -> Result<String, String> {
+    let mut value = serde_json::to_value(entry).map_err(|error| error.to_string())?;
+    let original = symvault_gojson::to_string(&value).map_err(|error| error.to_string())?;
+    let data = value
+        .get_mut("data")
+        .ok_or_else(|| "entry is missing data".to_owned())?;
+    let mut replacements = Vec::new();
+    mark_go_float_numbers(data, &original, &mut replacements)?;
+    let mut json = symvault_gojson::to_string(&value).map_err(|error| error.to_string())?;
+    for (marker, token) in replacements {
+        let quoted_marker = serde_json::to_string(&marker).map_err(|error| error.to_string())?;
+        if !json.contains(&quoted_marker) {
+            return Err("internal float marker missing from serialized entry".to_owned());
+        }
+        json = json.replace(&quoted_marker, &token);
+    }
+    Ok(json)
+}
+
+fn mark_go_float_numbers(
+    value: &mut serde_json::Value,
+    original: &str,
+    replacements: &mut Vec<(String, String)>,
+) -> Result<(), String> {
+    match value {
+        serde_json::Value::Number(number) => {
+            let float = number
+                .as_f64()
+                .ok_or_else(|| "entry data number cannot be represented as float64".to_owned())?;
+            let token = go_float_json_token(float)?;
+            let mut suffix = replacements.len();
+            let marker = loop {
+                let marker = format!("\u{0}symvault-mobile-float-{suffix}\u{0}");
+                let encoded = serde_json::to_string(&marker).map_err(|error| error.to_string())?;
+                if !original.contains(&encoded) {
+                    break marker;
+                }
+                suffix += 1;
+            };
+            *value = serde_json::Value::String(marker.clone());
+            replacements.push((marker, token));
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                mark_go_float_numbers(value, original, replacements)?;
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values_mut() {
+                mark_go_float_numbers(value, original, replacements)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn go_float_json_token(float: f64) -> Result<String, String> {
+    let number = serde_json::Number::from_f64(float)
+        .ok_or_else(|| "entry data number cannot be represented as float64".to_owned())?;
+    let raw = number.to_string();
+    let Some(exponent_at) = raw.find(|character| character == 'e' || character == 'E') else {
+        return Ok(raw);
+    };
+    let (mantissa, exponent) = raw.split_at(exponent_at);
+    let exponent = &exponent[1..];
+    let exponent = exponent
+        .parse::<i32>()
+        .map_err(|error| format!("invalid float exponent: {error}"))?;
+    if !(-6..21).contains(&exponent) {
+        return Ok(raw);
+    }
+
+    let negative = mantissa.starts_with('-');
+    let unsigned = mantissa.trim_start_matches('-');
+    let point = unsigned.find('.').unwrap_or(unsigned.len()) as i32;
+    let digits: String = unsigned
+        .chars()
+        .filter(|character| *character != '.')
+        .collect();
+    let decimal = point + exponent;
+    let magnitude = if decimal <= 0 {
+        format!("0.{}{}", "0".repeat((-decimal) as usize), digits)
+    } else if decimal as usize >= digits.len() {
+        format!("{}{}", digits, "0".repeat(decimal as usize - digits.len()))
+    } else {
+        let split = decimal as usize;
+        format!("{}.{}", &digits[..split], &digits[split..])
+    };
+    Ok(if negative {
+        format!("-{magnitude}")
+    } else {
+        magnitude
+    })
 }
 
 /// Lists matching vault entry paths as a JSON array.
@@ -1259,6 +1358,11 @@ mod tests {
         assert_eq!(
             migrated_kdf_config(without_format).unwrap(),
             b"vault:\n  format_version: 2\n  auto_migrate_kdf: true\n"
+        );
+        assert!(
+            vault_yaml_scalars("vault:\n  auto_migrate_kdf: false\n  auto_migrate_kdf: true\n")
+                .unwrap_err()
+                .contains("duplicate key auto_migrate_kdf")
         );
         let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -1751,7 +1855,7 @@ mod tests {
         }
         let root_bytes = root.path().to_str().unwrap().as_bytes();
         let entry_path = b"mobile/contracts/write-entry";
-        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]}}}"#;
+        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]},"numeric_probe":{"fixed_negative_six":1e-6,"fixed_positive_twenty":1e20,"scientific_negative_seven":1e-7,"scientific_positive_twenty_one":1e21}}}"#;
 
         let intact = unsafe {
             output(symvault_verify_manifest_integrity(
@@ -1793,7 +1897,20 @@ mod tests {
             ))
         }
         .unwrap();
-        let read: serde_json::Value = serde_json::from_slice(&read).unwrap();
+        let read_text = String::from_utf8(read).unwrap();
+        let numeric_fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/ffi/mobile-json-numbers.json"
+        )))
+        .unwrap();
+        assert!(
+            read_text.contains(&format!(
+                "\"numeric_probe\":{}",
+                numeric_fixture["expected_json"].as_str().unwrap()
+            )),
+            "ReadEntryJSON matches Go encoding/json float notation at both notation boundaries"
+        );
+        let read: serde_json::Value = serde_json::from_str(&read_text).unwrap();
         assert_eq!(read["data"]["username"], "ffi-user");
         assert_eq!(read["data"]["password"], "ffi-secret");
         assert_eq!(read["data"]["large_integer"].as_i64(), None);
