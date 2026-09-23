@@ -3666,6 +3666,12 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error == "field is required for --length, --digest, or --metadata" {
                 ExitCode::from(9)
+            } else if error == "vault not initialized. Run 'symvault init' first" {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+                ExitCode::from(3)
             } else {
                 ExitCode::from(1)
             }
