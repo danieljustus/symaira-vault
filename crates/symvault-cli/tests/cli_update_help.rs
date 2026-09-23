@@ -1,6 +1,41 @@
-use std::process::Command;
+use std::{
+    env,
+    path::Path,
+    process::{Command, Output},
+};
 
 const BINARY: &str = env!("CARGO_BIN_EXE_symvault");
+
+fn run_help(binary: &Path, args: &[&str]) -> Output {
+    Command::new(binary)
+        .args(args)
+        .output()
+        .expect("run CLI help")
+}
+
+#[test]
+fn nested_update_help_matches_go_bytes() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = Path::new(&go);
+    let rust = Path::new(BINARY);
+
+    for path in ["info", "check", "apply"] {
+        for args in [vec!["help", "update", path], vec!["update", path, "--help"]] {
+            let go_output = run_help(go, &args);
+            let rust_output = run_help(rust, &args);
+            assert_eq!(
+                rust_output.status.code(),
+                go_output.status.code(),
+                "path={path:?} args={args:?}"
+            );
+            assert_eq!(rust_output.stdout, go_output.stdout, "args={args:?}");
+            assert_eq!(rust_output.stderr, go_output.stderr, "args={args:?}");
+        }
+    }
+}
 
 #[test]
 fn update_subcommand_help_is_reachable_and_lists_go_flags() {
