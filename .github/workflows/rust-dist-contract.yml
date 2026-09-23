@@ -26,11 +26,11 @@ jobs:
             goos: linux
             goarch: amd64
             expected_arch: x86_64
-          - runner: macos-15
+          - runner: macos-latest
             goos: darwin
             goarch: arm64
             expected_arch: arm64
-          - runner: windows-2025
+          - runner: windows-latest
             goos: windows
             goarch: amd64
             expected_arch: x86_64
