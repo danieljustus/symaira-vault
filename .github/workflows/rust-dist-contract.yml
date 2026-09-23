@@ -25,15 +25,27 @@ jobs:
           - runner: ubuntu-24.04
             goos: linux
             goarch: amd64
-            expected_arch: x86_64
-          - runner: macos-latest
+            rust_host: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            rust_host: aarch64-unknown-linux-gnu
+          - runner: macos-15
             goos: darwin
             goarch: arm64
-            expected_arch: arm64
-          - runner: windows-latest
+            rust_host: aarch64-apple-darwin
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            rust_host: x86_64-apple-darwin
+          - runner: windows-2025
             goos: windows
             goarch: amd64
-            expected_arch: x86_64
+            rust_host: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            rust_host: aarch64-pc-windows-msvc
     env:
       GOTOOLCHAIN: go1.26.6
       RUSTUP_TOOLCHAIN: 1.98.0
@@ -54,9 +66,10 @@ jobs:
         shell: bash
         run: rustup toolchain install 1.98.0 --profile minimal
 
-      - name: Verify native runner architecture
+      - name: Verify native toolchain host
         shell: bash
-        run: test "$(uname -m)" = "${{ matrix.expected_arch }}"
+        run: |
+          rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
 
       - name: Build release CLI
         shell: bash
@@ -86,3 +99,69 @@ jobs:
             --rust-dir dist/rust \
             --version "$DIST_VERSION" \
             --target "${{ matrix.goos }}/${{ matrix.goarch }}"
+
+  freebsd-archive:
+    name: Native archive (freebsd-${{ matrix.go_arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            rust_host: x86_64-unknown-freebsd
+            go_arch: amd64
+            go_sha256: 9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
+          - arch: aarch64
+            rust_host: aarch64-unknown-freebsd
+            go_arch: arm64
+            go_sha256: 577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and check archive in native FreeBSD VM
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        with:
+          release: '15.1'
+          arch: ${{ matrix.arch }}
+          copyback: false
+          usesh: true
+          prepare: |
+            set -eu
+            pkg install -y bash ca_root_nss curl gmake python3 rust
+            pw groupadd symvault-ci
+            pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
+            go_archive="/tmp/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            test "$(sha256 -q "$go_archive")" = '${{ matrix.go_sha256 }}'
+            tar -C /usr/local -xzf "$go_archive"
+          run: |
+            set -eu
+            workspace="$(pwd -P)"
+            test "$workspace" = "$GITHUB_WORKSPACE"
+            chown -R symvault-ci:symvault-ci "$workspace"
+            su -m symvault-ci -c '
+              set -eu
+              export HOME=/home/symvault-ci
+              export PATH="/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin"
+              export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
+              cd "$GITHUB_WORKSPACE"
+              rustc --version | grep -Eq "^rustc 1[.]98[.]"
+              rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
+              go version | grep -q "^go version go1[.]26[.]6 "
+              cargo build --release -p symvault-cli --bin symvault --locked
+              python3 scripts/rust-port/stage-rust-archive.py \
+                --version 0.0.0 \
+                --goos freebsd \
+                --goarch "${{ matrix.go_arch }}" \
+                --binary target/release/symvault \
+                --output-dir dist/rust
+              go run ./scripts/rust-port/cmd/distcontract \
+                --repo . \
+                --rust-dir dist/rust \
+                --version 0.0.0 \
+                --target "freebsd/${{ matrix.go_arch }}"
+            '

@@ -11,7 +11,7 @@ import zipfile
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
-    parser.add_argument("--goos", choices=("linux", "darwin", "windows"), required=True)
+    parser.add_argument("--goos", choices=("linux", "darwin", "windows", "freebsd"), required=True)
     parser.add_argument("--goarch", choices=("amd64", "arm64"), required=True)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("dist/rust"))
