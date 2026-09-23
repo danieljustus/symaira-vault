@@ -7,6 +7,11 @@ cd "$repo_root"
 # clean VCS metadata and toolchain). CI builds one when none is provided.
 export GOWORK=off
 export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
+# The pinned Go oracle logs an unrelated, timestamped package-init warning on
+# FreeBSD before every command; keep command stderr comparisons deterministic.
+if [ "$(uname -s)" = FreeBSD ]; then
+    export SYMVAULT_LOG_LEVEL=error
+fi
 oracle_commit=fca3f89401833b5e14ec4ec74ef736b0f63bca74
 oracle_binary=${SYMVAULT_GO_BINARY:-}
 if [ -z "$oracle_binary" ]; then

@@ -174,8 +174,8 @@ func buildSessionFixture(meta oracle) sessionFixture {
 		{"empty_nonce", `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"eA==","nonce":""}`},
 	} {
 		backend := &fakeKeyring{values: map[string]string{key: input.raw}}
-		_, err := session.NewManager(backend, nil).LoadPassphrase(v)
-		item := resultCase(input.name, []string{"load_passphrase"}, err)
+		_, loadErr := session.NewManager(backend, nil).LoadPassphrase(v)
+		item := resultCase(input.name, []string{"load_passphrase"}, loadErr)
 		item.Input = json.RawMessage(input.raw)
 		item.NonMutating = backend.values[key] == input.raw
 		cases = append(cases, item)
