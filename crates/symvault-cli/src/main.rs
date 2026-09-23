@@ -151,6 +151,12 @@ enum Command {
         working_dir: Option<PathBuf>,
         #[arg(short = 't', long)]
         timeout: Option<String>,
+        #[arg(long)]
+        broker: bool,
+        #[arg(long)]
+        broker_strict: bool,
+        #[arg(long, value_delimiter = ',')]
+        broker_passthrough: Vec<String>,
         #[arg(last = true, required = true)]
         command: Vec<String>,
     },
@@ -1535,6 +1541,9 @@ fn run_cli() -> ExitCode {
             passthrough,
             working_dir,
             timeout,
+            broker,
+            broker_strict: _,
+            broker_passthrough: _,
             command,
         }) => {
             let result = (|| {
@@ -1550,6 +1559,9 @@ fn run_cli() -> ExitCode {
                     .map(session_commands::parse_ttl_override)
                     .transpose()?
                     .flatten();
+                if broker {
+                    return Err("run --broker is not implemented in the Rust CLI yet".to_owned());
+                }
                 let redactions: Vec<_> = environment
                     .values
                     .values()
