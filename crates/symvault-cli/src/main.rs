@@ -680,6 +680,11 @@ fn parse_watch_duration(
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
     List,
+    #[command(hide = true)]
+    Setup {
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     Doctor {
         name: String,
     },
@@ -1739,6 +1744,24 @@ fn run_cli() -> ExitCode {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::Setup { args },
+        }) => {
+            if let Some(flag) = args.iter().find(|arg| arg.starts_with('-')) {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Error: unknown flag: {flag}\nError: unknown flag: {flag}"
+                );
+                return ExitCode::from(1);
+            }
+            const MESSAGE: &str =
+                "This command is deprecated in v4.0. Use: symvault agent install <name>";
+            let _ = writeln!(
+                io::stderr(),
+                "{MESSAGE}\nError: {MESSAGE}\nError: {MESSAGE}\nTry: symvault find <search-term>"
+            );
+            ExitCode::from(2)
         }
         Some(Command::Agent {
             command: AgentCommand::List,
