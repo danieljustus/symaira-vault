@@ -26,6 +26,7 @@ mod file_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
@@ -257,6 +258,8 @@ enum Command {
         reveal: bool,
         #[arg(long)]
         quiet: bool,
+        #[command(subcommand)]
+        subcommand: Option<GenerateCommand>,
     },
     /// Check vault health and configuration
     Doctor {
@@ -480,6 +483,15 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GenerateCommand {
+    /// Generate manual pages.
+    Manpages {
+        #[arg(value_name = "DIRECTORY")]
+        directory: PathBuf,
     },
 }
 
@@ -1145,11 +1157,16 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Generate {
+            subcommand: Some(GenerateCommand::Manpages { directory }),
+            ..
+        }) => run_generate_manpages(&directory),
+        Some(Command::Generate {
             length,
             symbols,
             store,
             reveal,
             quiet,
+            subcommand: None,
         }) => run_generate(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -3361,6 +3378,19 @@ fn run_generate(
             },
             reveal,
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_generate_manpages(directory: &Path) -> ExitCode {
+    let result = (|| {
+        let output_dir = manpage_commands::generate(Cli::command(), directory)?;
+        writeln!(
+            io::stdout().lock(),
+            "Generated manpages in {}",
+            output_dir.display()
+        )
+        .map_err(|error| format!("write manpage result: {error}"))
     })();
     finish_vault_result(result)
 }
