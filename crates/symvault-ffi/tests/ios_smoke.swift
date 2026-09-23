@@ -422,10 +422,50 @@ func verifyMobileVaultFixture() throws {
   }
 }
 
+func verifyZeroKeyRecovery() throws {
+  let crypto = try fixture("age-kdf.json")
+  guard
+    let zeroCase = (crypto["zero_key_cases"] as? [[String: Any]])?.first,
+    let encoded = zeroCase["ciphertext"] as? String,
+    let encrypted = Data(base64Encoded: encoded),
+    let passphraseLength = zeroCase["passphrase_length"] as? Int,
+    let recipient = zeroCase["expected_recipient"] as? String,
+    let identities = crypto["identities"] as? [[String: Any]],
+    let identity = identities.first(where: { $0["recipient"] as? String == recipient })?["identity"] as? String
+  else {
+    throw SmokeFailure.fixture("Go zero-key recovery fixture is incomplete")
+  }
+  let root = FileManager.default.temporaryDirectory
+    .appendingPathComponent("symvault-ios-zero-key-\(UUID().uuidString)", isDirectory: true)
+  defer { try? FileManager.default.removeItem(at: root) }
+  try FileManager.default.createDirectory(
+    at: root.appendingPathComponent("entries", isDirectory: true),
+    withIntermediateDirectories: true)
+  let quotedBytes = try JSONSerialization.data(withJSONObject: root.path, options: .fragmentsAllowed)
+  guard let quotedPath = String(data: quotedBytes, encoding: .utf8) else {
+    throw SmokeFailure.fixture("Go zero-key vault path is not UTF-8")
+  }
+  try Data("vaultDir: \(quotedPath)\nvault:\n  format_version: 2\n".utf8)
+    .write(to: root.appendingPathComponent("config.yaml"))
+  try Data("\(recipient)\n".utf8).write(to: root.appendingPathComponent("recipients.txt"))
+  try encrypted.write(to: root.appendingPathComponent("identity.age"))
+  let passphrase = String(repeating: "x", count: passphraseLength)
+  guard try callVault(root, passphrase: passphrase, initialize: false) == Data(identity.utf8) else {
+    throw SmokeFailure.contract("Rust FFI did not recover the Go zero-key identity")
+  }
+  guard
+    try Data(contentsOf: root.appendingPathComponent("identity.age.bak")) == encrypted,
+    try Data(contentsOf: root.appendingPathComponent("identity.age")) != encrypted
+  else {
+    throw SmokeFailure.contract("Rust FFI did not back up and replace the zero-key identity")
+  }
+}
+
 func runContracts() throws {
   let identity = try verifyCryptoFixture()
   try verifyStoreFixture(identity: identity)
   try verifyMobileVaultFixture()
+  try verifyZeroKeyRecovery()
 }
 
 @MainActor @objc final class RustCoreSmokeAppDelegate: UIResponder, UIApplicationDelegate {
