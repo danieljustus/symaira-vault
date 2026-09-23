@@ -323,7 +323,7 @@ pub unsafe extern "C" fn symvault_write_entry_json(
         let entry_bytes = unsafe { input(entry_json, entry_json_len, "entry JSON")? };
         // encoding/json replaces invalid UTF-8 with U+FFFD before decoding.
         let entry_json = String::from_utf8_lossy(entry_bytes);
-        let entry_value = serde_json::from_str::<serde_json::Value>(&entry_json)
+        let mut entry_value = serde_json::from_str::<serde_json::Value>(&entry_json)
             .map_err(|error| format!("unmarshal entry: {error}"))?;
         // encoding/json accepts top-level null for a non-pointer struct and
         // leaves it zero-valued; Entry's custom Go unmarshaller initializes
@@ -331,6 +331,10 @@ pub unsafe extern "C" fn symvault_write_entry_json(
         let entry = if entry_value.is_null() {
             Entry::default()
         } else {
+            if let Some(data) = entry_value.get_mut("data") {
+                coerce_go_json_any_numbers(data)
+                    .map_err(|error| format!("unmarshal entry: {error}"))?;
+            }
             serde_json::from_value::<Entry>(entry_value)
                 .map_err(|error| format!("unmarshal entry: {error}"))?
         };
@@ -343,6 +347,32 @@ pub unsafe extern "C" fn symvault_write_entry_json(
             .map_err(|error| format!("write entry: {error}"))?;
         Ok(Vec::new())
     })
+}
+
+/// Go's encoding/json decodes numbers held by `map[string]any` as float64.
+/// Convert only Entry.data, whose values use that dynamic representation.
+fn coerce_go_json_any_numbers(value: &mut serde_json::Value) -> Result<(), String> {
+    match value {
+        serde_json::Value::Number(number) => {
+            let float = number
+                .as_f64()
+                .ok_or_else(|| "number cannot be represented as float64".to_owned())?;
+            *number = serde_json::Number::from_f64(float)
+                .ok_or_else(|| "number cannot be represented as float64".to_owned())?;
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                coerce_go_json_any_numbers(value)?;
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values_mut() {
+                coerce_go_json_any_numbers(value)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Lists matching vault entry paths as a JSON array.
@@ -751,7 +781,7 @@ mod tests {
         }
         let root_bytes = root.path().to_str().unwrap().as_bytes();
         let entry_path = b"mobile/contracts/write-entry";
-        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret"}}"#;
+        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]}}}"#;
 
         let intact = unsafe {
             output(symvault_verify_manifest_integrity(
@@ -796,6 +826,20 @@ mod tests {
         let read: serde_json::Value = serde_json::from_slice(&read).unwrap();
         assert_eq!(read["data"]["username"], "ffi-user");
         assert_eq!(read["data"]["password"], "ffi-secret");
+        assert_eq!(read["data"]["large_integer"].as_i64(), None);
+        assert_eq!(
+            read["data"]["large_integer"].as_f64(),
+            Some(9_007_199_254_740_992_f64)
+        );
+        assert_eq!(read["data"]["decimal"].as_f64(), Some(1.2345678901234567));
+        assert_eq!(read["data"]["exponent"].as_f64(), Some(1e30));
+        assert_eq!(read["data"]["nested"]["integer"].as_i64(), None);
+        assert_eq!(
+            read["data"]["nested"]["integer"].as_f64(),
+            Some(9_007_199_254_740_992_f64)
+        );
+        assert_eq!(read["data"]["nested"]["values"][0].as_f64(), Some(1e-7));
+        assert_eq!(read["data"]["nested"]["values"][1].as_f64(), Some(1e30));
         assert_eq!(read["meta"]["version"], 1);
         assert_ne!(read["meta"]["created"], "0001-01-01T00:00:00Z");
         assert_eq!(read["meta"]["created"], read["meta"]["updated"]);

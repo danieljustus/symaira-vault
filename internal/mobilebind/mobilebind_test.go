@@ -1,6 +1,7 @@
 package mobilebind_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,7 +83,7 @@ func TestMobileBind_VaultEndToEnd(t *testing.T) {
 	}
 
 	// 3. Write entry JSON
-	entryJSON := `{"data":{"username":"alice","password":"secretpassword123","url":"https://example.com"}}`
+	entryJSON := `{"data":{"username":"alice","password":"secretpassword123","url":"https://example.com","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]}}}`
 	if err := mobilebind.WriteEntryJSON(vaultDir, "services/example", entryJSON, idStr); err != nil {
 		t.Fatalf("WriteEntryJSON: %v", err)
 	}
@@ -94,6 +95,29 @@ func TestMobileBind_VaultEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(readJSON, "secretpassword123") {
 		t.Fatalf("ReadEntryJSON missing password: %s", readJSON)
+	}
+	var readEntry struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(readJSON), &readEntry); err != nil {
+		t.Fatalf("decode ReadEntryJSON: %v", err)
+	}
+	if got := readEntry.Data["large_integer"]; got != float64(9007199254740992) {
+		t.Fatalf("Go JSON integer conversion = %v, want float64(9007199254740992)", got)
+	}
+	if got := readEntry.Data["decimal"]; got != float64(1.2345678901234567) {
+		t.Fatalf("Go JSON decimal conversion = %.17g, want %.17g", got, float64(1.2345678901234567))
+	}
+	if got := readEntry.Data["exponent"]; got != float64(1e30) {
+		t.Fatalf("Go JSON exponent conversion = %v, want %v", got, float64(1e30))
+	}
+	nested := readEntry.Data["nested"].(map[string]any)
+	if got := nested["integer"]; got != float64(9007199254740992) {
+		t.Fatalf("Go JSON nested integer conversion = %v, want float64(9007199254740992)", got)
+	}
+	values := nested["values"].([]any)
+	if values[0] != float64(1e-7) || values[1] != float64(1e30) {
+		t.Fatalf("Go JSON nested exponent conversion = %v, want [%v %v]", values, float64(1e-7), float64(1e30))
 	}
 
 	// 5. List entries JSON
