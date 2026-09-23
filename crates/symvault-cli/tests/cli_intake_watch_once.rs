@@ -328,8 +328,15 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
     assert_eq!(rust.stderr, go.stderr);
     let normalize = |output: &Output, source: &Path| {
         let mut summary: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-        let skipped = summary["skipped"][0].as_str().unwrap();
-        summary["skipped"][0] = skipped.replace(source.to_str().unwrap(), "<source>").into();
+        let mut skipped = summary["skipped"][0].as_str().unwrap().to_owned();
+        let source_root = source.parent().unwrap();
+        for root in [
+            source_root.to_path_buf(),
+            fs::canonicalize(source_root).expect("canonicalize disposable source root"),
+        ] {
+            skipped = skipped.replace(root.to_str().unwrap(), "<source-root>");
+        }
+        summary["skipped"][0] = skipped.into();
         summary
     };
     let go_summary = normalize(&go, &go_source);
@@ -339,7 +346,7 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
     assert_eq!(go_summary["staged"], serde_json::Value::Null);
     assert_eq!(
         go_summary["skipped"][0],
-        "too-large.txt: reject \"<source>\": 1048577 bytes exceeds the 1048576 byte per-file limit"
+        "too-large.txt: reject \"<source-root>/too-large.txt\": 1048577 bytes exceeds the 1048576 byte per-file limit"
     );
     assert_eq!(fs::read(go_source).unwrap(), contents);
     assert_eq!(fs::read(rust_source).unwrap(), contents);
