@@ -18,6 +18,7 @@ pub const SESSION_ACCOUNT: &str = "session";
 pub const IDENTITY_ACCOUNT: &str = "identity";
 pub const WRAP_KEY_ACCOUNT: &str = "wrap-key";
 pub const DEFAULT_MAX_LIFETIME: Duration = Duration::from_secs(8 * 60 * 60);
+const GO_ZERO_NANOS: i128 = -62_135_596_800_000_000_000;
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -133,11 +134,14 @@ enum Timestamp {
     Text(String),
 }
 impl Timestamp {
-    fn nanos(&self) -> Result<u64, SessionError> {
+    fn nanos(&self) -> Result<i128, SessionError> {
         match self {
             Self::Text(v) => parse_timestamp(v)
                 .ok_or_else(|| SessionError::Malformed(format!("invalid timestamp {v:?}"))),
         }
+    }
+    fn is_go_zero(&self) -> bool {
+        self.nanos().is_ok_and(|nanos| nanos == GO_ZERO_NANOS)
     }
 }
 fn timestamp(t: SystemTime) -> Result<Timestamp, SessionError> {
@@ -174,7 +178,7 @@ fn timestamp(t: SystemTime) -> Result<Timestamp, SessionError> {
         rem % 60
     )))
 }
-fn parse_timestamp(v: &str) -> Option<u64> {
+fn parse_timestamp(v: &str) -> Option<i128> {
     let b = v.as_bytes();
     if b.len() < 20
         || b[4] != b'-'
@@ -185,7 +189,13 @@ fn parse_timestamp(v: &str) -> Option<u64> {
     {
         return None;
     }
-    let n = |a: usize, z: usize| std::str::from_utf8(&b[a..z]).ok()?.parse::<u64>().ok();
+    let n = |a: usize, z: usize| {
+        let digits = b.get(a..z)?;
+        if !digits.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        std::str::from_utf8(digits).ok()?.parse::<u64>().ok()
+    };
     let y = n(0, 4)? as i64;
     let m = n(5, 7)? as i64;
     let d = n(8, 10)? as i64;
@@ -195,16 +205,37 @@ fn parse_timestamp(v: &str) -> Option<u64> {
     if m == 0 || m > 12 || d == 0 || d > 31 || h > 23 || min > 59 || sec > 60 {
         return None;
     };
-    let frac = if b[19] == b'.' {
+    let (frac, end) = if b[19] == b'.' || b[19] == b',' {
         let end = 20
             + b[20..]
                 .iter()
                 .position(|x| *x == b'Z' || *x == b'+' || *x == b'-')
                 .unwrap_or(b.len() - 20);
-        let f = std::str::from_utf8(&b[20..end]).ok()?.parse::<u64>().ok()?;
-        f * 10u64.saturating_pow(9u32.saturating_sub((end - 20) as u32))
+        let digits = &b[20..end];
+        if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+            return None;
+        }
+        let width = digits.len().min(9);
+        let f = std::str::from_utf8(&digits[..width])
+            .ok()?
+            .parse::<u64>()
+            .ok()?;
+        (f * 10u64.pow(9 - width as u32), end)
     } else {
-        0
+        (0, 19)
+    };
+    let offset = match b.get(end)? {
+        b'Z' if end + 1 == b.len() => 0i128,
+        sign @ (b'+' | b'-') if end + 6 == b.len() && b[end + 3] == b':' => {
+            let hours = n(end + 1, end + 3)?;
+            let minutes = n(end + 4, end + 6)?;
+            if hours > 23 || minutes > 59 {
+                return None;
+            }
+            let seconds = (hours * 60 + minutes) as i128 * 60;
+            if *sign == b'+' { seconds } else { -seconds }
+        }
+        _ => return None,
     };
     let (mut yy, mm) = (y, m);
     if mm <= 2 {
@@ -215,12 +246,12 @@ fn parse_timestamp(v: &str) -> Option<u64> {
     let doy = (153 * (mm + if mm > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     let days = era * 146097 + doe - 719468;
-    u64::try_from(days)
-        .ok()?
+    i128::from(days)
         .checked_mul(86400)?
-        .checked_add(h * 3600 + min * 60 + sec)?
+        .checked_add((h * 3600 + min * 60 + sec) as i128)?
+        .checked_sub(offset)?
         .checked_mul(1_000_000_000)?
-        .checked_add(frac)
+        .checked_add(i128::from(frac))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -266,13 +297,13 @@ impl SessionManager {
     fn key(vault: &str, account: &str) -> String {
         format!("symvault:{vault}|{account}")
     }
-    fn now(&self) -> Result<(u64, Timestamp), SessionError> {
+    fn now(&self) -> Result<(i128, Timestamp), SessionError> {
         let t = self.clock.now();
         Ok((
             t.duration_since(UNIX_EPOCH)
                 .map_err(|e| SessionError::Malformed(e.to_string()))?
                 .as_nanos()
-                .min(u64::MAX as u128) as u64,
+                .min(i128::MAX as u128) as i128,
             timestamp(t)?,
         ))
     }
@@ -349,13 +380,18 @@ impl SessionManager {
         max: Duration,
     ) -> Result<(), SessionError> {
         let (_, t) = self.now()?;
-        let (saved_at, ttl, max) = match self.session_metadata(vault) {
-            Ok(Some(session)) => (session.saved_at, session.ttl_ns, session.max_lifetime_ns),
-            Ok(None) | Err(SessionError::NotFound) => {
-                (t.clone(), duration_ns(ttl), duration_ns(max))
+        let (mut saved_at, mut ttl, mut max) = (t.clone(), duration_ns(ttl), duration_ns(max));
+        if let Ok(Some(session)) = self.session_metadata(vault) {
+            if !session.saved_at.is_go_zero() {
+                saved_at = session.saved_at;
             }
-            Err(_) => (t.clone(), duration_ns(ttl), duration_ns(max)),
-        };
+            if session.ttl_ns > 0 {
+                ttl = session.ttl_ns;
+            }
+            if session.max_lifetime_ns > 0 {
+                max = session.max_lifetime_ns;
+            }
+        }
         let (e, n) = self.encrypt(vault, identity)?;
         let s = StoredIdentity {
             saved_at,
@@ -379,30 +415,27 @@ impl SessionManager {
             Err(error) => Err(error),
         }
     }
-    fn expired(saved: u64, last: u64, ttl: i64, max: i64, now: u64) -> bool {
-        if ttl <= 0 || saved == 0 {
+    fn expired(saved: i128, last: i128, ttl: i64, max: i64, now: i128) -> bool {
+        if ttl <= 0 || saved == GO_ZERO_NANOS {
             return true;
         }
-        let last = if last == 0 { saved } else { last };
-        now.saturating_sub(last) > ttl as u64
+        let last = if last == GO_ZERO_NANOS { saved } else { last };
+        now.saturating_sub(last) > i128::from(ttl)
             || now.saturating_sub(saved)
                 > if max > 0 {
-                    max as u64
+                    i128::from(max)
                 } else {
-                    DEFAULT_MAX_LIFETIME.as_nanos() as u64
+                    DEFAULT_MAX_LIFETIME.as_nanos() as i128
                 }
     }
     pub fn load_passphrase(&self, vault: &str) -> Result<Vec<u8>, SessionError> {
         let raw = self.keyring.get(&Self::key(vault, SESSION_ACCOUNT))?;
         let mut s: StoredSession =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
-        if s.passphrase
-            .as_deref()
-            .is_some_and(|value| !value.is_empty())
-        {
-            return Err(SessionError::LegacyPlaintext);
-        }
         let (now, t) = self.now()?;
+        if s.ttl_ns <= 0 {
+            return Err(SessionError::Expired("TTL is zero or negative"));
+        }
         if Self::expired(
             s.saved_at.nanos()?,
             s.last_access.nanos()?,
@@ -412,6 +445,12 @@ impl SessionManager {
         ) {
             let _ = self.revoke(vault);
             return Err(SessionError::Expired("idle or maximum lifetime"));
+        }
+        if s.passphrase
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err(SessionError::LegacyPlaintext);
         }
         let value = self.decrypt(
             vault,
@@ -423,10 +462,11 @@ impl SessionManager {
                 .ok_or(SessionError::Malformed("nonce missing".into()))?,
         )?;
         s.last_access = t;
-        self.keyring.set(
-            &Self::key(vault, SESSION_ACCOUNT),
-            &serde_json::to_vec(&s).map_err(|e| SessionError::Malformed(e.to_string()))?,
-        )?;
+        if let Ok(payload) = serde_json::to_vec(&s) {
+            let _ = self
+                .keyring
+                .set(&Self::key(vault, SESSION_ACCOUNT), &payload);
+        }
         Ok(value)
     }
     pub fn load_identity(&self, vault: &str, refresh: bool) -> Result<Vec<u8>, SessionError> {
@@ -503,15 +543,12 @@ impl SessionManager {
                 } else {
                     (i.saved_at, i.last_access, i.ttl_ns, i.max_lifetime_ns)
                 };
-                self.now().map_or(true, |(n, _)| {
-                    Self::expired(
-                        saved.nanos().unwrap_or(0),
-                        last.nanos().unwrap_or(0),
-                        ttl,
-                        max,
-                        n,
-                    )
-                })
+                match (self.now(), saved.nanos(), last.nanos()) {
+                    (Ok((now, _)), Ok(saved), Ok(last)) => {
+                        Self::expired(saved, last, ttl, max, now)
+                    }
+                    _ => true,
+                }
             })
             .unwrap_or(true)
     }
@@ -520,17 +557,14 @@ impl SessionManager {
             .get(&Self::key(vault, SESSION_ACCOUNT))
             .ok()
             .and_then(|v| serde_json::from_slice::<StoredSession>(&v).ok())
-            .map(|s| {
-                self.now().map_or(true, |(n, _)| {
-                    Self::expired(
-                        s.saved_at.nanos().unwrap_or(0),
-                        s.last_access.nanos().unwrap_or(0),
-                        s.ttl_ns,
-                        s.max_lifetime_ns,
-                        n,
-                    )
-                })
-            })
+            .map(
+                |s| match (self.now(), s.saved_at.nanos(), s.last_access.nanos()) {
+                    (Ok((now, _)), Ok(saved), Ok(last)) => {
+                        Self::expired(saved, last, s.ttl_ns, s.max_lifetime_ns, now)
+                    }
+                    _ => true,
+                },
+            )
             .unwrap_or(true)
     }
     pub fn revoke(&self, vault: &str) -> Result<(), SessionError> {
@@ -630,6 +664,202 @@ mod tests {
         ));
     }
     #[test]
+    fn zero_and_elapsed_ttl_precede_legacy_and_match_eviction() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:01:40Z","passphrase":"legacy","ttl_ns":0}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::Expired(_))
+        ));
+        assert_eq!(keyring.get(&key).unwrap(), payload);
+
+        let payload = br#"{"saved_at":"1970-01-01T00:01:00Z","last_access":"1970-01-01T00:01:00Z","passphrase":"legacy","ttl_ns":1}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::Expired(_))
+        ));
+        assert!(matches!(keyring.get(&key), Err(SessionError::NotFound)));
+    }
+    #[test]
+    fn identity_ignores_nonpositive_session_metadata() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let payload = br#"{"saved_at":"0001-01-01T00:00:00Z","last_access":"0001-01-01T00:00:00Z","ttl_ns":0,"max_lifetime_ns":0}"#;
+        keyring
+            .set(&SessionManager::key("v", SESSION_ACCOUNT), payload)
+            .unwrap();
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(60),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        let raw = keyring
+            .get(&SessionManager::key("v", IDENTITY_ACCOUNT))
+            .unwrap();
+        let stored: StoredIdentity = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(stored.saved_at.nanos().unwrap(), 100_000_000_000);
+        assert_eq!(stored.ttl_ns, 60_000_000_000);
+        assert_eq!(stored.max_lifetime_ns, 120_000_000_000);
+    }
+    #[test]
+    fn unix_epoch_is_not_go_zero_time() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let payload = br#"{"saved_at":"1970-01-01T00:00:00Z","last_access":"1970-01-01T00:00:00Z","ttl_ns":1,"max_lifetime_ns":1}"#;
+        keyring
+            .set(&SessionManager::key("v", SESSION_ACCOUNT), payload)
+            .unwrap();
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(60),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        let raw = keyring
+            .get(&SessionManager::key("v", IDENTITY_ACCOUNT))
+            .unwrap();
+        let stored: StoredIdentity = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(stored.saved_at.nanos().unwrap(), 0);
+        assert_eq!(stored.ttl_ns, 1);
+        assert_eq!(stored.max_lifetime_ns, 1);
+    }
+    #[test]
+    fn epoch_legacy_session_is_not_prematurely_evicted() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:00:00Z","last_access":"1970-01-01T00:00:00Z","passphrase":"legacy","ttl_ns":120000000000,"max_lifetime_ns":120000000000}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::LegacyPlaintext)
+        ));
+        assert_eq!(keyring.get(&key).unwrap(), payload);
+    }
+    #[test]
+    fn go_zero_last_access_uses_saved_at_before_eviction() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:01:00Z","last_access":"0001-01-01T00:00:00Z","passphrase":"legacy","ttl_ns":1,"max_lifetime_ns":120000000000}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::Expired(_))
+        ));
+        assert!(matches!(keyring.get(&key), Err(SessionError::NotFound)));
+    }
+    #[test]
+    fn malformed_last_access_fails_closed_in_both_expiry_probes() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:00:00++1:00","ttl_ns":120000000000,"max_lifetime_ns":120000000000}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(manager.is_session_expired("v"));
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(120),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        assert!(manager.is_identity_expired("v"));
+        assert_eq!(
+            keyring.get(&key).unwrap(),
+            payload,
+            "read-only probes must not evict"
+        );
+    }
+    #[test]
+    fn identity_inherits_pre_epoch_session_origin() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let payload = br#"{"saved_at":"1969-12-31T23:59:59Z","last_access":"1969-12-31T23:59:59Z","ttl_ns":1,"max_lifetime_ns":1}"#;
+        keyring
+            .set(&SessionManager::key("v", SESSION_ACCOUNT), payload)
+            .unwrap();
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(60),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        let raw = keyring
+            .get(&SessionManager::key("v", IDENTITY_ACCOUNT))
+            .unwrap();
+        let stored: StoredIdentity = serde_json::from_slice(&raw).unwrap();
+        assert!(
+            matches!(stored.saved_at, Timestamp::Text(ref value) if value == "1969-12-31T23:59:59Z")
+        );
+    }
+    struct FailRefreshKeyring {
+        inner: MemoryKeyring,
+        fail: std::sync::atomic::AtomicBool,
+    }
+    impl Keyring for FailRefreshKeyring {
+        fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
+            self.inner.get(key)
+        }
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) && key.ends_with("|session") {
+                return Err(SessionError::Keyring("refresh refused".into()));
+            }
+            self.inner.set(key, value)
+        }
+        fn delete(&self, key: &str) -> Result<(), SessionError> {
+            self.inner.delete(key)
+        }
+    }
+    #[test]
+    fn passphrase_survives_refresh_write_error() {
+        let keyring = Arc::new(FailRefreshKeyring {
+            inner: MemoryKeyring::new(),
+            fail: std::sync::atomic::AtomicBool::new(false),
+        });
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock.clone());
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(10),
+                Duration::from_secs(100),
+            )
+            .unwrap();
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let before = keyring.get(&key).unwrap();
+        *clock.0.lock().unwrap() = UNIX_EPOCH + Duration::from_secs(101);
+        keyring
+            .fail
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(manager.load_passphrase("v").unwrap(), b"secret");
+        assert_eq!(
+            keyring.get(&key).unwrap(),
+            before,
+            "failed refresh must not change cache"
+        );
+    }
+    #[test]
     fn revoke_is_idempotent() {
         let m = SessionManager::with_system_clock(Arc::new(MemoryKeyring::new()));
         m.revoke("missing").unwrap();
@@ -639,6 +869,21 @@ mod tests {
         let Timestamp::Text(text) =
             timestamp(UNIX_EPOCH + Duration::from_secs(1_735_689_600)).unwrap();
         assert_eq!(parse_timestamp(&text), Some(1_735_689_600_000_000_000));
+        assert_eq!(parse_timestamp("0001-01-01T00:00:00Z"), Some(GO_ZERO_NANOS));
+        assert_eq!(
+            parse_timestamp("0001-01-01T01:00:00+01:00"),
+            Some(GO_ZERO_NANOS)
+        );
+        assert_eq!(
+            parse_timestamp("1969-12-31T23:59:59Z"),
+            Some(-1_000_000_000)
+        );
+        assert_eq!(
+            parse_timestamp("1970-01-01T00:00:00.1234567891Z"),
+            Some(123_456_789)
+        );
+        assert_eq!(parse_timestamp("1970-01-01T00:00:00,000Z"), Some(0));
+        assert_eq!(parse_timestamp("2026-09-23T12:00:00++1:00"), None);
     }
     #[test]
     fn identity_round_trip_and_max_lifetime() {
