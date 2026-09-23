@@ -389,6 +389,7 @@ enum Command {
         trace: Option<PathBuf>,
     },
     /// Start the MCP server for agent access.
+    #[command(alias = "serve")]
     Mcp {
         #[command(subcommand)]
         action: Option<McpAction>,
