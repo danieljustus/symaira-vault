@@ -60,7 +60,7 @@ pub enum IntakeError {
     #[error("source is not a stable regular file: {0}")]
     InvalidSource(String),
     #[error("source exceeds limit")]
-    Limit,
+    Limit { size: Option<u64> },
     #[error("staged copy verification failed")]
     Verification,
     #[error("I/O failed: {0}")]
@@ -255,7 +255,9 @@ impl Spool {
             return Err(IntakeError::InvalidSource(path.display().to_string()));
         }
         if m.len() > limit {
-            return Err(IntakeError::Limit);
+            return Err(IntakeError::Limit {
+                size: Some(m.len()),
+            });
         }
         // The shared reader refuses links and non-regular files without blocking
         // if a concurrent writer replaces the preflight path with a FIFO.
@@ -277,7 +279,7 @@ impl Spool {
             .take(limit.saturating_add(1))
             .read_to_end(&mut data)?;
         if data.len() as u64 > limit {
-            return Err(IntakeError::Limit);
+            return Err(IntakeError::Limit { size: None });
         }
         let after = fs::symlink_metadata(path)?;
         if data.len() as u64 != m.len()
@@ -368,14 +370,28 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
                 spool_path: Some(spool_path),
             }
         }
-        Err(IntakeError::Limit) => FileResult {
-            file: path.to_string_lossy().into(),
-            status: "skipped".into(),
-            reason: Some("source exceeds limit".into()),
-            provenance: None,
-            suggestions: Vec::new(),
-            spool_path: None,
-        },
+        Err(IntakeError::Limit { size }) => {
+            let reason = match size {
+                Some(size) => format!(
+                    "reject {:?}: {size} bytes exceeds the {} byte per-file limit",
+                    path.display().to_string(),
+                    opts.max_file_size
+                ),
+                None => format!(
+                    "reject {:?}: file exceeds the {} byte per-file limit",
+                    path.display().to_string(),
+                    opts.max_file_size
+                ),
+            };
+            FileResult {
+                file: path.to_string_lossy().into(),
+                status: "skipped".into(),
+                reason: Some(reason),
+                provenance: None,
+                suggestions: Vec::new(),
+                spool_path: None,
+            }
+        }
         Err(e) => FileResult {
             file: path.to_string_lossy().into(),
             status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {

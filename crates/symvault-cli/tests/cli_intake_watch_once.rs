@@ -223,6 +223,21 @@ fn stable_candidate_matches_go_and_persists_quarantine_attachment() {
     assert_eq!(rust.stderr, go.stderr);
     let go_entry = quarantine_entry_path(&go_binary, &go_home, &go_tmp, &go_vault, true);
     let rust_entry = quarantine_entry_path(rust_binary, &rust_home, &rust_tmp, &rust_vault, false);
+
+    let go_repeat = run(&go_binary, &go_home, &go_tmp, &go_vault, &go_args);
+    let rust_repeat = run(rust_binary, &rust_home, &rust_tmp, &rust_vault, &rust_args);
+    assert_same(&go_repeat, &rust_repeat);
+    assert_eq!(go_repeat.status.code(), Some(0));
+    assert_eq!(
+        quarantine_entry_path(&go_binary, &go_home, &go_tmp, &go_vault, true),
+        go_entry,
+        "Go hash dedupe must leave one entry after a repeated scan"
+    );
+    assert_eq!(
+        quarantine_entry_path(rust_binary, &rust_home, &rust_tmp, &rust_vault, false),
+        rust_entry,
+        "Rust hash dedupe must leave one entry after a repeated scan"
+    );
     assert_eq!(fs::read(go_candidate).unwrap(), b"password: fixture");
     assert_eq!(fs::read(rust_candidate).unwrap(), b"password: fixture");
 
@@ -248,4 +263,84 @@ fn stable_candidate_matches_go_and_persists_quarantine_attachment() {
         assert_eq!(value["Fields"]["password"], "fixture");
         assert_eq!(value["Fields"]["attachment"], "cGFzc3dvcmQ6IGZpeHR1cmU=");
     }
+}
+
+#[test]
+fn oversized_source_matches_go_skip_and_remains_unchanged() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
+    let temp = TempDir::new().expect("temporary test root");
+    let go_home = temp.path().join("go-home");
+    let rust_home = temp.path().join("rust-home");
+    let go_tmp = temp.path().join("go-tmp");
+    let rust_tmp = temp.path().join("rust-tmp");
+    let go_folder = temp.path().join("go-intake");
+    let rust_folder = temp.path().join("rust-intake");
+    for dir in [
+        &go_home,
+        &rust_home,
+        &go_tmp,
+        &rust_tmp,
+        &go_folder,
+        &rust_folder,
+    ] {
+        fs::create_dir_all(dir).expect("create throwaway directory");
+    }
+    let contents = vec![b'x'; 1024 * 1024 + 1];
+    let go_source = go_folder.join("too-large.txt");
+    let rust_source = rust_folder.join("too-large.txt");
+    fs::write(&go_source, &contents).expect("write oversized Go source");
+    fs::write(&rust_source, &contents).expect("write oversized Rust source");
+
+    let go_args = [
+        "intake",
+        "watch",
+        go_folder.to_str().unwrap(),
+        "--once",
+        "--debounce",
+        "1ns",
+        "--json",
+    ];
+    let rust_args = [
+        "intake",
+        "watch",
+        rust_folder.to_str().unwrap(),
+        "--once",
+        "--debounce",
+        "1ns",
+        "--json",
+    ];
+    let unused_vault = temp.path().join("unused-vault");
+    let go = run(&go_binary, &go_home, &go_tmp, &unused_vault, &go_args);
+    let rust = run(
+        rust_binary,
+        &rust_home,
+        &rust_tmp,
+        &unused_vault,
+        &rust_args,
+    );
+    assert_eq!(rust.status.code(), go.status.code());
+    assert_eq!(rust.status.code(), Some(0));
+    assert_eq!(rust.stderr, go.stderr);
+    let normalize = |output: &Output, source: &Path| {
+        let mut summary: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let skipped = summary["skipped"][0].as_str().unwrap();
+        summary["skipped"][0] = skipped.replace(source.to_str().unwrap(), "<source>").into();
+        summary
+    };
+    let go_summary = normalize(&go, &go_source);
+    let rust_summary = normalize(&rust, &rust_source);
+    assert_eq!(rust_summary, go_summary);
+    assert_eq!(go_summary["scanned"], 1);
+    assert_eq!(go_summary["staged"], serde_json::Value::Null);
+    assert_eq!(
+        go_summary["skipped"][0],
+        "too-large.txt: reject \"<source>\": 1048577 bytes exceeds the 1048576 byte per-file limit"
+    );
+    assert_eq!(fs::read(go_source).unwrap(), contents);
+    assert_eq!(fs::read(rust_source).unwrap(), contents);
 }
