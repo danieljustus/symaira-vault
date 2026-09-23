@@ -1289,7 +1289,7 @@ mod tests {
         );
         assert!(response.contains("Content-Type: text/plain; charset=utf-8\r\n"));
         assert!(response.contains("X-Content-Type-Options: nosniff\r\n"));
-        assert!(response.contains("Content-Length: 12\r\n"));
+        assert!(response.contains("Content-Length: 13\r\n"));
         assert!(!response.contains("Connection:"), "{response}");
         assert_eq!(raw_body(&response), "unauthorized\n");
 
@@ -1305,7 +1305,7 @@ mod tests {
                 response.contains("Connection: keep-alive\r\n"),
                 "{response}"
             );
-            assert!(response.contains("Content-Length: 12\r\n"));
+            assert!(response.contains("Content-Length: 13\r\n"));
             assert_eq!(raw_body(&response), "unauthorized\n");
         }
     }
