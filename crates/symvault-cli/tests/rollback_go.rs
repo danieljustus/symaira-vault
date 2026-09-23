@@ -46,6 +46,16 @@ fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
 }
 
 fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str]) -> std::process::Output {
+    run_with_passphrase(binary, vault, home, args, "rollback-fixture-passphrase")
+}
+
+fn run_with_passphrase(
+    binary: &Path,
+    vault: &Path,
+    home: &Path,
+    args: &[&str],
+    passphrase: &str,
+) -> std::process::Output {
     Command::new(binary)
         .args(["--vault", vault.to_str().expect("UTF-8 vault path")])
         .args(args)
@@ -54,7 +64,7 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str]) -> std::process:
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env("XDG_DATA_HOME", home.join("data"))
         .env("XDG_CACHE_HOME", home.join("cache"))
-        .env("SYMVAULT_PASSPHRASE", "rollback-fixture-passphrase")
+        .env("SYMVAULT_PASSPHRASE", passphrase)
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
         .env("CI", "1")
         .output()
@@ -82,6 +92,28 @@ fn go_mutates_copied_rust_vault_without_touching_source() {
         snapshot(&copy),
         original_tree,
         "copied vault differs from source"
+    );
+
+    let wrong_passphrase = run_with_passphrase(
+        go,
+        &copy,
+        &home,
+        &["get", "rollback/check.password", "--print"],
+        "wrong-rollback-fixture-passphrase",
+    );
+    assert!(
+        !wrong_passphrase.status.success(),
+        "Go should reject the wrong passphrase"
+    );
+    assert_eq!(
+        snapshot(&copy),
+        original_tree,
+        "failed Go unlock changed copied Rust vault"
+    );
+    assert_eq!(
+        snapshot(&source),
+        original_tree,
+        "failed Go unlock changed source Rust vault"
     );
 
     let corrupt_archive = temp.path().join("corrupt-backup.tar.gz");
