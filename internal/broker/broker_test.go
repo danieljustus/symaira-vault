@@ -858,6 +858,59 @@ allow_private: true
 	}
 }
 
+func TestProxy_EndpointAllowlistRejectsEscapedPathTraversalBeforeCredentials(t *testing.T) {
+	const token = "endpoint-traversal-token"
+	credentialedRequests := make(chan string, 4)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer "+token {
+			credentialedRequests <- r.URL.RequestURI()
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allowed_endpoints:
+  - /v1/*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	client := newProxyClient(proxyURL)
+	for _, endpoint := range []string{
+		"/v1/../admin",
+		"/v1/%2e%2e/admin",
+		"/v1%2f..%2fadmin",
+		"/v1%5c..%5cadmin",
+	} {
+		resp, err := client.Get(upstream.URL + endpoint)
+		if err != nil {
+			t.Fatalf("GET %s through proxy: %v", endpoint, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("GET %s status = %d, want 403", endpoint, resp.StatusCode)
+		}
+	}
+
+	select {
+	case path := <-credentialedRequests:
+		t.Fatalf("credential reached escaped path %q", path)
+	default:
+	}
+}
+
 func TestProxy_AllowedMethodEnforced(t *testing.T) {
 	const token = "method-token"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
