@@ -434,11 +434,14 @@ pub struct Watcher {
     seen: BTreeMap<String, String>,
 }
 impl Watcher {
-    pub fn new(dir: impl AsRef<Path>, options: Options) -> Result<Self, IntakeError> {
+    pub fn new(dir: impl AsRef<Path>, mut options: Options) -> Result<Self, IntakeError> {
         if !dir.as_ref().is_dir() {
             return Err(IntakeError::InvalidSource(
                 dir.as_ref().display().to_string(),
             ));
+        }
+        if options.debounce.is_zero() {
+            options.debounce = Duration::from_secs(5);
         }
         Ok(Self {
             dir: dir.as_ref().into(),
