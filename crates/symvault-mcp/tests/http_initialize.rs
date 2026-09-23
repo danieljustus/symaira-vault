@@ -1,10 +1,13 @@
 use serde::Deserialize;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
-use symvault_mcp::ProtocolHandler;
 use symvault_mcp::http::{HttpRequest, HttpResponse, handle_request};
+use symvault_mcp::{ProtocolHandler, ToolCallResult, ToolCallRuntime};
 
 #[derive(Deserialize)]
 struct Fixture {
@@ -37,6 +40,12 @@ struct Request {
     accept: String,
     protocol_version: String,
     agent: String,
+    #[serde(default)]
+    token_name: String,
+    #[serde(default)]
+    token_agent: String,
+    #[serde(default)]
+    allowed_tools: Vec<String>,
     body: String,
 }
 
@@ -72,18 +81,21 @@ fn go_authenticated_http_session_matches_rust_adapter() {
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
     let addr = listener.local_addr().expect("loopback address");
-    let count = fixture
+    let scopes = fixture
         .cases
         .iter()
         .filter(|case| case.go_authenticated)
-        .count();
+        .map(|case| case.request.allowed_tools.clone())
+        .collect::<Vec<_>>();
     let server_name = fixture.server_name.clone();
     let server_version = fixture.server_version.clone();
     let server = thread::spawn(move || {
-        let mut handler = ProtocolHandler::new(server_name, server_version);
-        for _ in 0..count {
+        let runtime = FixtureRuntime;
+        let mut handler =
+            ProtocolHandler::with_tool_call_runtime(server_name, server_version, Arc::new(runtime));
+        for allowed_tools in scopes {
             let (stream, _) = listener.accept().expect("accept loopback request");
-            serve_one(stream, &mut handler);
+            serve_one(stream, &mut handler, &allowed_tools);
         }
     });
 
@@ -127,7 +139,90 @@ fn go_authenticated_http_session_matches_rust_adapter() {
     server.join().expect("Rust loopback adapter thread");
 }
 
-fn serve_one(stream: TcpStream, handler: &mut ProtocolHandler) {
+#[test]
+fn go_fixture_captures_token_agent_mismatch_rejection() {
+    let fixture = fixture();
+    let case = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "token_agent_mismatch_rejected")
+        .expect("Go token-agent mismatch case");
+    assert!(!case.go_authenticated);
+    assert_eq!(case.request.agent, "other");
+    assert_eq!(case.request.token_agent, "default");
+    assert_eq!(case.request.token_name, "health");
+    assert_eq!(case.response.status, 403);
+    assert_eq!(
+        case.response.body,
+        "forbidden: token agent does not match X-Symaira-Agent header\n"
+    );
+    assert_eq!(
+        case.response
+            .headers
+            .get("Content-Type")
+            .map(String::as_str),
+        Some("text/plain; charset=utf-8")
+    );
+}
+
+#[test]
+fn rust_loopback_rejects_go_fixture_token_agent_mismatch() {
+    const BEARER: &str = "http001-agent-bound-token";
+    let temp = tempfile::tempdir().expect("temporary token registry");
+    let hash = symvault_store::sha256_hex(BEARER.as_bytes());
+    let registry = temp.path().join("mcp-tokens.json");
+    let registry_json = format!(
+        r#"{{"version":2,"tokens":{{"tok-agent":{{"id":"tok-agent","hash":"{hash}","prefix":"http","allowed_tools":["health"],"agent_name":"default","created_at":"2026-01-01T00:00:00Z"}}}}}}"#
+    );
+    std::fs::write(&registry, registry_json).expect("write registry");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+    let address = listener.local_addr().expect("listener address");
+    let registry_path: PathBuf = registry;
+    thread::spawn(move || {
+        symvault_mcp::http::serve_loopback(listener, registry_path, |_| {
+            Err("handler must not be selected for an agent-mismatched token".into())
+        })
+        .expect("serve loopback request");
+    });
+
+    let mut stream = TcpStream::connect(address).expect("connect loopback server");
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: other\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    )
+    .expect("write mismatched-agent request");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read response");
+    assert!(
+        response.starts_with("HTTP/1.1 403 Forbidden\r\n"),
+        "{response}"
+    );
+    assert!(response.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+    assert!(
+        response
+            .ends_with("\r\n\r\nforbidden: token agent does not match X-Symaira-Agent header\n")
+    );
+}
+
+struct FixtureRuntime;
+
+impl ToolCallRuntime for FixtureRuntime {
+    fn authorize(&self, _name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+        Ok(())
+    }
+
+    fn call(&self, name: &str, _arguments: &Value) -> Result<ToolCallResult, String> {
+        match name {
+            "health" => Ok(ToolCallResult::text(
+                r#"{"server":"Symaira Vault MCP","status":"healthy","transport":"","version":"1.0.0"}"#,
+            )),
+            _ => Err(format!("unexpected fixture tool {name}")),
+        }
+    }
+}
+
+fn serve_one(stream: TcpStream, handler: &mut ProtocolHandler, allowed_tools: &[String]) {
+    handler.set_token_scope(allowed_tools);
     let mut reader = BufReader::new(stream.try_clone().expect("clone request stream"));
     let mut line = String::new();
     reader.read_line(&mut line).expect("read request line");

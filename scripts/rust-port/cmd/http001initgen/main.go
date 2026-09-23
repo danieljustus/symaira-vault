@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -61,15 +62,18 @@ type oracle struct {
 }
 
 type request struct {
-	Method          string `json:"method"`
-	Path            string `json:"path"`
-	Origin          string `json:"origin,omitempty"`
-	ContentType     string `json:"content_type"`
-	Accept          string `json:"accept"`
-	ProtocolVersion string `json:"protocol_version"`
-	Agent           string `json:"agent"`
-	Authenticated   bool   `json:"authenticated"`
-	Body            string `json:"body"`
+	Method          string   `json:"method"`
+	Path            string   `json:"path"`
+	Origin          string   `json:"origin,omitempty"`
+	ContentType     string   `json:"content_type"`
+	Accept          string   `json:"accept"`
+	ProtocolVersion string   `json:"protocol_version"`
+	Agent           string   `json:"agent"`
+	TokenName       string   `json:"token_name,omitempty"`
+	TokenAgent      string   `json:"token_agent,omitempty"`
+	AllowedTools    []string `json:"allowed_tools,omitempty"`
+	Authenticated   bool     `json:"authenticated"`
+	Body            string   `json:"body"`
 }
 
 type response struct {
@@ -95,6 +99,21 @@ func main() {
 	defer func() { _ = os.RemoveAll(vaultDir) }()
 	const token = "http001-fixture-token"
 	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
+	registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
+	check(registry.Load())
+	tokens := map[string]string{}
+	for _, scoped := range []struct {
+		name  string
+		agent string
+		tools []string
+	}{
+		{name: "health", agent: "default", tools: []string{"health"}},
+		{name: "limited", agent: "default", tools: []string{"list_entries"}},
+	} {
+		_, raw, createErr := registry.Create(scoped.name, scoped.tools, scoped.agent, time.Hour)
+		check(createErr)
+		tokens[scoped.name] = raw
+	}
 	cfg := config.Default()
 	cfg.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	vault := &vaultpkg.Vault{Dir: vaultDir, Config: cfg}
@@ -143,9 +162,24 @@ func main() {
 			GoAuthenticated: false,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Body: `{"jsonrpc":"2.0","id":4,"method":"initialize"}`},
 		},
+		{
+			Name:            "authenticated_allowed_health_tool",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+		},
+		{
+			Name:            "token_agent_mismatch_rejected",
+			GoAuthenticated: false,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "other", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+		},
+		{
+			Name:            "authenticated_tool_scope_denied",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "limited", TokenAgent: "default", AllowedTools: []string{"list_entries"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"get_entry","arguments":{"path":"fixture"}}}`},
+		},
 	}
 	for i := range requests {
-		requests[i].Response = doRequest(client, listener.Addr().String(), token, requests[i].Request)
+		requests[i].Response = doRequest(client, listener.Addr().String(), token, tokens, requests[i].Request)
 	}
 
 	out := fixture{
@@ -169,14 +203,18 @@ func main() {
 	check(os.WriteFile(*outputPath, encoded, 0o644))
 }
 
-func doRequest(client *http.Client, addr, token string, req request) response {
+func doRequest(client *http.Client, addr, token string, scopedTokens map[string]string, req request) response {
 	httpReq, err := http.NewRequest(req.Method, "http://"+addr+req.Path, strings.NewReader(req.Body))
 	check(err)
 	httpReq.Header.Set("Content-Type", req.ContentType)
 	httpReq.Header.Set("Accept", req.Accept)
 	httpReq.Header.Set("MCP-Protocol-Version", req.ProtocolVersion)
 	if req.Authenticated {
-		httpReq.Header.Set("Authorization", "Bearer "+token)
+		bearer := token
+		if req.TokenName != "" {
+			bearer = scopedTokens[req.TokenName]
+		}
+		httpReq.Header.Set("Authorization", "Bearer "+bearer)
 	}
 	if req.Origin != "" {
 		httpReq.Header.Set("Origin", req.Origin)
