@@ -1593,6 +1593,16 @@ fn run_cli() -> ExitCode {
                 }
                 Ok(())
             })();
+            if result
+                .as_ref()
+                .is_err_and(|error| error == "vault not initialized. Run 'symvault init' first")
+            {
+                print_error_like_go("vault not initialized. Run 'symvault init' first");
+                eprintln!(
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+                return ExitCode::from(3);
+            }
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
@@ -3666,12 +3676,6 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error == "field is required for --length, --digest, or --metadata" {
                 ExitCode::from(9)
-            } else if error == "vault not initialized. Run 'symvault init' first" {
-                let _ = writeln!(
-                    io::stderr(),
-                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
-                );
-                ExitCode::from(3)
             } else {
                 ExitCode::from(1)
             }
