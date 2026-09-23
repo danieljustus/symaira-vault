@@ -348,6 +348,13 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
           "$binary" version
 
+      - name: Run live Go/Rust approval CLI differential
+        shell: bash
+        run: |
+          binary=target/debug/symvault
+          if [ "$RUNNER_OS" = "Windows" ]; then binary="$binary.exe"; fi
+          GOTOOLCHAIN=go1.26.6 go run ./scripts/rust-port/cmd/approvallive --rust-binary "$binary"
+
       - name: Run pinned Go/Rust CLI differential
         shell: bash
         run: bash scripts/rust-port/check_config_cli.sh
