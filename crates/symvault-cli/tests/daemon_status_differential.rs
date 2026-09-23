@@ -32,8 +32,7 @@ fn mcp_and_serve_status_match_go_for_disposable_uninstalled_service() {
         return;
     };
     let go_binary = std::path::PathBuf::from(go_binary);
-    let rust_binary =
-        std::path::PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
     let home = tempfile::tempdir().expect("temporary home");
     let vault = home.path().join("vault");
     std::fs::create_dir(&vault).expect("create disposable vault");
@@ -41,7 +40,7 @@ fn mcp_and_serve_status_match_go_for_disposable_uninstalled_service() {
     for command in ["mcp", "serve"] {
         let args = ["--vault", vault.to_str().unwrap(), command, "status"];
         let go = run(&go_binary, &args, home.path(), &vault);
-        let rust = run(&rust_binary, &args, home.path(), &vault);
+        let rust = run(rust_binary, &args, home.path(), &vault);
 
         assert_eq!(go.status.code(), Some(0), "Go stderr: {:?}", go.stderr);
         assert_eq!(
