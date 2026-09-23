@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, fs, time::UNIX_EPOCH};
 use serde::Deserialize;
 use symvault_store::audit::{
     AuditKey, ExportOptions, KeyStore, Logger, RotationConfig, canonical_json, compute_hmac,
-    export_directory, key_fingerprint, load_or_create_key_with_keyring, redact_path,
+    export_directory, key_fingerprint, load_or_create_key_with_keyring,
+    load_or_create_key_with_local_fallback, redact_path, rotate_key_with_local_fallback,
     verify_entries, verify_jsonl,
 };
 
@@ -412,6 +413,7 @@ fn log_rotation_enforces_max_age_retention() {
 }
 
 #[test]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
 fn production_keyring_address_migrates_legacy_key_and_reopens_chain() {
     use symvault_core::session::{Keyring, MemoryKeyring};
     use symvault_store::audit::{LogEntry, open_with_keyring};
@@ -484,4 +486,116 @@ fn keyring_loader_roundtrips_without_creating_an_audit_log() {
     let second = load_or_create_key_with_keyring(root.path(), &keyring).unwrap();
     assert_eq!(second.fingerprint(), first.fingerprint());
     assert!(!root.path().join("audit-fixture.log").exists());
+}
+
+#[test]
+fn encrypted_local_fallback_bootstraps_rotates_and_reopens_durably() {
+    let root = tempfile::tempdir().unwrap();
+    let key_path = root.path().join("audit-hmac-key");
+    let kek_path = root.path().join("audit-hmac-key.kek");
+
+    let (first, archive) = rotate_key_with_local_fallback(root.path()).unwrap();
+    assert!(archive.is_none());
+    assert_eq!(
+        load_or_create_key_with_local_fallback(root.path()).unwrap(),
+        first
+    );
+    let stored = fs::read(&key_path).unwrap();
+    assert!(stored.starts_with(b"sv-local-v1:"));
+    assert!(stored.len() > b"sv-local-v1:".len() + 32);
+    let kek = fs::read(&kek_path).unwrap();
+    assert_eq!(kek.len(), 32);
+
+    let (second, archive) = rotate_key_with_local_fallback(root.path()).unwrap();
+    let archive = archive.expect("second invocation rotates the persisted key");
+    assert_eq!(
+        archive.file_name().unwrap().to_string_lossy(),
+        format!("audit-hmac-key.rotated.{}", first.fingerprint())
+    );
+    assert!(fs::read(&archive).unwrap().starts_with(b"sv-local-v1:"));
+    assert_eq!(
+        load_or_create_key_with_local_fallback(root.path()).unwrap(),
+        second
+    );
+    assert_ne!(first, second);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for path in [&key_path, &kek_path, &archive] {
+            assert_eq!(
+                fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+        }
+    }
+    assert!(fs::read_dir(root.path()).unwrap().all(|entry| {
+        !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".tmp.")
+    }));
+}
+
+#[test]
+fn encrypted_local_fallback_fails_closed_on_corrupt_key_or_kek() {
+    let root = tempfile::tempdir().unwrap();
+    let key_path = root.path().join("audit-hmac-key");
+    rotate_key_with_local_fallback(root.path()).unwrap();
+    let mut stored = fs::read(&key_path).unwrap();
+    *stored.last_mut().unwrap() ^= 1;
+    fs::write(&key_path, stored).unwrap();
+    assert!(load_or_create_key_with_local_fallback(root.path()).is_err());
+
+    let root = tempfile::tempdir().unwrap();
+    rotate_key_with_local_fallback(root.path()).unwrap();
+    fs::write(root.path().join("audit-hmac-key.kek"), b"short").unwrap();
+    assert!(load_or_create_key_with_local_fallback(root.path()).is_err());
+}
+
+#[test]
+fn go_local_fallback_ciphertext_fixture_decrypts_in_rust() {
+    #[derive(Deserialize)]
+    struct LocalFixture {
+        marker: String,
+        kek_hex: String,
+        key_hex: String,
+        ciphertext_hex: String,
+    }
+    const LOCAL_FIXTURE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/port/audit/local-fallback.json"
+    );
+    let vector: LocalFixture = serde_json::from_slice(&fs::read(LOCAL_FIXTURE).unwrap()).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let kek = hex_bytes(&vector.kek_hex);
+    fs::write(root.path().join("audit-hmac-key.kek"), &kek).unwrap();
+    let mut stored = vector.marker.into_bytes();
+    stored.extend_from_slice(&hex_bytes(&vector.ciphertext_hex));
+    fs::write(root.path().join("audit-hmac-key"), stored).unwrap();
+    let key = load_or_create_key_with_local_fallback(root.path()).unwrap();
+    let expected = AuditKey::new(hex_bytes(&vector.key_hex)).unwrap();
+    assert_eq!(key, expected);
+}
+
+#[test]
+fn encrypted_local_fallback_migrates_legacy_plaintext_before_archiving() {
+    let root = tempfile::tempdir().unwrap();
+    let current = root.path().join("audit-hmac-key");
+    let legacy = [0x42; 32];
+    fs::write(&current, legacy).unwrap();
+
+    let loaded = load_or_create_key_with_local_fallback(root.path()).unwrap();
+    assert_eq!(loaded, AuditKey::new(legacy).unwrap());
+    assert!(fs::read(&current).unwrap().starts_with(b"sv-local-v1:"));
+
+    let (_, archive) = rotate_key_with_local_fallback(root.path()).unwrap();
+    let archive = archive.unwrap();
+    assert!(fs::read(&archive).unwrap().starts_with(b"sv-local-v1:"));
+    fs::copy(&archive, &current).unwrap();
+    assert_eq!(
+        load_or_create_key_with_local_fallback(root.path()).unwrap(),
+        AuditKey::new(legacy).unwrap()
+    );
 }

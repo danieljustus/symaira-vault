@@ -20,6 +20,8 @@ use zeroize::Zeroize;
 
 const HMAC_KEY_BYTES: usize = 32;
 const KEY_FILE: &str = "audit-hmac-key";
+const LOCAL_KEY_MARKER: &[u8] = b"sv-local-v1:";
+const LOCAL_KEK_SUFFIX: &str = ".kek";
 const LOG_PREFIX: &str = "audit-";
 const LOG_SUFFIX: &str = ".log";
 const ROTATED_MARKER: &str = ".rotated.";
@@ -335,7 +337,7 @@ pub fn open_with_keyring(
             "invalid audit agent name",
         ));
     }
-    let key = load_or_create_key_with_keyring(directory, keyring)?;
+    let key = load_or_create_key_for_platform(directory, keyring)?;
     Logger::open(
         directory.join(format!("{LOG_PREFIX}{agent}{LOG_SUFFIX}")),
         key,
@@ -387,6 +389,52 @@ pub fn load_or_create_key_with_keyring(
         saved.map_err(|_| io::Error::other("could not store audit key"))?;
     }
     Ok(key)
+}
+
+/// Loads the audit key using the platform's durable fallback when the target
+/// has no supported OS audit keyring. FreeBSD and other BSD targets follow
+/// Go's encrypted local file contract; supported targets keep native keyring.
+pub fn load_or_create_key_for_platform(
+    directory: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+) -> io::Result<AuditKey> {
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
+    {
+        let _ = keyring;
+        return load_or_create_key_with_local_fallback(directory);
+    }
+    #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
+    {
+        load_or_create_key_with_keyring(directory, keyring)
+    }
+}
+
+/// Loads or creates the HMAC key in Go's FreeBSD fallback format. Key bytes
+/// are encrypted with a separate random 32-byte local KEK; neither the live
+/// key nor archives are persisted as plaintext.
+pub fn load_or_create_key_with_local_fallback(directory: &Path) -> io::Result<AuditKey> {
+    ensure_audit_directory(directory)?;
+    let path = directory.join(KEY_FILE);
+    match fs::read(&path) {
+        Ok(stored) => {
+            set_private_mode_path(&path)?;
+            let key = decode_local_key_file(directory, &stored)?;
+            let audit_key = AuditKey::new(&*key)?;
+            if !stored.starts_with(LOCAL_KEY_MARKER) {
+                // Migrate legacy plaintext in place only after its length is
+                // validated and the encrypted replacement was written.
+                write_local_key_file(directory, &path, &key)?;
+            }
+            Ok(audit_key)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
+            getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
+            write_local_key_file(directory, &path, &bytes)?;
+            AuditKey::new(&*bytes)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 /// Builds the shared session-keyring address for the audit HMAC key.
@@ -516,6 +564,196 @@ pub fn rotate_key_with_keyring(
     let new_key = AuditKey::new(new_bytes)?;
     new_bytes.zeroize();
     Ok((new_key, archive_path))
+}
+
+/// Rotates the audit key using the Go-compatible durable local fallback.
+/// Existing encrypted key files are renamed unchanged to the archive path.
+pub fn rotate_key_with_local_fallback(directory: &Path) -> io::Result<(AuditKey, Option<PathBuf>)> {
+    ensure_audit_directory(directory)?;
+    let current = directory.join(KEY_FILE);
+    let old_key = match fs::read(&current) {
+        Ok(stored) => {
+            set_private_mode_path(&current)?;
+            let bytes = decode_local_key_file(directory, &stored)?;
+            let _old_key = AuditKey::new(&*bytes)?;
+            if !stored.starts_with(LOCAL_KEY_MARKER) {
+                // Encrypt legacy plaintext before it can become an archive.
+                write_local_key_file(directory, &current, &bytes)?;
+            }
+            Some(bytes)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let archive = old_key.as_ref().map(|bytes| {
+        directory.join(format!(
+            "{KEY_FILE}{ROTATED_MARKER}{}",
+            key_fingerprint(bytes)
+        ))
+    });
+
+    if let Some(path) = &archive {
+        fs::rename(&current, path)
+            .map_err(|error| io::Error::other(format!("archive old HMAC key: {error}")))?;
+    }
+
+    let mut new_bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
+    if let Err(error) = getrandom::fill(&mut new_bytes) {
+        if let Some(path) = &archive {
+            let _ = fs::rename(path, &current);
+        }
+        return Err(io::Error::other(error.to_string()));
+    }
+    if let Err(error) = write_local_key_file(directory, &current, &new_bytes) {
+        if let Some(path) = &archive {
+            let _ = fs::rename(path, &current);
+        }
+        return Err(error);
+    }
+    Ok((AuditKey::new(&*new_bytes)?, archive))
+}
+
+fn ensure_audit_directory(directory: &Path) -> io::Result<()> {
+    fs::create_dir_all(directory)
+}
+
+fn local_kek_path(directory: &Path) -> PathBuf {
+    directory.join(format!("{KEY_FILE}{LOCAL_KEK_SUFFIX}"))
+}
+
+fn get_or_create_local_kek(directory: &Path) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    let path = local_kek_path(directory);
+    match fs::read(&path) {
+        Ok(bytes) if bytes.len() == HMAC_KEY_BYTES => {
+            set_private_mode_path(&path)?;
+            Ok(zeroize::Zeroizing::new(bytes))
+        }
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid local audit key-encryption key size",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
+            getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
+            match write_private_atomic(&path, &bytes, false) {
+                Ok(()) => Ok(bytes),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    let bytes = fs::read(&path)?;
+                    if bytes.len() != HMAC_KEY_BYTES {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "invalid local audit key-encryption key size",
+                        ));
+                    }
+                    set_private_mode_path(&path)?;
+                    Ok(zeroize::Zeroizing::new(bytes))
+                }
+                Err(error) => Err(error),
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn decode_local_key_file(
+    directory: &Path,
+    stored: &[u8],
+) -> io::Result<zeroize::Zeroizing<Vec<u8>>> {
+    if let Some(ciphertext) = stored.strip_prefix(LOCAL_KEY_MARKER) {
+        let kek = get_or_create_local_kek(directory)?;
+        let bytes = symvault_crypto::decrypt_with_key(ciphertext, &kek).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidData, "cannot decrypt local audit key")
+        })?;
+        return Ok(zeroize::Zeroizing::new(bytes));
+    }
+    if stored.starts_with(b"age-encryption.org/") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "encrypted audit key requires an age identity",
+        ));
+    }
+    Ok(zeroize::Zeroizing::new(stored.to_vec()))
+}
+
+fn write_local_key_file(directory: &Path, path: &Path, key: &[u8]) -> io::Result<()> {
+    let kek = get_or_create_local_kek(directory)?;
+    let ciphertext = symvault_crypto::encrypt_with_key(key, &kek)
+        .map_err(|_| io::Error::other("cannot encrypt local audit key"))?;
+    let mut marked = zeroize::Zeroizing::new(Vec::with_capacity(
+        LOCAL_KEY_MARKER.len() + ciphertext.len(),
+    ));
+    marked.extend_from_slice(LOCAL_KEY_MARKER);
+    marked.extend_from_slice(&ciphertext);
+    write_private_atomic(path, &marked, true)
+}
+
+fn write_private_atomic(path: &Path, bytes: &[u8], replace: bool) -> io::Result<()> {
+    let mut random = [0; 8];
+    getrandom::fill(&mut random).map_err(|error| io::Error::other(error.to_string()))?;
+    let name = path.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "audit key path has no filename",
+        )
+    })?;
+    let mut temp_name = name.to_os_string();
+    temp_name.push(format!(".tmp.{}", hex_encode(&random)));
+    let temp = path.with_file_name(temp_name);
+    let result = (|| {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        set_private_mode(&file)?;
+        if replace {
+            fs::rename(&temp, path)?;
+        } else {
+            fs::hard_link(&temp, path)?;
+            fs::remove_file(&temp)?;
+        }
+        if let Some(parent) = path.parent() {
+            File::open(parent)?.sync_all()?;
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result
+}
+
+#[cfg(unix)]
+fn set_private_mode_path(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn set_private_mode_path(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
+/// Chooses the target's durable audit key storage. Targets without an OS audit
+/// keyring use Go's encrypted file fallback; others use the native keyring.
+pub fn rotate_key_for_platform(
+    directory: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+) -> io::Result<(AuditKey, Option<PathBuf>)> {
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
+    {
+        let _ = keyring;
+        return rotate_key_with_local_fallback(directory);
+    }
+    #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
+    {
+        rotate_key_with_keyring(directory, keyring)
+    }
 }
 
 /// Local key archive manager. Raw key files are private (`0600`) and are only

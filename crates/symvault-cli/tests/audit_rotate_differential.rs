@@ -85,19 +85,32 @@ fn assert_same_normalized(go: &Output, rust: &Output, case: &str) {
 }
 
 #[test]
-fn audit_rotate_key_bootstrap_matches_go_contract() {
+fn audit_rotate_key_lifecycle_matches_go_contract() {
     let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
     let go = PathBuf::from(go);
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
-    let home = TempDir::new("home");
-    let vault = home.0.join("vault");
-    fs::create_dir_all(&vault).expect("vault directory");
-    // The CLI's CI keyring is process-local. Repeated Go calls use a durable
-    // FreeBSD fallback, so only bootstrap is a valid subprocess comparison.
-    let res_go = run(&go, &vault, &home.0, &["audit", "rotate-key"]);
-    let res_rust = run(&rust, &vault, &home.0, &["audit", "rotate-key"]);
-    assert_same_normalized(&res_go, &res_rust, "audit rotate-key bootstrap");
+    let go_home = TempDir::new("go-home");
+    let go_vault = go_home.0.join("vault");
+    fs::create_dir_all(&go_vault).expect("Go vault directory");
+    let rust_home = TempDir::new("rust-home");
+    let rust_vault = rust_home.0.join("vault");
+    fs::create_dir_all(&rust_vault).expect("Rust vault directory");
+
+    // Run each implementation against its own vault. FreeBSD's fallback is
+    // durable, so sharing one directory would make Go rotate before Rust's
+    // first invocation and compare different lifecycle states.
+    let go_bootstrap = run(&go, &go_vault, &go_home.0, &["audit", "rotate-key"]);
+    let rust_bootstrap = run(&rust, &rust_vault, &rust_home.0, &["audit", "rotate-key"]);
+    assert_same_normalized(&go_bootstrap, &rust_bootstrap, "audit rotate-key bootstrap");
+
+    let go_rotate = run(&go, &go_vault, &go_home.0, &["audit", "rotate-key"]);
+    let rust_rotate = run(&rust, &rust_vault, &rust_home.0, &["audit", "rotate-key"]);
+    assert_same_normalized(
+        &go_rotate,
+        &rust_rotate,
+        "audit rotate-key persisted rotation",
+    );
 }

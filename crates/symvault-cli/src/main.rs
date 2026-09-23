@@ -2583,7 +2583,7 @@ fn run_audit_export(
                 .keyring
                 .as_deref()
                 .ok_or_else(|| "audit keyring unavailable".to_owned())?;
-            let key = symvault_store::audit::load_or_create_key_with_keyring(&vault, keyring)
+            let key = symvault_store::audit::load_or_create_key_for_platform(&vault, keyring)
                 .map_err(|error| format!("load HMAC key: {error}"))?;
             let kid = key.fingerprint();
             let keys = BTreeMap::from([(kid.clone(), key)]);
@@ -2677,7 +2677,7 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
             .as_deref()
             .ok_or_else(|| "audit keyring unavailable".to_owned())?;
         let (new_key, archive_path) =
-            symvault_store::audit::rotate_key_with_keyring(&vault, keyring)
+            symvault_store::audit::rotate_key_for_platform(&vault, keyring)
                 .map_err(|error| format!("rotate HMAC key: {error}"))?;
         let mut stderr = io::stderr().lock();
         writeln!(stderr, "New key: {} (first 4 bytes)", new_key.preview_hex())

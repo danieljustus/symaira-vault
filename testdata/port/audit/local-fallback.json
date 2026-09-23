@@ -1,0 +1,7 @@
+{
+  "source": "internal/crypto.EncryptWithKey / internal/audit/keystore_fallback.go",
+  "marker": "sv-local-v1:",
+  "kek_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "key_hex": "676f2d636f6d70617469626c652d61756469742d686d61632d6b65792d333221",
+  "ciphertext_hex": "000102030405060708090a0bee942563467ad521c3ea5d9ffd306f16ad19c6ca3919ccdacbfc4abc58f3941d572b8ab0a25209db694841830d33a72e"
+}

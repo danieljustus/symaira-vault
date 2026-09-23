@@ -3,6 +3,8 @@ package crypto
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -93,6 +95,45 @@ func TestEncryptDecryptWithKeyEmpty(t *testing.T) {
 	_, err = DecryptWithKey([]byte{}, key)
 	if !errors.Is(err, ErrEmptyCiphertext) {
 		t.Fatalf("expected ErrEmptyCiphertext, got: %v", err)
+	}
+}
+
+func TestLocalAuditFallbackGoCompatibilityFixture(t *testing.T) {
+	type fixture struct {
+		Marker        string `json:"marker"`
+		KEKHex        string `json:"kek_hex"`
+		KeyHex        string `json:"key_hex"`
+		CiphertextHex string `json:"ciphertext_hex"`
+	}
+	data, err := os.ReadFile("../../testdata/port/audit/local-fallback.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vector fixture
+	if err := json.Unmarshal(data, &vector); err != nil {
+		t.Fatal(err)
+	}
+	kek, err := hex.DecodeString(vector.KEKHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := hex.DecodeString(vector.KeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, err := hex.DecodeString(vector.CiphertextHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(want) != Argon2idKeyLen || vector.Marker != "sv-local-v1:" {
+		t.Fatalf("fixture does not describe the local audit key format")
+	}
+	got, err := DecryptWithKey(ciphertext, kek)
+	if err != nil {
+		t.Fatalf("decrypt Go local-fallback fixture: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatal("fixture decrypt mismatch")
 	}
 }
 
