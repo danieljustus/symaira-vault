@@ -146,6 +146,36 @@ fn mapping_parser_matches_go_empty_segments_and_duplicate_keys() {
 }
 
 #[test]
+fn quarantine_prefix_uses_go_import_id_shape_and_rejects_prefix() {
+    let (prefix, import_id) =
+        import_commands::resolve_import_prefix("", true).expect("quarantine prefix");
+    let import_id = import_id.expect("quarantine import ID");
+    assert_eq!(prefix, format!("quarantine/{import_id}"));
+    assert_eq!(
+        symvault_sync::importer::apply_prefix(&prefix, "example"),
+        format!("quarantine/{import_id}/example")
+    );
+    let suffix = import_id.strip_prefix("import-").expect("import prefix");
+    let (date, random) = suffix.split_once('-').expect("date separator");
+    assert_eq!(date.len(), 8);
+    assert!(date.bytes().all(|byte| byte.is_ascii_digit()));
+    assert_eq!(random.len(), 8);
+    assert!(
+        random
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    );
+    assert_eq!(
+        import_commands::resolve_import_prefix("work", true).unwrap_err(),
+        "--quarantine and --prefix cannot be used together"
+    );
+    assert_eq!(
+        import_commands::resolve_import_prefix("work", false).unwrap(),
+        ("work".into(), None)
+    );
+}
+
+#[test]
 fn failed_overwrite_keeps_the_existing_entry() {
     let root = temporary_root();
     fs::create_dir_all(&root).expect("root");
