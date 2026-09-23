@@ -349,13 +349,18 @@ impl SessionManager {
         max: Duration,
     ) -> Result<(), SessionError> {
         let (_, t) = self.now()?;
-        let (saved_at, ttl, max) = match self.session_metadata(vault) {
-            Ok(Some(session)) => (session.saved_at, session.ttl_ns, session.max_lifetime_ns),
-            Ok(None) | Err(SessionError::NotFound) => {
-                (t.clone(), duration_ns(ttl), duration_ns(max))
+        let (mut saved_at, mut ttl, mut max) = (t.clone(), duration_ns(ttl), duration_ns(max));
+        if let Ok(Some(session)) = self.session_metadata(vault) {
+            if session.saved_at.nanos().is_ok() {
+                saved_at = session.saved_at;
             }
-            Err(_) => (t.clone(), duration_ns(ttl), duration_ns(max)),
-        };
+            if session.ttl_ns > 0 {
+                ttl = session.ttl_ns;
+            }
+            if session.max_lifetime_ns > 0 {
+                max = session.max_lifetime_ns;
+            }
+        }
         let (e, n) = self.encrypt(vault, identity)?;
         let s = StoredIdentity {
             saved_at,
@@ -396,13 +401,10 @@ impl SessionManager {
         let raw = self.keyring.get(&Self::key(vault, SESSION_ACCOUNT))?;
         let mut s: StoredSession =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
-        if s.passphrase
-            .as_deref()
-            .is_some_and(|value| !value.is_empty())
-        {
-            return Err(SessionError::LegacyPlaintext);
-        }
         let (now, t) = self.now()?;
+        if s.ttl_ns <= 0 {
+            return Err(SessionError::Expired("TTL is zero or negative"));
+        }
         if Self::expired(
             s.saved_at.nanos()?,
             s.last_access.nanos()?,
@@ -412,6 +414,12 @@ impl SessionManager {
         ) {
             let _ = self.revoke(vault);
             return Err(SessionError::Expired("idle or maximum lifetime"));
+        }
+        if s.passphrase
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+        {
+            return Err(SessionError::LegacyPlaintext);
         }
         let value = self.decrypt(
             vault,
@@ -423,10 +431,11 @@ impl SessionManager {
                 .ok_or(SessionError::Malformed("nonce missing".into()))?,
         )?;
         s.last_access = t;
-        self.keyring.set(
-            &Self::key(vault, SESSION_ACCOUNT),
-            &serde_json::to_vec(&s).map_err(|e| SessionError::Malformed(e.to_string()))?,
-        )?;
+        if let Ok(payload) = serde_json::to_vec(&s) {
+            let _ = self
+                .keyring
+                .set(&Self::key(vault, SESSION_ACCOUNT), &payload);
+        }
         Ok(value)
     }
     pub fn load_identity(&self, vault: &str, refresh: bool) -> Result<Vec<u8>, SessionError> {
@@ -628,6 +637,125 @@ mod tests {
             m.load_passphrase("v"),
             Err(SessionError::Expired(_))
         ));
+    }
+    #[test]
+    fn zero_and_elapsed_ttl_precede_legacy_and_match_eviction() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"1970-01-01T00:01:40Z","last_access":"1970-01-01T00:01:40Z","passphrase":"legacy","ttl_ns":0}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::Expired(_))
+        ));
+        assert_eq!(keyring.get(&key).unwrap(), payload);
+
+        let payload = br#"{"saved_at":"1970-01-01T00:01:00Z","last_access":"1970-01-01T00:01:00Z","passphrase":"legacy","ttl_ns":1}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(matches!(
+            manager.load_passphrase("v"),
+            Err(SessionError::Expired(_))
+        ));
+        assert!(matches!(keyring.get(&key), Err(SessionError::NotFound)));
+    }
+    #[test]
+    fn identity_ignores_nonpositive_session_metadata() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let payload = br#"{"saved_at":"0001-01-01T00:00:00Z","last_access":"0001-01-01T00:00:00Z","ttl_ns":0,"max_lifetime_ns":0}"#;
+        keyring
+            .set(&SessionManager::key("v", SESSION_ACCOUNT), payload)
+            .unwrap();
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(60),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        let raw = keyring
+            .get(&SessionManager::key("v", IDENTITY_ACCOUNT))
+            .unwrap();
+        let stored: StoredIdentity = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(stored.saved_at.nanos().unwrap(), 100_000_000_000);
+        assert_eq!(stored.ttl_ns, 60_000_000_000);
+        assert_eq!(stored.max_lifetime_ns, 120_000_000_000);
+    }
+    #[test]
+    fn unix_epoch_is_not_go_zero_time() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        let payload = br#"{"saved_at":"1970-01-01T00:00:00Z","last_access":"1970-01-01T00:00:00Z","ttl_ns":1,"max_lifetime_ns":1}"#;
+        keyring
+            .set(&SessionManager::key("v", SESSION_ACCOUNT), payload)
+            .unwrap();
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(60),
+                Duration::from_secs(120),
+            )
+            .unwrap();
+        let raw = keyring
+            .get(&SessionManager::key("v", IDENTITY_ACCOUNT))
+            .unwrap();
+        let stored: StoredIdentity = serde_json::from_slice(&raw).unwrap();
+        assert_eq!(stored.saved_at.nanos().unwrap(), 0);
+        assert_eq!(stored.ttl_ns, 1);
+        assert_eq!(stored.max_lifetime_ns, 1);
+    }
+    struct FailRefreshKeyring {
+        inner: MemoryKeyring,
+        fail: std::sync::atomic::AtomicBool,
+    }
+    impl Keyring for FailRefreshKeyring {
+        fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
+            self.inner.get(key)
+        }
+        fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) && key.ends_with("|session") {
+                return Err(SessionError::Keyring("refresh refused".into()));
+            }
+            self.inner.set(key, value)
+        }
+        fn delete(&self, key: &str) -> Result<(), SessionError> {
+            self.inner.delete(key)
+        }
+    }
+    #[test]
+    fn passphrase_survives_refresh_write_error() {
+        let keyring = Arc::new(FailRefreshKeyring {
+            inner: MemoryKeyring::new(),
+            fail: std::sync::atomic::AtomicBool::new(false),
+        });
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock.clone());
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(10),
+                Duration::from_secs(100),
+            )
+            .unwrap();
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let before = keyring.get(&key).unwrap();
+        *clock.0.lock().unwrap() = UNIX_EPOCH + Duration::from_secs(101);
+        keyring
+            .fail
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(manager.load_passphrase("v").unwrap(), b"secret");
+        assert_eq!(
+            keyring.get(&key).unwrap(),
+            before,
+            "failed refresh must not change cache"
+        );
     }
     #[test]
     fn revoke_is_idempotent() {
