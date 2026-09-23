@@ -118,7 +118,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 10)
+	cases := make([]sessionCase, 0, 12)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -179,6 +179,39 @@ func buildSessionFixture(meta oracle) sessionFixture {
 		item.NonMutating = backend.values[key] == input.raw
 		cases = append(cases, item)
 	}
+	const maxExpired = `{"saved_at":"2000-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"max_lifetime_ns":3600000000000,"encrypted_passphrase":"eA==","nonce":"AAAAAAAAAAAAAAAA"}`
+	maxBackend := &fakeKeyring{values: map[string]string{key: maxExpired}}
+	_, err = session.NewManager(maxBackend, nil).LoadPassphrase(v)
+	maxResult := resultCase("max_lifetime_expiry_evicts", []string{"load_passphrase"}, err)
+	if maxResult.ErrorClass != "expired" || len(maxBackend.values) != 0 {
+		panic("absolute lifetime did not expire and evict the Go session")
+	}
+	maxResult.Input = json.RawMessage(maxExpired)
+	maxResult.Expected = "expired_and_evicted"
+	cases = append(cases, maxResult)
+
+	clearBackend := &fakeKeyring{values: map[string]string{}}
+	clearManager := session.NewManager(clearBackend, nil)
+	if err := clearManager.SavePassphrase(v, []byte("fixture-secret"), time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.SaveIdentity(v, "fixture-identity", time.Hour); err != nil {
+		panic(err)
+	}
+	if len(clearBackend.values) != 3 {
+		panic("Go session did not save all three cache accounts")
+	}
+	if err := clearManager.ClearSession(v); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearSession(v); err != nil || len(clearBackend.values) != 0 {
+		panic("Go session clear was not complete and idempotent")
+	}
+	cases = append(cases, sessionCase{
+		Name:       "clear_all_accounts_twice",
+		Operations: []string{"save_passphrase", "save_identity", "clear_session", "clear_session"},
+		Expected:   "all_cleared",
+	})
 	cases = append(cases, identityMetadataCases()...)
 	_ = meta
 	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}

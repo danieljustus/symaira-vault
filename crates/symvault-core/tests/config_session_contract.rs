@@ -256,7 +256,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 10);
+    assert_eq!(fixture.cases.len(), 12);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -345,6 +345,64 @@ fn generated_session_cases_match_rust_manager() {
             Err(SessionError::Expired(_))
         ));
         assert_eq!(keyring.get(&key("session")).unwrap(), raw, "{name}");
+    }
+
+    let max_expired = cases
+        .iter()
+        .find(|case| case.name == "max_lifetime_expiry_evicts")
+        .unwrap();
+    assert_eq!(max_expired.expected, "expired_and_evicted");
+    assert_eq!(max_expired.error_class.as_deref(), Some("expired"));
+    let keyring = Arc::new(MemoryKeyring::new());
+    keyring
+        .set(
+            &key("session"),
+            &serde_json::to_vec(max_expired.input.as_ref().unwrap()).unwrap(),
+        )
+        .unwrap();
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    assert!(matches!(
+        manager.load_passphrase("fixture-vault"),
+        Err(SessionError::Expired(_))
+    ));
+    assert!(matches!(
+        keyring.get(&key("session")),
+        Err(SessionError::NotFound)
+    ));
+
+    let cleared = cases
+        .iter()
+        .find(|case| case.name == "clear_all_accounts_twice")
+        .unwrap();
+    assert_eq!(cleared.expected, "all_cleared");
+    let keyring = Arc::new(MemoryKeyring::new());
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    manager
+        .save_passphrase(
+            "fixture-vault",
+            b"fixture-secret",
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )
+        .unwrap();
+    manager
+        .save_identity(
+            "fixture-vault",
+            b"fixture-identity",
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )
+        .unwrap();
+    for account in ["session", "identity", "wrap-key"] {
+        assert!(keyring.get(&key(account)).is_ok(), "{account}");
+    }
+    manager.revoke("fixture-vault").unwrap();
+    manager.revoke("fixture-vault").unwrap();
+    for account in ["session", "identity", "wrap-key"] {
+        assert!(
+            matches!(keyring.get(&key(account)), Err(SessionError::NotFound)),
+            "{account}"
+        );
     }
 
     let keyring = Arc::new(MemoryKeyring::new());
