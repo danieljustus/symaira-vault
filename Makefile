@@ -211,6 +211,7 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
+PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
@@ -433,6 +434,15 @@ ffi-kdf-fixtures-check:
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
+# HTTP-001 source-bound loopback oracle plus Rust adapter replay.
+.PHONY: mcp-http-init-fixtures-check mcp-http-init-differential
+mcp-http-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen \
+		--check --output $(PORT_MCP_HTTP_INIT_FIXTURE)
+
+mcp-http-init-differential: mcp-http-init-fixtures-check
+	$(CARGO) test -p symvault-mcp --test http_initialize --locked
+
 mcp-stdio-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
 		--check --output $(PORT_MCP_STDIO_FIXTURE)
@@ -583,7 +593,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check ffi-kdf-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check ffi-kdf-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

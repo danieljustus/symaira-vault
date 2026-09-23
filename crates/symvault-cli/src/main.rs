@@ -4004,9 +4004,10 @@ fn run_mcp(
         if allow_locked {
             return Err("--allow-locked is not supported by the native MCP runtime".to_owned());
         }
-        let agent = agent
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| "--agent is required for the native MCP server".to_owned())?;
+        let agent = agent.filter(|name| !name.is_empty());
+        if stdio && agent.is_none() {
+            return Err("--agent is required for the native MCP stdio server".to_owned());
+        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;

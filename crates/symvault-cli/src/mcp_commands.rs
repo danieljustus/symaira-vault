@@ -2,7 +2,8 @@
 //!
 //! `main.rs` owns argument parsing and process exit codes. This module owns
 //! only the explicit construction of the MCP runtime from an already resolved
-//! vault, agent name, and unlocked identity. It performs no keychain lookup.
+//! vault and unlocked identity. HTTP selects its configured agent per request;
+//! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
 use std::{
     fs,
@@ -17,7 +18,7 @@ use symvault_core::{
     policy::{Engine, Policy},
     session::Keyring,
 };
-use symvault_crypto::Identity;
+use symvault_crypto::{Identity, SecretBytes};
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
     ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
@@ -31,7 +32,7 @@ use symvault_mcp::{
 #[allow(clippy::too_many_arguments)] // These inputs are owned by the CLI boundary.
 pub fn run(
     vault: impl AsRef<Path>,
-    agent: &str,
+    agent: Option<&str>,
     identity: Identity,
     keyring: &dyn Keyring,
     stdio: bool,
@@ -42,42 +43,7 @@ pub fn run(
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
-    let agent_name = if agent.is_empty() {
-        config.default_agent.as_str()
-    } else {
-        agent
-    };
-    let profile = config
-        .agents
-        .get(agent_name)
-        .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
-    let audit = symvault_store::audit::open_with_keyring(
-        agent_name,
-        root,
-        keyring,
-        symvault_store::audit::RotationConfig::default(),
-    )
-    .map_err(|error| format!("open audit logger: {error}"))?;
-    let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
-    let policy = load_policy_engine(root)?;
-    let mut runtime_config = runtime_config(root, profile, agent_name);
-    let signing_key =
-        symvault_store::grant_key::load_or_create_grant_signing_key(root, keyring, Some(&identity))
-            .map_err(|error| format!("load grant signing key: {error}"))?;
     let (touch_id_available, backend, persistent, message) = status();
-    runtime_config.auth_method = config.effective_auth_method().as_str().to_owned();
-    runtime_config.touch_id_available = touch_id_available;
-    runtime_config.cache_backend = backend;
-    runtime_config.cache_persistent = persistent;
-    runtime_config.cache_message = message;
-    let runtime =
-        StoreReadOnlyRuntime::open_with_audit(root, identity, runtime_config, policy, Some(audit))
-            .map_err(|error| format!("create MCP runtime: {error}"))?
-            .with_grant_signing_key(signing_key);
-    let mut handler =
-        ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
-    handler.set_tool_list_config(tool_list_config(profile));
-
     if !stdio {
         let address = if bind == "localhost" {
             "127.0.0.1"
@@ -92,14 +58,97 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
-        symvault_mcp::http::serve_loopback(listener, root.join("mcp-tokens.json"), &mut handler)
-            .map_err(|error| format!("MCP HTTP: {error}"))
+        let identity_text = symvault_crypto::identity_string(&identity);
+        let auth_method = config.effective_auth_method().as_str().to_owned();
+        let runtime_status = (touch_id_available, backend, persistent, message);
+        symvault_mcp::http::serve_loopback(listener, root.join("mcp-tokens.json"), move |agent| {
+            let identity = identity_from_secret(&identity_text)?;
+            let profile = config
+                .agents
+                .get(agent)
+                .ok_or_else(|| format!("agent {agent:?} not found"))?;
+            build_handler(
+                root,
+                agent,
+                profile,
+                identity,
+                keyring,
+                "http",
+                &auth_method,
+                &runtime_status,
+            )
+        })
+        .map_err(|error| format!("MCP HTTP: {error}"))
     } else {
+        let agent_name = agent
+            .filter(|name| !name.is_empty())
+            .unwrap_or(config.default_agent.as_str());
+        let profile = config
+            .agents
+            .get(agent_name)
+            .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
+        let mut handler = build_handler(
+            root,
+            agent_name,
+            profile,
+            identity,
+            keyring,
+            "stdio",
+            config.effective_auth_method().as_str(),
+            &(touch_id_available, backend, persistent, message),
+        )?;
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
     }
+}
+
+fn identity_from_secret(secret: &SecretBytes) -> Result<Identity, String> {
+    let value = std::str::from_utf8(secret.as_bytes())
+        .map_err(|_| "unlocked vault identity is not valid UTF-8".to_owned())?;
+    symvault_crypto::parse_identity(value)
+        .map_err(|error| format!("restore unlocked vault identity: {error}"))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_handler(
+    root: &Path,
+    agent_name: &str,
+    profile: &AgentProfile,
+    identity: Identity,
+    keyring: &dyn Keyring,
+    transport: &str,
+    auth_method: &str,
+    runtime_status: &(bool, String, bool, String),
+) -> Result<ProtocolHandler, String> {
+    let audit = symvault_store::audit::open_with_keyring(
+        agent_name,
+        root,
+        keyring,
+        symvault_store::audit::RotationConfig::default(),
+    )
+    .map_err(|error| format!("open audit logger: {error}"))?;
+    let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
+    let policy = load_policy_engine(root)?;
+    let mut settings = runtime_config(root, profile, agent_name);
+    let signing_key =
+        symvault_store::grant_key::load_or_create_grant_signing_key(root, keyring, Some(&identity))
+            .map_err(|error| format!("load grant signing key: {error}"))?;
+    settings.transport = transport.to_owned();
+    settings.auth_method = auth_method.to_owned();
+    settings.touch_id_available = runtime_status.0;
+    settings.cache_backend.clone_from(&runtime_status.1);
+    settings.cache_persistent = runtime_status.2;
+    settings.cache_message.clone_from(&runtime_status.3);
+    let runtime =
+        StoreReadOnlyRuntime::open_with_audit(root, identity, settings, policy, Some(audit))
+            .map_err(|error| format!("create MCP runtime: {error}"))?
+            .with_grant_signing_key(signing_key);
+    let mut handler =
+        ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
+    handler.set_tool_list_config(tool_list_config(profile));
+    Ok(handler)
 }
 
 fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {

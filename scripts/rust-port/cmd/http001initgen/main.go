@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -79,6 +80,9 @@ type response struct {
 }
 
 func main() {
+	checkOnly := flag.Bool("check", false, "verify the committed fixture without writing it")
+	outputPath := flag.String("output", "testdata/port/mcp/http-initialize.json", "fixture output path")
+	flag.Parse()
 	root, err := os.Getwd()
 	check(err)
 	sha, err := provenance.Verify(root, oracleCommit, sources)
@@ -154,7 +158,15 @@ func main() {
 	encoded, err := json.MarshalIndent(out, "", "  ")
 	check(err)
 	encoded = append(encoded, '\n')
-	check(os.WriteFile("testdata/port/mcp/http-initialize.json", encoded, 0o644))
+	if *checkOnly {
+		current, readErr := os.ReadFile(*outputPath)
+		check(readErr)
+		if string(current) != string(encoded) {
+			check(fmt.Errorf("HTTP-001 fixture drift: regenerate with go run ./scripts/rust-port/cmd/http001initgen --output %s", *outputPath))
+		}
+		return
+	}
+	check(os.WriteFile(*outputPath, encoded, 0o644))
 }
 
 func doRequest(client *http.Client, addr, token string, req request) response {
