@@ -7,12 +7,8 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
 };
-// Only the POSIX-gated git-IO cases spawn a fixture server or a `#!/bin/sh` helper.
-#[cfg(unix)]
-use std::io::Write;
-#[cfg(unix)]
 use std::{
-    io::Read,
+    io::{Read, Write},
     net::TcpListener,
     thread,
     time::{Duration, Instant},
@@ -366,7 +362,6 @@ fn pull_aborts_merge_state_created_by_this_invocation() {
     assert!(unresolved.is_empty(), "pull left unresolved index state");
 }
 
-#[cfg(unix)]
 fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind auth server");
     let port = listener.local_addr().unwrap().port();
@@ -392,15 +387,13 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     (port, handle)
 }
 
-// Windows git goes through the Git Credential Manager, which intercepts the
-// unauthenticated request and reports a network error instead of letting the
-// fixture's 401 surface as an authentication failure. The Go oracle's
-// classification is only reachable with a POSIX git, as for the shim tests below.
-#[cfg(unix)]
 #[test]
 fn pull_projects_auth_failure_from_a_real_http_remote() {
     let contract = git_io_case("GIT-002-go-auth");
     let (_root, repo, _remote) = pair();
+    // An empty local helper value clears inherited helpers (including GCM),
+    // so Git exposes the fixture's 401 instead of asking the host credential UI.
+    git(repo.root(), &["config", "--local", "credential.helper", ""]);
     let (port, server) = auth_server("401 Unauthorized");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
