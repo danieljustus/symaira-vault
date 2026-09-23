@@ -258,7 +258,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 16);
+    assert_eq!(fixture.cases.len(), 18);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -421,6 +421,36 @@ fn generated_session_cases_match_rust_manager() {
         manager.load_passphrase("fixture-vault").unwrap(),
         legacy.expected.as_bytes()
     );
+
+    let missing = cases
+        .iter()
+        .find(|case| case.name == "missing_migration_noop")
+        .unwrap();
+    assert_eq!(missing.expected, "unchanged");
+    let keyring = Arc::new(MemoryKeyring::new());
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    assert!(
+        !manager
+            .has_legacy_plaintext_session("fixture-vault")
+            .unwrap()
+    );
+    assert!(!manager.migrate_session("fixture-vault").unwrap());
+    assert!(matches!(
+        keyring.get(&key("session")),
+        Err(SessionError::NotFound)
+    ));
+
+    let encrypted = cases
+        .iter()
+        .find(|case| case.name == "encrypted_migration_noop")
+        .unwrap();
+    assert_eq!(encrypted.expected, "unchanged");
+    let keyring = Arc::new(MemoryKeyring::new());
+    let raw = serde_json::to_vec(encrypted.input.as_ref().unwrap()).unwrap();
+    keyring.set(&key("session"), &raw).unwrap();
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    assert!(!manager.migrate_session("fixture-vault").unwrap());
+    assert_eq!(keyring.get(&key("session")).unwrap(), raw);
 
     let cleared = cases
         .iter()

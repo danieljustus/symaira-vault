@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "8c6f5688b4cdc47e0d16ad1b8370ae6394684af0c249779c39a92a88f810091f"
+    "generator_digest": "737eabc662e48f7bb0f500394bdd62af89ed79d91b50ed61958875faaaae3096"
   },
   "cases": [
     {
@@ -150,6 +150,30 @@
         "ttl_ns": 3600000000000
       },
       "expected": "fixture-legacy-passphrase"
+    },
+    {
+      "name": "missing_migration_noop",
+      "operations": [
+        "has_legacy_plaintext_session",
+        "migrate_session"
+      ],
+      "expected": "unchanged"
+    },
+    {
+      "name": "encrypted_migration_noop",
+      "operations": [
+        "migrate_session"
+      ],
+      "input": {
+        "saved_at": "2000-01-01T00:00:00Z",
+        "last_access": "2000-01-01T00:00:00Z",
+        "ttl_ns": 9223372036854775807,
+        "max_lifetime_ns": 9223372036854775807,
+        "encrypted_passphrase": "JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=",
+        "nonce": "AAECAwQFBgcICQoL"
+      },
+      "wrap_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": "unchanged"
     },
     {
       "name": "clear_all_accounts_twice",

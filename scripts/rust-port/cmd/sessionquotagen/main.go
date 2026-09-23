@@ -119,7 +119,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 14)
+	cases := make([]sessionCase, 0, 16)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -226,6 +226,23 @@ func buildSessionFixture(meta oracle) sessionFixture {
 		Name: "legacy_plaintext_migration", Operations: []string{"migrate_session", "load_passphrase"},
 		Input: json.RawMessage(legacyWire), Expected: string(loadedLegacy),
 	})
+	missingMigration := &fakeKeyring{values: map[string]string{}}
+	missingManager := session.NewManager(missingMigration, nil)
+	legacyPresent, err := missingManager.HasLegacyPlaintextSession(v)
+	if err != nil || legacyPresent {
+		panic(fmt.Sprintf("Go missing legacy probe: %v %v", legacyPresent, err))
+	}
+	migrated, err = missingManager.MigrateSession(v)
+	if err != nil || migrated || len(missingMigration.values) != 0 {
+		panic(fmt.Sprintf("Go missing session migration was not a no-op: %v %v", migrated, err))
+	}
+	cases = append(cases, sessionCase{Name: "missing_migration_noop", Operations: []string{"has_legacy_plaintext_session", "migrate_session"}, Expected: "unchanged"})
+	goEncryptedBefore := goBackend.values[key]
+	migrated, err = session.NewManager(goBackend, nil).MigrateSession(v)
+	if err != nil || migrated || goBackend.values[key] != goEncryptedBefore {
+		panic(fmt.Sprintf("Go encrypted session migration was not a no-op: %v %v", migrated, err))
+	}
+	cases = append(cases, sessionCase{Name: "encrypted_migration_noop", Operations: []string{"migrate_session"}, Input: json.RawMessage(goEncrypted), WrapKey: goWrapKey, Expected: "unchanged"})
 
 	clearBackend := &fakeKeyring{values: map[string]string{}}
 	clearManager := session.NewManager(clearBackend, nil)
