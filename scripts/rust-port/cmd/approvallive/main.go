@@ -4,8 +4,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -84,17 +84,18 @@ func run(binary string) (runErr error) {
 		ip := net.ParseIP(host)
 		return ip != nil && ip.IsLoopback()
 	})
-	server := httptest.NewTLSServer(handler)
+	certPath, keyPath, err := serverbootstrap.EnsureTLSCert(vault)
+	if err != nil {
+		return fmt.Errorf("create loopback server certificate: %w", err)
+	}
+	serverCert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return fmt.Errorf("load loopback server certificate: %w", err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = &tls.Config{Certificates: []tls.Certificate{serverCert}, MinVersion: tls.VersionTLS12}
+	server.StartTLS()
 	defer server.Close()
-
-	certPath := filepath.Join(vault, "loopback-server.pem")
-	if len(server.TLS.Certificates) != 1 || len(server.TLS.Certificates[0].Certificate) == 0 {
-		return errors.New("go TLS test server did not expose its certificate")
-	}
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.TLS.Certificates[0].Certificate[0]})
-	if writeErr := os.WriteFile(certPath, certPEM, 0o600); writeErr != nil {
-		return fmt.Errorf("write loopback server certificate: %w", writeErr)
-	}
 	port, err := serverPort(server)
 	if err != nil {
 		return err
