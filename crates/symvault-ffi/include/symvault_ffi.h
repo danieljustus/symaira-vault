@@ -33,6 +33,10 @@ SymvaultResult symvault_encrypt_with_passphrase(
 SymvaultResult symvault_decrypt_with_passphrase(
     const uint8_t *passphrase, size_t passphrase_len,
     const uint8_t *ciphertext, size_t ciphertext_len);
+/* Explicit Argon2id envelope operation; the legacy export above remains scrypt-only. */
+SymvaultResult symvault_decrypt_with_passphrase_argon2id(
+    const uint8_t *passphrase, size_t passphrase_len,
+    const uint8_t *ciphertext, size_t ciphertext_len);
 
 /* JSON output matches the Go mobile bridge; manifest result is one byte (0 or 1). */
 SymvaultResult symvault_read_entry_json(

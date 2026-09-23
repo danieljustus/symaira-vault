@@ -33,6 +33,13 @@ int main(void) {
         id.output.data, id.output.len);
     if (!code && (write.error.len == 0 || write.output.len != 0)) code = 6;
     release(write);
+    const uint8_t passphrase[] = "test passphrase";
+    const uint8_t invalid_ciphertext[] = "not an age envelope";
+    SymvaultResult argon = symvault_decrypt_with_passphrase_argon2id(
+        passphrase, sizeof passphrase - 1,
+        invalid_ciphertext, sizeof invalid_ciphertext - 1);
+    if (!code && (argon.error.len == 0 || argon.output.len != 0)) code = 7;
+    release(argon);
     release(verify);
     release(list);
     release(read);

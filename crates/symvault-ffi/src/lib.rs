@@ -6,8 +6,8 @@
 use std::{path::Path, ptr, slice, str};
 
 use symvault_crypto::{
-    SecretBytes, decrypt, decrypt_scrypt, encrypt, encrypt_scrypt, fingerprint, generate_identity,
-    identity_string, parse_identity, parse_recipient, recipient_string,
+    SecretBytes, decrypt, decrypt_argon2id, decrypt_scrypt, encrypt, encrypt_scrypt, fingerprint,
+    generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
 };
 use symvault_store::{Entry, Store, utc_now_string};
 use zeroize::Zeroize;
@@ -237,6 +237,35 @@ pub unsafe extern "C" fn symvault_decrypt_with_passphrase(
             return Err("ciphertext is empty".to_owned());
         }
         decrypt_scrypt(ciphertext, &SecretBytes::new(passphrase)).map_err(|error| error.to_string())
+    })
+}
+
+/// Decrypts a Symaira Vault Argon2id age envelope.
+///
+/// This is deliberately separate from [`symvault_decrypt_with_passphrase`],
+/// which matches the Go mobile API's legacy scrypt behavior.
+///
+/// # Safety
+/// Each nonempty input pointer must reference `len` readable bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn symvault_decrypt_with_passphrase_argon2id(
+    passphrase: *const u8,
+    passphrase_len: usize,
+    ciphertext: *const u8,
+    ciphertext_len: usize,
+) -> SymvaultResult {
+    ffi(|| {
+        let passphrase = unsafe { input(passphrase, passphrase_len, "passphrase")? };
+        if passphrase.is_empty() {
+            return Err("passphrase is empty".to_owned());
+        }
+        str::from_utf8(passphrase).map_err(|_| "passphrase is not UTF-8".to_owned())?;
+        let ciphertext = unsafe { input(ciphertext, ciphertext_len, "ciphertext")? };
+        if ciphertext.is_empty() {
+            return Err("ciphertext is empty".to_owned());
+        }
+        decrypt_argon2id(ciphertext, &SecretBytes::new(passphrase))
+            .map_err(|error| error.to_string())
     })
 }
 
@@ -485,6 +514,60 @@ mod tests {
             ))
         };
         assert!(failure.is_err());
+    }
+
+    #[test]
+    fn explicit_argon2id_ffi_export_decrypts_go_crypto_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/crypto/age-kdf.json"
+        )))
+        .unwrap();
+        let case = fixture["argon2id_cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["name"] == "current_tiny_fixture_params")
+            .unwrap();
+        let passphrase = b"rust-interop-fixture-passphrase-v1";
+        let ciphertext = STANDARD
+            .decode(case["ciphertext"].as_str().unwrap())
+            .unwrap();
+        let expected = case["plaintext"].as_str().unwrap().as_bytes();
+
+        let decrypted = unsafe {
+            output(symvault_decrypt_with_passphrase_argon2id(
+                passphrase.as_ptr(),
+                passphrase.len(),
+                ciphertext.as_ptr(),
+                ciphertext.len(),
+            ))
+            .unwrap()
+        };
+        assert_eq!(decrypted, expected);
+
+        // The existing Go mobile API uses age scrypt; keep that export's
+        // behavior separate from this additive Argon2id operation.
+        let legacy_result = unsafe {
+            output(symvault_decrypt_with_passphrase(
+                passphrase.as_ptr(),
+                passphrase.len(),
+                ciphertext.as_ptr(),
+                ciphertext.len(),
+            ))
+        };
+        assert!(legacy_result.is_err());
+
+        let wrong_passphrase = b"wrong-passphrase";
+        let wrong_key = unsafe {
+            output(symvault_decrypt_with_passphrase_argon2id(
+                wrong_passphrase.as_ptr(),
+                wrong_passphrase.len(),
+                ciphertext.as_ptr(),
+                ciphertext.len(),
+            ))
+        };
+        assert!(wrong_key.is_err());
     }
 
     #[test]
