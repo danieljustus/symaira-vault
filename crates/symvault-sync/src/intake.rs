@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs, io,
+    fs,
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
@@ -213,19 +214,30 @@ pub fn proposed_path(name: &str) -> String {
     let s = s.trim_matches(['.', '_']).to_owned();
     if s.is_empty() { "entry".into() } else { s }
 }
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Spool {
-    root: PathBuf,
+    root: tempfile::TempDir,
 }
 impl Spool {
-    pub fn new(root: impl AsRef<Path>) -> Result<Self, IntakeError> {
-        fs::create_dir_all(root.as_ref())?;
-        Ok(Self {
-            root: root.as_ref().into(),
-        })
+    pub fn new(parent: impl AsRef<Path>) -> Result<Self, IntakeError> {
+        fs::create_dir_all(parent.as_ref())?;
+        if !fs::symlink_metadata(parent.as_ref())?.file_type().is_dir() {
+            return Err(IntakeError::InvalidSource(
+                "spool parent is not a directory".into(),
+            ));
+        }
+        let root = tempfile::Builder::new()
+            .prefix("symvault-intake-")
+            .tempdir_in(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(root.path(), fs::Permissions::from_mode(0o700))?;
+        }
+        Ok(Self { root })
     }
     pub fn root(&self) -> &Path {
-        &self.root
+        self.root.path()
     }
     pub fn stage(
         &self,
@@ -241,22 +253,54 @@ impl Spool {
         if m.len() > limit {
             return Err(IntakeError::Limit);
         }
-        let data = fs::read(path)?;
-        if data.len() as u64 > limit {
-            return Err(IntakeError::Limit);
-        }
-        let after = fs::metadata(path)?;
-        if after.len() != m.len() || after.modified().ok() != m.modified().ok() {
+        // The shared reader refuses links and non-regular files without blocking
+        // if a concurrent writer replaces the preflight path with a FIFO.
+        let mut source = match crate::safeio::open_read(path) {
+            Ok(Some(source)) => source,
+            Ok(None) | Err(crate::safeio::SafeIoError::NotRegularFile) => {
+                return Err(IntakeError::InvalidSource(path.display().to_string()));
+            }
+            Err(crate::safeio::SafeIoError::Io(error)) => return Err(error.into()),
+        };
+        let opened = source.metadata()?;
+        if !opened.is_file() || !same_source(&m, &opened) {
             return Err(IntakeError::InvalidSource(
                 "source changed during intake".into(),
             ));
         }
-        let dst = self.root.join(format!(
-            "{}-{}",
-            std::process::id(),
-            proposed_path(&path.to_string_lossy())
-        ));
-        fs::write(&dst, &data)?;
+        let mut data = Vec::new();
+        (&mut source)
+            .take(limit.saturating_add(1))
+            .read_to_end(&mut data)?;
+        if data.len() as u64 > limit {
+            return Err(IntakeError::Limit);
+        }
+        let after = fs::symlink_metadata(path)?;
+        if data.len() as u64 != m.len()
+            || !same_source(&m, &source.metadata()?)
+            || !same_source(&m, &after)
+        {
+            return Err(IntakeError::InvalidSource(
+                "source changed during intake".into(),
+            ));
+        }
+        let suffix = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| format!(".{extension}"))
+            .unwrap_or_default();
+        let mut staged = tempfile::Builder::new()
+            .prefix("intake-")
+            .suffix(&suffix)
+            .tempfile_in(self.root.path())?;
+        staged.write_all(&data)?;
+        staged.flush()?;
+        if fs::read(staged.path())? != data {
+            return Err(IntakeError::InvalidSource(
+                "staged copy verification failed".into(),
+            ));
+        }
+        staged.keep().map_err(|e| IntakeError::Io(e.error))?;
         Ok((
             data.clone(),
             Provenance {
@@ -278,6 +322,21 @@ impl Spool {
         ))
     }
 }
+
+fn same_source(before: &fs::Metadata, after: &fs::Metadata) -> bool {
+    if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if before.dev() != after.dev() || before.ino() != after.ino() {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Clone, Debug)]
 pub struct Options {
     pub max_file_size: u64,
