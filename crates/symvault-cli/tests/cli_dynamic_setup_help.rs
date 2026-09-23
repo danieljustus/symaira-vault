@@ -8,6 +8,14 @@ fn run(binary: &Path, topic: &[&str]) -> std::process::Output {
         .expect("run help topic")
 }
 
+fn run_flag(binary: &Path, topic: &[&str]) -> std::process::Output {
+    Command::new(binary)
+        .args(topic)
+        .arg("--help")
+        .output()
+        .expect("run direct help")
+}
+
 #[test]
 fn dynamic_and_setup_help_match_pinned_go_bytes() {
     let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -30,5 +38,15 @@ fn dynamic_and_setup_help_match_pinned_go_bytes() {
         assert_eq!(rust_output.stderr, go_output.stderr, "topic={topic:?}");
         assert_eq!(go_output.status.code(), Some(0), "topic={topic:?}");
         assert!(go_output.stderr.is_empty(), "topic={topic:?}");
+
+        let go_flag = run_flag(go, topic);
+        let rust_flag = run_flag(rust, topic);
+        assert_eq!(
+            rust_flag.status.code(),
+            go_flag.status.code(),
+            "topic={topic:?}"
+        );
+        assert_eq!(rust_flag.stdout, go_flag.stdout, "topic={topic:?}");
+        assert_eq!(rust_flag.stderr, go_flag.stderr, "topic={topic:?}");
     }
 }

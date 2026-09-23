@@ -11,7 +11,7 @@ const DYNAMIC_GENERATE_HELP: &str = include_str!("help-dynamic-generate.txt");
 const SETUP_HELP: &str = include_str!("help-setup.txt");
 const ROOT_HELP_FLAG: &str = "  -h, --help              help for symvault\n";
 
-/// Find direct `get --help` / `list --help` requests before clap renders its
+/// Find direct nested `--help` requests before clap renders its
 /// help. The Go CLI's nested pages are frozen byte-for-byte from the oracle.
 pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
     let mut index = 1;
@@ -34,6 +34,24 @@ pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
                     .any(|arg| arg == "--help" || arg == "-h")
                     .then_some("list");
             }
+            "dynamic" => {
+                return args[index + 1..]
+                    .iter()
+                    .any(|arg| arg == "--help" || arg == "-h")
+                    .then_some(
+                        if args.get(index + 1).is_some_and(|arg| arg == "generate") {
+                            "dynamic generate"
+                        } else {
+                            "dynamic"
+                        },
+                    );
+            }
+            "setup" => {
+                return args[index + 1..]
+                    .iter()
+                    .any(|arg| arg == "--help" || arg == "-h")
+                    .then_some("setup");
+            }
             _ if word.starts_with('-') => index += 1,
             _ => return None,
         }
@@ -45,6 +63,9 @@ pub fn write_nested<W: Write>(topic: &str, output: &mut W) -> io::Result<()> {
     let help = match topic {
         "get" => GET_HELP,
         "list" => LIST_HELP,
+        "dynamic" => DYNAMIC_HELP,
+        "dynamic generate" => DYNAMIC_GENERATE_HELP,
+        "setup" => SETUP_HELP,
         _ => return Err(io::Error::other("unknown frozen help topic")),
     };
     output.write_all(help.as_bytes())
