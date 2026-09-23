@@ -105,7 +105,7 @@ def output(command: list[str]) -> str:
 
 def deb_fields(package: Path) -> dict[str, str]:
     fields = {}
-    for key in ("Package", "Version", "Architecture", "Maintainer", "Description", "License", "Homepage", "Section", "Priority", "Recommends"):
+    for key in ("Package", "Version", "Architecture", "Maintainer", "Description", "Homepage", "Section", "Priority", "Recommends"):
         value = output(["dpkg-deb", "--field", str(package), key]).strip()
         if value:
             fields["name" if key == "Package" else key.lower()] = value.splitlines()[0]
@@ -179,6 +179,7 @@ def verify(package: Path, arch: str) -> None:
     }
     if package_format == "deb":
         actual = deb_fields(package)
+        expected.pop("license")  # nFPM v2.47 omits the invalid Debian License control field.
         expected.update({
             "maintainer": nfpm["maintainer"], "description": nfpm["description"],
             "section": nfpm["section"], "priority": nfpm["priority"],
