@@ -28,7 +28,8 @@ rpassword = "=7.5.4"
 symaira-core-version.workspace = true
 symvault-core.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
-time = { version = "=0.3.47", features = ["parsing"] }
+time = { version = "=0.3.47", features = ["formatting", "parsing"] }
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-mcp = { path = "../symvault-mcp", version = "=0.0.0" }
