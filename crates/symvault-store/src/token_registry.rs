@@ -1,11 +1,11 @@
-//! Agent-scoped MCP token registry mutations (`new`, `revoke`, `rotate`).
+//! Agent-scoped MCP token registry loading and mutations (`new`, `revoke`, `rotate`).
 //!
 //! Mirrors `internal/mcp/auth/token.go`'s `Create`/`Revoke`/`Save`. The Go
 //! `agent token` subcommands construct `auth.NewTokenRegistry` without an age
-//! identity, so `mcp-tokens.json` is always read and written in plaintext
-//! here — the encrypted `registry.age` path is out of scope for this
-//! no-unlock command family, matching `agent_list_commands::load_tokens` on
-//! the Rust side and Go's own command wiring.
+//! no-unlock command family, so those mutations read and write the plaintext
+//! `mcp-tokens.json` compatibility file. Read-only consumers with an unlocked
+//! age identity can load `registry.age` first, matching Go's optional encrypted
+//! registry path.
 //!
 //! Persistence reuses the same write lock and atomic publication primitives
 //! `sharing.rs` uses. Unlike Go's single in-memory `Load`-then-`Save`, every
@@ -14,16 +14,112 @@
 //! deliberate safety improvement over the Go oracle's process-local map that
 //! does not change single-writer observable behavior.
 
-use std::{collections::BTreeMap, fs, io, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::{self, Read},
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
 use crate::{StoreError, read_open_regular_with_metadata, sha256_hex};
+use symvault_crypto::{Identity, decrypt};
+use zeroize::Zeroizing;
 
 /// The Go token registry file name used below a vault directory.
 pub const TOKEN_REGISTRY_FILE: &str = "mcp-tokens.json";
 const TOKEN_REGISTRY_VERSION: i64 = 2;
+const MAX_READ_ONLY_REGISTRY_BYTES: u64 = 1024 * 1024;
+
+/// Loads a token registry without changing it.
+///
+/// When `identity` is provided and `registry.age` exists, the encrypted
+/// registry takes precedence over the legacy plaintext file. A missing
+/// encrypted file falls back to `mcp-tokens.json`; without an identity only
+/// the plaintext compatibility file is considered. Registry reads reject
+/// symlinks, non-regular files, and files larger than one MiB.
+pub fn load_read_only(
+    root: &Path,
+    identity: Option<&Identity>,
+) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
+    let _root_cap = open_root(root)?;
+    if let Some(identity) = identity {
+        let encrypted_path = root.join("registry.age");
+        if let Some(ciphertext) = read_registry_file(&encrypted_path)? {
+            let plaintext = Zeroizing::new(decrypt(&ciphertext, identity).map_err(|_| {
+                StoreError::Config(String::from(
+                    "load token registry: decrypt encrypted token registry",
+                ))
+            })?);
+            return parse_registry(&plaintext, &encrypted_path);
+        }
+    }
+
+    let plaintext_path = root.join(TOKEN_REGISTRY_FILE);
+    match read_registry_file(&plaintext_path)? {
+        Some(bytes) => parse_registry(&bytes, &plaintext_path),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+fn read_registry_file(path: &Path) -> Result<Option<Vec<u8>>, StoreError> {
+    #[cfg(unix)]
+    let file = crate::open_nofollow_kind(path, false);
+    #[cfg(not(unix))]
+    let file = crate::open_nofollow(path);
+    let file = match file {
+        Ok(file) => file,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(StoreError::Read {
+                path: path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    let metadata = file.metadata().map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path.to_path_buf()));
+    }
+    if metadata.len() > MAX_READ_ONLY_REGISTRY_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_READ_ONLY_REGISTRY_BYTES,
+        });
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.take(MAX_READ_ONLY_REGISTRY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|source| StoreError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    if bytes.len() as u64 > MAX_READ_ONLY_REGISTRY_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_READ_ONLY_REGISTRY_BYTES,
+        });
+    }
+    Ok(Some(bytes))
+}
+
+fn parse_registry(bytes: &[u8], path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
+    if bytes.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let raw: RawFile = serde_json::from_slice(bytes).map_err(|error| {
+        StoreError::Config(format!(
+            "load token registry: parse token registry {}: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(raw.tokens.unwrap_or_default())
+}
 
 /// One on-disk token registry entry, matching Go's `TokenData` JSON layout
 /// field-for-field so unrelated entries (including fields this command
