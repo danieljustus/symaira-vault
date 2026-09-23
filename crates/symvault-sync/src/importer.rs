@@ -411,73 +411,106 @@ fn host_from_url(raw: &str) -> &str {
     raw.split(':').next().unwrap_or("")
 }
 
-#[derive(Default, Deserialize)]
-struct Bw {
-    #[serde(default, deserialize_with = "null_default")]
-    folders: Vec<BwFolder>,
-    #[serde(default, deserialize_with = "null_default")]
-    items: Vec<BwItem>,
+// encoding/json matches tagged struct fields exactly first, then by Unicode
+// simple fold. Bitwarden's wire tags are ASCII and have no folded-name
+// collisions; these are the only non-ASCII runes that simple-fold to ASCII.
+fn bitwarden_field_matches(key: &str, tag: &str) -> bool {
+    let mut key_chars = key.chars();
+    tag.bytes().all(|tag_byte| {
+        let Some(key_char) = key_chars.next() else {
+            return false;
+        };
+        let folded = match key_char {
+            'ſ' => b's',
+            'K' => b'k',
+            c if c.is_ascii_alphabetic() => c.to_ascii_lowercase() as u8,
+            _ => return false,
+        };
+        folded == tag_byte.to_ascii_lowercase()
+    }) && key_chars.next().is_none()
 }
-#[derive(Default, Deserialize)]
-struct BwFolder {
-    #[serde(default, deserialize_with = "null_default")]
-    id: String,
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
+
+macro_rules! bitwarden_struct {
+    ($name:ident { $($field:ident: $ty:ty => $tag:literal),+ $(,)? }) => {
+        #[derive(Default)]
+        struct $name { $($field: $ty),+ }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct ObjectVisitor;
+                impl<'de> serde::de::Visitor<'de> for ObjectVisitor {
+                    type Value = $name;
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        formatter.write_str("a Bitwarden object")
+                    }
+
+                    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+                    where
+                        M: serde::de::MapAccess<'de>,
+                    {
+                        $(let mut $field: Option<$ty> = None;)+
+                        while let Some(key) = map.next_key::<String>()? {
+                            match key.as_str() {
+                                $($tag => $field = Some(map.next_value::<Option<$ty>>()?.unwrap_or_default()),)+
+                                _ => {
+                                    $(if bitwarden_field_matches(&key, $tag) {
+                                        $field = Some(map.next_value::<Option<$ty>>()?.unwrap_or_default());
+                                        continue;
+                                    })+
+                                    let _: serde::de::IgnoredAny = map.next_value()?;
+                                }
+                            }
+                        }
+                        Ok($name { $($field: $field.unwrap_or_default()),+ })
+                    }
+                }
+                deserializer.deserialize_map(ObjectVisitor)
+            }
+        }
+    };
 }
-#[derive(Default, Deserialize)]
-struct BwItem {
-    #[serde(rename = "type", default, deserialize_with = "null_default")]
-    kind: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
-    #[serde(rename = "folderId", default, deserialize_with = "null_default")]
-    folder_id: String,
-    #[serde(default, deserialize_with = "null_default")]
-    notes: String,
-    #[serde(default, deserialize_with = "null_default")]
-    login: BwLogin,
-    #[serde(default, deserialize_with = "null_default")]
-    card: BwCard,
-    #[serde(default, deserialize_with = "null_default")]
-    fields: Vec<BwField>,
-}
-#[derive(Default, Deserialize)]
-struct BwLogin {
-    #[serde(default, deserialize_with = "null_default")]
-    username: String,
-    #[serde(default, deserialize_with = "null_default")]
-    password: String,
-    #[serde(default, deserialize_with = "null_default")]
-    totp: String,
-    #[serde(default, deserialize_with = "null_default")]
-    uris: Vec<BwUri>,
-}
-#[derive(Default, Deserialize)]
-struct BwUri {
-    #[serde(default, deserialize_with = "null_default")]
-    uri: String,
-}
-#[derive(Default, Deserialize)]
-struct BwCard {
-    #[serde(rename = "cardholderName", default, deserialize_with = "null_default")]
-    cardholder: String,
-    #[serde(default, deserialize_with = "null_default")]
-    number: String,
-    #[serde(rename = "expMonth", default, deserialize_with = "null_default")]
-    exp_month: String,
-    #[serde(rename = "expYear", default, deserialize_with = "null_default")]
-    exp_year: String,
-    #[serde(default, deserialize_with = "null_default")]
-    code: String,
-}
-#[derive(Default, Deserialize)]
-struct BwField {
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
-    #[serde(default, deserialize_with = "null_default")]
-    value: String,
-}
+
+bitwarden_struct! { Bw {
+    folders: Vec<BwFolder> => "folders",
+    items: Vec<BwItem> => "items",
+} }
+bitwarden_struct! { BwFolder {
+    id: String => "id",
+    name: String => "name",
+} }
+bitwarden_struct! { BwItem {
+    kind: i64 => "type",
+    name: String => "name",
+    folder_id: String => "folderId",
+    notes: String => "notes",
+    login: BwLogin => "login",
+    card: BwCard => "card",
+    fields: Vec<BwField> => "fields",
+} }
+bitwarden_struct! { BwLogin {
+    username: String => "username",
+    password: String => "password",
+    totp: String => "totp",
+    uris: Vec<BwUri> => "uris",
+} }
+bitwarden_struct! { BwUri {
+    uri: String => "uri",
+} }
+bitwarden_struct! { BwCard {
+    cardholder: String => "cardholderName",
+    number: String => "number",
+    exp_month: String => "expMonth",
+    exp_year: String => "expYear",
+    code: String => "code",
+} }
+bitwarden_struct! { BwField {
+    name: String => "name",
+    value: String => "value",
+} }
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     let repaired = if std::str::from_utf8(bytes).is_ok() {
         Cow::Borrowed(bytes)

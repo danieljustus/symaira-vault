@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "8d1b7fc83be39f60a883113e90a6f12958aa8472f987bc8cbcbc522c64454505",
+  "generator_digest": "0542462fa909ac1b5c9d73c715b3a34c8527e7ffca4050ef8227b3ce3275f937",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -236,6 +236,103 @@
             "url": "",
             "urls": [],
             "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_fields",
+      "format": "bitwarden",
+      "input": "{\"Items\":[{\"Type\":1,\"Name\":\"x\"}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_item_duplicate_variants_last_wins",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"first\",\"Name\":\"last\"}]}",
+      "entries": [
+        {
+          "path": "last",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_variants_last_wins",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"first\",\"Name\":\"last\"}],\"Items\":[{\"Type\":1,\"Name\":\"second\"}]}",
+      "entries": [
+        {
+          "path": "second",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_unicode_simple_fold",
+      "format": "bitwarden",
+      "input": "{\"itemſ\":[{\"Type\":1,\"Name\":\"folded\"}]}",
+      "entries": [
+        {
+          "path": "folded",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_nested_fields",
+      "format": "bitwarden",
+      "input": "{\"FOLDERS\":[{\"ID\":\"f\",\"NAME\":\"folder\"}],\"ITEMS\":[{\"Type\":1,\"Name\":\"x\",\"FOLDERID\":\"f\",\"LOGIN\":{\"USERNAME\":\"u\",\"URIS\":[{\"URI\":\"https://example.test\"}]}}]}",
+      "entries": [
+        {
+          "path": "folder/x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "https://example.test",
+            "urls": [
+              "https://example.test"
+            ],
+            "username": "u"
           },
           "warnings": null
         }
