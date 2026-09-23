@@ -67,7 +67,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -92,7 +93,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": ""
+        "body": "",
+        "connection_reused": true
       }
     },
     {
@@ -118,7 +120,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":21,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":21,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -145,7 +148,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"method not allowed\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"method not allowed\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -171,7 +175,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"unsupported MCP-Protocol-Version\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":3}\n"
+        "body": "{\"error\":{\"message\":\"unsupported MCP-Protocol-Version\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":3}\n",
+        "connection_reused": true
       }
     },
     {
@@ -197,7 +202,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "unauthorized\n"
+        "body": "unauthorized\n",
+        "connection_reused": true
       }
     },
     {
@@ -228,7 +234,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -259,7 +266,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -290,7 +298,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "forbidden: token agent does not match X-Symaira-Agent header\n"
+        "body": "forbidden: token agent does not match X-Symaira-Agent header\n",
+        "connection_reused": true
       }
     },
     {
@@ -321,7 +330,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -352,7 +362,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"Tool \\\"get_entry\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"Tool \\\"get_entry\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -379,7 +390,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -406,7 +418,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -433,7 +446,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "unauthorized\n"
+        "body": "unauthorized\n",
+        "connection_reused": true
       }
     },
     {
@@ -461,7 +475,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"Content-Type must be application/json\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"Content-Type must be application/json\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -489,7 +504,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -518,7 +534,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"invalid JSON\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"invalid JSON\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {
@@ -575,7 +592,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"jsonrpc\":\"2.0\",\"id\":16,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n"
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":16,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
       }
     },
     {
@@ -603,7 +621,8 @@
         "absent_headers": [
           "MCP-Protocol-Version"
         ],
-        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n"
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
       }
     },
     {

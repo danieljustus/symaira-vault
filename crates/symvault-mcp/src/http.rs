@@ -835,6 +835,27 @@ mod tests {
         );
     }
 
+    #[test]
+    fn source_bound_go_keep_alive_reuse_is_a_rust_close_per_request_difference() {
+        let go_initial = go_http_case("initialize");
+        let go_continuation = go_http_case("authenticated_prompts_list_after_initialize");
+        assert!(
+            !go_initial["response"]["connection_reused"]
+                .as_bool()
+                .unwrap_or(false)
+        );
+        assert!(
+            go_continuation["response"]["connection_reused"]
+                .as_bool()
+                .unwrap()
+        );
+
+        // The Rust listener intentionally bounds each connection to one request
+        // and sends Connection: close, while the Go HTTP server reuses keep-alive.
+        let rust = round_trip(true, "http://127.0.0.1");
+        assert!(rust.contains("Connection: close\r\n"), "{rust}");
+    }
+
     fn raw_status(response: &str) -> u16 {
         response
             .split_whitespace()

@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"sort"
 	"strconv"
@@ -84,10 +85,11 @@ type request struct {
 }
 
 type response struct {
-	Status       int               `json:"status"`
-	Headers      map[string]string `json:"headers"`
-	AbsentHeader []string          `json:"absent_headers"`
-	Body         string            `json:"body"`
+	Status           int               `json:"status"`
+	Headers          map[string]string `json:"headers"`
+	AbsentHeader     []string          `json:"absent_headers"`
+	Body             string            `json:"body"`
+	ConnectionReused bool              `json:"connection_reused,omitempty"`
 }
 
 func main() {
@@ -332,12 +334,17 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 	if req.HeaderRepeat > 0 {
 		httpReq.Header.Set("X-Rust-Port-Fixture", strings.Repeat("x", req.HeaderRepeat))
 	}
+	connectionReused := false
+	trace := &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		connectionReused = info.Reused
+	}}
+	httpReq = httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
 	httpResp, err := client.Do(httpReq)
 	check(err)
-	return captureResponse(httpResp)
+	return captureResponse(httpResp, connectionReused)
 }
 
-func captureResponse(httpResp *http.Response) response {
+func captureResponse(httpResp *http.Response, connectionReused bool) response {
 	responseBody, err := io.ReadAll(httpResp.Body)
 	_ = httpResp.Body.Close()
 	check(err)
@@ -353,7 +360,7 @@ func captureResponse(httpResp *http.Response) response {
 		absent = append(absent, "MCP-Protocol-Version")
 	}
 	sort.Strings(absent)
-	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody)}
+	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody), ConnectionReused: connectionReused}
 }
 
 func usesRawRequest(req request) bool {
@@ -402,7 +409,7 @@ func doRawRequest(addr, token string, scopedTokens map[string]string, req reques
 	check(err)
 	httpResp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: req.Method})
 	check(err)
-	return captureResponse(httpResp)
+	return captureResponse(httpResp, false)
 }
 
 func check(err error) {
