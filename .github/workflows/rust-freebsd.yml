@@ -27,7 +27,7 @@ jobs:
           usesh: true
           prepare: |
             set -eu
-            pkg install -y curl ca_root_nss git gmake
+            pkg install -y bash curl ca_root_nss git gmake
             pw groupadd symvault-ci
             pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
             su -l symvault-ci -c "/usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0"
