@@ -3,23 +3,38 @@
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
 - **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
-  Der lokale Stand enthält 22 quellgebundene HTTP-Fälle, typisierte
+  Der lokale Stand enthält 25 quellgebundene HTTP-Fälle, typisierte
   `get`-Exitcodes, `intake watch disable` und `--once`, aktualisierte
-  FFI-Provenienz sowie den FreeBSD-`O_NOFOLLOW`-Fix. Go bleibt Produktionspfad. Release, Cutover,
+  FFI-Provenienz sowie den FreeBSD-`O_NOFOLLOW`-Fix. `intake watch --once`
+  speichert stabile Dateien nun in verschlüsselter Quarantäne. Go bleibt
+  Produktionspfad. Release, Cutover,
   Go-Abbau und destruktives Aufräumen sind nicht autorisiert.
-- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 14 Rust-HTTP-Unit-
+- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 17 Rust-HTTP-Unit-
   und drei Replay-Tests, FFI-KDF-Fixture und fünf Safe-I/O-Tests bestanden.
   `make config-cli-differential` bestand vollständig mit dem gepinnten
   Go-Oracle, einschließlich 75 Go-Fixture-Fällen, CLI-Differential und
   ignoriertem KDF-Migrationsfall. Fokussierte `intake watch --once`- und
-  Rollback-Differentialtests bestanden ebenfalls. Die Annahme stabiler
-  Intake-Dateien ist bis zum Vault-Batch-Writer noch offen.
+  Rollback-Differentialtests bestanden ebenfalls. Für `list` und `get` sind
+  Text/JSON/YAML-Differentiale grün; ein stabiler Intake-Kandidat wurde
+  verschlüsselt geschrieben und von Go und Rust gelesen, ohne die Quelldatei
+  zu verändern. Der vollständige Go-Coverage-Lauf erreichte 63,7 % und
+  bestand alle fünf Paketgrenzen. Feldgrenzen und Pfadkollisionen werden
+  noch geprüft.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
   macOS und Windows native Rust-Tests, Ubuntu-Go-Tests, iOS-Simulator sowie
   Audit/Pairing. `port-contract` und FreeBSD stoppten am gleichen
   Empty-`HOME`-Intake-Test; der plattformabhängige Go-Start-Exit ist lokal
   korrigiert, aber noch nicht am integrierten Head ausgeführt. Der
-  FreeBSD-`O_NOFOLLOW`-Fix wurde dadurch in CI noch nicht erneut erreicht.
+  FreeBSD-`O_NOFOLLOW`-Fix wurde am späteren `01ba082` in den nativen
+  Safe-I/O-Tests erreicht und bestand. Danach scheiterte ein Go-gegen-Go-
+  Selbsttest an einem zeitgestempelten FreeBSD-Startlog; der isolierte
+  Differential-Harness unterdrückt diesen Logeintrag nun gezielt, benötigt
+  aber einen erneuten FreeBSD-Lauf. Am `01ba082` waren Linux-Port-Contract,
+  Audit und iOS-Simulator grün; Rust-Clippy scheiterte auf drei Plattformen
+  an einem lokalen Intake-Initializer (nun korrigiert), Ubuntu-Go-Coverage
+  lag bei 63,4 % unter dem 63,5-%-Gate (HTTP-Generator jetzt im Go-Test),
+  und Windows-Pairing hatte einen einzelnen Zugriffsfehler beim Anlegen eines
+  temporären Git-Repos.
 - **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
   Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
   am lokalen Binary `e15b47a` nach Korrektur des Help-Parsers 134 Go-Pfade,
