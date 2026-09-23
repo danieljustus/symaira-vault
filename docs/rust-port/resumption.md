@@ -35,6 +35,9 @@
   unveränderte Quelle und beendet Go und Rust per SIGTERM mit Exit 0 und
   leerem Spool. Der Test ist Unix-only; Windows-Stop und die macOS-Mitteilung
   im Nicht-JSON-Modus sind offen.
+  `get`/`list`-Hilfe und Zusatzargument-Fehler wurden lokal bytegenau gegen
+  Go verglichen. Der integrierte Cherry-pick ist formatiert; wegen knappem
+  externen Build-Speicher wartet seine exakte Runtime-Evidenz auf CI.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
