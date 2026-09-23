@@ -80,6 +80,10 @@
   Protected-Resource-Discovery-Dokument. Ein Go-Handler-Test und ein Rust-
   Loopback-Test sind im Differential-Gate; OAuth-Registrierung, PKCE,
   Tokenausgabe und Refresh bleiben unportiert und werden nicht beworben.
+  Für DIST-001 ist eine native Acht-Ziel-Matrix integriert: Linux, Darwin,
+  Windows und FreeBSD jeweils amd64/arm64 mit einem expliziten Rust-CLI-Build
+  und `version`-Smoke. Die FreeBSD-arm64-Spur führt vorerst nur diesen Smoke
+  aus; die CI-Ausführung und volle Differentiale dort stehen aus.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
