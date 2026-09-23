@@ -1,9 +1,8 @@
 {
-  "go_version": "go1.27.1",
   "source_sha256": {
     "internal/mobilebind/mobilebind.go": "150c1f9b2a336634ed6b1887bbdac4c875494ecdc4a1fef1261fac5cc3fc4e5f",
     "internal/vault/entry.go": "6d90e91bf5d63ba7eefcc06e2f1e393aa838655f1eb39073053395f228368c94"
   },
-  "input_json": "{\"fixed_negative_six\":1e-6,\"fixed_positive_twenty\":1e20,\"scientific_negative_seven\":1e-7,\"scientific_positive_twenty_one\":1e21}",
-  "expected_json": "{\"fixed_negative_six\":0.000001,\"fixed_positive_twenty\":100000000000000000000,\"scientific_negative_seven\":1e-7,\"scientific_positive_twenty_one\":1e+21}"
+  "input_json": "{\"fixed_negative_six\":1e-6,\"fixed_positive_twenty\":1e20,\"scientific_negative_seven\":1e-7,\"scientific_positive_twenty_one\":1e21,\"integral_one\":1.0,\"negative_zero\":-0.0}",
+  "expected_json": "{\"fixed_negative_six\":0.000001,\"fixed_positive_twenty\":100000000000000000000,\"integral_one\":1,\"negative_zero\":-0,\"scientific_negative_seven\":1e-7,\"scientific_positive_twenty_one\":1e+21}"
 }

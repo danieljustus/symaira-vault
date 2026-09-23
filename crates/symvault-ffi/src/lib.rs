@@ -1011,7 +1011,7 @@ fn go_float_json_token(float: f64) -> Result<String, String> {
         .ok_or_else(|| "entry data number cannot be represented as float64".to_owned())?;
     let raw = number.to_string();
     let Some(exponent_at) = raw.find(|character| character == 'e' || character == 'E') else {
-        return Ok(raw);
+        return Ok(raw.strip_suffix(".0").unwrap_or(&raw).to_owned());
     };
     let (mantissa, exponent) = raw.split_at(exponent_at);
     let exponent = &exponent[1..];
@@ -1855,7 +1855,7 @@ mod tests {
         }
         let root_bytes = root.path().to_str().unwrap().as_bytes();
         let entry_path = b"mobile/contracts/write-entry";
-        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]},"numeric_probe":{"fixed_negative_six":1e-6,"fixed_positive_twenty":1e20,"scientific_negative_seven":1e-7,"scientific_positive_twenty_one":1e21}}}"#;
+        let entry_json = br#"{"data":{"username":"ffi-user","password":"ffi-secret","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]},"numeric_probe":{"fixed_negative_six":1e-6,"fixed_positive_twenty":1e20,"scientific_negative_seven":1e-7,"scientific_positive_twenty_one":1e21,"integral_one":1.0,"negative_zero":-0.0}}}"#;
 
         let intact = unsafe {
             output(symvault_verify_manifest_integrity(

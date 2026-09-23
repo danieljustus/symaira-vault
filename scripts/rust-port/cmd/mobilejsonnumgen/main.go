@@ -10,18 +10,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
 	outputPath = "testdata/port/ffi/mobile-json-numbers.json"
-	inputJSON  = `{"fixed_negative_six":1e-6,"fixed_positive_twenty":1e20,"scientific_negative_seven":1e-7,"scientific_positive_twenty_one":1e21}`
+	inputJSON  = `{"fixed_negative_six":1e-6,"fixed_positive_twenty":1e20,"scientific_negative_seven":1e-7,"scientific_positive_twenty_one":1e21,"integral_one":1.0,"negative_zero":-0.0}`
 )
 
 type fixture struct {
-	GoVersion    string            `json:"go_version"`
 	SourceSHA256 map[string]string `json:"source_sha256"`
 	InputJSON    string            `json:"input_json"`
 	ExpectedJSON string            `json:"expected_json"`
@@ -78,7 +76,6 @@ func buildFixture() (fixture, error) {
 		hashes[path] = hex.EncodeToString(digest[:])
 	}
 	return fixture{
-		GoVersion:    runtime.Version(),
 		SourceSHA256: hashes,
 		InputJSON:    inputJSON,
 		ExpectedJSON: string(expected),
