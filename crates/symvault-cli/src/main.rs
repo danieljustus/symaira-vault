@@ -1549,6 +1549,9 @@ fn run_cli() -> ExitCode {
             let result = (|| {
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
+                if broker {
+                    return Err("run --broker is not implemented in the Rust CLI yet".to_owned());
+                }
                 let identity = device::unlock_vault(&root)?;
                 let environment =
                     run_commands::build_secret_environment(&env, &env_file, |reference| {
@@ -1559,9 +1562,6 @@ fn run_cli() -> ExitCode {
                     .map(session_commands::parse_ttl_override)
                     .transpose()?
                     .flatten();
-                if broker {
-                    return Err("run --broker is not implemented in the Rust CLI yet".to_owned());
-                }
                 let redactions: Vec<_> = environment
                     .values
                     .values()
