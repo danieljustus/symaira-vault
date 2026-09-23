@@ -1,0 +1,4 @@
+module SymvaultRustCore {
+    header "symvault_ffi.h"
+    export *
+}
