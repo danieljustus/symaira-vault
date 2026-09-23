@@ -14,7 +14,9 @@ use std::{
 };
 
 const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
-const IO_TIMEOUT: Duration = Duration::from_secs(60);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_INFORMATIONAL_RESPONSES: usize = 8;
+const MAX_RESPONSE_HEADER_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct ApiTemplate {
@@ -41,6 +43,27 @@ pub fn execute_http(
     body: &[u8],
     bearer: Option<&str>,
 ) -> Result<ApiResponse, String> {
+    execute_http_with_timeout(
+        template,
+        method,
+        endpoint,
+        headers,
+        body,
+        bearer,
+        REQUEST_TIMEOUT,
+    )
+}
+
+fn execute_http_with_timeout(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+    bearer: Option<&str>,
+    timeout: Duration,
+) -> Result<ApiResponse, String> {
+    let deadline = std::time::Instant::now() + timeout;
     let target = Target::parse(&template.base_url, endpoint)?;
     if !template.allowed_endpoints.is_empty()
         && !template
@@ -68,11 +91,7 @@ pub fn execute_http(
         return Err("request body too large".into());
     }
     let addresses = resolve_and_check(&target.connect_authority, template.allow_private)?;
-    let mut stream = connect(&addresses)?;
-    stream
-        .set_read_timeout(Some(IO_TIMEOUT))
-        .and_then(|()| stream.set_write_timeout(Some(IO_TIMEOUT)))
-        .map_err(|_| "cannot configure upstream connection")?;
+    let mut stream = connect(&addresses, deadline)?;
 
     let mut outgoing = BTreeMap::new();
     for (name, value) in headers.iter().chain(template.default_headers.iter()) {
@@ -94,25 +113,32 @@ pub fn execute_http(
         return Err("credential value is empty".into());
     }
 
+    let mut request_head = Vec::new();
     write!(
-        stream,
+        request_head,
         "{method} {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n",
         target.path, target.host_header
     )
     .map_err(|_| "cannot write upstream request")?;
     for (key, (name, value)) in outgoing {
         if key == "authorization" && bearer.is_some() {
-            write!(stream, "{name}: Bearer {}\r\n", bearer.unwrap_or_default())
-                .map_err(|_| "cannot write upstream request")?;
+            write!(
+                request_head,
+                "{name}: Bearer {}\r\n",
+                bearer.unwrap_or_default()
+            )
+            .map_err(|_| "cannot write upstream request")?;
         } else {
-            write!(stream, "{name}: {value}\r\n").map_err(|_| "cannot write upstream request")?;
+            write!(request_head, "{name}: {value}\r\n")
+                .map_err(|_| "cannot write upstream request")?;
         }
     }
-    write!(stream, "Content-Length: {}\r\n\r\n", body.len())
-        .and_then(|()| stream.write_all(body))
+    write!(request_head, "Content-Length: {}\r\n\r\n", body.len())
         .map_err(|_| "cannot write upstream request")?;
+    write_all_deadline(&mut stream, &request_head, deadline)?;
+    write_all_deadline(&mut stream, body, deadline)?;
 
-    let (status, mut response_body) = read_response(stream)?;
+    let (status, mut response_body) = read_response(stream, deadline)?;
     if let Some(token) = bearer.filter(|token| !token.is_empty()) {
         response_body = replace_bytes(&response_body, token.as_bytes(), b"***");
     }
@@ -218,6 +244,7 @@ fn safe_path(path: &str) -> bool {
 }
 
 fn resolve_and_check(authority: &str, allow_private: bool) -> Result<Vec<SocketAddr>, String> {
+    // ponytail: std DNS resolution is uninterruptible; add a cancellable resolver if latency matters.
     let addresses = authority
         .to_socket_addrs()
         .map_err(|_| "cannot resolve upstream host")?
@@ -267,13 +294,49 @@ fn private_or_local(ip: IpAddr) -> bool {
     }
 }
 
-fn connect(addresses: &[SocketAddr]) -> Result<TcpStream, String> {
+fn remaining(deadline: std::time::Instant) -> Result<Duration, String> {
+    deadline
+        .checked_duration_since(std::time::Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or_else(|| "upstream request timed out".into())
+}
+
+fn connect(addresses: &[SocketAddr], deadline: std::time::Instant) -> Result<TcpStream, String> {
     for address in addresses {
-        if let Ok(stream) = TcpStream::connect_timeout(address, IO_TIMEOUT) {
+        let timeout = remaining(deadline)?;
+        if let Ok(stream) = TcpStream::connect_timeout(address, timeout) {
             return Ok(stream);
         }
     }
     Err("cannot connect to upstream host".into())
+}
+
+fn write_all_deadline(
+    stream: &mut TcpStream,
+    bytes: &[u8],
+    deadline: std::time::Instant,
+) -> Result<(), String> {
+    let mut written = 0;
+    while written < bytes.len() {
+        let timeout = remaining(deadline)?;
+        stream
+            .set_write_timeout(Some(timeout))
+            .map_err(|_| "cannot configure upstream connection")?;
+        match stream.write(&bytes[written..]) {
+            Ok(0) => return Err("cannot write upstream request".into()),
+            Ok(count) => written += count,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Err("upstream request timed out".into());
+            }
+            Err(_) => return Err("cannot write upstream request".into()),
+        }
+    }
+    Ok(())
 }
 
 fn is_http_token(value: &str) -> bool {
@@ -294,11 +357,20 @@ fn validate_header(name: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn read_response(stream: TcpStream) -> Result<(u16, Vec<u8>), String> {
+fn read_response(
+    stream: TcpStream,
+    deadline: std::time::Instant,
+) -> Result<(u16, Vec<u8>), String> {
     let mut reader = BufReader::new(stream);
+    let mut total_header_bytes = 0;
+    let mut informational_count = 0;
     loop {
-        let status_line =
-            read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+        let status_line = read_line_limited(&mut reader, 8 * 1024, deadline)?
+            .ok_or("invalid upstream response")?;
+        total_header_bytes += status_line.len();
+        if total_header_bytes > MAX_RESPONSE_HEADER_BYTES {
+            return Err("upstream response headers too large".into());
+        }
         let status = status_line
             .split_whitespace()
             .nth(1)
@@ -309,10 +381,13 @@ fn read_response(stream: TcpStream) -> Result<(u16, Vec<u8>), String> {
         let mut chunked = false;
         let mut header_bytes = status_line.len();
         loop {
-            let line =
-                read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+            let line = read_line_limited(&mut reader, 8 * 1024, deadline)?
+                .ok_or("invalid upstream response")?;
             header_bytes += line.len();
-            if header_bytes > 64 * 1024 {
+            total_header_bytes += line.len();
+            if header_bytes > MAX_RESPONSE_HEADER_BYTES
+                || total_header_bytes > MAX_RESPONSE_HEADER_BYTES
+            {
                 return Err("upstream response headers too large".into());
             }
             if line == "\r\n" {
@@ -344,41 +419,44 @@ fn read_response(stream: TcpStream) -> Result<(u16, Vec<u8>), String> {
             if status == 101 {
                 return Err("upstream protocol switch is unsupported".into());
             }
+            informational_count += 1;
+            if informational_count > MAX_INFORMATIONAL_RESPONSES {
+                return Err("too many informational upstream responses".into());
+            }
             continue;
         }
         if matches!(status, 204 | 205 | 304) {
             return Ok((status, Vec::new()));
         }
         let body = if chunked {
-            read_chunked(&mut reader)?
+            read_chunked(
+                &mut reader,
+                deadline,
+                MAX_RESPONSE_HEADER_BYTES - total_header_bytes,
+            )?
         } else if let Some(length) = content_length {
             if length > MAX_RESPONSE_BYTES {
                 return Err("upstream response too large".into());
             }
             let mut body = vec![0; length];
-            reader
-                .read_exact(&mut body)
-                .map_err(|_| "invalid upstream response")?;
+            read_exact_deadline(&mut reader, &mut body, deadline)?;
             body
         } else {
-            let mut body = Vec::new();
-            reader
-                .take((MAX_RESPONSE_BYTES + 1) as u64)
-                .read_to_end(&mut body)
-                .map_err(|_| "upstream request failed")?;
-            if body.len() > MAX_RESPONSE_BYTES {
-                return Err("upstream response too large".into());
-            }
-            body
+            read_until_close_deadline(&mut reader, deadline)?
         };
         return Ok((status, body));
     }
 }
 
-fn read_chunked(reader: &mut BufReader<TcpStream>) -> Result<Vec<u8>, String> {
+fn read_chunked(
+    reader: &mut BufReader<TcpStream>,
+    deadline: std::time::Instant,
+    max_trailer_bytes: usize,
+) -> Result<Vec<u8>, String> {
     let mut body = Vec::new();
     loop {
-        let line = read_line_limited(reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+        let line =
+            read_line_limited(reader, 8 * 1024, deadline)?.ok_or("invalid upstream response")?;
         let size = usize::from_str_radix(
             line.trim_end_matches(&['\r', '\n'][..])
                 .split(';')
@@ -390,10 +468,10 @@ fn read_chunked(reader: &mut BufReader<TcpStream>) -> Result<Vec<u8>, String> {
         if size == 0 {
             let mut trailer_bytes = 0;
             loop {
-                let line =
-                    read_line_limited(reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+                let line = read_line_limited(reader, 8 * 1024, deadline)?
+                    .ok_or("invalid upstream response")?;
                 trailer_bytes += line.len();
-                if trailer_bytes > 64 * 1024 {
+                if trailer_bytes > max_trailer_bytes {
                     return Err("upstream response headers too large".into());
                 }
                 if line == "\r\n" || line.is_empty() {
@@ -406,26 +484,27 @@ fn read_chunked(reader: &mut BufReader<TcpStream>) -> Result<Vec<u8>, String> {
         }
         let old_len = body.len();
         body.resize(old_len + size, 0);
-        reader
-            .read_exact(&mut body[old_len..])
-            .map_err(|_| "invalid upstream response")?;
+        read_exact_deadline(reader, &mut body[old_len..], deadline)?;
         let mut crlf = [0; 2];
-        reader
-            .read_exact(&mut crlf)
-            .map_err(|_| "invalid upstream response")?;
+        read_exact_deadline(reader, &mut crlf, deadline)?;
         if crlf != *b"\r\n" {
             return Err("invalid upstream response".into());
         }
     }
 }
 
-fn read_line_limited<R: BufRead>(
-    reader: &mut R,
+fn read_line_limited(
+    reader: &mut BufReader<TcpStream>,
     max_bytes: usize,
+    deadline: std::time::Instant,
 ) -> Result<Option<String>, String> {
     let mut bytes = Vec::new();
     loop {
-        let available = reader.fill_buf().map_err(|_| "upstream request failed")?;
+        reader
+            .get_ref()
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(|_| "cannot configure upstream connection")?;
+        let available = reader.fill_buf().map_err(read_error)?;
         if available.is_empty() {
             return if bytes.is_empty() {
                 Ok(None)
@@ -448,6 +527,61 @@ fn read_line_limited<R: BufRead>(
                 .map(Some)
                 .map_err(|_| "invalid upstream response".into());
         }
+    }
+}
+
+fn read_exact_deadline(
+    reader: &mut BufReader<TcpStream>,
+    bytes: &mut [u8],
+    deadline: std::time::Instant,
+) -> Result<(), String> {
+    let mut read = 0;
+    while read < bytes.len() {
+        reader
+            .get_ref()
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(|_| "cannot configure upstream connection")?;
+        match reader.read(&mut bytes[read..]) {
+            Ok(0) => return Err("invalid upstream response".into()),
+            Ok(count) => read += count,
+            Err(error) => return Err(read_error(error)),
+        }
+    }
+    Ok(())
+}
+
+fn read_until_close_deadline(
+    reader: &mut BufReader<TcpStream>,
+    deadline: std::time::Instant,
+) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    let mut chunk = [0; 8 * 1024];
+    loop {
+        reader
+            .get_ref()
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(|_| "cannot configure upstream connection")?;
+        match reader.read(&mut chunk) {
+            Ok(0) => return Ok(body),
+            Ok(count) => {
+                if body.len() + count > MAX_RESPONSE_BYTES {
+                    return Err("upstream response too large".into());
+                }
+                body.extend_from_slice(&chunk[..count]);
+            }
+            Err(error) => return Err(read_error(error)),
+        }
+    }
+}
+
+fn read_error(error: std::io::Error) -> String {
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ) {
+        "upstream request timed out".into()
+    } else {
+        "upstream request failed".into()
     }
 }
 
@@ -621,27 +755,87 @@ mod tests {
     #[test]
     fn informational_and_bodyless_responses_keep_the_final_framing() {
         let (status, body) = response_from_loopback(
-            b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
-        );
+            b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK".to_vec(),
+        )
+        .unwrap();
         assert_eq!(status, 200);
         assert_eq!(body, b"OK");
 
         let (status, body) = response_from_loopback(
-            b"HTTP/1.1 304 Not Modified\r\nContent-Length: 123\r\nConnection: close\r\n\r\n",
-        );
+            b"HTTP/1.1 304 Not Modified\r\nContent-Length: 123\r\nConnection: close\r\n\r\n"
+                .to_vec(),
+        )
+        .unwrap();
         assert_eq!(status, 304);
         assert!(body.is_empty());
+
+        let mut interim = Vec::new();
+        for _ in 0..=MAX_INFORMATIONAL_RESPONSES {
+            interim.extend_from_slice(b"HTTP/1.1 103 Early Hints\r\n\r\n");
+        }
+        assert_eq!(
+            response_from_loopback(interim).unwrap_err(),
+            "too many informational upstream responses"
+        );
+
+        let mut headers = Vec::new();
+        for _ in 0..MAX_INFORMATIONAL_RESPONSES {
+            headers.extend_from_slice(b"HTTP/1.1 103 Early Hints\r\nX-Pad: ");
+            headers.extend(std::iter::repeat_n(b'a', 8_180));
+            headers.extend_from_slice(b"\r\n\r\n");
+        }
+        assert_eq!(
+            response_from_loopback(headers).unwrap_err(),
+            "upstream response headers too large"
+        );
     }
 
-    fn response_from_loopback(wire: &'static [u8]) -> (u16, Vec<u8>) {
+    #[test]
+    fn slow_drip_cannot_extend_the_absolute_request_deadline() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            stream.write_all(wire).unwrap();
+            for byte in b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n" {
+                if stream.write_all(&[*byte]).is_err() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(30));
+            }
+        });
+        let template = ApiTemplate {
+            base_url: format!("http://{address}"),
+            allowed_endpoints: vec!["/safe/*".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: true,
+        };
+        let started = std::time::Instant::now();
+        let error = execute_http_with_timeout(
+            &template,
+            "GET",
+            "/safe/item",
+            &BTreeMap::new(),
+            b"",
+            None,
+            Duration::from_millis(150),
+        )
+        .unwrap_err();
+        let elapsed = started.elapsed();
+        server.join().unwrap();
+        assert_eq!(error, "upstream request timed out");
+        assert!(elapsed < Duration::from_millis(500));
+    }
+
+    fn response_from_loopback(wire: Vec<u8>) -> Result<(u16, Vec<u8>), String> {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(&wire).unwrap();
         });
         let stream = TcpStream::connect(address).unwrap();
-        let response = read_response(stream).unwrap();
+        let response = read_response(stream, std::time::Instant::now() + Duration::from_secs(2));
         server.join().unwrap();
         response
     }
