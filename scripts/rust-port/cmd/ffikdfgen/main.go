@@ -17,6 +17,7 @@ import (
 	"sort"
 
 	"filippo.io/age"
+
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -63,7 +64,7 @@ func rootDir() string {
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
 }
 
-func digestFiles(root string, names []string, read func(string) ([]byte, error)) (string, error) {
+func digestFiles(names []string, read func(string) ([]byte, error)) (string, error) {
 	sorted := append([]string(nil), names...)
 	sort.Strings(sorted)
 	h := sha256.New()
@@ -81,14 +82,14 @@ func digestFiles(root string, names []string, read func(string) ([]byte, error))
 }
 
 func provenance(root string) (oracle, error) {
-	sourceDigest, err := digestFiles(root, oracleFiles, func(name string) ([]byte, error) {
+	sourceDigest, err := digestFiles(oracleFiles, func(name string) ([]byte, error) {
 		return exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
 	})
 	if err != nil {
 		return oracle{}, fmt.Errorf("read pinned Go source: %w", err)
 	}
 	const generatorFile = "scripts/rust-port/cmd/ffikdfgen/main.go"
-	generatorDigest, err := digestFiles(root, []string{generatorFile}, func(name string) ([]byte, error) {
+	generatorDigest, err := digestFiles([]string{generatorFile}, func(name string) ([]byte, error) {
 		return os.ReadFile(filepath.Join(root, name))
 	})
 	if err != nil {
@@ -137,7 +138,8 @@ func verifyGoMigration(value fixture) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+	err = os.MkdirAll(filepath.Join(dir, "entries"), 0o700)
+	if err != nil {
 		return err
 	}
 	cfg := vaultconfig.Default()
@@ -150,23 +152,26 @@ func verifyGoMigration(value fixture) error {
 		Argon2idMemory:   32,
 		Argon2idThreads:  1,
 	}
-	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+	err = cfg.SaveTo(filepath.Join(dir, "config.yaml"))
+	if err != nil {
 		return err
 	}
 	identityPath := filepath.Join(dir, "identity.age")
-	if err := os.WriteFile(identityPath, ciphertext, 0o600); err != nil {
+	err = os.WriteFile(identityPath, ciphertext, 0o600)
+	if err != nil {
 		return err
 	}
-	if _, err := vaultpkg.OpenWithPassphrase(dir, []byte(passphrase)); err != nil {
-		return fmt.Errorf("Go OpenWithPassphrase migration: %w", err)
+	_, err = vaultpkg.OpenWithPassphrase(dir, []byte(passphrase))
+	if err != nil {
+		return fmt.Errorf("go OpenWithPassphrase migration: %w", err)
 	}
 	backup, err := os.ReadFile(identityPath + ".bak")
 	if err != nil || !equal(backup, ciphertext) {
-		return errors.New("Go migration did not preserve the original identity backup")
+		return errors.New("go migration did not preserve the original identity backup")
 	}
 	reopened, err := vaultcrypto.LoadIdentityWithArgon2id(identityPath, []byte(passphrase))
 	if err != nil || reopened.String() != value.Identity {
-		return errors.New("Go migration output did not decrypt to the fixture identity")
+		return errors.New("go migration output did not decrypt to the fixture identity")
 	}
 	return nil
 }

@@ -12,10 +12,10 @@
     ],
     "source_digest": "082c2739651538417f3a40855f972b53637e1b3283e8867d5b8395ee3c7a13ea",
     "generator_file": "scripts/rust-port/cmd/ffikdfgen/main.go",
-    "generator_digest": "bba921ed37eccbb88b32bd948cc94b4fc51557fdde17f3bfe126ed70c26349c6"
+    "generator_digest": "0c7873ce491640161b14254b1aeb9e62fac7f7924c6b55b244076aab0700c1a6"
   },
   "identity": "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",
   "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
-  "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBzRXlpUVJMTTdZSHQ3S2FlWnAza0ZRIDE4Cms5aFRlNzdWbWpQcXMwZ3lSSWh2THYxcm5PVnQ3NmlrblRtUXM3TkZBUkUKLS0tIERIUjFUNVNBSXgwYXg3dk90UHBMaE5Sek1xbnFnYjlXQXlmTG5DVFdZc1kK87oLSc3kCKIZ9GJtHV6oEoZCI2Zhyt8VT5d9/Xa0oIEBeN34w1B7o+tcB+qD+lWhKRYG+lOQoir9yBddo6iPnjfJeVwPy2Ge0UK4p6rm8DSHBa+CNCt3BiI8AVz2FfGsmbukHwJljHDV+w==",
+  "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBDVHk3dlhHZ09kYjVHU2Vjd3A5clVnIDE4CjFObkhIZDh1WVc1YjdYTitpZEoyQWlvcWthdElLVWpjck9leUhIUDNhMk0KLS0tIE5xNXdROFJtNlg5dUlLdGhzNmZBYllxMysxcjdqaUIycmdOaVh0RXRhaVUK53FYbmygUzF1tjXNo2DgqpgGbI5InPUUN6HbCpR5qwehcdmTyII3lzaTTggQBFVY3O8b9TXWCf5mhgqjcy0uNE2KYHLopYV/jR8+Kr1tlIrSc9RGhYl4bJIZor3FZhsBI8v024NLnWHfJQ==",
   "passphrase_length": 34
 }
