@@ -66,6 +66,8 @@ func main() {
 		{Name: "bw_invalid_utf8_in_string", Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte("{\"items\":[{\"type\":1,\"name\":\"A\",\"login\":{\"password\":\"\xff\"}}]}"))},
 		{Name: "bw_truncated_utf8_in_string", Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte("{\"items\":[{\"type\":1,\"name\":\"A\",\"login\":{\"password\":\"\xe2\x82\"}}]}"))},
 		{Name: "bw_invalid_utf8_outside_string", Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte("{\xff\"items\":[]}"))},
+		{Name: "bw_invalid_utf8_in_invalid_escape", Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte("{\"a\":\"é\",\"b\":\"\\\xff\"}"))},
+		{Name: "bw_invalid_utf8_after_escaped_backslash", Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte("{\"items\":[{\"type\":1,\"name\":\"A\",\"login\":{\"password\":\"\\\\\xff\"}}]}"))},
 		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},
 		{Name: "bw_card", Format: "bitwarden", Input: `{"items":[{"type":2,"name":"Card","card":{"number":"fixture-123","code":"000"}}]}`},
 		{Name: "bw_totp_precedence", Format: "bitwarden", Input: `{"items":[{"type":1,"name":"Login","login":{"totp":"otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&digits=8"},"fields":[{"name":"TOTP","value":"bad"},{"name":"totp","value":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}`}, // #nosec G101 -- public synthetic import fixture, not a real credential

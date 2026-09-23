@@ -592,22 +592,25 @@ fn replace_invalid_utf8_in_json_strings(bytes: &[u8]) -> Vec<u8> {
                 result.push(byte);
                 index += 1;
             }
-            _ => match std::str::from_utf8(&bytes[index..]) {
-                Ok(valid) => {
-                    result.extend_from_slice(valid.as_bytes());
-                    break;
-                }
-                Err(error) if error.valid_up_to() > 0 => {
-                    let end = index + error.valid_up_to();
-                    result.extend_from_slice(&bytes[index..end]);
-                    index = end;
-                }
-                Err(_) => {
+            _ => {
+                let width = match byte {
+                    0xc2..=0xdf => 2,
+                    0xe0..=0xef => 3,
+                    0xf0..=0xf4 => 4,
+                    _ => 0,
+                };
+                if width > 0
+                    && index + width <= bytes.len()
+                    && std::str::from_utf8(&bytes[index..index + width]).is_ok()
+                {
+                    result.extend_from_slice(&bytes[index..index + width]);
+                    index += width;
+                } else {
                     // Go encoding/json replaces each invalid byte inside a string.
                     result.extend_from_slice(br"\uFFFD");
                     index += 1;
                 }
-            },
+            }
         }
     }
     result

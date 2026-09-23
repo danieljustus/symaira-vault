@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "abb5bbd0f852f39bc404792c943b4a9238e8b4f418c078e8563332a6e9d7d64a",
+  "generator_digest": "8d1b7fc83be39f60a883113e90a6f12958aa8472f987bc8cbcbc522c64454505",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -286,6 +286,32 @@
       "input_b64": "e/8iaXRlbXMiOltdfQ==",
       "entries": [],
       "failed": true
+    },
+    {
+      "name": "bw_invalid_utf8_in_invalid_escape",
+      "format": "bitwarden",
+      "input_b64": "eyJhIjoiw6kiLCJiIjoiXP8ifQ==",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "bw_invalid_utf8_after_escaped_backslash",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6Ilxc/yJ9fV19",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "\\�",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
     },
     {
       "name": "bw_empty_fields",
