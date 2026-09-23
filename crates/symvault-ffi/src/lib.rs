@@ -66,6 +66,9 @@ unsafe fn input<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a [u8]
     if len == 0 {
         return Ok(&[]);
     }
+    if len > isize::MAX as usize {
+        return Err(format!("{label} is too large"));
+    }
     if data.is_null() {
         return Err(format!("{label} is null"));
     }
@@ -152,6 +155,9 @@ pub unsafe extern "C" fn symvault_encrypt_with_public_key(
         let recipient = unsafe { text(recipient, recipient_len, "recipient")? };
         let recipient = parse_recipient(recipient).map_err(|error| error.to_string())?;
         let plaintext = unsafe { input(plaintext, plaintext_len, "plaintext")? };
+        if plaintext.is_empty() {
+            return Err("plaintext is empty".to_owned());
+        }
         encrypt(plaintext, std::slice::from_ref(&recipient)).map_err(|error| error.to_string())
     })
 }
@@ -171,6 +177,9 @@ pub unsafe extern "C" fn symvault_decrypt_with_identity(
         let identity = unsafe { text(identity, identity_len, "identity")? };
         let identity = parse_identity(identity).map_err(|error| error.to_string())?;
         let ciphertext = unsafe { input(ciphertext, ciphertext_len, "ciphertext")? };
+        if ciphertext.is_empty() {
+            return Err("ciphertext is empty".to_owned());
+        }
         decrypt(ciphertext, &identity).map_err(|error| error.to_string())
     })
 }
@@ -193,6 +202,9 @@ pub unsafe extern "C" fn symvault_encrypt_with_passphrase(
         }
         str::from_utf8(passphrase).map_err(|_| "passphrase is not UTF-8".to_owned())?;
         let plaintext = unsafe { input(plaintext, plaintext_len, "plaintext")? };
+        if plaintext.is_empty() {
+            return Err("plaintext is empty".to_owned());
+        }
         encrypt_scrypt(plaintext, &SecretBytes::new(passphrase), 18)
             .map_err(|error| error.to_string())
     })
@@ -216,6 +228,9 @@ pub unsafe extern "C" fn symvault_decrypt_with_passphrase(
         }
         str::from_utf8(passphrase).map_err(|_| "passphrase is not UTF-8".to_owned())?;
         let ciphertext = unsafe { input(ciphertext, ciphertext_len, "ciphertext")? };
+        if ciphertext.is_empty() {
+            return Err("ciphertext is empty".to_owned());
+        }
         decrypt_scrypt(ciphertext, &SecretBytes::new(passphrase)).map_err(|error| error.to_string())
     })
 }
@@ -342,5 +357,74 @@ mod tests {
             .unwrap_err()
         };
         assert!(error.contains("not UTF-8"));
+    }
+
+    #[test]
+    fn empty_plaintext_and_ciphertext_match_go_errors() {
+        let identity = output(symvault_generate_identity()).unwrap();
+        let public_key = unsafe {
+            output(symvault_identity_public_key(
+                identity.as_ptr(),
+                identity.len(),
+            ))
+            .unwrap()
+        };
+        let passphrase = b"test passphrase";
+
+        let encrypt_error = unsafe {
+            output(symvault_encrypt_with_public_key(
+                public_key.as_ptr(),
+                public_key.len(),
+                ptr::null(),
+                0,
+            ))
+            .unwrap_err()
+        };
+        assert_eq!(encrypt_error, "plaintext is empty");
+
+        let passphrase_encrypt_error = unsafe {
+            output(symvault_encrypt_with_passphrase(
+                passphrase.as_ptr(),
+                passphrase.len(),
+                ptr::null(),
+                0,
+            ))
+            .unwrap_err()
+        };
+        assert_eq!(passphrase_encrypt_error, "plaintext is empty");
+
+        let decrypt_error = unsafe {
+            output(symvault_decrypt_with_identity(
+                identity.as_ptr(),
+                identity.len(),
+                ptr::null(),
+                0,
+            ))
+            .unwrap_err()
+        };
+        assert_eq!(decrypt_error, "ciphertext is empty");
+
+        let passphrase_decrypt_error = unsafe {
+            output(symvault_decrypt_with_passphrase(
+                passphrase.as_ptr(),
+                passphrase.len(),
+                ptr::null(),
+                0,
+            ))
+            .unwrap_err()
+        };
+        assert_eq!(passphrase_decrypt_error, "ciphertext is empty");
+    }
+
+    #[test]
+    fn oversized_inputs_are_rejected_before_slice_creation() {
+        let error = unsafe {
+            output(symvault_public_key_fingerprint(
+                ptr::null(),
+                isize::MAX as usize + 1,
+            ))
+            .unwrap_err()
+        };
+        assert_eq!(error, "public key is too large");
     }
 }
