@@ -38,6 +38,9 @@
   `get`/`list`-Hilfe und Zusatzargument-Fehler wurden lokal bytegenau gegen
   Go verglichen. Der integrierte Cherry-pick ist formatiert; wegen knappem
   externen Build-Speicher wartet seine exakte Runtime-Evidenz auf CI.
+  HTTP/1.0-Initialisierung wurde entlang des vorhandenen Go-Fixtures ergänzt;
+  der neue Rust-Replay ist vor dem CI-Lauf noch nicht ausgeführt. HTTP/1.0-
+  Fehlerantworten und `Connection: keep-alive` bleiben offen.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
