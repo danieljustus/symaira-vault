@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -468,6 +469,24 @@ func TestIsolatedEnvRejectsSandboxAndKeyringOverrides(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected override %q to be rejected", key)
 		}
+	}
+}
+
+func TestIsolatedEnvSuppressesTimestampedFreeBSDStartupLog(t *testing.T) {
+	env, err := isolatedEnv("/isolated/home", "/isolated/tmp", "/isolated/runtime", "/isolated/state", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range env {
+		if entry == "SYMVAULT_LOG_LEVEL=error" {
+			if runtime.GOOS != "freebsd" {
+				t.Fatal("unexpected log-level override outside FreeBSD")
+			}
+			return
+		}
+	}
+	if runtime.GOOS == "freebsd" {
+		t.Fatal("FreeBSD must suppress timestamped startup logging")
 	}
 }
 

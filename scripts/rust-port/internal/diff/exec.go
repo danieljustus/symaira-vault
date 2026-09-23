@@ -293,6 +293,11 @@ func isolatedEnv(home, tmp, runtimeDir, state string, extra map[string]string, r
 		"SYMVAULT_TEST_KEYRING=memory",
 		"SYMVAULT_SECUREUI=none",
 	}
+	// FreeBSD emits a timestamped package-init warning before CLI dispatch.
+	// Keep byte comparisons deterministic, as the CLI differential gate does.
+	if runtime.GOOS == "freebsd" {
+		env = append(env, "SYMVAULT_LOG_LEVEL=error")
+	}
 	for _, key := range []string{"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT"} {
 		if value, ok := lookupEnvFold(key); ok {
 			env = append(env, key+"="+value)
