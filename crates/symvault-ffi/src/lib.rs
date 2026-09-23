@@ -1356,7 +1356,7 @@ mod tests {
     fn open_vault_migrates_go_scrypt_identity_only_when_opted_in() {
         let without_format = b"vault:\n  scrypt_work_factor: 18\n  auto_migrate_kdf: true\n";
         assert_eq!(
-            migrated_kdf_config(without_format).unwrap(),
+            migrated_kdf_config(without_format).unwrap().as_slice(),
             b"vault:\n  format_version: 2\n  auto_migrate_kdf: true\n"
         );
         assert!(
