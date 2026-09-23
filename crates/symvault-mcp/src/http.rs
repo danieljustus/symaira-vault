@@ -816,10 +816,9 @@ mod tests {
                 .expect("response header UTF-8")
                 .trim_end_matches("\r\n")
                 .split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
             {
-                if name.eq_ignore_ascii_case("content-length") {
-                    content_length = Some(value.trim().parse::<usize>().expect("content length"));
-                }
+                content_length = Some(value.trim().parse::<usize>().expect("content length"));
             }
             response.extend_from_slice(&line);
         }
