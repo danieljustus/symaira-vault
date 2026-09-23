@@ -1595,6 +1595,11 @@ fn run_cli() -> ExitCode {
             ocr_text,
             command,
         }) => match command {
+            None if files.is_empty() => {
+                let message = "requires at least 1 arg(s), only received 0";
+                let _ = writeln!(io::stderr(), "Error: {message}\nError: {message}");
+                ExitCode::from(1)
+            }
             None => match intake_commands::intake_files(
                 &files,
                 dry_run,
@@ -1647,8 +1652,7 @@ fn run_cli() -> ExitCode {
                     };
                 }
                 let Some(directory) = directory else {
-                    let _ = writeln!(io::stderr(), "Error: watch directory is required");
-                    return ExitCode::from(9);
+                    return print_arg_count_error("1", 0);
                 };
                 let result = if once {
                     intake_commands::watch_once(
