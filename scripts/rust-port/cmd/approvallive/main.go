@@ -145,7 +145,7 @@ func run(binary string) error {
 	if err != nil {
 		return fmt.Errorf("Rust approve: %w", err)
 	}
-	if !sameOutcome(goApproveID, goApprove, rustApproveID, rustApprove) {
+	if !sameOutcome(goApproveID, goApprove, rustApproveID, rustApprove.Outcome) {
 		return fmt.Errorf("approve result differs: Go=%+v Rust=%+v", goApprove, rustApprove)
 	}
 
@@ -157,7 +157,7 @@ func run(binary string) error {
 	if err != nil {
 		return fmt.Errorf("Rust deny: %w", err)
 	}
-	if !sameOutcome(goDenyID, goDeny, rustDenyID, rustDeny) {
+	if !sameOutcome(goDenyID, goDeny, rustDenyID, rustDeny.Outcome) {
 		return fmt.Errorf("deny result differs: Go=%+v Rust=%+v", goDeny, rustDeny)
 	}
 

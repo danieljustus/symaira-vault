@@ -109,10 +109,10 @@ where
                 continue;
             }
             let state = Arc::clone(&state);
-            let active = Arc::clone(&active);
+            let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
-                let _active = ActiveHttpConnection(active);
+                let _active = ActiveHttpConnection(active_for_thread);
                 let _ = serve_connection_shared(
                     stream,
                     &registry_path,
