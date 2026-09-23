@@ -119,7 +119,7 @@ fn run_broker_fails_closed_before_spawning_child() {
         &["run", "--broker", "--", "/usr/bin/touch", marker_arg],
         home.path(),
         &vault,
-        Some(passphrase),
+        None,
     );
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty(), "stdout={:?}", output.stdout);
