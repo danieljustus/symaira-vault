@@ -45,6 +45,7 @@ mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
 mod template_commands;
+mod ui_commands;
 mod update_commands;
 mod utility_commands;
 mod vault_commands;
@@ -487,6 +488,15 @@ enum Command {
         quarantine: bool,
         #[arg(long, default_value = "")]
         mapping: String,
+    },
+    /// Launch the interactive terminal UI.
+    Ui {
+        #[arg(long)]
+        experimental: bool,
+        #[arg(long)]
+        print_keybindings: bool,
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        extra: Vec<String>,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -1284,6 +1294,16 @@ fn run_cli() -> ExitCode {
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
             cli.quiet,
+        ),
+        Some(Command::Ui {
+            experimental: _,
+            print_keybindings,
+            extra,
+        }) => ui_commands::run(
+            print_keybindings,
+            &extra,
+            &mut io::stdout().lock(),
+            &mut io::stderr().lock(),
         ),
         Some(Command::Generate {
             subcommand: Some(GenerateCommand::Manpages { directory }),
