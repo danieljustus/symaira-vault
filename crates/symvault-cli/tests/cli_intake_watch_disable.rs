@@ -4,7 +4,6 @@ use std::{
     process::{Command, Output},
 };
 
-#[cfg(target_os = "macos")]
 use std::fs;
 
 use tempfile::TempDir;
@@ -57,6 +56,22 @@ fn watch_disable_matches_go_in_throwaway_home() {
         assert!(
             !plist.exists(),
             "Rust command did not remove its LaunchAgent"
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        fs::create_dir_all(plist.parent().unwrap()).expect("create LaunchAgents");
+        fs::write(&plist, b"fixture plist").expect("seed LaunchAgent");
+        let go = run(&go_binary, home.path());
+        let rust = run(rust_binary, home.path());
+        assert_eq!(go.status.code(), Some(9));
+        assert_eq!(rust.status.code(), go.status.code());
+        assert_eq!(rust.stdout, go.stdout);
+        assert_eq!(rust.stderr, go.stderr);
+        assert!(
+            plist.exists(),
+            "non-macOS disable must leave the plist intact"
         );
     }
 }

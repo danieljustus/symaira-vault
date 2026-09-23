@@ -1441,7 +1441,18 @@ fn run_cli() -> ExitCode {
                 IntakeCommand::Watch {
                     command: IntakeWatchCommand::Disable,
                 },
-        }) => finish_vault_result(intake_commands::watch_disable(cli.quiet)),
+        }) => match intake_commands::watch_disable(cli.quiet) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                for _ in 0..2 {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                }
+                ExitCode::from(match error {
+                    intake_commands::WatchDisableError::UnsupportedPlatform => 9,
+                    intake_commands::WatchDisableError::Remove(_) => 1,
+                })
+            }
+        },
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
         }) => {
