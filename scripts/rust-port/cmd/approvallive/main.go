@@ -231,29 +231,35 @@ func runMTLS(binary, vault string, queue *approval.Queue, handler http.Handler, 
 	if err != nil {
 		return err
 	}
-	if err := cli.SaveRuntimePort(vault, "127.0.0.1", port); err != nil {
-		return fmt.Errorf("write mTLS runtime port: %w", err)
+	if saveErr := cli.SaveRuntimePort(vault, "127.0.0.1", port); saveErr != nil {
+		return fmt.Errorf("write mTLS runtime port: %w", saveErr)
 	}
 	id, err := enqueue(queue, "rust-mtls-approve")
 	if err != nil {
 		return err
 	}
-	if err := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, "", "", true); err != nil {
-		return fmt.Errorf("write missing mTLS identity: %w", err)
+	if saveErr := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, "", "", true); saveErr != nil {
+		return fmt.Errorf("write missing mTLS identity: %w", saveErr)
 	}
 	missing, err := runRustRaw(binary, vault, "--output", "json", "approval", "list")
-	if err != nil || missing.ExitCode != 1 || !bytes.Contains(missing.Stderr, []byte("dedicated local approval client certificate")) {
-		return fmt.Errorf("missing approval identity was accepted: exit=%d err=%v stderr=%q", missing.ExitCode, err, missing.Stderr)
+	if err != nil {
+		return fmt.Errorf("check missing approval identity: %w", err)
 	}
-	if err := cli.SaveRuntimeTLSConfig(vault, certPath, filepath.Join(fixtureDir, "rotated-client-ca.pem"), clientCertPath, clientKeyPath, true); err != nil {
-		return fmt.Errorf("write rotated mTLS CA: %w", err)
+	if missing.ExitCode != 1 || !bytes.Contains(missing.Stderr, []byte("dedicated local approval client certificate")) {
+		return fmt.Errorf("missing approval identity was accepted: exit=%d stderr=%q", missing.ExitCode, missing.Stderr)
+	}
+	if saveErr := cli.SaveRuntimeTLSConfig(vault, certPath, filepath.Join(fixtureDir, "rotated-client-ca.pem"), clientCertPath, clientKeyPath, true); saveErr != nil {
+		return fmt.Errorf("write rotated mTLS CA: %w", saveErr)
 	}
 	rotated, err := runRustRaw(binary, vault, "--output", "json", "approval", "list")
-	if err != nil || rotated.ExitCode != 1 || !bytes.Contains(rotated.Stderr, []byte("verify local approval client identity")) {
-		return fmt.Errorf("rotated approval CA was accepted: exit=%d err=%v stderr=%q", rotated.ExitCode, err, rotated.Stderr)
+	if err != nil {
+		return fmt.Errorf("check rotated approval CA: %w", err)
 	}
-	if err := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, clientCertPath, clientKeyPath, true); err != nil {
-		return fmt.Errorf("write dedicated mTLS identity: %w", err)
+	if rotated.ExitCode != 1 || !bytes.Contains(rotated.Stderr, []byte("verify local approval client identity")) {
+		return fmt.Errorf("rotated approval CA was accepted: exit=%d stderr=%q", rotated.ExitCode, rotated.Stderr)
+	}
+	if saveErr := cli.SaveRuntimeTLSConfig(vault, certPath, caPath, clientCertPath, clientKeyPath, true); saveErr != nil {
+		return fmt.Errorf("write dedicated mTLS identity: %w", saveErr)
 	}
 	list, err := runRust[listOutput](binary, vault, "--output", "json", "approval", "list")
 	if err != nil {
@@ -267,8 +273,11 @@ func runMTLS(binary, vault string, queue *approval.Queue, handler http.Handler, 
 		return fmt.Errorf("mTLS approval decide: %w", err)
 	}
 	entry, err := queue.Get(id)
-	if err != nil || entry.Status != approval.StatusApproved || entry.DecidedBy != "local-cli" || decision.Outcome.ID != id {
-		return fmt.Errorf("mTLS approval queue = %+v, outcome = %+v, err = %v", entry, decision, err)
+	if err != nil {
+		return fmt.Errorf("read mTLS approval queue: %w", err)
+	}
+	if entry.Status != approval.StatusApproved || entry.DecidedBy != "local-cli" || decision.Outcome.ID != id {
+		return fmt.Errorf("mTLS approval queue = %+v, outcome = %+v", entry, decision)
 	}
 	return nil
 }
