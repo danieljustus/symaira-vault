@@ -51,6 +51,11 @@
   im aktuellen CLI-Manager keine dynamischen Engines registriert; der
   geprüfte Fehlerpfad ruft keinen externen Provider. Beide neuen Tests
   warten auf einen nativen Lauf am integrierten Head.
+  Der nicht-interaktive `setup`-Fehlerpfad hat ebenfalls einen Go-Vergleich;
+  der interaktive Wizard bleibt unimplementiert. Der FreeBSD-Lauf erreichte
+  `audit_rotate_key_cli_flow` und fand eine fehlende Passphrase in dessen
+  isoliertem Testprozess. Der Test setzt sie nun explizit; die erneute
+  FreeBSD-Ausführung steht aus.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
