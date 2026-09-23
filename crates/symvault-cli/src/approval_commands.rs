@@ -164,16 +164,21 @@ fn approval_api_request<T: DeserializeOwned>(
         .timeout_global(Some(Duration::from_secs(10)))
         .build()
         .new_agent();
-    let request = match method {
-        "GET" => agent.get(&url),
-        "POST" => agent.post(&url),
+    let response = match method {
+        "GET" => agent
+            .get(&url)
+            .header("X-Enroll-Timestamp", &timestamp)
+            .header("X-Enroll-Proof", &proof)
+            .call(),
+        "POST" => agent
+            .post(&url)
+            .header("X-Enroll-Timestamp", &timestamp)
+            .header("X-Enroll-Proof", &proof)
+            .send_empty(),
         _ => return Err(format!("unsupported local approval method {method:?}")),
     };
-    let mut response = request
-        .header("X-Enroll-Timestamp", &timestamp)
-        .header("X-Enroll-Proof", &proof)
-        .call()
-        .map_err(|error| format!("connect to local approval server: {error}"))?;
+    let mut response =
+        response.map_err(|error| format!("connect to local approval server: {error}"))?;
     let status = response.status().as_u16();
     let body = response
         .body_mut()
