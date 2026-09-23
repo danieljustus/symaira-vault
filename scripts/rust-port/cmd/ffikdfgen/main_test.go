@@ -25,3 +25,18 @@ func TestPinnedGoKDFMigrationFixture(t *testing.T) {
 		t.Fatal("a stale fixture schema was accepted")
 	}
 }
+
+func TestGeneratedKDFEnvelopeRoundTripsAndRejectsCorruption(t *testing.T) {
+	root := rootDir()
+	value, err := build(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(root, value); err != nil {
+		t.Fatalf("new Go envelope did not migrate and reopen: %v", err)
+	}
+	value.Ciphertext = "not-base64"
+	if err := verify(root, value); err == nil {
+		t.Fatal("corrupt identity ciphertext was accepted")
+	}
+}
