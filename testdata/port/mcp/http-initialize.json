@@ -26,7 +26,7 @@
         "path": "/mcp",
         "origin": "http://127.0.0.1",
         "content_type": "application/json",
-        "accept": "application/json, text/event-stream",
+        "accept": "text/event-stream, application/json",
         "protocol_version": "2025-11-25",
         "agent": "default",
         "authenticated": true,
@@ -68,6 +68,33 @@
           "MCP-Protocol-Version"
         ],
         "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_sse_only_prompts_list_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
         "connection_reused": true
       }
     },
@@ -246,7 +273,7 @@
         "path": "/mcp",
         "origin": "http://127.0.0.1",
         "content_type": "application/json",
-        "accept": "application/json, text/event-stream",
+        "accept": "text/event-stream, application/json",
         "protocol_version": "2025-11-25",
         "agent": "default",
         "token_name": "health",
@@ -267,6 +294,38 @@
           "MCP-Protocol-Version"
         ],
         "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_sse_only_health_tool_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":24,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
         "connection_reused": true
       }
     },

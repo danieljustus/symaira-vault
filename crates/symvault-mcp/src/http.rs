@@ -836,6 +836,77 @@ mod tests {
     }
 
     #[test]
+    fn source_bound_post_sse_negotiation_matches_go_json_or_406_paths() {
+        let wire_request = |case: &serde_json::Value| {
+            let request = &case["request"];
+            let body = request["body"].as_str().expect("fixture request body");
+            format!(
+                "{} {} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: {}\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: {}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                request["method"].as_str().expect("fixture method"),
+                request["path"].as_str().expect("fixture path"),
+                request["origin"].as_str().expect("fixture origin"),
+                request["agent"].as_str().expect("fixture agent"),
+                request["content_type"]
+                    .as_str()
+                    .expect("fixture content type"),
+                request["accept"].as_str().expect("fixture Accept"),
+                request["protocol_version"]
+                    .as_str()
+                    .expect("fixture protocol version"),
+                body.len(),
+                body,
+            )
+        };
+
+        let initialized = go_http_case("initialize");
+        assert_eq!(
+            initialized["request"]["accept"],
+            "text/event-stream, application/json"
+        );
+        assert_eq!(initialized["response"]["status"], 200);
+        assert_eq!(
+            initialized["response"]["headers"]["Content-Type"],
+            "application/json"
+        );
+        let rust_initialized = round_trip_wire(&wire_request(&initialized));
+        assert_eq!(raw_status(&rust_initialized), 200);
+        assert!(rust_initialized.contains("Content-Type: application/json\r\n"));
+        assert_eq!(
+            raw_body(&rust_initialized),
+            initialized["response"]["body"]
+                .as_str()
+                .expect("Go initialize body")
+        );
+
+        for name in [
+            "authenticated_sse_only_prompts_list_rejected",
+            "authenticated_sse_only_health_tool_rejected",
+        ] {
+            let go = go_http_case(name);
+            assert_eq!(go["request"]["accept"], "text/event-stream");
+            assert_eq!(go["response"]["status"], 406);
+            assert_eq!(
+                go["response"]["headers"]["Content-Type"],
+                "application/json"
+            );
+            let rust = round_trip_wire(&wire_request(&go));
+            assert_eq!(raw_status(&rust), 406, "{name} status");
+            assert!(
+                rust.contains("Content-Type: application/json\r\n"),
+                "{rust}"
+            );
+            assert_eq!(
+                raw_body(&rust),
+                go["response"]["body"]
+                    .as_str()
+                    .expect("Go negotiation body"),
+                "{name} body"
+            );
+            assert!(!rust.contains("Content-Type: text/event-stream\r\n"));
+        }
+    }
+
+    #[test]
     fn source_bound_go_keep_alive_reuse_is_a_rust_close_per_request_difference() {
         let go_initial = go_http_case("initialize");
         let go_continuation = go_http_case("authenticated_prompts_list_after_initialize");

@@ -154,12 +154,17 @@ func main() {
 		{
 			Name:            "initialize",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream, application/json", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
 		},
 		{
 			Name:            "authenticated_prompts_list_after_initialize",
 			GoAuthenticated: true,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":2,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "authenticated_sse_only_prompts_list_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":22,"method":"prompts/list"}`},
 		},
 		{
 			Name:            "authenticated_initialized_notification_accepted",
@@ -194,7 +199,12 @@ func main() {
 		{
 			Name:            "authenticated_allowed_health_tool",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream, application/json", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+		},
+		{
+			Name:            "authenticated_sse_only_health_tool_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
 		},
 		{
 			Name:            "token_agent_mismatch_rejected",
