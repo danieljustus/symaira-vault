@@ -4,7 +4,6 @@ package secureui
 
 import (
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -37,9 +36,9 @@ func TestTTY_EchoOffOverPty(t *testing.T) {
 		_, _ = master.Write([]byte("hunter2\n"))
 	}()
 
-	buf := make([]byte, 32)
+	buf := make([]byte, len("hunter2"))
 	_ = master.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-	n, err := master.Read(buf)
+	n, err := io.ReadFull(master, buf)
 	if err != nil && err != io.EOF {
 		t.Skipf("pty read failed (sandbox limitation): %v", err)
 	}
@@ -47,7 +46,7 @@ func TestTTY_EchoOffOverPty(t *testing.T) {
 		t.Skip("pty produced no bytes (no controlling terminal)")
 	}
 	// Sanity: the bytes round-tripped through the pty.
-	if !strings.Contains(string(buf[:n]), "hunter2") {
-		t.Errorf("pty read returned %q, want to contain 'hunter2'", string(buf[:n]))
+	if string(buf) != "hunter2" {
+		t.Errorf("pty read returned %q, want 'hunter2'", string(buf))
 	}
 }
