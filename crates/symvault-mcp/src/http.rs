@@ -1151,8 +1151,11 @@ mod tests {
         let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
         assert!(source.contains("IdleTimeout:       120 * time.Second"));
         assert!(source.contains("serveErr = server.Serve(listener)"));
+        fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
+            Ok(ProtocolHandler::new("symaira", "1.0.0"))
+        }
         let state = Arc::new(Mutex::new(HttpServerState {
-            handler_for_agent: |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handler_for_agent: test_handler,
             handlers: HashMap::new(),
             sessions: HashMap::new(),
         }));
