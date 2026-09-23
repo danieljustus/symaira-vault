@@ -187,6 +187,32 @@ func callRead(vault: URL, entry: String, identity: String) throws -> Data {
   }
 }
 
+func callWrite(vault: URL, entry: String, json: String, identity: String) throws -> Data {
+  let vaultBytes = Data(vault.path.utf8)
+  let entryBytes = Data(entry.utf8)
+  let jsonBytes = Data(json.utf8)
+  let identityBytes = Data(identity.utf8)
+  return try vaultBytes.withUnsafeBytes { vaultRaw in
+    try entryBytes.withUnsafeBytes { entryRaw in
+      try jsonBytes.withUnsafeBytes { jsonRaw in
+        try identityBytes.withUnsafeBytes { identityRaw in
+          try output(
+            symvault_write_entry_json(
+              vaultRaw.bindMemory(to: UInt8.self).baseAddress,
+              vaultBytes.count,
+              entryRaw.bindMemory(to: UInt8.self).baseAddress,
+              entryBytes.count,
+              jsonRaw.bindMemory(to: UInt8.self).baseAddress,
+              jsonBytes.count,
+              identityRaw.bindMemory(to: UInt8.self).baseAddress,
+              identityBytes.count
+            ))
+        }
+      }
+    }
+  }
+}
+
 func callList(vault: URL, prefix: String, identity: String) throws -> Data {
   let vaultBytes = Data(vault.path.utf8)
   let prefixBytes = Data(prefix.utf8)
@@ -286,6 +312,24 @@ func verifyStoreFixture(identity: String) throws {
   }
   guard try callManifest(vault: root, identity: identity) == Data([1]) else {
     throw SmokeFailure.contract("Rust FFI rejected the intact Go store manifest")
+  }
+
+  let newPath = "nested/ios-write"
+  guard
+    try callWrite(
+      vault: root, entry: newPath, json: #"{"data":{"username":"ios-fixture"}}"#,
+      identity: identity).isEmpty
+  else {
+    throw SmokeFailure.contract("Rust FFI writer returned data for a successful write")
+  }
+  let written = try JSONSerialization.jsonObject(
+    with: callRead(vault: root, entry: newPath, identity: identity)) as? [String: Any]
+  let data = written?["data"] as? [String: Any]
+  guard data?["username"] as? String == "ios-fixture" else {
+    throw SmokeFailure.contract("Rust FFI did not read back its encrypted iOS write")
+  }
+  guard try callManifest(vault: root, identity: identity) == Data([1]) else {
+    throw SmokeFailure.contract("Rust FFI write left the Go store manifest invalid")
   }
 
   let tamperedEntry = try fixtureFileURL(root: root, relativePath: "entries/minimal.age")
