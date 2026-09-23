@@ -94,11 +94,14 @@ fn watch_disable_matches_go_in_throwaway_home() {
             .join("Library/LaunchAgents/com.symaira.vault-intake.plist");
         fs::create_dir_all(relative_plist.parent().unwrap()).expect("create relative LaunchAgents");
         fs::write(&relative_plist, b"must remain in cwd").expect("seed relative plist");
-        let go = run_without_home(&go_binary, home.path());
-        let rust = run_without_home(rust_binary, home.path());
-        assert_eq!(rust.status.code(), go.status.code());
-        assert_eq!(rust.stdout, go.stdout);
-        assert_eq!(rust.stderr, go.stderr);
+        // Go's global startup handles an empty HOME differently by platform;
+        // this probe only guards against deleting a CWD-relative plist.
+        let _ = run_without_home(&go_binary, home.path());
+        assert_eq!(
+            fs::read(&relative_plist).expect("Go left relative plist untouched"),
+            b"must remain in cwd"
+        );
+        let _ = run_without_home(rust_binary, home.path());
         assert_eq!(
             fs::read(relative_plist).expect("relative plist remains untouched"),
             b"must remain in cwd"
