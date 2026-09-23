@@ -1,0 +1,35 @@
+name: Rust native FreeBSD
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-freebsd:
+    name: Rust native (FreeBSD amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test in FreeBSD 15.1 VM
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        with:
+          release: '15.1'
+          copyback: false
+          usesh: true
+          prepare: |
+            set -eu
+            pkg install -y curl ca_root_nss git
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
+          run: |
+            set -eu
+            export PATH="$HOME/.cargo/bin:$PATH"
+            test "$(rustc --version | awk '{print $2}')" = '1.98.0'
+            cargo test --workspace --all-features --locked
