@@ -10,6 +10,8 @@ on:
       - 'crates/**'
       - 'scripts/build-rustcore.sh'
       - 'crates/symvault-ffi/tests/ios_smoke.swift'
+      - 'testdata/port/crypto/age-kdf.json'
+      - 'testdata/port/store/store.json'
   push:
     branches: [main, 'migration/**']
     paths:
@@ -20,6 +22,8 @@ on:
       - 'crates/**'
       - 'scripts/build-rustcore.sh'
       - 'crates/symvault-ffi/tests/ios_smoke.swift'
+      - 'testdata/port/crypto/age-kdf.json'
+      - 'testdata/port/store/store.json'
   workflow_dispatch:
 
 permissions:
