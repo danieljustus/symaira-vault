@@ -1,4 +1,9 @@
-use std::{env, fs, path::Path, process::Command};
+use std::{
+    collections::BTreeMap,
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 fn copy_tree(source: &Path, destination: &Path) {
     fs::create_dir(destination).expect("copy vault directory");
@@ -14,6 +19,30 @@ fn copy_tree(source: &Path, destination: &Path) {
             panic!("rollback fixture contains a non-regular file");
         }
     }
+}
+
+fn snapshot(root: &Path) -> BTreeMap<PathBuf, Option<Vec<u8>>> {
+    fn visit(root: &Path, relative: &Path, files: &mut BTreeMap<PathBuf, Option<Vec<u8>>>) {
+        for entry in fs::read_dir(root.join(relative)).expect("read vault tree") {
+            let entry = entry.expect("vault tree entry");
+            let path = relative.join(entry.file_name());
+            let kind = entry.file_type().expect("vault tree entry type");
+            if kind.is_dir() {
+                files.insert(path.clone(), None);
+                visit(root, &path, files);
+            } else if kind.is_file() {
+                files.insert(
+                    path.clone(),
+                    Some(fs::read(root.join(path)).expect("vault file")),
+                );
+            } else {
+                panic!("rollback fixture contains a non-regular file");
+            }
+        }
+    }
+    let mut files = BTreeMap::new();
+    visit(root, Path::new(""), &mut files);
+    files
 }
 
 fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str]) -> std::process::Output {
@@ -47,10 +76,13 @@ fn go_mutates_copied_rust_vault_without_touching_source() {
     let copy = temp.path().join("copy");
     let initialized = run(rust, &source, &home, &["init", "--auth", "passphrase"]);
     assert!(initialized.status.success(), "Rust init: {initialized:?}");
-    let original_config = fs::read(source.join("config.yaml")).unwrap();
-    let original_identity = fs::read(source.join("identity.age")).unwrap();
-    let original_recipients = fs::read(source.join("recipients.txt")).ok();
+    let original_tree = snapshot(&source);
     copy_tree(&source, &copy);
+    assert_eq!(
+        snapshot(&copy),
+        original_tree,
+        "copied vault differs from source"
+    );
 
     let written = run(
         go,
@@ -75,17 +107,5 @@ fn go_mutates_copied_rust_vault_without_touching_source() {
         assert_eq!(read.status.code(), Some(0), "read copied vault: {read:?}");
         assert_eq!(read.stdout, b"copied-secret\n");
     }
-    assert_eq!(
-        fs::read(source.join("config.yaml")).unwrap(),
-        original_config
-    );
-    assert_eq!(
-        fs::read(source.join("identity.age")).unwrap(),
-        original_identity
-    );
-    assert_eq!(
-        fs::read(source.join("recipients.txt")).ok(),
-        original_recipients
-    );
-    assert!(!source.join("entries/rollback/check.age").exists());
+    assert_eq!(snapshot(&source), original_tree, "source vault changed");
 }
