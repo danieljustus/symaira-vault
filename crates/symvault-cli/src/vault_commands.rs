@@ -14,10 +14,11 @@ use std::{
 
 use serde::Serialize;
 use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
+use symvault_core::error::CliError;
 use symvault_crypto::{
     Argon2idParams, Identity, SecretBytes, encrypt_identity_argon2id, generate_identity,
 };
-use symvault_store::{Entry, Store};
+use symvault_store::{Entry, Store, StoreError};
 use symvault_sync::safeio;
 
 /// Metadata emitted by `list --output json`.
@@ -180,8 +181,8 @@ fn has_value(entry: &Entry) -> bool {
 }
 
 /// Resolves an exact path or `path.field` query.
-pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, String> {
-    let store = open_vault(root, identity)?;
+pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, CliError> {
+    let store = open_vault(root, identity).map_err(CliError::internal)?;
     if let Some((path, field)) = query
         .rsplit_once('.')
         .filter(|(_, field)| !field.is_empty())
@@ -207,7 +208,7 @@ pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, S
     let needle = query.to_ascii_lowercase();
     let matches: Vec<_> = store
         .list(identity)
-        .map_err(|error| format!("cannot read entry: {error}"))?
+        .map_err(|error| CliError::internal(format!("cannot read entry: {error}")))?
         .into_iter()
         .filter(|path| path.to_ascii_lowercase().contains(&needle))
         .collect();
@@ -215,14 +216,21 @@ pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, S
         [path] => {
             let entry = store
                 .get(path, identity)
-                .map_err(|error| format!("cannot read entry: {error}"))?;
+                .map_err(|error| CliError::internal(format!("cannot read entry: {error}")))?;
             Ok(GetResult::Entry {
                 path: path.clone(),
                 entry: Box::new(entry),
             })
         }
-        [] => Err(format!("cannot read entry: {exact_error}")),
-        _ => Err(format!("ambiguous path: {query}")),
+        [] => match exact_error {
+            StoreError::EntryNotFound(path) => {
+                Err(CliError::not_found(format!("entry not found: {path}"))
+                    .with_hint("Try: symvault find <search-term>"))
+            }
+            error => Err(CliError::internal(format!("cannot read entry: {error}"))),
+        },
+        _ => Err(CliError::not_found(format!("ambiguous path: {query}"))
+            .with_hint("Try: symvault find <search-term>")),
     }
 }
 

@@ -77,6 +77,7 @@ use symvault_core::session::MemoryKeyring;
 use symvault_core::{
     TOOL_NAME,
     config::{AuthMethod, Config, PathResolver, VaultConfig},
+    error::CliError,
     session::SessionManager,
 };
 use symvault_crypto::{SecretBytes, decrypt_identity, encrypt_identity_scrypt};
@@ -2782,7 +2783,8 @@ fn run_auth_set(
                         fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
                     let identity_bytes = fs::read(vault.join("identity.age"))
                         .map_err(|error| format!("read identity: {error}"))?;
-                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)
+                        .map_err(|error| error.to_string())?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
                     let keyring = runtime.keyring.as_deref().ok_or_else(|| {
@@ -3195,10 +3197,10 @@ fn run_get(
         print_error_like_go("--print, --length, --digest, and --metadata are mutually exclusive");
         return ExitCode::from(9);
     }
-    let result = (|| {
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
+    let result = (|| -> Result<(), CliError> {
+        let vault = resolve_vault(explicit_vault, profile).map_err(CliError::internal)?;
+        require_initialized(&vault).map_err(CliError::internal)?;
+        let identity = device::unlock_vault_for_cli(&vault)?;
         let result = vault_commands::get(&vault, &identity, query);
         if length || digest || metadata {
             let value = match result {
@@ -3211,9 +3213,9 @@ fn run_get(
                         io::stderr(),
                         "Error: field is required for --length, --digest, or --metadata"
                     );
-                    return Err(
-                        "field is required for --length, --digest, or --metadata".to_owned()
-                    );
+                    return Err(CliError::invalid_input(
+                        "field is required for --length, --digest, or --metadata",
+                    ));
                 }
             };
             let str_value = match &value {
@@ -3260,7 +3262,7 @@ fn run_get(
         let format = if json { "json" } else { output };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|error| error.to_string())?
+            .map_err(|error| CliError::internal(error.to_string()))?
             .as_secs() as i64;
         vault_commands::write_get_at(
             &mut io::stdout().lock(),
@@ -3270,8 +3272,9 @@ fn run_get(
             quiet,
             now,
         )
+        .map_err(CliError::internal)
     })();
-    finish_vault_result(result)
+    finish_get_result(result)
 }
 
 fn run_find(
@@ -3335,6 +3338,19 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             } else {
                 ExitCode::from(1)
             }
+        }
+    }
+}
+
+fn finish_get_result(result: Result<(), CliError>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            if let Some(hint) = error.hint() {
+                let _ = writeln!(io::stderr(), "Hint: {hint}");
+            }
+            ExitCode::from(error.effective_exit_code().value())
         }
     }
 }
@@ -4332,7 +4348,8 @@ fn run_unlock(
             fs::read(vault.join("config.yaml")).map_err(|error| format!("read config: {error}"))?;
         let identity_bytes = fs::read(vault.join("identity.age"))
             .map_err(|error| format!("read identity: {error}"))?;
-        let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+        let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)
+            .map_err(|error| error.to_string())?;
         let secret = SecretBytes::new(passphrase.as_bytes());
         let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
@@ -4382,19 +4399,21 @@ fn unlock_passphrase(
     config: &Config,
     vault: &Path,
     runtime: &RuntimeSession,
-) -> Result<Zeroizing<String>, String> {
-    let vault_string = vault
-        .to_str()
-        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+) -> Result<Zeroizing<String>, session_input::PassphraseInputError> {
+    let vault_string = vault.to_str().ok_or_else(|| {
+        session_input::PassphraseInputError::Other("vault path is not valid UTF-8".to_owned())
+    })?;
     // An explicit unlock first reuses a valid cached passphrase. This mirrors
     // Go's session resolver and avoids prompting or invoking Touch ID when a
     // persistent session is already available.
     if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
         && !bytes.is_empty()
     {
-        return String::from_utf8(bytes)
-            .map(Zeroizing::new)
-            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+        return String::from_utf8(bytes).map(Zeroizing::new).map_err(|_| {
+            session_input::PassphraseInputError::Other(
+                "cached session passphrase is not valid UTF-8".to_owned(),
+            )
+        });
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (config, vault, runtime);
@@ -4406,12 +4425,15 @@ fn unlock_passphrase(
     {
         let touch_id = symvault_platform::MacOsTouchId;
         if let Ok(bytes) = session_commands::load_touch_id_passphrase(vault, keyring, &touch_id) {
-            let passphrase = String::from_utf8(bytes.to_vec())
-                .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
+            let passphrase = String::from_utf8(bytes.to_vec()).map_err(|_| {
+                session_input::PassphraseInputError::Other(
+                    "Touch ID passphrase is not valid UTF-8".to_owned(),
+                )
+            })?;
             return Ok(Zeroizing::new(passphrase));
         }
     }
-    session_input::unlock_passphrase_for_session(config_bytes)
+    session_input::unlock_passphrase_for_session_typed(config_bytes)
 }
 
 fn run_auth_status(

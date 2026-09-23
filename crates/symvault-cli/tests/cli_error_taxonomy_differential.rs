@@ -82,7 +82,7 @@ fn invalid_config_auth_and_not_found_follow_go_exit_taxonomy() {
             true,
             false,
         ),
-        // Missing auth is Go's ExitLocked (4); Rust currently collapses this to its generic exit.
+        // Missing auth maps to Go's ExitLocked (4).
         (
             "missing auth",
             vec!["--vault", vault_arg, "get", "ghost", "--print"],
@@ -90,7 +90,7 @@ fn invalid_config_auth_and_not_found_follow_go_exit_taxonomy() {
             false,
             false,
         ),
-        // A correct credential reaches the missing-entry path; Rust currently returns its generic exit.
+        // A correct credential reaches the missing-entry path (ExitNotFound, 2).
         (
             "not found",
             vec!["--vault", vault_arg, "get", "ghost", "--print"],
@@ -141,11 +141,10 @@ fn invalid_config_auth_and_not_found_follow_go_exit_taxonomy() {
             );
             assert_eq!(rust.stderr, go.stderr, "stderr for {name}");
         } else {
-            // These failures still cross the shared String-only error path, so their Rust exit
-            // categories cannot be compared until that path preserves typed errors.
-            assert!(
-                code(&rust).is_some_and(|code| code != 0),
-                "Rust unexpectedly succeeded for {name}: {:?}",
+            assert_eq!(
+                code(&rust),
+                code(&go),
+                "Rust exit for {name}: {:?}",
                 rust.stderr
             );
         }

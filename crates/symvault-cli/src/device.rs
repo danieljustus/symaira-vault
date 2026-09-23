@@ -11,6 +11,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use symvault_core::config::{Config, GitConfig};
+use symvault_core::error::{CliError, ExitCode};
 #[cfg(test)]
 use symvault_crypto::encrypt;
 use symvault_crypto::{
@@ -83,8 +84,16 @@ fn joined_config(vault: &Path) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
+    unlock_vault_for_cli(vault).map_err(|error| error.to_string())
+}
+
+pub(crate) fn unlock_vault_for_cli(vault: &Path) -> Result<Identity, CliError> {
     if !is_initialized(vault) {
-        return Err("vault is not initialized (run 'symvault init' first)".to_owned());
+        return Err(CliError::new(
+            ExitCode::NotInitialized,
+            "vault is not initialized (run 'symvault init' first)",
+            None,
+        ));
     }
     let runtime = crate::runtime_session_manager();
     unlock_vault_with_runtime(vault, &runtime)
@@ -93,15 +102,16 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
 fn unlock_vault_with_runtime(
     vault: &Path,
     runtime: &crate::RuntimeSession,
-) -> Result<Identity, String> {
+) -> Result<Identity, CliError> {
     let vault_string = vault
         .to_str()
-        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+        .ok_or_else(|| CliError::internal("vault path is not valid UTF-8"))?;
     let config_path = vault.join("config.yaml");
-    let config = Config::load(&config_path).map_err(|error| format!("load config: {error}"))?;
+    let config = Config::load(&config_path)
+        .map_err(|error| CliError::config(format!("load config: {error}")))?;
     let config_bytes = safeio::read(&config_path)
-        .map_err(|e| format!("read config: {e}"))?
-        .ok_or_else(|| "configuration is missing".to_owned())?;
+        .map_err(|e| CliError::internal(format!("read config: {e}")))?
+        .ok_or_else(|| CliError::config("configuration is missing"))?;
 
     // A cached private identity is the fastest path and deliberately avoids
     // reading or decrypting the on-disk envelope. SessionManager renews the
@@ -118,8 +128,14 @@ fn unlock_vault_with_runtime(
 
     let id_path = vault.join("identity.age");
     let data = safeio::read(&id_path)
-        .map_err(|e| format!("read identity: {e}"))?
-        .ok_or_else(|| "vault is not initialized (run 'symvault init' first)".to_owned())?;
+        .map_err(|e| CliError::internal(format!("read identity: {e}")))?
+        .ok_or_else(|| {
+            CliError::new(
+                ExitCode::NotInitialized,
+                "vault is not initialized (run 'symvault init' first)",
+                None,
+            )
+        })?;
 
     // Prefer the encrypted session passphrase before invoking Touch ID or a
     // prompt. A bad/expired cache is recoverable and falls through to the
@@ -130,13 +146,24 @@ fn unlock_vault_with_runtime(
         .map(zeroize::Zeroizing::new)
         && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
     {
-        save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
+        save_unlocked_session(runtime, vault_string, &config, &cached, &identity)
+            .map_err(CliError::internal)?;
         return Ok(identity);
     }
 
-    let passphrase = crate::unlock_passphrase(&config_bytes, &config, vault, runtime)?;
+    let passphrase =
+        crate::unlock_passphrase(&config_bytes, &config, vault, runtime).map_err(|error| {
+            let message = error.to_string();
+            match error {
+                input::PassphraseInputError::Missing => {
+                    CliError::new(ExitCode::Locked, message, None)
+                }
+                input::PassphraseInputError::Other(message) => CliError::internal(message),
+            }
+        })?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
-    let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    let identity = decrypt_identity(&data, &sec_pass)
+        .map_err(|e| CliError::internal(format!("unlock vault: {e}")))?;
     if !input::env_passphrase_selected(&config_bytes) {
         save_unlocked_session(
             runtime,
@@ -144,7 +171,8 @@ fn unlock_vault_with_runtime(
             &config,
             passphrase.as_bytes(),
             &identity,
-        )?;
+        )
+        .map_err(CliError::internal)?;
     }
     Ok(identity)
 }
