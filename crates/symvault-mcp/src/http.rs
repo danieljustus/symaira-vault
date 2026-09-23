@@ -1,6 +1,6 @@
 //! Minimal Streamable HTTP request adapter for the existing MCP protocol handler.
 //! The socket listener stays with the caller; this module owns `/mcp` request
-//! checks and response framing for one request.
+//! checks and response framing for bounded HTTP/1.1 connections.
 
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
@@ -35,6 +35,7 @@ const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
+const MAX_HTTP_REQUESTS_PER_CONNECTION: usize = 16;
 
 #[derive(Deserialize)]
 struct TokenRegistry {
@@ -64,37 +65,19 @@ where
     let mut handlers = HashMap::new();
     let mut sessions = HashMap::new();
     for incoming in listener.incoming() {
-        let mut stream = incoming?;
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-        let result = serve_one_authenticated(
-            &mut stream,
+        serve_connection_authenticated(
+            incoming?,
             registry_path.as_ref(),
             &mut handler_for_agent,
             &mut handlers,
             &mut sessions,
-        );
-        if let Err(error) = result
-            && error.kind() == std::io::ErrorKind::InvalidData
-        {
-            let (status, message) = if error.to_string().contains("too large") {
-                let message = if error.to_string().contains("request body") {
-                    "request body too large"
-                } else {
-                    "request too large"
-                };
-                (413, message)
-            } else {
-                (400, "bad request")
-            };
-            write_http_error(&mut stream, status, message)?;
-        }
+        )?;
     }
     Ok(())
 }
 
-fn serve_one_authenticated<F>(
-    stream: &mut TcpStream,
+fn serve_connection_authenticated<F>(
+    mut stream: TcpStream,
     registry_path: &Path,
     handler_for_agent: &mut F,
     handlers: &mut HashMap<String, ProtocolHandler>,
@@ -106,44 +89,120 @@ where
     let peer = stream.peer_addr()?;
     let local = stream.local_addr()?;
     if !peer.ip().is_loopback() || !local.ip().is_loopback() {
-        return write_plain_error(stream, 403, "forbidden");
+        return write_plain_error(&mut stream, 403, "forbidden");
     }
-    let request = read_wire_request(stream)?;
-    let Some(request) = request else {
-        return Ok(());
-    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+    let mut reader = BufReader::new(stream);
+    for served in 0..MAX_HTTP_REQUESTS_PER_CONNECTION {
+        let request = match read_wire_request(&mut reader) {
+            Ok(Some(request)) => request,
+            Ok(None) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                let (status, message) = if error.to_string().contains("too large") {
+                    let message = if error.to_string().contains("request body") {
+                        "request body too large"
+                    } else {
+                        "request too large"
+                    };
+                    (413, message)
+                } else {
+                    (400, "bad request")
+                };
+                write_http_error(reader.get_mut(), status, message)?;
+                return Ok(());
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::TimedOut
+                        | std::io::ErrorKind::WouldBlock
+                ) =>
+            {
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
+        let keep_alive = served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION
+            && !request
+                .connection
+                .split(',')
+                .any(|value| value.trim().eq_ignore_ascii_case("close"));
+        if !serve_one_authenticated(
+            &mut reader,
+            request,
+            keep_alive,
+            registry_path,
+            handler_for_agent,
+            handlers,
+            sessions,
+        )? {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+fn serve_one_authenticated<F>(
+    reader: &mut BufReader<TcpStream>,
+    request: WireRequest,
+    keep_alive: bool,
+    registry_path: &Path,
+    handler_for_agent: &mut F,
+    handlers: &mut HashMap<String, ProtocolHandler>,
+    sessions: &mut HashMap<String, ProtocolHandler>,
+) -> Result<bool, std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
+    let stream = reader.get_mut();
     if !allowed_origin(&request.origin, &request.host) {
-        return write_json_error(stream, 403, "invalid Origin header");
+        write_json_error(stream, 403, "invalid Origin header")?;
+        return Ok(false);
     }
     let Some(bearer) = request.authorization.strip_prefix("Bearer ") else {
-        return write_plain_error(stream, 401, "unauthorized");
+        write_plain_error(stream, 401, "unauthorized")?;
+        return Ok(false);
     };
     let token = match lookup_token(registry_path, bearer) {
         Ok(Some(token)) => token,
-        Ok(None) | Err(_) => return write_plain_error(stream, 401, "unauthorized"),
+        Ok(None) | Err(_) => {
+            write_plain_error(stream, 401, "unauthorized")?;
+            return Ok(false);
+        }
     };
     if !token.agent_name.is_empty() && token.agent_name != request.agent {
-        return write_plain_error(
+        write_plain_error(
             stream,
             403,
             "forbidden: token agent does not match X-Symaira-Agent header",
-        );
+        )?;
+        return Ok(false);
     }
     if request.agent.is_empty() {
-        return write_plain_error(stream, 403, "forbidden: missing X-Symaira-Agent header");
+        write_plain_error(stream, 403, "forbidden: missing X-Symaira-Agent header")?;
+        return Ok(false);
     }
     if !handlers.contains_key(&request.agent) {
         match handler_for_agent(&request.agent) {
             Ok(handler) if handlers.len() < MAX_HTTP_SESSIONS => {
                 handlers.insert(request.agent.clone(), handler);
             }
-            Ok(_) => return write_http_error(stream, 503, "too many MCP agent handlers"),
-            Err(error) => return write_json_error(stream, 403, &error),
+            Ok(_) => {
+                write_http_error(stream, 503, "too many MCP agent handlers")?;
+                return Ok(false);
+            }
+            Err(error) => {
+                write_json_error(stream, 403, &error)?;
+                return Ok(false);
+            }
         }
     }
     let session_key = format!("{}:{}", token.id, request.agent);
     if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
-        return write_http_error(stream, 503, "too many MCP sessions");
+        write_http_error(stream, 503, "too many MCP sessions")?;
+        return Ok(false);
     }
     let handler = sessions.entry(session_key).or_insert_with(|| {
         handlers
@@ -164,7 +223,8 @@ where
         handler,
     )
     .map_err(|error| std::io::Error::other(error.to_string()))?;
-    write_http_response(stream, response)
+    write_http_response(stream, response, keep_alive)?;
+    Ok(keep_alive)
 }
 
 struct WireRequest {
@@ -177,12 +237,14 @@ struct WireRequest {
     content_type: String,
     accept: String,
     protocol_version: String,
+    connection: String,
     body: String,
 }
 
-fn read_wire_request(stream: &mut TcpStream) -> Result<Option<WireRequest>, std::io::Error> {
-    let mut reader = BufReader::new(stream);
-    let Some(first) = read_bounded_line(&mut reader, MAX_HTTP_REQUEST_LINE)? else {
+fn read_wire_request(
+    reader: &mut BufReader<TcpStream>,
+) -> Result<Option<WireRequest>, std::io::Error> {
+    let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
     };
     let request_line = parse_crlf_line(&first)?;
@@ -205,7 +267,7 @@ fn read_wire_request(stream: &mut TcpStream) -> Result<Option<WireRequest>, std:
     let mut headers = BTreeMap::new();
     let mut header_bytes = first.len();
     loop {
-        let Some(line) = read_bounded_line(&mut reader, MAX_HTTP_HEADERS)? else {
+        let Some(line) = read_bounded_line(reader, MAX_HTTP_HEADERS)? else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "incomplete HTTP headers",
@@ -270,6 +332,7 @@ fn read_wire_request(stream: &mut TcpStream) -> Result<Option<WireRequest>, std:
         content_type: get("content-type"),
         accept: get("accept"),
         protocol_version: get("mcp-protocol-version"),
+        connection: get("connection"),
         body,
     }))
 }
@@ -417,6 +480,7 @@ fn loopback_host(host: &str) -> bool {
 fn write_http_response(
     stream: &mut TcpStream,
     response: HttpResponse,
+    keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
@@ -433,11 +497,11 @@ fn write_http_response(
     for (name, value) in response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    write!(
-        stream,
-        "Content-Length: {}\r\nConnection: close\r\n\r\n",
-        response.body.len()
-    )?;
+    write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    if !keep_alive {
+        stream.write_all(b"Connection: close\r\n")?;
+    }
+    stream.write_all(b"\r\n")?;
     stream.write_all(&response.body)
 }
 
@@ -686,7 +750,7 @@ fn is_mime_token(value: &str) -> bool {
 mod tests {
     use super::*;
     use serde::Deserialize;
-    use std::{io::Read, thread};
+    use std::{io::BufRead, thread};
 
     const BEARER: &str = "http001-rust-loopback-token";
     const BODY: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"http-test","version":"1"}}}"#;
@@ -707,40 +771,62 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept");
+            let (stream, _) = listener.accept().expect("accept");
             let mut handlers = HashMap::new();
             let mut sessions = HashMap::new();
-            let result = serve_one_authenticated(
-                &mut stream,
+            serve_connection_authenticated(
+                stream,
                 &registry_path,
                 &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
                 &mut handlers,
                 &mut sessions,
-            );
-            match result {
-                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-                    let (status, message) = if error.to_string().contains("too large") {
-                        let message = if error.to_string().contains("request body") {
-                            "request body too large"
-                        } else {
-                            "request too large"
-                        };
-                        (413, message)
-                    } else {
-                        (400, "bad request")
-                    };
-                    write_http_error(&mut stream, status, message).expect("write parse error");
-                }
-                Err(error) => panic!("serve request: {error}"),
-                Ok(()) => {}
-            }
+            )
+            .expect("serve connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream.write_all(request.as_bytes()).expect("write request");
-        let mut response = String::new();
-        stream.read_to_string(&mut response).expect("read response");
+        let response = read_http_response(&mut BufReader::new(
+            stream.try_clone().expect("clone stream"),
+        ));
+        drop(stream);
         server.join().expect("server thread");
         response
+    }
+
+    fn read_http_response(reader: &mut BufReader<TcpStream>) -> String {
+        let mut response = Vec::new();
+        let mut line = Vec::new();
+        reader
+            .read_until(b'\n', &mut line)
+            .expect("read response line");
+        assert!(line.ends_with(b"\r\n"), "invalid response status line");
+        response.extend_from_slice(&line);
+        let mut content_length = None;
+        loop {
+            line.clear();
+            reader
+                .read_until(b'\n', &mut line)
+                .expect("read response header");
+            assert!(line.ends_with(b"\r\n"), "invalid response header line");
+            if line == b"\r\n" {
+                break;
+            }
+            if let Some((name, value)) = std::str::from_utf8(&line)
+                .expect("response header UTF-8")
+                .trim_end_matches("\r\n")
+                .split_once(':')
+            {
+                if name.eq_ignore_ascii_case("content-length") {
+                    content_length = Some(value.trim().parse::<usize>().expect("content length"));
+                }
+            }
+            response.extend_from_slice(&line);
+        }
+        response.extend_from_slice(b"\r\n");
+        let mut body = vec![0; content_length.expect("response Content-Length")];
+        reader.read_exact(&mut body).expect("read response body");
+        response.extend_from_slice(&body);
+        String::from_utf8(response).expect("HTTP response UTF-8")
     }
 
     fn round_trip(auth: bool, origin: &str) -> String {
@@ -907,7 +993,7 @@ mod tests {
     }
 
     #[test]
-    fn source_bound_go_keep_alive_reuse_is_a_rust_close_per_request_difference() {
+    fn source_bound_go_keep_alive_reuses_authenticated_session_on_rust_connection() {
         let go_initial = go_http_case("initialize");
         let go_continuation = go_http_case("authenticated_prompts_list_after_initialize");
         assert!(
@@ -921,10 +1007,74 @@ mod tests {
                 .unwrap()
         );
 
-        // The Rust listener intentionally bounds each connection to one request
-        // and sends Connection: close, while the Go HTTP server reuses keep-alive.
-        let rust = round_trip(true, "http://127.0.0.1");
-        assert!(rust.contains("Connection: close\r\n"), "{rust}");
+        let wire_request = |case: &serde_json::Value| {
+            let request = &case["request"];
+            let body = request["body"].as_str().expect("fixture body");
+            format!(
+                "{} {} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: {}\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: {}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nContent-Length: {}\r\n\r\n{}",
+                request["method"].as_str().expect("fixture method"),
+                request["path"].as_str().expect("fixture path"),
+                request["origin"].as_str().expect("fixture origin"),
+                request["agent"].as_str().expect("fixture agent"),
+                request["content_type"]
+                    .as_str()
+                    .expect("fixture content type"),
+                request["accept"].as_str().expect("fixture Accept"),
+                request["protocol_version"]
+                    .as_str()
+                    .expect("fixture protocol version"),
+                body.len(),
+                body,
+            )
+        };
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let mut handlers = HashMap::new();
+            let mut sessions = HashMap::new();
+            serve_connection_authenticated(
+                stream,
+                &registry_path,
+                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                &mut handlers,
+                &mut sessions,
+            )
+            .expect("serve keep-alive connection");
+        });
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream
+            .write_all(wire_request(&go_initial).as_bytes())
+            .expect("send initialize");
+        let mut reader = BufReader::new(stream);
+        let rust_initial = read_http_response(&mut reader);
+        assert_eq!(raw_status(&rust_initial), 200);
+        assert!(!rust_initial.contains("Connection: close\r\n"));
+        assert_eq!(
+            raw_body(&rust_initial),
+            go_initial["response"]["body"]
+                .as_str()
+                .expect("Go initialize body")
+        );
+
+        reader
+            .get_mut()
+            .write_all(wire_request(&go_continuation).as_bytes())
+            .expect("send session continuation");
+        let rust_continuation = read_http_response(&mut reader);
+        assert_eq!(raw_status(&rust_continuation), 200);
+        assert!(!rust_continuation.contains("Connection: close\r\n"));
+        assert_eq!(
+            raw_body(&rust_continuation),
+            go_continuation["response"]["body"]
+                .as_str()
+                .expect("Go continuation body")
+        );
+        drop(reader);
+        server.join().expect("server thread");
     }
 
     fn raw_status(response: &str) -> u16 {
