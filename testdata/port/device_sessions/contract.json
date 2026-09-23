@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "origin/main",
+    "commit_sha": "27da9111e64ab2aa6cacb0f35e921077f3be30ee",
+    "go_version": "go1.26.6",
+    "source_files": [
+      "internal/pairing/devicesession.go",
+      "internal/mcp/auth/token.go"
+    ],
+    "source_digest": "c1ba52b5f54a4e790edae842ea850adf59c541ce11b9fd0cd50d3d6800436e1e",
+    "generator_digest": "a581b75268740c2deb0f5f222b0f403fca86bd28a19acc114044479cd1e80e36"
+  },
+  "cases": [
+    {
+      "name": "active",
+      "token": "0123456789ABCDEFGHIJKLMNOPQRSTUV",
+      "input": "{\n  \"41ba696bc2822924f7cba0ce211bfddfe653ceb3c981255a1775bebf110bf42d\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-active\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"prefix\": \"0123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": false\n  }\n}",
+      "valid": true,
+      "device_id": "device-active",
+      "after": "{\n  \"41ba696bc2822924f7cba0ce211bfddfe653ceb3c981255a1775bebf110bf42d\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-active\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"prefix\": \"0123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": false\n  }\n}",
+      "raw_absent": true,
+      "cleanup": false
+    },
+    {
+      "name": "revoked",
+      "token": "1123456789ABCDEFGHIJKLMNOPQRSTUV",
+      "input": "{\n  \"d4bb4875ab45fbd9d693a643246d7d6884353be88d4235e6f2994a6936cf1cd3\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-revoked\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"prefix\": \"1123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": true\n  }\n}",
+      "valid": false,
+      "device_id": "",
+      "after": "{\n  \"d4bb4875ab45fbd9d693a643246d7d6884353be88d4235e6f2994a6936cf1cd3\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-revoked\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"prefix\": \"1123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": true\n  }\n}",
+      "raw_absent": true,
+      "cleanup": false
+    },
+    {
+      "name": "expired_and_cleaned",
+      "token": "2123456789ABCDEFGHIJKLMNOPQRSTUV",
+      "input": "{\n  \"04b1751dfcb14505c65d2b3d2556a95db6de319d55376f42e85abde3a42acdf6\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-expired\",\n    \"expires_at\": \"2000-01-02T03:04:05Z\",\n    \"prefix\": \"2123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": false\n  }\n}",
+      "valid": false,
+      "device_id": "",
+      "after": "{}",
+      "raw_absent": true,
+      "cleanup": true
+    },
+    {
+      "name": "legacy_raw_key",
+      "token": "3123456789ABCDEFGHIJKLMNOPQRSTUV",
+      "input": "{\n  \"3123456789ABCDEFGHIJKLMNOPQRSTUV\": {\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"device_id\": \"device-legacy\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"prefix\": \"3123\",\n    \"public_key\": \"fixture-public-key\",\n    \"revoked\": false,\n    \"token\": \"3123456789ABCDEFGHIJKLMNOPQRSTUV\"\n  }\n}",
+      "valid": true,
+      "device_id": "device-legacy",
+      "after": "{\n  \"06daaa85984f571a896df3f92841dde18b16aef362dc40e982248c4b4347589a\": {\n    \"prefix\": \"3123\",\n    \"device_id\": \"device-legacy\",\n    \"public_key\": \"fixture-public-key\",\n    \"created_at\": \"2025-01-02T03:04:05Z\",\n    \"expires_at\": \"2030-01-02T03:04:05Z\",\n    \"revoked\": false\n  }\n}",
+      "raw_absent": true,
+      "cleanup": false
+    }
+  ]
+}
