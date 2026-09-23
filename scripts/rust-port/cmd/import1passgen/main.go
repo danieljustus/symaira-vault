@@ -28,8 +28,9 @@ type entry struct {
 }
 
 type passFile struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
+	Path          string `json:"path"`
+	Content       string `json:"content,omitempty"`
+	ContentBase64 string `json:"content_base64,omitempty"`
 }
 
 type importCase struct {
@@ -286,12 +287,20 @@ func passCase() (importCase, error) {
 		return importCase{}, err
 	}
 	files := []passFile{
-		{"work/example.gpg", "example-secret\nusername:  example-user\nurl: https://example.test\ncomment line\n"},
-		{"work/invalid.gpg", "invalid-secret\notpauth://totp/example?secret=bad\n"},
-		{"work/slash\\name.gpg", "pw\n"},
+		{Path: "work/example.gpg", Content: "example-secret\nusername:  example-user\nurl: https://example.test\ncomment line\n"},
+		{Path: "work/invalid.gpg", Content: "invalid-secret\notpauth://totp/example?secret=bad\n"},
+		{Path: "work/slash\\name.gpg", Content: "pw\n"},
+		{Path: "work/truncated-utf8.gpg", ContentBase64: base64.StdEncoding.EncodeToString([]byte("bad-\xe2\x82"))},
 	}
 	for _, file := range files {
-		if err = os.WriteFile(filepath.Join(store, file.Path), []byte(file.Content), 0600); err != nil {
+		content := []byte(file.Content)
+		if file.ContentBase64 != "" {
+			content, err = base64.StdEncoding.DecodeString(file.ContentBase64)
+			if err != nil {
+				return importCase{}, err
+			}
+		}
+		if err = os.WriteFile(filepath.Join(store, file.Path), content, 0600); err != nil {
 			return importCase{}, err
 		}
 	}

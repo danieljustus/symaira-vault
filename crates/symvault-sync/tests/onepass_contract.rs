@@ -64,7 +64,10 @@ fn onepux_matches_source_bound_go_fixture() {
 #[derive(Deserialize)]
 struct PassFile {
     path: String,
+    #[serde(default)]
     content: String,
+    #[serde(default)]
+    content_base64: Option<String>,
 }
 
 #[cfg(unix)]
@@ -75,35 +78,32 @@ fn pass_content_matches_source_bound_go_fixture() {
     for case in fixture.cases.into_iter().filter(|c| c.kind == "pass") {
         let mut files = case.files;
         files.sort_by(|a, b| a.path.cmp(&b.path));
-        let entries: Vec<_> = files
-            .iter()
-            .map(|f| {
-                symvault_sync::importer::parse_pass_entry(std::path::Path::new(&f.path), &f.content)
-            })
-            .collect();
         // The oracle uses Unix filenames, including a literal backslash.
-        #[cfg(unix)]
-        assert_eq!(
-            serde_json::to_value(&entries).unwrap(),
-            Value::Array(case.expected)
-        );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let root = tempfile::tempdir().unwrap();
-            let store = root.path().join("store");
-            for file in files {
-                let path = store.join(file.path);
-                std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-                std::fs::write(path, file.content).unwrap();
-            }
-            let gpg = root.path().join("fake-gpg");
-            std::fs::write(&gpg, "#!/bin/sh\ncat \"$4\"\n").unwrap();
-            std::fs::set_permissions(&gpg, std::fs::Permissions::from_mode(0o700)).unwrap();
-            assert_eq!(
-                symvault_sync::importer::import_pass_with_gpg(&store, &gpg).unwrap(),
-                entries
-            );
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let store = root.path().join("store");
+        for file in files {
+            let path = store.join(file.path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let content = file
+                .content_base64
+                .map(|encoded| {
+                    base64::engine::general_purpose::STANDARD
+                        .decode(encoded)
+                        .unwrap()
+                })
+                .unwrap_or_else(|| file.content.into_bytes());
+            std::fs::write(path, content).unwrap();
         }
+        let gpg = root.path().join("fake-gpg");
+        std::fs::write(&gpg, "#!/bin/sh\ncat \"$4\"\n").unwrap();
+        std::fs::set_permissions(&gpg, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let entries = symvault_sync::importer::import_pass_with_gpg(&store, &gpg).unwrap();
+        assert_eq!(
+            serde_json::to_value(entries).unwrap(),
+            Value::Array(case.expected),
+            "pass case {}",
+            case.name
+        );
     }
 }
