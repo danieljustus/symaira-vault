@@ -91,8 +91,8 @@
         {
           "path": "A",
           "data": {
-            "password": "�",
-            "username": "��"
+            "password": "\ufffd",
+            "username": "\ufffd\ufffd"
           },
           "warnings": null
         }
@@ -121,7 +121,7 @@
       "input_b64": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQKwygsdSxwCg==",
       "entries": [
         {
-          "path": "�(",
+          "path": "\ufffd(",
           "data": {
             "password": "p",
             "username": "u"
@@ -152,7 +152,7 @@
       "input_b64": "bmFtZSx1cmwsdXNlcm5hbWUscGFzc3dvcmQsbm90ZQr/LGh0dHBzOi8vb25lLnRlc3QsdSxwLG4K/ixodHRwczovL3R3by50ZXN0LHUyLHAyLG4yCg==",
       "entries": [
         {
-          "path": "�",
+          "path": "\ufffd",
           "data": {
             "notes": "n",
             "password": "p",
@@ -162,7 +162,7 @@
           "warnings": null
         },
         {
-          "path": "�",
+          "path": "\ufffd",
           "data": {
             "notes": "n2",
             "password": "p2",
