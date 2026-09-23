@@ -231,12 +231,16 @@ enum Command {
     List {
         #[arg(value_name = "PREFIX")]
         prefix: Option<String>,
+        #[arg(value_name = "EXTRA")]
+        extra: Vec<String>,
     },
     /// Get a password entry or field.
     #[command(alias = "show", alias = "cat")]
     Get {
         #[arg(value_name = "PATH[.FIELD]")]
         query: String,
+        #[arg(value_name = "EXTRA")]
+        extra: Vec<String>,
         #[arg(short, long)]
         _print: bool,
         #[arg(long)]
@@ -1117,6 +1121,12 @@ struct VersionArgs {
 /// device-list differential is the regression check for this.
 const CLI_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+fn print_arg_count_error(accepted: &str, received: usize) -> ExitCode {
+    let message = format!("accepts {accepted} arg(s), received {received}");
+    eprintln!("Error: {message}\nError: {message}");
+    ExitCode::from(1)
+}
+
 fn main() -> ExitCode {
     match std::thread::Builder::new()
         .name("symvault".to_string())
@@ -1133,6 +1143,16 @@ fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
+    }
+
+    if let Some(topic) = help_commands::flag_help_topic(&args) {
+        return match help_commands::write_nested(topic, &mut io::stdout().lock()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Error: help: {error}");
+                ExitCode::from(1)
+            }
+        };
     }
 
     let cli = match Cli::try_parse_from(args) {
@@ -1217,32 +1237,45 @@ fn run_cli() -> ExitCode {
             })();
             finish_vault_result(result)
         }
-        Some(Command::List { prefix }) => run_list(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            prefix.as_deref().unwrap_or(""),
-            cli.output.as_deref().unwrap_or("text"),
-            cli.json,
-            cli.quiet,
-        ),
+        Some(Command::List { prefix, extra }) => {
+            if extra.is_empty() {
+                run_list(
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    prefix.as_deref().unwrap_or(""),
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    cli.quiet,
+                )
+            } else {
+                print_arg_count_error("at most 1", 1 + extra.len())
+            }
+        }
         Some(Command::Get {
             query,
+            extra,
             _print,
             length,
             digest,
             metadata,
-        }) => run_get(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            &query,
-            cli.output.as_deref().unwrap_or("text"),
-            cli.json,
-            _print,
-            length,
-            digest,
-            metadata,
-            cli.quiet,
-        ),
+        }) => {
+            if extra.is_empty() {
+                run_get(
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    &query,
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    _print,
+                    length,
+                    digest,
+                    metadata,
+                    cli.quiet,
+                )
+            } else {
+                print_arg_count_error("1", 1 + extra.len())
+            }
+        }
         Some(Command::Find { query, url }) => run_find(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
