@@ -100,6 +100,19 @@ jobs:
             --version "$DIST_VERSION" \
             --target "${{ matrix.goos }}/${{ matrix.goarch }}"
 
+      - name: Install and initialize the staged Rust archive in isolation
+        shell: bash
+        env:
+          DIST_GOOS: ${{ matrix.goos }}
+          DIST_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          archive="dist/rust/symaira-vault_${DIST_VERSION}_${DIST_GOOS}_${DIST_GOARCH}.tar.gz"
+          if [[ "$DIST_GOOS" == windows ]]; then
+            archive="dist/rust/symaira-vault_${DIST_VERSION}_${DIST_GOOS}_${DIST_GOARCH}.zip"
+          fi
+          python3 scripts/rust-port/install-smoke.py --archive "$archive" --version "$DIST_VERSION"
+
   freebsd-archive:
     name: Native archive (freebsd-${{ matrix.go_arch }})
     runs-on: ubuntu-latest
