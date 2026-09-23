@@ -76,6 +76,10 @@
   keinen SSE-Stream: Sie verhandelt `Accept`, schreibt aber vollständiges JSON
   ohne Event-Framing oder Flush. SSE-Stream-Parität ist deshalb am gepinnten
   Oracle derzeit nicht anwendbar; HTTP-Timeout und Shutdown bleiben offen.
+  Als begrenzter HTTP-003-Slice liefert Rust nun das quellgeprüfte
+  Protected-Resource-Discovery-Dokument. Ein Go-Handler-Test und ein Rust-
+  Loopback-Test sind im Differential-Gate; OAuth-Registrierung, PKCE,
+  Tokenausgabe und Refresh bleiben unportiert und werden nicht beworben.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
