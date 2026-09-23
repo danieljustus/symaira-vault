@@ -37,7 +37,11 @@ fn parent_dry_run_limits_and_ocr_match_go() {
     let image = temp.path().join("scan.png");
     fs::write(&image, b"\x89PNG\r\n\x1a\nfixture").expect("write image fixture");
     let ocr = temp.path().join("ocr.txt");
-    fs::write(&ocr, "password: hidden-value\n").expect("write OCR fixture");
+    fs::write(
+        &ocr,
+        "username: alice\npassword: hidden-value\napi key: token-value\nnote: ignored\n",
+    )
+    .expect("write OCR fixture");
     let image_arg = image.to_str().unwrap();
     let ocr_arg = ocr.to_str().unwrap();
 
@@ -49,6 +53,7 @@ fn parent_dry_run_limits_and_ocr_match_go() {
     assert_eq!(rust_output.stderr, go_output.stderr);
     assert!(String::from_utf8_lossy(&rust_output.stdout).contains("field: password"));
     assert!(!String::from_utf8_lossy(&rust_output.stdout).contains("hidden-value"));
+    assert!(!String::from_utf8_lossy(&rust_output.stdout).contains("token-value"));
 
     let args = [
         "intake",

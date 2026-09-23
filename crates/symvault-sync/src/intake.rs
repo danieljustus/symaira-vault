@@ -151,15 +151,13 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
         }]
     };
     match kind {
-        SourceType::Env | SourceType::Text => {
+        SourceType::Env => {
             let mut out = Vec::new();
             for line in String::from_utf8_lossy(data).lines() {
-                let (k, v) = if kind == SourceType::Env {
-                    line.split_once('=').map(|(a, b)| (a, b.trim()))
-                } else {
-                    line.split_once(':').map(|(a, b)| (a, b.trim()))
-                }
-                .unwrap_or(("", ""));
+                let (k, v) = line
+                    .split_once('=')
+                    .map(|(a, b)| (a, b.trim()))
+                    .unwrap_or(("", ""));
                 if k.is_empty() || v.is_empty() {
                     continue;
                 }
@@ -176,6 +174,57 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
                     warning: None,
                     attachment: false,
                 });
+            }
+            if out.is_empty() { attachment() } else { out }
+        }
+        SourceType::Text => {
+            // Go's text parser recognizes these hints in order; arbitrary
+            // colon-separated lines do not become credential suggestions.
+            const HINTS: &[(&str, &str, f64)] = &[
+                ("username:", "username", 0.8),
+                ("user name:", "username", 0.8),
+                ("user:", "username", 0.8),
+                ("login:", "username", 0.8),
+                ("login id:", "username", 0.8),
+                ("account:", "username", 0.6),
+                ("email:", "username", 0.7),
+                ("password:", "password", 0.85),
+                ("pass:", "password", 0.8),
+                ("passwd:", "password", 0.8),
+                ("pwd:", "password", 0.8),
+                ("secret:", "password", 0.7),
+                ("token:", "token", 0.8),
+                ("api key:", "token", 0.85),
+                ("api-key:", "token", 0.85),
+                ("apikey:", "token", 0.85),
+                ("access token:", "token", 0.85),
+                ("auth token:", "token", 0.8),
+                ("totp:", "totp", 0.8),
+                ("otp:", "totp", 0.8),
+                ("2fa:", "totp", 0.7),
+                ("client id:", "client_id", 0.7),
+                ("client secret:", "client_secret", 0.8),
+            ];
+            let mut out = Vec::new();
+            for line in String::from_utf8_lossy(data).lines() {
+                let line = line.trim();
+                let lower = line.to_ascii_lowercase();
+                if let Some((prefix, field, confidence)) = HINTS
+                    .iter()
+                    .find(|(prefix, _, _)| lower.starts_with(*prefix))
+                {
+                    let value = line[prefix.len()..].trim();
+                    if !value.is_empty() {
+                        out.push(Suggestion {
+                            path: path.clone(),
+                            field: (*field).into(),
+                            confidence: *confidence,
+                            value: Some(value.into()),
+                            warning: None,
+                            attachment: false,
+                        });
+                    }
+                }
             }
             if out.is_empty() { attachment() } else { out }
         }
