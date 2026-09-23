@@ -139,6 +139,18 @@ where
                 .any(|value| value.eq_ignore_ascii_case("keep-alive"));
         let keep_alive =
             served + 1 < MAX_HTTP_REQUESTS_PER_CONNECTION && requested_keep_alive && !closes;
+        if let Some(response) = well_known_response(&request, local) {
+            write_http_response(
+                reader.get_mut(),
+                response,
+                &request.http_version,
+                keep_alive,
+            )?;
+            if !keep_alive {
+                return Ok(());
+            }
+            continue;
+        }
         if !serve_one_authenticated(
             &mut reader,
             request,
@@ -555,6 +567,25 @@ fn write_connection_header(
     }
 }
 
+fn well_known_response(request: &WireRequest, local: std::net::SocketAddr) -> Option<HttpResponse> {
+    if request.method != "GET" || request.path != "/.well-known/oauth-protected-resource" {
+        return None;
+    }
+    let resource = format!("http://{}:{}/mcp", local.ip(), local.port());
+    let mut body = serde_json::to_vec(&serde_json::json!({
+        "resource": resource,
+        "bearer_methods_supported": ["header"],
+        "resource_name": "Symaira Vault MCP Server",
+    }))
+    .ok()?;
+    body.push(b'\n');
+    Some(HttpResponse {
+        status: 200,
+        headers: vec![("Content-Type", "application/json")],
+        body,
+    })
+}
+
 fn write_plain_error(
     stream: &mut TcpStream,
     status: u16,
@@ -868,6 +899,28 @@ mod tests {
         drop(stream);
         server.join().expect("server thread");
         response
+    }
+
+    #[test]
+    fn protected_resource_discovery_matches_go_response_without_authentication() {
+        let response = round_trip_wire(
+            "GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        );
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+        assert!(
+            response.contains("Content-Type: application/json\r\n"),
+            "{response}"
+        );
+        let body: serde_json::Value = serde_json::from_str(raw_body(&response)).unwrap();
+        let resource = body["resource"].as_str().expect("resource URL");
+        assert!(resource.starts_with("http://127.0.0.1:"), "{resource}");
+        assert!(resource.ends_with("/mcp"), "{resource}");
+        assert_eq!(
+            body["bearer_methods_supported"],
+            serde_json::json!(["header"])
+        );
+        assert_eq!(body["resource_name"], "Symaira Vault MCP Server");
+        assert!(body.get("authorization_servers").is_none());
     }
 
     fn round_trip_wire_sequence(request: &str, count: usize) -> Vec<String> {

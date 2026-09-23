@@ -913,19 +913,17 @@ func TestRunHTTPServer_OAuthProtectedResource(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if body["resource"] == nil {
-		t.Error("resource field is missing")
-	} else if resource, ok := body["resource"].(string); !ok {
-		t.Error("resource field is not a string")
-	} else if !strings.HasSuffix(resource, "/mcp") {
-		t.Errorf("resource = %q, want suffix /mcp", resource)
+	if resource, ok := body["resource"].(string); !ok {
+		t.Errorf("resource = %T, want string", body["resource"])
+	} else if want := baseURL + "/mcp"; resource != want {
+		t.Errorf("resource = %q, want %q", resource, want)
 	}
-
-	if body["bearer_methods_supported"] == nil {
-		t.Error("bearer_methods_supported field is missing")
+	methods, ok := body["bearer_methods_supported"].([]any)
+	if !ok || len(methods) != 1 || methods[0] != "header" {
+		t.Errorf("bearer_methods_supported = %#v, want [\"header\"]", body["bearer_methods_supported"])
 	}
-	if body["resource_name"] == nil {
-		t.Error("resource_name field is missing")
+	if body["resource_name"] != "Symaira Vault MCP Server" {
+		t.Errorf("resource_name = %#v, want Symaira Vault MCP Server", body["resource_name"])
 	}
 	if _, ok := body["authorization_servers"]; ok {
 		t.Error("authorization_servers field must NOT be present")

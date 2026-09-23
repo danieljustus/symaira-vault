@@ -444,7 +444,7 @@ mcp-http-init-fixtures-check:
 		--check --output $(PORT_MCP_HTTP_INIT_FIXTURE)
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive$$' -count=1
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
 
