@@ -26,12 +26,19 @@ fn watcher_matches_go_polling_debounce_ledger_and_skip_contract() {
     let first = b"A=1\n";
     let second = b"A=2\n";
     fs::write(&source, first).unwrap();
-    let now = SystemTime::now();
+    // A clock ahead of creation makes dotfiles and new symlinks old enough
+    // that debounce cannot hide a broken candidate filter.
+    let now = SystemTime::now() + Duration::from_secs(3600);
     set_mtime(&source, now + Duration::from_secs(3600));
     fs::write(inbox.join(".hidden.env"), first).unwrap();
     fs::create_dir(inbox.join("subdir")).unwrap();
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&source, inbox.join("source-link.env")).unwrap();
+    {
+        let link_target = home.path().join("link-target.env");
+        fs::write(&link_target, b"L=1\n").unwrap();
+        set_mtime(&link_target, now - Duration::from_secs(3600));
+        std::os::unix::fs::symlink(&link_target, inbox.join("source-link.env")).unwrap();
+    }
 
     let options = Options {
         debounce: Duration::ZERO, // Go normalizes zero to five seconds.

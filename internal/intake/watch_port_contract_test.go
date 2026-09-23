@@ -26,11 +26,30 @@ func TestWatcherPortPollingContract(t *testing.T) {
 		}
 	}
 	setMTime(src, now.Add(time.Hour))
-	if err := os.WriteFile(filepath.Join(dir, ".hidden.env"), first, 0o600); err != nil {
+	hidden := filepath.Join(dir, ".hidden.env")
+	if err := os.WriteFile(hidden, first, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	setMTime(hidden, now.Add(-time.Hour))
 	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0o700); err != nil {
 		t.Fatal(err)
+	}
+	if err := os.Symlink(src, filepath.Join(dir, "source-link.env")); err == nil {
+		// Go's directory-entry metadata does not follow the symlink. With a
+		// positive 1ns debounce it would be scanned if the type filter broke.
+		linkOpts := DefaultWatcherOptions()
+		linkOpts.Debounce = time.Nanosecond
+		linkWatcher, newErr := NewWatcher(dir, linkOpts)
+		if newErr != nil {
+			t.Fatal(newErr)
+		}
+		defer linkWatcher.Close()
+		linkResult, scanErr := linkWatcher.Scan()
+		if scanErr != nil || linkResult.Scanned != 0 {
+			t.Fatalf("symlink entered intake candidates: %v, %+v", scanErr, linkResult)
+		}
+	} else {
+		t.Logf("symlink negative control unavailable on this host: %v", err)
 	}
 
 	opts := DefaultWatcherOptions()
