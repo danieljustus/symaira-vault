@@ -155,7 +155,7 @@ def build_report(
         passphrase = "value-bench-" + os.urandom(24).hex()
         go_version = safe_version(go_binary, home, root, "Go")
         rust_version = safe_version(rust_binary, home, root, "Rust")
-        if GO_RELEASE not in go_version:
+        if go_version != f"symvault {GO_RELEASE.removeprefix('v')}":
             raise BenchmarkError("Go binary did not report the frozen v0.22.1 release")
 
         template = root / "template-vault"

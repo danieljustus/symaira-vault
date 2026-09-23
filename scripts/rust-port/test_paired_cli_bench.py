@@ -36,7 +36,7 @@ class PairedCliBenchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="paired-cli-self-check-") as temp_name:
             root = Path(temp_name)
             binaries = {}
-            for side, version in (("go", "symvault v0.22.1"), ("rust", "symvault dev")):
+            for side, version in (("go", "symvault 0.22.1"), ("rust", "symvault dev")):
                 path = root / side
                 path.write_text(
                     "#!/usr/bin/env python3\n"
