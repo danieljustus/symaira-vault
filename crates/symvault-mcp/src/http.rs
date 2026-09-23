@@ -38,6 +38,27 @@ const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
 // ponytail: serial listener and 16-request cap; use concurrent connections if throughput matters.
 const MAX_HTTP_REQUESTS_PER_CONNECTION: usize = 16;
 
+#[derive(Clone, Copy)]
+struct HttpTimeouts {
+    initial_read: Duration,
+    request_read: Duration,
+    keep_alive_idle: Duration,
+    write: Duration,
+}
+
+impl Default for HttpTimeouts {
+    fn default() -> Self {
+        Self {
+            // Keep the existing 10-second bounded request-read behavior;
+            // only an idle keep-alive wait adopts Go's longer idle timeout.
+            initial_read: Duration::from_secs(10),
+            request_read: Duration::from_secs(10),
+            keep_alive_idle: Duration::from_secs(120),
+            write: Duration::from_secs(10),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct TokenRegistry {
     #[serde(default)]
@@ -78,11 +99,32 @@ where
 }
 
 fn serve_connection_authenticated<F>(
+    stream: TcpStream,
+    registry_path: &Path,
+    handler_for_agent: &mut F,
+    handlers: &mut HashMap<String, ProtocolHandler>,
+    sessions: &mut HashMap<String, ProtocolHandler>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
+    serve_connection_with_timeouts(
+        stream,
+        registry_path,
+        handler_for_agent,
+        handlers,
+        sessions,
+        HttpTimeouts::default(),
+    )
+}
+
+fn serve_connection_with_timeouts<F>(
     mut stream: TcpStream,
     registry_path: &Path,
     handler_for_agent: &mut F,
     handlers: &mut HashMap<String, ProtocolHandler>,
     sessions: &mut HashMap<String, ProtocolHandler>,
+    timeouts: HttpTimeouts,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -92,39 +134,44 @@ where
     if !peer.ip().is_loopback() || !local.ip().is_loopback() {
         return write_plain_error(&mut stream, 403, "forbidden");
     }
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
-    let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
+    stream.set_write_timeout(Some(timeouts.write))?;
     let mut reader = BufReader::new(stream);
     for served in 0..MAX_HTTP_REQUESTS_PER_CONNECTION {
-        let request = match read_wire_request(&mut reader) {
-            Ok(Some(request)) => request,
-            Ok(None) => return Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-                let (status, message) = if error.to_string().contains("too large") {
-                    let message = if error.to_string().contains("request body") {
-                        "request body too large"
-                    } else {
-                        "request too large"
-                    };
-                    (413, message)
-                } else {
-                    (400, "bad request")
-                };
-                write_http_error(reader.get_mut(), status, message)?;
-                return Ok(());
-            }
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::UnexpectedEof
-                        | std::io::ErrorKind::TimedOut
-                        | std::io::ErrorKind::WouldBlock
-                ) =>
-            {
-                return Ok(());
-            }
-            Err(error) => return Err(error),
+        let first_byte_timeout = if served == 0 {
+            timeouts.initial_read
+        } else {
+            timeouts.keep_alive_idle
         };
+        let request =
+            match read_wire_request(&mut reader, first_byte_timeout, timeouts.request_read) {
+                Ok(Some(request)) => request,
+                Ok(None) => return Ok(()),
+                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                    let (status, message) = if error.to_string().contains("too large") {
+                        let message = if error.to_string().contains("request body") {
+                            "request body too large"
+                        } else {
+                            "request too large"
+                        };
+                        (413, message)
+                    } else {
+                        (400, "bad request")
+                    };
+                    write_http_error(reader.get_mut(), status, message)?;
+                    return Ok(());
+                }
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::UnexpectedEof
+                            | std::io::ErrorKind::TimedOut
+                            | std::io::ErrorKind::WouldBlock
+                    ) =>
+                {
+                    return Ok(());
+                }
+                Err(error) => return Err(error),
+            };
         let connection_tokens = request
             .connection
             .split(',')
@@ -293,7 +340,18 @@ struct WireRequest {
 
 fn read_wire_request(
     reader: &mut BufReader<TcpStream>,
+    first_byte_timeout: Duration,
+    request_read_timeout: Duration,
 ) -> Result<Option<WireRequest>, std::io::Error> {
+    reader
+        .get_mut()
+        .set_read_timeout(Some(first_byte_timeout))?;
+    let has_first_byte = !reader.fill_buf()?.is_empty();
+    if has_first_byte {
+        reader
+            .get_mut()
+            .set_read_timeout(Some(request_read_timeout))?;
+    }
     let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
     };
@@ -954,6 +1012,60 @@ mod tests {
         drop(reader);
         server.join().expect("server thread");
         responses
+    }
+
+    #[test]
+    fn keep_alive_idle_timeout_matches_go_source_and_closes_socket() {
+        let go_http = include_str!("../../../internal/mcp/serverbootstrap/http.go");
+        let compact_go = go_http
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect::<String>();
+        assert!(compact_go.contains("IdleTimeout:120*time.Second"));
+        assert_eq!(
+            HttpTimeouts::default().keep_alive_idle,
+            Duration::from_secs(120)
+        );
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept");
+            let mut handlers = HashMap::new();
+            let mut sessions = HashMap::new();
+            serve_connection_with_timeouts(
+                stream,
+                &registry_path,
+                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                &mut handlers,
+                &mut sessions,
+                HttpTimeouts {
+                    initial_read: Duration::from_secs(1),
+                    request_read: Duration::from_secs(1),
+                    keep_alive_idle: Duration::from_millis(100),
+                    write: Duration::from_secs(1),
+                },
+            )
+            .expect("serve connection with short test idle timeout");
+        });
+
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream
+            .write_all(b"GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n")
+            .expect("write discovery request");
+        let mut reader = BufReader::new(stream);
+        let response = read_http_response(&mut reader);
+        assert_eq!(raw_status(&response), 200);
+        reader
+            .get_mut()
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set test read timeout");
+        let mut byte = [0];
+        assert_eq!(reader.read(&mut byte).expect("read connection close"), 0);
+        drop(reader);
+        server.join().expect("server thread");
     }
 
     fn read_http_response(reader: &mut BufReader<TcpStream>) -> String {
