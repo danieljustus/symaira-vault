@@ -61,37 +61,74 @@ func decrypt(_ ciphertext: Data, with identity: String) throws -> Data {
   }
 }
 
+func decrypt(_ ciphertext: Data, withPassphrase passphrase: String) throws -> Data {
+  let passphraseBytes = Data(passphrase.utf8)
+  return try passphraseBytes.withUnsafeBytes { passphraseRaw in
+    try ciphertext.withUnsafeBytes { ciphertextRaw in
+      try output(
+        symvault_decrypt_with_passphrase(
+          passphraseRaw.bindMemory(to: UInt8.self).baseAddress,
+          passphraseBytes.count,
+          ciphertextRaw.bindMemory(to: UInt8.self).baseAddress,
+          ciphertext.count
+        ))
+    }
+  }
+}
+
 func verifyCryptoFixture() throws -> String {
   let crypto = try fixture("age-kdf.json")
   guard
     let identities = crypto["identities"] as? [[String: Any]],
     let cases = crypto["age_cases"] as? [[String: Any]],
-    let testCase = cases.first(where: { $0["name"] as? String == "two_recipients" }),
-    let plaintext = testCase["plaintext"] as? String,
-    let encodedCiphertext = testCase["ciphertext"] as? String,
-    let ciphertext = Data(base64Encoded: encodedCiphertext)
+    cases.count == 2
   else {
-    throw SmokeFailure.fixture("Go age fixture is missing two_recipients fields")
+    throw SmokeFailure.fixture("Go age fixture is missing its recipient cases")
   }
 
-  let recipientNames = Set(testCase["recipients"] as? [String] ?? [])
-  let matchingIdentities = identities.filter {
-    guard let recipient = $0["recipient"] as? String else { return false }
-    return recipientNames.contains(recipient)
-  }
-  guard matchingIdentities.count == 2 else {
-    throw SmokeFailure.fixture("two_recipients must name exactly two fixture identities")
-  }
-
-  for identity in matchingIdentities {
-    guard let secret = identity["identity"] as? String else {
-      throw SmokeFailure.fixture("Go age fixture identity has no secret string")
+  for testCase in cases {
+    guard
+      let plaintext = testCase["plaintext"] as? String,
+      let encodedCiphertext = testCase["ciphertext"] as? String,
+      let ciphertext = Data(base64Encoded: encodedCiphertext),
+      let recipients = testCase["recipients"] as? [String],
+      !recipients.isEmpty
+    else {
+      throw SmokeFailure.fixture("Go age fixture case has invalid fields")
     }
-    guard try decrypt(ciphertext, with: secret) == Data(plaintext.utf8) else {
-      throw SmokeFailure.contract("Rust FFI did not decrypt Go age fixture for both recipients")
+    let recipientNames = Set(recipients)
+    let matchingIdentities = identities.filter {
+      guard let recipient = $0["recipient"] as? String else { return false }
+      return recipientNames.contains(recipient)
+    }
+    guard matchingIdentities.count == recipientNames.count else {
+      throw SmokeFailure.fixture("Go age fixture has no identity for every recipient")
+    }
+    for identity in matchingIdentities {
+      guard let secret = identity["identity"] as? String else {
+        throw SmokeFailure.fixture("Go age fixture identity has no secret string")
+      }
+      guard try decrypt(ciphertext, with: secret) == Data(plaintext.utf8) else {
+        throw SmokeFailure.contract("Rust FFI did not decrypt a Go age fixture recipient")
+      }
     }
   }
-  guard let storeIdentity = matchingIdentities.first?["identity"] as? String else {
+  guard
+    let scryptCases = crypto["scrypt_cases"] as? [[String: Any]],
+    let scryptCase = scryptCases.first(where: { $0["name"] as? String == "legacy_work_factor_12" }),
+    let scryptPlaintext = scryptCase["plaintext"] as? String,
+    let encodedScrypt = scryptCase["ciphertext"] as? String,
+    let scryptCiphertext = Data(base64Encoded: encodedScrypt)
+  else {
+    throw SmokeFailure.fixture("Go crypto fixture is missing legacy scrypt fields")
+  }
+  guard
+    try decrypt(scryptCiphertext, withPassphrase: "rust-interop-fixture-passphrase-v1")
+      == Data(scryptPlaintext.utf8)
+  else {
+    throw SmokeFailure.contract("Rust FFI did not decrypt the Go scrypt fixture")
+  }
+  guard let storeIdentity = identities.first?["identity"] as? String else {
     throw SmokeFailure.fixture("Go age fixture has no store identity")
   }
   return storeIdentity
