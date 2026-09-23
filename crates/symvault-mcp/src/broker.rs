@@ -2,7 +2,7 @@
 //! Oracle sources: proxy/auth at `ba4dc0680878870bfb30ccd39a0b973b960d3e09`,
 //! and `internal/ssrf/ssrf.go` at `c7c6d04b6dc6349800d12d87d605ae55081bf694`.
 //!
-//! This deliberately supports plain HTTP only. The full Go broker's TLS MITM,
+//! Plain HTTP is allowed only to loopback targets. The full Go broker's TLS MITM,
 //! template catalog loading, vault lookup, substitutions, audit, and response
 //! pattern sanitizer remain separate migration work.
 
@@ -60,6 +60,9 @@ pub fn execute_http(
     }
     if !is_http_token(method) {
         return Err("invalid request method".into());
+    }
+    if method.eq_ignore_ascii_case("HEAD") {
+        return Err("HEAD is unsupported by this broker slice".into());
     }
     if body.len() > MAX_RESPONSE_BYTES {
         return Err("request body too large".into());
@@ -145,6 +148,9 @@ impl<'a> Target<'a> {
         if base_path.contains('?') || base_path.contains('#') {
             return Err("invalid template URL".into());
         }
+        if !safe_path(base_path) {
+            return Err("invalid template URL path".into());
+        }
         if !endpoint.starts_with('/')
             || endpoint.bytes().any(|b| b.is_ascii_control() || b == b' ')
             || endpoint.contains('#')
@@ -152,6 +158,9 @@ impl<'a> Target<'a> {
             return Err("invalid endpoint".into());
         }
         let endpoint_path = endpoint.split('?').next().unwrap_or(endpoint);
+        if !safe_path(endpoint_path) {
+            return Err("invalid endpoint path".into());
+        }
         let base_path = base_path.trim_end_matches('/');
         let (path, query) = endpoint.split_once('?').unwrap_or((endpoint, ""));
         let path = format!("{base_path}{path}");
@@ -197,6 +206,17 @@ fn endpoint_matches(pattern: &str, path: &str) -> bool {
     }
 }
 
+fn safe_path(path: &str) -> bool {
+    !path.contains('%')
+        && !path.contains('\\')
+        && !path.contains('\r')
+        && !path.contains('\n')
+        && !path.contains("//")
+        && path
+            .split('/')
+            .all(|segment| segment != "." && segment != "..")
+}
+
 fn resolve_and_check(authority: &str, allow_private: bool) -> Result<Vec<SocketAddr>, String> {
     let addresses = authority
         .to_socket_addrs()
@@ -205,10 +225,24 @@ fn resolve_and_check(authority: &str, allow_private: bool) -> Result<Vec<SocketA
     if addresses.is_empty() {
         return Err("cannot resolve upstream host".into());
     }
+    if addresses.iter().any(|addr| !is_loopback(addr.ip())) {
+        return Err("plain HTTP is restricted to loopback targets".into());
+    }
     if !allow_private && addresses.iter().any(|addr| private_or_local(addr.ip())) {
         return Err("blocked private or local upstream host".into());
     }
     Ok(addresses)
+}
+
+fn is_loopback(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ip.is_loopback(),
+        IpAddr::V6(ip) => {
+            ip.to_ipv4_mapped()
+                .is_some_and(|mapped| mapped.is_loopback())
+                || ip.is_loopback()
+        }
+    }
 }
 
 fn private_or_local(ip: IpAddr) -> bool {
@@ -262,71 +296,83 @@ fn validate_header(name: &str, value: &str) -> Result<(), String> {
 
 fn read_response(stream: TcpStream) -> Result<(u16, Vec<u8>), String> {
     let mut reader = BufReader::new(stream);
-    let status_line =
-        read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
-    let status = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|status| status.parse::<u16>().ok())
-        .filter(|status| *status >= 100)
-        .ok_or("invalid upstream response")?;
-    let mut content_length = None;
-    let mut chunked = false;
-    let mut header_bytes = status_line.len();
     loop {
-        let line = read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
-        header_bytes += line.len();
-        if header_bytes > 64 * 1024 {
-            return Err("upstream response headers too large".into());
-        }
-        if line == "\r\n" {
-            break;
-        }
-        let (name, value) = line
-            .trim_end_matches(&['\r', '\n'][..])
-            .split_once(':')
+        let status_line =
+            read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+        let status = status_line
+            .split_whitespace()
+            .nth(1)
+            .and_then(|status| status.parse::<u16>().ok())
+            .filter(|status| (100..=599).contains(status))
             .ok_or("invalid upstream response")?;
-        if name.eq_ignore_ascii_case("content-length") {
-            let parsed = value
-                .trim()
-                .parse::<usize>()
-                .map_err(|_| "invalid upstream response")?;
-            if content_length.replace(parsed).is_some() {
-                return Err("invalid upstream response".into());
+        let mut content_length = None;
+        let mut chunked = false;
+        let mut header_bytes = status_line.len();
+        loop {
+            let line =
+                read_line_limited(&mut reader, 8 * 1024)?.ok_or("invalid upstream response")?;
+            header_bytes += line.len();
+            if header_bytes > 64 * 1024 {
+                return Err("upstream response headers too large".into());
+            }
+            if line == "\r\n" {
+                break;
+            }
+            let (name, value) = line
+                .trim_end_matches(&['\r', '\n'][..])
+                .split_once(':')
+                .ok_or("invalid upstream response")?;
+            if name.eq_ignore_ascii_case("content-length") {
+                let parsed = value
+                    .trim()
+                    .parse::<usize>()
+                    .map_err(|_| "invalid upstream response")?;
+                if content_length.replace(parsed).is_some() {
+                    return Err("invalid upstream response".into());
+                }
+            }
+            if name.eq_ignore_ascii_case("transfer-encoding") {
+                chunked = value
+                    .split(',')
+                    .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"));
             }
         }
-        if name.eq_ignore_ascii_case("transfer-encoding") {
-            chunked = value
-                .split(',')
-                .any(|encoding| encoding.trim().eq_ignore_ascii_case("chunked"));
+        if chunked && content_length.is_some() {
+            return Err("invalid upstream response".into());
         }
+        if (100..200).contains(&status) {
+            if status == 101 {
+                return Err("upstream protocol switch is unsupported".into());
+            }
+            continue;
+        }
+        if matches!(status, 204 | 205 | 304) {
+            return Ok((status, Vec::new()));
+        }
+        let body = if chunked {
+            read_chunked(&mut reader)?
+        } else if let Some(length) = content_length {
+            if length > MAX_RESPONSE_BYTES {
+                return Err("upstream response too large".into());
+            }
+            let mut body = vec![0; length];
+            reader
+                .read_exact(&mut body)
+                .map_err(|_| "invalid upstream response")?;
+            body
+        } else {
+            let mut body = Vec::new();
+            reader
+                .take((MAX_RESPONSE_BYTES + 1) as u64)
+                .read_to_end(&mut body)
+                .map_err(|_| "upstream request failed")?;
+            if body.len() > MAX_RESPONSE_BYTES {
+                return Err("upstream response too large".into());
+            }
+            body
+        };
+        return Ok((status, body));
     }
-    if chunked && content_length.is_some() {
-        return Err("invalid upstream response".into());
-    }
-    let body = if chunked {
-        read_chunked(&mut reader)?
-    } else if let Some(length) = content_length {
-        if length > MAX_RESPONSE_BYTES {
-            return Err("upstream response too large".into());
-        }
-        let mut body = vec![0; length];
-        reader
-            .read_exact(&mut body)
-            .map_err(|_| "invalid upstream response")?;
-        body
-    } else {
-        let mut body = Vec::new();
-        reader
-            .take((MAX_RESPONSE_BYTES + 1) as u64)
-            .read_to_end(&mut body)
-            .map_err(|_| "upstream request failed")?;
-        if body.len() > MAX_RESPONSE_BYTES {
-            return Err("upstream response too large".into());
-        }
-        body
-    };
-    Ok((status, body))
 }
 
 fn read_chunked(reader: &mut BufReader<TcpStream>) -> Result<Vec<u8>, String> {
@@ -514,5 +560,89 @@ mod tests {
         .unwrap_err();
         assert_eq!(denied, "endpoint not allowed by template");
         assert!(!denied.contains("must-not-leak"));
+    }
+
+    #[test]
+    fn cleartext_bearer_is_restricted_to_loopback_even_when_private_is_allowed() {
+        let template = ApiTemplate {
+            base_url: "http://192.0.2.1".into(),
+            allowed_endpoints: vec!["/safe/*".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: true,
+        };
+        let error = execute_http(
+            &template,
+            "GET",
+            "/safe/item",
+            &BTreeMap::new(),
+            b"",
+            Some("must-not-leak"),
+        )
+        .unwrap_err();
+        assert_eq!(error, "plain HTTP is restricted to loopback targets");
+        assert!(!error.contains("must-not-leak"));
+    }
+
+    #[test]
+    fn ambiguous_paths_and_head_are_rejected_before_transport() {
+        let template = ApiTemplate {
+            base_url: "http://127.0.0.1:9".into(),
+            allowed_endpoints: vec!["/v1/*".into()],
+            allowed_methods: vec!["GET".into(), "HEAD".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: true,
+        };
+        for endpoint in [
+            "/v1/../admin",
+            "/v1/%2e%2e/admin",
+            "/v1%2fadmin",
+            "/v1//admin",
+            "/v1\\admin",
+        ] {
+            let error = execute_http(
+                &template,
+                "GET",
+                endpoint,
+                &BTreeMap::new(),
+                b"",
+                Some("must-not-leak"),
+            )
+            .unwrap_err();
+            assert!(!error.contains("must-not-leak"));
+            assert!(!error.contains(endpoint));
+        }
+        assert_eq!(
+            execute_http(&template, "HEAD", "/v1/item", &BTreeMap::new(), b"", None,).unwrap_err(),
+            "HEAD is unsupported by this broker slice"
+        );
+    }
+
+    #[test]
+    fn informational_and_bodyless_responses_keep_the_final_framing() {
+        let (status, body) = response_from_loopback(
+            b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nOK",
+        );
+        assert_eq!(status, 200);
+        assert_eq!(body, b"OK");
+
+        let (status, body) = response_from_loopback(
+            b"HTTP/1.1 304 Not Modified\r\nContent-Length: 123\r\nConnection: close\r\n\r\n",
+        );
+        assert_eq!(status, 304);
+        assert!(body.is_empty());
+    }
+
+    fn response_from_loopback(wire: &'static [u8]) -> (u16, Vec<u8>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.write_all(wire).unwrap();
+        });
+        let stream = TcpStream::connect(address).unwrap();
+        let response = read_response(stream).unwrap();
+        server.join().unwrap();
+        response
     }
 }
