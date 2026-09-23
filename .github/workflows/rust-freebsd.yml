@@ -36,11 +36,26 @@ jobs:
             pw groupadd symvault-ci
             pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
             su -l symvault-ci -c "/usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0"
-            if [ "$(uname -m)" = 'x86_64' ]; then
-              /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o /tmp/go1.26.6.freebsd-amd64.tar.gz https://go.dev/dl/go1.26.6.freebsd-amd64.tar.gz
-              test "$(sha256 -q /tmp/go1.26.6.freebsd-amd64.tar.gz)" = '9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7'
-              tar -C /usr/local -xzf /tmp/go1.26.6.freebsd-amd64.tar.gz
-            fi
+            # SHA-256 values are from go.dev/dl/?mode=json&include=all for go1.26.6.
+            # Select from the action matrix: FreeBSD reports x86_64 as amd64.
+            case '${{ matrix.arch }}' in
+              x86_64)
+                go_arch=amd64
+                go_sha256=9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
+                ;;
+              aarch64)
+                go_arch=arm64
+                go_sha256=577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
+                ;;
+              *)
+                echo "Unsupported FreeBSD architecture: ${{ matrix.arch }}" >&2
+                exit 1
+                ;;
+            esac
+            go_archive="/tmp/go1.26.6.freebsd-${go_arch}.tar.gz"
+            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${go_arch}.tar.gz"
+            test "$(sha256 -q "$go_archive")" = "$go_sha256"
+            tar -C /usr/local -xzf "$go_archive"
           run: |
             set -eu
             workspace="$(pwd -P)"
@@ -53,11 +68,6 @@ jobs:
               export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
               cd "$GITHUB_WORKSPACE"
               rustc --version | grep -q "^rustc 1[.]98[.]0 "
-              if [ "$(uname -m)" = "aarch64" ]; then
-                cargo build -p symvault-cli --bin symvault --locked
-                target/debug/symvault version
-                exit 0
-              fi
               go version | grep -q "^go version go1[.]26[.]6 "
               gmake port-contract
               gmake pairing-fixtures-check store-differential audit-fixtures-check
