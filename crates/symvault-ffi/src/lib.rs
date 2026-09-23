@@ -4,7 +4,7 @@
 //! and must be released with [`symvault_buffer_free`]. Inputs are borrowed.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, OpenOptions},
     io::{Read, Write},
     path::Path,
@@ -16,7 +16,8 @@ use symvault_crypto::{
     Argon2idParams, FailureClass, SecretBytes, ZeroKeyAuthority, classify_zero_key_candidate,
     decrypt, decrypt_argon2id, decrypt_identity, decrypt_scrypt, encrypt,
     encrypt_identity_argon2id, encrypt_scrypt, fingerprint, generate_identity, identity_string,
-    parse_identity, parse_recipient, recipient_string, recover_zero_key_identity,
+    needs_kdf_migration, parse_identity, parse_recipient, recipient_string,
+    recover_zero_key_identity,
 };
 use symvault_store::{Entry, Store, utc_now_string};
 use zeroize::Zeroize;
@@ -187,6 +188,25 @@ fn read_private_regular(path: &Path, label: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn write_private_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path).map_err(|error| error.to_string())?;
+    let result = file
+        .write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        let _ = fs::remove_file(path);
+    }
+    result
+}
+
 fn zero_key_authorities(raw: &[u8]) -> Result<Vec<String>, String> {
     let text = str::from_utf8(raw)
         .map_err(|_| "zero-key recovery requires valid recipients.txt authority".to_owned())?;
@@ -230,51 +250,272 @@ fn heal_zero_key_identity(
     });
     let identity = identity.ok_or_else(|| "zero-key recovery failed".to_owned())?;
 
-    let current_identity = read_private_regular(identity_path, "identity file").map_err(|_| {
-        "identity changed during zero-key recovery; refusing to re-key the vault".to_owned()
-    })?;
-    let current_recipients =
-        read_private_regular(&recipients_path, "recipients file").map_err(|_| {
-            "zero-key recovery authority changed; refusing to re-key the vault".to_owned()
-        })?;
-    if current_identity != raw {
-        return Err(
-            "identity changed during zero-key recovery; refusing to re-key the vault".to_owned(),
-        );
-    }
-    if current_recipients != recipients_snapshot {
-        return Err("zero-key recovery authority changed; refusing to re-key the vault".to_owned());
-    }
-
-    let replacement = encrypt_identity_argon2id(
-        &identity,
-        &SecretBytes::new(passphrase),
-        Argon2idParams::default(),
-    )
-    .map_err(|error| format!("save healed identity: {error}"))?;
-    let backup_path = identity_path.with_extension("age.bak");
-    write_private_atomic(&backup_path, raw)
-        .map_err(|error| format!("write identity backup: {error}"))?;
-    if let Err(error) = write_private_atomic(identity_path, &replacement) {
-        let _ = fs::remove_file(&backup_path);
-        return Err(format!("save healed identity: {error}"));
-    }
-    let verification = (|| {
-        let bytes = read_private_regular(identity_path, "identity file")?;
-        let verified = decrypt_identity(&bytes, &SecretBytes::new(passphrase))
-            .map_err(|error| format!("verify healed identity: {error}"))?;
-        if recipient_string(&verified) != recipient_string(&identity) {
-            return Err("verify healed identity: recovered identity mismatch".to_owned());
-        }
-        Ok(())
-    })();
-    if let Err(error) = verification {
-        write_private_atomic(identity_path, raw)
-            .map_err(|restore| format!("{error}; restore original identity: {restore}"))?;
-        let _ = fs::remove_file(&backup_path);
-        return Err(error);
-    }
+    let store = Store::open(root, &identity).map_err(|error| error.to_string())?;
+    rewrite_identity_with_lock(
+        &store,
+        IdentityRewrite {
+            identity_path,
+            original: raw,
+            identity: &identity,
+            passphrase,
+            params: Argon2idParams::default(),
+            authority: Some((&recipients_path, &recipients_snapshot)),
+            migration_config: None,
+            operation: "zero-key recovery",
+        },
+    )?;
     Ok(identity)
+}
+
+struct IdentityRewrite<'a> {
+    identity_path: &'a Path,
+    original: &'a [u8],
+    identity: &'a symvault_crypto::Identity,
+    passphrase: &'a [u8],
+    params: Argon2idParams,
+    authority: Option<(&'a Path, &'a [u8])>,
+    migration_config: Option<(&'a Path, &'a [u8])>,
+    operation: &'a str,
+}
+
+fn rewrite_identity_with_lock(store: &Store, request: IdentityRewrite<'_>) -> Result<(), String> {
+    let IdentityRewrite {
+        identity_path,
+        original,
+        identity,
+        passphrase,
+        params,
+        authority,
+        migration_config,
+        operation,
+    } = request;
+    let backup_path = identity_path.with_extension("age.bak");
+    let result = store.with_write_lock(|_| {
+        let rewrite = (|| {
+            let current_identity =
+                read_private_regular(identity_path, "identity file").map_err(|_| {
+                    format!("identity changed before {operation}; refusing to re-key the vault")
+                })?;
+            if current_identity != original {
+                return Err(format!(
+                    "identity changed before {operation}; refusing to re-key the vault"
+                ));
+            }
+            if let Some((authority_path, expected_authority)) = authority {
+                let current_authority = read_private_regular(authority_path, "recipients file")
+                    .map_err(|_| {
+                        "zero-key recovery authority changed; refusing to re-key the vault"
+                            .to_owned()
+                    })?;
+                if current_authority != expected_authority {
+                    return Err(
+                        "zero-key recovery authority changed; refusing to re-key the vault"
+                            .to_owned(),
+                    );
+                }
+            }
+            let config_replacement = if let Some((config_path, expected_config)) = migration_config
+            {
+                let current_config = read_private_regular(config_path, "vault config")
+                    .map_err(|_| "vault config changed before KDF migration".to_owned())?;
+                if current_config != expected_config {
+                    return Err("vault config changed before KDF migration".to_owned());
+                }
+                Some((config_path, migrated_kdf_config(&current_config)?))
+            } else {
+                None
+            };
+            let replacement =
+                encrypt_identity_argon2id(identity, &SecretBytes::new(passphrase), params)
+                    .map_err(|error| format!("save migrated identity: {error}"))?;
+            write_private_new(&backup_path, original).map_err(|error| {
+                format!("write identity backup (existing backups are preserved): {error}")
+            })?;
+            if let Err(error) = write_private_atomic(identity_path, &replacement) {
+                let _ = fs::remove_file(&backup_path);
+                return Err(format!("save migrated identity: {error}"));
+            }
+            let verification = (|| {
+                let bytes = read_private_regular(identity_path, "identity file")?;
+                let verified = decrypt_identity(&bytes, &SecretBytes::new(passphrase))
+                    .map_err(|error| format!("verify migrated identity: {error}"))?;
+                if recipient_string(&verified) != recipient_string(identity) {
+                    return Err("verify migrated identity: identity mismatch".to_owned());
+                }
+                Ok(())
+            })();
+            if let Err(error) = verification {
+                write_private_atomic(identity_path, original)
+                    .map_err(|restore| format!("{error}; restore original identity: {restore}"))?;
+                let _ = fs::remove_file(&backup_path);
+                return Err(error);
+            }
+            if let Some((config_path, config_bytes)) = config_replacement
+                && let Err(error) = write_private_atomic(config_path, &config_bytes)
+            {
+                write_private_atomic(identity_path, original).map_err(|restore| {
+                    format!("save migrated config: {error}; restore original identity: {restore}")
+                })?;
+                let _ = fs::remove_file(&backup_path);
+                return Err(format!("save migrated config: {error}"));
+            }
+            Ok(())
+        })();
+        Ok(rewrite)
+    });
+    match result {
+        Ok(rewrite) => rewrite,
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+struct MobileKdfMigrationSettings {
+    params: Argon2idParams,
+    config_snapshot: Vec<u8>,
+}
+
+fn mobile_kdf_migration_settings(
+    root: &Path,
+) -> Result<Option<MobileKdfMigrationSettings>, String> {
+    let raw = read_private_regular(&root.join("config.yaml"), "vault config")?;
+    let text = str::from_utf8(&raw).map_err(|_| "vault config is not UTF-8".to_owned())?;
+    let values = vault_yaml_scalars(text);
+    let enabled = match values.get("auto_migrate_kdf").map(String::as_str) {
+        Some(value) if value.eq_ignore_ascii_case("true") => true,
+        Some(value) if value.eq_ignore_ascii_case("false") => false,
+        Some(_) => return Err("vault auto_migrate_kdf must be true or false".to_owned()),
+        None => false,
+    };
+    if !enabled {
+        return Ok(None);
+    }
+    let mut params = Argon2idParams::default();
+    if let Some(value) = values.get("argon2id_time") {
+        if let Ok(value) = value.parse::<u32>() {
+            if value > 0 {
+                params.time = value;
+            }
+        } else {
+            return Err("vault argon2id_time is invalid".to_owned());
+        }
+    }
+    if let Some(value) = values.get("argon2id_memory") {
+        if let Ok(value) = value.parse::<u32>() {
+            if value > 0 {
+                params.memory_kib = value;
+            }
+        } else {
+            return Err("vault argon2id_memory is invalid".to_owned());
+        }
+    }
+    if let Some(value) = values.get("argon2id_threads") {
+        if let Ok(value) = value.parse::<u32>() {
+            if value > 0 {
+                params.threads = value;
+            }
+        } else {
+            return Err("vault argon2id_threads is invalid".to_owned());
+        }
+    }
+    Ok(Some(MobileKdfMigrationSettings {
+        params,
+        config_snapshot: raw,
+    }))
+}
+
+fn migrated_kdf_config(raw: &[u8]) -> Result<Vec<u8>, String> {
+    let text = str::from_utf8(raw).map_err(|_| "vault config is not UTF-8".to_owned())?;
+    let mut lines = text.lines().map(str::to_owned).collect::<Vec<_>>();
+    let header = lines
+        .iter()
+        .position(|line| line.split('#').next().unwrap_or_default().trim() == "vault:")
+        .ok_or_else(|| "vault config has no vault mapping".to_owned())?;
+    let parent_indent = lines[header].len() - lines[header].trim_start_matches(' ').len();
+    let child_indent = lines
+        .iter()
+        .skip(header + 1)
+        .find_map(|line| {
+            let content = line.split('#').next().unwrap_or_default();
+            if content.trim().is_empty() {
+                return None;
+            }
+            let indent = content.len() - content.trim_start_matches(' ').len();
+            (indent > parent_indent).then_some(indent)
+        })
+        .unwrap_or(parent_indent + 2);
+    let mut format_index = None;
+    let mut remove_indices = Vec::new();
+    for (index, line) in lines.iter().enumerate().skip(header + 1) {
+        let content = line.split('#').next().unwrap_or_default();
+        if content.trim().is_empty() {
+            continue;
+        }
+        let indent = content.len() - content.trim_start_matches(' ').len();
+        if indent <= parent_indent {
+            break;
+        }
+        if indent != child_indent {
+            continue;
+        }
+        let Some((key, _)) = content.trim().split_once(':') else {
+            continue;
+        };
+        match key.trim().trim_matches(['"', '\'']) {
+            "format_version" => format_index = Some(index),
+            "scrypt_work_factor" => remove_indices.push(index),
+            _ => {}
+        }
+    }
+    let replacement = format!("{}format_version: 2", " ".repeat(child_indent));
+    if let Some(index) = format_index {
+        lines[index] = replacement;
+    } else {
+        lines.insert(header + 1, replacement);
+    }
+    for index in remove_indices.into_iter().rev() {
+        lines.remove(index);
+    }
+    let mut output = lines.join("\n").into_bytes();
+    if text.ends_with('\n') {
+        output.push(b'\n');
+    }
+    Ok(output)
+}
+
+fn vault_yaml_scalars(text: &str) -> HashMap<String, String> {
+    let mut scalars = HashMap::new();
+    let mut vault_indent = None;
+    let mut child_indent = None;
+    for line in text.lines() {
+        let line = line.split('#').next().unwrap_or_default();
+        let indent = line.len() - line.trim_start_matches(' ').len();
+        let Some((key, value)) = line.trim().split_once(':') else {
+            continue;
+        };
+        let key = key.trim().trim_matches(['"', '\'']);
+        let value = value.trim();
+        if indent == 0 {
+            vault_indent = (key == "vault" && value.is_empty()).then_some(indent);
+            child_indent = None;
+            continue;
+        }
+        let Some(parent_indent) = vault_indent else {
+            continue;
+        };
+        if indent <= parent_indent {
+            vault_indent = None;
+            child_indent = None;
+            continue;
+        }
+        let depth = *child_indent.get_or_insert(indent);
+        if indent != depth {
+            continue;
+        }
+        let value = value.split('#').next().unwrap_or_default().trim();
+        let value = value.trim_matches(['"', '\'']);
+        scalars.insert(key.to_owned(), value.to_owned());
+    }
+    scalars
 }
 
 /// Frees a buffer returned in a result. A zero-length buffer is a no-op.
@@ -576,7 +817,24 @@ pub unsafe extern "C" fn symvault_open_vault_with_passphrase(
             }
             Err(error) => return Err(format!("load identity: {error}")),
         };
-        Store::open(root, &identity).map_err(|error| error.to_string())?;
+        let store = Store::open(&root, &identity).map_err(|error| error.to_string())?;
+        if needs_kdf_migration(&ciphertext)
+            && let Some(settings) = mobile_kdf_migration_settings(&root)?
+        {
+            rewrite_identity_with_lock(
+                &store,
+                IdentityRewrite {
+                    identity_path: &identity_path,
+                    original: &ciphertext,
+                    identity: &identity,
+                    passphrase,
+                    params: settings.params,
+                    authority: None,
+                    migration_config: Some((&root.join("config.yaml"), &settings.config_snapshot)),
+                    operation: "KDF migration",
+                },
+            )?;
+        }
         Ok(identity_string(&identity).as_bytes().to_vec())
     })
 }
@@ -954,6 +1212,214 @@ mod tests {
         assert!(error.contains("zero-key recovery failed"));
         assert_eq!(fs::read(rejected.join("identity.age")).unwrap(), original);
         assert!(!rejected.join("identity.age.bak").exists());
+
+        let backup_occupied = temp.path().join("backup-occupied-vault");
+        fs::create_dir_all(backup_occupied.join("entries")).unwrap();
+        fs::write(
+            backup_occupied.join("config.yaml"),
+            format!(
+                "vaultDir: {}\nvault:\n  format_version: 2\n",
+                serde_json::to_string(backup_occupied.to_str().unwrap()).unwrap()
+            ),
+        )
+        .unwrap();
+        fs::write(backup_occupied.join("identity.age"), &original).unwrap();
+        fs::write(
+            backup_occupied.join("recipients.txt"),
+            format!("{expected_recipient}\n"),
+        )
+        .unwrap();
+        let sentinel_backup = b"keep prior identity backup";
+        fs::write(backup_occupied.join("identity.age.bak"), sentinel_backup).unwrap();
+        let occupied_bytes = backup_occupied.to_str().unwrap().as_bytes();
+        let error = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                occupied_bytes.as_ptr(),
+                occupied_bytes.len(),
+                passphrase_bytes.as_ptr(),
+                passphrase_bytes.len(),
+            ))
+        }
+        .unwrap_err();
+        assert!(error.contains("existing backups are preserved"));
+        assert_eq!(
+            fs::read(backup_occupied.join("identity.age")).unwrap(),
+            original
+        );
+        assert_eq!(
+            fs::read(backup_occupied.join("identity.age.bak")).unwrap(),
+            sentinel_backup
+        );
+    }
+
+    #[test]
+    fn open_vault_migrates_go_scrypt_identity_only_when_opted_in() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/ffi/kdf-migration.json"
+        )))
+        .unwrap();
+        let original = STANDARD
+            .decode(fixture["ciphertext"].as_str().unwrap())
+            .unwrap();
+        let expected_identity = fixture["identity"].as_str().unwrap();
+        let passphrase = b"rust-interop-fixture-passphrase-v1";
+
+        let temp = tempfile::tempdir().unwrap();
+        let make_vault = |name: &str, auto_migrate: bool| {
+            let vault = temp.path().join(name);
+            fs::create_dir_all(vault.join("entries")).unwrap();
+            let quoted_path = serde_json::to_string(vault.to_str().unwrap()).unwrap();
+            fs::write(
+                vault.join("config.yaml"),
+                format!(
+                    "vaultDir: {quoted_path}\nvault:\n  format_version: 1\n  scrypt_work_factor: 18\n  auto_migrate_kdf: {auto_migrate}\n  argon2id_time: 1\n  argon2id_memory: 32\n  argon2id_threads: 1\n"
+                ),
+            )
+            .unwrap();
+            fs::write(vault.join("identity.age"), &original).unwrap();
+            vault
+        };
+        let vault = make_vault("migrate", true);
+        let vault_bytes = vault.to_str().unwrap().as_bytes();
+        let opened = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                vault_bytes.as_ptr(),
+                vault_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            ))
+        }
+        .unwrap();
+        assert_eq!(str::from_utf8(&opened).unwrap(), expected_identity);
+        assert_eq!(fs::read(vault.join("identity.age.bak")).unwrap(), original);
+        let migrated_config = fs::read_to_string(vault.join("config.yaml")).unwrap();
+        assert!(migrated_config.contains("format_version: 2"));
+        assert!(migrated_config.contains("auto_migrate_kdf: true"));
+        assert!(!migrated_config.contains("scrypt_work_factor"));
+        let migrated = fs::read(vault.join("identity.age")).unwrap();
+        assert!(needs_kdf_migration(&original));
+        assert!(!needs_kdf_migration(&migrated));
+        let reopened = decrypt_identity(&migrated, &SecretBytes::new(passphrase)).unwrap();
+        assert_eq!(
+            recipient_string(&reopened),
+            recipient_string(&parse_identity(expected_identity).unwrap())
+        );
+
+        let wrong_pass_vault = make_vault("wrong-pass", true);
+        let wrong_vault_bytes = wrong_pass_vault.to_str().unwrap().as_bytes();
+        let wrong_passphrase = b"not the fixture passphrase";
+        let error = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                wrong_vault_bytes.as_ptr(),
+                wrong_vault_bytes.len(),
+                wrong_passphrase.as_ptr(),
+                wrong_passphrase.len(),
+            ))
+        }
+        .unwrap_err();
+        assert!(error.contains("load identity"));
+        assert_eq!(
+            fs::read(wrong_pass_vault.join("identity.age")).unwrap(),
+            original
+        );
+        assert!(!wrong_pass_vault.join("identity.age.bak").exists());
+
+        let disabled = make_vault("disabled", false);
+        let disabled_bytes = disabled.to_str().unwrap().as_bytes();
+        output(unsafe {
+            symvault_open_vault_with_passphrase(
+                disabled_bytes.as_ptr(),
+                disabled_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            )
+        })
+        .unwrap();
+        assert_eq!(fs::read(disabled.join("identity.age")).unwrap(), original);
+        assert!(!disabled.join("identity.age.bak").exists());
+
+        let backup_occupied = make_vault("backup-occupied", true);
+        let prior_backup = b"pre-existing migration backup";
+        fs::write(backup_occupied.join("identity.age.bak"), prior_backup).unwrap();
+        let occupied_bytes = backup_occupied.to_str().unwrap().as_bytes();
+        let error = unsafe {
+            output(symvault_open_vault_with_passphrase(
+                occupied_bytes.as_ptr(),
+                occupied_bytes.len(),
+                passphrase.as_ptr(),
+                passphrase.len(),
+            ))
+        }
+        .unwrap_err();
+        assert!(error.contains("existing backups are preserved"));
+        assert_eq!(
+            fs::read(backup_occupied.join("identity.age")).unwrap(),
+            original
+        );
+        assert_eq!(
+            fs::read(backup_occupied.join("identity.age.bak")).unwrap(),
+            prior_backup
+        );
+
+        let changed = make_vault("changed-identity", true);
+        let changed_bytes = b"changed identity bytes";
+        fs::write(changed.join("identity.age"), changed_bytes).unwrap();
+        let expected_identity_parsed = parse_identity(expected_identity).unwrap();
+        let changed_store = Store::open(&changed, &expected_identity_parsed).unwrap();
+        let error = rewrite_identity_with_lock(
+            &changed_store,
+            IdentityRewrite {
+                identity_path: &changed.join("identity.age"),
+                original: &original,
+                identity: &expected_identity_parsed,
+                passphrase,
+                params: Argon2idParams {
+                    time: 1,
+                    memory_kib: 32,
+                    threads: 1,
+                },
+                authority: None,
+                migration_config: None,
+                operation: "KDF migration",
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("identity changed"));
+        assert_eq!(
+            fs::read(changed.join("identity.age")).unwrap(),
+            changed_bytes
+        );
+        assert!(!changed.join("identity.age.bak").exists());
+
+        let changed_authority = make_vault("changed-authority", true);
+        let recipient_path = changed_authority.join("recipients.txt");
+        fs::write(&recipient_path, b"changed authority\n").unwrap();
+        let authority_store = Store::open(&changed_authority, &expected_identity_parsed).unwrap();
+        let error = rewrite_identity_with_lock(
+            &authority_store,
+            IdentityRewrite {
+                identity_path: &changed_authority.join("identity.age"),
+                original: &original,
+                identity: &expected_identity_parsed,
+                passphrase,
+                params: Argon2idParams {
+                    time: 1,
+                    memory_kib: 32,
+                    threads: 1,
+                },
+                authority: Some((&recipient_path, b"original authority\n")),
+                migration_config: None,
+                operation: "zero-key recovery",
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("authority changed"));
+        assert_eq!(
+            fs::read(changed_authority.join("identity.age")).unwrap(),
+            original
+        );
+        assert!(!changed_authority.join("identity.age.bak").exists());
     }
 
     #[test]
