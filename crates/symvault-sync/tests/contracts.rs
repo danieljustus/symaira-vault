@@ -231,7 +231,7 @@ fn import_and_intake_adapters_are_bounded_and_deterministic() {
     )
     .unwrap();
     let opts = intake::Options {
-        debounce: Duration::ZERO,
+        debounce: Duration::from_millis(1),
         ..Default::default()
     };
     let mut watcher = intake::Watcher::new(&inbox, opts).unwrap();
