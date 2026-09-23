@@ -128,6 +128,38 @@ func verifyCryptoFixture() throws -> String {
   else {
     throw SmokeFailure.contract("Rust FFI did not decrypt the Go scrypt fixture")
   }
+  guard let reencryptCases = crypto["reencrypt_cases"] as? [[String: Any]],
+    reencryptCases.count == 2
+  else {
+    throw SmokeFailure.fixture("Go crypto fixture is missing its re-encryption cases")
+  }
+  for testCase in reencryptCases {
+    guard
+      let plaintext = testCase["plaintext"] as? String,
+      let encodedCiphertext = testCase["reencrypted_ciphertext"] as? String,
+      let ciphertext = Data(base64Encoded: encodedCiphertext),
+      let recipients = testCase["recipients"] as? [String],
+      let removedIdentity = testCase["removed_identity"] as? String
+    else {
+      throw SmokeFailure.fixture("Go re-encryption fixture case has invalid fields")
+    }
+    let recipientNames = Set(recipients)
+    let retained = identities.filter { recipientNames.contains($0["recipient"] as? String ?? "") }
+    guard retained.count == recipientNames.count else {
+      throw SmokeFailure.fixture("Go re-encryption fixture has no identity for every recipient")
+    }
+    for identity in retained {
+      guard let secret = identity["identity"] as? String else {
+        throw SmokeFailure.fixture("Go re-encryption fixture identity has no secret string")
+      }
+      guard try decrypt(ciphertext, with: secret) == Data(plaintext.utf8) else {
+        throw SmokeFailure.contract("Rust FFI did not decrypt a retained Go recipient")
+      }
+    }
+    guard (try? decrypt(ciphertext, with: removedIdentity)) == nil else {
+      throw SmokeFailure.contract("Rust FFI decrypted a removed Go recipient")
+    }
+  }
   guard let storeIdentity = identities.first?["identity"] as? String else {
     throw SmokeFailure.fixture("Go age fixture has no store identity")
   }
