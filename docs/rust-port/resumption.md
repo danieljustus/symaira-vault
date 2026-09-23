@@ -21,6 +21,13 @@
   zu verändern. Ein fokussierter Rust-Test prüft vorhandene Quarantäne-Pfade
   und die Feldgrenze bei 4096 Byte. Wiederholte Scans deduplizieren denselben
   Kandidaten; zu große Dateien werden mit Go-gleichem Grund übersprungen.
+  Der HTTP-Listener wiederverwendet eine authentifizierte Verbindung für
+  sequenzielle Anfragen bis zur Grenze von 16 Requests; das lokale Go/Rust-
+  Keep-Alive-Replay besteht. Rusts 10-Sekunden-Socket-Timeout bleibt kürzer
+  als Go's 120-Sekunden-Idle-Timeout.
+  Nach einem erzwungenen Neubau des gemeinsam genutzten Cargo-Targets bestand
+  `make config-cli-differential` vollständig, einschließlich der neuen
+  `get`-Ausgabe- und Intake-Fälle sowie des ignorierten KDF-Migrationsfalls.
   Der vollständige Go-Coverage-Lauf
   erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
@@ -42,8 +49,15 @@
   Differential an einem veralteten Generator-Hash im Config-Profile-Fixture.
   Der Hash ist lokal aus dem gepinnten Oracle erneuert und erneut geprüft.
   Der `6bb47dc`-Lint-Lauf stoppte am `goconst`-Befund im FreeBSD-Harness-Test;
-  der Test ist lokal korrigiert. Native Rust- und FreeBSD-Jobs dieses Heads
-  sind noch nicht abgeschlossen.
+  der Test ist lokal korrigiert. `port-contract` desselben Heads stoppte am
+  gleichen alten Fixture-Hash. Der native macOS-Lauf fand einen doppelten
+  Slash im Rust-Pfad für die Service-Datei; die Pfadbildung ist korrigiert,
+  und der gezielte Go/Rust-Differentialtest besteht auch bei `TMPDIR` mit
+  doppeltem Slash. Windows bestand Rust-Clippy und alle Rust-Tests, scheiterte
+  dann im neuen CLI-Gate am Go-Binary ohne `.exe`; das Skript wählt nun den
+  Windows-Suffix. Linux-Rust und iOS-Simulator bestanden, FreeBSD erreichte
+  die Config-Fixtures und stoppte ebenfalls am erneuerten Hash. Miri bestand.
+  Alle Korrekturen warten auf native Läufe am nächsten integrierten SHA.
 - **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
   Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
   am lokalen Binary `e15b47a` nach Korrektur des Help-Parsers 134 Go-Pfade,

@@ -35,6 +35,7 @@ const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
+// ponytail: serial listener and 16-request cap; use concurrent connections if throughput matters.
 const MAX_HTTP_REQUESTS_PER_CONNECTION: usize = 16;
 
 #[derive(Deserialize)]
