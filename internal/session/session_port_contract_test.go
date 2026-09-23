@@ -84,3 +84,45 @@ func TestSessionPortCacheMetadataContract(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionPortTimestampBoundaryContract(t *testing.T) {
+	goZero := time.Time{}
+	epoch := time.Unix(0, 0).UTC()
+	now := epoch.Add(100 * time.Second)
+	if cacheExpired(epoch, epoch, int64(120*time.Second), int64(120*time.Second), now) {
+		t.Fatal("Unix epoch is a valid session origin")
+	}
+	if !cacheExpired(epoch.Add(60*time.Second), goZero, 1, int64(120*time.Second), now) {
+		t.Fatal("Go zero last-access must fall back to saved-at before expiry")
+	}
+	if !cacheExpired(goZero, epoch, int64(120*time.Second), int64(120*time.Second), now) {
+		t.Fatal("Go zero saved-at must expire")
+	}
+	preEpoch := epoch.Add(-time.Second)
+	if preEpoch.IsZero() || cacheExpired(preEpoch, preEpoch, int64(120*time.Second), int64(120*time.Second), epoch) {
+		t.Fatal("a pre-epoch timestamp is nonzero and may be fresh")
+	}
+	if !time.Date(1, 1, 1, 1, 0, 0, 0, time.FixedZone("+01:00", 3600)).IsZero() {
+		t.Fatal("RFC3339 offsets must not change the Go zero instant")
+	}
+	mgr, keyring := newTestManager(t)
+	vault := "pre-epoch-port-contract"
+	key := keyFor(serviceNameForVault(vault), sessionAccount)
+	if err := keyring.Set(key, `{"saved_at":"1969-12-31T23:59:59Z","last_access":"1969-12-31T23:59:59Z","ttl_ns":1,"max_lifetime_ns":1}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.SaveIdentityWithMaxLifetime(vault, "test-identity", time.Hour, 2*time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := keyring.Get(keyFor(serviceNameForVault(vault), identityAccount))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var identity storedIdentity
+	if err := json.Unmarshal([]byte(raw), &identity); err != nil {
+		t.Fatal(err)
+	}
+	if !identity.SavedAt.Equal(preEpoch) || identity.TTL != 1 || identity.MaxLifetime != 1 {
+		t.Fatalf("pre-epoch session origin not inherited: savedAt=%v ttl=%v max=%v", identity.SavedAt, identity.TTL, identity.MaxLifetime)
+	}
+}
