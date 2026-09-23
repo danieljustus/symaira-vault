@@ -598,6 +598,13 @@ impl SessionManager {
         Ok(())
     }
 
+    pub fn clear_identity(&self, vault: &str) -> Result<(), SessionError> {
+        match self.keyring.delete(&Self::key(vault, IDENTITY_ACCOUNT)) {
+            Err(SessionError::NotFound) | Ok(()) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
     /// Reports whether the cached session still holds a plaintext passphrase.
     ///
     /// Mirrors Go's `Manager.HasLegacyPlaintextSession`: a missing cache entry is

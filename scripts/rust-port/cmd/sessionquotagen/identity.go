@@ -70,5 +70,27 @@ func identityMetadataCases() []sessionCase {
 		panic("identity expiry ignored expired shared session")
 	}
 	expiry := sessionCase{Name: "identity_expiry_uses_shared_session", Operations: []string{"expire_session_only", "is_identity_expired"}, Expected: "expired"}
-	return []sessionCase{peek, refresh, expiry}
+	clearBackend := &fakeKeyring{values: map[string]string{}}
+	clearManager := session.NewManager(clearBackend, nil)
+	if err := clearManager.SavePassphrase(vault, []byte("fixture-secret"), time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.SaveIdentity(vault, "fixture-identity", time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearIdentity(vault); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearIdentity(vault); err != nil {
+		panic(err)
+	}
+	if _, present := clearBackend.values[identityKey]; present {
+		panic("Go clear identity retained identity account")
+	}
+	passphrase, err := clearManager.LoadPassphrase(vault)
+	if err != nil || string(passphrase) != "fixture-secret" || len(clearBackend.values) != 2 {
+		panic(fmt.Sprintf("Go clear identity removed shared session: %q %v", passphrase, err))
+	}
+	clear := sessionCase{Name: "clear_identity_preserves_session", Operations: []string{"save_passphrase", "save_identity", "clear_identity", "clear_identity", "load_passphrase"}, Expected: "session_preserved"}
+	return []sessionCase{peek, refresh, expiry, clear}
 }
