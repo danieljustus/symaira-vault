@@ -717,6 +717,7 @@ fn write_private_atomic(path: &Path, bytes: &[u8], replace: bool) -> io::Result<
             fs::hard_link(&temp, path)?;
             fs::remove_file(&temp)?;
         }
+        #[cfg(unix)]
         if let Some(parent) = path.parent() {
             File::open(parent)?.sync_all()?;
         }
