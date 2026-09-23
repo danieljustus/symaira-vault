@@ -39,8 +39,11 @@ func TestStagedArchiveMatchesGoReleaseContract(t *testing.T) {
 	}
 	stage := t.TempDir()
 	writeTarGz(t, filepath.Join(stage, plan.name), root, *plan, false)
-	if err := compareOne(filepath.Join(stage, plan.name), *plan); err != nil {
+	if err := compare(root, stage, "9.8.7", "linux/amd64"); err != nil {
 		t.Fatalf("valid staged artifact rejected: %v", err)
+	}
+	if err := compare(root, stage, "9.8.7", "unknown/arch"); err == nil {
+		t.Fatal("unknown target passed")
 	}
 }
 

@@ -46,6 +46,7 @@ type archivePlan struct {
 	name   string
 	format string
 	root   string
+	target string
 	files  map[string]string // archive path -> SHA-256 of source file
 	binary string
 }
@@ -53,21 +54,22 @@ type archivePlan struct {
 const maxArchiveMemberBytes = 256 << 20
 
 func main() {
-	var repo, stage, version string
+	var repo, stage, version, target string
 	flag.StringVar(&repo, "repo", ".", "repository root containing .goreleaser.yml and packaged source files")
 	flag.StringVar(&stage, "rust-dir", "dist/rust", "directory containing locally staged Rust archives")
 	flag.StringVar(&version, "version", "", "release version, with or without a leading v")
+	flag.StringVar(&target, "target", "", "optional Go OS/architecture pair, for example linux/amd64")
 	flag.Parse()
 	if version == "" {
 		fatal(errors.New("--version is required"))
 	}
-	if err := compare(repo, stage, version); err != nil {
+	if err := compare(repo, stage, version, target); err != nil {
 		fatal(err)
 	}
 	fmt.Println("Rust archive metadata matches GoReleaser contract")
 }
 
-func compare(repo, stage, version string) error {
+func compare(repo, stage, version, target string) error {
 	root, err := filepath.Abs(repo)
 	if err != nil {
 		return err
@@ -92,11 +94,19 @@ func compare(repo, stage, version string) error {
 	if len(plans) == 0 {
 		return errors.New("GoReleaser config produced no archive plans")
 	}
+	checked := 0
 	for _, plan := range plans {
+		if target != "" && plan.target != target {
+			continue
+		}
 		path := filepath.Join(stage, plan.name)
 		if err := compareOne(path, plan); err != nil {
 			return fmt.Errorf("%s: %w", plan.name, err)
 		}
+		checked++
+	}
+	if checked == 0 {
+		return fmt.Errorf("GoReleaser config has no archive for target %q", target)
 	}
 	return nil
 }
@@ -151,7 +161,7 @@ func makePlans(root string, cfg config, version string) ([]archivePlan, error) {
 					memberFiles[name] = hash
 				}
 				plans = append(plans, archivePlan{
-					name: stem + extension, format: format, root: stem,
+					name: stem + extension, format: format, root: stem, target: goos + "/" + goarch,
 					files: memberFiles, binary: binary,
 				})
 			}
