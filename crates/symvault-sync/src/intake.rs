@@ -401,6 +401,7 @@ pub trait QuarantineSink {
         provenance: &Provenance,
     ) -> io::Result<()>;
     fn contains_hash(&self, hash: &str) -> bool;
+    fn contains_path(&self, path: &str) -> bool;
 }
 pub fn quarantine<S: QuarantineSink>(
     sink: &mut S,
@@ -416,17 +417,27 @@ pub fn quarantine<S: QuarantineSink>(
         let Some(p) = r.provenance.as_ref() else {
             continue;
         };
+        let path = format!("quarantine/{import_id}/{}", proposed_path(&p.source_name));
+        if sink.contains_path(&path) {
+            continue;
+        }
         if sink.contains_hash(&p.sha256) {
             continue;
         }
-        let path = format!("quarantine/{import_id}/{}", proposed_path(&p.source_name));
         let mut fields = BTreeMap::new();
         for s in &r.suggestions {
-            if !s.attachment {
-                fields
-                    .entry(s.field.clone())
-                    .or_insert_with(|| s.value.clone().unwrap_or_default());
+            if s.attachment || s.field == ATTACHMENT_FIELD {
+                continue;
             }
+            let Some(value) = s.value.as_deref() else {
+                continue;
+            };
+            if value.is_empty() || value.len() > 4096 {
+                continue;
+            }
+            fields
+                .entry(s.field.clone())
+                .or_insert_with(|| value.into());
         }
         if !dry_run {
             sink.write(&path, &fields, data, p)?;
@@ -576,4 +587,109 @@ impl Watcher {
 #[must_use]
 pub fn encode_attachment(data: &[u8]) -> String {
     STANDARD.encode(data)
+}
+
+#[cfg(test)]
+mod quarantine_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[derive(Default)]
+    struct Sink {
+        paths: BTreeSet<String>,
+        writes: Vec<(String, BTreeMap<String, String>)>,
+    }
+
+    impl QuarantineSink for Sink {
+        fn write(
+            &mut self,
+            path: &str,
+            fields: &BTreeMap<String, String>,
+            _: &[u8],
+            _: &Provenance,
+        ) -> io::Result<()> {
+            self.paths.insert(path.into());
+            self.writes.push((path.into(), fields.clone()));
+            Ok(())
+        }
+
+        fn contains_hash(&self, _: &str) -> bool {
+            false
+        }
+
+        fn contains_path(&self, path: &str) -> bool {
+            self.paths.contains(path)
+        }
+    }
+
+    fn result(name: &str, suggestions: Vec<Suggestion>) -> FileResult {
+        FileResult {
+            file: name.into(),
+            status: "ok".into(),
+            reason: None,
+            provenance: Some(Provenance {
+                source_path: name.into(),
+                source_name: name.into(),
+                source_type: SourceType::Text,
+                size: 1,
+                sha256: format!("hash-{name}"),
+                mtime: 0,
+            }),
+            suggestions,
+            spool_path: None,
+        }
+    }
+
+    fn suggestion(field: &str, value: Option<String>, attachment: bool) -> Suggestion {
+        Suggestion {
+            path: "ignored".into(),
+            field: field.into(),
+            confidence: 1.0,
+            value,
+            warning: None,
+            attachment,
+        }
+    }
+
+    #[test]
+    fn skips_path_collisions_and_go_invalid_field_suggestions() {
+        let colliding = result("existing.txt", vec![]);
+        let valid = result(
+            "valid.txt",
+            vec![
+                suggestion("empty", Some(String::new()), false),
+                suggestion("missing", None, false),
+                suggestion("oversize", Some("x".repeat(4097)), false),
+                suggestion("boundary", Some("x".repeat(4096)), false),
+                suggestion("attachment", Some("suggested bytes".into()), false),
+                suggestion("marked", Some("ignored".into()), true),
+                suggestion("username", Some("alice".into()), false),
+            ],
+        );
+        let mut sink = Sink {
+            paths: ["quarantine/batch/existing".into()].into_iter().collect(),
+            ..Sink::default()
+        };
+
+        let written = quarantine(
+            &mut sink,
+            &[(colliding, b"a".to_vec()), (valid, b"b".to_vec())],
+            "batch",
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(written, ["quarantine/batch/valid"]);
+        assert_eq!(sink.writes.len(), 1);
+        assert_eq!(sink.writes[0].0, "quarantine/batch/valid");
+        let fields = &sink.writes[0].1;
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields["boundary"].len(), 4096);
+        assert_eq!(fields["username"], "alice");
+        assert!(!fields.contains_key("empty"));
+        assert!(!fields.contains_key("missing"));
+        assert!(!fields.contains_key("oversize"));
+        assert!(!fields.contains_key("attachment"));
+        assert!(!fields.contains_key("marked"));
+    }
 }

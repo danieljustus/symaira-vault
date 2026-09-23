@@ -258,6 +258,10 @@ impl QuarantineSink for StoreQuarantineSink<'_> {
                 })
         })
     }
+
+    fn contains_path(&self, path: &str) -> bool {
+        self.existing_paths.iter().any(|existing| existing == path)
+    }
 }
 
 fn sha256(bytes: &[u8]) -> String {
