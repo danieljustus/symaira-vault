@@ -20,6 +20,7 @@ mod daemon_commands;
 mod device;
 mod device_approval;
 mod doctor_commands;
+mod dynamic_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
@@ -545,6 +546,11 @@ enum Command {
         #[arg(value_name = "COMMAND", num_args = 0.., allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
+    /// Generate dynamic secrets with time-limited leases.
+    Dynamic {
+        #[command(subcommand)]
+        command: DynamicCommand,
+    },
     /// Manage vault authentication and session status.
     Auth {
         #[command(subcommand)]
@@ -636,6 +642,21 @@ enum ShareCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum DynamicCommand {
+    /// Generate a dynamic secret.
+    Generate {
+        #[arg(long)]
+        engine: Option<String>,
+        #[arg(long)]
+        role: Option<String>,
+        #[arg(long, default_value = "1h0m0s", value_parser = parse_dynamic_ttl)]
+        ttl: String,
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        _args: Vec<OsString>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum IntakeCommand {
     Watch {
         directory: Option<PathBuf>,
@@ -657,6 +678,12 @@ enum IntakeWatchCommand {
 
 fn parse_watch_interval(value: &str) -> Result<std::time::Duration, String> {
     parse_watch_duration(value, std::time::Duration::from_secs(10))
+}
+
+fn parse_dynamic_ttl(value: &str) -> Result<String, String> {
+    symvault_core::config::parse_duration_nanos(value)
+        .map(|_| value.to_owned())
+        .ok_or_else(|| format!("invalid duration {value:?}"))
 }
 
 fn parse_watch_debounce(value: &str) -> Result<std::time::Duration, String> {
@@ -2417,6 +2444,30 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Dynamic {
+            command:
+                DynamicCommand::Generate {
+                    engine,
+                    role,
+                    ttl,
+                    _args: _,
+                },
+        }) => match dynamic_commands::generate(
+            engine.as_deref(),
+            role.as_deref(),
+            &ttl,
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err((code, error, hint)) => {
+                print_error_like_go(&error);
+                if let Some(hint) = hint {
+                    let _ = writeln!(io::stderr(), "{hint}");
+                }
+                ExitCode::from(code)
+            }
+        },
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
