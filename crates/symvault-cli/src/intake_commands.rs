@@ -1,11 +1,101 @@
-//! Offline intake watch management commands.
+//! Offline intake watch commands.
 
 use std::{
     ffi::OsStr,
     fs, io,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    time::Duration,
 };
+
+use symvault_sync::intake::{Options, ScanResult, Spool, Watcher};
+
+pub(crate) enum WatchOnceError {
+    InvalidDirectory(String),
+    Scan(symvault_sync::intake::IntakeError),
+    BatchWriterUnavailable,
+    Output(io::Error),
+}
+
+impl std::fmt::Display for WatchOnceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidDirectory(message) => write!(f, "watch: {message}"),
+            Self::Scan(error) => write!(f, "scan: {error}"),
+            Self::BatchWriterUnavailable => {
+                f.write_str("intake watch --once cannot write quarantined batches: vault-backed batch writer is unavailable")
+            }
+            Self::Output(error) => write!(f, "write scan output: {error}"),
+        }
+    }
+}
+
+pub(crate) fn watch_once(
+    dir: &Path,
+    interval: Duration,
+    debounce: Duration,
+    json: bool,
+    quiet: bool,
+) -> Result<(), WatchOnceError> {
+    let _interval = interval; // Poll intervals do not affect a single scan.
+    match fs::metadata(dir) {
+        Ok(metadata) if !metadata.is_dir() => {
+            return Err(WatchOnceError::InvalidDirectory(format!(
+                "watch path is not a directory: {}",
+                dir.display()
+            )));
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return Err(WatchOnceError::InvalidDirectory(format!(
+                "stat watch directory: {error}"
+            )));
+        }
+    }
+    let mut options = Options::default();
+    options.debounce = if debounce.is_zero() {
+        Duration::from_secs(5)
+    } else {
+        debounce
+    };
+    let mut watcher = Watcher::new(dir, options).map_err(WatchOnceError::Scan)?;
+    let spool = Spool::new(std::env::temp_dir()).map_err(WatchOnceError::Scan)?;
+    let result = watcher.scan_result(&spool).map_err(WatchOnceError::Scan)?;
+    if json {
+        let mut stdout = io::stdout().lock();
+        serde_json::to_writer(&mut stdout, &result)
+            .map_err(|e| WatchOnceError::Output(io::Error::other(e)))?;
+        writeln!(stdout).map_err(WatchOnceError::Output)?;
+    } else if !quiet {
+        print_scan_summary(&result)?;
+    }
+    if !result.staged_results.is_empty() {
+        // The intake backend can stage files, but the CLI has no vault-backed
+        // quarantine writer yet. Do not claim the batch was saved.
+        return Err(WatchOnceError::BatchWriterUnavailable);
+    }
+    Ok(())
+}
+
+fn print_scan_summary(result: &ScanResult) -> Result<(), WatchOnceError> {
+    let mut stdout = io::stdout().lock();
+    writeln!(
+        stdout,
+        "Scanned {} candidate(s), staged {}, skipped {}, errors {}",
+        result.scanned,
+        result.staged.as_ref().map_or(0, Vec::len),
+        result.skipped.len(),
+        result.errors.len()
+    )
+    .map_err(WatchOnceError::Output)?;
+    for skipped in &result.skipped {
+        writeln!(stdout, "  skip: {skipped}").map_err(WatchOnceError::Output)?;
+    }
+    for error in &result.errors {
+        writeln!(stdout, "  error: {error}").map_err(WatchOnceError::Output)?;
+    }
+    Ok(())
+}
 
 pub(crate) enum WatchDisableError {
     UnsupportedPlatform,

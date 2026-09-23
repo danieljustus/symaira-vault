@@ -611,14 +611,43 @@ enum ShareCommand {
 #[derive(Debug, Subcommand)]
 enum IntakeCommand {
     Watch {
+        directory: Option<PathBuf>,
+        #[arg(long)]
+        once: bool,
+        #[arg(long, default_value = "10s", value_parser = parse_watch_interval)]
+        interval: std::time::Duration,
+        #[arg(long, default_value = "5s", value_parser = parse_watch_debounce)]
+        debounce: std::time::Duration,
         #[command(subcommand)]
-        command: IntakeWatchCommand,
+        command: Option<IntakeWatchCommand>,
     },
 }
 
 #[derive(Debug, Subcommand)]
 enum IntakeWatchCommand {
     Disable,
+}
+
+fn parse_watch_interval(value: &str) -> Result<std::time::Duration, String> {
+    parse_watch_duration(value, std::time::Duration::from_secs(10))
+}
+
+fn parse_watch_debounce(value: &str) -> Result<std::time::Duration, String> {
+    parse_watch_duration(value, std::time::Duration::from_secs(5))
+}
+
+fn parse_watch_duration(
+    value: &str,
+    fallback: std::time::Duration,
+) -> Result<std::time::Duration, String> {
+    let nanos = symvault_core::config::parse_duration_nanos(value)
+        .ok_or_else(|| format!("invalid duration {value:?}"))?;
+    if nanos <= 0 {
+        return Ok(fallback);
+    }
+    u64::try_from(nanos)
+        .map(std::time::Duration::from_nanos)
+        .map_err(|_| format!("invalid duration {value:?}"))
 }
 
 #[derive(Debug, Subcommand)]
@@ -1440,20 +1469,52 @@ fn run_cli() -> ExitCode {
         Some(Command::Intake {
             command:
                 IntakeCommand::Watch {
-                    command: IntakeWatchCommand::Disable,
+                    directory,
+                    once,
+                    interval,
+                    debounce,
+                    command,
                 },
-        }) => match intake_commands::watch_disable(cli.quiet) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                for _ in 0..2 {
-                    let _ = writeln!(io::stderr(), "Error: {error}");
-                }
-                ExitCode::from(match error {
-                    intake_commands::WatchDisableError::UnsupportedPlatform => 9,
-                    intake_commands::WatchDisableError::Remove(_) => 1,
-                })
+        }) => {
+            if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                return match intake_commands::watch_disable(cli.quiet) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        for _ in 0..2 {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                        }
+                        ExitCode::from(match error {
+                            intake_commands::WatchDisableError::UnsupportedPlatform => 9,
+                            intake_commands::WatchDisableError::Remove(_) => 1,
+                        })
+                    }
+                };
             }
-        },
+            let Some(directory) = directory else {
+                let _ = writeln!(io::stderr(), "Error: watch directory is required");
+                return ExitCode::from(9);
+            };
+            if !once {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Error: continuous intake watch is not implemented"
+                );
+                return ExitCode::from(1);
+            }
+            match intake_commands::watch_once(&directory, interval, debounce, cli.json, cli.quiet) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    let code =
+                        if matches!(&error, intake_commands::WatchOnceError::InvalidDirectory(_)) {
+                            9
+                        } else {
+                            1
+                        };
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(code)
+                }
+            }
+        }
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
         }) => {
