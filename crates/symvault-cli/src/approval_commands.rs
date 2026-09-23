@@ -7,8 +7,9 @@
 
 use std::{net::IpAddr, path::Path, time::Duration};
 
+use hmac::{Hmac, Mac};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use ureq::tls::{Certificate, RootCerts, TlsConfig};
 use zeroize::Zeroizing;
@@ -189,26 +190,10 @@ fn load_runtime_tls(vault: &Path) -> Result<RuntimeTls, String> {
 }
 
 fn enroll_proof(secret: &[u8], timestamp: &[u8]) -> String {
-    let mut key = [0u8; 64];
-    if secret.len() > key.len() {
-        key[..32].copy_from_slice(&Sha256::digest(secret));
-    } else {
-        key[..secret.len()].copy_from_slice(secret);
-    }
-    let mut inner_key = [0x36; 64];
-    let mut outer_key = [0x5c; 64];
-    for index in 0..64 {
-        inner_key[index] ^= key[index];
-        outer_key[index] ^= key[index];
-    }
-    let mut inner = Sha256::new();
-    inner.update(inner_key);
-    inner.update(timestamp);
-    let digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(outer_key);
-    outer.update(digest);
-    let bytes = outer.finalize();
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret).expect("HMAC accepts a secret of any length");
+    mac.update(timestamp);
+    let bytes = mac.finalize().into_bytes();
     let mut encoded = String::with_capacity(64);
     for byte in bytes {
         use std::fmt::Write as _;
@@ -264,4 +249,20 @@ fn render(
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::enroll_proof;
+
+    const GO_ENROLL_SOURCE: &str = include_str!("../../../internal/approval/enroll.go");
+
+    #[test]
+    fn enroll_proof_uses_go_hmac_sha256_bytes() {
+        assert!(GO_ENROLL_SOURCE.contains("hmac.New(sha256.New, secret)"));
+        assert_eq!(
+            enroll_proof(&(0u8..32).collect::<Vec<_>>(), b"2026-09-24T00:00:00Z"),
+            "2a5b82136548c4dabec59c8055dc424ac6bdd0f34ecab28eb732881f642ae651"
+        );
+    }
 }
