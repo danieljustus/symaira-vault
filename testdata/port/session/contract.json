@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "a460710c7b272aee88e7966107c5ee1492fab8a325f2bf68257c77a1e7ddd2be"
+    "generator_digest": "70b216106947d14a4bf56dc6d91c959eaf0de93dba77c97a206a0280a05898af"
   },
   "cases": [
     {
@@ -160,6 +160,16 @@
         "clear_session"
       ],
       "expected": "all_cleared"
+    },
+    {
+      "name": "identity_peek_does_not_refresh",
+      "operations": [
+        "save_passphrase",
+        "save_identity",
+        "age_both_last_access",
+        "peek_identity"
+      ],
+      "expected": "both_unchanged"
     },
     {
       "name": "identity_refreshes_shared_session",

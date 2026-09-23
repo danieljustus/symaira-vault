@@ -258,7 +258,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 14);
+    assert_eq!(fixture.cases.len(), 15);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -487,6 +487,23 @@ fn generated_session_cases_match_rust_manager() {
         keyring
             .set(&key(account), &serde_json::to_vec(&value).unwrap())
             .unwrap();
+    }
+    assert_eq!(
+        manager.load_identity("fixture-vault", false).unwrap(),
+        b"fixture-identity"
+    );
+    assert_eq!(
+        cases
+            .iter()
+            .find(|c| c.name == "identity_peek_does_not_refresh")
+            .unwrap()
+            .expected,
+        "both_unchanged"
+    );
+    for account in ["session", "identity"] {
+        let value: serde_json::Value =
+            serde_json::from_slice(&keyring.get(&key(account)).unwrap()).unwrap();
+        assert_eq!(value["last_access"], old);
     }
     assert_eq!(
         manager.load_identity("fixture-vault", true).unwrap(),

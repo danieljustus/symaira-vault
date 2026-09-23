@@ -46,6 +46,13 @@ func identityMetadataCases() []sessionCase {
 		value["ttl_ns"] = json.RawMessage("9223372036854775807")
 		store(key, value)
 	}
+	if value, err := manager.PeekIdentity(vault); err != nil || value != "fixture-identity" {
+		panic(fmt.Errorf("identity peek returned %q: %w", value, err))
+	}
+	if string(decode(sessionKey)["last_access"]) != string(old) || string(decode(identityKey)["last_access"]) != string(old) {
+		panic("identity peek refreshed a cache record")
+	}
+	peek := sessionCase{Name: "identity_peek_does_not_refresh", Operations: []string{"save_passphrase", "save_identity", "age_both_last_access", "peek_identity"}, Expected: "both_unchanged"}
 	if value, err := manager.LoadIdentity(vault); err != nil {
 		panic(fmt.Errorf("identity refresh: %w", err))
 	} else if value != "fixture-identity" {
@@ -63,5 +70,5 @@ func identityMetadataCases() []sessionCase {
 		panic("identity expiry ignored expired shared session")
 	}
 	expiry := sessionCase{Name: "identity_expiry_uses_shared_session", Operations: []string{"expire_session_only", "is_identity_expired"}, Expected: "expired"}
-	return []sessionCase{refresh, expiry}
+	return []sessionCase{peek, refresh, expiry}
 }
