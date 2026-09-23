@@ -1,0 +1,88 @@
+name: Rust distribution archive contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-archive:
+    name: Native archive (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            expected_arch: x86_64
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+            expected_arch: arm64
+          - runner: windows-2025
+            goos: windows
+            goarch: amd64
+            expected_arch: x86_64
+    env:
+      GOTOOLCHAIN: go1.26.6
+      RUSTUP_TOOLCHAIN: 1.98.0
+      DIST_VERSION: 0.0.0
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go for the archive contract comparator
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Verify native runner architecture
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.expected_arch }}"
+
+      - name: Build release CLI
+        shell: bash
+        run: SYMVAULT_VERSION="$DIST_VERSION" cargo +1.98.0 build --release -p symvault-cli --bin symvault --locked
+
+      - name: Stage GoReleaser-named archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=target/release/symvault
+          if [[ "${{ matrix.goos }}" == windows ]]; then
+            binary+=".exe"
+          fi
+          python3 scripts/rust-port/stage-rust-archive.py \
+            --version "$DIST_VERSION" \
+            --goos "${{ matrix.goos }}" \
+            --goarch "${{ matrix.goarch }}" \
+            --binary "$binary" \
+            --output-dir dist/rust
+
+      - name: Compare staged archive with GoReleaser contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOTOOLCHAIN=go1.26.6 go run ./scripts/rust-port/cmd/distcontract \
+            --repo . \
+            --rust-dir dist/rust \
+            --version "$DIST_VERSION" \
+            --target "${{ matrix.goos }}/${{ matrix.goarch }}"
