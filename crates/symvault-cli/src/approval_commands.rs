@@ -8,7 +8,7 @@
 use std::{net::IpAddr, path::Path, time::Duration};
 
 use hmac::{Hmac, Mac};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Sha256;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use ureq::tls::{Certificate, RootCerts, TlsConfig};
@@ -18,6 +18,7 @@ const RUNTIME_PORT: &str = ".runtime-port";
 const RUNTIME_TLS: &str = ".runtime-tls-cert";
 const ENROLL_SECRET: &str = "mcp-server.enroll-secret";
 const LOCAL_APPROVALS: &str = "/api/v1/local/approvals";
+const LOCAL_APPROVAL_ACTION: &str = "/api/v1/local/approvals/";
 const MAX_RESPONSE_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +38,21 @@ struct RuntimeTls {
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct ApprovalList {
     requests: Vec<ApprovalEntry>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ApprovalDecision {
+    outcome: ApprovalOutcome,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ApprovalOutcome {
+    id: String,
+    status: String,
+    #[serde(default = "zero_timestamp")]
+    decided_at: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    decided_by: String,
 }
 
 #[derive(Debug, Deserialize, serde::Serialize)]
@@ -69,6 +85,33 @@ pub(crate) fn list(
     json: bool,
     quiet: bool,
 ) -> Result<(), String> {
+    let result: ApprovalList = approval_api_request(vault, "GET", LOCAL_APPROVALS)?;
+    render(result, output_format, json, quiet)
+}
+
+pub(crate) fn decide(
+    vault: &Path,
+    request_id: &str,
+    approve: bool,
+    deny: bool,
+    output_format: &str,
+    json: bool,
+    quiet: bool,
+) -> Result<(), String> {
+    if approve == deny {
+        return Err("exactly one of --approve or --deny is required".to_owned());
+    }
+    let action = if approve { "approve" } else { "deny" };
+    let path = format!("{LOCAL_APPROVAL_ACTION}{request_id}/{action}");
+    let result: ApprovalDecision = approval_api_request(vault, "POST", &path)?;
+    render_decision(result, output_format, json, quiet)
+}
+
+fn approval_api_request<T: DeserializeOwned>(
+    vault: &Path,
+    method: &str,
+    path: &str,
+) -> Result<T, String> {
     let (port, bind) = runtime_server(vault)?;
     let ip = bind.parse::<IpAddr>().ok();
     let loopback = bind == "localhost" || ip.is_some_and(|value| value.is_loopback());
@@ -108,7 +151,7 @@ pub(crate) fn list(
         Some(IpAddr::V6(_)) => format!("[{bind}]"),
         _ => bind,
     };
-    let url = format!("https://{host}:{port}{LOCAL_APPROVALS}");
+    let url = format!("https://{host}:{port}{path}");
     let tls = TlsConfig::builder()
         .root_certs(RootCerts::new_with_certs(&[certificate]))
         .build();
@@ -121,8 +164,12 @@ pub(crate) fn list(
         .timeout_global(Some(Duration::from_secs(10)))
         .build()
         .new_agent();
-    let mut response = agent
-        .get(&url)
+    let request = match method {
+        "GET" => agent.get(&url),
+        "POST" => agent.post(&url),
+        _ => return Err(format!("unsupported local approval method {method:?}")),
+    };
+    let mut response = request
         .header("X-Enroll-Timestamp", &timestamp)
         .header("X-Enroll-Proof", &proof)
         .call()
@@ -134,17 +181,19 @@ pub(crate) fn list(
         .limit(MAX_RESPONSE_BYTES)
         .read_to_string()
         .map_err(|error| format!("decode approval response: {error}"))?;
+    decode_api_response(status, &body)
+}
+
+fn decode_api_response<T: DeserializeOwned>(status: u16, body: &str) -> Result<T, String> {
     if !(200..300).contains(&status) {
-        if let Ok(api_error) = serde_json::from_str::<ApiError>(&body)
+        if let Ok(api_error) = serde_json::from_str::<ApiError>(body)
             && !api_error.error.trim().is_empty()
         {
             return Err(format!("approval server: {}", api_error.error));
         }
         return Err(format!("approval server returned HTTP {status}"));
     }
-    let result: ApprovalList = serde_json::from_str(&body)
-        .map_err(|error| format!("decode approval response: {error}"))?;
-    render(result, output_format, json, quiet)
+    serde_json::from_str(body).map_err(|error| format!("decode approval response: {error}"))
 }
 
 fn runtime_server(vault: &Path) -> Result<(u16, String), String> {
@@ -251,11 +300,43 @@ fn render(
     Ok(())
 }
 
+fn render_decision(
+    result: ApprovalDecision,
+    output_format: &str,
+    json: bool,
+    quiet: bool,
+) -> Result<(), String> {
+    if quiet {
+        return Ok(());
+    }
+    if json || output_format == "json" {
+        println!(
+            "{}",
+            serde_json::to_string(&result).map_err(|error| error.to_string())?
+        );
+        return Ok(());
+    }
+    if output_format == "yaml" {
+        print!(
+            "{}",
+            serde_yaml_ng::to_string(&result).map_err(|error| error.to_string())?
+        );
+        return Ok(());
+    }
+    println!(
+        "Approval request {:?} {}.",
+        result.outcome.id, result.outcome.status
+    );
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::enroll_proof;
+    use super::{ApprovalDecision, decode_api_response, enroll_proof};
 
     const GO_ENROLL_SOURCE: &str = include_str!("../../../internal/approval/enroll.go");
+    const GO_LOCAL_SOURCE: &str = include_str!("../../../internal/approval/local.go");
+    const GO_QUEUE_SOURCE: &str = include_str!("../../../internal/approval/queue.go");
 
     #[test]
     fn enroll_proof_uses_go_hmac_sha256_bytes() {
@@ -263,6 +344,35 @@ mod tests {
         assert_eq!(
             enroll_proof(&(0u8..32).collect::<Vec<_>>(), b"2026-09-24T00:00:00Z"),
             "2a5b82136548c4dabec59c8055dc424ac6bdd0f34ecab28eb732881f642ae651"
+        );
+    }
+
+    #[test]
+    fn decide_response_matches_go_success_and_conflict_contract() {
+        assert!(
+            GO_LOCAL_SOURCE
+                .contains("writeApprovalJSON(w, http.StatusOK, map[string]any{\"outcome\": out})")
+        );
+        assert!(GO_LOCAL_SOURCE.contains("status := http.StatusConflict"));
+        assert!(GO_QUEUE_SOURCE.contains("approval request %s already %s"));
+
+        let success: ApprovalDecision = decode_api_response(
+            200,
+            r#"{"outcome":{"id":"apr-test","status":"approved","decided_at":"2026-09-24T10:00:00Z","decided_by":"local-cli"}}"#,
+        )
+        .expect("decode Go success response");
+        assert_eq!(success.outcome.id, "apr-test");
+        assert_eq!(success.outcome.status, "approved");
+        assert_eq!(success.outcome.decided_by, "local-cli");
+
+        let conflict = decode_api_response::<ApprovalDecision>(
+            409,
+            r#"{"error":"approval request apr-test already approved"}"#,
+        )
+        .expect_err("repeat decision must surface HTTP conflict");
+        assert_eq!(
+            conflict,
+            "approval server: approval request apr-test already approved"
         );
     }
 }

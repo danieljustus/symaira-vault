@@ -43,3 +43,26 @@ fn approval_list_refuses_non_loopback_server_like_go() {
         "unexpected error: {stderr}"
     );
 }
+
+#[test]
+fn approval_decide_requires_exactly_one_decision_flag_like_go() {
+    assert!(GO_COMMAND.contains("exactly one of --approve or --deny is required"));
+    let vault = tempdir().expect("temporary vault");
+
+    for flags in [&[][..], &["--approve", "--deny"][..]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+            .arg("--vault")
+            .arg(vault.path())
+            .args(["approval", "decide", "apr-test"])
+            .args(flags)
+            .output()
+            .expect("run approval decide");
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Error: exactly one of --approve or --deny is required"),
+            "flags {flags:?} returned unexpected error: {stderr}"
+        );
+    }
+}

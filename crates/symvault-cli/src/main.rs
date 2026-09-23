@@ -1145,6 +1145,17 @@ enum DeviceCommand {
 enum ApprovalCommand {
     /// List pending approval requests.
     List,
+    /// Approve or deny a pending request.
+    Decide {
+        #[arg(value_name = "REQUEST_ID", num_args = 0..)]
+        args: Vec<String>,
+        /// Approve the request.
+        #[arg(long)]
+        approve: bool,
+        /// Deny the request.
+        #[arg(long)]
+        deny: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -2578,6 +2589,37 @@ fn run_cli() -> ExitCode {
                 )
             })();
             finish_vault_result(result)
+        }
+        Some(Command::Approval {
+            command:
+                ApprovalCommand::Decide {
+                    args,
+                    approve,
+                    deny,
+                },
+        }) => {
+            if args.len() != 1 {
+                print_arg_count_error("1", args.len())
+            } else if approve == deny {
+                finish_vault_result(Err(
+                    "exactly one of --approve or --deny is required".to_owned()
+                ))
+            } else {
+                let result = (|| {
+                    let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                    require_initialized(&vault)?;
+                    approval_commands::decide(
+                        &vault,
+                        &args[0],
+                        approve,
+                        deny,
+                        cli.output.as_deref().unwrap_or("text"),
+                        cli.json,
+                        cli.quiet,
+                    )
+                })();
+                finish_vault_result(result)
+            }
         }
         Some(Command::Device { command }) => {
             let vault = match resolve_vault(cli.vault.as_deref(), cli._profile.as_deref()) {
