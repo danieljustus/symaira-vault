@@ -144,7 +144,7 @@ jobs:
           usesh: true
           prepare: |
             set -eu
-            pkg install -y bash ca_root_nss curl gmake python3 rust
+            pkg install -y bash ca_root_nss curl git gmake python3 rust
             pw groupadd symvault-ci
             pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
             go_archive="/tmp/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
@@ -165,7 +165,7 @@ jobs:
               rustc --version | grep -Eq "^rustc 1[.]98[.]"
               rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
               go version | grep -q "^go version go1[.]26[.]6 "
-              cargo build --release -p symvault-cli --bin symvault --locked
+              SYMVAULT_VERSION=0.0.0 cargo build --release -p symvault-cli --bin symvault --locked
               python3 scripts/rust-port/stage-rust-archive.py \
                 --version 0.0.0 \
                 --goos freebsd \
@@ -177,4 +177,7 @@ jobs:
                 --rust-dir dist/rust \
                 --version 0.0.0 \
                 --target "freebsd/${{ matrix.go_arch }}"
+              python3 scripts/rust-port/install-smoke.py \
+                --archive "dist/rust/symaira-vault_0.0.0_freebsd_${{ matrix.go_arch }}.tar.gz" \
+                --version 0.0.0
             '
