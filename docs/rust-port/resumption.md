@@ -3,23 +3,26 @@
 ## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
 
 - **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
-  Der lokale Stand enthält 25 quellgebundene HTTP-Fälle, typisierte
+  Der lokale Stand enthält 27 quellgebundene HTTP-Fälle, typisierte
   `get`-Exitcodes, `intake watch disable` und `--once`, aktualisierte
   FFI-Provenienz sowie den FreeBSD-`O_NOFOLLOW`-Fix. `intake watch --once`
   speichert stabile Dateien nun in verschlüsselter Quarantäne. Go bleibt
   Produktionspfad. Release, Cutover,
   Go-Abbau und destruktives Aufräumen sind nicht autorisiert.
-- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 17 Rust-HTTP-Unit-
+- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 18 Rust-HTTP-Unit-
   und drei Replay-Tests, FFI-KDF-Fixture und fünf Safe-I/O-Tests bestanden.
   `make config-cli-differential` bestand vollständig mit dem gepinnten
   Go-Oracle, einschließlich 75 Go-Fixture-Fällen, CLI-Differential und
   ignoriertem KDF-Migrationsfall. Fokussierte `intake watch --once`- und
   Rollback-Differentialtests bestanden ebenfalls. Für `list` und `get` sind
-  Text/JSON/YAML-Differentiale grün; ein stabiler Intake-Kandidat wurde
+  Text/JSON/YAML-Differentiale sowie ganze `get`-Einträge in JSON/YAML grün;
+  ein stabiler Intake-Kandidat wurde
   verschlüsselt geschrieben und von Go und Rust gelesen, ohne die Quelldatei
-  zu verändern. Der vollständige Go-Coverage-Lauf erreichte 63,7 % und
-  bestand alle fünf Paketgrenzen. Feldgrenzen und Pfadkollisionen werden
-  noch geprüft.
+  zu verändern. Ein fokussierter Rust-Test prüft vorhandene Quarantäne-Pfade
+  und die Feldgrenze bei 4096 Byte. Wiederholte Scans deduplizieren denselben
+  Kandidaten; zu große Dateien werden mit Go-gleichem Grund übersprungen.
+  Der vollständige Go-Coverage-Lauf
+  erreichte 63,7 % und bestand alle fünf Paketgrenzen.
 - **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
   macOS und Windows native Rust-Tests, Ubuntu-Go-Tests, iOS-Simulator sowie
   Audit/Pairing. `port-contract` und FreeBSD stoppten am gleichen
@@ -34,7 +37,13 @@
   an einem lokalen Intake-Initializer (nun korrigiert), Ubuntu-Go-Coverage
   lag bei 63,4 % unter dem 63,5-%-Gate (HTTP-Generator jetzt im Go-Test),
   und Windows-Pairing hatte einen einzelnen Zugriffsfehler beim Anlegen eines
-  temporären Git-Repos.
+  temporären Git-Repos. Am gepushten `6bb47dc` bestanden Ubuntu-Go und alle
+  drei Audit-Jobs; Pairing auf Linux/macOS/Windows stoppte vor dem eigentlichen
+  Differential an einem veralteten Generator-Hash im Config-Profile-Fixture.
+  Der Hash ist lokal aus dem gepinnten Oracle erneuert und erneut geprüft.
+  Der `6bb47dc`-Lint-Lauf stoppte am `goconst`-Befund im FreeBSD-Harness-Test;
+  der Test ist lokal korrigiert. Native Rust- und FreeBSD-Jobs dieses Heads
+  sind noch nicht abgeschlossen.
 - **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
   Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
   am lokalen Binary `e15b47a` nach Korrektur des Help-Parsers 134 Go-Pfade,
