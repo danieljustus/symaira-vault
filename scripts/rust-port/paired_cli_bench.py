@@ -54,7 +54,9 @@ def parse_rss_bytes(stderr: str, system: str) -> tuple[int | None, str | None]:
     return None, None
 
 
-def isolated_env(home: Path, temp_root: Path, vault: Path | None = None) -> dict[str, str]:
+def isolated_env(
+    home: Path, temp_root: Path, vault: Path | None = None, passphrase: str = ""
+) -> dict[str, str]:
     # Only inherit executable lookup and OS loader necessities. This prevents
     # user credentials and unrelated CLI configuration from reaching either
     # measured process.
@@ -82,7 +84,7 @@ def isolated_env(home: Path, temp_root: Path, vault: Path | None = None) -> dict
         env["LOCALAPPDATA"] = str(home / "AppData" / "Local")
     if vault is not None:
         env["SYMVAULT_VAULT"] = str(vault)
-        env["SYMVAULT_PASSPHRASE"] = os.environ.get("SYMVAULT_BENCH_INTERNAL_PASSPHRASE", "")
+        env["SYMVAULT_PASSPHRASE"] = passphrase
     return env
 
 
@@ -149,109 +151,104 @@ def build_report(
         root = Path(temp_name)
         home = root / "home"
         home.mkdir()
-        # The ephemeral passphrase exists only in this process environment and
-        # its children. It is synthetic, never printed, and never serialized.
+        # The passphrase is synthetic, never printed, and never serialized.
         passphrase = "value-bench-" + os.urandom(24).hex()
-        os.environ["SYMVAULT_BENCH_INTERNAL_PASSPHRASE"] = passphrase
-        try:
-            go_version = safe_version(go_binary, home, root, "Go")
-            rust_version = safe_version(rust_binary, home, root, "Rust")
-            if GO_RELEASE not in go_version:
-                raise BenchmarkError("Go binary did not report the frozen v0.22.1 release")
+        go_version = safe_version(go_binary, home, root, "Go")
+        rust_version = safe_version(rust_binary, home, root, "Rust")
+        if GO_RELEASE not in go_version:
+            raise BenchmarkError("Go binary did not report the frozen v0.22.1 release")
 
-            template = root / "template-vault"
-            go_env = isolated_env(home, root, template)
-            run_captured([str(go_binary), "init", "--auth", "passphrase"], go_env, "Go vault init")
-            for index in range(1, entries + 1):
-                entry = f"benchmark-entry-{index:03d}"
-                run_captured(
-                    [
-                        str(go_binary), "add", entry,
-                        "--value", f"synthetic-value-{index:03d}",
-                        "--username", f"fixture-user-{index:03d}",
-                        "--url", "https://example.test/benchmark",
-                        "--notes", "synthetic benchmark fixture",
-                        "--force",
-                    ],
-                    go_env,
-                    "Go fixture creation",
-                )
+        template = root / "template-vault"
+        go_env = isolated_env(home, root, template, passphrase)
+        run_captured([str(go_binary), "init", "--auth", "passphrase"], go_env, "Go vault init")
+        for index in range(1, entries + 1):
+            entry = f"benchmark-entry-{index:03d}"
+            run_captured(
+                [
+                    str(go_binary), "add", entry,
+                    "--value", f"synthetic-value-{index:03d}",
+                    "--username", f"fixture-user-{index:03d}",
+                    "--url", "https://example.test/benchmark",
+                    "--notes", "synthetic benchmark fixture",
+                    "--force",
+                ],
+                go_env,
+                "Go fixture creation",
+            )
 
-            measured_entry = f"benchmark-entry-{entries:03d}"
-            vaults: dict[str, Path] = {}
-            for label in ("go", "rust"):
-                vault = root / label / "vault"
-                vault.parent.mkdir()
-                shutil.copytree(template, vault)
-                vaults[label] = vault
+        measured_entry = f"benchmark-entry-{entries:03d}"
+        vaults: dict[str, Path] = {}
+        for label in ("go", "rust"):
+            vault = root / label / "vault"
+            vault.parent.mkdir()
+            shutil.copytree(template, vault)
+            vaults[label] = vault
 
-            binaries = {"go": go_binary, "rust": rust_binary}
-            homes = {label: root / label / "home" for label in binaries}
-            for side_home in homes.values():
-                side_home.mkdir()
-            command_args = ["get", measured_entry, "--output", "json"]
+        binaries = {"go": go_binary, "rust": rust_binary}
+        homes = {label: root / label / "home" for label in binaries}
+        for side_home in homes.values():
+            side_home.mkdir()
+        command_args = ["get", measured_entry, "--output", "json"]
 
-            def read_once(label: str) -> None:
-                env = isolated_env(homes[label], root, vaults[label])
-                run_captured([str(binaries[label]), *command_args], env, f"{label} read")
+        def read_once(label: str) -> None:
+            env = isolated_env(homes[label], root, vaults[label], passphrase)
+            run_captured([str(binaries[label]), *command_args], env, f"{label} read")
 
-            for _ in range(warmups):
-                read_once("go")
-                read_once("rust")
-            samples: dict[str, list[float]] = {"go": [], "rust": []}
-            for index in range(runs):
-                order = ("go", "rust") if index % 2 == 0 else ("rust", "go")
-                for label in order:
-                    start = time.perf_counter_ns()
-                    read_once(label)
-                    samples[label].append((time.perf_counter_ns() - start) / 1_000_000)
+        for _ in range(warmups):
+            read_once("go")
+            read_once("rust")
+        samples: dict[str, list[float]] = {"go": [], "rust": []}
+        for index in range(runs):
+            order = ("go", "rust") if index % 2 == 0 else ("rust", "go")
+            for label in order:
+                start = time.perf_counter_ns()
+                read_once(label)
+                samples[label].append((time.perf_counter_ns() - start) / 1_000_000)
 
-            rss: dict[str, tuple[int | None, str | None]] = {"go": (None, None), "rust": (None, None)}
-            if include_rss:
-                for label in binaries:
-                    env = isolated_env(homes[label], root, vaults[label])
-                    rss[label] = rss_sample(binaries[label], command_args, env, label)
+        rss: dict[str, tuple[int | None, str | None]] = {"go": (None, None), "rust": (None, None)}
+        if include_rss:
+            for label in binaries:
+                env = isolated_env(homes[label], root, vaults[label], passphrase)
+                rss[label] = rss_sample(binaries[label], command_args, env, label)
 
-            go_p95 = percentile(samples["go"], 95)
-            rust_p95 = percentile(samples["rust"], 95)
-            return {
-                "schema_version": 1,
-                "benchmark": "paired-cli-get",
-                "oracle": {
-                    "expected_release": GO_RELEASE,
-                    "expected_source_revision": GO_REVISION,
-                },
-                "environment": {"os": platform.system(), "arch": platform.machine()},
-                "fixture": {"entries": entries, "synthetic": True, "vault_copies": 2},
-                "sampling": {
-                    "operation": f"get {measured_entry} --output json",
-                    "runs_per_binary": runs,
-                    "warmups_per_binary": warmups,
-                    "latency_method": "subprocess wall time via perf_counter_ns, including startup",
-                    "p95_method": "nearest-rank",
-                    "rss_samples_per_binary": 1 if include_rss else 0,
-                    "rss_method": rss["go"][1] or rss["rust"][1],
-                },
-                "artifacts": {
-                    "go": {"version": go_version, "binary_bytes": go_binary.stat().st_size},
-                    "rust": {"version": rust_version, "binary_bytes": rust_binary.stat().st_size},
-                },
-                "measurements": {
-                    label: {
-                        "read_p50_ms": round(statistics.median(samples[label]), 3),
-                        "read_p95_ms": round(percentile(samples[label], 95), 3),
-                        "max_rss_bytes": rss[label][0],
-                    }
-                    for label in binaries
-                },
-                "comparison": {
-                    "rust_binary_size_ratio": rust_binary.stat().st_size / go_binary.stat().st_size,
-                    "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
-                },
-                "value_gate_claim": "not_evaluated_requires_native_macos_arm64_and_ci_samples",
-            }
-        finally:
-            os.environ.pop("SYMVAULT_BENCH_INTERNAL_PASSPHRASE", None)
+        go_p95 = percentile(samples["go"], 95)
+        rust_p95 = percentile(samples["rust"], 95)
+        return {
+            "schema_version": 1,
+            "benchmark": "paired-cli-get",
+            "oracle": {
+                "expected_release": GO_RELEASE,
+                "expected_source_revision": GO_REVISION,
+            },
+            "environment": {"os": platform.system(), "arch": platform.machine()},
+            "fixture": {"entries": entries, "synthetic": True, "vault_copies": 2},
+            "sampling": {
+                "operation": f"get {measured_entry} --output json",
+                "runs_per_binary": runs,
+                "warmups_per_binary": warmups,
+                "latency_method": "subprocess wall time via perf_counter_ns, including startup",
+                "p95_method": "nearest-rank",
+                "rss_samples_per_binary": 1 if include_rss else 0,
+                "rss_method": rss["go"][1] or rss["rust"][1],
+            },
+            "artifacts": {
+                "go": {"version": go_version, "binary_bytes": go_binary.stat().st_size},
+                "rust": {"version": rust_version, "binary_bytes": rust_binary.stat().st_size},
+            },
+            "measurements": {
+                label: {
+                    "read_p50_ms": round(statistics.median(samples[label]), 3),
+                    "read_p95_ms": round(percentile(samples[label], 95), 3),
+                    "max_rss_bytes": rss[label][0],
+                }
+                for label in binaries
+            },
+            "comparison": {
+                "rust_binary_size_ratio": rust_binary.stat().st_size / go_binary.stat().st_size,
+                "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
+            },
+            "value_gate_claim": "not_evaluated_requires_native_macos_arm64_and_ci_samples",
+        }
 
 
 def main() -> int:
