@@ -3,17 +3,13 @@
 //! Narrow C ABI for the mobile crypto slice. Returned buffers belong to Rust
 //! and must be released with [`symvault_buffer_free`]. Inputs are borrowed.
 
-use std::{
-    path::Path,
-    ptr, slice, str,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{path::Path, ptr, slice, str};
 
 use symvault_crypto::{
     SecretBytes, decrypt, decrypt_scrypt, encrypt, encrypt_scrypt, fingerprint, generate_identity,
     identity_string, parse_identity, parse_recipient, recipient_string,
 };
-use symvault_store::{Entry, Store};
+use symvault_store::{Entry, Store, utc_now_string};
 use zeroize::Zeroize;
 
 /// Owned byte buffer returned across the C ABI.
@@ -65,46 +61,6 @@ fn result(output: Result<Vec<u8>, String>) -> SymvaultResult {
 
 fn ffi(operation: impl FnOnce() -> Result<Vec<u8>, String>) -> SymvaultResult {
     result(operation())
-}
-
-fn utc_now_rfc3339() -> Result<String, String> {
-    let elapsed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| format!("system clock precedes Unix epoch: {error}"))?;
-    let seconds = i64::try_from(elapsed.as_secs())
-        .map_err(|_| "system clock is outside RFC3339 range".to_owned())?;
-    let days = seconds.div_euclid(86_400);
-    let day_seconds = seconds.rem_euclid(86_400);
-
-    // Civil date from days since 1970-01-01 (proleptic Gregorian calendar).
-    let shifted_days = days + 719_468;
-    let era = if shifted_days >= 0 {
-        shifted_days / 146_097
-    } else {
-        (shifted_days - 146_096) / 146_097
-    };
-    let day_of_era = shifted_days - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let mut year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let month_prime = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
-    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
-    year += i64::from(month <= 2);
-
-    let hour = day_seconds / 3_600;
-    let minute = (day_seconds % 3_600) / 60;
-    let second = day_seconds % 60;
-    let nanos = elapsed.subsec_nanos();
-    let fraction = if nanos == 0 {
-        String::new()
-    } else {
-        format!(".{}", format!("{nanos:09}").trim_end_matches('0'))
-    };
-    Ok(format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{fraction}Z"
-    ))
 }
 
 unsafe fn input<'a>(data: *const u8, len: usize, label: &str) -> Result<&'a [u8], String> {
@@ -351,7 +307,8 @@ pub unsafe extern "C" fn symvault_write_entry_json(
         };
         let store = Store::open(Path::new(vault_dir), &identity)
             .map_err(|error| format!("open vault: {error}"))?;
-        let now = utc_now_rfc3339().map_err(|error| format!("write entry: {error}"))?;
+        let now = utc_now_string(Path::new(vault_dir))
+            .map_err(|error| format!("write entry: {error}"))?;
         store
             .write_entry_at(entry_path, &entry, &identity, &now, false, None)
             .map_err(|error| format!("write entry: {error}"))?;

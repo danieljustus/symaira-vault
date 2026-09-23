@@ -273,7 +273,9 @@ fn go_zero_time() -> String {
     "0001-01-01T00:00:00Z".into()
 }
 
-fn utc_now_string(path: &Path) -> Result<String, StoreError> {
+/// Formats the current UTC time using Go-compatible RFC3339Nano precision.
+/// `path` supplies the context on the rare formatting failure.
+pub fn utc_now_string(path: &Path) -> Result<String, StoreError> {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|source| StoreError::Read {
