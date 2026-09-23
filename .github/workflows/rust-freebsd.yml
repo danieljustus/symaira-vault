@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Test in FreeBSD 15.1 VM
         uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
@@ -26,10 +27,26 @@ jobs:
           usesh: true
           prepare: |
             set -eu
-            pkg install -y curl ca_root_nss git
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0
+            pkg install -y curl ca_root_nss git gmake
+            pw groupadd symvault-ci
+            pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
+            su -l symvault-ci -c "/usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.98.0"
+            /usr/local/bin/curl --proto '=https' --tlsv1.2 -sSf -o /tmp/go1.26.6.freebsd-amd64.tar.gz https://go.dev/dl/go1.26.6.freebsd-amd64.tar.gz
+            echo '9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7  /tmp/go1.26.6.freebsd-amd64.tar.gz' | sha256 -c -
+            tar -C /usr/local -xzf /tmp/go1.26.6.freebsd-amd64.tar.gz
           run: |
             set -eu
-            export PATH="$HOME/.cargo/bin:$PATH"
-            test "$(rustc --version | awk '{print $2}')" = '1.98.0'
-            cargo test --workspace --all-features --locked
+            workspace="$(pwd -P)"
+            test "$workspace" = "$GITHUB_WORKSPACE"
+            chown -R symvault-ci:symvault-ci "$workspace"
+            su -m symvault-ci -c '
+              set -eu
+              export HOME=/home/symvault-ci
+              export PATH="$HOME/.cargo/bin:/usr/local/go/bin:$PATH"
+              export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
+              cd "$GITHUB_WORKSPACE"
+              rustc --version | grep -q "^rustc 1[.]98[.]0 "
+              go version | grep -q "^go version go1[.]26[.]6 "
+              gmake port-contract
+              cargo test --workspace --all-features --locked
+            '
