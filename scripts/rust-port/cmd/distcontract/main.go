@@ -81,7 +81,8 @@ func compare(repo, stage, version string) error {
 		return fmt.Errorf("read GoReleaser config: %w", err)
 	}
 	var cfg config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	err = yaml.Unmarshal(data, &cfg)
+	if err != nil {
 		return fmt.Errorf("parse GoReleaser config: %w", err)
 	}
 	plans, err := makePlans(root, cfg, version)
@@ -220,24 +221,24 @@ func compareOne(path string, plan archivePlan) error {
 	if err != nil {
 		return fmt.Errorf("open staged archive: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var names map[string]string
 	switch plan.format {
 	case "tar.gz":
-		gz, err := gzip.NewReader(f)
-		if err != nil {
-			return fmt.Errorf("open gzip stream: %w", err)
+		gz, gzipErr := gzip.NewReader(f)
+		if gzipErr != nil {
+			return fmt.Errorf("open gzip stream: %w", gzipErr)
 		}
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 		names, err = readTar(gz, plan)
 	case "zip":
-		info, err := f.Stat()
-		if err != nil {
-			return err
+		info, statErr := f.Stat()
+		if statErr != nil {
+			return statErr
 		}
-		zr, err := zip.NewReader(f, info.Size())
-		if err != nil {
-			return fmt.Errorf("open zip archive: %w", err)
+		zr, zipErr := zip.NewReader(f, info.Size())
+		if zipErr != nil {
+			return fmt.Errorf("open zip archive: %w", zipErr)
 		}
 		names, err = readZip(zr, plan)
 	default:
@@ -272,7 +273,7 @@ func readTar(r io.Reader, plan archivePlan) (map[string]string, error) {
 	result := make(map[string]string)
 	for {
 		header, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return result, nil
 		}
 		if err != nil {
@@ -281,7 +282,7 @@ func readTar(r io.Reader, plan archivePlan) (map[string]string, error) {
 		if header.Typeflag == tar.TypeDir {
 			continue
 		}
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+		if !header.FileInfo().Mode().IsRegular() {
 			return nil, fmt.Errorf("unsupported tar member type %d", header.Typeflag)
 		}
 		name, err := normalizeMember(header.Name, plan.root)

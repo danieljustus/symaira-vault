@@ -7,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -15,8 +14,7 @@ import (
 )
 
 func TestStagedArchiveMatchesGoReleaseContract(t *testing.T) {
-	_, source, _, _ := runtime.Caller(0)
-	root := filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", ".."))
+	root := testRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -47,8 +45,7 @@ func TestStagedArchiveMatchesGoReleaseContract(t *testing.T) {
 }
 
 func TestStagedArchiveRejectsUnexpectedMember(t *testing.T) {
-	_, source, _, _ := runtime.Caller(0)
-	root := filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", ".."))
+	root := testRepoRoot(t)
 	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -103,8 +100,11 @@ func TestWindowsStagedArchiveUsesZipAndExeMember(t *testing.T) {
 
 func testRepoRoot(t *testing.T) string {
 	t.Helper()
-	_, source, _, _ := runtime.Caller(0)
-	return filepath.Clean(filepath.Join(filepath.Dir(source), "..", "..", "..", ".."))
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Clean(filepath.Join(cwd, "..", "..", "..", ".."))
 }
 
 func writeTarGz(t *testing.T, path, root string, plan archivePlan, extra bool) {
