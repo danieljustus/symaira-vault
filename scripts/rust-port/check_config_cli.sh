@@ -7,11 +7,11 @@ cd "$repo_root"
 # clean VCS metadata and toolchain). CI builds one when none is provided.
 export GOWORK=off
 export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
+oracle_commit=fca3f89401833b5e14ec4ec74ef736b0f63bca74
 oracle_binary=${SYMVAULT_GO_BINARY:-}
 if [ -z "$oracle_binary" ]; then
     run_root=$(mktemp -d "${TMPDIR:-/tmp}/config-cli.XXXXXX")
     trap 'rm -rf "$run_root"' EXIT HUP INT TERM
-    oracle_commit=fca3f89401833b5e14ec4ec74ef736b0f63bca74
     export TMPDIR="$run_root"
     export TMP="$run_root" TEMP="$run_root" GOTMPDIR="$run_root"
     # Ordinary clones give Go reliable VCS metadata; nested worktrees do not.
@@ -20,8 +20,15 @@ if [ -z "$oracle_binary" ]; then
     (cd "$run_root/oracle" && "${GO:-go}" build -buildvcs=true -o "$run_root/symvault-go" .)
     oracle_binary="$run_root/symvault-go"
 fi
-"${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
-    --check --go-binary "$oracle_binary"
+if ! "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
+    --check --go-binary "$oracle_binary"; then
+    diagnostic_output=$(mktemp "${TMPDIR:-/tmp}/config-cli-actual.XXXXXX")
+    "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
+        --go-binary "$oracle_binary" --oracle-commit "$oracle_commit" \
+        --oracle-release unreleased --output "$diagnostic_output"
+    diff -u testdata/port/cli/config-inspect.json "$diagnostic_output" || true
+    exit 1
+fi
 SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
     -p symvault-cli --test config_inspect --test cli_differential --test profile_differential --test remote_differential --test sync_differential --test audit_export_commands --test run_differential --test share_differential --test agent_whoami_differential --test agent_list_differential --test agent_profile_differential --test agent_token_mutations_differential --test policy_differential --test path_migration_differential --test auth_differential --test audit_rotate_differential --test config_validate_differential --test doctor_differential --locked
 SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
