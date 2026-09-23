@@ -209,6 +209,7 @@ func main() {
 		}
 		return
 	}
+	// #nosec G306 -- the generated oracle transcript is public testdata.
 	check(os.WriteFile(*outputPath, encoded, 0o644))
 }
 

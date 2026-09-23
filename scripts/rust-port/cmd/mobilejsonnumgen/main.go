@@ -50,6 +50,7 @@ func main() {
 		fmt.Println("PASS Go mobile JSON number fixture")
 		return
 	}
+	// #nosec G306 -- the generated fixture is public testdata, not a secret.
 	if err := os.WriteFile(*output, content, 0o644); err != nil {
 		fatal("write fixture: %v", err)
 	}
@@ -68,6 +69,7 @@ func buildFixture() (fixture, error) {
 	sources := []string{"internal/mobilebind/mobilebind.go", "internal/vault/entry.go"}
 	hashes := make(map[string]string, len(sources))
 	for _, path := range sources {
+		// #nosec G304 -- sources is the fixed list of repository files above.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return fixture{}, fmt.Errorf("read source %s: %w", path, err)

@@ -83,6 +83,7 @@ func digestFiles(names []string, read func(string) ([]byte, error)) (string, err
 
 func provenance(root string) (oracle, error) {
 	sourceDigest, err := digestFiles(oracleFiles, func(name string) ([]byte, error) {
+		// #nosec G204 -- root is this repository; commit and source names are fixed above.
 		return exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
 	})
 	if err != nil {
@@ -90,6 +91,7 @@ func provenance(root string) (oracle, error) {
 	}
 	const generatorFile = "scripts/rust-port/cmd/ffikdfgen/main.go"
 	generatorDigest, err := digestFiles([]string{generatorFile}, func(name string) ([]byte, error) {
+		// #nosec G304 -- name is the fixed generator path above, under the repository root.
 		return os.ReadFile(filepath.Join(root, name))
 	})
 	if err != nil {
@@ -165,6 +167,7 @@ func verifyGoMigration(value fixture) error {
 	if err != nil {
 		return fmt.Errorf("go OpenWithPassphrase migration: %w", err)
 	}
+	// #nosec G304 -- identityPath is inside the fresh temporary vault created above.
 	backup, err := os.ReadFile(identityPath + ".bak")
 	if err != nil || !equal(backup, ciphertext) {
 		return errors.New("go migration did not preserve the original identity backup")
