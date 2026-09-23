@@ -372,7 +372,7 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
         ] {
             skipped = skipped.replace(root.to_str().unwrap(), "<source-root>");
             if let Ok(alias) = root.strip_prefix("/private") {
-                skipped = skipped.replace(alias.to_str().unwrap(), "<source-root>");
+                skipped = skipped.replace(&format!("/{}", alias.display()), "<source-root>");
             }
         }
         summary["skipped"][0] = skipped.into();
