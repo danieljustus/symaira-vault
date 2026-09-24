@@ -171,24 +171,29 @@ fn config_inspect_cleans_read_paths_but_preserves_set_target() {
         vec!["config", "set", "vaultDir", "/updated", "--file", raw],
     ] {
         let go_result = run(&go, &home.0, &args);
-        assert_eq!(
-            fs::read(&valid).expect("Go preserves original config"),
-            original
-        );
+        let go_file = fs::read(&valid).expect("Go config state");
+        fs::write(&valid, original).expect("reset config before Rust run");
         let rust_result = run(&rust, &home.0, &args);
-        assert_eq!(
-            fs::read(&valid).expect("Rust preserves original config"),
-            original
-        );
+        let rust_file = fs::read(&valid).expect("Rust config state");
+        assert_eq!(rust_file, go_file, "config {} file differs", args[1]);
+        fs::write(&valid, original).expect("reset config for next case");
         if args[1] == "set" {
             assert_eq!(go_result.status.code(), rust_result.status.code());
-            assert!(!go_result.status.success());
             assert_eq!(go_result.stdout, rust_result.stdout);
-            for result in [&go_result, &rust_result] {
-                assert!(
-                    String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
-                    "set must fail at the write stage, not the read stage"
-                );
+            if cfg!(windows) {
+                // Windows resolves the raw rename destination through `..`.
+                assert!(go_result.status.success());
+                assert_ne!(go_file, original);
+                assert_eq!(go_result.stderr, rust_result.stderr);
+            } else {
+                assert!(!go_result.status.success());
+                assert_eq!(go_file, original);
+                for result in [&go_result, &rust_result] {
+                    assert!(
+                        String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
+                        "set must fail at the write stage, not the read stage"
+                    );
+                }
             }
         } else {
             assert_same(
