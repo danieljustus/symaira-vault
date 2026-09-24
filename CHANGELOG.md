@@ -14,16 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
-## [v0.20.0]
-
-### Features
-- Read-only iOS client (`SymvaultIOS`): unlocks an enrolled device identity and browses vault entries, mirroring the SymBrainMobile precedent. Talks to the embedded `Vaultcore` XCFramework (a gomobile bind of `pkg/mobilebind`) instead of shelling out to the `symvault` binary, because iOS cannot spawn subprocesses. Enrolment and Face ID unlock use the Keychain bound to `ThisDeviceOnly`. (#910, #868)
-
-### Dependencies
-- Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
-- Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
-
-## [v0.23.0] - 2026-09-22
+## [Unreleased]
 
 ### Changed (breaking)
 - The config loader now rejects a session duration the operator set to a
@@ -43,11 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Go oracle (28 → 24 known oracle gaps), with the CFG-003 step-two rejections
   pinned by new oracle tests.
 
-## [Unreleased]
+## [v0.22.1] - 2026-09-04
 
-> **Editorial note (2026-09-22):** bullets below this line predate the
-> v0.21.0–v0.22.1 releases, which never received their own sections — they
-> have already shipped, attribution pending. Tracked in #1115.
+### Fixed
+- macOS releases now notarize and staple the app before packaging it, then
+  Developer-ID-sign, notarize, staple, and Gatekeeper-assess the DMG itself.
+  Missing signing credentials and failed stapling are release failures rather
+  than warning-only unsigned artifacts (#976).
+
+## [v0.22.0] - 2026-09-04
 
 ### Fixed
 - MCP HTTP startup no longer fails intermittently with `bad file descriptor`
@@ -58,16 +53,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carries the Apache-2.0 license metadata, and is exercised end to end in CI.
   Previously it failed during non-hermetic host-oriented tests and pointed
   `nix run` at a nonexistent executable (#974).
-- macOS releases now notarize and staple the app before packaging it, then
-  Developer-ID-sign, notarize, staple, and Gatekeeper-assess the DMG itself.
-  Missing signing credentials and failed stapling are release failures rather
-  than warning-only unsigned artifacts (#976).
 - Agent token and profile subcommands now use executable action-first syntax
   (`symvault agent token new|list|revoke|rotate <name>` and
   `symvault agent profile show|edit|export <name>`). The previous name-first
   examples could not reach Cobra subcommands, while action-first calls silently
   operated on agent `unknown`. Release, Homebrew, security, migration, generated
   skill, health, and man-page guidance now matches the working CLI.
+- `symvault device approval-pair` now refuses with an actionable error
+  instead of producing a QR code that can never connect, when
+  `symvault serve`/`symvault mcp` is bound to loopback only (the default).
+  The runtime port file now also records the server's bind address so this
+  can be checked; existing plain-integer runtime port files are read
+  without a bind address, so this check is skipped rather than false-flagged
+  until the server is restarted (#961).
+
+### Dependencies
+- Bumped `corekit` from `v0.16.3` to the verified post-`v0.17.0` fix at
+  `f3d3eb79b9b1`, which closes Unix `SafeRemove` descriptors exactly once.
+
+### Documentation
+- Added [docs/approval-devices.md](docs/approval-devices.md): pairing, revocation, TLS fingerprint pinning, and LAN exposure implications for the approval-device feature (`symvault device approval-pair`/`approval-list`/`approval-revoke`), which previously had no end-to-end documentation. README and the configuration reference now link to it; man pages for the three commands were generated.
+
+## [v0.21.1] - 2026-08-29
+
+### Fixed
 - The macOS app could no longer unlock the vault: entering the passphrase and
   pressing "Entsperren" appeared to do nothing while the CLI kept working.
   `symvault unlock` short-circuited on the cached age identity and returned
@@ -85,23 +94,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     session, matching the vault every other command can already read.
   - The macOS app no longer returns to the unlock screen without a message when
     a reported-successful unlock leaves no active session.
-- `symvault device approval-pair` now refuses with an actionable error
-  instead of producing a QR code that can never connect, when
-  `symvault serve`/`symvault mcp` is bound to loopback only (the default).
-  The runtime port file now also records the server's bind address so this
-  can be checked; existing plain-integer runtime port files are read
-  without a bind address, so this check is skipped rather than false-flagged
-  until the server is restarted.
+
+## [v0.21.0] - 2026-08-28
+
+### Added
+- Added an expiring approval-device flow (#923).
+
+### Security
+- Validated the Perplexity MCP base URL against SSRF (#922).
+
+### Fixed
+- Surfaced iOS biometric enrollment failures (#924).
+
+## [v0.20.0] - 2026-08-27
+
+### Features
+- Read-only iOS client (`SymvaultIOS`): unlocks an enrolled device identity and browses vault entries, mirroring the SymBrainMobile precedent. Talks to the embedded `Vaultcore` XCFramework (a gomobile bind of `pkg/mobilebind`) instead of shelling out to the `symvault` binary, because iOS cannot spawn subprocesses. Enrolment and Face ID unlock use the Keychain bound to `ThisDeviceOnly`. (#910, #868)
+
+## [v0.16.1] - 2026-08-24
 
 ### Dependencies
-- Bumped `corekit` from `v0.16.3` to the verified post-`v0.17.0` fix at
-  `f3d3eb79b9b1`, which closes Unix `SafeRemove` descriptors exactly once.
+- Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
 - Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
 
 ### Documentation
 - Documented the deliberate audit-chain deviation from `corekit/auditkit` in `ARCHITECTURE.md` §8.
 - Added `.github/CONTRIBUTING.md` for project contribution guidelines.
-- Added [docs/approval-devices.md](docs/approval-devices.md): pairing, revocation, TLS fingerprint pinning, and LAN exposure implications for the approval-device feature (`symvault device approval-pair`/`approval-list`/`approval-revoke`), which previously had no end-to-end documentation. README and the configuration reference now link to it; man pages for the three commands were generated.
 
 ## [v0.16.0] - 2026-08-24
 
@@ -1158,7 +1176,13 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.5...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.22.1...HEAD
+[v0.22.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.1
+[v0.22.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.0
+[v0.21.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.21.1
+[v0.21.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.21.0
+[v0.20.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.20.0
+[v0.16.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.16.1
 [v0.15.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.2
 [v0.15.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.0
 [v0.15.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.1
