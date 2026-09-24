@@ -1,5 +1,49 @@
 # Rust migration handover — 2026-09-09
 
+## Zwischenstand 2026-09-24, Teil 17 — Slice `agent setup` + `serve token*` gebaut
+
+- **Basis/Worktree:** Branch `feat/rust-port-deprecated-stubs2` @ `a4b4e92f`
+  (Worktree `symaira-vault-wt-mig-stubs2`), Implementierung `67135aee`
+  (Koordinator-Cherry-Pick aus dem Subagent-Worktree, unabhängig nachverifiziert).
+- **Slice:** die fünf verbliebenen Deprecated-Stub-Pfade — `agent setup <name>`
+  (`cmd/mcp/agent.go`, `newAgentSetupCmd`) sowie `serve token`,
+  `serve token create|list|revoke`. Der Oracle baut `mcp` **und** `serve` aus
+  einer gemeinsamen `newMcpTokenCmd()` (`cmd/mcp/serve.go`), alle
+  `serve token*`-Bytes sind deshalb identisch mit `mcp token*`. Portierung in
+  neuem Modul `crates/symvault-cli/src/deprecated_stubs.rs`, Dispatch in
+  `main.rs` (`AgentCommand::Setup` als Catch-all = `ArbitraryArgs`-Semantik,
+  `Command::Serve` hidden + `ServeAction::Token` als Wort-Catch-all wie
+  `McpAction::Token`); Wiederverwendung von `deprecated_stub_message` (vier
+  Stderr-Zeilen, Exit 2, `--quiet`-ignorierend) und `deprecated_token_message`.
+- **Oracle-Capture:** Go-Oracle in `target/port/symvault-go` bei `f34780ac`
+  gebaut (sha256 `ad9fb1e2f697…`), isoliertes HOME; alle fünf Pfade plus
+  Varianten (ohne Args, Extra-Args, unbekanntes Wort, `--quiet`) liefern die
+  vier Stderr-Zeilen, leeres Stdout, Exit 2. Differenzial Go↔Rust:
+  **26/26 Fälle byte-identisch** (Exit, Stdout, Stderr).
+- **Bekannte Differenz (bewusst, wie `update check`/`apply`):** das
+  `serve`-Elternobjekt wird nur deklariert (hidden, wie der Oracle), damit die
+  portierten `token`-Kinder erreichbar sind; `token` ist dessen einziges
+  deklariertes Kind. Bare `serve` und `serve install|status|uninstall`
+  bleiben unportiert (HTTP- bzw. launchd/systemd-Runtime). Der Oracle druckt
+  `Warning: 'symvault serve' is deprecated, use 'symvault mcp' instead.` und
+  startet den Server (leeres HOME: Exit 3 mit `vault not initialized`); die
+  Portierung: clap `unrecognized subcommand` (Wort-Formen, Exit 1) bzw. Help
+  auf Stderr (bare `serve`, Exit 1 — dieselbe Form wie bare `agent`/`policy`).
+  Keine Oberfläche ohne Runtime; dokumentiert in den Modul-Docs von
+  `deprecated_stubs` und als Negativ-Kontrolle in
+  `tests/cli_agent_setup_serve_stubs.rs` assertiert. `symvault help` bleibt
+  dokumentiertes Non-Goal.
+- **Blocker-Liste korrigiert:** `agent setup` stand in Teil 13/14 noch als
+  „Netzwerk-Downloads"-Blocker; der gepinnte Oracle zeigt dort nur noch den
+  Deprecated-Stub (kein Netzwerk, kein Vault-Zugang) — der Pfad war fälschlich
+  als blocked geführt.
+- **Gates am Stand `67135aee`:** `cargo fmt --all --check` ✅,
+  `cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings` ✅,
+  `cargo test -p symvault-cli --locked` ✅ (u. a. fünf neue Kontrakt-Tests:
+  Byte-Parität, `--quiet`-Ignoranz, `serve token` ≡ `mcp token`, Hidden-in-
+  Help, Negativ-Kontrolle). Kein Push, kein PR, keine Go-Änderung, kein
+  Tag/Cutover.
+
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
 - **Basis:** `main` @ `d4aa2b13` (Merge `b9a48ac7` + Ledger `d4aa2b13`);
