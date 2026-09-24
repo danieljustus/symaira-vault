@@ -5,6 +5,10 @@
 //! vault and unlocked identity. HTTP selects its configured agent per request;
 //! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
+#[cfg(unix)]
+use std::sync::OnceLock;
+#[cfg(unix)]
+use std::time::Duration;
 use std::{
     fs,
     io::{self, BufRead, BufReader, IsTerminal, Write},
@@ -58,6 +62,8 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        let expected_recipient = symvault_crypto::recipient_string(&identity);
+        let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
         let oauth_agent_name = config.default_agent.clone();
@@ -81,19 +87,26 @@ pub fn run(
         };
         let registry_path = root.join("mcp-tokens.json");
         let consent_agent_name = oauth_agent_name.clone();
-        let result = if io::stdin().is_terminal() {
-            symvault_mcp::http::serve_loopback_with_oauth(
-                listener,
-                registry_path,
-                handler_for_agent,
-                oauth_agent_name,
-                move |client_id, redirect_uri| {
-                    oauth_consent(client_id, redirect_uri, &consent_agent_name)
-                },
-            )
-        } else {
-            symvault_mcp::http::serve_loopback(listener, registry_path, handler_for_agent)
-        };
+        let result = symvault_mcp::http::serve_loopback_with_oauth(
+            listener,
+            registry_path,
+            handler_for_agent,
+            oauth_agent_name,
+            move |client_id, redirect_uri| {
+                oauth_consent(client_id, redirect_uri, &consent_agent_name)
+            },
+            move |passphrase| {
+                encrypted_identity.as_deref().is_some_and(|encrypted| {
+                    symvault_crypto::decrypt_identity(
+                        encrypted,
+                        &SecretBytes::new(passphrase.as_bytes()),
+                    )
+                    .is_ok_and(|candidate| {
+                        symvault_crypto::recipient_string(&candidate) == expected_recipient
+                    })
+                })
+            },
+        );
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         let agent_name = agent
@@ -120,20 +133,72 @@ pub fn run(
     }
 }
 
-fn oauth_consent(client_id: &str, redirect_uri: &str, agent_name: &str) -> bool {
-    if !io::stdin().is_terminal() {
-        return false;
+fn oauth_consent(
+    client_id: &str,
+    redirect_uri: &str,
+    agent_name: &str,
+) -> symvault_mcp::http::OAuthConsentDecision {
+    if browser_consent_selected(io::stdin().is_terminal()) {
+        return symvault_mcp::http::OAuthConsentDecision::Browser;
     }
-    let _ = write!(
-        io::stderr(),
-        "OAuth client {client_id:?} requests full tool access for agent {agent_name:?} at {redirect_uri}. Approve? [y/N] "
-    );
-    let _ = io::stderr().flush();
-    let mut answer = String::new();
-    if io::stdin().lock().read_line(&mut answer).is_err() {
-        return false;
+    #[cfg(unix)]
+    {
+        static TTY_CONSENT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let Ok(_input_guard) = TTY_CONSENT_LOCK.get_or_init(|| Mutex::new(())).try_lock() else {
+            return symvault_mcp::http::OAuthConsentDecision::Denied;
+        };
+        let _ = write!(
+            io::stderr(),
+            "OAuth client {client_id:?} requests full tool access for agent {agent_name:?} at {redirect_uri}. Approve? [y/N] "
+        );
+        let _ = io::stderr().flush();
+        let timeout = Duration::from_secs(60);
+        return read_tty_approval(timeout);
     }
-    matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+    #[cfg(not(unix))]
+    {
+        let _ = (client_id, redirect_uri, agent_name);
+        symvault_mcp::http::OAuthConsentDecision::Browser
+    }
+}
+
+fn browser_consent_selected(stdin_is_terminal: bool) -> bool {
+    !cfg!(unix) || !stdin_is_terminal
+}
+
+#[cfg(unix)]
+fn read_tty_approval(timeout: Duration) -> symvault_mcp::http::OAuthConsentDecision {
+    let stdin = io::stdin();
+    let mut reader = stdin.lock();
+    match wait_for_fd_readable(&reader, timeout) {
+        Some(true) => {
+            let mut answer = String::new();
+            if reader.read_line(&mut answer).is_ok()
+                && matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+            {
+                symvault_mcp::http::OAuthConsentDecision::Approved
+            } else {
+                symvault_mcp::http::OAuthConsentDecision::Denied
+            }
+        }
+        Some(false) => {
+            let _ = rustix::termios::tcflush(&reader, rustix::termios::QueueSelector::IFlush);
+            symvault_mcp::http::OAuthConsentDecision::Denied
+        }
+        None => symvault_mcp::http::OAuthConsentDecision::Browser,
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_fd_readable(fd: &impl std::os::fd::AsFd, timeout: Duration) -> Option<bool> {
+    use rustix::event::{PollFd, PollFlags, Timespec, poll};
+
+    let mut fds = [PollFd::new(fd, PollFlags::IN)];
+    let timeout = Timespec {
+        tv_sec: timeout.as_secs().try_into().unwrap_or(i64::MAX),
+        tv_nsec: timeout.subsec_nanos().into(),
+    };
+    poll(&mut fds, Some(&timeout)).ok().map(|ready| ready > 0)
 }
 
 fn identity_from_secret(secret: &SecretBytes) -> Result<Identity, String> {
@@ -342,5 +407,29 @@ mod tests {
         let error = load_policy_engine(&root).expect_err("malformed policy must fail");
         let _ = fs::remove_dir_all(&root);
         assert!(error.contains("parse policy file"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn consent_timeout_leaves_stdin_available_for_the_next_prompt() {
+        let (reader, mut writer) = std::os::unix::net::UnixStream::pair().unwrap();
+        assert_eq!(
+            wait_for_fd_readable(&reader, Duration::from_millis(1)),
+            Some(false)
+        );
+        writer.write_all(b"y\n").unwrap();
+        assert_eq!(
+            wait_for_fd_readable(&reader, Duration::from_secs(1)),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn consent_selector_uses_browser_without_tty_and_on_non_unix() {
+        assert!(browser_consent_selected(false));
+        #[cfg(unix)]
+        assert!(!browser_consent_selected(true));
+        #[cfg(not(unix))]
+        assert!(browser_consent_selected(true));
     }
 }

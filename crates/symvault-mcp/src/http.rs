@@ -36,6 +36,14 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
 }
 
+/// OAuth consent result; daemon mode can request browser-based confirmation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OAuthConsentDecision {
+    Approved,
+    Denied,
+    Browser,
+}
+
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
@@ -87,19 +95,22 @@ where
 
 /// Serves MCP HTTP and the complete consent-gated OAuth code/PKCE/refresh
 /// flow. OAuth-issued tokens are bound to `oauth_agent_name`. The caller must
-/// provide a real human-consent callback; the listener does not enable OAuth
-/// when that callback is absent. Approval grants that agent's full tool scope,
-/// so the callback should make this privilege clear before returning `true`.
-pub fn serve_loopback_with_oauth<F, C>(
+/// provide a human-consent callback and a passphrase verifier. Browser consent
+/// approves only after that verifier accepts the submitted vault passphrase.
+/// Approval grants the agent's full tool scope, which the consent callback
+/// should state clearly.
+pub fn serve_loopback_with_oauth<F, C, V>(
     listener: TcpListener,
     registry_path: impl AsRef<Path>,
     handler_for_agent: F,
     oauth_agent_name: impl Into<String>,
     consent: C,
+    verify_passphrase: V,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
-    C: FnMut(&str, &str) -> bool + Send + 'static,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
 {
     let root = registry_path
         .as_ref()
@@ -114,6 +125,7 @@ where
             root,
             oauth_agent_name.into(),
             Box::new(consent),
+            Box::new(verify_passphrase),
         )),
     )
 }
@@ -139,8 +151,8 @@ where
         handler_for_agent,
         handlers: HashMap::new(),
         sessions: HashMap::new(),
-        oauth,
     }));
+    let oauth = oauth.map(Arc::new);
     let active = Arc::new(AtomicUsize::new(0));
     thread::scope(|scope| {
         for incoming in listener.incoming() {
@@ -155,6 +167,7 @@ where
                 continue;
             }
             let state = Arc::clone(&state);
+            let oauth = oauth.clone();
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
@@ -163,6 +176,7 @@ where
                     stream,
                     &registry_path,
                     &state,
+                    oauth.as_deref(),
                     HttpTimeouts::default(),
                 );
             }) {
@@ -178,32 +192,36 @@ struct HttpServerState<F> {
     handler_for_agent: F,
     handlers: HashMap<String, ProtocolHandler>,
     sessions: HashMap<String, ProtocolHandler>,
-    oauth: Option<crate::oauth::OAuthState>,
 }
 
 fn serve_connection_shared<F>(
     stream: TcpStream,
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
+    oauth_state: Option<&crate::oauth::OAuthState>,
     timeouts: HttpTimeouts,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
     serve_connection_with_timeouts(stream, timeouts, |reader, request, keep_alive| {
-        let mut state = state
-            .lock()
-            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
-        let HttpServerState {
-            handler_for_agent,
-            handlers,
-            sessions,
-            oauth,
-        } = &mut *state;
-        if let Some(oauth) = oauth.as_mut() {
+        let request_path = request
+            .path
+            .split_once('?')
+            .map_or(request.path.as_str(), |(path, _)| path);
+        if let Some(oauth_state) = oauth_state.filter(|_| {
+            matches!(
+                request_path,
+                "/.well-known/oauth-authorization-server"
+                    | "/oauth/register"
+                    | "/mcp/oauth/authorize"
+                    | "/mcp/oauth/authorize/confirm"
+                    | "/mcp/oauth/token"
+            )
+        }) {
             let local = reader.get_ref().local_addr()?;
             if let Some(response) = crate::oauth::handle(
-                oauth,
+                oauth_state,
                 &request.method,
                 &request.path,
                 &request.content_type,
@@ -229,6 +247,14 @@ where
                 return Ok(keep_alive);
             }
         }
+        let mut state = state
+            .lock()
+            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
+        let HttpServerState {
+            handler_for_agent,
+            handlers,
+            sessions,
+        } = &mut *state;
         serve_one_authenticated(
             reader,
             request,
@@ -1139,20 +1165,27 @@ mod tests {
         let registry_path = registry(dir.path());
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let address = listener.local_addr().expect("listener address");
-        let state = Mutex::new(HttpServerState {
+        let state = Arc::new(Mutex::new(HttpServerState {
             handler_for_agent: |_: &str| Ok(ProtocolHandler::new("symaira", "1.0.0")),
             handlers: HashMap::new(),
             sessions: HashMap::new(),
-            oauth: Some(crate::oauth::OAuthState::new(
-                dir.path().to_path_buf(),
-                "default".into(),
-                Box::new(|_, _| true),
-            )),
-        });
+        }));
+        let oauth_state = crate::oauth::OAuthState::new(
+            dir.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| OAuthConsentDecision::Approved),
+            Box::new(|_| false),
+        );
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
-            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
-                .expect("serve OAuth HTTP connection");
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &state,
+                Some(&oauth_state),
+                HttpTimeouts::default(),
+            )
+            .expect("serve OAuth HTTP connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream.write_all(request.as_bytes()).expect("write request");
@@ -1211,6 +1244,232 @@ mod tests {
                 .unwrap()
                 .ends_with("/oauth/register")
         );
+    }
+
+    #[test]
+    fn headless_authorize_renders_passphrase_consent_without_issuing_a_code() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let client = symvault_store::token_registry::register_oauth_client(
+            dir.path(),
+            vec!["http://localhost/callback".into()],
+            time::OffsetDateTime::now_utc(),
+        )
+        .expect("persist client");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let state = Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        });
+        let oauth_state = crate::oauth::OAuthState::new(
+            dir.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| OAuthConsentDecision::Browser),
+            Box::new(|_| false),
+        );
+        let server_registry = registry_path.clone();
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().expect("accept");
+                serve_connection_shared(
+                    stream,
+                    &server_registry,
+                    &state,
+                    Some(&oauth_state),
+                    HttpTimeouts::default(),
+                )
+                .expect("serve headless OAuth request");
+            }
+        });
+        let mut authorize_stream = TcpStream::connect(address).expect("connect authorize");
+        authorize_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set authorize timeout");
+        let authorize_request = format!(
+            "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            client.client_id
+        );
+        authorize_stream
+            .write_all(authorize_request.as_bytes())
+            .expect("write authorize request");
+        let authorize_response = read_http_response(&mut BufReader::new(authorize_stream));
+        assert_eq!(raw_status(&authorize_response), 200, "{authorize_response}");
+        let flow_id = raw_body(&authorize_response)
+            .split("name=\"flow_id\" value=\"")
+            .nth(1)
+            .expect("flow ID in consent page")
+            .split('"')
+            .next()
+            .expect("flow ID value");
+        assert!(raw_body(&authorize_response).contains("Vault passphrase"));
+
+        let form = format!("flow_id={flow_id}&passphrase=wrong");
+        let mut confirm_stream = TcpStream::connect(address).expect("connect confirm");
+        confirm_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set confirm timeout");
+        write!(
+            confirm_stream,
+            "POST /mcp/oauth/authorize/confirm HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            form.len(),
+            form
+        )
+        .expect("write confirmation request");
+        let confirm_response = read_http_response(&mut BufReader::new(confirm_stream));
+        assert_eq!(raw_status(&confirm_response), 200, "{confirm_response}");
+        assert!(raw_body(&confirm_response).contains("Incorrect passphrase"));
+        assert!(!confirm_response.starts_with("HTTP/1.1 302 Found"));
+        server.join().expect("server thread");
+    }
+
+    #[test]
+    fn oauth_and_mcp_routes_remain_responsive_during_consent() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let client = symvault_store::token_registry::register_oauth_client(
+            dir.path(),
+            vec!["http://localhost/callback".into()],
+            time::OffsetDateTime::now_utc(),
+        )
+        .expect("persist OAuth client");
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let (consent_started, started) = std::sync::mpsc::channel();
+        let (release_consent, release) = std::sync::mpsc::channel();
+        let release = Arc::new(Mutex::new(release));
+        let consent_calls = Arc::new(AtomicUsize::new(0));
+        let state = Arc::new(Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        }));
+        let release = Arc::clone(&release);
+        let consent_calls = Arc::clone(&consent_calls);
+        let oauth_state = Arc::new(crate::oauth::OAuthState::new(
+            dir.path().to_path_buf(),
+            "default".into(),
+            Box::new(move |_, _| {
+                if consent_calls.fetch_add(1, Ordering::AcqRel) != 0 {
+                    return OAuthConsentDecision::Denied;
+                }
+                let _ = consent_started.send(());
+                if release
+                    .lock()
+                    .expect("release mutex")
+                    .recv_timeout(Duration::from_secs(10))
+                    .is_ok()
+                {
+                    OAuthConsentDecision::Approved
+                } else {
+                    OAuthConsentDecision::Denied
+                }
+            }),
+            Box::new(|_| false),
+        ));
+        let shared_state = Arc::clone(&state);
+        let server = thread::spawn(move || {
+            let mut connections = Vec::new();
+            for _ in 0..6 {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = Arc::clone(&shared_state);
+                let oauth_state = Arc::clone(&oauth_state);
+                let registry_path = registry_path.clone();
+                connections.push(thread::spawn(move || {
+                    serve_connection_shared(
+                        stream,
+                        &registry_path,
+                        &state,
+                        Some(&oauth_state),
+                        HttpTimeouts::default(),
+                    )
+                    .expect("serve concurrent request");
+                }));
+            }
+            for connection in connections {
+                connection.join().expect("connection thread");
+            }
+        });
+        let mut stream = TcpStream::connect(address).expect("connect");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set client timeout");
+        let request = format!(
+            "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            client.client_id
+        );
+        stream.write_all(request.as_bytes()).expect("write request");
+        started
+            .recv_timeout(Duration::from_secs(2))
+            .expect("consent callback starts");
+        assert!(state.try_lock().is_ok(), "MCP state lock remains available");
+        let mut duplicate_authorize =
+            TcpStream::connect(address).expect("connect second authorize");
+        duplicate_authorize
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set duplicate authorize timeout");
+        let request = format!(
+            "GET /mcp/oauth/authorize?response_type=code&client_id={}&redirect_uri=http://localhost/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256 HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            client.client_id
+        );
+        duplicate_authorize
+            .write_all(request.as_bytes())
+            .expect("write second authorize request");
+        let duplicate_response = read_http_response(&mut BufReader::new(duplicate_authorize));
+        assert_eq!(raw_status(&duplicate_response), 403, "{duplicate_response}");
+        let mut mcp_stream = TcpStream::connect(address).expect("connect regular MCP request");
+        mcp_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set MCP client timeout");
+        mcp_stream
+            .write_all(b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("write regular MCP request");
+        let mcp_response = read_http_response(&mut BufReader::new(mcp_stream));
+        assert_eq!(raw_status(&mcp_response), 401, "{mcp_response}");
+        let mut discovery_stream = TcpStream::connect(address).expect("connect discovery request");
+        discovery_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set discovery client timeout");
+        discovery_stream
+            .write_all(b"GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("write discovery request");
+        let discovery_response = read_http_response(&mut BufReader::new(discovery_stream));
+        assert_eq!(raw_status(&discovery_response), 200, "{discovery_response}");
+        let registration_body = r#"{"redirect_uris":["http://localhost/other"]}"#;
+        let mut registration_stream = TcpStream::connect(address).expect("connect registration");
+        registration_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set registration timeout");
+        write!(
+            registration_stream,
+            "POST /oauth/register HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            registration_body.len(),
+            registration_body
+        )
+        .expect("write registration request");
+        let registration_response = read_http_response(&mut BufReader::new(registration_stream));
+        assert_eq!(
+            raw_status(&registration_response),
+            201,
+            "{registration_response}"
+        );
+        let mut token_stream = TcpStream::connect(address).expect("connect token endpoint");
+        token_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set token timeout");
+        token_stream
+            .write_all(b"POST /mcp/oauth/token HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 22\r\nConnection: close\r\n\r\ngrant_type=unsupported")
+            .expect("write token request");
+        let token_response = read_http_response(&mut BufReader::new(token_stream));
+        assert_eq!(raw_status(&token_response), 400, "{token_response}");
+        release_consent.send(()).expect("release consent");
+        let response = read_http_response(&mut BufReader::new(
+            stream.try_clone().expect("clone stream"),
+        ));
+        assert!(response.starts_with("HTTP/1.1 302 Found\r\n"), "{response}");
+        drop(stream);
+        server.join().expect("server thread");
     }
 
     #[test]
@@ -1347,7 +1606,7 @@ mod tests {
         let idle_registry = registry_path.clone();
         let idle_state = Arc::clone(&state);
         let idle = thread::spawn(move || {
-            serve_connection_shared(idle_server, &idle_registry, &idle_state, timeouts)
+            serve_connection_shared(idle_server, &idle_registry, &idle_state, None, timeouts)
                 .expect("serve idle client")
         });
 
@@ -1359,8 +1618,14 @@ mod tests {
         let active_registry = registry_path;
         let active_state = Arc::clone(&state);
         let active = thread::spawn(move || {
-            serve_connection_shared(active_server, &active_registry, &active_state, timeouts)
-                .expect("serve active client")
+            serve_connection_shared(
+                active_server,
+                &active_registry,
+                &active_state,
+                None,
+                timeouts,
+            )
+            .expect("serve active client")
         });
 
         for index in 0..20 {

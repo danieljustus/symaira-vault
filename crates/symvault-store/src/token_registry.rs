@@ -346,7 +346,12 @@ fn write_oauth_clients(
 pub fn verify_s256_code_verifier(verifier: &str, challenge: &str) -> bool {
     use base64::Engine as _;
 
-    if verifier.is_empty() || challenge.is_empty() {
+    if !(43..=128).contains(&verifier.len())
+        || !verifier
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte))
+        || challenge.is_empty()
+    {
         return false;
     }
     let digest = Sha256::digest(verifier.as_bytes());
@@ -972,6 +977,12 @@ mod tests {
         assert!(verify_s256_code_verifier(verifier, challenge));
         assert!(!verify_s256_code_verifier(verifier, "wrong"));
         assert!(!verify_s256_code_verifier("", challenge));
+        assert!(!verify_s256_code_verifier(&"a".repeat(42), challenge));
+        assert!(!verify_s256_code_verifier(&"a".repeat(129), challenge));
+        assert!(!verify_s256_code_verifier(
+            &format!("{}!", "a".repeat(42)),
+            challenge
+        ));
     }
 
     #[test]

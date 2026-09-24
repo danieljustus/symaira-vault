@@ -45,4 +45,4 @@ zeroize = { version = "=1.8.2", features = ["alloc"] }
 tempfile = "=3.27.0"
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "=1.1.4", features = ["process"] }
+rustix = { version = "=1.1.4", features = ["event", "process", "termios"] }
