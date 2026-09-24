@@ -559,9 +559,12 @@ crypto-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
 	$(MAKE) crypto-fuzz-smoke
 
+# ponytail: Go 1.26 timed fuzz can spuriously time out on FreeBSD;
+# use at least 100k executions there and revisit when Go reaches 1.27.
+CRYPTO_FUZZTIME := $(if $(filter FreeBSD,$(shell uname -s)),100000x,3s)
 crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=$(CRYPTO_FUZZTIME) -timeout=120s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=$(CRYPTO_FUZZTIME) -timeout=120s ./internal/crypto
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
 # cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
