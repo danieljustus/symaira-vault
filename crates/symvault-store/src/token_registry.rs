@@ -85,6 +85,56 @@ pub struct TokenRecord {
     pub refresh_expires_at: Option<String>,
 }
 
+/// Returns whether a token can authenticate at `now`.
+///
+/// Go's `TokenRegistry.Get` rejects revoked tokens and treats an expiry as
+/// expired only when `now.After(expires_at)`, so equality remains active.
+pub fn is_active_at(token: &TokenRecord, now: OffsetDateTime) -> Result<bool, time::error::Parse> {
+    if token.revoked {
+        return Ok(false);
+    }
+    token
+        .expires_at
+        .as_deref()
+        .map(|expires_at| parse_rfc3339(expires_at).map(|expires_at| now <= expires_at))
+        .unwrap_or(Ok(true))
+}
+
+/// Looks up a raw bearer without exposing a hash-at-call-site requirement.
+/// The stored registry continues to contain only the SHA-256 digest.
+pub fn lookup_raw_bearer<'a>(
+    entries: &'a BTreeMap<String, TokenRecord>,
+    bearer: &str,
+    now: OffsetDateTime,
+) -> Result<Option<&'a TokenRecord>, time::error::Parse> {
+    let hash = sha256_hex(bearer.as_bytes());
+    let mut matches = entries.values().filter(|token| token.hash == hash);
+    let Some(token) = matches.next() else {
+        return Ok(None);
+    };
+    // Go's hash-keyed loader overwrites duplicate hashes in map iteration
+    // order. Never pick a potentially different scope by token-ID order.
+    if matches.next().is_some() {
+        return Ok(None);
+    }
+    if is_active_at(token, now)? {
+        Ok(Some(token))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Checks one already-canonical MCP tool name against an exact scope or `*`.
+/// Tool aliases are resolved by the transport/catalog layer, outside this
+/// registry contract.
+pub fn is_tool_allowed(token: &TokenRecord, canonical_tool_name: &str) -> bool {
+    token.allowed_tools.as_deref().is_some_and(|allowed| {
+        allowed
+            .iter()
+            .any(|name| name == "*" || name == canonical_tool_name)
+    })
+}
+
 /// Inputs for a freshly minted token, shared by `create` and `rotate`.
 pub struct NewToken<'a> {
     pub label: &'a str,
@@ -544,5 +594,141 @@ mod tests {
         assert_eq!(go_rfc3339(zero_fraction), "2023-11-14T22:13:20Z");
         let with_fraction = zero_fraction + time::Duration::nanoseconds(120_000_000);
         assert_eq!(go_rfc3339(with_fraction), "2023-11-14T22:13:20.12Z");
+    }
+
+    #[test]
+    fn token_activity_uses_explicit_clock_and_expiry_equality_is_active() {
+        let mut token = TokenRecord {
+            id: "tok-active".into(),
+            label: String::new(),
+            hash: String::new(),
+            prefix: String::new(),
+            allowed_tools: Some(Vec::new()),
+            tool_registry_hash: String::new(),
+            agent_name: "alpha".into(),
+            created_at: "2026-09-23T00:00:00Z".into(),
+            expires_at: Some("2026-09-23T12:00:00Z".into()),
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        let now = parse_rfc3339("2026-09-23T12:00:00Z").unwrap();
+        assert!(is_active_at(&token, now).unwrap());
+        assert!(!is_active_at(&token, now + time::Duration::nanoseconds(1)).unwrap());
+        token.expires_at = None;
+        assert!(is_active_at(&token, now).unwrap());
+        token.expires_at = Some("2026-09-23T12:00:00Z".into());
+
+        token.revoked = true;
+        assert!(!is_active_at(&token, now).unwrap());
+    }
+
+    #[test]
+    fn malformed_expiry_fails_closed() {
+        let mut token = TokenRecord {
+            id: "tok-invalid".into(),
+            label: String::new(),
+            hash: String::new(),
+            prefix: String::new(),
+            allowed_tools: Some(Vec::new()),
+            tool_registry_hash: String::new(),
+            agent_name: "alpha".into(),
+            created_at: "2026-09-23T00:00:00Z".into(),
+            expires_at: None,
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        token.expires_at = Some("not-rfc3339".into());
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        assert!(is_active_at(&token, now).is_err());
+    }
+
+    #[test]
+    fn duplicate_bearer_hashes_never_select_a_scope_by_id_order() {
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let bearer = "fixture-bearer-not-a-credential";
+        let hash = sha256_hex(bearer.as_bytes());
+        let record = TokenRecord {
+            id: "first".into(),
+            label: String::new(),
+            hash,
+            prefix: String::new(),
+            allowed_tools: Some(vec!["*".into()]),
+            tool_registry_hash: String::new(),
+            agent_name: String::new(),
+            created_at: String::new(),
+            expires_at: None,
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        let mut entries = BTreeMap::new();
+        entries.insert("first".into(), record.clone());
+        let mut second = record;
+        second.id = "second".into();
+        second.revoked = true;
+        entries.insert("second".into(), second);
+        assert!(lookup_raw_bearer(&entries, bearer, now).unwrap().is_none());
+    }
+
+    #[test]
+    fn go_generated_token_lookup_fixture_matches_bearer_validation_and_scope() {
+        #[derive(Deserialize)]
+        struct Fixture {
+            now: String,
+            registry: Registry,
+            lookups: Vec<Lookup>,
+            scopes: Vec<Scope>,
+        }
+        #[derive(Deserialize)]
+        struct Registry {
+            tokens: BTreeMap<String, TokenRecord>,
+        }
+        #[derive(Deserialize)]
+        struct Lookup {
+            bearer: String,
+            found: bool,
+            token_id: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Scope {
+            token_id: String,
+            tool: String,
+            allowed: bool,
+        }
+
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../../../testdata/port/auth/token-lookup.json"
+        ))
+        .expect("Go token lookup fixture");
+        let now = parse_rfc3339(&fixture.now).expect("fixture clock");
+        for case in &fixture.lookups {
+            let found = lookup_raw_bearer(&fixture.registry.tokens, &case.bearer, now)
+                .expect("valid fixture expiry");
+            assert_eq!(found.is_some(), case.found, "bearer {}", case.bearer);
+            assert_eq!(
+                found.map(|token| token.id.as_str()),
+                case.token_id.as_deref(),
+                "bearer {}",
+                case.bearer
+            );
+        }
+        for case in &fixture.scopes {
+            let token = &fixture.registry.tokens[&case.token_id];
+            assert_eq!(
+                is_tool_allowed(token, &case.tool),
+                case.allowed,
+                "tool {} on token {}",
+                case.tool,
+                case.token_id
+            );
+        }
     }
 }
