@@ -121,6 +121,12 @@ fn config_validate_matches_go_contract() {
         assert_same(&res_go, &res_rust, "config validate traversal");
     }
 
+    let dot_args = ["config", "validate", ".", "--output", "json"];
+    let res_go = run(&go, &home.0, &dot_args);
+    let res_rust = run(&rust, &home.0, &dot_args);
+    assert!(!res_go.status.success(), "a directory is not a config file");
+    assert_same(&res_go, &res_rust, "config validate current directory");
+
     // Case 4: Valid config with --output json
     let res_go = run(
         &go,

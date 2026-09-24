@@ -650,6 +650,7 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     let err_msg = match err.raw_os_error() {
         Some(2) => "no such file or directory",
         Some(13) => "permission denied",
+        Some(21) => "is a directory",
         _ => {
             if err.kind() == io::ErrorKind::NotFound {
                 "no such file or directory"
@@ -659,6 +660,12 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
                 "input/output error"
             }
         }
+    };
+    #[cfg(not(windows))]
+    let op = if err.kind() == io::ErrorKind::IsADirectory {
+        "read"
+    } else {
+        op
     };
     format!("{op} {}: {err_msg}", path.display())
 }
