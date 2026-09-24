@@ -6,7 +6,8 @@ use std::{
 };
 
 pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
-    let bytes = fs::read(path).map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
+        .map_err(|error| format!("cannot load config: {error}"))?;
     if !quiet {
         let _ = io::stdout().write_all(&bytes);
     }
@@ -14,7 +15,8 @@ pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
 }
 
 pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), String> {
-    let bytes = fs::read(path).map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
+        .map_err(|error| format!("cannot load config: {error}"))?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
     let value = lookup_scalar(source, key)?;
@@ -37,7 +39,8 @@ pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), Stri
 pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), String> {
     use yaml_edit::path::YamlPath;
 
-    let bytes = fs::read(path).map_err(|error| format!("cannot load config: {error}"))?;
+    let bytes = fs::read(crate::agent_list_commands::clean_path(path))
+        .map_err(|error| format!("cannot load config: {error}"))?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
     let file = yaml_edit::YamlFile::from_str(source)
@@ -67,6 +70,16 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Strin
         rendered.push('\n');
     }
     atomic_write(path, rendered.as_bytes())?;
+    // Go rejects traversal on its post-write reload, even when Windows
+    // resolves the raw rename destination through a parent component.
+    if path
+        .components()
+        .any(|component| component == std::path::Component::ParentDir)
+    {
+        return Err(
+            "config is invalid after update: config file path escapes expected directory".into(),
+        );
+    }
     if let Err(error) = symvault_core::config::Config::load(path) {
         return Err(format!("config is invalid after update: {error}"));
     }
@@ -312,7 +325,11 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| "cannot write config: invalid path".to_owned())?;
-    let temporary = path.with_file_name(format!(".{file_name}.tmp-{}", std::process::id()));
+    // Go stages beside filepath.Clean(path), then renames to the raw target.
+    // Keep the target raw so an absent intermediate component cannot redirect
+    // a config set into the existing cleaned file.
+    let temporary = crate::agent_list_commands::clean_path(path)
+        .with_file_name(format!(".{file_name}.tmp-{}", std::process::id()));
     let mut created = false;
     let result = (|| {
         let mut options = fs::OpenOptions::new();
