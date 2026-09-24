@@ -266,6 +266,26 @@ fn malformed_store_is_rejected() {
     assert!(DeviceSessionStore::new(Some(dir.path())).is_err());
 }
 
+#[test]
+fn go_json_field_folding_nulls_and_duplicates_preserve_revocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join(".symvault/device-sessions.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let token = "test-revoked-token";
+    let input = format!(
+        "{{\"{token}\":{{\"device_id\":\"device-one\",\"expires_at\":\"2999-01-01T00:00:00Z\",\"revoked\":false,\"REVOKED\":true,\"name\":null}}}}"
+    );
+    std::fs::write(&path, input).unwrap();
+    let store = DeviceSessionStore::new(Some(dir.path())).unwrap();
+    assert_eq!(store.validate(token).unwrap(), None);
+    store.save().unwrap();
+    assert!(
+        std::fs::read_to_string(path)
+            .unwrap()
+            .contains("\"revoked\": true")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn session_store_uses_private_modes() {

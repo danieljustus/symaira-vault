@@ -32,7 +32,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use serde::Deserialize;
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -45,23 +46,80 @@ pub const DEFAULT_SESSION_TTL_SECONDS: i64 = 90 * 24 * 60 * 60;
 /// does: a field the JSON omits takes the value Go's zero value would, and a
 /// missing timestamp becomes the zero `time.Time` (which `MarshalJSON` writes
 /// back as `0001-01-01T00:00:00Z`).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceSession {
-    #[serde(default)]
     pub prefix: String,
-    #[serde(default)]
     pub device_id: String,
     /// `json:"name,omitempty"` — absent from the file when empty.
-    #[serde(default)]
     pub name: String,
-    #[serde(default)]
     pub public_key: String,
-    #[serde(default = "go_zero_time")]
     pub created_at: String,
-    #[serde(default = "go_zero_time")]
     pub expires_at: String,
-    #[serde(default)]
     pub revoked: bool,
+}
+
+impl<'de> Deserialize<'de> for DeviceSession {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct SessionVisitor;
+        impl<'de> Visitor<'de> for SessionVisitor {
+            type Value = DeviceSession;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a device session object")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
+                let mut session = DeviceSession {
+                    prefix: String::new(),
+                    device_id: String::new(),
+                    name: String::new(),
+                    public_key: String::new(),
+                    created_at: go_zero_time(),
+                    expires_at: go_zero_time(),
+                    revoked: false,
+                };
+                while let Some(key) = map.next_key::<String>()? {
+                    let value: serde_json::Value = map.next_value()?;
+                    if value.is_null() {
+                        continue; // encoding/json leaves primitive and time fields untouched.
+                    }
+                    match key.to_ascii_lowercase().as_str() {
+                        "prefix" => {
+                            session.prefix =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "device_id" => {
+                            session.device_id =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "name" => {
+                            session.name =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "public_key" => {
+                            session.public_key =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "created_at" => {
+                            session.created_at =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "expires_at" => {
+                            session.expires_at =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        "revoked" => {
+                            session.revoked =
+                                serde_json::from_value(value).map_err(de::Error::custom)?
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(session)
+            }
+        }
+        deserializer.deserialize_map(SessionVisitor)
+    }
 }
 
 #[derive(Debug)]
