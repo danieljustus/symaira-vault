@@ -1,4 +1,9 @@
-use std::{collections::HashMap, path::PathBuf, sync::Mutex};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::Mutex,
+    time::{Duration as StdDuration, Instant},
+};
 
 use serde::Deserialize;
 use symvault_store::token_registry::{self, NewToken};
@@ -10,6 +15,9 @@ const AUTH_CODE_TTL: Duration = Duration::minutes(5);
 const ACCESS_TOKEN_TTL: Duration = Duration::hours(24);
 const REFRESH_TOKEN_TTL: Duration = Duration::hours(720);
 const MAX_BROWSER_CONSENTS: usize = 256;
+const MAX_BROWSER_ATTEMPTS_PER_FLOW: u8 = 5;
+const MAX_BROWSER_ATTEMPTS_PER_WINDOW: usize = 10;
+const BROWSER_ATTEMPT_WINDOW: StdDuration = StdDuration::from_secs(60);
 
 #[derive(Deserialize)]
 struct RegistrationRequest {
@@ -28,7 +36,7 @@ pub(super) struct OAuthState {
     root: PathBuf,
     agent_name: String,
     codes: Mutex<HashMap<String, PendingCode>>,
-    browser_requests: Mutex<HashMap<String, BrowserRequest>>,
+    browser_consents: Mutex<BrowserConsentState>,
     consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
     verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
 }
@@ -40,6 +48,13 @@ struct BrowserRequest {
     state: String,
     code_challenge: String,
     expires_at: OffsetDateTime,
+    attempts: u8,
+}
+
+struct BrowserConsentState {
+    requests: HashMap<String, BrowserRequest>,
+    window_started: Instant,
+    attempts_in_window: usize,
 }
 
 pub(super) enum OAuthResponse {
@@ -58,7 +73,11 @@ impl OAuthState {
             root,
             agent_name,
             codes: Mutex::new(HashMap::new()),
-            browser_requests: Mutex::new(HashMap::new()),
+            browser_consents: Mutex::new(BrowserConsentState {
+                requests: HashMap::new(),
+                window_started: Instant::now(),
+                attempts_in_window: 0,
+            }),
             consent,
             verify_passphrase,
         }
@@ -235,15 +254,18 @@ fn start_browser_consent(
         state: state_value.to_owned(),
         code_challenge: challenge.to_owned(),
         expires_at: now + AUTH_CODE_TTL,
+        attempts: 0,
     };
-    let Ok(mut requests) = state.browser_requests.lock() else {
+    let Ok(mut browser) = state.browser_consents.lock() else {
         return OAuthResponse::Http(error(500, "server_error"));
     };
-    requests.retain(|_, request| request.expires_at >= now);
-    if requests.len() >= MAX_BROWSER_CONSENTS {
+    browser
+        .requests
+        .retain(|_, request| request.expires_at >= now);
+    if browser.requests.len() >= MAX_BROWSER_CONSENTS {
         return OAuthResponse::Http(error(503, "server_error"));
     }
-    requests.insert(flow_id.clone(), request);
+    browser.requests.insert(flow_id.clone(), request);
     OAuthResponse::Http(html_response(
         200,
         &consent_page(&flow_id, client_id, redirect_uri, &state.agent_name, ""),
@@ -274,10 +296,10 @@ fn confirm(
     }
     let denied = decision == Some("deny");
     let Some(request) = state
-        .browser_requests
+        .browser_consents
         .lock()
         .ok()
-        .and_then(|requests| requests.get(flow_id).cloned())
+        .and_then(|browser| browser.requests.get(flow_id).cloned())
         .filter(|request| request.expires_at >= now)
     else {
         return OAuthResponse::Http(error(400, "invalid_request"));
@@ -290,10 +312,10 @@ fn confirm(
         return OAuthResponse::Http(error(400, "invalid_redirect_uri"));
     }
     if denied {
-        let Ok(mut requests) = state.browser_requests.lock() else {
+        let Ok(mut browser) = state.browser_consents.lock() else {
             return OAuthResponse::Http(error(500, "server_error"));
         };
-        if requests.remove(flow_id).is_none() {
+        if browser.requests.remove(flow_id).is_none() {
             return OAuthResponse::Http(error(400, "invalid_request"));
         }
         return OAuthResponse::Redirect(redirect_uri_with_error(
@@ -302,7 +324,16 @@ fn confirm(
             &request.state,
         ));
     }
+    let Some((request, last_flow_attempt)) = reserve_browser_attempt(state, flow_id, now) else {
+        return OAuthResponse::Http(error(429, "slow_down"));
+    };
     if !(state.verify_passphrase)(passphrase) {
+        if last_flow_attempt {
+            if let Ok(mut browser) = state.browser_consents.lock() {
+                browser.requests.remove(flow_id);
+            }
+            return OAuthResponse::Http(error(429, "slow_down"));
+        }
         return OAuthResponse::Http(html_response(
             200,
             &consent_page(
@@ -314,10 +345,10 @@ fn confirm(
             ),
         ));
     }
-    let Ok(mut requests) = state.browser_requests.lock() else {
+    let Ok(mut browser) = state.browser_consents.lock() else {
         return OAuthResponse::Http(error(500, "server_error"));
     };
-    if requests.remove(flow_id).is_none() {
+    if browser.requests.remove(flow_id).is_none() {
         return OAuthResponse::Http(error(400, "invalid_request"));
     }
     issue_code(
@@ -328,6 +359,37 @@ fn confirm(
         &request.code_challenge,
         now,
     )
+}
+
+/// Reserve a passphrase verification before running the potentially expensive
+/// verifier. The service-wide window is deliberately independent of flow
+/// creation, so creating another DCR/authorize flow cannot reset the budget.
+fn reserve_browser_attempt(
+    state: &OAuthState,
+    flow_id: &str,
+    now: OffsetDateTime,
+) -> Option<(BrowserRequest, bool)> {
+    let mut browser = state.browser_consents.lock().ok()?;
+    browser
+        .requests
+        .retain(|_, request| request.expires_at >= now);
+    if browser.window_started.elapsed() >= BROWSER_ATTEMPT_WINDOW {
+        browser.window_started = Instant::now();
+        browser.attempts_in_window = 0;
+    }
+    if browser.attempts_in_window >= MAX_BROWSER_ATTEMPTS_PER_WINDOW {
+        return None;
+    }
+    let request = browser.requests.get_mut(flow_id)?;
+    if request.attempts >= MAX_BROWSER_ATTEMPTS_PER_FLOW {
+        browser.requests.remove(flow_id);
+        return None;
+    }
+    request.attempts += 1;
+    let last_flow_attempt = request.attempts == MAX_BROWSER_ATTEMPTS_PER_FLOW;
+    let request = request.clone();
+    browser.attempts_in_window += 1;
+    Some((request, last_flow_attempt))
 }
 
 fn consent_page(
@@ -930,6 +992,88 @@ mod tests {
             matches!(approved, OAuthResponse::Redirect(location) if location.contains("state=browser-state") && location.contains("code="))
         );
         assert!(!html.contains("approved-passphrase"));
+    }
+
+    #[test]
+    fn browser_passphrase_budget_survives_new_consent_flows() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let directory = tempfile::tempdir().unwrap();
+        let verification_count = std::sync::Arc::new(AtomicUsize::new(0));
+        let verifier_count = verification_count.clone();
+        let state = OAuthState::new(
+            directory.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Browser),
+            Box::new(move |_| {
+                verifier_count.fetch_add(1, Ordering::SeqCst);
+                false
+            }),
+        );
+        let client_id = register(&state);
+        let make_flow = || {
+            let response = start_browser_consent(
+                &state,
+                &client_id,
+                REDIRECT,
+                "state",
+                CHALLENGE,
+                OffsetDateTime::now_utc(),
+            );
+            let OAuthResponse::Http(response) = response else {
+                panic!("browser flow must render a page");
+            };
+            let page = String::from_utf8(response.body).unwrap();
+            page.split("name=\"flow_id\" value=\"")
+                .nth(1)
+                .unwrap()
+                .split('"')
+                .next()
+                .unwrap()
+                .to_owned()
+        };
+
+        for _ in 0..2 {
+            let flow_id = make_flow();
+            for attempt in 0..MAX_BROWSER_ATTEMPTS_PER_FLOW {
+                let response = confirm(
+                    &state,
+                    "application/x-www-form-urlencoded",
+                    &format!("flow_id={flow_id}&passphrase=wrong"),
+                    OffsetDateTime::now_utc(),
+                );
+                let OAuthResponse::Http(response) = response else {
+                    panic!("bad passphrase must not redirect");
+                };
+                assert_eq!(
+                    response.status,
+                    if attempt + 1 == MAX_BROWSER_ATTEMPTS_PER_FLOW {
+                        429
+                    } else {
+                        200
+                    },
+                    "each flow permits at most five verifier calls"
+                );
+            }
+        }
+        assert_eq!(
+            verification_count.load(Ordering::SeqCst),
+            MAX_BROWSER_ATTEMPTS_PER_WINDOW
+        );
+
+        let new_flow = make_flow();
+        let blocked = confirm(
+            &state,
+            "application/x-www-form-urlencoded",
+            &format!("flow_id={new_flow}&passphrase=wrong"),
+            OffsetDateTime::now_utc(),
+        );
+        assert!(matches!(blocked, OAuthResponse::Http(response) if response.status == 429));
+        assert_eq!(
+            verification_count.load(Ordering::SeqCst),
+            MAX_BROWSER_ATTEMPTS_PER_WINDOW,
+            "creating a fresh authorization flow cannot reset the global verification budget"
+        );
     }
 
     #[test]
