@@ -70,6 +70,16 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Strin
         rendered.push('\n');
     }
     atomic_write(path, rendered.as_bytes())?;
+    // Go rejects traversal on its post-write reload, even when Windows
+    // resolves the raw rename destination through a parent component.
+    if path
+        .components()
+        .any(|component| component == std::path::Component::ParentDir)
+    {
+        return Err(
+            "config is invalid after update: config file path escapes expected directory".into(),
+        );
+    }
     if let Err(error) = symvault_core::config::Config::load(path) {
         return Err(format!("config is invalid after update: {error}"));
     }

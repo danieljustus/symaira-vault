@@ -180,13 +180,18 @@ fn config_inspect_cleans_read_paths_but_preserves_set_target() {
         if args[1] == "set" {
             assert_eq!(go_result.status.code(), rust_result.status.code());
             assert_eq!(go_result.stdout, rust_result.stdout);
+            assert!(!go_result.status.success());
             if cfg!(windows) {
-                // Windows resolves the raw rename destination through `..`.
-                assert!(go_result.status.success());
+                // Windows resolves the rename, but Go rejects `..` on reload.
                 assert_ne!(go_file, original);
-                assert_eq!(go_result.stderr, rust_result.stderr);
+                for result in [&go_result, &rust_result] {
+                    assert!(
+                        String::from_utf8_lossy(&result.stderr)
+                            .contains("config file path escapes expected directory"),
+                        "set must reject traversal after writing on Windows"
+                    );
+                }
             } else {
-                assert!(!go_result.status.success());
                 assert_eq!(go_file, original);
                 for result in [&go_result, &rust_result] {
                     assert!(
