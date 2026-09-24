@@ -634,6 +634,14 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
 /// rather than a silent no-op.
 fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     #[cfg(windows)]
+    if err.kind() == io::ErrorKind::PermissionDenied
+        && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+    {
+        // Rust's File::open rejects directories, whereas Go opens them and
+        // reports the later Windows ReadFile error.
+        return format!("read {}: Incorrect function.", path.display());
+    }
+    #[cfg(windows)]
     let err_msg = match err.raw_os_error() {
         Some(2) => "The system cannot find the file specified.",
         Some(3) => "The system cannot find the path specified.",
