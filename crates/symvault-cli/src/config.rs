@@ -670,15 +670,22 @@ pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(),
     let json = output == "json";
     // The header below prints the RAW argument, exactly like Go's
     // `cannot load config from %s` (cmd/admin/config.go), while config.Load
-    // opens os.ReadFile(filepath.Clean(path)) — so the open attempt (and its
-    // error text) sees the cleaned path.
+    // rejects traversal before os.ReadFile(filepath.Clean(path)) — so the
+    // open attempt (and its error text) sees the cleaned path.
     let path_display = path.display().to_string();
     let read_path = crate::agent_list_commands::clean_path(path);
 
-    let bytes = match fs::read(&read_path) {
+    let bytes = if path
+        .components()
+        .any(|component| component == std::path::Component::ParentDir)
+    {
+        Err("config file path escapes expected directory".to_owned())
+    } else {
+        fs::read(&read_path).map_err(|error| format_go_path_error("open", &read_path, &error))
+    };
+    let bytes = match bytes {
         Ok(bytes) => bytes,
-        Err(error) => {
-            let path_err = format_go_path_error("open", &read_path, &error);
+        Err(path_err) => {
             if json {
                 print_json(
                     &serde_json::json!({ "error": path_err, "valid": false }),

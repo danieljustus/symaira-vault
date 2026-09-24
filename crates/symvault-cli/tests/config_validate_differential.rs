@@ -106,6 +106,21 @@ fn config_validate_matches_go_contract() {
     let res_rust = run(&rust, &home.0, &["config", "validate", valid_str]);
     assert_same(&res_go, &res_rust, "config validate valid text");
 
+    // Go rejects a parent-directory component before filepath.Clean can turn
+    // this into the existing valid config, even if the intermediate directory
+    // has never existed.
+    let traversal = home.0.join("missing/../valid.yaml");
+    let traversal_str = traversal.to_str().unwrap();
+    for args in [
+        vec!["config", "validate", traversal_str],
+        vec!["config", "validate", traversal_str, "--output", "json"],
+    ] {
+        let res_go = run(&go, &home.0, &args);
+        let res_rust = run(&rust, &home.0, &args);
+        assert!(!res_go.status.success(), "Go must reject path traversal");
+        assert_same(&res_go, &res_rust, "config validate traversal");
+    }
+
     // Case 4: Valid config with --output json
     let res_go = run(
         &go,

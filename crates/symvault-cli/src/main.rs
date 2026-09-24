@@ -4425,11 +4425,16 @@ fn expand_policy_path(path: &Path) -> Result<PathBuf, String> {
         let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .filter(|value| !value.is_empty())
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
-        // Go's filepath.Join(home, path[1:]) concatenates textually and then
-        // Cleans, so `~/x` (rest `/x`) stays under home; PathBuf::join would
-        // instead REPLACE home with the absolute rest.
+        // Go's filepath.Join(home, path[1:]) keeps a separator-prefixed rest
+        // under home; PathBuf::join would instead replace home. A backslash
+        // is a separator only on Windows, and a literal filename byte on Unix.
+        let rest = if cfg!(windows) {
+            rest.trim_start_matches(['/', '\\'])
+        } else {
+            rest.trim_start_matches('/')
+        };
         return Ok(agent_list_commands::clean_path(
-            &PathBuf::from(home).join(rest.trim_start_matches('/')),
+            &PathBuf::from(home).join(rest),
         ));
     }
     Ok(path.to_path_buf())
