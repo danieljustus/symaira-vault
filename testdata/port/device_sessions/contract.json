@@ -9,7 +9,7 @@
       "internal/mcp/auth/token.go"
     ],
     "source_digest": "c1ba52b5f54a4e790edae842ea850adf59c541ce11b9fd0cd50d3d6800436e1e",
-    "generator_digest": "a581b75268740c2deb0f5f222b0f403fca86bd28a19acc114044479cd1e80e36"
+    "generator_digest": "76007114e4fcf0f8b6a24dfed569c51c7efcdb73d3c031f1d1184f3c69a30e01"
   },
   "cases": [
     {
