@@ -489,6 +489,11 @@ enum GenerateCommand {
 #[derive(Debug, Subcommand)]
 enum McpAction {
     /// Run the MCP server over the selected transport.
+    ///
+    /// Hidden to match the oracle: Go's `serve` command is `Hidden: true` and
+    /// its `mcp` group only lists `install`, `status` and `uninstall`, so
+    /// `generate manpages` must not emit a `symvault-mcp-serve.1` page.
+    #[command(hide = true)]
     Serve {
         /// Agent profile used by the stdio server.
         #[arg(long)]
