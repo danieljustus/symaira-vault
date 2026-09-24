@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 MODULE_PATH = Path(__file__).with_name("paired_cli_bench.py")
 SPEC = importlib.util.spec_from_file_location("paired_cli_bench", MODULE_PATH)
@@ -61,17 +62,28 @@ class PairedCliBenchTests(unittest.TestCase):
                 path.chmod(0o755)
                 binaries[side] = path
 
-            report = bench.build_report(
-                binaries["go"], binaries["rust"], runs=2, warmups=0, entries=1, include_rss=False
-            )
+            with patch.object(
+                bench,
+                "rss_sample",
+                side_effect=lambda _binary, args, _env, _label: (
+                    1234 if args[0] == "get" else 5678,
+                    "mock-time",
+                ),
+            ):
+                report = bench.build_report(
+                    binaries["go"], binaries["rust"], runs=2, warmups=0, entries=1, include_rss=True
+                )
             serialized = json.dumps(report)
             self.assertEqual(report["fixture"], {"entries": 1, "synthetic": True, "vault_copies": 2})
             self.assertEqual(report["measurements"]["go"]["read_p95_ms"] > 0, True)
             self.assertEqual(report["sampling"]["list_operation"], "list --output json")
+            self.assertEqual(report["sampling"]["rss_samples_per_binary"], 2)
             for label in ("go", "rust"):
                 measurements = report["measurements"][label]
                 self.assertGreater(measurements["list_p50_ms"], 0)
                 self.assertGreater(measurements["list_p95_ms"], 0)
+                self.assertEqual(measurements["max_rss_bytes"], 1234)
+                self.assertEqual(measurements["max_list_rss_bytes"], 5678)
                 for key in (
                     "startup_samples_ms",
                     "read_samples_ms",

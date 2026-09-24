@@ -5,6 +5,11 @@
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
 };
+use rustls::{
+    RootCertStore, ServerConfig, ServerConnection, StreamOwned,
+    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
+    server::WebPkiClientVerifier,
+};
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -34,6 +39,133 @@ pub struct HttpResponse {
     pub status: u16,
     pub headers: Vec<(&'static str, &'static str)>,
     pub body: Vec<u8>,
+}
+
+enum HttpStream {
+    Tcp(TcpStream),
+    Tls(StreamOwned<ServerConnection, TcpStream>),
+}
+
+impl HttpStream {
+    fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
+        let stream = match tls {
+            Some(config) => ServerConnection::new(config)
+                .map(|connection| Self::Tls(StreamOwned::new(connection, stream)))
+                .map_err(std::io::Error::other),
+            None => Ok(Self::Tcp(stream)),
+        }?;
+        let timeouts = HttpTimeouts::default();
+        stream.set_read_timeout(Some(timeouts.initial_read))?;
+        stream.set_write_timeout(Some(timeouts.write))?;
+        Ok(stream)
+    }
+
+    fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.peer_addr(),
+            Self::Tls(stream) => stream.sock.peer_addr(),
+        }
+    }
+
+    fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.local_addr(),
+            Self::Tls(stream) => stream.sock.local_addr(),
+        }
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.set_read_timeout(timeout),
+            Self::Tls(stream) => stream.sock.set_read_timeout(timeout),
+        }
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.set_write_timeout(timeout),
+            Self::Tls(stream) => stream.sock.set_write_timeout(timeout),
+        }
+    }
+
+    fn is_tls(&self) -> bool {
+        matches!(self, Self::Tls(_))
+    }
+}
+
+impl From<TcpStream> for HttpStream {
+    fn from(stream: TcpStream) -> Self {
+        Self::Tcp(stream)
+    }
+}
+
+impl Read for HttpStream {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.read(buffer),
+            Self::Tls(stream) => stream.read(buffer),
+        }
+    }
+}
+
+impl Write for HttpStream {
+    fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.write(buffer),
+            Self::Tls(stream) => stream.write(buffer),
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        match self {
+            Self::Tcp(stream) => stream.flush(),
+            Self::Tls(stream) => stream.flush(),
+        }
+    }
+}
+
+/// Loads the PEM server identity and optional client CA used by the HTTP
+/// listener. A CA file enables mandatory client-certificate verification.
+pub fn load_tls_server_config(
+    certificate_path: impl AsRef<Path>,
+    key_path: impl AsRef<Path>,
+    client_ca_path: Option<&Path>,
+) -> Result<Arc<ServerConfig>, String> {
+    let certificates = CertificateDer::pem_file_iter(certificate_path.as_ref())
+        .map_err(|error| format!("read TLS certificate: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("parse TLS certificate: {error}"))?;
+    if certificates.is_empty() {
+        return Err("TLS certificate file contains no certificates".into());
+    }
+    let key = PrivateKeyDer::from_pem_file(key_path.as_ref())
+        .map_err(|error| format!("read TLS private key: {error}"))?;
+    let builder = if let Some(path) = client_ca_path {
+        let certificates = CertificateDer::pem_file_iter(path)
+            .map_err(|error| format!("read TLS client CA: {error}"))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("parse TLS client CA: {error}"))?;
+        if certificates.is_empty() {
+            return Err("TLS client CA file contains no certificates".into());
+        }
+        let mut roots = RootCertStore::empty();
+        for certificate in certificates {
+            roots
+                .add(certificate)
+                .map_err(|error| format!("add TLS client CA: {error}"))?;
+        }
+        rustls::ServerConfig::builder().with_client_cert_verifier(
+            WebPkiClientVerifier::builder(Arc::new(roots))
+                .build()
+                .map_err(|error| format!("configure TLS client authentication: {error}"))?,
+        )
+    } else {
+        rustls::ServerConfig::builder().with_no_client_auth()
+    };
+    builder
+        .with_single_cert(certificates, key)
+        .map(Arc::new)
+        .map_err(|error| format!("configure TLS server identity: {error}"))
 }
 
 /// OAuth consent result; daemon mode can request browser-based confirmation.
@@ -90,7 +222,13 @@ pub fn serve_loopback<F>(
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
 {
-    serve_loopback_inner(listener, registry_path.as_ref(), handler_for_agent, None)
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        None,
+        None,
+    )
 }
 
 /// Serves MCP HTTP and the complete consent-gated OAuth code/PKCE/refresh
@@ -127,6 +265,42 @@ where
             Box::new(consent),
             Box::new(verify_passphrase),
         )),
+        None,
+    )
+}
+
+/// Serves MCP and OAuth HTTP over TLS. TLS permits a non-loopback listener;
+/// cleartext entry points retain their loopback-only restriction.
+pub fn serve_with_tls_and_oauth<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Arc<ServerConfig>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+            Box::new(verify_passphrase),
+        )),
+        Some(tls),
     )
 }
 
@@ -135,16 +309,12 @@ fn serve_loopback_inner<F>(
     registry_path: &Path,
     handler_for_agent: F,
     oauth: Option<crate::oauth::OAuthState>,
+    tls: Option<Arc<ServerConfig>>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
 {
-    if !listener.local_addr()?.ip().is_loopback() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "MCP HTTP listener must bind to loopback",
-        ));
-    }
+    validate_listener_security(listener.local_addr()?, tls.is_some())?;
     load_token_registry(registry_path)?;
     let registry_path = registry_path.to_path_buf();
     let state = Arc::new(Mutex::new(HttpServerState {
@@ -156,7 +326,7 @@ where
     let active = Arc::new(AtomicUsize::new(0));
     thread::scope(|scope| {
         for incoming in listener.incoming() {
-            let mut stream = incoming?;
+            let mut stream = HttpStream::new(incoming?, tls.clone())?;
             if active
                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                     (count < MAX_HTTP_CONNECTIONS).then_some(count + 1)
@@ -188,6 +358,25 @@ where
     })
 }
 
+fn validate_listener_security(
+    address: std::net::SocketAddr,
+    tls_enabled: bool,
+) -> Result<(), std::io::Error> {
+    if address.ip().is_unspecified() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "MCP HTTP wildcard binds cannot publish a trusted OAuth origin; bind a concrete IP",
+        ));
+    }
+    if !address.ip().is_loopback() && !tls_enabled {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "MCP HTTP listener must use TLS when binding off loopback",
+        ));
+    }
+    Ok(())
+}
+
 struct HttpServerState<F> {
     handler_for_agent: F,
     handlers: HashMap<String, ProtocolHandler>,
@@ -195,7 +384,7 @@ struct HttpServerState<F> {
 }
 
 fn serve_connection_shared<F>(
-    stream: TcpStream,
+    stream: impl Into<HttpStream>,
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
     oauth_state: Option<&crate::oauth::OAuthState>,
@@ -204,6 +393,8 @@ fn serve_connection_shared<F>(
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
+    let stream = stream.into();
+    let secure = stream.is_tls();
     serve_connection_with_timeouts(stream, timeouts, |reader, request, keep_alive| {
         let request_path = request
             .path
@@ -229,6 +420,7 @@ where
                 &request.host,
                 &request.body,
                 local,
+                secure,
             ) {
                 match response {
                     crate::oauth::OAuthResponse::Http(response) => write_http_response(
@@ -263,6 +455,7 @@ where
             handler_for_agent,
             handlers,
             sessions,
+            secure,
         )
     })
 }
@@ -298,22 +491,24 @@ where
                 handler_for_agent,
                 handlers,
                 sessions,
+                false,
             )
         },
     )
 }
 
 fn serve_connection_with_timeouts<F>(
-    mut stream: TcpStream,
+    stream: impl Into<HttpStream>,
     timeouts: HttpTimeouts,
     mut serve_request: F,
 ) -> Result<(), std::io::Error>
 where
-    F: FnMut(&mut BufReader<TcpStream>, WireRequest, bool) -> Result<bool, std::io::Error>,
+    F: FnMut(&mut BufReader<HttpStream>, WireRequest, bool) -> Result<bool, std::io::Error>,
 {
+    let mut stream = stream.into();
     let peer = stream.peer_addr()?;
     let local = stream.local_addr()?;
-    if !peer.ip().is_loopback() || !local.ip().is_loopback() {
+    if (!peer.ip().is_loopback() || !local.ip().is_loopback()) && !stream.is_tls() {
         return write_plain_error(&mut stream, 403, "forbidden");
     }
     stream.set_write_timeout(Some(timeouts.write))?;
@@ -369,7 +564,7 @@ where
                 .iter()
                 .any(|value| value.eq_ignore_ascii_case("keep-alive"));
         let keep_alive = requested_keep_alive && !closes;
-        if let Some(response) = well_known_response(&request, local) {
+        if let Some(response) = well_known_response(&request, local, reader.get_ref().is_tls()) {
             write_http_response(
                 reader.get_mut(),
                 response,
@@ -388,20 +583,21 @@ where
 }
 
 fn serve_one_authenticated<F>(
-    reader: &mut BufReader<TcpStream>,
+    reader: &mut BufReader<HttpStream>,
     request: WireRequest,
     keep_alive: bool,
     registry_path: &Path,
     handler_for_agent: &mut F,
     handlers: &mut HashMap<String, ProtocolHandler>,
     sessions: &mut HashMap<String, ProtocolHandler>,
+    secure: bool,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
     let stream = reader.get_mut();
     let response_version = request.http_version.as_str();
-    if !allowed_origin(&request.origin, &request.host) {
+    if !allowed_origin_for_transport(&request.origin, &request.host, secure) {
         write_json_error_for_request(
             stream,
             403,
@@ -513,7 +709,7 @@ struct WireRequest {
 }
 
 fn read_wire_request(
-    reader: &mut BufReader<TcpStream>,
+    reader: &mut BufReader<HttpStream>,
     first_byte_timeout: Duration,
     request_read_timeout: Duration,
 ) -> Result<Option<WireRequest>, std::io::Error> {
@@ -743,6 +939,73 @@ pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
     loopback_host(origin_host) && loopback_host(request_host)
 }
 
+pub(super) fn allowed_origin_for_transport(origin: &str, request_host: &str, secure: bool) -> bool {
+    if !secure {
+        return allowed_origin(origin, request_host);
+    }
+    let Some((scheme, authority)) = origin.trim().split_once("://") else {
+        return false;
+    };
+    if scheme != "https" {
+        return false;
+    }
+    let Some(origin_authority) = tls_authority(authority) else {
+        return false;
+    };
+    tls_authority(request_host)
+        .is_some_and(|request_authority| request_authority == origin_authority)
+}
+
+fn tls_authority(authority: &str) -> Option<(String, u16)> {
+    if authority.is_empty()
+        || authority.bytes().any(|byte| {
+            byte <= 0x20 || byte >= 0x7f || matches!(byte, b'/' | b'\\' | b'@' | b'?' | b'#' | b'%')
+        })
+    {
+        return None;
+    }
+    let (host, port) = if let Some(rest) = authority.strip_prefix('[') {
+        let (host, suffix) = rest.split_once(']')?;
+        let address = host.parse::<std::net::Ipv6Addr>().ok()?;
+        let port = match suffix {
+            "" => 443,
+            suffix => suffix.strip_prefix(':')?.parse::<u16>().ok()?,
+        };
+        (address.to_string(), port)
+    } else {
+        let (host, port) = match authority.rsplit_once(':') {
+            Some((host, port)) => {
+                if host.contains(':') {
+                    return None;
+                }
+                (host, port.parse::<u16>().ok()?)
+            }
+            None => (authority, 443),
+        };
+        let host = if let Ok(address) = host.parse::<std::net::Ipv4Addr>() {
+            address.to_string()
+        } else {
+            let host = host.to_ascii_lowercase();
+            if host.len() > 253
+                || host.split('.').any(|label| {
+                    label.is_empty()
+                        || label.len() > 63
+                        || label.starts_with('-')
+                        || label.ends_with('-')
+                        || !label
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+                })
+            {
+                return None;
+            }
+            host
+        };
+        (host, port)
+    };
+    (port != 0).then_some((host, port))
+}
+
 fn host_without_port(authority: &str) -> &str {
     if let Some(rest) = authority.strip_prefix('[') {
         return rest.split_once(']').map(|(host, _)| host).unwrap_or("");
@@ -761,7 +1024,7 @@ fn loopback_host(host: &str) -> bool {
 }
 
 fn write_http_response(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     response: HttpResponse,
     version: &str,
     keep_alive: bool,
@@ -790,7 +1053,7 @@ fn write_http_response(
 }
 
 fn write_http_redirect(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     location: &str,
     version: &str,
     keep_alive: bool,
@@ -804,7 +1067,7 @@ fn write_http_redirect(
 }
 
 fn write_connection_header(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     version: &str,
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
@@ -815,11 +1078,16 @@ fn write_connection_header(
     }
 }
 
-fn well_known_response(request: &WireRequest, local: std::net::SocketAddr) -> Option<HttpResponse> {
+fn well_known_response(
+    request: &WireRequest,
+    local: std::net::SocketAddr,
+    secure: bool,
+) -> Option<HttpResponse> {
     if request.method != "GET" || request.path != "/.well-known/oauth-protected-resource" {
         return None;
     }
-    let resource = format!("http://{}:{}/mcp", local.ip(), local.port());
+    let scheme = if secure { "https" } else { "http" };
+    let resource = format!("{scheme}://{local}/mcp");
     let mut body = serde_json::to_vec(&serde_json::json!({
         "resource": resource,
         "bearer_methods_supported": ["header"],
@@ -835,7 +1103,7 @@ fn well_known_response(request: &WireRequest, local: std::net::SocketAddr) -> Op
 }
 
 fn write_plain_error(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     status: u16,
     message: &str,
 ) -> Result<(), std::io::Error> {
@@ -843,7 +1111,7 @@ fn write_plain_error(
 }
 
 fn write_http_error(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     status: u16,
     message: &str,
 ) -> Result<(), std::io::Error> {
@@ -864,7 +1132,7 @@ fn write_http_error(
 }
 
 fn write_request_error(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     status: u16,
     message: &str,
     version: &str,
@@ -887,7 +1155,7 @@ fn write_request_error(
 }
 
 fn write_json_error_for_request(
-    stream: &mut TcpStream,
+    stream: &mut HttpStream,
     status: u16,
     message: &str,
     version: &str,
@@ -1220,6 +1488,203 @@ mod tests {
     }
 
     #[test]
+    fn tls_listener_accepts_remote_origin_and_publishes_https_endpoints() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let certificate_path = fixture_dir.join("tls-server.pem");
+        let key_path = fixture_dir.join("tls-server.key");
+        let tls = load_tls_server_config(&certificate_path, &key_path, None)
+            .expect("load test TLS server identity");
+        let mut roots = RootCertStore::empty();
+        for certificate in CertificateDer::pem_file_iter(&certificate_path)
+            .expect("read TLS test certificate")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("parse TLS test certificate")
+        {
+            roots.add(certificate).expect("trust test certificate");
+        }
+        let client_config = Arc::new(
+            rustls::ClientConfig::builder()
+                .with_root_certificates(roots)
+                .with_no_client_auth(),
+        );
+
+        let directory = tempfile::tempdir().expect("temporary vault");
+        let registry_path = registry(directory.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("concrete TLS bind");
+        let listen_address = listener.local_addr().expect("listener address");
+        assert!(validate_listener_security(listen_address, true).is_ok());
+        assert!(
+            validate_listener_security(
+                std::net::SocketAddr::new(std::net::Ipv4Addr::new(192, 0, 2, 1).into(), 8443),
+                false,
+            )
+            .is_err()
+        );
+        assert!(
+            validate_listener_security(
+                std::net::SocketAddr::new(
+                    std::net::Ipv4Addr::UNSPECIFIED.into(),
+                    listen_address.port()
+                ),
+                true,
+            )
+            .is_err()
+        );
+        let connection_address = ("127.0.0.1", listen_address.port());
+        let oauth_root = directory.path().to_path_buf();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept TLS client");
+            let stream = HttpStream::new(stream, Some(tls)).expect("create TLS stream");
+            let state = Mutex::new(HttpServerState {
+                handler_for_agent: |_: &str| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                handlers: HashMap::new(),
+                sessions: HashMap::new(),
+            });
+            let oauth = crate::oauth::OAuthState::new(
+                oauth_root,
+                "default".into(),
+                Box::new(|_, _| OAuthConsentDecision::Denied),
+                Box::new(|_| false),
+            );
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &state,
+                Some(&oauth),
+                HttpTimeouts::default(),
+            )
+            .expect("serve TLS requests");
+        });
+
+        let server_name = "vault.example.test"
+            .to_owned()
+            .try_into()
+            .expect("valid TLS server name");
+        let connection = rustls::ClientConnection::new(client_config, server_name)
+            .expect("create TLS client connection");
+        let socket = TcpStream::connect(connection_address).expect("connect TLS client");
+        socket
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set TLS test read timeout");
+        let mut reader = BufReader::new(StreamOwned::new(connection, socket));
+        let authority = format!("vault.example.test:{}", listen_address.port());
+        let origin = format!("https://{authority}");
+        reader
+            .get_mut()
+            .write_all(
+                format!(
+                    "GET /.well-known/oauth-protected-resource HTTP/1.1\r\nHost: {authority}\r\nConnection: keep-alive\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .expect("write protected-resource discovery request");
+        let protected_resource = read_http_response(&mut reader);
+        assert_eq!(raw_status(&protected_resource), 200, "{protected_resource}");
+        let protected_body: serde_json::Value =
+            serde_json::from_str(raw_body(&protected_resource)).expect("parse protected resource");
+        assert!(
+            protected_body["resource"]
+                .as_str()
+                .unwrap()
+                .starts_with("https://")
+        );
+
+        reader
+            .get_mut()
+            .write_all(
+                format!(
+                    "GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: {authority}\r\nConnection: keep-alive\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .expect("write OAuth discovery request");
+        let oauth_discovery = read_http_response(&mut reader);
+        assert_eq!(raw_status(&oauth_discovery), 200, "{oauth_discovery}");
+        let oauth_body: serde_json::Value =
+            serde_json::from_str(raw_body(&oauth_discovery)).expect("parse OAuth discovery");
+        assert!(
+            oauth_body["issuer"]
+                .as_str()
+                .unwrap()
+                .starts_with("https://")
+        );
+        assert!(
+            oauth_body["token_endpoint"]
+                .as_str()
+                .unwrap()
+                .starts_with("https://")
+        );
+
+        reader
+            .get_mut()
+            .write_all(
+                format!(
+                    "POST /mcp HTTP/1.1\r\nHost: {authority}\r\nOrigin: {origin}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .expect("write MCP request with remote HTTPS origin");
+        let mcp_response = read_http_response(&mut reader);
+        assert_eq!(raw_status(&mcp_response), 401, "{mcp_response}");
+        drop(reader);
+        server.join().expect("TLS server thread");
+    }
+
+    #[test]
+    fn tls_origin_must_be_https_and_match_host_and_port() {
+        assert!(allowed_origin_for_transport(
+            "https://vault.example.test:8443",
+            "vault.example.test:8443",
+            true,
+        ));
+        assert!(allowed_origin_for_transport(
+            "https://vault.example.test",
+            "VAULT.EXAMPLE.TEST:443",
+            true,
+        ));
+        for (origin, host) in [
+            ("http://vault.example.test:8443", "vault.example.test:8443"),
+            ("https://attacker.example:8443", "vault.example.test:8443"),
+            ("https://vault.example.test:443", "vault.example.test:8443"),
+            ("https://vault.example.test/path", "vault.example.test"),
+        ] {
+            assert!(!allowed_origin_for_transport(origin, host, true));
+        }
+        assert!(!allowed_origin_for_transport(
+            "https://vault.example.test:8443",
+            "vault.example.test:8443",
+            false,
+        ));
+    }
+
+    #[test]
+    fn TLS_server_configuration_fails_closed_on_invalid_ca_and_identity() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let certificate_path = fixture_dir.join("tls-server.pem");
+        let key_path = fixture_dir.join("tls-server.key");
+        assert!(
+            load_tls_server_config(&certificate_path, &key_path, Some(&certificate_path)).is_ok(),
+            "valid client CA config must enable mTLS"
+        );
+        let directory = tempfile::tempdir().expect("temporary CA directory");
+        let empty_ca = directory.path().join("empty-ca.pem");
+        fs::write(&empty_ca, b"not a certificate").expect("write invalid client CA");
+        assert!(load_tls_server_config(&certificate_path, &key_path, Some(&empty_ca)).is_err());
+        assert!(
+            load_tls_server_config(directory.path().join("missing-cert.pem"), &key_path, None,)
+                .is_err()
+        );
+        assert!(
+            load_tls_server_config(
+                &certificate_path,
+                directory.path().join("missing-key.pem"),
+                None,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn authorization_server_discovery_is_reachable_through_oauth_listener() {
         let response = round_trip_oauth_wire(
             "GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -1423,7 +1888,7 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("set MCP client timeout");
         mcp_stream
-            .write_all(b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .write_all(b"POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
             .expect("write regular MCP request");
         let mcp_response = read_http_response(&mut BufReader::new(mcp_stream));
         assert_eq!(raw_status(&mcp_response), 401, "{mcp_response}");
@@ -1473,14 +1938,18 @@ mod tests {
     }
 
     #[test]
-    fn dynamic_registration_stays_unavailable_until_rust_can_persist_clients() {
+    fn dynamic_registration_persists_client_metadata() {
         let body = r#"{"redirect_uris":["http://localhost/callback"]}"#;
         let request = format!(
-            "POST /oauth/register HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            "POST /oauth/register HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );
-        let response = round_trip_wire(&request);
-        assert_eq!(raw_status(&response), 401, "{response}");
+        let response = round_trip_oauth_wire(&request);
+        assert_eq!(raw_status(&response), 201, "{response}");
+        let payload: serde_json::Value = serde_json::from_str(raw_body(&response)).unwrap();
+        assert_eq!(payload["token_endpoint_auth_method"], "none");
+        assert_eq!(payload["redirect_uris"][0], "http://localhost/callback");
+        assert_eq!(payload["client_id"].as_str().unwrap().len(), 32);
     }
 
     fn round_trip_wire_sequence(request: &str, count: usize) -> Vec<String> {
@@ -1554,6 +2023,7 @@ mod tests {
                         &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
                         &mut handlers,
                         &mut sessions,
+                        false,
                     )
                 },
             )
@@ -1650,7 +2120,7 @@ mod tests {
         idle.join().expect("idle connection worker");
     }
 
-    fn read_http_response(reader: &mut BufReader<TcpStream>) -> String {
+    fn read_http_response(reader: &mut impl BufRead) -> String {
         let mut response = Vec::new();
         let mut line = Vec::new();
         reader

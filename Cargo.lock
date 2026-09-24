@@ -2870,6 +2870,7 @@ name = "symvault-mcp"
 version = "0.0.0"
 dependencies = [
  "getrandom 0.3.3",
+ "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",

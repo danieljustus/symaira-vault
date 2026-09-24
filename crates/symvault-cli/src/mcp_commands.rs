@@ -44,6 +44,9 @@ pub fn run(
     stdio: bool,
     bind: &str,
     port: u16,
+    tls_cert: &str,
+    tls_key: &str,
+    tls_ca: &str,
     status: impl FnOnce() -> (bool, String, bool, String),
 ) -> Result<(), String> {
     let root = vault.as_ref();
@@ -51,16 +54,37 @@ pub fn run(
         .map_err(|error| format!("load vault config: {error}"))?;
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
+        if tls_cert.is_empty() != tls_key.is_empty() {
+            return Err("MCP HTTP requires both --tls-cert and --tls-key".to_owned());
+        }
+        if !tls_ca.is_empty() && tls_cert.is_empty() {
+            return Err("MCP HTTP --tls-ca requires --tls-cert and --tls-key".to_owned());
+        }
+        let tls = if tls_cert.is_empty() {
+            None
+        } else {
+            Some(
+                symvault_mcp::http::load_tls_server_config(
+                    tls_cert,
+                    tls_key,
+                    (!tls_ca.is_empty()).then(|| Path::new(tls_ca)),
+                )
+                .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
+            )
+        };
         let address = if bind == "localhost" {
             "127.0.0.1"
                 .parse::<std::net::IpAddr>()
                 .expect("literal loopback IP")
         } else {
             bind.parse::<std::net::IpAddr>()
-                .map_err(|_| "MCP HTTP bind address must be a loopback IP".to_owned())?
+                .map_err(|_| "MCP HTTP bind address must be an IP".to_owned())?
         };
-        if !address.is_loopback() {
-            return Err("MCP HTTP listener must bind to loopback".to_owned());
+        if address.is_unspecified() {
+            return Err("MCP HTTP wildcard binds are unavailable; choose a concrete IP".to_owned());
+        }
+        if !address.is_loopback() && tls.is_none() {
+            return Err("MCP HTTP listener requires TLS when binding off loopback".to_owned());
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
@@ -89,26 +113,39 @@ pub fn run(
         };
         let registry_path = root.join("mcp-tokens.json");
         let consent_agent_name = oauth_agent_name.clone();
-        let result = symvault_mcp::http::serve_loopback_with_oauth(
-            listener,
-            registry_path,
-            handler_for_agent,
-            oauth_agent_name,
-            move |client_id, redirect_uri| {
-                oauth_consent(client_id, redirect_uri, &consent_agent_name)
-            },
-            move |passphrase| {
-                encrypted_identity.as_deref().is_some_and(|encrypted| {
-                    symvault_crypto::decrypt_identity(
-                        encrypted,
-                        &SecretBytes::new(passphrase.as_bytes()),
-                    )
-                    .is_ok_and(|candidate| {
-                        symvault_crypto::recipient_string(&candidate) == expected_recipient
-                    })
+        let consent = move |client_id, redirect_uri| {
+            oauth_consent(client_id, redirect_uri, &consent_agent_name)
+        };
+        let verify_passphrase = move |passphrase: &str| {
+            encrypted_identity.as_deref().is_some_and(|encrypted| {
+                symvault_crypto::decrypt_identity(
+                    encrypted,
+                    &SecretBytes::new(passphrase.as_bytes()),
+                )
+                .is_ok_and(|candidate| {
+                    symvault_crypto::recipient_string(&candidate) == expected_recipient
                 })
-            },
-        );
+            })
+        };
+        let result = match tls {
+            Some(tls) => symvault_mcp::http::serve_with_tls_and_oauth(
+                listener,
+                registry_path,
+                handler_for_agent,
+                oauth_agent_name,
+                consent,
+                verify_passphrase,
+                tls,
+            ),
+            None => symvault_mcp::http::serve_loopback_with_oauth(
+                listener,
+                registry_path,
+                handler_for_agent,
+                oauth_agent_name,
+                consent,
+                verify_passphrase,
+            ),
+        };
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         let agent_name = agent

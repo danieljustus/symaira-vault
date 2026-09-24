@@ -444,19 +444,19 @@ enum Command {
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Bind address for HTTP mode (loopback addresses only).
+        /// Bind address for HTTP mode (remote binds require TLS).
         #[arg(long, default_value = "127.0.0.1")]
         bind: String,
         /// Server port.
         #[arg(long, default_value_t = 8080)]
         port: u16,
-        /// TLS certificate file path (overrides config; TLS is not yet supported natively).
+        /// PEM TLS certificate file path.
         #[arg(long, default_value = "")]
         tls_cert: String,
-        /// TLS key file path (overrides config; TLS is not yet supported natively).
+        /// PEM TLS private key file path.
         #[arg(long, default_value = "")]
         tls_key: String,
-        /// CA certificate file path for mTLS (TLS is not yet supported natively).
+        /// PEM client CA file path; enables mandatory mTLS.
         #[arg(long, default_value = "")]
         tls_ca: String,
         /// Permit a locked vault (unsupported by the native runtime).
@@ -621,19 +621,19 @@ enum McpAction {
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Bind address for HTTP mode (loopback addresses only).
+        /// Bind address for HTTP mode (remote binds require TLS).
         #[arg(long, default_value = "127.0.0.1")]
         bind: String,
         /// Server port.
         #[arg(long, default_value_t = 8080)]
         port: u16,
-        /// TLS certificate file path (overrides config; TLS is not yet supported natively).
+        /// PEM TLS certificate file path.
         #[arg(long, default_value = "")]
         tls_cert: String,
-        /// TLS key file path (overrides config; TLS is not yet supported natively).
+        /// PEM TLS private key file path.
         #[arg(long, default_value = "")]
         tls_key: String,
-        /// CA certificate file path for mTLS (TLS is not yet supported natively).
+        /// PEM client CA file path; enables mandatory mTLS.
         #[arg(long, default_value = "")]
         tls_ca: String,
         /// Permit a locked vault (unsupported by the native runtime).
@@ -4538,8 +4538,12 @@ fn run_mcp(
     _quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        if !stdio && (!tls_cert.is_empty() || !tls_key.is_empty() || !tls_ca.is_empty()) {
-            return Err("native MCP HTTP TLS/mTLS is not supported yet".to_owned());
+        let tls_enabled = !tls_cert.is_empty() && !tls_key.is_empty();
+        if !stdio && tls_cert.is_empty() != tls_key.is_empty() {
+            return Err("native MCP HTTP requires both --tls-cert and --tls-key".to_owned());
+        }
+        if !stdio && !tls_ca.is_empty() && !tls_enabled {
+            return Err("native MCP HTTP --tls-ca requires --tls-cert and --tls-key".to_owned());
         }
         if !stdio {
             let bind_ip = if bind == "localhost" {
@@ -4547,12 +4551,20 @@ fn run_mcp(
                     .parse::<std::net::IpAddr>()
                     .expect("literal loopback IP")
             } else {
-                bind.parse::<std::net::IpAddr>().map_err(|_| {
-                    "native MCP HTTP --bind must be a loopback IP address".to_owned()
-                })?
+                bind.parse::<std::net::IpAddr>()
+                    .map_err(|_| "native MCP HTTP --bind must be an IP address".to_owned())?
             };
-            if !bind_ip.is_loopback() {
-                return Err("native MCP HTTP is loopback-only until TLS is ported".to_owned());
+            if bind_ip.is_unspecified() {
+                return Err(
+                    "native MCP HTTP wildcard binds are unavailable; choose a concrete IP"
+                        .to_owned(),
+                );
+            }
+            if !bind_ip.is_loopback() && !tls_enabled {
+                return Err(
+                    "native MCP HTTP non-loopback binds require --tls-cert and --tls-key"
+                        .to_owned(),
+                );
             }
         }
         if allow_locked && !stdio {
@@ -4573,15 +4585,27 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
-        mcp_commands::run(&vault, agent, identity, keyring, stdio, bind, port, || {
-            let cache = runtime.cache_status();
-            (
-                touch_id_available(),
-                cache.backend,
-                cache.persistent,
-                cache.message,
-            )
-        })
+        mcp_commands::run(
+            &vault,
+            agent,
+            identity,
+            keyring,
+            stdio,
+            bind,
+            port,
+            tls_cert,
+            tls_key,
+            tls_ca,
+            || {
+                let cache = runtime.cache_status();
+                (
+                    touch_id_available(),
+                    cache.backend,
+                    cache.persistent,
+                    cache.message,
+                )
+            },
+        )
     })();
     finish_vault_result(result)
 }
@@ -4809,6 +4833,12 @@ fn run_import(
             },
         )?;
         if !quiet {
+            for path in &result.imported_paths {
+                println!(
+                    "{}: {path}",
+                    if dry_run { "Would import" } else { "Imported" }
+                );
+            }
             println!(
                 "Import summary: {} imported, {} skipped",
                 result.imported, result.skipped

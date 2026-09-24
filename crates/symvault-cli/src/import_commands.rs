@@ -33,6 +33,7 @@ pub struct ImportResult {
     pub format: String,
     pub imported: usize,
     pub skipped: usize,
+    pub imported_paths: Vec<String>,
 }
 
 /// Resolves the import prefix, assigning quarantined imports a Go-compatible batch ID.
@@ -167,6 +168,7 @@ where
 
     let mut imported = 0;
     let mut skipped = 0;
+    let mut imported_paths = Vec::new();
     for entry in entries {
         let path = importer::apply_prefix(&options.prefix, &entry.path);
         if path.is_empty() {
@@ -183,6 +185,7 @@ where
             continue;
         }
         if options.dry_run {
+            imported_paths.push(path);
             imported += 1;
             continue;
         }
@@ -199,12 +202,14 @@ where
             set_secret_type(root, identity, &path, secret_type)
                 .map_err(|error| format!("cannot set secret metadata {path}: {error}"))?;
         }
+        imported_paths.push(path);
         imported += 1;
     }
     Ok(ImportResult {
         format: format_name(format).to_owned(),
         imported,
         skipped,
+        imported_paths,
     })
 }
 

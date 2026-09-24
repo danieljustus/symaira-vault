@@ -98,6 +98,7 @@ pub(super) fn handle(
     host: &str,
     body: &str,
     local: std::net::SocketAddr,
+    secure: bool,
 ) -> Option<OAuthResponse> {
     let (path, query) = path_and_query
         .split_once('?')
@@ -105,7 +106,7 @@ pub(super) fn handle(
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
         return Some(if method == "GET" {
-            OAuthResponse::Http(discovery_response(local))
+            OAuthResponse::Http(discovery_response(local, secure))
         } else {
             OAuthResponse::Http(error(405, "invalid_request"))
         });
@@ -119,7 +120,7 @@ pub(super) fn handle(
     ) {
         return None;
     }
-    if !origin.is_empty() && !super::http::allowed_origin(origin, host) {
+    if !origin.is_empty() && !super::http::allowed_origin_for_transport(origin, host, secure) {
         return Some(OAuthResponse::Http(origin_error()));
     }
     match (path, method) {
@@ -622,8 +623,9 @@ fn valid_client_id(value: &str) -> bool {
     value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn discovery_response(local: std::net::SocketAddr) -> HttpResponse {
-    let issuer = format!("http://{local}");
+fn discovery_response(local: std::net::SocketAddr, secure: bool) -> HttpResponse {
+    let scheme = if secure { "https" } else { "http" };
+    let issuer = format!("{scheme}://{local}");
     json_response(
         200,
         serde_json::json!({
@@ -840,7 +842,7 @@ mod tests {
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=st-1&code_challenge={CHALLENGE}&code_challenge_method=S256"
         );
         let OAuthResponse::Redirect(location) =
-            authorize(&mut state, &authorization, OffsetDateTime::now_utc())
+            authorize(&state, &authorization, OffsetDateTime::now_utc())
         else {
             panic!("approved request must redirect");
         };
@@ -852,7 +854,7 @@ mod tests {
         let token_request =
             format!("grant_type=authorization_code&code={code}&code_verifier={VERIFIER}");
         let (status, token_body) =
-            response_body(token(&mut state, &token_request, OffsetDateTime::now_utc()));
+            response_body(token(&state, &token_request, OffsetDateTime::now_utc()));
         assert_eq!(status, 200);
         let access = token_body["access_token"].as_str().unwrap();
         let refresh = token_body["refresh_token"].as_str().unwrap();
@@ -872,27 +874,19 @@ mod tests {
         );
 
         assert_eq!(
-            response_body(token(&mut state, &token_request, OffsetDateTime::now_utc(),)).0,
+            response_body(token(&state, &token_request, OffsetDateTime::now_utc(),)).0,
             400,
             "authorization codes are single use"
         );
 
         let refresh_request = format!("grant_type=refresh_token&refresh_token={refresh}");
-        let (status, rotated) = response_body(token(
-            &mut state,
-            &refresh_request,
-            OffsetDateTime::now_utc(),
-        ));
+        let (status, rotated) =
+            response_body(token(&state, &refresh_request, OffsetDateTime::now_utc()));
         assert_eq!(status, 200);
         assert_ne!(rotated["access_token"].as_str(), Some(access));
         assert_ne!(rotated["refresh_token"].as_str(), Some(refresh));
         assert_eq!(
-            response_body(token(
-                &mut state,
-                &refresh_request,
-                OffsetDateTime::now_utc(),
-            ))
-            .0,
+            response_body(token(&state, &refresh_request, OffsetDateTime::now_utc(),)).0,
             400,
             "refresh tokens are single use"
         );
@@ -913,7 +907,7 @@ mod tests {
         );
         assert_eq!(
             response_body(authorize(
-                &mut denied,
+                &denied,
                 &authorization,
                 OffsetDateTime::now_utc(),
             ))
@@ -929,7 +923,7 @@ mod tests {
             Box::new(|_| false),
         );
         let OAuthResponse::Redirect(location) =
-            authorize(&mut approved, &authorization, OffsetDateTime::now_utc())
+            authorize(&approved, &authorization, OffsetDateTime::now_utc())
         else {
             panic!("approved request must redirect");
         };
@@ -939,7 +933,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             response_body(token(
-                &mut approved,
+                &approved,
                 &format!("grant_type=authorization_code&code={code}&code_verifier=wrong"),
                 OffsetDateTime::now_utc(),
             ))
@@ -1111,12 +1105,7 @@ mod tests {
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&code_challenge={CHALLENGE}&code_challenge_method=S256&scope=read"
         );
         assert_eq!(
-            response_body(authorize(
-                &mut state,
-                &authorization,
-                OffsetDateTime::now_utc(),
-            ))
-            .0,
+            response_body(authorize(&state, &authorization, OffsetDateTime::now_utc(),)).0,
             400
         );
         assert!(state.codes.lock().unwrap().is_empty());
