@@ -24,6 +24,21 @@ secret values are returned. The CLI endpoint is reachable only over a
 loopback connection and requires proof of ownership of the local vault
 directory. The server remains authoritative for queue state and decisions.
 
+## Device approval pairing
+
+`symvault device approval-pair --host <LAN-address>` requests a one-time
+enrollment code from the running Go server at its localhost-only HTTPS endpoint.
+The CLI connects to `127.0.0.1` with the vault's cached server certificate and
+the timestamped HMAC proof from the vault's enroll secret, even when the server
+is bound to a LAN address. `--host` is the address placed in the payload for the
+phone; the Rust CLI does not discover LAN addresses or render a QR code, so it
+prints the values for manual entry (or emits the payload with `--json`).
+
+The Rust server port does not yet expose the Go device-enrollment endpoints
+`/api/v1/devices/enroll-code` and `/api/v1/devices/enroll`. This command works
+with a running Go `symvault serve`; enrollment/session creation in the Rust
+server and QR rendering remain unported.
+
 ## mTLS
 
 The local CLI never downgrades MCP mTLS. Configure a dedicated approval client

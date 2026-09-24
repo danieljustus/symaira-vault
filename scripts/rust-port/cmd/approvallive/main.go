@@ -1,5 +1,5 @@
 // Command approvallive exercises the Rust approval CLI against the Go
-// production local approval handler over an ephemeral loopback TLS server.
+// production approval and enrollment handlers over ephemeral loopback TLS.
 package main
 
 import (
@@ -23,6 +23,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
 )
 
 const maxResponseBytes = 1 << 20
@@ -35,6 +36,13 @@ type outcomeOutput struct {
 	Outcome approval.Outcome `json:"outcome"`
 }
 
+type pairingPayload struct {
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	Code        string `json:"code"`
+	Fingerprint string `json:"fingerprint"`
+}
+
 func main() {
 	binary := flag.String("rust-binary", "", "path to the already-built Rust symvault CLI")
 	flag.Parse()
@@ -44,7 +52,7 @@ func main() {
 	if err := run(*binary); err != nil {
 		fatal(err)
 	}
-	fmt.Println("PASS live Go/Rust approval list and decide differential")
+	fmt.Println("PASS live Go/Rust approval list, decide, and device-pair differential")
 }
 
 //nolint:gocyclo // This is one linear live acceptance scenario.
@@ -81,10 +89,23 @@ func run(binary string) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("create vault proof secret: %w", err)
 	}
-	handler := approval.NewLocalHTTPHandler(queue, secret, func(host string) bool {
+	localHandler := approval.NewLocalHTTPHandler(queue, secret, func(host string) bool {
 		ip := net.ParseIP(host)
 		return ip != nil && ip.IsLoopback()
 	})
+	enrollCodes := pairing.NewTokenStore()
+	fingerprint, err := serverbootstrap.CertFingerprint(vault)
+	if err != nil {
+		return fmt.Errorf("compute approval pairing certificate fingerprint: %w", err)
+	}
+	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(enrollCodes, fingerprint, func(host string) bool {
+		ip := net.ParseIP(host)
+		return ip != nil && ip.IsLoopback()
+	}, secret)
+	handler := http.NewServeMux()
+	handler.Handle(approval.PathLocalApprovals, localHandler)
+	handler.Handle(approval.PathLocalApprovalAction, localHandler)
+	handler.Handle(approval.PathDeviceEnrollCode, enrollCodeHandler)
 	certPath, keyPath, err := serverbootstrap.EnsureTLSCert(vault)
 	if err != nil {
 		return fmt.Errorf("create loopback server certificate: %w", err)
@@ -101,11 +122,26 @@ func run(binary string) (runErr error) {
 	if err != nil {
 		return err
 	}
-	if saveErr := cli.SaveRuntimePort(vault, "127.0.0.1", port); saveErr != nil {
+	// Record a LAN-capable bind to match a real `serve --bind 0.0.0.0` while
+	// httptest keeps the disposable listener itself on loopback.
+	if saveErr := cli.SaveRuntimePort(vault, "0.0.0.0", port); saveErr != nil {
 		return fmt.Errorf("write runtime port record: %w", saveErr)
 	}
 	if saveErr := cli.SaveRuntimeTLSConfig(vault, certPath, "", "", "", false); saveErr != nil {
 		return fmt.Errorf("write runtime TLS record: %w", saveErr)
+	}
+	pairingResult, err := runRust[pairingPayload](absoluteBinary, vault, "--output", "json", "device", "approval-pair", "--host", "192.168.1.42")
+	if err != nil {
+		return fmt.Errorf("rust approval pair: %w", err)
+	}
+	if pairingResult.Host != "192.168.1.42" || pairingResult.Port != port || pairingResult.Fingerprint != fingerprint {
+		return fmt.Errorf("approval pairing payload mismatch: got %+v, want host 192.168.1.42, port %d, fingerprint %s", pairingResult, port, fingerprint)
+	}
+	if _, ok := enrollCodes.Validate(pairingResult.Code); !ok {
+		return fmt.Errorf("Rust pairing code %q was not minted into Go's enrollment token store", pairingResult.Code)
+	}
+	if saveErr := cli.SaveRuntimePort(vault, "127.0.0.1", port); saveErr != nil {
+		return fmt.Errorf("restore loopback runtime port for approval CLI checks: %w", saveErr)
 	}
 
 	goApproveID, err := enqueue(queue, "go-approve")

@@ -1153,6 +1153,12 @@ enum DeviceCommand {
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
     },
+    /// Mint a pairing code for an approval device.
+    ApprovalPair {
+        /// LAN address the phone should use to reach the running server.
+        #[arg(long, value_name = "HOST")]
+        host: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -2691,6 +2697,19 @@ fn run_cli() -> ExitCode {
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
+                DeviceCommand::ApprovalPair { host } => (|| {
+                    require_initialized(vault)?;
+                    let host = host.as_deref().ok_or_else(|| {
+                        "--host is required by this Rust CLI slice; pass the LAN address reachable by the phone"
+                            .to_owned()
+                    })?;
+                    approval_commands::pair(
+                        vault,
+                        host,
+                        cli.json || cli.output.as_deref() == Some("json"),
+                        cli.quiet,
+                    )
+                })(),
                 DeviceCommand::ApprovalRevoke { yes, args } => {
                     if args.len() != 1 {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))

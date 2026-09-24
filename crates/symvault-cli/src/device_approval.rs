@@ -1,5 +1,6 @@
 //! `symvault device approval-list` and `device approval-revoke`, plus the
-//! file-backed device-session registry they share.
+//! file-backed device-session registry they share. Pair-code minting lives in
+//! `approval_commands` because it talks to the running Go server.
 //!
 //! Ported from `cmd/device_approval.go` (the two commands) and
 //! `internal/pairing/devicesession.go` (the store); oracle pin `3232e31f`.

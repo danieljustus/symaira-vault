@@ -25,6 +25,7 @@ const RUNTIME_TLS: &str = ".runtime-tls-cert";
 const ENROLL_SECRET: &str = "mcp-server.enroll-secret";
 const LOCAL_APPROVALS: &str = "/api/v1/local/approvals";
 const LOCAL_APPROVAL_ACTION: &str = "/api/v1/local/approvals/";
+const DEVICE_ENROLL_CODE: &str = "/api/v1/devices/enroll-code";
 const MAX_RESPONSE_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -105,6 +106,134 @@ struct ApprovalEntry {
 #[derive(Debug, Deserialize)]
 struct ApiError {
     error: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct EnrollCode {
+    code: String,
+    expires_at: String,
+    fingerprint: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PairingPayload<'a> {
+    host: &'a str,
+    port: u16,
+    code: &'a str,
+    fingerprint: &'a str,
+}
+
+/// Ask the running Go server to mint a code over its localhost-only endpoint.
+/// `host` is the address the phone will use; the mint request always targets
+/// loopback even when the server is listening on a LAN interface.
+pub(crate) fn pair(vault: &Path, host: &str, json: bool, quiet: bool) -> Result<(), String> {
+    let (port, bind) = runtime_server(vault)?;
+    validate_pair_target(host, &bind)?;
+    let host = host.trim();
+    let runtime_tls = load_runtime_tls(vault)?;
+    let certificate =
+        symvault_sync::safeio::read_bounded(Path::new(&runtime_tls.certificate), 1024 * 1024)
+            .map_err(|_| "read server TLS certificate".to_owned())?
+            .ok_or_else(|| "read server TLS certificate".to_owned())?;
+    let certificates = parse_certificate_chain(&certificate, "parse server TLS certificate")?;
+    let secret = symvault_sync::safeio::read_bounded(&vault.join(ENROLL_SECRET), 64)
+        .map_err(|error| format!("load vault-ownership proof secret: {error}"))?
+        .ok_or_else(|| "load vault-ownership proof secret: file not found".to_owned())?;
+    if secret.len() != 32 {
+        return Err("load vault-ownership proof secret: invalid secret length".to_owned());
+    }
+    let secret = Zeroizing::new(secret);
+    let timestamp = OffsetDateTime::now_utc()
+        .replace_nanosecond(0)
+        .map_err(|error| format!("format approval timestamp: {error}"))?
+        .format(&Rfc3339)
+        .map_err(|error| format!("format approval timestamp: {error}"))?;
+    let proof = enroll_proof(&secret, timestamp.as_bytes());
+    let tls = TlsConfig::builder()
+        .root_certs(RootCerts::new_with_certs(&certificates))
+        .build();
+    let agent = ureq::Agent::config_builder()
+        .tls_config(tls)
+        .proxy(None)
+        .https_only(true)
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .timeout_global(Some(Duration::from_secs(10)))
+        .build()
+        .new_agent();
+    let url = format!("https://127.0.0.1:{port}{DEVICE_ENROLL_CODE}");
+    let mut response = agent
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("X-Enroll-Timestamp", &timestamp)
+        .header("X-Enroll-Proof", &proof)
+        .send_empty()
+        .map_err(|error| {
+            format!("call {DEVICE_ENROLL_CODE} (is 'symvault serve' running with TLS?): {error}")
+        })?;
+    let status = response.status().as_u16();
+    let body = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_RESPONSE_BYTES)
+        .read_to_string()
+        .map_err(|error| format!("decode approval response: {error}"))?;
+    let minted: EnrollCode = decode_api_response(status, &body)?;
+    if minted.code.is_empty() || minted.fingerprint.is_empty() {
+        return Err("decode approval response: missing code or fingerprint".to_owned());
+    }
+    let payload = PairingPayload {
+        host,
+        port,
+        code: &minted.code,
+        fingerprint: &minted.fingerprint,
+    };
+    if quiet {
+        return Ok(());
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&payload).map_err(|error| error.to_string())?
+        );
+    } else {
+        println!("Approval device pairing (enter these values in the phone app):");
+        println!("  Host:        {}", payload.host);
+        println!("  Port:        {}", payload.port);
+        println!("  Code:        {}", payload.code);
+        println!("  Fingerprint: {}", payload.fingerprint);
+        println!("  Expires:     {}", minted.expires_at);
+        println!("QR rendering is not available in this Rust CLI.");
+    }
+    Ok(())
+}
+
+fn validate_pair_target(host: &str, bind: &str) -> Result<(), String> {
+    let host = host.trim();
+    if host.is_empty()
+        || host.chars().any(char::is_whitespace)
+        || host.chars().any(char::is_control)
+    {
+        return Err("--host must be a LAN address reachable by the phone".to_owned());
+    }
+    if host.eq_ignore_ascii_case("localhost")
+        || host.parse::<IpAddr>().is_ok_and(|address| {
+            address.is_loopback() || address.is_unspecified() || address.is_multicast()
+        })
+    {
+        return Err("--host must be a LAN address reachable by the phone".to_owned());
+    }
+    let bind = bind.trim();
+    let loopback = bind == "localhost"
+        || bind
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if loopback {
+        return Err(format!(
+            "'symvault serve' is bound to {bind} (loopback-only) — restart it with --bind 0.0.0.0 or --bind <lan-ip> so a phone can connect"
+        ));
+    }
+    Ok(())
 }
 
 /// Fetch and render the live queue, preserving Go's loopback, TLS and
@@ -481,10 +610,12 @@ mod tests {
     use super::{
         ApprovalDecision, RUNTIME_TLS, RuntimeTls, decode_api_response, enroll_proof,
         load_approval_client_identity, load_runtime_tls, parse_certificate_chain,
+        validate_pair_target,
     };
     use ureq::tls::Certificate;
 
     const GO_ENROLL_SOURCE: &str = include_str!("../../../internal/approval/enroll.go");
+    const GO_DEVICE_APPROVAL_SOURCE: &str = include_str!("../../../cmd/device_approval.go");
     const GO_LOCAL_SOURCE: &str = include_str!("../../../internal/approval/local.go");
     const GO_QUEUE_SOURCE: &str = include_str!("../../../internal/approval/queue.go");
     const GO_APPROVAL_SOURCE: &str = include_str!("../../../cmd/approval.go");
@@ -494,10 +625,57 @@ mod tests {
     #[test]
     fn enroll_proof_uses_go_hmac_sha256_bytes() {
         assert!(GO_ENROLL_SOURCE.contains("hmac.New(sha256.New, secret)"));
+        assert!(
+            GO_ENROLL_SOURCE.contains("PathDeviceEnrollCode = \"/api/v1/devices/enroll-code\"")
+        );
+        assert!(GO_ENROLL_SOURCE.contains("HeaderEnrollTimestamp = \"X-Enroll-Timestamp\""));
+        assert!(GO_ENROLL_SOURCE.contains("HeaderEnrollProof = \"X-Enroll-Proof\""));
+        assert!(GO_DEVICE_APPROVAL_SOURCE.contains("https://127.0.0.1:%d%s"));
+        assert!(
+            GO_DEVICE_APPROVAL_SOURCE
+                .contains("req.Header.Set(\"Content-Type\", \"application/json\")")
+        );
+        assert!(GO_ENROLL_SOURCE.contains("\"fingerprint\": h.fingerprint"));
         assert_eq!(
             enroll_proof(&(0u8..32).collect::<Vec<_>>(), b"2026-09-24T00:00:00Z"),
             "2a5b82136548c4dabec59c8055dc424ac6bdd0f34ecab28eb732881f642ae651"
         );
+    }
+
+    #[test]
+    fn device_pair_decodes_go_success_and_rejects_go_failures() {
+        let minted: EnrollCode = decode_api_response(
+            200,
+            r#"{"code":"ABCD1234","expires_at":"2026-09-24T00:05:00Z","fingerprint":"sha256:test"}"#,
+        )
+        .expect("Go mint response");
+        assert_eq!(minted.code, "ABCD1234");
+        assert_eq!(minted.fingerprint, "sha256:test");
+        assert_eq!(
+            decode_api_response::<EnrollCode>(
+                401,
+                r#"{"error":"missing or invalid proof of vault-directory ownership"}"#,
+            )
+            .unwrap_err(),
+            "approval server: missing or invalid proof of vault-directory ownership"
+        );
+        assert!(decode_api_response::<EnrollCode>(200, r#"{"code":"ABCD1234"}"#).is_err());
+    }
+
+    #[test]
+    fn device_pair_requires_phone_host_and_reachable_server_bind() {
+        assert!(
+            validate_pair_target("  ", "0.0.0.0")
+                .unwrap_err()
+                .contains("--host")
+        );
+        assert!(validate_pair_target("127.0.0.1", "0.0.0.0").is_err());
+        assert!(validate_pair_target("192.168.1.42\nInjected:", "0.0.0.0").is_err());
+        for bind in ["127.0.0.1", "::1", "localhost"] {
+            let error = validate_pair_target("192.168.1.42", bind).unwrap_err();
+            assert!(error.contains("loopback-only"), "{bind}: {error}");
+        }
+        assert!(validate_pair_target("192.168.1.42", "0.0.0.0").is_ok());
     }
 
     #[test]
