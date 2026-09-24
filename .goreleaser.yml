@@ -8,7 +8,6 @@ before:
     - env GOWORK=off go mod tidy
     - env GOWORK=off go mod download
     - env GOWORK=off make completions
-    - env GOWORK=off make manpages
     - >-
       sh -c 'SENSITIVE_FILES="identity.age mcp-token .env coverage coverage.out *.test cmd.test mcp.test vault.test";
       for f in $SENSITIVE_FILES; do
@@ -28,6 +27,8 @@ builds:
     main: .
     binary: symvault
     hooks:
+      pre:
+        - cmd: sh -c 'if [ "{{ .Os }}/{{ .Arch }}" = "linux/amd64" ]; then env GOWORK=off make release-manpages; fi'
       post:
         - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
     env:
@@ -109,7 +110,9 @@ archives:
       - LICENSE
       - README.md
       - completions/*
-      - docs/man/*.1
+      - src: dist/man/*.1
+        dst: docs/man
+        strip_parent: true
     wrap_in_directory: true
 
 checksum:
