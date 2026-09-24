@@ -132,6 +132,17 @@ jobs:
           set -euo pipefail
           make config-profile-differential
 
+      - name: Run Windows config and policy path differential
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $oracle = Join-Path $env:RUNNER_TEMP 'symvault-go.exe'
+          go build -o $oracle .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:SYMVAULT_GO_BINARY = $oracle
+          cargo test -p symvault-cli --test config_validate_differential --test policy_differential --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Run pairing differential against the pinned Go oracle
         shell: bash
         run: |
