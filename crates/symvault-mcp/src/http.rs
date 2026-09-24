@@ -1491,11 +1491,12 @@ mod tests {
     fn tls_listener_accepts_remote_origin_and_publishes_https_endpoints() {
         let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
         let certificate_path = fixture_dir.join("tls-server.pem");
+        let ca_path = fixture_dir.join("tls-ca.pem");
         let key_path = fixture_dir.join("tls-server.key");
         let tls = load_tls_server_config(&certificate_path, &key_path, None)
             .expect("load test TLS server identity");
         let mut roots = RootCertStore::empty();
-        for certificate in CertificateDer::pem_file_iter(&certificate_path)
+        for certificate in CertificateDer::pem_file_iter(&ca_path)
             .expect("read TLS test certificate")
             .collect::<Result<Vec<_>, _>>()
             .expect("parse TLS test certificate")
@@ -1661,9 +1662,10 @@ mod tests {
     fn TLS_server_configuration_fails_closed_on_invalid_ca_and_identity() {
         let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
         let certificate_path = fixture_dir.join("tls-server.pem");
+        let ca_path = fixture_dir.join("tls-ca.pem");
         let key_path = fixture_dir.join("tls-server.key");
         assert!(
-            load_tls_server_config(&certificate_path, &key_path, Some(&certificate_path)).is_ok(),
+            load_tls_server_config(&certificate_path, &key_path, Some(&ca_path)).is_ok(),
             "valid client CA config must enable mTLS"
         );
         let directory = tempfile::tempdir().expect("temporary CA directory");
