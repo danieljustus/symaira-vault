@@ -727,7 +727,7 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
     Ok(registry)
 }
 
-fn allowed_origin(origin: &str, request_host: &str) -> bool {
+pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };

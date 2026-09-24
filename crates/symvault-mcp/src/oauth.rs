@@ -485,7 +485,7 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                 Ok((record, access, refresh)) => {
                     OAuthResponse::Http(token_response(&record, access, refresh, now))
                 }
-                Err(_) => OAuthResponse::Http(json_error(
+                Err(_) => OAuthResponse::Http(json_response(
                     400,
                     serde_json::json!({
                         "error": "invalid_grant",

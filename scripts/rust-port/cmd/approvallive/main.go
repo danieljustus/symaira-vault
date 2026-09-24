@@ -138,7 +138,7 @@ func run(binary string) (runErr error) {
 		return fmt.Errorf("approval pairing payload mismatch: got %+v, want host 192.168.1.42, port %d, fingerprint %s", pairingResult, port, fingerprint)
 	}
 	if _, ok := enrollCodes.Validate(pairingResult.Code); !ok {
-		return fmt.Errorf("Rust pairing code %q was not minted into Go's enrollment token store", pairingResult.Code)
+		return fmt.Errorf("rust pairing code %q was not minted into Go's enrollment token store", pairingResult.Code)
 	}
 	if saveErr := cli.SaveRuntimePort(vault, "127.0.0.1", port); saveErr != nil {
 		return fmt.Errorf("restore loopback runtime port for approval CLI checks: %w", saveErr)
