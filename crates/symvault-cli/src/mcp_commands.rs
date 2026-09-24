@@ -113,7 +113,7 @@ pub fn run(
         };
         let registry_path = root.join("mcp-tokens.json");
         let consent_agent_name = oauth_agent_name.clone();
-        let consent = move |client_id, redirect_uri| {
+        let consent = move |client_id: &str, redirect_uri: &str| {
             oauth_consent(client_id, redirect_uri, &consent_agent_name)
         };
         let verify_passphrase = move |passphrase: &str| {
