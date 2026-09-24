@@ -19,6 +19,8 @@ const MAX_BROWSER_ATTEMPTS_PER_FLOW: u8 = 5;
 const MAX_BROWSER_ATTEMPTS_PER_WINDOW: usize = 10;
 const BROWSER_ATTEMPT_WINDOW: StdDuration = StdDuration::from_secs(60);
 
+type ConsentCallback = dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync;
+
 #[derive(Deserialize)]
 struct RegistrationRequest {
     #[serde(default)]
@@ -37,7 +39,7 @@ pub(super) struct OAuthState {
     agent_name: String,
     codes: Mutex<HashMap<String, PendingCode>>,
     browser_consents: Mutex<BrowserConsentState>,
-    consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+    consent: Box<ConsentCallback>,
     verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
 }
 
@@ -66,7 +68,7 @@ impl OAuthState {
     pub(super) fn new(
         root: PathBuf,
         agent_name: String,
-        consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+        consent: Box<ConsentCallback>,
         verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Self {
         Self {
@@ -86,6 +88,7 @@ impl OAuthState {
 
 /// Handles the Go-backed DCR, authorization-code, PKCE, token, refresh, and
 /// authorization-server discovery routes. The caller supplies human consent.
+#[allow(clippy::too_many_arguments)] // Mirrors the transport request without allocating a wrapper.
 pub(super) fn handle(
     state: &OAuthState,
     method: &str,
