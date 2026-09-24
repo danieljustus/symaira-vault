@@ -1814,15 +1814,16 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert_success(&add, "Go file add for file use");
 
     let (shell, shell_arg) = if cfg!(windows) {
-        ("cmd.exe", "/C")
+        ("powershell.exe", "-Command")
     } else {
         ("sh", "-c")
     };
     let script = |marker: &Path| {
         if cfg!(windows) {
+            // Avoid cmd.exe /C quoting of generated paths in composite commands.
+            let marker = marker.display().to_string().replace('\'', "''");
             format!(
-                "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & echo %SYMVAULT_FILE_CERT_P12%> \"{}\" & type \"%SYMVAULT_FILE_CERT_P12%\"",
-                marker.display()
+                "$f=$env:SYMVAULT_FILE_CERT_P12; if (!(Test-Path -LiteralPath $f)) {{ exit 1 }}; [IO.File]::WriteAllText('{marker}', $f); $b=[IO.File]::ReadAllBytes($f); [Console]::OpenStandardOutput().Write($b, 0, $b.Length)"
             )
         } else {
             format!(
@@ -1876,7 +1877,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
 
     let failure_script = if cfg!(windows) {
-        "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & exit /b 7"
+        "if (!(Test-Path -LiteralPath $env:SYMVAULT_FILE_CERT_P12)) { exit 1 }; exit 7"
     } else {
         "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7"
     };
