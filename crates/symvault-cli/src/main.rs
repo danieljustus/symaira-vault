@@ -435,7 +435,7 @@ enum Command {
         overwrite: bool,
         #[arg(
             long,
-            help = "Import entries into quarantine/<import-id>/ for human review"
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
         )]
         quarantine: bool,
         #[arg(long, default_value = "")]
@@ -4059,6 +4059,13 @@ fn run_import(
     mapping: &str,
     quiet: bool,
 ) -> ExitCode {
+    // cmd/admin/import.go resolves and validates the import format before it
+    // checks any flag conflict, so an undetectable format wins over the
+    // --skip-existing/--overwrite and --quarantine/--prefix errors and no
+    // quarantine ID line is printed for an invocation that cannot run.
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
     if skip_existing && overwrite {
         return finish_vault_result(Err(
             "--skip-existing and --overwrite cannot be used together".into(),
@@ -4068,10 +4075,8 @@ fn run_import(
         Ok(value) => value,
         Err(error) => return finish_vault_result(Err(error)),
     };
-    if !quiet {
-        if let Some(import_id) = &import_id {
-            println!("Quarantine import ID: {import_id}");
-        }
+    if !quiet && let Some(import_id) = &import_id {
+        println!("Quarantine import ID: {import_id}");
     }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
