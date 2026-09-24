@@ -156,7 +156,7 @@ Typical costs for a comprehensive security audit:
 
 ## Related Documents
 
-- [SECURITY.md](/SECURITY.md) - Security policy and vulnerability reporting
-- [ARCHITECTURE.md](/ARCHITECTURE.md) - System architecture
-- [docs/adr/](/docs/adr/) - Architecture Decision Records
-- [docs/observability.md](/docs/observability.md) - Monitoring and logging
+- [SECURITY.md](../SECURITY.md) - Security policy and vulnerability reporting
+- [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture
+- [docs/adr/](adr/) - Architecture Decision Records
+- [docs/observability.md](observability.md) - Monitoring and logging

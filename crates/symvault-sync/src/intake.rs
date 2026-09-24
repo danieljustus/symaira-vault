@@ -6,6 +6,8 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::mpsc::{Receiver, RecvTimeoutError},
+    thread,
     time::{Duration, SystemTime},
 };
 use thiserror::Error;
@@ -412,6 +414,7 @@ pub struct Options {
     pub max_batch_size: u64,
     pub max_files: usize,
     pub debounce: Duration,
+    pub interval: Duration,
     pub ocr_text: Option<PathBuf>,
 }
 impl Default for Options {
@@ -421,6 +424,7 @@ impl Default for Options {
             max_batch_size: MAX_BATCH_SIZE,
             max_files: MAX_FILES,
             debounce: Duration::from_secs(5),
+            interval: Duration::from_secs(10),
             ocr_text: None,
         }
     }
@@ -628,6 +632,9 @@ impl Watcher {
         if options.debounce.is_zero() {
             options.debounce = Duration::from_secs(5);
         }
+        if options.interval.is_zero() {
+            options.interval = Duration::from_secs(10);
+        }
         Ok(Self {
             dir: dir.as_ref().into(),
             options,
@@ -735,6 +742,33 @@ impl Watcher {
     }
     pub fn scan(&mut self, spool: &Spool) -> Result<Vec<FileResult>, IntakeError> {
         self.scan_at(SystemTime::now(), spool)
+    }
+
+    /// Poll immediately, then wait between scans until signalled or the sender is dropped.
+    /// The caller owns the private spool and writes each non-empty quarantine batch.
+    pub fn run<F>(
+        &mut self,
+        stop: Option<&Receiver<()>>,
+        spool: &Spool,
+        mut on_batch: F,
+    ) -> Result<(), IntakeError>
+    where
+        F: FnMut(Vec<FileResult>) -> Result<(), IntakeError>,
+    {
+        loop {
+            let scan = self.scan_result(spool)?;
+            if !scan.staged_results.is_empty() {
+                on_batch(scan.staged_results)?;
+            }
+            if let Some(stop) = stop {
+                match stop.recv_timeout(self.options.interval) {
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => return Ok(()),
+                    Err(RecvTimeoutError::Timeout) => {}
+                }
+            } else {
+                thread::sleep(self.options.interval);
+            }
+        }
     }
 }
 
