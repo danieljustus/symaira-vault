@@ -189,6 +189,7 @@ def build_report(
         for side_home in homes.values():
             side_home.mkdir()
         command_args = ["get", measured_entry, "--output", "json"]
+        list_args = ["list", "--output", "json"]
 
         def timed_once(label: str, args: list[str], operation: str) -> float:
             start = time.perf_counter_ns()
@@ -203,25 +204,31 @@ def build_report(
         startup_args = ["version"]
         startup_samples: dict[str, list[float]] = {"go": [], "rust": []}
         read_samples: dict[str, list[float]] = {"go": [], "rust": []}
+        list_samples: dict[str, list[float]] = {"go": [], "rust": []}
         adjusted_samples: dict[str, list[float]] = {"go": [], "rust": []}
         for _ in range(warmups):
             for label in ("go", "rust"):
                 timed_once(label, startup_args, "startup")
                 timed_once(label, command_args, "read")
+                timed_once(label, list_args, "list")
         for index in range(runs):
             order = ("go", "rust") if index % 2 == 0 else ("rust", "go")
             for label in order:
                 startup_ms = timed_once(label, startup_args, "startup")
                 read_ms = timed_once(label, command_args, "read")
+                list_ms = timed_once(label, list_args, "list")
                 startup_samples[label].append(startup_ms)
                 read_samples[label].append(read_ms)
+                list_samples[label].append(list_ms)
                 adjusted_samples[label].append(read_ms - startup_ms)
 
         rss: dict[str, tuple[int | None, str | None]] = {"go": (None, None), "rust": (None, None)}
+        list_rss: dict[str, tuple[int | None, str | None]] = {"go": (None, None), "rust": (None, None)}
         if include_rss:
             for label in binaries:
                 env = isolated_env(homes[label], root, vaults[label], passphrase)
                 rss[label] = rss_sample(binaries[label], command_args, env, label)
+                list_rss[label] = rss_sample(binaries[label], list_args, env, f"{label} list")
 
         go_p95 = percentile(read_samples["go"], 95)
         rust_p95 = percentile(read_samples["rust"], 95)
@@ -238,6 +245,7 @@ def build_report(
             "fixture": {"entries": entries, "synthetic": True, "vault_copies": 2},
             "sampling": {
                 "operation": f"get {measured_entry} --output json",
+                "list_operation": "list --output json",
                 "runs_per_binary": runs,
                 "warmups_per_binary": warmups,
                 "latency_method": "subprocess wall time via perf_counter_ns, including startup",
@@ -249,7 +257,8 @@ def build_report(
                     "warmups_per_binary": warmups,
                 },
                 "p95_method": "nearest-rank",
-                "rss_samples_per_binary": 1 if include_rss else 0,
+                "rss_samples_per_binary": 2 if include_rss else 0,
+                "rss_operations": ["get", "list"] if include_rss else [],
                 "rss_method": rss["go"][1] or rss["rust"][1],
             },
             "artifacts": {
@@ -262,15 +271,26 @@ def build_report(
                     "startup_p95_ms": round(percentile(startup_samples[label], 95), 3),
                     "read_p50_ms": round(statistics.median(read_samples[label]), 3),
                     "read_p95_ms": round(percentile(read_samples[label], 95), 3),
+                    "list_p50_ms": round(statistics.median(list_samples[label]), 3),
+                    "list_p95_ms": round(percentile(list_samples[label], 95), 3),
                     "startup_adjusted_read_p50_ms": round(statistics.median(adjusted_samples[label]), 3),
                     "startup_adjusted_read_p95_ms": round(percentile(adjusted_samples[label], 95), 3),
                     "max_rss_bytes": rss[label][0],
+                    "max_list_rss_bytes": list_rss[label][0],
+                    "startup_samples_ms": startup_samples[label],
+                    "read_samples_ms": read_samples[label],
+                    "list_samples_ms": list_samples[label],
+                    "startup_adjusted_read_samples_ms": adjusted_samples[label],
                 }
                 for label in binaries
             },
             "comparison": {
                 "rust_binary_size_ratio": rust_binary.stat().st_size / go_binary.stat().st_size,
-                "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
+            "rust_read_p95_ratio": rust_p95 / go_p95 if go_p95 else None,
+            "rust_list_p95_ratio": (
+                percentile(list_samples["rust"], 95) / percentile(list_samples["go"], 95)
+                if percentile(list_samples["go"], 95) else None
+            ),
                 "rust_startup_adjusted_read_p95_ratio": (
                     rust_adjusted_p95 / go_adjusted_p95 if go_adjusted_p95 > 0 else None
                 ),

@@ -1117,10 +1117,22 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let entries_root = root.join(ENTRIES_DIR);
     if entries_root.is_dir() {
         for item in WalkDir::new(&entries_root).follow_links(false) {
-            let item = item.map_err(|error| StoreError::Read {
-                path: entries_root.clone(),
-                source: io::Error::other(error.to_string()),
-            })?;
+            let item = match item {
+                Ok(item) => item,
+                Err(error)
+                    if error
+                        .io_error()
+                        .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
+                {
+                    continue;
+                }
+                Err(error) => {
+                    return Err(StoreError::Read {
+                        path: entries_root.clone(),
+                        source: io::Error::other(error.to_string()),
+                    });
+                }
+            };
             if item.file_type().is_symlink() {
                 return Err(StoreError::Symlink(item.path().to_path_buf()));
             }
@@ -1149,10 +1161,22 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
         }
     }
     for item in WalkDir::new(root).max_depth(64).follow_links(false) {
-        let item = item.map_err(|error| StoreError::Read {
-            path: root.to_path_buf(),
-            source: io::Error::other(error.to_string()),
-        })?;
+        let item = match item {
+            Ok(item) => item,
+            Err(error)
+                if error
+                    .io_error()
+                    .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
+            {
+                continue;
+            }
+            Err(error) => {
+                return Err(StoreError::Read {
+                    path: root.to_path_buf(),
+                    source: io::Error::other(error.to_string()),
+                });
+            }
+        };
         if item.path() == root || item.path().starts_with(&entries_root) {
             continue;
         }

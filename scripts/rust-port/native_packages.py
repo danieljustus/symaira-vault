@@ -68,11 +68,43 @@ def check_elf(path: Path, arch: str) -> None:
         raise ValueError(f"{path} is not executable")
 
 
-def stage(binary: Path, output: Path, arch: str, nfpm_bin: str) -> list[Path]:
+def check_musl_elf(path: Path, arch: str) -> None:
+    check_elf(path, arch)
+    with path.open("rb") as binary:
+        header = binary.read(64)
+        if len(header) < 64:
+            raise ValueError(f"{path} has a truncated ELF header")
+        phoff = struct.unpack_from("<Q", header, 32)[0]
+        phentsize, phnum = struct.unpack_from("<HH", header, 54)
+        if phnum and phentsize < 56:
+            raise ValueError(f"{path} has invalid ELF program header size {phentsize}")
+        if phoff + phentsize * phnum > path.stat().st_size:
+            raise ValueError(f"{path} has truncated ELF program headers")
+        for index in range(phnum):
+            binary.seek(phoff + index * phentsize)
+            program_header = binary.read(phentsize)
+            if len(program_header) != phentsize:
+                raise ValueError(f"{path} has a truncated ELF program header")
+            if struct.unpack_from("<I", program_header)[0] == 3:  # PT_INTERP
+                offset = struct.unpack_from("<Q", program_header, 8)[0]
+                size = struct.unpack_from("<Q", program_header, 32)[0]
+                if offset + size > path.stat().st_size:
+                    raise ValueError(f"{path} has a truncated ELF interpreter")
+                binary.seek(offset)
+                interpreter = binary.read(size).rstrip(b"\0").decode("ascii", errors="replace")
+                if "musl" not in interpreter:
+                    raise ValueError(f"{path} APK binary needs non-musl interpreter {interpreter!r}")
+                break
+
+
+def stage(binary: Path, apk_binary: Path, output: Path, arch: str, nfpm_bin: str) -> list[Path]:
     build, nfpm = source_config()
     if build["binary"] != binary.name:
         raise ValueError(f"expected Rust binary named {build['binary']}, got {binary.name}")
     check_elf(binary, arch)
+    if build["binary"] != apk_binary.name:
+        raise ValueError(f"expected APK binary named {build['binary']}, got {apk_binary.name}")
+    check_musl_elf(apk_binary, arch)
     output.mkdir(parents=True, exist_ok=True)
     template = nfpm["file_name_template"]
     base = template.replace("{{ .PackageName }}", nfpm["package_name"])
@@ -86,7 +118,10 @@ def stage(binary: Path, output: Path, arch: str, nfpm_bin: str) -> list[Path]:
             target = output / f"{base}.{package_format}"
             config_path = Path(temp) / f"nfpm-{package_format}.yml"
             config_path.write_text(
-                yaml.safe_dump(package_config(nfpm, binary.resolve(), arch, package_format), sort_keys=False),
+                yaml.safe_dump(
+                    package_config(nfpm, (apk_binary if package_format == "apk" else binary).resolve(), arch, package_format),
+                    sort_keys=False,
+                ),
                 encoding="utf-8",
             )
             subprocess.run(
@@ -242,6 +277,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     stage_parser = subparsers.add_parser("stage")
     stage_parser.add_argument("--binary", type=Path, required=True)
+    stage_parser.add_argument("--apk-binary", type=Path, required=True)
     stage_parser.add_argument("--output", type=Path, required=True)
     stage_parser.add_argument("--arch", choices=GOARCH, required=True)
     stage_parser.add_argument("--nfpm", default="nfpm")
@@ -254,7 +290,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         if args.command == "stage":
-            packages = stage(args.binary.resolve(), args.output.resolve(), args.arch, args.nfpm)
+            packages = stage(args.binary.resolve(), args.apk_binary.resolve(), args.output.resolve(), args.arch, args.nfpm)
             for package in packages:
                 print(package)
         elif args.command == "verify":

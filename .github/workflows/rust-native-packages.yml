@@ -44,9 +44,11 @@ jobs:
         include:
           - arch: amd64
             target: x86_64-unknown-linux-gnu
+            musl_target: x86_64-unknown-linux-musl
             runner: ubuntu-24.04
           - arch: arm64
             target: aarch64-unknown-linux-gnu
+            musl_target: aarch64-unknown-linux-musl
             runner: ubuntu-24.04-arm
     steps:
       - name: Checkout
@@ -57,7 +59,7 @@ jobs:
       - name: Install package inspection tools
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y rpm python3-yaml
+          sudo apt-get install --no-install-recommends -y rpm python3-yaml musl-tools
           python3 -c 'import yaml'
 
       - name: Set up pinned Go for nfpm
@@ -75,17 +77,21 @@ jobs:
         run: |
           rustup toolchain install 1.98.0 --profile minimal
           rustup default 1.98.0
-          rustup target add '${{ matrix.target }}'
+          rustup target add '${{ matrix.target }}' '${{ matrix.musl_target }}'
 
       - name: Build Rust CLI for Linux ${{ matrix.arch }}
         run: |
           cargo build --release --locked -p symvault-cli --bin symvault --target '${{ matrix.target }}'
           echo "RUST_BINARY=target/${{ matrix.target }}/release/symvault" >> "$GITHUB_ENV"
+          CC=musl-gcc cargo build --config "target.${{ matrix.musl_target }}.linker='musl-gcc'" \
+            --release --locked -p symvault-cli --bin symvault --target '${{ matrix.musl_target }}'
+          echo "APK_BINARY=target/${{ matrix.musl_target }}/release/symvault" >> "$GITHUB_ENV"
 
       - name: Stage, compare, and install-smoke unsigned packages
         run: |
           python3 scripts/rust-port/native_packages.py stage \
-            --binary "$RUST_BINARY" --output dist/rust-native-packages \
+            --binary "$RUST_BINARY" --apk-binary "$APK_BINARY" \
+            --output dist/rust-native-packages \
             --arch '${{ matrix.arch }}'
           for package in dist/rust-native-packages/*; do
             python3 scripts/rust-port/native_packages.py verify \

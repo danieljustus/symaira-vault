@@ -52,6 +52,8 @@ class PairedCliBenchTests(unittest.TestCase):
                     "    p.write_text('synthetic-command-output-marker')\n"
                     "elif args and args[0] == 'get':\n"
                     "    print('synthetic-command-output-marker')\n"
+                    "elif args and args[0] == 'list':\n"
+                    "    print('synthetic-command-output-marker')\n"
                     "else:\n"
                     "    raise SystemExit(2)\n",
                     encoding="utf-8",
@@ -65,6 +67,19 @@ class PairedCliBenchTests(unittest.TestCase):
             serialized = json.dumps(report)
             self.assertEqual(report["fixture"], {"entries": 1, "synthetic": True, "vault_copies": 2})
             self.assertEqual(report["measurements"]["go"]["read_p95_ms"] > 0, True)
+            self.assertEqual(report["sampling"]["list_operation"], "list --output json")
+            for label in ("go", "rust"):
+                measurements = report["measurements"][label]
+                self.assertGreater(measurements["list_p50_ms"], 0)
+                self.assertGreater(measurements["list_p95_ms"], 0)
+                for key in (
+                    "startup_samples_ms",
+                    "read_samples_ms",
+                    "list_samples_ms",
+                    "startup_adjusted_read_samples_ms",
+                ):
+                    self.assertEqual(len(measurements[key]), 2)
+                    self.assertTrue(all(isinstance(sample, float) for sample in measurements[key]))
             self.assertIn("value_gate_claim", report)
             self.assertNotIn("synthetic-command-output-marker", serialized)
             self.assertNotIn("value-bench-", serialized)
