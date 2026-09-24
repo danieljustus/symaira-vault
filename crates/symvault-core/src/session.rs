@@ -202,9 +202,19 @@ fn parse_timestamp(v: &str) -> Option<i128> {
     let h = n(11, 13)?;
     let min = n(14, 16)?;
     let sec = n(17, 19)?;
-    if m == 0 || m > 12 || d == 0 || d > 31 || h > 23 || min > 59 || sec > 60 {
+    if m == 0 || m > 12 || d == 0 || d > 31 || h > 23 || min > 59 || sec > 59 {
         return None;
     };
+    let leap_year = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let days_in_month = match m {
+        2 if leap_year => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if d > days_in_month {
+        return None;
+    }
     let (frac, end) = if b[19] == b'.' || b[19] == b',' {
         let end = 20
             + b[20..]
@@ -884,6 +894,25 @@ mod tests {
         );
         assert_eq!(parse_timestamp("1970-01-01T00:00:00,000Z"), Some(0));
         assert_eq!(parse_timestamp("2026-09-23T12:00:00++1:00"), None);
+    }
+    #[test]
+    fn invalid_calendar_session_is_expired_without_mutation() {
+        for (timestamp, valid) in [
+            ("2024-02-29T00:00:00Z", true),
+            ("2023-02-29T00:00:00Z", false),
+            ("2099-02-30T00:00:00Z", false),
+            ("2099-04-31T00:00:00Z", false),
+            ("2099-01-01T00:00:60Z", false),
+        ] {
+            assert_eq!(parse_timestamp(timestamp).is_some(), valid, "{timestamp}");
+        }
+        let keyring = Arc::new(MemoryKeyring::new());
+        let manager = SessionManager::with_system_clock(keyring.clone());
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let payload = br#"{"saved_at":"2099-02-30T00:00:00Z","last_access":"2099-02-30T00:00:00Z","ttl_ns":3600000000000}"#;
+        keyring.set(&key, payload).unwrap();
+        assert!(manager.is_session_expired("v"));
+        assert_eq!(keyring.get(&key).unwrap(), payload);
     }
     #[test]
     fn identity_round_trip_and_max_lifetime() {
