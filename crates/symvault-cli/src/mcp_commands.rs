@@ -6,12 +6,14 @@
 //! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
 #[cfg(unix)]
+use std::io::{BufRead, Write};
+#[cfg(unix)]
 use std::sync::OnceLock;
 #[cfg(unix)]
 use std::time::Duration;
 use std::{
     fs,
-    io::{self, BufRead, BufReader, IsTerminal, Write},
+    io::{self, BufReader, IsTerminal},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -153,7 +155,7 @@ fn oauth_consent(
         );
         let _ = io::stderr().flush();
         let timeout = Duration::from_secs(60);
-        return read_tty_approval(timeout);
+        read_tty_approval(timeout)
     }
     #[cfg(not(unix))]
     {

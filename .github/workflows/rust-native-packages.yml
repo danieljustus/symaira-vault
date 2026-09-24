@@ -82,12 +82,14 @@ jobs:
           cargo build --release --locked -p symvault-cli --bin symvault --target '${{ matrix.target }}'
           echo "RUST_BINARY=target/${{ matrix.target }}/release/symvault" >> "$GITHUB_ENV"
 
-      - name: Stage and compare unsigned packages
+      - name: Stage, compare, and install-smoke unsigned packages
         run: |
           python3 scripts/rust-port/native_packages.py stage \
             --binary "$RUST_BINARY" --output dist/rust-native-packages \
             --arch '${{ matrix.arch }}'
           for package in dist/rust-native-packages/*; do
             python3 scripts/rust-port/native_packages.py verify \
+              --package "$package" --arch '${{ matrix.arch }}'
+            python3 scripts/rust-port/native_packages.py smoke \
               --package "$package" --arch '${{ matrix.arch }}'
           done

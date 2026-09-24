@@ -17,6 +17,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::value::RawValue;
 
+pub mod approval;
 pub mod broker;
 mod call;
 pub mod http;

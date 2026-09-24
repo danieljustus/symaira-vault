@@ -212,6 +212,31 @@ def verify(package: Path, arch: str) -> None:
         raise ValueError(f"{package.name}: package files expected {sorted(expected_files)}, got {sorted(got_files)}")
 
 
+def smoke(package: Path, arch: str) -> None:
+    package_format = package.suffix.lstrip(".")
+    if package_format not in FORMATS:
+        raise ValueError(f"unknown package format: {package}")
+    if arch not in GOARCH:
+        raise ValueError(f"unsupported package target: {package_format}/{arch}")
+    image, install = {
+        "deb": ("ubuntu:24.04", "dpkg -i /tmp/symvault.pkg; dpkg -s symvault"),
+        "rpm": ("fedora:44", "dnf install -y /tmp/symvault.pkg; rpm -q symvault"),
+        "apk": ("alpine:3.23", "apk add --allow-untrusted /tmp/symvault.pkg; apk info -e symvault"),
+    }[package_format]
+    binary = package.resolve()
+    subprocess.run(
+        [
+            "docker", "run", "--rm", "--mount",
+            f"type=bind,src={binary},dst=/tmp/symvault.pkg,readonly", image,
+            "sh", "-ec",
+            f"{install}; symvault version; tmp=$(mktemp -d); "
+            "SYMVAULT_ALLOW_ENV_PASSPHRASE=1 SYMVAULT_PASSPHRASE=package-smoke "
+            "SYMVAULT_VAULT=\"$tmp/vault\" symvault init",
+        ],
+        check=True,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -223,15 +248,21 @@ def main() -> int:
     verify_parser = subparsers.add_parser("verify")
     verify_parser.add_argument("--package", type=Path, required=True)
     verify_parser.add_argument("--arch", choices=GOARCH, required=True)
+    smoke_parser = subparsers.add_parser("smoke")
+    smoke_parser.add_argument("--package", type=Path, required=True)
+    smoke_parser.add_argument("--arch", choices=GOARCH, required=True)
     args = parser.parse_args()
     try:
         if args.command == "stage":
             packages = stage(args.binary.resolve(), args.output.resolve(), args.arch, args.nfpm)
             for package in packages:
                 print(package)
-        else:
+        elif args.command == "verify":
             verify(args.package.resolve(), args.arch)
             print(f"PASS {args.package.name}")
+        else:
+            smoke(args.package.resolve(), args.arch)
+            print(f"PASS install smoke {args.package.name}")
     except (OSError, subprocess.CalledProcessError, KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         print(f"native package check failed: {exc}", file=sys.stderr)
         return 1

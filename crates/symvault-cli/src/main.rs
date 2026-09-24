@@ -63,7 +63,11 @@ use std::{
     io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     process::ExitCode,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -1585,16 +1589,16 @@ fn run_cli() -> ExitCode {
             working_dir,
             timeout,
             broker,
-            broker_strict: _,
-            broker_passthrough: _,
+            broker_strict,
+            broker_passthrough,
             command,
         }) => {
             let result = (|| {
+                if broker && broker_passthrough.iter().all(|host| host.trim().is_empty()) {
+                    return Err("--broker-passthrough requires at least one host".to_owned());
+                }
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
-                if broker {
-                    return Err("run --broker is not implemented in the Rust CLI yet".to_owned());
-                }
                 let identity = device::unlock_vault(&root)?;
                 let environment =
                     run_commands::build_secret_environment(&env, &env_file, |reference| {
@@ -1605,15 +1609,51 @@ fn run_cli() -> ExitCode {
                     .map(session_commands::parse_ttl_override)
                     .transpose()?
                     .flatten();
+                let broker = if broker {
+                    let address = broker_commands::validate_address("127.0.0.1:0")?;
+                    let listener = broker_commands::bind(address)?;
+                    let proxy_url = format!(
+                        "http://{}",
+                        listener.local_addr().map_err(|error| error.to_string())?
+                    );
+                    let stopping = Arc::new(AtomicBool::new(false));
+                    let server_stopping = Arc::clone(&stopping);
+                    let server_hosts = broker_passthrough.clone();
+                    let server = thread::spawn(move || {
+                        symvault_mcp::broker::serve_connect_passthrough(
+                            listener,
+                            server_hosts,
+                            broker_strict,
+                            &server_stopping,
+                            false,
+                        )
+                    });
+                    Some((stopping, server, proxy_url))
+                } else {
+                    None
+                };
+                let extra_environment: Vec<(OsString, OsString)> = broker
+                    .as_ref()
+                    .map(|(_, _, proxy_url)| {
+                        [
+                            ("HTTP_PROXY", proxy_url.as_str()),
+                            ("HTTPS_PROXY", proxy_url.as_str()),
+                            ("NO_PROXY", "127.0.0.1,localhost"),
+                        ]
+                        .into_iter()
+                        .map(|(name, value)| (name.into(), value.into()))
+                        .collect()
+                    })
+                    .unwrap_or_default();
                 let redactions: Vec<_> = environment
                     .values
                     .values()
                     .map(|value| value.as_bytes().to_vec())
                     .collect();
-                let result = run_commands::run_process(run_commands::ProcessOptions {
+                let process_result = run_commands::run_process(run_commands::ProcessOptions {
                     command: &command,
                     environment: &environment.values,
-                    extra_environment: &[],
+                    extra_environment: &extra_environment,
                     generic_redaction: true,
                     passthrough: &passthrough,
                     working_directory: working_dir
@@ -1622,7 +1662,15 @@ fn run_cli() -> ExitCode {
                     timeout,
                     redactions: &redactions,
                     whitelist: run_commands::RUN_ENV_WHITELIST,
-                })?;
+                });
+                if let Some((stopping, server, _)) = broker {
+                    stopping.store(true, Ordering::Relaxed);
+                    let server_result = server
+                        .join()
+                        .map_err(|_| "broker listener thread panicked".to_owned())?;
+                    server_result?;
+                }
+                let result = process_result?;
                 if result.timed_out {
                     return Err(format!(
                         "command timed out after {}",

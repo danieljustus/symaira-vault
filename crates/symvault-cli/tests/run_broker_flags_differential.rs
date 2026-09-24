@@ -1,5 +1,7 @@
 use std::{
     env,
+    io::{Read, Write},
+    net::{SocketAddr, TcpStream},
     path::Path,
     process::{Command, Output},
 };
@@ -30,6 +32,7 @@ fn run_with_passphrase(
         .env_remove("SYMVAULT_ALLOW_ENV_PASSPHRASE")
         .env("SYMVAULT_NO_ENV_WARNING", "1")
         .env("CI", "1");
+    command.env("SYMVAULT_RUN_BROKER_PROBE", "1");
     if let Some(passphrase) = passphrase {
         command
             .env("SYMVAULT_PASSPHRASE", passphrase)
@@ -51,7 +54,14 @@ fn run_broker_flags_parse_before_uninitialized_vault_error() {
     let vault = home.path().join("vault");
 
     for args in [
-        &["run", "--broker", "--", "/usr/bin/true"][..],
+        &[
+            "run",
+            "--broker",
+            "--broker-passthrough",
+            "corp.internal",
+            "--",
+            "/usr/bin/true",
+        ][..],
         &["run", "--broker-strict", "--", "/usr/bin/true"],
         &[
             "run",
@@ -91,6 +101,35 @@ fn run_broker_fails_closed_before_spawning_child() {
     let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
     let home = tempfile::tempdir().expect("temporary HOME");
     let vault = home.path().join("vault");
+    let marker = home.path().join("child-ran");
+    let marker_arg = marker.to_str().expect("marker path");
+    let output = run_with_passphrase(
+        rust_binary,
+        &["run", "--broker", "--", "/usr/bin/touch", marker_arg],
+        home.path(),
+        &vault,
+        None,
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty(), "stdout={:?}", output.stdout);
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("--broker-passthrough requires at least one host"),
+        "stderr={:?}",
+        output.stderr
+    );
+    assert!(
+        !vault.exists(),
+        "missing allowlist must fail before vault access"
+    );
+    assert!(!marker.exists(), "run spawned the child despite --broker");
+}
+
+#[test]
+fn run_broker_executes_child_that_reaches_loopback_proxy() {
+    let rust_binary = Path::new(env!("CARGO_BIN_EXE_symvault"));
+    let home = tempfile::tempdir().expect("temporary HOME");
+    let vault = home.path().join("vault");
     let passphrase = "fixture-passphrase-for-broker";
 
     let init = run_with_passphrase(
@@ -107,25 +146,77 @@ fn run_broker_fails_closed_before_spawning_child() {
         init.stdout,
         init.stderr
     );
-    assert!(
-        vault.join("config.yaml").is_file(),
-        "vault was not initialized"
-    );
 
-    let marker = home.path().join("child-ran");
-    let marker_arg = marker.to_str().expect("marker path");
+    let child = env::current_exe().expect("integration test executable");
+    let args = [
+        "run",
+        "--broker",
+        "--broker-strict",
+        "--broker-passthrough",
+        "example.com",
+        "--passthrough",
+        "SYMVAULT_RUN_BROKER_PROBE",
+        "--",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .chain([
+        child.to_string_lossy().into_owned(),
+        "--exact".to_owned(),
+        "run_broker_child_connects_to_the_loopback_proxy".to_owned(),
+        "--nocapture".to_owned(),
+    ])
+    .collect::<Vec<_>>();
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
     let output = run_with_passphrase(
         rust_binary,
-        &["run", "--broker", "--", "/usr/bin/touch", marker_arg],
+        &arg_refs,
         home.path(),
         &vault,
-        None,
+        Some(passphrase),
     );
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty(), "stdout={:?}", output.stdout);
+    assert!(
+        output.status.success(),
+        "run broker failed: status={:?}, stdout={:?}, stderr={:?}",
+        output.status.code(),
+        output.stdout,
+        output.stderr
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("broker-proxy-child-ok"),
+        "child did not report a successful CONNECT response: {:?}",
+        output.stdout
+    );
+}
+
+#[test]
+fn run_broker_child_connects_to_the_loopback_proxy() {
+    if env::var("SYMVAULT_RUN_BROKER_PROBE").ok().as_deref() != Some("1") {
+        return;
+    }
+    let proxy = env::var("HTTPS_PROXY").expect("run must export HTTPS_PROXY");
+    assert_eq!(env::var("HTTP_PROXY").ok().as_deref(), Some(proxy.as_str()));
     assert_eq!(
-        output.stderr,
-        b"Error: run --broker is not implemented in the Rust CLI yet\nError: run --broker is not implemented in the Rust CLI yet\n"
+        env::var("NO_PROXY").ok().as_deref(),
+        Some("127.0.0.1,localhost")
     );
-    assert!(!marker.exists(), "run spawned the child despite --broker");
+    let address = proxy
+        .strip_prefix("http://")
+        .expect("plain loopback proxy URL")
+        .parse::<SocketAddr>()
+        .expect("proxy socket address");
+    let mut connection = TcpStream::connect(address).expect("connect to run broker");
+    connection
+        .write_all(b"CONNECT 1.1.1.1:443 HTTP/1.1\r\nHost: 1.1.1.1:443\r\n\r\n")
+        .expect("send CONNECT request");
+    let mut response = String::new();
+    connection
+        .read_to_string(&mut response)
+        .expect("read CONNECT response");
+    assert!(
+        response.starts_with("HTTP/1.1 403 Forbidden")
+            && response.contains("host is outside the passthrough allowlist"),
+        "unexpected broker response: {response:?}"
+    );
+    println!("broker-proxy-child-ok");
 }

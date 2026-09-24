@@ -5,6 +5,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/approval"
@@ -51,5 +55,45 @@ func TestGoOracleAndComparisonGuards(t *testing.T) {
 	}
 	if !sameOutcome(id, decided, id, decided) || sameOutcome("wrong-id", decided, id, decided) {
 		t.Fatal("approval outcome ID guard failed")
+	}
+	if _, err := goDecision(server, secret, id, "approve"); err == nil || !strings.Contains(err.Error(), "HTTP 409") {
+		t.Fatalf("repeat approval must be rejected with conflict: %v", err)
+	}
+}
+
+func TestRustProcessResultGuards(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture is Unix-only")
+	}
+	fixture := func(name, body string) string {
+		t.Helper()
+		path := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	valid := fixture("valid", "printf '{\"value\":1}'\n")
+	got, err := runRust[map[string]int](valid, t.TempDir(), "approval", "list")
+	if err != nil || got["value"] != 1 {
+		t.Fatalf("valid Rust JSON response = %v, %v", got, err)
+	}
+	invalid := fixture("invalid", "printf 'not-json'\n")
+	if _, err := runRust[map[string]int](invalid, t.TempDir()); err == nil || !strings.Contains(err.Error(), "decode stdout") {
+		t.Fatalf("invalid Rust JSON accepted: %v", err)
+	}
+	failing := fixture("failing", "printf 'denied' >&2; exit 7\n")
+	output, err := runRustRaw(failing, t.TempDir())
+	if err != nil || output.ExitCode != 7 || string(output.Stderr) != "denied" {
+		t.Fatalf("failed process = %+v, %v", output, err)
+	}
+	if _, err := runRust[map[string]int](failing, t.TempDir()); err == nil || !strings.Contains(err.Error(), "exit 7: denied") {
+		t.Fatalf("nonzero Rust exit accepted: %v", err)
+	}
+	if _, err := runRustRaw(filepath.Join(t.TempDir(), "missing"), t.TempDir()); err == nil || !strings.Contains(err.Error(), "launch Rust CLI") {
+		t.Fatalf("missing Rust binary accepted: %v", err)
+	}
+	if err := run(filepath.Join(t.TempDir(), "missing")); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("live differential accepted missing Rust binary: %v", err)
 	}
 }

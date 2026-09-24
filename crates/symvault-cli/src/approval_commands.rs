@@ -608,7 +608,7 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        ApprovalDecision, RUNTIME_TLS, RuntimeTls, decode_api_response, enroll_proof,
+        ApprovalDecision, EnrollCode, RUNTIME_TLS, RuntimeTls, decode_api_response, enroll_proof,
         load_approval_client_identity, load_runtime_tls, parse_certificate_chain,
         validate_pair_target,
     };
