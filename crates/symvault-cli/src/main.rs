@@ -364,12 +364,19 @@ enum Command {
     },
     /// Measure and report CLI startup time.
     StartupProfile {
-        #[arg(short = 'n', long, default_value_t = 10)]
+        // allow_hyphen_values mirrors pflag, which accepts `--count -5`
+        // (clamped to one iteration by the command itself).
+        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true)]
         count: i64,
         #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
         top: i64,
+        // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
+        // but Go treats `--trace ""` as "no trace" and runs the benchmark.
         #[arg(long)]
-        trace: Option<PathBuf>,
+        trace: Option<OsString>,
+        // Go's cobra command accepts and ignores extra positionals.
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
     },
     /// Start the MCP server for agent access.
     Mcp {
@@ -1009,6 +1016,9 @@ struct VersionArgs {
 const CLI_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 fn main() -> ExitCode {
+    // Earliest observable point for child-marker timing, mirroring Go's
+    // SetStartTime call in main.
+    startup_profile_commands::mark_process_start();
     match std::thread::Builder::new()
         .name("symvault".to_string())
         .stack_size(CLI_STACK_SIZE)
@@ -1847,23 +1857,27 @@ fn run_cli() -> ExitCode {
             yes,
             cli.quiet,
         ),
-        Some(Command::StartupProfile { count, top, trace }) => {
+        Some(Command::StartupProfile {
+            count, top, trace, ..
+        }) => {
             let format = if cli.json {
                 Some("json")
             } else {
                 cli.output.as_deref()
             };
             if let Some(format) = format.filter(|format| *format != "text") {
-                let _ = writeln!(
-                    io::stderr(),
-                    "Error: output format {format:?} is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
-                );
+                // Go prints this twice (cobra, then ExecuteRoot) — see
+                // print_error_like_go.
+                print_error_like_go(&format!(
+                    "output format {format:?} is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
+                ));
                 ExitCode::from(9)
             } else {
-                match startup_profile_commands::run(count, top, trace.as_deref()) {
+                let trace = trace.as_deref().map(Path::new);
+                match startup_profile_commands::run(count, top, trace) {
                     Ok(()) => ExitCode::SUCCESS,
                     Err(error) => {
-                        let _ = writeln!(io::stderr(), "Error: {error}");
+                        print_error_like_go(&error);
                         ExitCode::from(1)
                     }
                 }
