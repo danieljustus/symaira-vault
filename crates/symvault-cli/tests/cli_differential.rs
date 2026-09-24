@@ -1813,11 +1813,23 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     );
     assert_success(&add, "Go file add for file use");
 
+    let (shell, shell_arg) = if cfg!(windows) {
+        ("cmd.exe", "/C")
+    } else {
+        ("sh", "-c")
+    };
     let script = |marker: &Path| {
-        format!(
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {} ; cat \"$SYMVAULT_FILE_CERT_P12\"",
-            marker.display()
-        )
+        if cfg!(windows) {
+            format!(
+                "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & <nul set /p \"=%SYMVAULT_FILE_CERT_P12%\" > \"{}\" & type \"%SYMVAULT_FILE_CERT_P12%\"",
+                marker.display()
+            )
+        } else {
+            format!(
+                "test -f \"$SYMVAULT_FILE_CERT_P12\"; printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {} ; cat \"$SYMVAULT_FILE_CERT_P12\"",
+                marker.display()
+            )
+        }
     };
     let go_use = run(
         &go_binary,
@@ -1828,8 +1840,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
+            shell,
+            shell_arg,
             &script(&marker_go),
         ],
         &root,
@@ -1844,8 +1856,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
+            shell,
+            shell_arg,
             &script(&marker_rust),
         ],
         &root,
@@ -1861,6 +1873,11 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
     assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
 
+    let failure_script = if cfg!(windows) {
+        "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & exit /b 7"
+    } else {
+        "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7"
+    };
     let go_failure = run(
         &go_binary,
         &[
@@ -1870,9 +1887,9 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+            shell,
+            shell_arg,
+            failure_script,
         ],
         &root,
         &home,
@@ -1886,15 +1903,20 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+            shell,
+            shell_arg,
+            failure_script,
         ],
         &root,
         &home,
     );
     assert!(!go_failure.status.success());
     assert!(!rust_failure.status.success());
+
+    // The remaining process-tree and link checks below exercise Unix shell tools.
+    if cfg!(windows) {
+        return;
+    }
 
     let timeout_script = |marker: &Path| {
         format!(

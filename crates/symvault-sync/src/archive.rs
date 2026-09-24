@@ -63,8 +63,12 @@ fn mode(meta: &fs::Metadata) -> u32 {
     }
     #[cfg(not(unix))]
     {
-        let _ = meta;
-        0
+        match (meta.is_dir(), meta.permissions().readonly()) {
+            (true, false) => 0o777,
+            (true, true) => 0o555,
+            (false, false) => 0o666,
+            (false, true) => 0o444,
+        }
     }
 }
 fn copy_and_hash(mut input: impl Read, mut output: impl Write) -> io::Result<(u64, String)> {

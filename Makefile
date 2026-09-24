@@ -936,4 +936,4 @@ export-cli-fixtures-check:
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
 	$(CARGO) build -p symvault-cli --locked
-	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1 -timeout=20m

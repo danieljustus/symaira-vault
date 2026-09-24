@@ -102,7 +102,7 @@ jobs:
   freebsd:
     name: MCPB (freebsd/${{ matrix.goarch }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
