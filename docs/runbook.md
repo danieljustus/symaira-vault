@@ -151,7 +151,7 @@ go mod tidy
 
 ### GoReleaser Failures
 
-1. **Check .goreleaser.yaml** syntax
+1. **Check .goreleaser.yml** syntax
 2. **Verify workflow permissions** include `contents: write`
 3. **Check artifact sizes** - GitHub has 10GB total limit
 4. **Check GitHub release publishing** if asset upload fails
@@ -1055,7 +1055,7 @@ rm -rf /tmp/test-vault
 
 ### Useful Links
 
-- [Security Policy](SECURITY.md)
-- [Release Process Documentation](.github/workflows/release.yml)
-- [GoReleaser Configuration](.goreleaser.yaml)
+- [Security Policy](../SECURITY.md)
+- [Release Process Documentation](../.github/workflows/release.yml)
+- [GoReleaser Configuration](../.goreleaser.yml)
 - [Vulnerability Database](https://pkg.go.dev/golang.org/x/vuln)

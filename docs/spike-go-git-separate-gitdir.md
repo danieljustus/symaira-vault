@@ -249,4 +249,4 @@ When implementing the D3 layout in Symaira Vault:
 
 ## 7. Permanent Regression Test
 
-The probe test has been committed as a permanent regression test at [internal/git/separate_gitdir_probe_test.go](file:///Users/daniel/Dev/Symaira%20Dev/symaira-vault/.worktrees/spike-git-dir/internal/git/separate_gitdir_probe_test.go) to guarantee that future updates to `go-git` preserve separate-git-dir compatibility.
+The probe test has been committed as a permanent regression test at [internal/git/separate_gitdir_probe_test.go](../internal/git/separate_gitdir_probe_test.go) to guarantee that future updates to `go-git` preserve separate-git-dir compatibility.

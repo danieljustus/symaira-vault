@@ -498,7 +498,7 @@ sha256sum openpass-v1.2.3-linux-amd64
 
 ## Related Documents
 
-- [docs/distribution.md](/docs/distribution.md) - Distribution channels and installation
-- [docs/macos-notarization.md](/docs/macos-notarization.md) - macOS-specific signing requirements
-- [SECURITY.md](/SECURITY.md) - Security policy
-- [CHANGELOG.md](/CHANGELOG.md) - Release history
+- [docs/distribution.md](distribution.md) - Distribution channels and installation
+- [docs/macos-notarization.md](macos-notarization.md) - macOS-specific signing requirements
+- [SECURITY.md](../SECURITY.md) - Security policy
+- [CHANGELOG.md](../CHANGELOG.md) - Release history
