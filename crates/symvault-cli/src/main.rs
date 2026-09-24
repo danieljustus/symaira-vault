@@ -16,6 +16,7 @@ mod audit_export_commands;
 mod backup_commands;
 mod config;
 mod daemon_commands;
+mod deprecated_stubs;
 mod device;
 mod device_approval;
 mod doctor_commands;
@@ -375,6 +376,18 @@ enum Command {
         #[arg(long)]
         allow_locked: bool,
     },
+    /// Deprecated: use `symvault mcp`.
+    ///
+    /// Hidden like the oracle's `serve` command (`cmd/mcp/serve.go`). Only the
+    /// deprecated `token` children are ported: the bare `serve` server and
+    /// `serve install|status|uninstall` belong to the unported
+    /// HTTP/service runtime, so `token` is this parent's only declared
+    /// subcommand and clap rejects the rest (see `deprecated_stubs`).
+    #[command(hide = true)]
+    Serve {
+        #[command(subcommand)]
+        action: ServeAction,
+    },
     /// Deprecated: use `symvault agent install <agent> --config-only`.
     ///
     /// Kept as a hidden compatibility command because `cmd/mcp/mcp_config.go`
@@ -506,6 +519,27 @@ enum McpAction {
     },
 }
 
+/// Subcommands the port implements under the deprecated `serve` parent.
+///
+/// The oracle's `serve` also owns `install`, `status`, `uninstall` and the
+/// bare server itself; those stay unported with the HTTP/service runtime, so
+/// they are deliberately absent here (see `deprecated_stubs`).
+#[derive(Debug, Subcommand)]
+enum ServeAction {
+    /// Deprecated: use `symvault agent token <action> <name>`.
+    ///
+    /// Deliberately a catch-all instead of clap subcommands, mirroring
+    /// `McpAction::Token`: the oracle shares one `newMcpTokenCmd()` between
+    /// the `mcp` and `serve` parents, so `serve token <unknown>` still runs
+    /// the group handler and the words after `token` are dispatched in
+    /// `deprecated_stubs::serve_token`.
+    #[command(hide = true)]
+    Token {
+        #[arg(value_name = "ARGS", num_args = 0..)]
+        args: Vec<String>,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 enum PolicyCommand {
     Validate { file: PathBuf },
@@ -533,6 +567,17 @@ enum ShareCommand {
 
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
+    /// Deprecated: use `symvault agent install <name>`.
+    ///
+    /// Hidden like the oracle's `newAgentSetupCmd` in `cmd/mcp/agent.go`; the
+    /// stub only prints the deprecation notice (see `deprecated_stubs`).
+    /// The oracle declares `ArbitraryArgs`, so any number of positional words
+    /// — including none — reaches the handler unchanged.
+    #[command(hide = true)]
+    Setup {
+        #[arg(value_name = "NAME", num_args = 0..)]
+        _args: Vec<String>,
+    },
     List,
     Doctor {
         name: String,
@@ -1778,6 +1823,9 @@ fn run_cli() -> ExitCode {
             }
             finish_vault_result(result)
         }
+        Some(Command::Agent {
+            command: AgentCommand::Setup { .. },
+        }) => deprecated_stubs::agent_setup(),
         Some(Command::Audit {
             command: Some(AuditCommand::RotateKey),
             ..
@@ -1876,6 +1924,9 @@ fn run_cli() -> ExitCode {
                 deprecated_stub_message(deprecated_token_message(args.first().map(String::as_str)))
             }
         },
+        Some(Command::Serve {
+            action: ServeAction::Token { args },
+        }) => deprecated_stubs::serve_token(&args),
         Some(Command::McpConfig { .. }) => deprecated_stub_message(DEPRECATED_MCP_CONFIG),
         Some(Command::McpTokenRotate { .. }) => {
             deprecated_stub_message(DEPRECATED_MCP_TOKEN_ROTATE)
@@ -4287,9 +4338,14 @@ const DEPRECATED_MCP_TOKEN_ROTATE: &str =
 
 /// Maps the words after `mcp token` to the notice the oracle prints.
 ///
+/// `serve token` maps through here as well: the oracle builds both parents
+/// from one shared `newMcpTokenCmd()` (`cmd/mcp/serve.go`), so the notices
+/// are the same bytes on both paths.
+///
 /// Cobra has no `Args` restriction on the group or its subcommands, so an
-/// unknown word (`mcp token bogus`) falls through to the group handler and
-/// prints the group notice — verified against the pinned oracle.
+/// unknown word (`mcp token bogus`, `serve token bogus`) falls through to the
+/// group handler and prints the group notice — verified against the pinned
+/// oracle.
 fn deprecated_token_message(first: Option<&str>) -> &'static str {
     match first {
         Some("create") => DEPRECATED_MCP_TOKEN_CREATE,
