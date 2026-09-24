@@ -108,9 +108,15 @@ pub fn lookup_raw_bearer<'a>(
     now: OffsetDateTime,
 ) -> Result<Option<&'a TokenRecord>, time::error::Parse> {
     let hash = sha256_hex(bearer.as_bytes());
-    let Some(token) = entries.values().find(|token| token.hash == hash) else {
+    let mut matches = entries.values().filter(|token| token.hash == hash);
+    let Some(token) = matches.next() else {
         return Ok(None);
     };
+    // Go's hash-keyed loader overwrites duplicate hashes in map iteration
+    // order. Never pick a potentially different scope by token-ID order.
+    if matches.next().is_some() {
+        return Ok(None);
+    }
     if is_active_at(token, now)? {
         Ok(Some(token))
     } else {
@@ -640,6 +646,36 @@ mod tests {
         token.expires_at = Some("not-rfc3339".into());
         let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
         assert!(is_active_at(&token, now).is_err());
+    }
+
+    #[test]
+    fn duplicate_bearer_hashes_never_select_a_scope_by_id_order() {
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let bearer = "fixture-bearer-not-a-credential";
+        let hash = sha256_hex(bearer.as_bytes());
+        let record = TokenRecord {
+            id: "first".into(),
+            label: String::new(),
+            hash,
+            prefix: String::new(),
+            allowed_tools: Some(vec!["*".into()]),
+            tool_registry_hash: String::new(),
+            agent_name: String::new(),
+            created_at: String::new(),
+            expires_at: None,
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        let mut entries = BTreeMap::new();
+        entries.insert("first".into(), record.clone());
+        let mut second = record;
+        second.id = "second".into();
+        second.revoked = true;
+        entries.insert("second".into(), second);
+        assert!(lookup_raw_bearer(&entries, bearer, now).unwrap().is_none());
     }
 
     #[test]
