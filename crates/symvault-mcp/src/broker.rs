@@ -106,10 +106,10 @@ fn handle_connect_client(
         write_proxy_error(&mut client, status, body)?;
         return Ok(());
     }
-    let mut upstream = addresses
+    let upstream = addresses
         .iter()
         .find_map(|address| TcpStream::connect_timeout(address, CONNECT_TIMEOUT).ok());
-    let Some(mut upstream) = upstream.take() else {
+    let Some(mut upstream) = upstream else {
         write_proxy_error(&mut client, 502, "cannot connect to passthrough host")?;
         return Ok(());
     };
@@ -889,7 +889,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let client_thread = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            let (stream, _) = listener.accept().unwrap();
             handle_connect_client(stream.try_clone().unwrap(), &[], true, true).unwrap();
         });
         let mut client = TcpStream::connect(address).unwrap();
