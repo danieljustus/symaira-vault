@@ -187,8 +187,12 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
         );
         assert_same(&go, &rust, &format!("nested legacy symlink {args:?}"));
         assert!(!go.status.success(), "Go must reject nested legacy symlink");
+        // Go reports the walked path after filepath.Join/Clean semantics; the
+        // raw fixture path keeps a doubled slash when it inherits one from
+        // TMPDIR, so collapse components the way Go does before matching.
+        let walked_vault: PathBuf = nested_vault.components().collect();
         assert!(
-            String::from_utf8_lossy(&go.stderr).contains(nested_vault.to_string_lossy().as_ref()),
+            String::from_utf8_lossy(&go.stderr).contains(walked_vault.to_string_lossy().as_ref()),
             "Go nested symlink diagnostic should contain the absolute walked path: {:?}",
             go.stderr
         );
