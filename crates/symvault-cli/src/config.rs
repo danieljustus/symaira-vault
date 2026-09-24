@@ -634,6 +634,14 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
 /// rather than a silent no-op.
 fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     #[cfg(windows)]
+    if err.kind() == io::ErrorKind::PermissionDenied
+        && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
+    {
+        // Rust's File::open rejects directories, whereas Go opens them and
+        // reports the later Windows ReadFile error.
+        return format!("read {}: Incorrect function.", path.display());
+    }
+    #[cfg(windows)]
     let err_msg = match err.raw_os_error() {
         Some(2) => "The system cannot find the file specified.",
         Some(3) => "The system cannot find the path specified.",
@@ -650,6 +658,7 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     let err_msg = match err.raw_os_error() {
         Some(2) => "no such file or directory",
         Some(13) => "permission denied",
+        Some(21) => "is a directory",
         _ => {
             if err.kind() == io::ErrorKind::NotFound {
                 "no such file or directory"
@@ -660,6 +669,12 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
             }
         }
     };
+    #[cfg(not(windows))]
+    let op = if err.kind() == io::ErrorKind::IsADirectory {
+        "read"
+    } else {
+        op
+    };
     format!("{op} {}: {err_msg}", path.display())
 }
 
@@ -668,12 +683,24 @@ pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(),
         return Err("config validate --fix is not supported by this build".to_owned());
     }
     let json = output == "json";
+    // The header below prints the RAW argument, exactly like Go's
+    // `cannot load config from %s` (cmd/admin/config.go), while config.Load
+    // rejects traversal before os.ReadFile(filepath.Clean(path)) — so the
+    // open attempt (and its error text) sees the cleaned path.
     let path_display = path.display().to_string();
+    let read_path = crate::agent_list_commands::clean_path(path);
 
-    let bytes = match fs::read(path) {
+    let bytes = if path
+        .components()
+        .any(|component| component == std::path::Component::ParentDir)
+    {
+        Err("config file path escapes expected directory".to_owned())
+    } else {
+        fs::read(&read_path).map_err(|error| format_go_path_error("open", &read_path, &error))
+    };
+    let bytes = match bytes {
         Ok(bytes) => bytes,
-        Err(error) => {
-            let path_err = format_go_path_error("open", path, &error);
+        Err(path_err) => {
             if json {
                 print_json(
                     &serde_json::json!({ "error": path_err, "valid": false }),
@@ -760,7 +787,13 @@ pub fn resolve_path(file: Option<PathBuf>) -> Result<PathBuf, String> {
     let home = home
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "cannot determine config file path".to_owned())?;
-    Ok(PathBuf::from(home).join(".symvault").join("config.yaml"))
+    // Go builds this via filepath.Join(home, subdir, "config.yaml"), whose
+    // Clean collapses structural quirks such as a doubled slash in $HOME;
+    // a raw PathBuf join keeps them. Reuse the repo's filepath.Clean mirror
+    // (agent_list_commands::clean_path) instead of a second implementation.
+    Ok(crate::agent_list_commands::clean_path(
+        &PathBuf::from(home).join(".symvault").join("config.yaml"),
+    ))
 }
 
 #[cfg(test)]
