@@ -122,7 +122,7 @@ fn broker_rejects_connect_and_stops_on_sigterm() {
         .set_read_timeout(Some(Duration::from_secs(2)))
         .expect("set broker response timeout");
     proxy
-        .write_all(b"CONNECT 203.0.113.1:443 HTTP/1.1\r\nHost: 203.0.113.1:443\r\n\r\n")
+        .write_all(b"CONNECT 192.168.1.1:443 HTTP/1.1\r\nHost: 192.168.1.1:443\r\n\r\n")
         .expect("send rejected CONNECT without DNS");
     let mut response = Vec::new();
     proxy

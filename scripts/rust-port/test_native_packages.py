@@ -20,8 +20,9 @@ class NativePackageSmokeTests(unittest.TestCase):
                 runner.smoke(Path(__file__).with_suffix(f".{suffix}"), "amd64")
                 command = run.call_args.args[0]
                 self.assertEqual(command[5], image)
+                self.assertIn(f"dst=/tmp/symvault.{suffix},readonly", command[4])
                 self.assertIn("git", command[-1].split("symvault init")[0])
-                self.assertIn("/tmp/symvault.pkg", command[-1])
+                self.assertIn(f"/tmp/symvault.{suffix}", command[-1])
                 self.assertTrue(run.call_args.kwargs["check"])
 
 

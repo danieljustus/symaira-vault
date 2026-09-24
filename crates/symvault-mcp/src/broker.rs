@@ -898,8 +898,10 @@ mod tests {
         let mut client = TcpStream::connect(address).unwrap();
         write!(client, "CONNECT 127.0.0.1:443 HTTP/1.1\r\n\r\n").unwrap();
         let mut response = String::new();
-        BufReader::new(client).read_line(&mut response).unwrap();
-        assert_eq!(response, "HTTP/1.1 403 Forbidden\r\n");
+        BufReader::new(client)
+            .read_to_string(&mut response)
+            .unwrap();
+        assert!(response.starts_with("HTTP/1.1 403 Forbidden\r\n"));
         client_thread.join().unwrap();
     }
 
