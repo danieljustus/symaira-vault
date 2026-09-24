@@ -1821,7 +1821,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     let script = |marker: &Path| {
         if cfg!(windows) {
             format!(
-                "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & <nul set /p \"=%SYMVAULT_FILE_CERT_P12%\" > \"{}\" & type \"%SYMVAULT_FILE_CERT_P12%\"",
+                "if not exist \"%SYMVAULT_FILE_CERT_P12%\" exit /b 1 & echo %SYMVAULT_FILE_CERT_P12%> \"{}\" & type \"%SYMVAULT_FILE_CERT_P12%\"",
                 marker.display()
             )
         } else {
@@ -1870,6 +1870,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!String::from_utf8_lossy(&rust_use.stderr).contains("file-use-secret"));
     let go_materialized = fs::read_to_string(&marker_go).expect("Go marker");
     let rust_materialized = fs::read_to_string(&marker_rust).expect("Rust marker");
+    let go_materialized = go_materialized.trim();
+    let rust_materialized = rust_materialized.trim();
     assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
     assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
 

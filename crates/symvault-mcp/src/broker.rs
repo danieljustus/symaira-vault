@@ -5,11 +5,15 @@
 //! Plain HTTP is allowed only to loopback targets. The full Go broker's TLS MITM,
 //! template catalog loading, vault lookup, substitutions, audit, and response
 //! pattern sanitizer remain separate migration work.
+//! The CLI currently exposes only an explicitly allowlisted CONNECT tunnel for
+//! certificate-pinning hosts; it does not intercept TLS or attach credentials.
 
 use std::{
     collections::BTreeMap,
     io::{BufRead, BufReader, Read, Write},
-    net::{IpAddr, SocketAddr, TcpStream, ToSocketAddrs},
+    net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
     time::Duration,
 };
 
@@ -17,6 +21,209 @@ const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_INFORMATIONAL_RESPONSES: usize = 8;
 const MAX_RESPONSE_HEADER_BYTES: usize = 64 * 1024;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const CONNECT_HEADER_LIMIT: usize = 64 * 1024;
+
+/// Serve the explicitly allowlisted CONNECT passthrough subset of the CLI broker.
+/// Targets are resolved once, checked, and dialed by pinned IP address.
+pub fn serve_connect_passthrough(
+    listener: TcpListener,
+    passthrough: Vec<String>,
+    strict: bool,
+    stopping: &AtomicBool,
+    allow_private: bool,
+) -> Result<(), String> {
+    if passthrough.iter().all(|host| host.trim().is_empty()) {
+        return Err("--passthrough requires at least one host".into());
+    }
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("configure broker listener: {error}"))?;
+    while !stopping.load(Ordering::Relaxed) {
+        match listener.accept() {
+            Ok((client, _)) => {
+                let passthrough = passthrough.clone();
+                // ponytail: one thread per tunnel, bounded workers if local connection volume grows.
+                thread::spawn(move || {
+                    let _ = handle_connect_client(client, &passthrough, strict, allow_private);
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(error) => return Err(format!("accept broker connection: {error}")),
+        }
+    }
+    Ok(())
+}
+
+fn handle_connect_client(
+    mut client: TcpStream,
+    passthrough: &[String],
+    strict: bool,
+    allow_private: bool,
+) -> Result<(), String> {
+    let request = read_connect_headers(&mut client)?;
+    let request_line = request.lines().next().unwrap_or_default();
+    let mut parts = request_line.split_ascii_whitespace();
+    let method = parts.next().unwrap_or_default();
+    let authority = parts.next().unwrap_or_default();
+    let version = parts.next().unwrap_or_default();
+    if parts.next().is_some() || version != "HTTP/1.1" {
+        write_proxy_error(&mut client, 400, "invalid proxy request")?;
+        return Ok(());
+    }
+    if method != "CONNECT" {
+        if strict {
+            write_proxy_error(
+                &mut client,
+                403,
+                "host is outside the passthrough allowlist",
+            )?;
+        } else {
+            write_proxy_error(
+                &mut client,
+                501,
+                "HTTP forwarding is not supported by the Rust broker",
+            )?;
+        }
+        return Ok(());
+    }
+    if authority.is_empty() {
+        write_proxy_error(&mut client, 400, "missing CONNECT target")?;
+        return Ok(());
+    }
+    let Some((host, addresses)) = resolve_connect_target(authority, allow_private) else {
+        write_proxy_error(&mut client, 403, "CONNECT target is blocked")?;
+        return Ok(());
+    };
+    if !passthrough.iter().any(|entry| host_matches(entry, &host)) {
+        let (status, body) = if strict {
+            (403, "host is outside the passthrough allowlist")
+        } else {
+            (501, "TLS interception is not supported by the Rust broker")
+        };
+        write_proxy_error(&mut client, status, body)?;
+        return Ok(());
+    }
+    let mut upstream = addresses
+        .iter()
+        .find_map(|address| TcpStream::connect_timeout(address, CONNECT_TIMEOUT).ok());
+    let Some(mut upstream) = upstream.take() else {
+        write_proxy_error(&mut client, 502, "cannot connect to passthrough host")?;
+        return Ok(());
+    };
+    client
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .map_err(|error| format!("write CONNECT response: {error}"))?;
+    let mut client_reader = client
+        .try_clone()
+        .map_err(|error| format!("clone broker client: {error}"))?;
+    let mut upstream_writer = upstream
+        .try_clone()
+        .map_err(|error| format!("clone broker upstream: {error}"))?;
+    let outbound = thread::spawn(move || {
+        let _ = std::io::copy(&mut client_reader, &mut upstream_writer);
+        let _ = upstream_writer.shutdown(Shutdown::Write);
+    });
+    let _ = std::io::copy(&mut upstream, &mut client);
+    let _ = client.shutdown(Shutdown::Write);
+    let _ = outbound.join();
+    Ok(())
+}
+
+fn read_connect_headers(stream: &mut TcpStream) -> Result<String, String> {
+    let mut bytes = Vec::with_capacity(1024);
+    let mut byte = [0; 1];
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while bytes.len() < CONNECT_HEADER_LIMIT {
+        stream
+            .set_read_timeout(Some(remaining(deadline)?))
+            .map_err(|_| "cannot configure broker client")?;
+        stream
+            .read_exact(&mut byte)
+            .map_err(|_| "cannot read proxy request".to_owned())?;
+        bytes.push(byte[0]);
+        if bytes.ends_with(b"\r\n\r\n") {
+            return String::from_utf8(bytes).map_err(|_| "invalid proxy request".to_owned());
+        }
+    }
+    Err("proxy request headers too large".into())
+}
+
+fn resolve_connect_target(
+    authority: &str,
+    allow_private: bool,
+) -> Option<(String, Vec<SocketAddr>)> {
+    if authority.is_empty()
+        || authority.bytes().any(|byte| {
+            byte.is_ascii_whitespace()
+                || byte.is_ascii_control()
+                || matches!(byte, b'/' | b'@' | b'\\')
+        })
+    {
+        return None;
+    }
+    let (raw_host, port) = if let Some(rest) = authority.strip_prefix('[') {
+        let (host, port) = rest.split_once("]:")?;
+        (host, port)
+    } else {
+        let (host, port) = authority.rsplit_once(':')?;
+        if host.contains(':') {
+            return None;
+        }
+        (host, port)
+    };
+    if raw_host.is_empty() || port.parse::<u16>().is_err() {
+        return None;
+    }
+    let host = canonical_host(raw_host);
+    if host.is_empty() || host.contains('%') {
+        return None;
+    }
+    let addresses = authority.to_socket_addrs().ok()?.collect::<Vec<_>>();
+    if addresses.is_empty()
+        || (!allow_private
+            && (matches!(host.as_str(), "localhost" | "localhost.localdomain")
+                || addresses
+                    .iter()
+                    .any(|address| private_or_local(address.ip()))))
+    {
+        return None;
+    }
+    Some((host, addresses))
+}
+
+fn canonical_host(value: &str) -> String {
+    let value = value.trim_start_matches('[').trim_end_matches(']');
+    value
+        .parse::<IpAddr>()
+        .map_or_else(|_| value.to_ascii_lowercase(), |ip| ip.to_string())
+}
+
+fn host_matches(pattern: &str, host: &str) -> bool {
+    let pattern = pattern
+        .rsplit_once(':')
+        .filter(|(host, _)| !host.contains(':'))
+        .map_or(pattern, |(host, _)| host);
+    let pattern = canonical_host(pattern);
+    host == pattern || host.ends_with(&format!(".{pattern}"))
+}
+
+fn write_proxy_error(stream: &mut TcpStream, status: u16, message: &str) -> Result<(), String> {
+    let reason = match status {
+        400 => "Bad Request",
+        403 => "Forbidden",
+        501 => "Not Implemented",
+        _ => "Bad Gateway",
+    };
+    write!(
+        stream,
+        "HTTP/1.1 {status} {reason}\r\nX-Content-Type-Options: nosniff\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{message}\n",
+        message.len() + 1
+    )
+    .map_err(|error| format!("write proxy error response: {error}"))
+}
 
 #[derive(Clone, Debug)]
 pub struct ApiTemplate {
@@ -606,7 +813,92 @@ fn replace_bytes(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{net::TcpListener, thread};
+    use std::{
+        io::{BufRead, BufReader, Read, Write},
+        net::TcpListener,
+        sync::{Arc, atomic::AtomicBool},
+        thread,
+    };
+
+    #[test]
+    fn connect_passthrough_tunnels_only_allowlisted_loopback_hosts() {
+        let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+        let upstream_addr = upstream.local_addr().unwrap();
+        let upstream_thread = thread::spawn(move || {
+            let (mut stream, _) = upstream.accept().unwrap();
+            let mut request = [0; 4];
+            stream.read_exact(&mut request).unwrap();
+            assert_eq!(&request, b"ping");
+            stream.write_all(b"pong").unwrap();
+        });
+        let proxy = TcpListener::bind("127.0.0.1:0").unwrap();
+        let proxy_addr = proxy.local_addr().unwrap();
+        let stopping = Arc::new(AtomicBool::new(false));
+        let proxy_stopping = Arc::clone(&stopping);
+        let proxy_thread = thread::spawn(move || {
+            serve_connect_passthrough(
+                proxy,
+                vec!["127.0.0.1".into()],
+                false,
+                &proxy_stopping,
+                true,
+            )
+            .unwrap();
+        });
+
+        let mut client = TcpStream::connect(proxy_addr).unwrap();
+        write!(
+            client,
+            "CONNECT {upstream_addr} HTTP/1.1\r\nHost: {upstream_addr}\r\n\r\n"
+        )
+        .unwrap();
+        let mut response = BufReader::new(client.try_clone().unwrap());
+        let mut status = String::new();
+        response.read_line(&mut status).unwrap();
+        assert_eq!(status, "HTTP/1.1 200 Connection Established\r\n");
+        loop {
+            let mut header = String::new();
+            response.read_line(&mut header).unwrap();
+            if header == "\r\n" {
+                break;
+            }
+        }
+        client.write_all(b"ping").unwrap();
+        let mut body = [0; 4];
+        response.read_exact(&mut body).unwrap();
+        assert_eq!(&body, b"pong");
+        drop(response);
+        drop(client);
+        upstream_thread.join().unwrap();
+        stopping.store(true, Ordering::Relaxed);
+        proxy_thread.join().unwrap();
+    }
+
+    #[test]
+    fn connect_passthrough_fails_closed_for_unlisted_or_private_targets() {
+        let private = resolve_connect_target("127.0.0.1:443", false);
+        assert!(private.is_none());
+        let (ipv6_host, _) = resolve_connect_target("[::1]:443", true).unwrap();
+        assert_eq!(ipv6_host, "::1");
+        assert!(host_matches("example.com", "api.example.com"));
+        assert!(host_matches("example.com:443", "api.example.com"));
+        assert!(host_matches("[::1]", "::1"));
+        assert!(!host_matches("example.com", "notexample.com"));
+        assert!(!host_matches("example.com", "example.com.evil"));
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let client_thread = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            handle_connect_client(stream.try_clone().unwrap(), &[], true, true).unwrap();
+        });
+        let mut client = TcpStream::connect(address).unwrap();
+        write!(client, "CONNECT 127.0.0.1:443 HTTP/1.1\r\n\r\n").unwrap();
+        let mut response = String::new();
+        BufReader::new(client).read_line(&mut response).unwrap();
+        assert_eq!(response, "HTTP/1.1 403 Forbidden\r\n");
+        client_thread.join().unwrap();
+    }
 
     #[test]
     fn loopback_transcript_injects_then_redacts_bearer() {

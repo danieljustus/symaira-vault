@@ -15,6 +15,7 @@ mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod broker_commands;
 mod completion_commands;
 mod config;
 mod daemon_commands;
@@ -160,6 +161,19 @@ enum Command {
         broker_passthrough: Vec<String>,
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Run the loopback egress broker's explicit CONNECT passthrough subset.
+    Broker {
+        /// Loopback listen address (0 selects an ephemeral port).
+        #[arg(long, default_value = "127.0.0.1:0")]
+        addr: String,
+        /// Reject hosts outside the passthrough allowlist with 403.
+        #[arg(long)]
+        strict: bool,
+        /// Hosts tunneled without TLS interception (comma-separated, domain suffixes match).
+        /// At least one host is required by this Rust broker slice.
+        #[arg(long, value_delimiter = ',')]
+        passthrough: Vec<String>,
     },
     /// Manage local credential intake.
     #[command(subcommand_precedence_over_arg = true)]
@@ -1629,6 +1643,24 @@ fn run_cli() -> ExitCode {
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
+            finish_vault_result(result)
+        }
+        Some(Command::Broker {
+            addr,
+            strict,
+            passthrough,
+        }) => {
+            let result = (|| {
+                if passthrough.iter().all(|host| host.trim().is_empty()) {
+                    return Err("--passthrough requires at least one host".to_owned());
+                }
+                let address = broker_commands::validate_address(&addr)?;
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&root)?;
+                let _identity = device::unlock_vault(&root)?;
+                let listener = broker_commands::bind(address)?;
+                broker_commands::serve(listener, strict, passthrough)
+            })();
             finish_vault_result(result)
         }
         Some(Command::Intake {

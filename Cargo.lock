@@ -195,14 +195,15 @@ dependencies = [
 
 [[package]]
 name = "argon2"
-version = "0.5.3"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+checksum = "134c52ddac6d63c576bef8168db10c83c49c26444ecbc68060fef078925a901c"
 dependencies = [
  "base64ct",
  "blake2",
- "cpufeatures 0.2.17",
+ "cpufeatures 0.3.1",
  "password-hash",
+ "rayon",
  "zeroize",
 ]
 
@@ -417,11 +418,11 @@ checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
 name = "blake2"
-version = "0.10.6"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+checksum = "5b5d4d889834ee8ecfc0f8426ad30faf7cdcb10f741a8e6d7224d95325479f6f"
 dependencies = [
- "digest 0.10.7",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -709,6 +710,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -874,6 +894,12 @@ dependencies = [
  "quote",
  "syn 3.0.5",
 ]
+
+[[package]]
+name = "either"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
 name = "elliptic-curve"
@@ -1916,13 +1942,11 @@ dependencies = [
 
 [[package]]
 name = "password-hash"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+checksum = "aab41826031698d6ffcd9cff78ef56ef998e39dc7e5067cdfebe373842d4723b"
 dependencies = [
- "base64ct",
- "rand_core 0.6.4",
- "subtle",
+ "phc",
 ]
 
 [[package]]
@@ -1940,6 +1964,16 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "phc"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44dc769b75f93afdddd8c7fa12d685292ddeff1e66f7f0f3a234cf1818afe892"
+dependencies = [
+ "base64ct",
+ "ctutils",
+]
 
 [[package]]
 name = "pin-project"
@@ -2200,6 +2234,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.5",
+]
+
+[[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
 ]
 
 [[package]]
