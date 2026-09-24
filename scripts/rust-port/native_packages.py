@@ -254,9 +254,9 @@ def smoke(package: Path, arch: str) -> None:
     if arch not in GOARCH:
         raise ValueError(f"unsupported package target: {package_format}/{arch}")
     image, install = {
-        "deb": ("ubuntu:24.04", "dpkg -i /tmp/symvault.pkg; dpkg -s symvault"),
-        "rpm": ("fedora:44", "dnf install -y /tmp/symvault.pkg; rpm -q symvault"),
-        "apk": ("alpine:3.23", "apk add --allow-untrusted /tmp/symvault.pkg; apk info -e symvault"),
+        "deb": ("ubuntu:24.04", "apt-get update; apt-get install -y --no-install-recommends git; dpkg -i /tmp/symvault.pkg; dpkg -s symvault"),
+        "rpm": ("fedora:44", "dnf install -y git /tmp/symvault.pkg; rpm -q symvault"),
+        "apk": ("alpine:3.23", "apk add --allow-untrusted /tmp/symvault.pkg git; apk info -e symvault"),
     }[package_format]
     binary = package.resolve()
     subprocess.run(

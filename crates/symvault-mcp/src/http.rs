@@ -43,14 +43,14 @@ pub struct HttpResponse {
 
 enum HttpStream {
     Tcp(TcpStream),
-    Tls(StreamOwned<ServerConnection, TcpStream>),
+    Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
 }
 
 impl HttpStream {
     fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
         let stream = match tls {
             Some(config) => ServerConnection::new(config)
-                .map(|connection| Self::Tls(StreamOwned::new(connection, stream)))
+                .map(|connection| Self::Tls(Box::new(StreamOwned::new(connection, stream))))
                 .map_err(std::io::Error::other),
             None => Ok(Self::Tcp(stream)),
         }?;
@@ -455,7 +455,6 @@ where
             handler_for_agent,
             handlers,
             sessions,
-            secure,
         )
     })
 }
@@ -491,7 +490,6 @@ where
                 handler_for_agent,
                 handlers,
                 sessions,
-                false,
             )
         },
     )
@@ -590,11 +588,11 @@ fn serve_one_authenticated<F>(
     handler_for_agent: &mut F,
     handlers: &mut HashMap<String, ProtocolHandler>,
     sessions: &mut HashMap<String, ProtocolHandler>,
-    secure: bool,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
+    let secure = reader.get_ref().is_tls();
     let stream = reader.get_mut();
     let response_version = request.http_version.as_str();
     if !allowed_origin_for_transport(&request.origin, &request.host, secure) {
@@ -1659,7 +1657,7 @@ mod tests {
     }
 
     #[test]
-    fn TLS_server_configuration_fails_closed_on_invalid_ca_and_identity() {
+    fn tls_server_configuration_fails_closed_on_invalid_ca_and_identity() {
         let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
         let certificate_path = fixture_dir.join("tls-server.pem");
         let ca_path = fixture_dir.join("tls-ca.pem");
@@ -2025,7 +2023,6 @@ mod tests {
                         &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
                         &mut handlers,
                         &mut sessions,
-                        false,
                     )
                 },
             )

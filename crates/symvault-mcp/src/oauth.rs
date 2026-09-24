@@ -831,7 +831,7 @@ mod tests {
     #[test]
     fn consent_pkce_access_and_refresh_are_connected_and_single_use() {
         let directory = tempfile::tempdir().unwrap();
-        let mut state = OAuthState::new(
+        let state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
@@ -864,14 +864,14 @@ mod tests {
         assert!(!registry.contains(refresh));
         let registry: serde_json::Value = serde_json::from_str(&registry).unwrap();
         let access_hash = symvault_store::sha256_hex(access.as_bytes());
-        assert_eq!(
-            registry["tokens"][access_hash.as_str()]["agent_name"],
-            "default"
-        );
-        assert_eq!(
-            registry["tokens"][access_hash.as_str()]["allowed_tools"],
-            serde_json::json!(["*"])
-        );
+        let record = registry["tokens"]
+            .as_object()
+            .unwrap()
+            .values()
+            .find(|record| record["hash"].as_str() == Some(access_hash.as_str()))
+            .expect("access token hash must be stored");
+        assert_eq!(record["agent_name"], "default");
+        assert_eq!(record["allowed_tools"], serde_json::json!(["*"]));
 
         assert_eq!(
             response_body(token(&state, &token_request, OffsetDateTime::now_utc(),)).0,
@@ -895,7 +895,7 @@ mod tests {
     #[test]
     fn consent_denial_and_failed_pkce_never_mint_tokens() {
         let directory = tempfile::tempdir().unwrap();
-        let mut denied = OAuthState::new(
+        let denied = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Denied),
@@ -916,7 +916,7 @@ mod tests {
         );
         assert!(denied.codes.lock().unwrap().is_empty());
 
-        let mut approved = OAuthState::new(
+        let approved = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
@@ -1094,7 +1094,7 @@ mod tests {
     #[test]
     fn authorization_rejects_unimplemented_scope_requests() {
         let directory = tempfile::tempdir().unwrap();
-        let mut state = OAuthState::new(
+        let state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),

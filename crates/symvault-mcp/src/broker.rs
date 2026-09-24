@@ -42,6 +42,9 @@ pub fn serve_connect_passthrough(
     while !stopping.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((client, _)) => {
+                client
+                    .set_nonblocking(false)
+                    .map_err(|error| format!("configure broker client: {error}"))?;
                 let passthrough = passthrough.clone();
                 // ponytail: one thread per tunnel, bounded workers if local connection volume grows.
                 thread::spawn(move || {
