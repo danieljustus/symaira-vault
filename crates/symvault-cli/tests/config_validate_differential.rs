@@ -149,3 +149,53 @@ fn config_validate_matches_go_contract() {
     );
     assert_same(&res_go, &res_rust, "config validate valid quiet");
 }
+
+#[test]
+fn config_inspect_cleans_read_paths_but_preserves_set_target() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("inspect-path");
+    let valid = home.0.join("valid.yaml");
+    let original = b"vaultDir: /fixture/vault\n";
+    fs::write(&valid, original).expect("write isolated config");
+    let raw = home.0.join("missing/../valid.yaml");
+    let raw = raw.to_str().expect("temporary path is UTF-8");
+
+    for args in [
+        vec!["config", "get", "vaultDir", "--file", raw],
+        vec!["config", "list", "--file", raw],
+        vec!["config", "set", "vaultDir", "/updated", "--file", raw],
+    ] {
+        let go_result = run(&go, &home.0, &args);
+        assert_eq!(
+            fs::read(&valid).expect("Go preserves original config"),
+            original
+        );
+        let rust_result = run(&rust, &home.0, &args);
+        assert_eq!(
+            fs::read(&valid).expect("Rust preserves original config"),
+            original
+        );
+        if args[1] == "set" {
+            assert_eq!(go_result.status.code(), rust_result.status.code());
+            assert!(!go_result.status.success());
+            assert_eq!(go_result.stdout, rust_result.stdout);
+            for result in [&go_result, &rust_result] {
+                assert!(
+                    String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
+                    "set must fail at the write stage, not the read stage"
+                );
+            }
+        } else {
+            assert_same(
+                &go_result,
+                &rust_result,
+                &format!("config {} lexical path", args[1]),
+            );
+        }
+    }
+}
