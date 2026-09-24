@@ -4,8 +4,7 @@ Symaira Vault is an open-source, age-encrypted password manager for terminal
 users and AI agents. We welcome contributions from the community.
 
 This document describes how to set up a development environment, run tests, and
-submit changes. For agent-specific conventions (merge policy, issue handling,
-release scope), see [AGENTS.md](AGENTS.md).
+submit changes.
 
 ## Prerequisites
 
@@ -98,9 +97,6 @@ make vet        # run go vet (includes passlint analyzer)
   to check. Coverage gates are enforced during release.
 - **Error handling:** Use `%w` for error wrapping when the wrapped error should
   be inspectable via `errors.Is`/`errors.As`. Do not wrap for decoration only.
-- **Agent instructions:** These conventions are also captured in
-  [AGENTS.md](AGENTS.md) for automated coding agents (Hermes, Claude Code,
-  OpenCode). Both human contributors and agents follow the same rules.
 
 ## Issue triage
 
@@ -119,7 +115,7 @@ automatically.
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
+See [SECURITY.md](../SECURITY.md) for reporting vulnerabilities.
 **Do not** open public issues for security vulnerabilities — use the GitHub
 Security Advisory "Report a vulnerability" flow instead.
 
