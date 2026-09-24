@@ -245,8 +245,9 @@ fn unported_serve_runtime_paths_fail_closed_without_stub_output() {
         );
         assert!(output.stdout.is_empty(), "{label} wrote to stdout");
         let stderr = String::from_utf8_lossy(&output.stderr);
+        // Windows renders the executable name as `symvault.exe` in clap usage.
         assert!(
-            stderr.contains("symvault serve"),
+            stderr.contains(" serve [") || stderr.contains(" serve "),
             "{label} did not target the serve command: {stderr}"
         );
         if args.len() > 1 {
