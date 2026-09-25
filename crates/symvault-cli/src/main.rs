@@ -433,6 +433,11 @@ enum Command {
         skip_existing: bool,
         #[arg(long)]
         overwrite: bool,
+        #[arg(
+            long,
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
+        )]
+        quarantine: bool,
         #[arg(long, default_value = "")]
         mapping: String,
     },
@@ -1917,6 +1922,7 @@ fn run_cli() -> ExitCode {
             prefix,
             skip_existing,
             overwrite,
+            quarantine,
             mapping,
         }) => {
             // cobra Find: only the FIRST non-flag word can name a
@@ -1948,6 +1954,7 @@ fn run_cli() -> ExitCode {
                     &prefix,
                     skip_existing,
                     overwrite,
+                    quarantine,
                     &mapping,
                     cli.quiet,
                 )
@@ -4048,9 +4055,29 @@ fn run_import(
     prefix: &str,
     skip_existing: bool,
     overwrite: bool,
+    quarantine: bool,
     mapping: &str,
     quiet: bool,
 ) -> ExitCode {
+    // cmd/admin/import.go resolves and validates the import format before it
+    // checks any flag conflict, so an undetectable format wins over the
+    // --skip-existing/--overwrite and --quarantine/--prefix errors and no
+    // quarantine ID line is printed for an invocation that cannot run.
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
+    if skip_existing && overwrite {
+        return finish_vault_result(Err(
+            "--skip-existing and --overwrite cannot be used together".into(),
+        ));
+    }
+    let (prefix, import_id) = match import_commands::resolve_import_prefix(prefix, quarantine) {
+        Ok(value) => value,
+        Err(error) => return finish_vault_result(Err(error)),
+    };
+    if !quiet && let Some(import_id) = &import_id {
+        println!("Quarantine import ID: {import_id}");
+    }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
@@ -4062,7 +4089,7 @@ fn run_import(
                 source: source.to_owned(),
                 format: format.map(str::to_owned),
                 dry_run,
-                prefix: prefix.to_owned(),
+                prefix,
                 skip_existing,
                 overwrite,
                 mapping: mapping.to_owned(),
