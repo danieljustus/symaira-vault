@@ -236,6 +236,43 @@ fn list_marks_an_expired_session_as_expired() {
 }
 
 #[test]
+fn list_rejects_non_go_timestamps_without_output_or_store_mutation() {
+    let binary = rust_binary();
+    for (field, created_at, expires_at) in [
+        ("created_at", "2026-01-01T00:00:00z", "2999-01-01T00:00:00Z"),
+        ("created_at", "2026-01-01T00:00:60Z", "2999-01-01T00:00:00Z"),
+        ("expires_at", "2026-01-01T00:00:00Z", "2999-01-01T00:00:00z"),
+        ("expires_at", "2026-01-01T00:00:00Z", "2999-01-01T00:00:60Z"),
+    ] {
+        let (_guard, home, root) = disposable_roots();
+        let dir = root.join(".symvault");
+        std::fs::create_dir_all(&dir).expect("store dir");
+        let store = format!(
+            r#"{{
+  "{ACTIVE}": {{
+    "prefix": "ABCD",
+    "device_id": "dev-invalid-time",
+    "public_key": "key",
+    "created_at": "{created_at}",
+    "expires_at": "{expires_at}",
+    "revoked": false
+  }}
+}}"#
+        );
+        std::fs::write(root.join(STORE), &store).expect("write store");
+
+        let output = run(&binary, &["device", "approval-list"], &root, &home);
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert!(output.stdout.is_empty(), "{output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(field),
+            "{output:?}"
+        );
+        assert_eq!(read_store(&root), store);
+    }
+}
+
+#[test]
 fn quiet_suppresses_both_the_empty_notice_and_the_table() {
     let binary = rust_binary();
     let (_guard, home, root) = disposable_roots();

@@ -239,8 +239,35 @@ fn display_minutes(stamp: &str) -> String {
     }
 }
 
+/// Validate the list input before `DeviceSessionStore::new` can migrate legacy
+/// keys and rewrite the file. Revoke keeps its existing load semantics.
+fn validate_list_timestamps(vault: &Path) -> Result<(), String> {
+    let path = vault.join(VAULT_SUBDIR).join(STORE_FILE);
+    let Ok(Some(data)) = safeio::read(&path) else {
+        return Ok(());
+    };
+    let Ok(sessions) = serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(&data)
+    else {
+        return Ok(());
+    };
+    for session in sessions.into_values().flatten() {
+        for (field, stamp) in [
+            ("created_at", session.created_at.as_str()),
+            ("expires_at", session.expires_at.as_str()),
+        ] {
+            GoTime::parse_rfc3339(stamp).map_err(|_| {
+                format!(
+                    "load approval device store: load device session store: invalid {field} timestamp {stamp:?}"
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
 /// `device approval-list`.
 pub(crate) fn list(vault: &Path, quiet: bool) -> Result<(), String> {
+    validate_list_timestamps(vault)?;
     let store = DeviceSessionStore::new(vault)
         .map_err(|error| format!("load approval device store: {error}"))?;
     let sessions = store.list();
