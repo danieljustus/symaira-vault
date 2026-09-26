@@ -58,6 +58,9 @@ const LOCK_FILE: &str = ".lock";
 /// Read and parse limits are deliberately explicit. They cap allocation before
 /// decryption and reject pathological JSON structures after parsing.
 pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+/// Version 1 entry envelope budgets shared with Go's Entry-Read path.
+pub const MAX_ENTRY_CIPHERTEXT_BYTES_V1: u64 = 24 * 1024 * 1024;
+pub const MAX_ENTRY_PLAINTEXT_BYTES_V1: u64 = 16 * 1024 * 1024;
 pub const MAX_ENTRY_FIELDS: usize = 1024;
 pub const MAX_ENTRY_DEPTH: usize = 32;
 pub const MAX_VALUE_BYTES: usize = 1024 * 1024;
@@ -942,9 +945,19 @@ impl Store {
         identity: &Identity,
     ) -> Result<Entry, StoreError> {
         let mut raw = self.read_candidate_bytes(candidate)?;
-        let mut plaintext =
-            decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let decrypted =
+            symvault_crypto::decrypt_bounded(&raw, identity, MAX_ENTRY_PLAINTEXT_BYTES_V1);
         raw.zeroize();
+        let mut plaintext = match decrypted {
+            Ok(plaintext) => plaintext,
+            Err(error) if error.class() == symvault_crypto::FailureClass::SizeLimit => {
+                return Err(StoreError::Limit {
+                    path: candidate.path.clone(),
+                    limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+                });
+            }
+            Err(error) => return Err(StoreError::Decryption(error.to_string())),
+        };
         let result = serde_json::from_slice(&plaintext)
             .map_err(|error| StoreError::Entry {
                 path: candidate.logical.clone(),
@@ -958,11 +971,16 @@ impl Store {
     fn read_candidate_bytes(&self, candidate: &Candidate) -> Result<Vec<u8>, StoreError> {
         #[cfg(unix)]
         {
-            rooted::read(&self.root_cap, &candidate.relative, &candidate.path)
+            rooted::read_limited(
+                &self.root_cap,
+                &candidate.relative,
+                &candidate.path,
+                MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            )
         }
         #[cfg(not(unix))]
         {
-            read_regular(&candidate.path)
+            read_regular_limited(&candidate.path, MAX_ENTRY_CIPHERTEXT_BYTES_V1)
         }
     }
 }
@@ -1509,6 +1527,15 @@ fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
 }
 
 #[cfg(not(unix))]
+fn read_regular_limited(path: &Path, limit: u64) -> Result<Vec<u8>, StoreError> {
+    let file = open_nofollow(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    read_open_regular_with_metadata_limit(file, path, limit).map(|(bytes, _)| bytes)
+}
+
+#[cfg(not(unix))]
 fn read_regular_with_metadata(path: &Path) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
@@ -1521,6 +1548,14 @@ fn read_open_regular_with_metadata(
     file: fs::File,
     path: &Path,
 ) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
+    read_open_regular_with_metadata_limit(file, path, MAX_FILE_BYTES)
+}
+
+fn read_open_regular_with_metadata_limit(
+    file: fs::File,
+    path: &Path,
+    limit: u64,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -1529,23 +1564,23 @@ fn read_open_regular_with_metadata(
         return Err(StoreError::NotRegularFile(path.to_path_buf()));
     }
     let size = metadata.len();
-    if size > MAX_FILE_BYTES {
+    if size > limit {
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
-            limit: MAX_FILE_BYTES,
+            limit,
         });
     }
     let mut bytes = Vec::with_capacity(size as usize);
-    file.take(MAX_FILE_BYTES + 1)
+    file.take(limit.saturating_add(1))
         .read_to_end(&mut bytes)
         .map_err(|source| StoreError::Read {
             path: path.to_path_buf(),
             source,
         })?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
+    if bytes.len() as u64 > limit {
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
-            limit: MAX_FILE_BYTES,
+            limit,
         });
     }
     Ok((bytes, metadata))

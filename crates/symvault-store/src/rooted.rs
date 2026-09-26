@@ -411,10 +411,28 @@ pub(super) fn read(
     read_with_metadata(root, relative, display).map(|(bytes, _)| bytes)
 }
 
+pub(super) fn read_limited(
+    root: &fs::File,
+    relative: &Path,
+    display: &Path,
+    limit: u64,
+) -> Result<Vec<u8>, StoreError> {
+    read_with_metadata_limited(root, relative, display, limit).map(|(bytes, _)| bytes)
+}
+
 pub(super) fn read_with_metadata(
     root: &fs::File,
     relative: &Path,
     display: &Path,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
+    read_with_metadata_limited(root, relative, display, super::MAX_FILE_BYTES)
+}
+
+fn read_with_metadata_limited(
+    root: &fs::File,
+    relative: &Path,
+    display: &Path,
+    limit: u64,
 ) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     use rustix::fs::{Mode, OFlags, openat};
     validate_relative(relative)?;
@@ -437,5 +455,5 @@ pub(super) fn read_with_metadata(
         path: display.to_path_buf(),
         source: source.into(),
     })?;
-    super::read_open_regular_with_metadata(fs::File::from(file), display)
+    super::read_open_regular_with_metadata_limit(fs::File::from(file), display, limit)
 }

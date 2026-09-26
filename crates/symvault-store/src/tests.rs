@@ -883,15 +883,43 @@ fn bounded_reads_reject_oversized_config_and_entry() {
     let entry_temp = tempfile::tempdir().unwrap();
     let entry_root = entry_temp.path();
     materialize(entry_root, &value.vaults[0]);
+    let store = Store::open(entry_root, &identity).unwrap();
+    let entry_path = entry_root.join("entries/minimal.age");
     fs::write(
-        entry_root.join("entries/minimal.age"),
-        vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
+        &entry_path,
+        vec![b'x'; MAX_ENTRY_CIPHERTEXT_BYTES_V1 as usize],
     )
     .unwrap();
-    let store = Store::open(entry_root, &identity).unwrap();
     assert!(matches!(
         store.get("minimal", &identity),
-        Err(StoreError::Limit { .. })
+        Err(StoreError::Decryption(_))
+    ));
+    fs::write(
+        &entry_path,
+        vec![b'x'; (MAX_ENTRY_CIPHERTEXT_BYTES_V1 + 1) as usize],
+    )
+    .unwrap();
+    assert!(matches!(
+        store.get("minimal", &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            ..
+        })
+    ));
+
+    let oversized_plaintext = vec![b'x'; (MAX_ENTRY_PLAINTEXT_BYTES_V1 + 1) as usize];
+    let encrypted = symvault_crypto::encrypt(
+        &oversized_plaintext,
+        &[parse_recipient(&recipient_string(&identity)).unwrap()],
+    )
+    .unwrap();
+    fs::write(&entry_path, encrypted).unwrap();
+    assert!(matches!(
+        store.get("minimal", &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+            ..
+        })
     ));
 }
 

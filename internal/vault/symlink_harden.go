@@ -3,8 +3,12 @@
 package vault
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/fsutil/safepath"
@@ -45,6 +49,35 @@ func SafeReadFile(path string) ([]byte, error) {
 	}
 
 	return os.ReadFile(path) // #nosec G304 -- symlink check performed above
+}
+
+// readEntryFileBounded opens an entry without following a final symlink, rejects
+// non-regular files before reading, and never allocates beyond the entry budget.
+func readEntryFileBounded(path string) ([]byte, error) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	file := os.NewFile(uintptr(fd), path)
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, &os.PathError{Op: "fstat", Path: path, Err: err}
+	}
+	if !info.Mode().IsRegular() {
+		return nil, &os.PathError{Op: "open", Path: path, Err: syscall.ENOTDIR}
+	}
+	if info.Size() > maxEntryCiphertextBytesV1 {
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	}
+	bytes, err := io.ReadAll(io.LimitReader(file, maxEntryCiphertextBytesV1+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes) > maxEntryCiphertextBytesV1 {
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	}
+	return bytes, nil
 }
 
 // SafeRemove delegates to the safepath package's symlink-hardened remove.

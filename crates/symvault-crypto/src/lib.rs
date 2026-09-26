@@ -59,6 +59,8 @@ pub enum FailureClass {
     WrongPassphraseOrKey,
     /// A supplied KDF parameter exceeds the resource policy.
     ParameterBounds,
+    /// Decrypted output exceeds the caller's explicit resource budget.
+    SizeLimit,
     /// The envelope may have been written by the historical zero-key bug.
     ZeroKeyCandidate,
     /// The caller supplied invalid public input.
@@ -323,6 +325,39 @@ pub fn decrypt(ciphertext: &[u8], identity: &Identity) -> Result<Vec<u8>, Crypto
     reader
         .read_to_end(&mut plaintext)
         .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
+    Ok(plaintext)
+}
+
+/// Decrypts an age X25519 entry while limiting plaintext allocation.
+///
+/// The reader is allowed to produce one byte beyond `max_plaintext_bytes` so
+/// callers can distinguish an exact-boundary payload from an oversized one.
+pub fn decrypt_bounded(
+    ciphertext: &[u8],
+    identity: &Identity,
+    max_plaintext_bytes: u64,
+) -> Result<Vec<u8>, CryptoError> {
+    let decryptor = age::Decryptor::new(ciphertext)
+        .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
+    let mut reader = decryptor
+        .decrypt(iter::once(&identity.0 as &dyn age::Identity))
+        .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
+    let mut plaintext = Vec::with_capacity(max_plaintext_bytes.min(64 * 1024) as usize);
+    reader
+        .by_ref()
+        .take(max_plaintext_bytes.saturating_add(1))
+        .read_to_end(&mut plaintext)
+        .map_err(|_| {
+            plaintext.zeroize();
+            CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed")
+        })?;
+    if plaintext.len() as u64 > max_plaintext_bytes {
+        plaintext.zeroize();
+        return Err(CryptoError::new(
+            FailureClass::SizeLimit,
+            "decrypted output exceeds size limit",
+        ));
+    }
     Ok(plaintext)
 }
 
@@ -952,6 +987,39 @@ mod tests {
     const ID: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
     const ID2: &str = "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3";
     const ID3: &str = "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597";
+
+    #[test]
+    fn bounded_age_decrypt_accepts_exact_plaintext_limit_and_rejects_one_over() {
+        let identity = parse_identity(ID).unwrap();
+        let exact_ciphertext = encrypt(b"12345", &[Recipient(identity.0.to_public())]).unwrap();
+        assert_eq!(
+            decrypt_bounded(&exact_ciphertext, &identity, 5).unwrap(),
+            b"12345"
+        );
+
+        let oversized_ciphertext =
+            encrypt(b"123456", &[Recipient(identity.0.to_public())]).unwrap();
+        assert_eq!(
+            decrypt_bounded(&oversized_ciphertext, &identity, 5)
+                .unwrap_err()
+                .class(),
+            FailureClass::SizeLimit
+        );
+    }
+
+    #[test]
+    fn entry_read_v1_plaintext_ceiling_fits_ciphertext_budget() {
+        const MAX_ENTRY_PLAINTEXT_BYTES_V1: usize = 16 * 1024 * 1024;
+        const MAX_ENTRY_CIPHERTEXT_BYTES_V1: usize = 24 * 1024 * 1024;
+        let identity = parse_identity(ID).unwrap();
+        let plaintext = vec![b'x'; MAX_ENTRY_PLAINTEXT_BYTES_V1];
+        let ciphertext = encrypt(&plaintext, &[Recipient(identity.0.to_public())]).unwrap();
+        assert!(ciphertext.len() <= MAX_ENTRY_CIPHERTEXT_BYTES_V1);
+        assert_eq!(
+            decrypt_bounded(&ciphertext, &identity, MAX_ENTRY_PLAINTEXT_BYTES_V1 as u64).unwrap(),
+            plaintext
+        );
+    }
     const ORACLE_COMMIT: &str = "caadd5e";
     const ORACLE_RELEASE: &str = "v0.22.1";
     const ORACLE_SOURCE_FILES: &[&str] = &[

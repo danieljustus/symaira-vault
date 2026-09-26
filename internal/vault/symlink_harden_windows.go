@@ -4,6 +4,8 @@ package vault
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"io/fs"
 	"os"
 
@@ -55,6 +57,35 @@ func SafeReadFile(path string) ([]byte, error) {
 	}
 
 	return os.ReadFile(path) // #nosec G304 -- symlink check performed above
+}
+
+func readEntryFileBounded(path string) ([]byte, error) {
+	if err := rejectSymlink(path); err != nil {
+		return nil, err
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, &os.PathError{Op: "open", Path: path, Err: errUnsafePath}
+	}
+	if info.Size() > maxEntryCiphertextBytesV1 {
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	}
+	bytes, err := io.ReadAll(io.LimitReader(file, maxEntryCiphertextBytesV1+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes) > maxEntryCiphertextBytesV1 {
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	}
+	return bytes, nil
 }
 
 func rejectSymlink(path string) error {
