@@ -162,8 +162,8 @@ pub fn write_atomic(path: &Path, data: &[u8]) -> Result<(), SafeIoError> {
     Ok(())
 }
 
-/// Opens `path` for appending, creating it with [`FILE_MODE`] if absent, after
-/// refusing a symlinked target.
+/// Opens `path` for readable appending, creating it with [`FILE_MODE`] if
+/// absent, after refusing a symlinked target.
 pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
     #[cfg(unix)]
     {
@@ -171,7 +171,7 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
         use rustix::io::Errno;
         let descriptor = open(
             path,
-            OFlags::WRONLY
+            OFlags::RDWR
                 | OFlags::APPEND
                 | OFlags::CREATE
                 | OFlags::NOFOLLOW
@@ -195,7 +195,7 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
     #[cfg(not(unix))]
     {
         refuse_unsafe_target(path)?;
-        Ok(append_options().open(path)?)
+        Ok(append_read_options().open(path)?)
     }
 }
 
@@ -259,9 +259,9 @@ pub fn create_dir_all(path: &Path) -> Result<(), SafeIoError> {
 }
 
 #[cfg(not(unix))]
-fn append_options() -> fs::OpenOptions {
+fn append_read_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
-    options.append(true).create(true);
+    options.read(true).append(true).create(true);
     options
 }
 
