@@ -775,9 +775,14 @@ fn entry_shape_budget_counts_duplicate_raw_keys_like_go() {
         Err(StoreError::ValueLimit(_))
     ));
 
-    // Go unmarshals duplicate envelope members into a map, so only the final
-    // `data` member is checked against the entry value limits.
-    assert!(entry_budget::validate(br#"{"data":false,"data":{}}"#, "overwritten").is_ok());
+    // Go merges duplicate map fields; both ports reject ambiguous envelopes.
+    assert!(entry_budget::validate(br#"{"data":{},"DATA":{}}"#, "duplicate").is_err());
+    let mut value: serde_json::Value =
+        serde_json::from_slice(br#"{"DATA":{"secret":"kept"}}"#).unwrap();
+    assert!(entry_budget::validate(br#"{"DATA":{"secret":"kept"}}"#, "case").is_ok());
+    normalize_entry_data_key(&mut value);
+    let entry: Entry = serde_json::from_value(value).unwrap();
+    assert_eq!(entry.data["secret"], "kept");
 }
 
 #[test]

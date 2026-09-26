@@ -1015,7 +1015,8 @@ impl Store {
                     path: candidate.logical.clone(),
                     detail: error.to_string(),
                 })
-                .and_then(|value| {
+                .and_then(|mut value| {
+                    normalize_entry_data_key(&mut value);
                     serde_json::from_value(value).map_err(|error| StoreError::Entry {
                         path: candidate.logical.clone(),
                         detail: error.to_string(),
@@ -1040,6 +1041,18 @@ impl Store {
         {
             read_regular_limited(&candidate.path, MAX_ENTRY_CIPHERTEXT_BYTES_V1)
         }
+    }
+}
+
+fn normalize_entry_data_key(value: &mut serde_json::Value) {
+    if let Some(fields) = value.as_object_mut()
+        && let Some(key) = fields
+            .keys()
+            .find(|key| key.as_str() != "data" && key.eq_ignore_ascii_case("data"))
+            .cloned()
+        && let Some(data) = fields.remove(&key)
+    {
+        fields.insert("data".into(), data);
     }
 }
 
