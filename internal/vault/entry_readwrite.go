@@ -423,6 +423,9 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	if len(plaintext) > maxEntryPlaintextBytesV1 {
 		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
 	}
+	if err := validateEntryPlaintext(plaintext); err != nil {
+		return nil, err
+	}
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
 	recordDuration("encrypt", time.Since(start))
