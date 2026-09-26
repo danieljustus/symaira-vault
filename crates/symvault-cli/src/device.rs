@@ -90,6 +90,19 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     unlock_vault_with_runtime(vault, &runtime)
 }
 
+pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(), String> {
+    // Go's Open skips legacy migration entirely once this marker exists. Keep
+    // unlock from preflighting the entry layout in that case; individual
+    // commands retain their own, more specific validation order.
+    if fs::metadata(vault.join(".symvault-migrated")).is_ok() {
+        return Ok(());
+    }
+    let store = symvault_store::Store::open(vault, identity).map_err(|error| error.to_string())?;
+    store
+        .migrate_legacy()
+        .map_err(|error| format!("migrate legacy entries: {error}"))
+}
+
 fn unlock_vault_with_runtime(
     vault: &Path,
     runtime: &crate::RuntimeSession,

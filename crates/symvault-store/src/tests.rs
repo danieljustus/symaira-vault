@@ -1442,6 +1442,35 @@ fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
 
 #[cfg(unix)]
 #[test]
+fn legacy_migration_rejects_user_owned_symlink_ancestors() {
+    use std::os::unix::{fs::MetadataExt, fs::symlink};
+
+    let temp = tempfile::tempdir().unwrap();
+    let real = temp.path().join("real");
+    let vault = real.join("vault");
+    let alias = temp.path().join("alias");
+    fs::create_dir_all(&vault).unwrap();
+    fs::write(
+        vault.join(CONFIG_FILE),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(vault.join(IDENTITY_FILE), b"identity").unwrap();
+    fs::write(vault.join("legacy.age"), b"ciphertext").unwrap();
+    symlink(&real, &alias).unwrap();
+    if fs::symlink_metadata(&alias).unwrap().uid() == 0 {
+        return;
+    }
+
+    let store = Store::open(alias.join("vault"), &parse_identity(IDENTITY).unwrap()).unwrap();
+    let error = store.migrate_legacy().unwrap_err();
+    assert!(matches!(error, StoreError::Symlink(path) if path == alias));
+    assert_eq!(fs::read(vault.join("legacy.age")).unwrap(), b"ciphertext");
+    assert!(!vault.join("entries").exists());
+}
+
+#[cfg(unix)]
+#[test]
 fn read_list_verify_and_files_use_the_retained_root_capability() {
     let (_, fixture) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();

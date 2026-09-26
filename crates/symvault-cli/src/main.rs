@@ -2702,6 +2702,9 @@ fn run_auth_rotate_passphrase(
                 }
             };
 
+        device::open_unlocked_vault(&vault, &identity)
+            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
+
         let new_passphrase =
             session_input::read_passphrase("New passphrase (minimum 12 characters): ")
                 .map_err(|error| format!("cannot read new passphrase: {error}"))?;
@@ -4133,6 +4136,8 @@ fn run_unlock(
         let secret = SecretBytes::new(passphrase.as_bytes());
         let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
+        device::open_unlocked_vault(&vault, &decrypted_identity)
+            .map_err(|error| format!("open vault: {error}"))?;
         let configured_ttl = if config.session_timeout.is_zero() {
             std::time::Duration::from_secs(15 * 60)
         } else {

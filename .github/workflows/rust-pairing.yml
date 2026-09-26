@@ -20,6 +20,8 @@ on:
       - 'scripts/rust-port/cmd/devicelistdriver/**'
       - 'scripts/rust-port/internal/diff/**'
       - 'crates/symvault-cli/**'
+      - 'internal/vault/**'
+      - 'cmd/auth/**'
       - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'
       - '.github/workflows/ci.yml'
@@ -53,6 +55,8 @@ on:
       - 'scripts/rust-port/cmd/devicelistdriver/**'
       - 'scripts/rust-port/internal/diff/**'
       - 'crates/symvault-cli/**'
+      - 'internal/vault/**'
+      - 'cmd/auth/**'
       - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'
       - '.github/workflows/ci.yml'
@@ -150,6 +154,22 @@ jobs:
           test -f "$SYMVAULT_GO_BINARY"
           cargo test -p symvault-cli --test cli_differential --locked \
             init_list_get_match_go_cli_on_a_disposable_vault -- --exact
+
+      - name: Run auth root-trust differential against the current Go oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp_root="$RUNNER_TEMP"
+          executable_suffix=
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            temp_root="$(cygpath -u "$RUNNER_TEMP")"
+            executable_suffix=.exe
+          fi
+          oracle_binary="$temp_root/symvault-go-auth$executable_suffix"
+          GOWORK=off go build -o "$oracle_binary" .
+          test -f "$oracle_binary"
+          export SYMVAULT_GO_BINARY="$oracle_binary"
+          cargo test -p symvault-cli --test auth_differential auth_rotate --locked
 
       - name: Run config profile differential against the pinned Go oracle
         shell: bash
