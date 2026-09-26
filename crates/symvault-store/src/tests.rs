@@ -1620,6 +1620,28 @@ fn manifest_verification_ignores_size_mismatch_like_go() {
     assert!(result.tampered.is_empty());
 }
 
+#[test]
+fn manifest_rejects_too_many_entries_before_building_map() {
+    let mut json = String::from(
+        "{\"version\":1,\"generation\":0,\"created\":\"\",\"updated\":\"\",\"entries\":{",
+    );
+    for index in 0..=MAX_VAULT_ENTRY_COUNT {
+        if index != 0 {
+            json.push(',');
+        }
+        json.push_str(&format!(
+            "\"entry-{index}\":{{\"sha256\":\"\",\"size\":0,\"mtime\":\"\"}}"
+        ));
+    }
+    json.push_str("}}");
+    let error = serde_json::from_str::<Manifest>(&json).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("manifest entry count exceeds limit")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn manifest_preserves_existing_zero_created_and_crosses_i32_generation_boundary() {

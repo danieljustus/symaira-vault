@@ -1999,7 +1999,45 @@ pub struct Manifest {
     pub generation: i64,
     pub created: String,
     pub updated: String,
+    #[serde(deserialize_with = "deserialize_manifest_entries")]
     pub entries: BTreeMap<String, ManifestEntry>,
+}
+
+fn deserialize_manifest_entries<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, ManifestEntry>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, MapAccess, Visitor};
+
+    struct EntriesVisitor;
+
+    impl<'de> Visitor<'de> for EntriesVisitor {
+        type Value = BTreeMap<String, ManifestEntry>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a bounded manifest entry map")
+        }
+
+        fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let mut entries = BTreeMap::new();
+            let mut count = 0;
+            while let Some(key) = map.next_key::<String>()? {
+                count += 1;
+                if count > MAX_VAULT_ENTRY_COUNT {
+                    return Err(M::Error::custom("manifest entry count exceeds limit"));
+                }
+                entries.insert(key, map.next_value()?);
+            }
+            Ok(entries)
+        }
+    }
+
+    deserializer.deserialize_map(EntriesVisitor)
 }
 
 /// The four independent outcomes of manifest verification.
@@ -2570,6 +2608,11 @@ impl Store {
         manifest: &Manifest,
         identity: &Identity,
     ) -> Result<Manifest, StoreError> {
+        if manifest.entries.len() > MAX_VAULT_ENTRY_COUNT {
+            return Err(StoreError::Config(
+                "manifest entry count exceeds limit".into(),
+            ));
+        }
         let mut manifest = manifest.clone();
         if manifest.version == 0 {
             manifest.version = 1;
@@ -2581,6 +2624,12 @@ impl Store {
         );
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        if ciphertext.len() as u64 > MAX_FILE_BYTES {
+            return Err(StoreError::Limit {
+                path: self.root.join(MANIFEST_FILE),
+                limit: MAX_FILE_BYTES,
+            });
+        }
         publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)?;
         Ok(manifest)
     }
