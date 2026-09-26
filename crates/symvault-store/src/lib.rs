@@ -2025,7 +2025,7 @@ impl Store {
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
         let target = self.configured_entry_path(path, identity)?;
         let parent_cap = self.entry_parent_cap(&target)?;
-        publication::replace(&target, &encrypted, &parent_cap)?;
+        publication::replace_entry(&target, &encrypted, &parent_cap)?;
         // Go publishes the primary entry first and intentionally discards
         // queued manifest failures from this high-level mutation.
         let _ = self.update_manifest_entry(path, &encrypted, identity);
