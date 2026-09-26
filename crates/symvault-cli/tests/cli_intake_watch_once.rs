@@ -370,7 +370,9 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
             source_root.to_path_buf(),
             fs::canonicalize(source_root).expect("canonicalize disposable source root"),
         ] {
-            skipped = skipped.replace(root.to_str().unwrap(), "<source-root>");
+            let root_text = root.to_str().unwrap();
+            skipped = skipped.replace(root_text, "<source-root>");
+            skipped = skipped.replace(&root_text.replace('\\', "\\\\"), "<source-root>");
             if let Ok(alias) = root.strip_prefix("/private") {
                 skipped = skipped.replace(&format!("/{}", alias.display()), "<source-root>");
             }
@@ -383,9 +385,12 @@ fn oversized_source_matches_go_skip_and_remains_unchanged() {
     assert_eq!(rust_summary, go_summary);
     assert_eq!(go_summary["scanned"], 1);
     assert_eq!(go_summary["staged"], serde_json::Value::Null);
+    let separator = if cfg!(windows) { r"\\" } else { "/" };
     assert_eq!(
         go_summary["skipped"][0],
-        "too-large.txt: reject \"<source-root>/too-large.txt\": 1048577 bytes exceeds the 1048576 byte per-file limit"
+        format!(
+            "too-large.txt: reject \"<source-root>{separator}too-large.txt\": 1048577 bytes exceeds the 1048576 byte per-file limit"
+        )
     );
     assert_eq!(fs::read(go_source).unwrap(), contents);
     assert_eq!(fs::read(rust_source).unwrap(), contents);
