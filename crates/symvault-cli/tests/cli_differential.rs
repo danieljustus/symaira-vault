@@ -1823,7 +1823,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             // Avoid cmd.exe /C quoting of generated paths in composite commands.
             let marker = marker.display().to_string().replace('\'', "''");
             format!(
-                "$f=$env:SYMVAULT_FILE_CERT_P12; if (!(Test-Path -LiteralPath $f)) {{ exit 1 }}; [IO.File]::WriteAllText('{marker}', $f); $b=[IO.File]::ReadAllBytes($f); [Console]::OpenStandardOutput().Write($b, 0, $b.Length)"
+                "$f=$env:SYMVAULT_FILE_CERT_P12; if (!(Test-Path -LiteralPath $f)) {{ exit 1 }}; [IO.File]::WriteAllText('{marker}', $f); $b=$null; for ($i=0; $i -lt 40 -and $null -eq $b; $i++) {{ try {{ $b=[IO.File]::ReadAllBytes($f) }} catch {{ Start-Sleep -Milliseconds 50 }} }}; if ($null -eq $b) {{ throw 'attachment stayed locked' }}; [Console]::OpenStandardOutput().Write($b, 0, $b.Length)"
             )
         } else {
             format!(
