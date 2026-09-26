@@ -305,13 +305,27 @@ fn cleanup_file(materialized: MaterializedFile) {
     let MaterializedFile {
         directory,
         path,
-        mut handle,
+        handle,
         length,
     } = materialized;
-    // Write through the descriptor opened before the child ran. The child may
-    // replace the pathname with a symlink or another file, but cannot redirect
-    // this handle. The zero buffer and original length keep cleanup bounded.
+    // Unix writes through the descriptor opened before the child ran, so a
+    // child-created symlink cannot redirect cleanup. Windows pins the path
+    // with a read-only handle during execution and reopens it for writing here.
+    // The zero buffer and original length keep cleanup bounded.
     let zeros = [0u8; 8192];
+    #[cfg(not(windows))]
+    let mut handle = handle;
+    #[cfg(windows)]
+    drop(handle);
+    #[cfg(windows)]
+    let mut handle = match fs::OpenOptions::new().write(true).open(&path) {
+        Ok(handle) => handle,
+        Err(_) => {
+            let _ = fs::remove_file(&path);
+            let _ = fs::remove_dir(&directory);
+            return;
+        }
+    };
     let _ = handle.seek(SeekFrom::Start(0));
     let mut remaining = length;
     while remaining > 0 {
@@ -356,12 +370,36 @@ fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> 
 
 #[cfg(not(unix))]
 fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> {
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt as _;
+        // Keep a read-only handle open during child execution. Windows rejects
+        // the child's ordinary FileShare.Read handle if the open writer is
+        // still present. Read sharing lets it consume the attachment while
+        // preventing the child from changing or deleting it.
+        let mut writer = fs::OpenOptions::new();
+        writer.write(true).create_new(true).share_mode(0x1);
+        let mut file = writer.open(path)?;
+        file.write_all(content)?;
+        file.sync_all()?;
+        drop(file);
+
+        let mut reader = fs::OpenOptions::new();
+        reader.read(true).share_mode(0x1);
+        return reader.open(path);
+    }
+
+    #[cfg(not(windows))]
+    let mut options = fs::OpenOptions::new();
+    #[cfg(not(windows))]
+    options.write(true).create_new(true);
+    #[cfg(not(windows))]
+    let mut file = options.open(path)?;
+    #[cfg(not(windows))]
     file.write_all(content)?;
+    #[cfg(not(windows))]
     file.sync_all()?;
+    #[cfg(not(windows))]
     Ok(file)
 }
 
