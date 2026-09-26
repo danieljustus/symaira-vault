@@ -75,7 +75,8 @@ struct GetEntryOutput<'a> {
 
 /// Opens an existing vault using a caller-provided unlocked identity.
 pub fn open_vault(root: &Path, identity: &Identity) -> Result<Store, String> {
-    Store::open(root, identity).map_err(|error| format!("cannot open vault: {error}"))
+    Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| format!("cannot open vault: {error}"))
 }
 
 /// Creates the first vault files and returns the generated identity.

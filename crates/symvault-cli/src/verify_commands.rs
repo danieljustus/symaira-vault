@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 use symvault_crypto::Identity;
-use symvault_store::{Store, StoreError};
+use symvault_store::StoreError;
 
 pub fn verify(
     root: &Path,
@@ -13,7 +13,8 @@ pub fn verify(
     rebuild_only: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     if rebuild || rebuild_only {
         store
             .rebuild_manifest(identity)

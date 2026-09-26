@@ -86,7 +86,6 @@ use symvault_platform::FallbackKeyring;
     target_os = "netbsd"
 ))]
 use symvault_platform::OsKeyring;
-use symvault_store::Store;
 use symvault_sync::{CommitOptions, GitError, GitRepository, GoTime};
 use zeroize::Zeroizing;
 
@@ -2702,6 +2701,9 @@ fn run_auth_rotate_passphrase(
                 }
             };
 
+        device::open_unlocked_vault(&vault, &identity)
+            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
+
         let new_passphrase =
             session_input::read_passphrase("New passphrase (minimum 12 characters): ")
                 .map_err(|error| format!("cannot read new passphrase: {error}"))?;
@@ -3324,7 +3326,8 @@ fn run_generate(
                 serde_json::Value::String(password.to_string()),
             )]),
         )?;
-        let store = Store::open(&vault, &identity).map_err(|error| error.to_string())?;
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
+            .map_err(|error| error.to_string())?;
         let file = store
             .configured_entry_path(store_path, &identity)
             .map_err(|error| error.to_string())?;
@@ -3641,7 +3644,7 @@ fn run_migrate_pseudonymize(
         }
 
         let identity = device::unlock_vault(&vault)?;
-        let store = symvault_store::Store::open(&vault, &identity)
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
             .migrate_pseudonymize(&identity)
@@ -4133,6 +4136,8 @@ fn run_unlock(
         let secret = SecretBytes::new(passphrase.as_bytes());
         let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
+        device::open_unlocked_vault(&vault, &decrypted_identity)
+            .map_err(|error| format!("open vault: {error}"))?;
         let configured_ttl = if config.session_timeout.is_zero() {
             std::time::Duration::from_secs(15 * 60)
         } else {

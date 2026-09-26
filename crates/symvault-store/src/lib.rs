@@ -366,6 +366,8 @@ pub struct PseudonymizeSummary {
 #[derive(Clone, Debug)]
 pub struct Store {
     root: PathBuf,
+    #[cfg(unix)]
+    requested_root: PathBuf,
     root_cap: std::sync::Arc<fs::File>,
     layout: Layout,
     config: VaultConfig,
@@ -380,20 +382,41 @@ impl Store {
         Ok(store)
     }
 
+    /// Opens a vault and performs the legacy migration Go runs during Vault.Open.
+    pub fn open_with_legacy_migration(
+        root: impl AsRef<Path>,
+        identity: &Identity,
+    ) -> Result<Self, StoreError> {
+        let store = Self::open(root, identity)?;
+        store.migrate_legacy()?;
+        Ok(store)
+    }
+
     fn open_with_root_acquisition(
         root: impl AsRef<Path>,
         acquire_hook: impl FnOnce(&Path),
     ) -> Result<Self, StoreError> {
         let requested_root = root.as_ref();
-        reject_symlink(requested_root)?;
         #[cfg(unix)]
-        let root_snapshot = root_identity(requested_root)?;
         let root = requested_root
             .canonicalize()
             .map_err(|source| StoreError::Read {
                 path: requested_root.to_path_buf(),
                 source,
             })?;
+        #[cfg(not(unix))]
+        {
+            reject_symlink(requested_root)?;
+        }
+        #[cfg(not(unix))]
+        let root = requested_root
+            .canonicalize()
+            .map_err(|source| StoreError::Read {
+                path: requested_root.to_path_buf(),
+                source,
+            })?;
+        #[cfg(unix)]
+        let root_snapshot = root_identity(&root)?;
         acquire_hook(&root);
         let root_cap = std::sync::Arc::new(ensure_directory(&root)?);
         #[cfg(unix)]
@@ -444,8 +467,12 @@ impl Store {
         let layout = detect_layout_rooted(&root_cap, &root)?;
         #[cfg(not(unix))]
         let layout = detect_layout(&root)?;
+        #[cfg(unix)]
+        reject_user_owned_root_symlink(requested_root)?;
         Ok(Self {
             root,
+            #[cfg(unix)]
+            requested_root: requested_root.to_path_buf(),
             root_cap,
             layout,
             config,
@@ -1396,6 +1423,79 @@ fn root_identity(path: &Path) -> Result<RootIdentity, StoreError> {
 }
 
 #[cfg(unix)]
+fn reject_user_owned_root_symlink(path: &Path) -> Result<(), StoreError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = fs::symlink_metadata(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if metadata.file_type().is_symlink() && metadata.uid() != 0 {
+        return Err(StoreError::Symlink(path.to_path_buf()));
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn resolve_trusted_root(requested: &Path) -> Result<PathBuf, StoreError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let inspect = || -> Result<(), StoreError> {
+        let absolute = if requested.is_absolute() {
+            requested.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map_err(|source| StoreError::Read {
+                    path: requested.to_path_buf(),
+                    source,
+                })?
+                .join(requested)
+        };
+        let mut current = PathBuf::new();
+        for component in absolute.components() {
+            match component {
+                Component::RootDir => current.push(component.as_os_str()),
+                Component::Normal(part) => {
+                    current.push(part);
+                    let metadata =
+                        fs::symlink_metadata(&current).map_err(|source| StoreError::Read {
+                            path: current.clone(),
+                            source,
+                        })?;
+                    if metadata.file_type().is_symlink() && metadata.uid() != 0 {
+                        return Err(StoreError::Symlink(current.clone()));
+                    }
+                }
+                Component::CurDir => {}
+                Component::ParentDir | Component::Prefix(_) => {
+                    return Err(StoreError::UnsafePath(requested.display().to_string()));
+                }
+            }
+        }
+        Ok(())
+    };
+
+    inspect()?;
+    let root = requested
+        .canonicalize()
+        .map_err(|source| StoreError::Read {
+            path: requested.to_path_buf(),
+            source,
+        })?;
+    inspect()?;
+    let verified = requested
+        .canonicalize()
+        .map_err(|source| StoreError::Read {
+            path: requested.to_path_buf(),
+            source,
+        })?;
+    if verified != root {
+        return Err(StoreError::RootChanged(requested.to_path_buf()));
+    }
+    Ok(root)
+}
+
+#[cfg(unix)]
 fn root_identity_from_file(file: &fs::File) -> Result<RootIdentity, StoreError> {
     use std::os::unix::fs::MetadataExt;
     file.metadata()
@@ -1856,6 +1956,15 @@ impl Store {
     /// their ciphertext. Existing fresh files win; a marker makes the operation
     /// idempotent. No plaintext is ever loaded during migration.
     pub fn migrate_legacy(&self) -> Result<(), StoreError> {
+        let marker = self.root.join(".symvault-migrated");
+        if self.regular_exists_path(&marker)? {
+            return Ok(());
+        }
+        #[cfg(unix)]
+        if resolve_trusted_root(&self.requested_root)? != self.root {
+            return Err(StoreError::RootChanged(self.requested_root.clone()));
+        }
+
         let entries = self.entry_candidates()?;
         let fresh_root = self.root.join(ENTRIES_DIR);
         #[cfg(unix)]
@@ -1898,7 +2007,6 @@ impl Store {
                 })?;
             }
         }
-        let marker = self.root.join(".symvault-migrated");
         if !self.regular_exists_path(&marker)? {
             publication::replace(&marker, &[], &self.root_cap)?;
         }
