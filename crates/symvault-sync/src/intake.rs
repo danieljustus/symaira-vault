@@ -250,6 +250,15 @@ impl Spool {
         path: impl AsRef<Path>,
         limit: u64,
     ) -> Result<(Vec<u8>, Provenance, PathBuf), IntakeError> {
+        self.stage_with_metadata(path, limit)
+            .map(|(data, provenance, staged_path, _)| (data, provenance, staged_path))
+    }
+
+    fn stage_with_metadata(
+        &self,
+        path: impl AsRef<Path>,
+        limit: u64,
+    ) -> Result<(Vec<u8>, Provenance, PathBuf, fs::Metadata), IntakeError> {
         let path = path.as_ref();
         let m =
             fs::symlink_metadata(path).map_err(|e| IntakeError::InvalidSource(e.to_string()))?;
@@ -321,7 +330,7 @@ impl Spool {
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                 .map_or(0, |d| d.as_secs()),
         };
-        Ok((data, provenance, staged_path))
+        Ok((data, provenance, staged_path, after))
     }
 }
 
@@ -359,40 +368,57 @@ impl Default for Options {
     }
 }
 pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileResult {
+    process_with_metadata(spool, path, opts).0
+}
+
+fn process_with_metadata(
+    spool: &Spool,
+    path: impl AsRef<Path>,
+    opts: &Options,
+) -> (FileResult, Option<fs::Metadata>) {
     let path = path.as_ref();
-    match spool.stage(path, opts.max_file_size) {
-        Ok((data, mut p, spool_path)) => {
+    match spool.stage_with_metadata(path, opts.max_file_size) {
+        Ok((data, mut p, spool_path, source_metadata)) => {
             p.source_type = source_type(&p.source_name, &data);
+            (
+                FileResult {
+                    file: path.to_string_lossy().into(),
+                    status: "ok".into(),
+                    reason: None,
+                    provenance: Some(p.clone()),
+                    suggestions: suggestions(&data, p.source_type, &p.source_name),
+                    spool_path: Some(spool_path),
+                },
+                Some(source_metadata),
+            )
+        }
+        Err(IntakeError::Limit) => (
             FileResult {
                 file: path.to_string_lossy().into(),
-                status: "ok".into(),
-                reason: None,
-                provenance: Some(p.clone()),
-                suggestions: suggestions(&data, p.source_type, &p.source_name),
-                spool_path: Some(spool_path),
-            }
-        }
-        Err(IntakeError::Limit) => FileResult {
-            file: path.to_string_lossy().into(),
-            status: "skipped".into(),
-            reason: Some("source exceeds limit".into()),
-            provenance: None,
-            suggestions: Vec::new(),
-            spool_path: None,
-        },
-        Err(e) => FileResult {
-            file: path.to_string_lossy().into(),
-            status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {
-                "error"
-            } else {
-                "skipped"
-            }
-            .into(),
-            reason: Some(e.to_string()),
-            provenance: None,
-            suggestions: Vec::new(),
-            spool_path: None,
-        },
+                status: "skipped".into(),
+                reason: Some("source exceeds limit".into()),
+                provenance: None,
+                suggestions: Vec::new(),
+                spool_path: None,
+            },
+            None,
+        ),
+        Err(e) => (
+            FileResult {
+                file: path.to_string_lossy().into(),
+                status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {
+                    "error"
+                } else {
+                    "skipped"
+                }
+                .into(),
+                reason: Some(e.to_string()),
+                provenance: None,
+                suggestions: Vec::new(),
+                spool_path: None,
+            },
+            None,
+        ),
     }
 }
 /// A sink keeps quarantine writes testable without a vault, keychain, OCR, or network service.
@@ -501,6 +527,17 @@ impl Watcher {
         spool: &Spool,
         strict_metadata: bool,
     ) -> Result<(ScanResult, Vec<FileResult>), IntakeError> {
+        self.scan_internal_with_candidate_hooks(now, spool, strict_metadata, |_| {}, |_| {})
+    }
+
+    fn scan_internal_with_candidate_hooks(
+        &mut self,
+        now: SystemTime,
+        spool: &Spool,
+        strict_metadata: bool,
+        mut before_process: impl FnMut(&Path),
+        mut after_process: impl FnMut(&Path),
+    ) -> Result<(ScanResult, Vec<FileResult>), IntakeError> {
         let mut res = ScanResult::default();
         let mut paths = Vec::new();
         let mut entries = fs::read_dir(&self.dir)?.collect::<Result<Vec<_>, _>>()?;
@@ -542,22 +579,31 @@ impl Watcher {
             {
                 continue;
             }
-            let key = format!("{}:{}:{:?}", e.path().display(), m.len(), m.modified().ok());
+            let path = e.path();
+            let key = ledger_key(&path, &m);
             if self.seen.contains_key(&key) {
                 continue;
             }
-            paths.push((e.path(), key));
+            paths.push(path);
             res.scanned += 1;
         }
-        paths.sort_by(|a, b| a.0.cmp(&b.0));
+        paths.sort();
         let mut out = Vec::new();
-        for (p, key) in paths {
-            let r = process(spool, &p, &self.options);
+        for p in paths {
+            before_process(&p);
+            let (r, source_metadata) = process_with_metadata(spool, &p, &self.options);
+            after_process(&p);
             if let Some(prov) = r.provenance.as_ref().filter(|_| r.status == "ok") {
                 let staged_path = r.spool_path.as_ref().ok_or_else(|| {
                     IntakeError::InvalidSource("successful intake has no staged copy".into())
                 })?;
-                self.seen.insert(key, prov.sha256.clone());
+                // The staged metadata is the same snapshot validated by the
+                // source reader. A later stat could describe different bytes
+                // if the source changes just after staging.
+                if let Some(metadata) = source_metadata {
+                    self.seen
+                        .insert(ledger_key(&p, &metadata), prov.sha256.clone());
+                }
                 res.staged
                     .get_or_insert_with(Vec::new)
                     .push(staged_path.to_string_lossy().into_owned());
@@ -607,7 +653,151 @@ impl Watcher {
     }
 }
 
+fn ledger_key(path: &Path, metadata: &fs::Metadata) -> String {
+    format!(
+        "{}:{}:{:?}",
+        path.display(),
+        metadata.len(),
+        metadata.modified().ok()
+    )
+}
+
 #[must_use]
 pub fn encode_attachment(data: &[u8]) -> String {
     STANDARD.encode(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn watcher_ledger_uses_metadata_from_the_staged_source_snapshot() {
+        let root = tempfile::tempdir().unwrap();
+        let inbox = root.path().join("inbox");
+        fs::create_dir(&inbox).unwrap();
+        let source = inbox.join("sample.env");
+        fs::write(&source, b"A=1\n").unwrap();
+
+        let now = SystemTime::now();
+        let first_mtime = now - Duration::from_secs(3600);
+        let second_mtime = now - Duration::from_secs(7200);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_modified(first_mtime)
+            .unwrap();
+
+        let spool = Spool::new(root.path().join("spool")).unwrap();
+        let mut watcher = Watcher::new(
+            &inbox,
+            Options {
+                debounce: Duration::from_nanos(1),
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        let mut mutated = false;
+        let (summary, results) = watcher
+            .scan_internal_with_candidate_hooks(
+                now,
+                &spool,
+                false,
+                |candidate| {
+                    assert_eq!(candidate, source);
+                    assert!(!mutated, "candidate hook must mutate only once");
+                    fs::write(candidate, b"A=2\n").unwrap();
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .open(candidate)
+                        .unwrap()
+                        .set_modified(second_mtime)
+                        .unwrap();
+                    mutated = true;
+                },
+                |_| {},
+            )
+            .unwrap();
+
+        assert_eq!(summary.scanned, 1);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, "ok");
+        let staged = results[0].spool_path.as_ref().unwrap();
+        assert_eq!(fs::read(staged).unwrap(), b"A=2\n");
+        assert_eq!(fs::read(&source).unwrap(), b"A=2\n");
+
+        let next = watcher.scan_at(now, &spool).unwrap();
+        assert!(
+            next.is_empty(),
+            "unchanged staged bytes must not be staged again"
+        );
+        assert_eq!(fs::read_dir(spool.root()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn watcher_does_not_record_post_stage_source_mutation_as_seen() {
+        let root = tempfile::tempdir().unwrap();
+        let inbox = root.path().join("inbox");
+        fs::create_dir(&inbox).unwrap();
+        let source = inbox.join("sample.env");
+        fs::write(&source, b"A=1\n").unwrap();
+
+        let now = SystemTime::now();
+        let first_mtime = now - Duration::from_secs(3600);
+        let second_mtime = now - Duration::from_secs(7200);
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_modified(first_mtime)
+            .unwrap();
+
+        let spool = Spool::new(root.path().join("spool")).unwrap();
+        let mut watcher = Watcher::new(
+            &inbox,
+            Options {
+                debounce: Duration::from_nanos(1),
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        let mut mutated = false;
+        let (summary, results) = watcher
+            .scan_internal_with_candidate_hooks(
+                now,
+                &spool,
+                false,
+                |_| {},
+                |candidate| {
+                    assert_eq!(candidate, source);
+                    assert!(!mutated, "candidate hook must mutate only once");
+                    fs::write(candidate, b"A=2\n").unwrap();
+                    fs::OpenOptions::new()
+                        .write(true)
+                        .open(candidate)
+                        .unwrap()
+                        .set_modified(second_mtime)
+                        .unwrap();
+                    mutated = true;
+                },
+            )
+            .unwrap();
+
+        assert_eq!(summary.scanned, 1);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].status, "ok");
+        let staged = results[0].spool_path.as_ref().unwrap();
+        assert_eq!(fs::read(staged).unwrap(), b"A=1\n");
+
+        let next = watcher.scan_at(now, &spool).unwrap();
+        assert_eq!(next.len(), 1, "new source version must be picked up");
+        assert_eq!(next[0].status, "ok");
+        assert_eq!(
+            fs::read(next[0].spool_path.as_ref().unwrap()).unwrap(),
+            b"A=2\n"
+        );
+        assert_eq!(fs::read(staged).unwrap(), b"A=1\n");
+        assert_eq!(fs::read_dir(spool.root()).unwrap().count(), 2);
+    }
 }
