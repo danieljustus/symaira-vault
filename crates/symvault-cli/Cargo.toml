@@ -40,6 +40,9 @@ symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
+qrcode = { version = "=0.14.1", default-features = false }
+getifaddrs = "=0.4.1"
+terminal_size = "=0.4.4"
 
 [dev-dependencies]
 tempfile = "=3.27.0"
