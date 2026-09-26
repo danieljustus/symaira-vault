@@ -48,7 +48,10 @@ fn str_field(value: &Value, key: &str) -> String {
 fn every_pairing_case_is_replayed() {
     let fixture = fixture();
     assert_eq!(fixture["schema_version"], 1);
-    assert_eq!(fixture["oracle"]["commit"], "caadd5e");
+    assert_eq!(
+        fixture["oracle"]["commit"],
+        "cf496d4315181b8e444e62520dfc4dce0fb94e5c"
+    );
     assert_eq!(fixture["oracle"]["release"], "v0.22.1");
 
     let cases = fixture["cases"].as_array().expect("cases array");
@@ -385,8 +388,8 @@ fn replay_registry(id: &str, input: &Value, expected: &Value) {
 
 /// Replays a recipients.txt operation script. Both halves of the contract are
 /// compared: the error class an operation fails with, and the exact bytes left
-/// on disk -- including the concatenation Go produces when the existing file
-/// has no trailing newline, which this port reproduces on purpose.
+/// on disk, including the separator inserted when Go appends after an
+/// unterminated non-empty file.
 fn replay_recipients(id: &str, input: &Value, expected: &Value) {
     let dir = std::env::temp_dir().join(format!(
         "symvault-pairing-recipients-{}-{}",

@@ -5,25 +5,18 @@
 //! `device revoke` removes it, so this file is the other half of "a revoked
 //! device no longer decrypts" — the cryptographic half is `CRYPTO-004`.
 //!
-//! Two behaviours are faithfully preserved rather than improved, because the
-//! register's rule is that Rust replaces observable behaviour, not that it
-//! corrects it. Both are frozen as vectors:
+//! One behaviour is faithfully preserved because Rust replaces observable
+//! behavior, not that it corrects it; another has been fixed in the Go oracle
+//! and ported here:
 //!
-//! - **Appending never inserts a missing separator.** Go means to write a
-//!   newline when the existing file does not end in one, but it opens the file
-//!   `O_WRONLY|O_APPEND` and then tries to `ReadAt` the last byte through that
-//!   same write-only descriptor. That read always fails, so the branch is dead
-//!   and the new recipient is concatenated onto the previous line. This is a
-//!   real defect in the Go production code — see
-//!   `recipients/add-after-file-without-trailing-newline`, where the result is
-//!   one corrupt 124-character line. It is reproduced here deliberately; fixing
-//!   it is a change to the Go oracle, not to this port.
 //! - **An uppercase recipient is rejected as malformed.** `ValidateRecipient`
 //!   checks `strings.HasPrefix(s, "age1")` case-sensitively before parsing, so
 //!   `AGE1…` never reaches the bech32 decoder that would have accepted it.
 //!
 //! Neither `LoadRecipientStrings` nor the removal scan validates the lines it
-//! keeps: a junk line stays in the file and is reported by a load.
+//! keeps: a junk line stays in the file and is reported by a load. Appending
+//! now reads the last byte through the same symlink-safe read/write descriptor
+//! used for the append, matching the corrected Go implementation.
 
 use crate::safeio::{self, SafeIoError};
 use std::path::PathBuf;
@@ -117,10 +110,10 @@ impl RecipientsFile {
 
     /// Appends `recipient` in its canonical form.
     ///
-    /// See the module documentation: no separator is inserted when the file
-    /// does not end in a newline, because Go's separator branch cannot run.
+    /// Inserts a separator when existing non-empty content does not end in a
+    /// newline, matching the Go `RecipientsManager` contract.
     pub fn add(&self, recipient: &str) -> Result<(), RecipientsError> {
-        use std::io::Write as _;
+        use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
 
         let canonical = canonicalize(recipient)?;
         let existing = self.load_strings()?.unwrap_or_default();
@@ -128,6 +121,21 @@ impl RecipientsFile {
             return Err(RecipientsError::AlreadyExists);
         }
         let mut file = safeio::open_append(&self.path())?;
+        let length = file
+            .metadata()
+            .map_err(|source| RecipientsError::Io(SafeIoError::Io(source)))?
+            .len();
+        if length > 0 {
+            file.seek(SeekFrom::End(-1))
+                .map_err(|source| RecipientsError::Io(SafeIoError::Io(source)))?;
+            let mut last = [0_u8; 1];
+            file.read_exact(&mut last)
+                .map_err(|source| RecipientsError::Io(SafeIoError::Io(source)))?;
+            if last[0] != b'\n' {
+                file.write_all(b"\n")
+                    .map_err(|source| RecipientsError::Io(SafeIoError::Io(source)))?;
+            }
+        }
         file.write_all(canonical.as_bytes())
             .and_then(|()| file.write_all(b"\n"))
             .map_err(|source| RecipientsError::Io(SafeIoError::Io(source)))
@@ -225,11 +233,8 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 
-    /// The Go oracle's dead separator branch, reproduced deliberately. If this
-    /// ever starts inserting a newline, the port has diverged from the frozen
-    /// behaviour even though the result would look more correct.
     #[test]
-    fn appending_to_a_file_without_a_trailing_newline_concatenates() {
+    fn appending_to_a_file_without_a_trailing_newline_separates_records() {
         let dir = scratch("concat");
         let file = RecipientsFile::new(&dir);
         fs::write(file.path(), RECIPIENT).unwrap();
@@ -237,7 +242,43 @@ mod tests {
         file.add(second).unwrap();
         assert_eq!(
             fs::read_to_string(file.path()).unwrap(),
-            format!("{RECIPIENT}{second}\n")
+            format!("{RECIPIENT}\n{second}\n")
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn appending_after_comment_only_or_malformed_content_keeps_records_separate() {
+        for (tag, initial, expected) in [
+            (
+                "comment",
+                "# vault recipients".to_owned(),
+                format!("# vault recipients\n{RECIPIENT}\n"),
+            ),
+            (
+                "malformed",
+                "not-a-recipient".to_owned(),
+                format!("not-a-recipient\n{RECIPIENT}\n"),
+            ),
+        ] {
+            let dir = scratch(tag);
+            let file = RecipientsFile::new(&dir);
+            fs::write(file.path(), initial).unwrap();
+            file.add(RECIPIENT).unwrap();
+            assert_eq!(fs::read_to_string(file.path()).unwrap(), expected);
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn appending_to_an_existing_empty_file_does_not_add_a_blank_record() {
+        let dir = scratch("empty-existing");
+        let file = RecipientsFile::new(&dir);
+        fs::write(file.path(), []).unwrap();
+        file.add(RECIPIENT).unwrap();
+        assert_eq!(
+            fs::read_to_string(file.path()).unwrap(),
+            format!("{RECIPIENT}\n")
         );
         let _ = fs::remove_dir_all(dir);
     }
