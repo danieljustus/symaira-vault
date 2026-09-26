@@ -195,6 +195,20 @@ func TestWriteEntryRejectsPayloadAboveReadBudget(t *testing.T) {
 	}
 }
 
+func TestWriteEntryRejectsSerializedValueAboveReadBudget(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	// []byte becomes a base64 JSON string after the typed precheck.
+	data := map[string]any{"bytes": bytes.Repeat([]byte{'x'}, 786433)}
+	err := WriteEntry(vaultDir, "too-large-value", &Entry{Data: data}, identity)
+	if err == nil {
+		t.Fatal("WriteEntry published an entry its own reader cannot decode")
+	}
+	if _, statErr := os.Stat(entryFilePath(vaultDir, "too-large-value")); !os.IsNotExist(statErr) {
+		t.Fatalf("unreadable entry was published; stat error = %v", statErr)
+	}
+}
+
 func TestWriteAndReadEntryRoundTrip(t *testing.T) {
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
