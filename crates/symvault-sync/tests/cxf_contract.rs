@@ -32,7 +32,7 @@ fn cxf_matches_pinned_go_fixture_and_negative_controls() {
             .expect("valid generated CXF fixture");
     assert_eq!(
         fixture.cases.len(),
-        19,
+        20,
         "fixture cardinality is part of the gate"
     );
     for case in fixture.cases {

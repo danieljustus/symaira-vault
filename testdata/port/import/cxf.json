@@ -98,9 +98,47 @@
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "087a0f08e49d48c55494b97b9972d599e754f98b47d1ce20e96eed5b19bd4d96"
+    "generator_digest": "2fae33c63285ac9853b639bd97615861fb680748f40a6869c8f479794c5a674c"
   },
   "cases": [
+    {
+      "id": "CXF-020-case-insensitive-tags",
+      "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAATAAkAbmVzdGVkL3BheWxvYWQuanNvblVUBQABAAAAAGyTXXOiPBTHv4rPucanVetuN3eI0VJ5mxC0TMeLLEk1owJD4o6O43ffCbgLdutVjvmff37nhQvYjhMmAY0BvV/ACT0PO9QNgyZ2KfbbEyDQbLMRHK5rC+Jkci9fW0Bd6mFAsCqqXS1qDZwKc5xTae+bOGJKrYqKA7rAknlHk/YhT/pYiX7JlIKrBUmMSWD7+CvNUYnKaPS5FIDgJ1My67Oj3sLVuoC9nxdE0q1hjl/s4fgbWDCVc0kVoGcL3DhOMGntwIJIEBlyQE9jC2LhVFgDgtdJvEpH0wi/RItR9BZ9jqELec/2F00XuqyhnDCgOKBfVZMXWnSquYUXWODUCX2/zuqwLnBK08gYKLXtCz4cjwc/TA3EXdoUL3Da8d6J8393d1E9SrnJi0rwltNY7cS5QbXJtHmhZf0lFTOM+C1ySTq16d3t8HH4vf/4bASzxPM+j23WwPSS29iCxJ+YAbSKp8H9z6iWmLgz17HNiv2bMRiOOj3LKsGl7mes4k0JRa5FrrsJ/Jyzg8x6JqNXiQOTueqJE8u08bl1tOm92V3eLrwFcRaWdUUJ8RSgd9hqXSr08CBO7FDuxf9aKA1r48PmteDPuMx3IeneMNLarfchxZ6r9hGWZcUx1/UfS0xiNwzMS779GhJAAwt8NzCnx+v1dwAAAP//UEsHCN+B7U73AQAAsQMAAFBLAQIUABQACAAIAAAAIezfge1O9wEAALEDAAATAAkAAAAAAAAAAAAAAAAAAABuZXN0ZWQvcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEASgAAAEECAAAAAA==",
+      "expected": {
+        "entries": [
+          {
+            "path": "Work/Tagged-fields",
+            "data": {
+              "card_number": "4111111111111111",
+              "cardholder": "Fixture User",
+              "cvc": "123",
+              "expiry_month": "2027",
+              "expiry_year": "08",
+              "notes": "fixture-note",
+              "password": "fixture-pass",
+              "private_key": "fixture-key!",
+              "subtype": "card",
+              "tags": [
+                "fixture"
+              ],
+              "totp": {
+                "algorithm": "SHA256",
+                "digits": 8,
+                "period": 45,
+                "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+              },
+              "url": "https://example.test",
+              "urls": [
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null,
+            "secret_type": "payment"
+          }
+        ]
+      }
+    },
     {
       "id": "CXF-019-totp-structured",
       "input_b64": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAAMAAkAcGF5bG9hZC5qc29uVVQFAAEAAAAAtNLPS8MwFAfwf6V8zxG6pL8s7KAoDL0UdlDRHkL77AJdU9JXUUb+dymlCDqYDHbLCyHv877JAbqq7NjxgPz1AMO0n1eVo5o6Nrqd64EqR4wcD7fbpxd1V9xvikdVPBe/67cxDGVims46qtcfuh0JAvzVE3Kw5R6+FGDdTPfi3Xzy6AjTluF2OXMVwou/CN021hne7ZEjGHZaxkkAgdo0ZhogE+jJGVsjj2LxQw5OmYMzhKujwoWSiv8ndkZzebT5Mvy1lEqlMlRJFkdpGmfhhTnq5GttNzer+WfMCa0zXJYUwZe+9N8BAAD//1BLBwiOyrtt6wAAAOACAABQSwECFAAUAAgACAAAACHsjsq7besAAADgAgAADAAJAAAAAAAAAAAAAAAAAAAAcGF5bG9hZC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEAQwAAAC4BAAAAAA==",
