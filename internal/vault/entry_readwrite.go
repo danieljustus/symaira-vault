@@ -1,11 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"filippo.io/age"
@@ -14,6 +17,24 @@ import (
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
+
+// EntryReadBudgetV1 keeps Go and Rust entry reads on the same allocation
+// envelope. Ciphertext allows room for Age armor and framing around the full
+// plaintext budget.
+const (
+	maxEntryCiphertextBytesV1 = 24 * 1024 * 1024
+	maxEntryPlaintextBytesV1  = 16 * 1024 * 1024
+	maxEntryFields            = 1024
+	maxEntryDepth             = 32
+	maxEntryValueBytes        = 1024 * 1024
+	maxEntryArrayItems        = 1024
+	maxVaultEntryCount        = 100_000
+	maxVaultEntryPathDepth    = 64
+)
+
+var errEntryReadLimit = errors.New("entry exceeds read size limit")
+var errEntryEnumerationLimit = errors.New("vault entry enumeration exceeds limit")
+var errManifestEntryLimit = errors.New("manifest entry count exceeds limit")
 
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	cache := listCacheFor(vaultDir)
@@ -59,41 +80,37 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 		return nil, err
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
-	raw, err := SafeReadFile(filePath)
+	raw, err := readVaultEntryBounded(vaultDir, filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		// A vault may still hold entries under their plaintext names while
 		// pseudonymize_paths is already enabled — an interrupted or previously
 		// buggy migration leaves exactly that state. Reading must fall back to
 		// the entries/<plain>.age layout, not only to the pre-entries/ legacy
 		// root, or the entries become unreachable even though they exist.
-		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, entryFilePath(vaultDir, path))
 	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}
-	var entry Entry
-	if err := json.Unmarshal(plaintext, &entry); err != nil {
-		vaultcrypto.Wipe(plaintext)
+	entry, err := decodeEntryBounded(plaintext)
+	vaultcrypto.Wipe(plaintext)
+	if err != nil {
 		return nil, err
 	}
-	vaultcrypto.Wipe(plaintext)
-	if entry.Data == nil {
-		entry.Data = map[string]any{}
-	}
-	MigrateBackupCodes(&entry)
-	return &entry, nil
+	MigrateBackupCodes(entry)
+	return entry, nil
 }
 
 func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoKey []byte) (*Entry, error) {
@@ -116,39 +133,288 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	} else {
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}
-	raw, err := SafeReadFile(filePath)
+	raw, err := readVaultEntryBounded(vaultDir, filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		// See ReadEntry: an entry may still live under its plaintext name in
 		// entries/ while pseudonymize_paths is enabled.
-		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, entryFilePath(vaultDir, path))
 	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}
-	var entry Entry
-	if err := json.Unmarshal(plaintext, &entry); err != nil {
-		vaultcrypto.Wipe(plaintext)
+	entry, err := decodeEntryBounded(plaintext)
+	vaultcrypto.Wipe(plaintext)
+	if err != nil {
 		return nil, err
 	}
-	vaultcrypto.Wipe(plaintext)
+	MigrateBackupCodes(entry)
+	return entry, nil
+}
+
+func decryptEntryBounded(ciphertext []byte, identity *age.X25519Identity, limit int64) ([]byte, error) {
+	if identity == nil {
+		return nil, errors.New("nil identity")
+	}
+	if len(ciphertext) == 0 {
+		return nil, vaultcrypto.ErrEmptyCiphertext
+	}
+	reader, err := age.Decrypt(bytes.NewReader(ciphertext), identity)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", vaultcrypto.ErrDecryptionFailed, err)
+	}
+	plaintext, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		vaultcrypto.Wipe(plaintext)
+		return nil, fmt.Errorf("read decrypted entry: %w", err)
+	}
+	if int64(len(plaintext)) > limit {
+		vaultcrypto.Wipe(plaintext)
+		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
+	}
+	return plaintext, nil
+}
+
+func decodeEntryBounded(plaintext []byte) (*Entry, error) {
+	if err := validateEntryPlaintext(plaintext); err != nil {
+		return nil, err
+	}
+	var entry Entry
+	if err := json.Unmarshal(plaintext, &entry); err != nil {
+		return nil, err
+	}
 	if entry.Data == nil {
 		entry.Data = map[string]any{}
 	}
-	MigrateBackupCodes(&entry)
 	return &entry, nil
+}
+
+func validateEntryPlaintext(plaintext []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(plaintext))
+	start, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if start == nil { // JSON null has the same zero-value behavior as Entry decoding.
+		return nil
+	}
+	delim, ok := start.(json.Delim)
+	if !ok || delim != '{' {
+		return nil // Entry decoding returns the authoritative shape error.
+	}
+	dataSeen := false
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return errors.New("entry object key is not a string")
+		}
+		isData := strings.EqualFold(key, "data")
+		if isData && dataSeen {
+			return errors.New("entry has duplicate data fields")
+		}
+		dataSeen = dataSeen || isData
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return err
+		}
+		// encoding/json matches struct fields case-insensitively and merges
+		// duplicate map fields. Reject duplicates so each port has one value.
+		if isData {
+			if err := validateEntryDataJSON(raw); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("entry has trailing JSON")
+		}
+		return err
+	}
+	return nil
+}
+
+func validateEntryDataJSON(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	start, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	if start == nil {
+		return nil
+	}
+	delim, ok := start.(json.Delim)
+	if !ok || delim != '{' {
+		return errors.New("entry data must be an object or null")
+	}
+	var nestedFields int
+	topLevelFields := 0
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return errors.New("entry object key is not a string")
+		}
+		topLevelFields++
+		if topLevelFields > maxEntryFields {
+			return fmt.Errorf("entry has too many top-level fields (limit %d)", maxEntryFields)
+		}
+		if len(key) > maxEntryValueBytes {
+			return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+		}
+		if err := validateEntryJSONValue(decoder, 1, &nestedFields); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("entry data has trailing JSON")
+		}
+		return err
+	}
+	return nil
+}
+
+func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error {
+	if depth > maxEntryDepth {
+		return fmt.Errorf("entry nesting depth exceeds %d", maxEntryDepth)
+	}
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	switch value := token.(type) {
+	case string:
+		if len(value) > maxEntryValueBytes {
+			return fmt.Errorf("entry string exceeds %d bytes", maxEntryValueBytes)
+		}
+	case json.Delim:
+		switch value {
+		case '[':
+			items := 0
+			for decoder.More() {
+				items++
+				if items > maxEntryArrayItems {
+					return fmt.Errorf("entry array exceeds %d items", maxEntryArrayItems)
+				}
+				if err := validateEntryJSONValue(decoder, depth+1, fields); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+		case '{':
+			for decoder.More() {
+				keyToken, keyErr := decoder.Token()
+				if keyErr != nil {
+					return keyErr
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return errors.New("entry object key is not a string")
+				}
+				if len(key) > maxEntryValueBytes {
+					return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+				}
+				(*fields)++
+				if *fields > maxEntryFields {
+					return fmt.Errorf("entry has too many nested fields (limit %d)", maxEntryFields)
+				}
+				if err := validateEntryJSONValue(decoder, depth+1, fields); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+		default:
+			return errors.New("unexpected JSON delimiter")
+		}
+		return err
+	}
+	return nil
+}
+
+func validateEntryData(data map[string]any) error {
+	if len(data) > maxEntryFields {
+		return fmt.Errorf("entry has too many top-level fields (limit %d)", maxEntryFields)
+	}
+	fields := 0
+	for key, value := range data {
+		if len(key) > maxEntryValueBytes {
+			return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+		}
+		if err := validateEntryValue(value, 1, &fields); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateEntryValue(value any, depth int, fields *int) error {
+	if depth > maxEntryDepth {
+		return fmt.Errorf("entry nesting depth exceeds %d", maxEntryDepth)
+	}
+	switch value := value.(type) {
+	case string:
+		if len(value) > maxEntryValueBytes {
+			return fmt.Errorf("entry string exceeds %d bytes", maxEntryValueBytes)
+		}
+	case []any:
+		if len(value) > maxEntryArrayItems {
+			return fmt.Errorf("entry array exceeds %d items", maxEntryArrayItems)
+		}
+		for _, item := range value {
+			if err := validateEntryValue(item, depth+1, fields); err != nil {
+				return err
+			}
+		}
+	case map[string]any:
+		*fields += len(value)
+		if *fields > maxEntryFields {
+			return fmt.Errorf("entry has too many nested fields (limit %d)", maxEntryFields)
+		}
+		for key, item := range value {
+			if len(key) > maxEntryValueBytes {
+				return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+			}
+			if err := validateEntryValue(item, depth+1, fields); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func readVaultEntryBounded(vaultDir, filePath string) ([]byte, error) {
+	relative, err := filepath.Rel(vaultDir, filePath)
+	if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("entry path escapes vault root: %q", filePath)
+	}
+	return readEntryRootedBounded(vaultDir, relative)
 }
 
 // InferClassification scans all string values in entry.Data.
@@ -188,16 +454,29 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	now := time.Now().UTC()
 	copyEntry := PrepareEntryForWrite(entry, now, path, isPseudonymizeEnabled(cfg))
 	copyEntry.Classification = InferClassification(copyEntry)
+	if err := validateEntryData(copyEntry.Data); err != nil {
+		return nil, err
+	}
 	plaintext, err := json.Marshal(copyEntry)
 	if err != nil {
 		return nil, err
 	}
 	defer vaultcrypto.Wipe(plaintext)
+	if len(plaintext) > maxEntryPlaintextBytesV1 {
+		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
+	}
+	if err := validateEntryPlaintext(plaintext); err != nil {
+		return nil, err
+	}
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
 	recordDuration("encrypt", time.Since(start))
 	if err != nil {
 		return nil, err
+	}
+	if len(ciphertext) > maxEntryCiphertextBytesV1 {
+		vaultcrypto.Wipe(ciphertext)
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	if err := SafeMkdirAll(filepath.Dir(filePath), 0o700); err != nil {
@@ -257,31 +536,36 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 // the entry once paths are pseudonymized; only the ciphertext's embedded
 // logical path does. Callers that need to migrate a file whose name is not
 // (or no longer) derivable from a logical path must read it this way.
-func ReadEntryFile(filePath string, identity *age.X25519Identity) (*Entry, error) {
+// ReadEntryFile reads an entry file through a capability rooted at vaultDir.
+// It is intended for vault-internal callers that have discovered a file path
+// and need the logical path stored in its ciphertext.
+func ReadEntryFile(vaultDir, filePath string, identity *age.X25519Identity) (*Entry, error) {
+	return readEntryFileWith(identity, func() ([]byte, error) {
+		return readVaultEntryBounded(vaultDir, filePath)
+	})
+}
+
+func readEntryFileWith(identity *age.X25519Identity, read func() ([]byte, error)) (*Entry, error) {
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
-	raw, err := SafeReadFile(filePath)
+	raw, err := read()
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}
-	var entry Entry
-	if err := json.Unmarshal(plaintext, &entry); err != nil {
-		vaultcrypto.Wipe(plaintext)
+	entry, err := decodeEntryBounded(plaintext)
+	vaultcrypto.Wipe(plaintext)
+	if err != nil {
 		return nil, err
 	}
-	vaultcrypto.Wipe(plaintext)
-	if entry.Data == nil {
-		entry.Data = map[string]any{}
-	}
-	MigrateBackupCodes(&entry)
-	return &entry, nil
+	MigrateBackupCodes(entry)
+	return entry, nil
 }
 
 // DeleteEntry removes an entry from the vault
@@ -397,23 +681,26 @@ func GetEntryMetadata(vaultDir, path string, identity *age.X25519Identity) (*Ent
 	if err != nil {
 		return nil, err
 	}
-	raw, err := SafeReadFile(entryStoragePath(vaultDir, path, identity, cfg))
+	raw, err := readVaultEntryBounded(vaultDir, entryStoragePath(vaultDir, path, identity, cfg))
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}
 	defer vaultcrypto.Wipe(plaintext)
+	if err := validateEntryPlaintext(plaintext); err != nil {
+		return nil, err
+	}
 	var entry struct {
 		Metadata EntryMetadata `json:"meta"`
 	}

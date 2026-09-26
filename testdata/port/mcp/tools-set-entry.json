@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "3232e31f",
-    "commit_sha": "3232e31fb91362b6e6202774f7e95f6d477305d2",
+    "commit": "c98b560f",
+    "commit_sha": "c98b560f51fd0e10c3bb7e10c6c7621cafbebdfb",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -16,8 +16,8 @@
       "internal/crypto/password.go",
       "internal/crypto/totp.go"
     ],
-    "source_hash": "f61a0e1e2b5dd49bd3024ef6689249dc4687fce7e14118ced78b5f7d36fa7d78",
-    "generator_hash": "57f8cb839d3855533262d25832667622891b25a7ddb7fd0a312191724c810c35"
+    "source_hash": "7ecd1ec07162e124409adeeb23b6d33a6457c5da1fd7e9de0c9d58aebb1d8d8c",
+    "generator_hash": "46ae28a0293e8ef3e17c6dee4a6ba523631ebae4a3ccd025e6d8f266c172ee7b"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-set-entry-fixture",

@@ -61,7 +61,7 @@ var mcpCallSourceFiles = []string{
 	"internal/vault/search.go",
 }
 
-const mcpCallPinnedSourceHash = "8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9"
+const mcpCallPinnedSourceHash = "33f58a6ad963dc4a00c31905430ed239df07cbec71368d90e4fd96211061b6fb"
 
 func TestGenerateMCPCallFixture(t *testing.T) {
 	g := os.Getenv("SYMAIRA_GENERATE_MCP_CALL_FIXTURE") == "1"
@@ -138,14 +138,14 @@ func TestGenerateMCPCallFixture(t *testing.T) {
 		t.Fatalf("Go MCP call sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpCallPinnedSourceHash)
 	}
 	if pinnedHash := mcpCallGitSourceHash(t, mcpCallSourceFiles); pinnedHash != sourceHash {
-		t.Fatalf("working Go MCP call sources differ from caadd5e: got %s, want %s", sourceHash, pinnedHash)
+		t.Fatalf("working Go MCP call sources differ from c98b560f: got %s, want %s", sourceHash, pinnedHash)
 	}
 
 	fixture := mcpCallFixture{
 		SchemaVersion: 1,
 		Oracle: mcpCallOracle{
-			Commit:        "caadd5e",
-			CommitSHA:     "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+			Commit:        "c98b560f",
+			CommitSHA:     "c98b560f51fd0e10c3bb7e10c6c7621cafbebdfb",
 			SourceFiles:   mcpCallSourceFiles,
 			SourceHash:    sourceHash,
 			GeneratorHash: mcpCallGeneratorHash(t),
@@ -269,7 +269,7 @@ func mcpCallGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "caadd5e:"+name)
+		cmd := exec.Command("git", "show", "c98b560f:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

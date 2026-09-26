@@ -751,6 +751,95 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
 }
 
 #[test]
+fn entry_shape_budget_is_checked_before_entry_deserialization() {
+    let too_many =
+        serde_json::json!({"data": {"array": vec![serde_json::Value::Null; MAX_ARRAY_ITEMS + 1]}});
+    assert!(entry_budget::validate(&serde_json::to_vec(&too_many).unwrap(), "test").is_err());
+
+    let mut deep = serde_json::Value::String("leaf".into());
+    for _ in 0..MAX_ENTRY_DEPTH {
+        deep = serde_json::json!({"nested": deep});
+    }
+    let deep = serde_json::json!({"data": {"root": deep}});
+    assert!(entry_budget::validate(&serde_json::to_vec(&deep).unwrap(), "test").is_err());
+}
+
+#[test]
+fn entry_shape_budget_counts_duplicate_raw_keys_like_go() {
+    let duplicate_fields = std::iter::repeat_n("\"x\":0", MAX_ENTRY_FIELDS + 1)
+        .collect::<Vec<_>>()
+        .join(",");
+    let plaintext = format!("{{\"data\":{{{duplicate_fields}}}}}");
+    assert!(matches!(
+        entry_budget::validate(plaintext.as_bytes(), "duplicate-keys"),
+        Err(StoreError::ValueLimit(_))
+    ));
+
+    // Go merges duplicate map fields; both ports reject ambiguous envelopes.
+    assert!(entry_budget::validate(br#"{"data":{},"DATA":{}}"#, "duplicate").is_err());
+    let mut value: serde_json::Value =
+        serde_json::from_slice(br#"{"DATA":{"secret":"kept"}}"#).unwrap();
+    assert!(entry_budget::validate(br#"{"DATA":{"secret":"kept"}}"#, "case").is_ok());
+    normalize_entry_data_key(&mut value);
+    let entry: Entry = serde_json::from_value(value).unwrap();
+    assert_eq!(entry.data["secret"], "kept");
+}
+
+#[test]
+fn file_manifest_enumeration_obeys_depth_and_entry_limits() {
+    let temp = tempfile::tempdir().unwrap();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let (_, value) = fixture();
+    materialize(temp.path(), &value.vaults[0]);
+    fs::create_dir_all(temp.path().join("shallow")).unwrap();
+    fs::write(temp.path().join("shallow/file"), b"ok").unwrap();
+    fs::create_dir_all(temp.path().join("deep/one/two")).unwrap();
+    fs::write(temp.path().join("deep/one/two/file"), b"too deep").unwrap();
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    let files = store.files_with_limits(2, 100).unwrap();
+    assert!(files.iter().any(|item| item.path == "shallow"));
+    assert!(
+        !files
+            .iter()
+            .any(|item| item.path.ends_with("deep/one/two/file"))
+    );
+    assert!(matches!(
+        store.files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, 1),
+        Err(StoreError::ValueLimit(_))
+    ));
+}
+
+#[test]
+fn writer_refuses_entries_larger_than_the_read_budget() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut data = BTreeMap::new();
+    let value = "x".repeat(MAX_VALUE_BYTES);
+    for index in 0..17 {
+        data.insert(
+            format!("field-{index:02}"),
+            serde_json::Value::String(value.clone()),
+        );
+    }
+    let entry = Entry {
+        data,
+        ..Entry::default()
+    };
+    assert!(matches!(
+        store.write_new_entry("too-large", &entry, &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+            ..
+        })
+    ));
+    assert!(!temp.path().join("entries/too-large.age").exists());
+}
+
+#[test]
 fn fresh_layout_write_supports_pseudonymized_nested_and_dotted_paths() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
@@ -883,15 +972,43 @@ fn bounded_reads_reject_oversized_config_and_entry() {
     let entry_temp = tempfile::tempdir().unwrap();
     let entry_root = entry_temp.path();
     materialize(entry_root, &value.vaults[0]);
+    let store = Store::open(entry_root, &identity).unwrap();
+    let entry_path = entry_root.join("entries/minimal.age");
     fs::write(
-        entry_root.join("entries/minimal.age"),
-        vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
+        &entry_path,
+        vec![b'x'; MAX_ENTRY_CIPHERTEXT_BYTES_V1 as usize],
     )
     .unwrap();
-    let store = Store::open(entry_root, &identity).unwrap();
     assert!(matches!(
         store.get("minimal", &identity),
-        Err(StoreError::Limit { .. })
+        Err(StoreError::Decryption(_))
+    ));
+    fs::write(
+        &entry_path,
+        vec![b'x'; (MAX_ENTRY_CIPHERTEXT_BYTES_V1 + 1) as usize],
+    )
+    .unwrap();
+    assert!(matches!(
+        store.get("minimal", &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            ..
+        })
+    ));
+
+    let oversized_plaintext = vec![b'x'; (MAX_ENTRY_PLAINTEXT_BYTES_V1 + 1) as usize];
+    let encrypted = symvault_crypto::encrypt(
+        &oversized_plaintext,
+        &[parse_recipient(&recipient_string(&identity)).unwrap()],
+    )
+    .unwrap();
+    fs::write(&entry_path, encrypted).unwrap();
+    assert!(matches!(
+        store.get("minimal", &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+            ..
+        })
     ));
 }
 
@@ -907,6 +1024,8 @@ fn path_validation_and_symlink_reads_fail_closed() {
     ] {
         assert!(validate_entry_path(path).is_err(), "accepted {path:?}");
     }
+    assert!(validate_entry_path(&vec!["d"; MAX_VAULT_ENTRY_PATH_DEPTH + 1].join("/")).is_err());
+    assert!(validate_entry_path(&vec!["d"; MAX_VAULT_ENTRY_PATH_DEPTH].join("/")).is_ok());
     let (_, value) = fixture();
     let _identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
@@ -1506,6 +1625,28 @@ fn manifest_verification_ignores_size_mismatch_like_go() {
     assert!(result.tampered.is_empty());
 }
 
+#[test]
+fn manifest_rejects_too_many_entries_before_building_map() {
+    let mut json = String::from(
+        "{\"version\":1,\"generation\":0,\"created\":\"\",\"updated\":\"\",\"entries\":{",
+    );
+    for index in 0..=MAX_VAULT_ENTRY_COUNT {
+        if index != 0 {
+            json.push(',');
+        }
+        json.push_str(&format!(
+            "\"entry-{index}\":{{\"sha256\":\"\",\"size\":0,\"mtime\":\"\"}}"
+        ));
+    }
+    json.push_str("}}");
+    let error = serde_json::from_str::<Manifest>(&json).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("manifest entry count exceeds limit")
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn manifest_preserves_existing_zero_created_and_crosses_i32_generation_boundary() {
@@ -1912,9 +2053,9 @@ fn open_preserves_legacy_validation_error_order() {
 
 #[cfg(unix)]
 #[test]
-fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
+fn fresh_and_legacy_scans_keep_the_shared_path_depth_limit() {
     let identity = parse_identity(IDENTITY).unwrap();
-    let deep = (0..65).map(|_| "deep").collect::<Vec<_>>().join("/");
+    let deep = (0..63).map(|_| "deep").collect::<Vec<_>>().join("/");
     let path = format!("{deep}/entry");
     let fresh_temp = tempfile::tempdir().unwrap();
     fs::create_dir(fresh_temp.path().join("entries")).unwrap();
@@ -1967,7 +2108,7 @@ fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
     fs::remove_dir_all(legacy_temp.path().join("entries")).unwrap();
     fs::create_dir(legacy_temp.path().join("entries")).unwrap();
     let legacy = Store::open(legacy_temp.path(), &identity).unwrap();
-    assert!(legacy.list(&identity).unwrap().is_empty());
+    assert_eq!(legacy.list(&identity).unwrap(), vec![path]);
 }
 
 #[cfg(unix)]
@@ -1993,7 +2134,7 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
                     .to_path_buf()
             })
             .collect::<Vec<_>>();
-        let mut actual = rooted::walk_with_max_depth(&root, temp.path(), Some(depth))
+        let mut actual = rooted::walk_with_limits(&root, temp.path(), Some(depth), None)
             .unwrap()
             .into_iter()
             .map(|entry| entry.relative)
@@ -2002,6 +2143,19 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
         actual.sort();
         assert_eq!(actual, expected, "depth {depth}");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn rooted_walk_rejects_entry_count_overflow() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join("one.age"), b"1").unwrap();
+    fs::write(temp.path().join("two.age"), b"2").unwrap();
+    let root = fs::File::open(temp.path()).unwrap();
+    assert!(matches!(
+        rooted::walk_with_limits(&root, temp.path(), None, Some(1)),
+        Err(StoreError::ValueLimit(_))
+    ));
 }
 #[derive(Debug, Deserialize, Serialize)]
 struct Store004Fixture {

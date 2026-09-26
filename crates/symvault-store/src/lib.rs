@@ -41,6 +41,7 @@ pub mod sharing;
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
 
+mod entry_budget;
 mod publication;
 mod reencrypt_journal;
 
@@ -58,10 +59,15 @@ const LOCK_FILE: &str = ".lock";
 /// Read and parse limits are deliberately explicit. They cap allocation before
 /// decryption and reject pathological JSON structures after parsing.
 pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+/// Version 1 entry envelope budgets shared with Go's Entry-Read path.
+pub const MAX_ENTRY_CIPHERTEXT_BYTES_V1: u64 = 24 * 1024 * 1024;
+pub const MAX_ENTRY_PLAINTEXT_BYTES_V1: u64 = 16 * 1024 * 1024;
 pub const MAX_ENTRY_FIELDS: usize = 1024;
 pub const MAX_ENTRY_DEPTH: usize = 32;
 pub const MAX_VALUE_BYTES: usize = 1024 * 1024;
 pub const MAX_ARRAY_ITEMS: usize = 1024;
+pub const MAX_VAULT_ENTRY_COUNT: usize = 100_000;
+pub const MAX_VAULT_ENTRY_PATH_DEPTH: usize = 64;
 
 /// Errors returned by the read-only store.
 #[derive(Debug, Error)]
@@ -584,11 +590,12 @@ impl Store {
         #[cfg(unix)]
         {
             let mut result = Vec::new();
-            let fresh_entries = match rooted::walk_from(
+            let fresh_entries = match rooted::walk_from_with_limits(
                 &self.root_cap,
                 Path::new(ENTRIES_DIR),
                 &self.root.join(ENTRIES_DIR),
-                None,
+                Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+                Some(MAX_VAULT_ENTRY_COUNT),
             ) {
                 Ok(entries) => entries,
                 Err(StoreError::Read { source, .. })
@@ -598,7 +605,12 @@ impl Store {
                 }
                 Err(error) => return Err(error),
             };
-            let legacy_entries = rooted::walk_with_max_depth(&self.root_cap, &self.root, Some(64))?;
+            let legacy_entries = rooted::walk_with_limits(
+                &self.root_cap,
+                &self.root,
+                Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+                Some(MAX_VAULT_ENTRY_COUNT),
+            )?;
             for (entries, fresh) in [(fresh_entries, true), (legacy_entries, false)] {
                 for item in entries {
                     if !item.regular {
@@ -617,6 +629,11 @@ impl Store {
                     }
                     if fresh != relative.starts_with(Path::new(ENTRIES_DIR)) {
                         continue;
+                    }
+                    if result.len() >= MAX_VAULT_ENTRY_COUNT {
+                        return Err(StoreError::ValueLimit(
+                            "vault entry enumeration limit exceeded".into(),
+                        ));
                     }
                     let logical = if fresh {
                         relative
@@ -770,6 +787,7 @@ impl Store {
                     path: path.to_owned(),
                     detail,
                 })?;
+        validate_entry_values(&stored)?;
         let plaintext =
             Zeroizing::new(
                 serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
@@ -777,6 +795,12 @@ impl Store {
                     detail: error.to_string(),
                 })?,
             );
+        if plaintext.len() as u64 > MAX_ENTRY_PLAINTEXT_BYTES_V1 {
+            return Err(StoreError::Limit {
+                path: target.clone(),
+                limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+            });
+        }
         let mut recipient_strings = self.recipients()?;
         recipient_strings.insert(0, recipient_string(identity));
         let mut seen = BTreeSet::new();
@@ -789,6 +813,12 @@ impl Store {
             .collect::<Result<Vec<_>, _>>()?;
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        if ciphertext.len() as u64 > MAX_ENTRY_CIPHERTEXT_BYTES_V1 {
+            return Err(StoreError::Limit {
+                path: target.clone(),
+                limit: MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            });
+        }
 
         #[cfg(unix)]
         let _entries_cap =
@@ -824,9 +854,22 @@ impl Store {
 
     /// Returns a sorted recursive manifest of the vault tree.
     pub fn files(&self) -> Result<Vec<FileInfo>, StoreError> {
+        self.files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, MAX_VAULT_ENTRY_COUNT)
+    }
+
+    fn files_with_limits(
+        &self,
+        max_depth: usize,
+        max_entries: usize,
+    ) -> Result<Vec<FileInfo>, StoreError> {
         let mut result = Vec::new();
         #[cfg(unix)]
-        for item in rooted::walk(&self.root_cap, &self.root)? {
+        for item in rooted::walk_with_limits(
+            &self.root_cap,
+            &self.root,
+            Some(max_depth),
+            Some(max_entries),
+        )? {
             let metadata = rooted::metadata(
                 &self.root_cap,
                 &item.relative,
@@ -835,13 +878,24 @@ impl Store {
             result.push(self.file_info(&item.relative, metadata)?);
         }
         #[cfg(not(unix))]
-        for item in WalkDir::new(&self.root).follow_links(false) {
+        let mut visited = 0usize;
+        #[cfg(not(unix))]
+        for item in WalkDir::new(&self.root)
+            .max_depth(max_depth)
+            .follow_links(false)
+        {
             let item = item.map_err(|error| StoreError::Read {
                 path: self.root.clone(),
                 source: io::Error::other(error.to_string()),
             })?;
             if item.path() == self.root {
                 continue;
+            }
+            visited += 1;
+            if visited > max_entries {
+                return Err(StoreError::ValueLimit(
+                    "vault entry enumeration limit exceeded".into(),
+                ));
             }
             let relative = item
                 .path()
@@ -942,15 +996,33 @@ impl Store {
         identity: &Identity,
     ) -> Result<Entry, StoreError> {
         let mut raw = self.read_candidate_bytes(candidate)?;
-        let mut plaintext =
-            decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let decrypted =
+            symvault_crypto::decrypt_bounded(&raw, identity, MAX_ENTRY_PLAINTEXT_BYTES_V1);
         raw.zeroize();
-        let result = serde_json::from_slice(&plaintext)
-            .map_err(|error| StoreError::Entry {
-                path: candidate.logical.clone(),
-                detail: error.to_string(),
-            })
-            .and_then(|entry: Entry| validate_entry_values(&entry).map(|()| entry));
+        let mut plaintext = match decrypted {
+            Ok(plaintext) => plaintext,
+            Err(error) if error.class() == symvault_crypto::FailureClass::SizeLimit => {
+                return Err(StoreError::Limit {
+                    path: candidate.path.clone(),
+                    limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+                });
+            }
+            Err(error) => return Err(StoreError::Decryption(error.to_string())),
+        };
+        let result = entry_budget::validate(&plaintext, &candidate.logical).and_then(|()| {
+            serde_json::from_slice::<serde_json::Value>(&plaintext)
+                .map_err(|error| StoreError::Entry {
+                    path: candidate.logical.clone(),
+                    detail: error.to_string(),
+                })
+                .and_then(|mut value| {
+                    normalize_entry_data_key(&mut value);
+                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
+                        path: candidate.logical.clone(),
+                        detail: error.to_string(),
+                    })
+                })
+        });
         plaintext.zeroize();
         result
     }
@@ -958,21 +1030,42 @@ impl Store {
     fn read_candidate_bytes(&self, candidate: &Candidate) -> Result<Vec<u8>, StoreError> {
         #[cfg(unix)]
         {
-            rooted::read(&self.root_cap, &candidate.relative, &candidate.path)
+            rooted::read_limited(
+                &self.root_cap,
+                &candidate.relative,
+                &candidate.path,
+                MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            )
         }
         #[cfg(not(unix))]
         {
-            read_regular(&candidate.path)
+            read_regular_limited(&candidate.path, MAX_ENTRY_CIPHERTEXT_BYTES_V1)
         }
     }
 }
 
+fn normalize_entry_data_key(value: &mut serde_json::Value) {
+    if let Some(fields) = value.as_object_mut()
+        && let Some(key) = fields
+            .keys()
+            .find(|key| key.as_str() != "data" && key.eq_ignore_ascii_case("data"))
+            .cloned()
+        && let Some(data) = fields.remove(&key)
+    {
+        fields.insert("data".into(), data);
+    }
+}
+
 fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
-    if entry.data.len() > MAX_ENTRY_FIELDS {
+    validate_entry_data(&entry.data)
+}
+
+fn validate_entry_data(data: &BTreeMap<String, serde_json::Value>) -> Result<(), StoreError> {
+    if data.len() > MAX_ENTRY_FIELDS {
         return Err(StoreError::ValueLimit("too many top-level fields".into()));
     }
     let mut fields = 0usize;
-    for (key, value) in &entry.data {
+    for (key, value) in data {
         if key.len() > MAX_VALUE_BYTES {
             return Err(StoreError::ValueLimit("field name too large".into()));
         }
@@ -1065,11 +1158,12 @@ fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
 
 #[cfg(unix)]
 fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, StoreError> {
-    let fresh_entries = match rooted::walk_from(
+    let fresh_entries = match rooted::walk_from_with_limits(
         root_cap,
         Path::new(ENTRIES_DIR),
         &root.join(ENTRIES_DIR),
-        None,
+        Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+        Some(MAX_VAULT_ENTRY_COUNT),
     ) {
         Ok(entries) => entries,
         Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
@@ -1077,7 +1171,12 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
         }
         Err(error) => return Err(error),
     };
-    let legacy_entries = rooted::walk_with_max_depth(root_cap, root, Some(64))?;
+    let legacy_entries = rooted::walk_with_limits(
+        root_cap,
+        root,
+        Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+        Some(MAX_VAULT_ENTRY_COUNT),
+    )?;
     let fresh = fresh_entries.iter().any(|item| {
         item.regular
             && item.relative.starts_with(Path::new(ENTRIES_DIR))
@@ -1124,7 +1223,11 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let mut result = Vec::new();
     let entries_root = root.join(ENTRIES_DIR);
     if entries_root.is_dir() {
-        for item in WalkDir::new(&entries_root).follow_links(false) {
+        let mut visited = 0usize;
+        for item in WalkDir::new(&entries_root)
+            .max_depth(MAX_VAULT_ENTRY_PATH_DEPTH + 1)
+            .follow_links(false)
+        {
             let item = match item {
                 Ok(item) => item,
                 Err(error)
@@ -1141,6 +1244,12 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
                     });
                 }
             };
+            visited += 1;
+            if visited > MAX_VAULT_ENTRY_COUNT {
+                return Err(StoreError::ValueLimit(
+                    "vault entry enumeration limit exceeded".into(),
+                ));
+            }
             if item.file_type().is_symlink() {
                 return Err(StoreError::Symlink(item.path().to_path_buf()));
             }
@@ -1168,7 +1277,11 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
             }
         }
     }
-    for item in WalkDir::new(root).max_depth(64).follow_links(false) {
+    let mut visited = 0usize;
+    for item in WalkDir::new(root)
+        .max_depth(MAX_VAULT_ENTRY_PATH_DEPTH + 1)
+        .follow_links(false)
+    {
         let item = match item {
             Ok(item) => item,
             Err(error)
@@ -1185,6 +1298,12 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
                 });
             }
         };
+        visited += 1;
+        if visited > MAX_VAULT_ENTRY_COUNT {
+            return Err(StoreError::ValueLimit(
+                "vault entry enumeration limit exceeded".into(),
+            ));
+        }
         if item.path() == root || item.path().starts_with(&entries_root) {
             continue;
         }
@@ -1231,6 +1350,9 @@ fn validate_entry_path(path: &str) -> Result<(), StoreError> {
         if component.is_empty() || component == "." || component == ".." {
             return Err(StoreError::InvalidEntryPath(path.to_owned()));
         }
+    }
+    if normalized.split('/').count() > MAX_VAULT_ENTRY_PATH_DEPTH {
+        return Err(StoreError::InvalidEntryPath(path.to_owned()));
     }
     if Path::new(path).components().any(|component| {
         matches!(
@@ -1509,6 +1631,15 @@ fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
 }
 
 #[cfg(not(unix))]
+fn read_regular_limited(path: &Path, limit: u64) -> Result<Vec<u8>, StoreError> {
+    let file = open_nofollow(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    read_open_regular_with_metadata_limit(file, path, limit).map(|(bytes, _)| bytes)
+}
+
+#[cfg(not(unix))]
 fn read_regular_with_metadata(path: &Path) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
@@ -1521,6 +1652,14 @@ fn read_open_regular_with_metadata(
     file: fs::File,
     path: &Path,
 ) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
+    read_open_regular_with_metadata_limit(file, path, MAX_FILE_BYTES)
+}
+
+fn read_open_regular_with_metadata_limit(
+    file: fs::File,
+    path: &Path,
+    limit: u64,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -1529,23 +1668,23 @@ fn read_open_regular_with_metadata(
         return Err(StoreError::NotRegularFile(path.to_path_buf()));
     }
     let size = metadata.len();
-    if size > MAX_FILE_BYTES {
+    if size > limit {
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
-            limit: MAX_FILE_BYTES,
+            limit,
         });
     }
     let mut bytes = Vec::with_capacity(size as usize);
-    file.take(MAX_FILE_BYTES + 1)
+    file.take(limit.saturating_add(1))
         .read_to_end(&mut bytes)
         .map_err(|source| StoreError::Read {
             path: path.to_path_buf(),
             source,
         })?;
-    if bytes.len() as u64 > MAX_FILE_BYTES {
+    if bytes.len() as u64 > limit {
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
-            limit: MAX_FILE_BYTES,
+            limit,
         });
     }
     Ok((bytes, metadata))
@@ -1873,7 +2012,45 @@ pub struct Manifest {
     pub generation: i64,
     pub created: String,
     pub updated: String,
+    #[serde(deserialize_with = "deserialize_manifest_entries")]
     pub entries: BTreeMap<String, ManifestEntry>,
+}
+
+fn deserialize_manifest_entries<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, ManifestEntry>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, MapAccess, Visitor};
+
+    struct EntriesVisitor;
+
+    impl<'de> Visitor<'de> for EntriesVisitor {
+        type Value = BTreeMap<String, ManifestEntry>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a bounded manifest entry map")
+        }
+
+        fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+        where
+            M: MapAccess<'de>,
+        {
+            let mut entries = BTreeMap::new();
+            let mut count = 0;
+            while let Some(key) = map.next_key::<String>()? {
+                count += 1;
+                if count > MAX_VAULT_ENTRY_COUNT {
+                    return Err(M::Error::custom("manifest entry count exceeds limit"));
+                }
+                entries.insert(key, map.next_value()?);
+            }
+            Ok(entries)
+        }
+    }
+
+    deserializer.deserialize_map(EntriesVisitor)
 }
 
 /// The four independent outcomes of manifest verification.
@@ -2444,6 +2621,11 @@ impl Store {
         manifest: &Manifest,
         identity: &Identity,
     ) -> Result<Manifest, StoreError> {
+        if manifest.entries.len() > MAX_VAULT_ENTRY_COUNT {
+            return Err(StoreError::Config(
+                "manifest entry count exceeds limit".into(),
+            ));
+        }
         let mut manifest = manifest.clone();
         if manifest.version == 0 {
             manifest.version = 1;
@@ -2455,6 +2637,12 @@ impl Store {
         );
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        if ciphertext.len() as u64 > MAX_FILE_BYTES {
+            return Err(StoreError::Limit {
+                path: self.root.join(MANIFEST_FILE),
+                limit: MAX_FILE_BYTES,
+            });
+        }
         publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)?;
         Ok(manifest)
     }
