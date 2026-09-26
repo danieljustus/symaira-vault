@@ -14,7 +14,7 @@ import (
 )
 
 func TestStagedArchiveMatchesGoReleaseContract(t *testing.T) {
-	root := testRepoRoot(t)
+	root := testArchiveFixture(t)
 	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestStagedArchiveMatchesGoReleaseContract(t *testing.T) {
 }
 
 func TestStagedArchiveRejectsUnexpectedMember(t *testing.T) {
-	root := testRepoRoot(t)
+	root := testArchiveFixture(t)
 	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestStagedArchiveRejectsUnexpectedMember(t *testing.T) {
 }
 
 func TestWindowsStagedArchiveUsesZipAndExeMember(t *testing.T) {
-	root := testRepoRoot(t)
+	root := testArchiveFixture(t)
 	data, err := os.ReadFile(filepath.Join(root, ".goreleaser.yml"))
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +110,35 @@ func testRepoRoot(t *testing.T) string {
 	return filepath.Clean(filepath.Join(cwd, "..", "..", "..", ".."))
 }
 
+func testArchiveFixture(t *testing.T) string {
+	t.Helper()
+	sourceRoot := testRepoRoot(t)
+	root := t.TempDir()
+	config, err := os.ReadFile(filepath.Join(sourceRoot, ".goreleaser.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".goreleaser.yml"), config, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"LICENSE",
+		"README.md",
+		"completions/symvault.bash",
+		"dist/man/symvault.1",
+		"docs/man/symvault.1",
+	} {
+		fullPath := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, []byte("fixture: "+filepath.Base(path)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
 func TestSourceFilesRejectsEscape(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "repo")
@@ -119,8 +148,32 @@ func TestSourceFilesRejectsEscape(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "outside"), []byte("private"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sourceFiles(root, []string{"../outside"}); err == nil {
+	if _, err := sourceFiles(root, []archiveFile{{Src: "../outside"}}); err == nil {
 		t.Fatal("source pattern escaped repository root")
+	}
+}
+
+func TestSourceFilesMapsDestinationAndStripsParent(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "dist", "man", "symvault.1")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("manual"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := sourceFiles(root, []archiveFile{{
+		Src: "dist/man/*.1", Dst: "docs/man", StripParent: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := files["docs/man/symvault.1"]; !ok {
+		t.Fatalf("mapped archive member missing: %v", files)
+	}
+	if _, ok := files["dist/man/symvault.1"]; ok {
+		t.Fatalf("source path leaked into archive member list: %v", files)
 	}
 }
 

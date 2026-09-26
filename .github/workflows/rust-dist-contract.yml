@@ -75,6 +75,10 @@ jobs:
         shell: bash
         run: SYMVAULT_VERSION="$DIST_VERSION" cargo +1.98.0 build --release -p symvault-cli --bin symvault --locked
 
+      - name: Generate GoReleaser manual-page sources
+        shell: bash
+        run: GOTOOLCHAIN=go1.26.6 go run . generate manpages dist/man
+
       - name: Stage GoReleaser-named archive
         shell: bash
         run: |
@@ -165,6 +169,7 @@ jobs:
               rustc --version | grep -Eq "^rustc 1[.]98[.]"
               rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
               go version | grep -q "^go version go1[.]26[.]6 "
+              GOTOOLCHAIN=go1.26.6 go run . generate manpages dist/man
               SYMVAULT_VERSION=0.0.0 cargo build --release -p symvault-cli --bin symvault --locked
               python3 scripts/rust-port/stage-rust-archive.py \
                 --version 0.0.0 \

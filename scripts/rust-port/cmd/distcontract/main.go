@@ -37,9 +37,38 @@ type config struct {
 			GOOS    string   `yaml:"goos"`
 			Formats []string `yaml:"formats"`
 		} `yaml:"format_overrides"`
-		Files           []string `yaml:"files"`
-		WrapInDirectory bool     `yaml:"wrap_in_directory"`
+		Files           []archiveFile `yaml:"files"`
+		WrapInDirectory bool          `yaml:"wrap_in_directory"`
 	} `yaml:"archives"`
+}
+
+// archiveFile accepts GoReleaser's shorthand string form and its structured
+// src/dst form. The latter is used for generated manpages so release builds
+// can stage them outside the tracked docs tree.
+type archiveFile struct {
+	Src         string `yaml:"src"`
+	Dst         string `yaml:"dst"`
+	StripParent bool   `yaml:"strip_parent"`
+}
+
+func (f *archiveFile) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		f.Src = node.Value
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("archive file must be a pattern or a src/dst mapping")
+	}
+	type rawArchiveFile archiveFile
+	var raw rawArchiveFile
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	*f = archiveFile(raw)
+	if f.Src == "" {
+		return errors.New("archive file mapping has no src pattern")
+	}
+	return nil
 }
 
 type archivePlan struct {
@@ -170,20 +199,20 @@ func makePlans(root string, cfg config, version string) ([]archivePlan, error) {
 	return plans, nil
 }
 
-func sourceFiles(root string, patterns []string) (map[string]string, error) {
+func sourceFiles(root string, patterns []archiveFile) (map[string]string, error) {
 	files := make(map[string]string)
 	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern)))
+		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(pattern.Src)))
 		if err != nil {
-			return nil, fmt.Errorf("expand GoReleaser file pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf("expand GoReleaser file pattern %q: %w", pattern.Src, err)
 		}
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("GoReleaser file pattern %q matched no files", pattern)
+			return nil, fmt.Errorf("GoReleaser file pattern %q matched no files", pattern.Src)
 		}
 		for _, path := range matches {
 			relative, err := filepath.Rel(root, path)
 			if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-				return nil, fmt.Errorf("GoReleaser file pattern %q escapes repository root", pattern)
+				return nil, fmt.Errorf("GoReleaser file pattern %q escapes repository root", pattern.Src)
 			}
 			info, err := os.Lstat(path)
 			if err != nil {
@@ -196,7 +225,18 @@ func sourceFiles(root string, patterns []string) (map[string]string, error) {
 			if err != nil {
 				return nil, err
 			}
-			files[filepath.ToSlash(relative)] = fmt.Sprintf("%x", sha256.Sum256(data))
+			name := relative
+			if pattern.StripParent {
+				name = filepath.Base(name)
+			}
+			if pattern.Dst != "" {
+				name = filepath.Join(filepath.FromSlash(pattern.Dst), name)
+			}
+			name = filepath.Clean(name)
+			if name == ".." || filepath.IsAbs(name) || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("GoReleaser archive destination for %q escapes archive root", pattern.Src)
+			}
+			files[filepath.ToSlash(name)] = fmt.Sprintf("%x", sha256.Sum256(data))
 		}
 	}
 	return files, nil
