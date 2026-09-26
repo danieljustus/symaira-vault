@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "c42b96bb",
-    "commit_sha": "c42b96bb4dd2a2d6cea1ade0770f55650045e5b3",
+    "commit": "c98b560f",
+    "commit_sha": "c98b560f51fd0e10c3bb7e10c6c7621cafbebdfb",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -14,8 +14,8 @@
       "internal/vault/entry.go",
       "internal/vault/entry_readwrite.go"
     ],
-    "source_hash": "b69fe4c1a92dfcb63648e357d0cf0649de3314ca62e75c70d163804f2b27b520",
-    "generator_hash": "b834a9d279b4cc845efa2de00ad3b0ca93878e5a38e820d7ea4ee2fccd6b07d5"
+    "source_hash": "568a5ae8811ae3cf8f4ab8e27b4d39bb54b10abeca326fe915372bb84f7264ae",
+    "generator_hash": "a0b5d1cc4c136d4353aee66b1bb07339bf75455403d7a242c75a8c9de98569da"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-delete-entry-fixture",
