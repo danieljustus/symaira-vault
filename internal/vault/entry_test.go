@@ -167,6 +167,13 @@ func TestEntryJSONShapeBudgetIsSharedWithRust(t *testing.T) {
 	}
 }
 
+func TestEntryJSONShapeBudgetMatchesCaseInsensitiveGoFieldNames(t *testing.T) {
+	plaintext := []byte(`{"DATA":{"oversized":"` + strings.Repeat("x", maxEntryValueBytes+1) + `"}}`)
+	if err := validateEntryPlaintext(plaintext); err == nil {
+		t.Fatal("case-insensitive Data field bypassed the string limit")
+	}
+}
+
 func TestEntryPathDepthBudget(t *testing.T) {
 	path64 := strings.TrimSuffix(strings.Repeat("d/", maxVaultEntryPathDepth-1), "/") + "/entry"
 	if err := validateEntryPath(t.TempDir(), path64); err != nil {

@@ -2,13 +2,16 @@ package vault
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
@@ -28,6 +31,48 @@ func TestLoadManifestRejectsCiphertextAboveSharedReadBudget(t *testing.T) {
 	}
 	if _, err := LoadManifest(vaultDir, nil); !errors.Is(err, errEntryReadLimit) {
 		t.Fatalf("LoadManifest error = %v, want shared read limit", err)
+	}
+}
+
+func TestLoadManifestRejectsExcessEntriesBeforeMapDecode(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	var plaintext strings.Builder
+	plaintext.WriteString(`{"entries":{`)
+	for index := 0; index <= maxVaultEntryCount; index++ {
+		if index > 0 {
+			plaintext.WriteByte(',')
+		}
+		fmt.Fprintf(&plaintext, `"%d":{}`, index)
+	}
+	plaintext.WriteString(`}}`)
+	ciphertext, err := vaultcrypto.Encrypt([]byte(plaintext.String()), identity.Recipient())
+	if err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(vaultDir, manifestFileName), ciphertext, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(vaultDir, identity); !errors.Is(err, errManifestEntryLimit) {
+		t.Fatalf("LoadManifest error = %v, want manifest entry limit", err)
+	}
+}
+
+func TestWriteManifestRejectsUnreadableBudgets(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	tooManyEntries := &Manifest{Entries: make(map[string]ManifestEntry, maxVaultEntryCount+1)}
+	for index := 0; index <= maxVaultEntryCount; index++ {
+		tooManyEntries.Entries[fmt.Sprintf("%d", index)] = ManifestEntry{}
+	}
+	if err := writeManifest(vaultDir, tooManyEntries, identity); !errors.Is(err, errManifestEntryLimit) {
+		t.Fatalf("writeManifest entry count error = %v, want manifest entry limit", err)
+	}
+	tooLarge := &Manifest{Entries: map[string]ManifestEntry{
+		strings.Repeat("x", maxEntryPlaintextBytesV1): {},
+	}}
+	if err := writeManifest(vaultDir, tooLarge, identity); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("writeManifest size error = %v, want read budget", err)
 	}
 }
 

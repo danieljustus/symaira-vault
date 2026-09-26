@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -66,6 +67,9 @@ func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, err
 		return nil, fmt.Errorf("decrypt manifest: %w", err)
 	}
 	defer vaultcrypto.Wipe(plaintext)
+	if err := validateManifestEntryCount(plaintext); err != nil {
+		return nil, err
+	}
 
 	var m Manifest
 	if err := json.Unmarshal(plaintext, &m); err != nil {
@@ -75,6 +79,45 @@ func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, err
 		m.Entries = make(map[string]ManifestEntry)
 	}
 	return &m, nil
+}
+
+func validateManifestEntryCount(plaintext []byte) error {
+	var envelope struct {
+		Entries json.RawMessage `json:"entries"`
+	}
+	if err := json.Unmarshal(plaintext, &envelope); err != nil {
+		return err
+	}
+	if len(envelope.Entries) == 0 || string(envelope.Entries) == "null" {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(envelope.Entries))
+	start, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := start.(json.Delim)
+	if !ok || delim != '{' {
+		return nil // Manifest decoding reports the authoritative type error.
+	}
+	entries := 0
+	for decoder.More() {
+		if _, err := decoder.Token(); err != nil { // key
+			return err
+		}
+		entries++
+		if entries > maxVaultEntryCount {
+			return errManifestEntryLimit
+		}
+		var ignored json.RawMessage
+		if err := decoder.Decode(&ignored); err != nil {
+			return err
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // walkVaultEntriesBounded applies the same traversal limits as Rust's
@@ -148,6 +191,9 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 // writeManifest marshals the manifest to JSON, encrypts it for all recipients,
 // and writes it atomically to manifest.age.
 func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) error {
+	if len(m.Entries) > maxVaultEntryCount {
+		return errManifestEntryLimit
+	}
 	if m.Version == 0 {
 		m.Version = 1
 	}
@@ -159,6 +205,9 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 		return fmt.Errorf("marshal manifest: %w", err)
 	}
 	defer vaultcrypto.Wipe(plaintext)
+	if len(plaintext) > maxEntryPlaintextBytesV1 {
+		return fmt.Errorf("%w: manifest plaintext", errEntryReadLimit)
+	}
 
 	v := &Vault{Dir: vaultDir, Identity: identity}
 	recipients, err := v.GetAllRecipientsForEncryption()
@@ -169,6 +218,10 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 	ciphertext, err := vaultcrypto.EncryptWithRecipients(plaintext, recipients...)
 	if err != nil {
 		return fmt.Errorf("encrypt manifest: %w", err)
+	}
+	if len(ciphertext) > maxEntryPlaintextBytesV1 {
+		vaultcrypto.Wipe(ciphertext)
+		return fmt.Errorf("%w: manifest ciphertext", errEntryReadLimit)
 	}
 
 	manifestPath := filepath.Join(vaultDir, manifestFileName)

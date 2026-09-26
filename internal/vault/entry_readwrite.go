@@ -34,6 +34,7 @@ const (
 
 var errEntryReadLimit = errors.New("entry exceeds read size limit")
 var errEntryEnumerationLimit = errors.New("vault entry enumeration exceeds limit")
+var errManifestEntryLimit = errors.New("manifest entry count exceeds limit")
 
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	cache := listCacheFor(vaultDir)
@@ -201,12 +202,49 @@ func decodeEntryBounded(plaintext []byte) (*Entry, error) {
 }
 
 func validateEntryPlaintext(plaintext []byte) error {
-	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(plaintext, &envelope); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(plaintext))
+	start, err := decoder.Token()
+	if err != nil {
 		return err
 	}
-	if raw, ok := envelope["data"]; ok {
-		return validateEntryDataJSON(raw)
+	if start == nil { // JSON null has the same zero-value behavior as Entry decoding.
+		return nil
+	}
+	delim, ok := start.(json.Delim)
+	if !ok || delim != '{' {
+		return nil // Entry decoding returns the authoritative shape error.
+	}
+	var data json.RawMessage
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return errors.New("entry object key is not a string")
+		}
+		var raw json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			return err
+		}
+		// encoding/json matches struct fields case-insensitively and processes
+		// duplicate members in order, so the last matching Data value wins.
+		if strings.EqualFold(key, "data") {
+			data = raw
+		}
+	}
+	if _, err := decoder.Token(); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("entry has trailing JSON")
+		}
+		return err
+	}
+	if data != nil {
+		return validateEntryDataJSON(data)
 	}
 	return nil
 }
