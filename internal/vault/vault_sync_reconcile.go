@@ -97,7 +97,7 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 			if l.path == winner.path {
 				continue
 			}
-			if _, perr := preserveConflictCopy(l.path); perr != nil {
+			if _, perr := preserveConflictCopy(vaultDir, l.path); perr != nil {
 				if !os.IsNotExist(perr) {
 					return perr
 				}
@@ -111,7 +111,7 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 // "<name>.conflict-<utc-timestamp>.age" file (with an incrementing suffix on
 // collision) and returns its path. It never deletes or mutates the source, so
 // the losing side of a sync conflict is always retained losslessly.
-func preserveConflictCopy(srcPath string) (string, error) {
+func preserveConflictCopy(vaultDir, srcPath string) (string, error) {
 	info, err := os.Lstat(srcPath)
 	if err != nil {
 		return "", err
@@ -119,7 +119,7 @@ func preserveConflictCopy(srcPath string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("cannot preserve conflict copy of a directory: %s", srcPath)
 	}
-	data, err := os.ReadFile(srcPath) // #nosec G304 -- srcPath is an explicit entry file supplied by the reconciler
+	data, err := readVaultEntryBounded(vaultDir, srcPath)
 	if err != nil {
 		return "", err
 	}

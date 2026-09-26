@@ -181,7 +181,7 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 		filePath := entryStoragePathCached(vaultDir, logicalPath, pseudoKey)
 		storagePaths[filePath] = true
 
-		data, err := os.ReadFile(filePath) //#nosec G304 -- path derived from manifest entries
+		data, err := readVaultEntryBounded(vaultDir, filePath)
 		if os.IsNotExist(err) {
 			result.Missing = append(result.Missing, logicalPath)
 			continue
@@ -281,9 +281,26 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 
 	// First pass: collect all .age file paths.
 	var paths []string
+	visited := 0
 	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // skip inaccessible files
+		}
+		if filepath.Clean(path) != filepath.Clean(entriesPath) {
+			visited++
+		}
+		if visited > maxVaultEntryCount {
+			return errEntryEnumerationLimit
+		}
+		rel, relErr := filepath.Rel(entriesPath, path)
+		if relErr != nil {
+			return relErr
+		}
+		if pathDepth(rel) > maxVaultEntryPathDepth {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
 			return nil
@@ -319,7 +336,7 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 		go func() {
 			defer wg.Done()
 			for path := range pathCh {
-				data, err := os.ReadFile(path) // #nosec G304 — path is within entriesDir
+				data, err := readVaultEntryBounded(vaultDir, path)
 				if err != nil {
 					continue // skip unreadable files
 				}
