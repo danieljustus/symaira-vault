@@ -2747,13 +2747,9 @@ fn run_cli() -> ExitCode {
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
                 DeviceCommand::ApprovalPair { host } => (|| {
                     require_initialized(vault)?;
-                    let host = host.as_deref().ok_or_else(|| {
-                        "--host is required by this Rust CLI slice; pass the LAN address reachable by the phone"
-                            .to_owned()
-                    })?;
                     approval_commands::pair(
                         vault,
-                        host,
+                        host.as_deref(),
                         cli.json || cli.output.as_deref() == Some("json"),
                         cli.quiet,
                     )

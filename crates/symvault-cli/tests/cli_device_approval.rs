@@ -1,5 +1,6 @@
-//! Contract for `device approval-list` and `device approval-revoke` plus the
-//! device-session registry file they share.
+//! CLI contract for approval-device pair/list/revoke flows and the
+//! device-session registry file they share. Pair-host selection and QR
+//! rendering are covered by deterministic unit seams in `approval_commands`.
 //!
 //! Expected values were captured from the pinned Go oracle
 //! (`target/port/symvault-go`, `GOTOOLCHAIN=go1.26.6`, commit `3232e31f`,

@@ -5,9 +5,16 @@
 //! enrolled-device bearer API. The local queue is never reconstructed here;
 //! the running MCP server remains authoritative.
 
-use std::{net::IpAddr, path::Path, sync::Arc, time::Duration};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    path::Path,
+    sync::Arc,
+    time::Duration,
+};
 
+use getifaddrs::{Address, InterfaceFlags};
 use hmac::{Hmac, Mac};
+use qrcode::{Color as QrColor, EcLevel, QrCode};
 use rustls::{
     RootCertStore,
     pki_types::{CertificateDer, PrivateKeyDer, UnixTime, pem::PemObject},
@@ -126,10 +133,14 @@ struct PairingPayload<'a> {
 /// Ask the running Go server to mint a code over its localhost-only endpoint.
 /// `host` is the address the phone will use; the mint request always targets
 /// loopback even when the server is listening on a LAN interface.
-pub(crate) fn pair(vault: &Path, host: &str, json: bool, quiet: bool) -> Result<(), String> {
+pub(crate) fn pair(
+    vault: &Path,
+    host: Option<&str>,
+    json: bool,
+    quiet: bool,
+) -> Result<(), String> {
     let (port, bind) = runtime_server(vault)?;
-    validate_pair_target(host, &bind)?;
-    let host = host.trim();
+    let host = select_pair_host(host, &bind, detect_lan_ipv4)?;
     let runtime_tls = load_runtime_tls(vault)?;
     let certificate =
         symvault_sync::safeio::read_bounded(Path::new(&runtime_tls.certificate), 1024 * 1024)
@@ -183,29 +194,138 @@ pub(crate) fn pair(vault: &Path, host: &str, json: bool, quiet: bool) -> Result<
         return Err("decode approval response: missing code or fingerprint".to_owned());
     }
     let payload = PairingPayload {
-        host,
+        host: &host,
         port,
         code: &minted.code,
         fingerprint: &minted.fingerprint,
     };
+    print!(
+        "{}",
+        render_pair_output(&payload, &minted.expires_at, json, quiet, terminal_width())?
+    );
+    Ok(())
+}
+
+fn select_pair_host(
+    explicit_host: Option<&str>,
+    bind: &str,
+    detect: impl FnOnce() -> Result<Vec<Ipv4Addr>, String>,
+) -> Result<String, String> {
+    validate_pair_bind(bind)?;
+    if let Some(host) = explicit_host {
+        validate_pair_target(host, bind)?;
+        return Ok(host.trim().to_owned());
+    }
+
+    let candidates = detect().unwrap_or_default();
+    match candidates.as_slice() {
+        [] => Err("could not auto-detect a LAN address; pass --host <ip> explicitly".to_owned()),
+        [host] => Ok(host.to_string()),
+        _ => {
+            let mut message =
+                String::from("multiple network addresses found; pass --host to pick one:\n");
+            for host in candidates {
+                message.push_str(&format!("  {host}\n"));
+            }
+            Err(message)
+        }
+    }
+}
+
+fn detect_lan_ipv4() -> Result<Vec<Ipv4Addr>, String> {
+    let interfaces = getifaddrs::InterfaceFilter::new()
+        .v4()
+        .get()
+        .map_err(|error| error.to_string())?;
+    let mut addresses = Vec::new();
+    for interface in interfaces {
+        if let Address::V4(address) = interface.address {
+            let ip = address.address;
+            if is_lan_ipv4(interface.flags, ip) {
+                addresses.push(ip);
+            }
+        }
+    }
+    Ok(addresses)
+}
+
+fn is_lan_ipv4(flags: InterfaceFlags, ip: Ipv4Addr) -> bool {
+    flags.contains(InterfaceFlags::UP)
+        && !flags.contains(InterfaceFlags::LOOPBACK)
+        && !ip.is_loopback()
+        && !ip.is_link_local()
+}
+
+fn render_pair_output(
+    payload: &PairingPayload<'_>,
+    expires_at: &str,
+    json: bool,
+    quiet: bool,
+    width: usize,
+) -> Result<String, String> {
     if quiet {
-        return Ok(());
+        return Ok(String::new());
     }
     if json {
-        println!(
-            "{}",
-            serde_json::to_string(&payload).map_err(|error| error.to_string())?
-        );
-    } else {
-        println!("Approval device pairing (enter these values in the phone app):");
-        println!("  Host:        {}", payload.host);
-        println!("  Port:        {}", payload.port);
-        println!("  Code:        {}", payload.code);
-        println!("  Fingerprint: {}", payload.fingerprint);
-        println!("  Expires:     {}", minted.expires_at);
-        println!("QR rendering is not available in this Rust CLI.");
+        return serde_json::to_string(payload)
+            .map(|value| format!("{value}\n"))
+            .map_err(|error| error.to_string());
     }
-    Ok(())
+
+    let data = serde_json::to_string(payload).map_err(|error| error.to_string())?;
+    let qr = render_qr_for_width(&data, width);
+    let mut output = String::from("\n=== Approval Device Pairing ===\n\n");
+    match qr {
+        Ok(art) => {
+            output.push_str(&art);
+            output.push('\n');
+        }
+        Err(error) => output.push_str(&format!("(QR code not shown: {error})\n\n")),
+    }
+    output.push_str("Scan this with the Symaira Vault iOS app, or enter it manually:\n\n");
+    output.push_str(&format!(
+        "  Host:        {}\n  Port:        {}\n  Code:        {}\n  Fingerprint: {}\n\nExpires: {}\n",
+        payload.host, payload.port, payload.code, payload.fingerprint, expires_at
+    ));
+    Ok(output)
+}
+
+fn render_qr_for_width(data: &str, width: usize) -> Result<String, String> {
+    const MIN_QR_WIDTH: usize = 41;
+    if width > 0 && width < MIN_QR_WIDTH {
+        return Err(format!(
+            "terminal too narrow for QR code; need at least {MIN_QR_WIDTH} columns"
+        ));
+    }
+    let code = QrCode::with_error_correction_level(data.as_bytes(), EcLevel::M)
+        .map_err(|error| format!("qr encode: {error}"))?;
+    let size = code.width();
+    let total_size = size + 8;
+    let mut output = String::new();
+    for y in (0..total_size).step_by(2) {
+        for x in 0..total_size {
+            let top = qr_is_dark(&code, x, y, size);
+            let bottom = qr_is_dark(&code, x, y + 1, size);
+            output.push(match (top, bottom) {
+                (true, true) => '█',
+                (true, false) => '▀',
+                (false, true) => '▄',
+                (false, false) => ' ',
+            });
+        }
+        output.push('\n');
+    }
+    Ok(output)
+}
+
+fn qr_is_dark(code: &QrCode, x: usize, y: usize, size: usize) -> bool {
+    x >= 4 && y >= 4 && x < size + 4 && y < size + 4 && code[(x - 4, y - 4)] == QrColor::Dark
+}
+
+fn terminal_width() -> usize {
+    terminal_size::terminal_size_of(std::io::stderr())
+        .map(|(terminal_size::Width(width), _)| usize::from(width))
+        .unwrap_or(80)
 }
 
 fn validate_pair_target(host: &str, bind: &str) -> Result<(), String> {
@@ -223,6 +343,10 @@ fn validate_pair_target(host: &str, bind: &str) -> Result<(), String> {
     {
         return Err("--host must be a LAN address reachable by the phone".to_owned());
     }
+    validate_pair_bind(bind)
+}
+
+fn validate_pair_bind(bind: &str) -> Result<(), String> {
     let bind = bind.trim();
     let loopback = bind == "localhost"
         || bind
@@ -230,7 +354,7 @@ fn validate_pair_target(host: &str, bind: &str) -> Result<(), String> {
             .is_ok_and(|address| address.is_loopback());
     if loopback {
         return Err(format!(
-            "'symvault serve' is bound to {bind} (loopback-only) — restart it with --bind 0.0.0.0 or --bind <lan-ip> so a phone can connect"
+            "'symvault serve' is bound to {bind} (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all interfaces) or --bind <lan-ip>, then run 'approval-pair' again"
         ));
     }
     Ok(())
@@ -608,10 +732,13 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        ApprovalDecision, EnrollCode, RUNTIME_TLS, RuntimeTls, decode_api_response, enroll_proof,
-        load_approval_client_identity, load_runtime_tls, parse_certificate_chain,
+        ApprovalDecision, EnrollCode, PairingPayload, RUNTIME_TLS, RuntimeTls, decode_api_response,
+        enroll_proof, is_lan_ipv4, load_approval_client_identity, load_runtime_tls,
+        parse_certificate_chain, render_pair_output, render_qr_for_width, select_pair_host,
         validate_pair_target,
     };
+    use getifaddrs::InterfaceFlags;
+    use std::net::Ipv4Addr;
     use ureq::tls::Certificate;
 
     const GO_ENROLL_SOURCE: &str = include_str!("../../../internal/approval/enroll.go");
@@ -676,6 +803,118 @@ mod tests {
             assert!(error.contains("loopback-only"), "{bind}: {error}");
         }
         assert!(validate_pair_target("192.168.1.42", "0.0.0.0").is_ok());
+    }
+
+    #[test]
+    fn device_pair_uses_explicit_host_without_detecting_interfaces() {
+        let host = select_pair_host(Some(" 192.168.1.42 "), "0.0.0.0", || {
+            panic!("explicit host must bypass interface detection")
+        })
+        .expect("explicit host");
+        assert_eq!(host, "192.168.1.42");
+    }
+
+    #[test]
+    fn device_pair_auto_detects_only_one_unambiguous_host() {
+        let host = select_pair_host(None, "0.0.0.0", || Ok(vec![Ipv4Addr::new(192, 168, 1, 42)]))
+            .expect("one candidate");
+        assert_eq!(host, "192.168.1.42");
+    }
+
+    #[test]
+    fn device_pair_reports_missing_or_ambiguous_host_candidates() {
+        let missing = select_pair_host(None, "0.0.0.0", || Ok(Vec::new())).unwrap_err();
+        assert_eq!(
+            missing,
+            "could not auto-detect a LAN address; pass --host <ip> explicitly"
+        );
+        let failed =
+            select_pair_host(None, "0.0.0.0", || Err("interface query failed".into())).unwrap_err();
+        assert_eq!(failed, missing);
+
+        let multiple = select_pair_host(None, "0.0.0.0", || {
+            Ok(vec![
+                Ipv4Addr::new(192, 168, 1, 42),
+                Ipv4Addr::new(10, 0, 0, 12),
+            ])
+        })
+        .unwrap_err();
+        assert_eq!(
+            multiple,
+            "multiple network addresses found; pass --host to pick one:\n  192.168.1.42\n  10.0.0.12\n"
+        );
+    }
+
+    #[test]
+    fn device_pair_rejects_loopback_bind_before_host_detection() {
+        let error = select_pair_host(None, "127.0.0.1", || {
+            panic!("loopback bind must be rejected before host detection")
+        })
+        .unwrap_err();
+        assert!(error.contains("loopback-only"), "{error}");
+    }
+
+    #[test]
+    fn device_pair_lan_detection_filters_down_local_and_link_local_addresses() {
+        let up = InterfaceFlags::UP;
+        let up_loopback = up | InterfaceFlags::LOOPBACK;
+        assert!(is_lan_ipv4(up, Ipv4Addr::new(192, 168, 1, 42)));
+        assert!(!is_lan_ipv4(
+            InterfaceFlags::empty(),
+            Ipv4Addr::new(192, 168, 1, 42)
+        ));
+        assert!(!is_lan_ipv4(up_loopback, Ipv4Addr::new(192, 168, 1, 42)));
+        assert!(!is_lan_ipv4(up, Ipv4Addr::LOCALHOST));
+        assert!(!is_lan_ipv4(up, Ipv4Addr::new(169, 254, 10, 2)));
+    }
+
+    #[test]
+    fn device_pair_qr_and_manual_fallback_rendering() {
+        let payload = PairingPayload {
+            host: "192.168.1.42",
+            port: 8443,
+            code: "ABCD1234",
+            fingerprint: "sha256:test",
+        };
+        let qr = render_qr_for_width(r#"{"host":"192.168.1.42"}"#, 41).expect("QR");
+        assert!(
+            qr.chars().any(|glyph| matches!(glyph, '█' | '▀' | '▄')),
+            "{qr}"
+        );
+        assert!(qr.ends_with('\n'));
+        assert!(
+            render_qr_for_width("data", 40)
+                .unwrap_err()
+                .contains("need at least 41 columns")
+        );
+
+        let fallback = render_pair_output(&payload, "2026-09-26T12:00:00Z", false, false, 40)
+            .expect("manual fallback");
+        assert!(fallback.starts_with("\n=== Approval Device Pairing ===\n\n"));
+        assert!(fallback.contains("(QR code not shown: terminal too narrow"));
+        assert!(fallback.contains("Scan this with the Symaira Vault iOS app"));
+        assert!(fallback.contains("  Code:        ABCD1234\n"));
+        assert!(fallback.ends_with("Expires: 2026-09-26T12:00:00Z\n"));
+
+        let qr_output = render_pair_output(&payload, "2026-09-26T12:00:00Z", false, false, 80)
+            .expect("QR output");
+        assert!(qr_output.starts_with("\n=== Approval Device Pairing ===\n\n"));
+        assert!(!qr_output.contains("QR code not shown"));
+        assert!(
+            qr_output
+                .chars()
+                .any(|glyph| matches!(glyph, '█' | '▀' | '▄'))
+        );
+
+        let json = render_pair_output(&payload, "ignored", true, false, 0).expect("JSON");
+        assert_eq!(
+            json,
+            "{\"host\":\"192.168.1.42\",\"port\":8443,\"code\":\"ABCD1234\",\"fingerprint\":\"sha256:test\"}\n"
+        );
+        assert_eq!(
+            render_pair_output(&payload, "ignored", false, true, 40).unwrap(),
+            ""
+        );
     }
 
     #[test]
