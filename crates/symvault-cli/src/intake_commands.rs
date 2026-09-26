@@ -575,11 +575,7 @@ impl std::fmt::Display for WatchDisableError {
 pub(crate) fn watch_disable(quiet: bool) -> Result<(), WatchDisableError> {
     let home = std::env::var_os("HOME").unwrap_or_default();
     let plist = launch_agent_plist_path(&home);
-    let plist_display = if home.is_empty() {
-        "/Library/LaunchAgents/com.symaira.vault-intake.plist".to_owned()
-    } else {
-        plist.display().to_string()
-    };
+    let plist_display = launch_agent_plist_display(&home);
     if matches!(
         fs::metadata(&plist),
         Err(ref error) if error.kind() == io::ErrorKind::NotFound
@@ -617,6 +613,17 @@ fn launch_agent_plist_path(home: &OsStr) -> PathBuf {
     }
 }
 
+fn launch_agent_plist_display(home: &OsStr) -> String {
+    if home.is_empty() {
+        "/Library/LaunchAgents/com.symaira.vault-intake.plist".to_owned()
+    } else {
+        format!(
+            "{}/Library/LaunchAgents/com.symaira.vault-intake.plist",
+            home.to_string_lossy()
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -640,6 +647,14 @@ mod tests {
         assert_eq!(
             fs::read(relative_plist).expect("relative plist remains"),
             b"untouched"
+        );
+    }
+
+    #[test]
+    fn launch_agent_display_preserves_go_environment_expansion_separators() {
+        assert_eq!(
+            launch_agent_plist_display(OsStr::new(r"C:\Users\runner\home")),
+            r"C:\Users\runner\home/Library/LaunchAgents/com.symaira.vault-intake.plist"
         );
     }
 }

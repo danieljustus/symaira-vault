@@ -24,7 +24,7 @@ symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 tar = "=0.4.46"
 tempfile = "=3.27.0"
 thiserror = "=1.0.69"
-time = { version = "=0.3.47", features = ["formatting", "parsing"] }
+time = { version = "=0.3.47", features = ["formatting", "local-offset", "parsing"] }
 zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]

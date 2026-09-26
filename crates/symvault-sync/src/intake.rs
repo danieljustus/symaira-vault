@@ -384,7 +384,10 @@ impl Spool {
                         .ok()
                 })
                 .and_then(|timestamp| {
+                    let offset =
+                        time::UtcOffset::local_offset_at(timestamp).unwrap_or(time::UtcOffset::UTC);
                     timestamp
+                        .to_offset(offset)
                         .format(&time::format_description::well_known::Rfc3339)
                         .ok()
                 })
