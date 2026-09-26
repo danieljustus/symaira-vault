@@ -366,6 +366,7 @@ pub struct PseudonymizeSummary {
 #[derive(Clone, Debug)]
 pub struct Store {
     root: PathBuf,
+    #[cfg(unix)]
     requested_root: PathBuf,
     root_cap: std::sync::Arc<fs::File>,
     layout: Layout,
@@ -458,6 +459,7 @@ impl Store {
         let layout = detect_layout(&root)?;
         Ok(Self {
             root,
+            #[cfg(unix)]
             requested_root: requested_root.to_path_buf(),
             root_cap,
             layout,
