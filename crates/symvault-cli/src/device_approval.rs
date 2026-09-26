@@ -136,6 +136,16 @@ impl DeviceSessionStore {
         };
         let raw: BTreeMap<String, Option<DeviceSession>> = serde_json::from_slice(&data)
             .map_err(|error| format!("parse device sessions: {error}"))?;
+        for session in raw.values().flatten() {
+            for (field, stamp) in [
+                ("created_at", session.created_at.as_str()),
+                ("expires_at", session.expires_at.as_str()),
+            ] {
+                GoTime::parse_rfc3339(stamp).map_err(|_| {
+                    format!("parse device sessions: invalid {field} timestamp {stamp:?}")
+                })?;
+            }
+        }
 
         // Migrate legacy entries keyed by the raw bearer token (from before
         // tokens were hashed at rest) onto hash-keyed entries. A legacy key is
