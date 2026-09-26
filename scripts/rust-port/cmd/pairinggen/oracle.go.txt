@@ -805,14 +805,33 @@ func main() {
       rop("add", "recipient", "AGE-SECRET-KEY-1QQQ"),
       rop("exists"),
     }),
+    // AddRecipient reads the final byte from a validated readable append
+    // descriptor, so every non-empty unterminated file gets a record separator.
     recipientsCase("recipients/add-after-file-without-trailing-newline", []map[string]any{
       rop("seed", "data_b64", b64([]byte(recipientA))),
       rop("add", "recipient", recipientB),
       rop("file"),
       rop("load"),
     }),
+    recipientsCase("recipients/add-duplicate-to-unterminated-file", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA))),
+      rop("add", "recipient", recipientA),
+      rop("file"),
+    }),
     recipientsCase("recipients/add-after-comment-only-file-without-newline", []map[string]any{
       rop("seed", "data_b64", b64([]byte("# vault recipients"))),
+      rop("add", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-after-malformed-line-without-newline", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("not-a-recipient"))),
+      rop("add", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-to-existing-empty-file", []map[string]any{
+      rop("seed", "data_b64", b64([]byte{})),
       rop("add", "recipient", recipientA),
       rop("file"),
       rop("load"),

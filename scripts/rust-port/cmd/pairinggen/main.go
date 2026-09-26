@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	oracleCommit  = "caadd5e"
+	oracleCommit  = "cf496d4315181b8e444e62520dfc4dce0fb94e5c"
 	oracleRelease = "v0.22.1"
 )
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "caadd5e",
+    "commit": "cf496d4315181b8e444e62520dfc4dce0fb94e5c",
     "release": "v0.22.1",
     "source_files": [
       "cmd/device.go",
@@ -14,12 +14,12 @@
       "internal/vault/symlink_harden.go",
       "internal/vault/symlink_harden_windows.go"
     ],
-    "source_digest": "d0101b60a1f738558f5b67dbf2a0669a5fa64350931f06f9c7deeb799b876018",
+    "source_digest": "9da7bd562c492cc8d868d818241711b7dab186ea3684712279ce5951dc710de6",
     "generator_files": [
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "8a5c067b4cecea621ea8346fb618ff0efcd362fafc619cdae2d77e952dd3defe"
+    "generator_digest": "e106e1407c167322e6b23afc9ff81fc78afaa0e69d1c905e6bd6c298b79b2b4b"
   },
   "cases": [
     {
@@ -2750,15 +2750,52 @@
             "op": "add"
           },
           {
-            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXlhZ2Uxd3hrbnlhcjI5bHVobWx0YzMyMHdubGx6eGQ3bjBjanZsZHhxanVueWg5dTNsNGdwZDNrcTlyNGxncgo=",
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKYWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3IK",
             "exists": true,
             "op": "file",
-            "sha256": "d44bd480fc27420c3d9e712e7fdb762ca627eb334053da61fedc0a22ea271d2a"
+            "sha256": "befa3bb193085ba0b97c08ba435e79487a55dc3d795563ccc72744c31a2db97f"
           },
           {
             "ok": true,
             "op": "load",
-            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9yage1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\",\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-duplicate-to-unterminated-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXk=",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "already_exists",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXk=",
+            "exists": true,
+            "op": "file",
+            "sha256": "9dc3a8a074ce0e8ae8718b96246d238b5e7ec4c9bc9f1dc1629ee862d1bda294"
           }
         ]
       }
@@ -2795,15 +2832,105 @@
             "op": "add"
           },
           {
-            "bytes_b64": "IyB2YXVsdCByZWNpcGllbnRzYWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "bytes_b64": "IyB2YXVsdCByZWNpcGllbnRzCmFnZTFtZHdhdms0bnJhbHN4NnRlOHVjdmRlbnl4amFlcGdkcXBrOHpoNm00Z2xzbnUwNjRlY3pza2NuZzl5Cg==",
             "exists": true,
             "op": "file",
-            "sha256": "c20dca44e3646e7c42d423146922b4bb70cfc032b1bad5bdbe8807a1f65c2400"
+            "sha256": "a15539e7540178e1c5095b9af33f4cf7d3bd79b6852ea3093b47cf76521f3202"
           },
           {
             "ok": true,
             "op": "load",
-            "recipients": "null"
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-after-malformed-line-without-newline",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "bm90LWEtcmVjaXBpZW50",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "bm90LWEtcmVjaXBpZW50CmFnZTFtZHdhdms0bnJhbHN4NnRlOHVjdmRlbnl4amFlcGdkcXBrOHpoNm00Z2xzbnUwNjRlY3pza2NuZzl5Cg==",
+            "exists": true,
+            "op": "file",
+            "sha256": "419d237e0c3537ea559727bca7cd0d5cdb16615aa249aadf22550961247ba06f"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"not-a-recipient\",\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-to-existing-empty-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\"]"
           }
         ]
       }
