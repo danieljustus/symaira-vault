@@ -214,7 +214,7 @@ func validateEntryPlaintext(plaintext []byte) error {
 	if !ok || delim != '{' {
 		return nil // Entry decoding returns the authoritative shape error.
 	}
-	var data json.RawMessage
+	dataSeen := false
 	for decoder.More() {
 		keyToken, err := decoder.Token()
 		if err != nil {
@@ -224,14 +224,21 @@ func validateEntryPlaintext(plaintext []byte) error {
 		if !ok {
 			return errors.New("entry object key is not a string")
 		}
+		isData := strings.EqualFold(key, "data")
+		if isData && dataSeen {
+			return errors.New("entry has duplicate data fields")
+		}
+		dataSeen = dataSeen || isData
 		var raw json.RawMessage
 		if err := decoder.Decode(&raw); err != nil {
 			return err
 		}
-		// encoding/json matches struct fields case-insensitively and processes
-		// duplicate members in order, so the last matching Data value wins.
-		if strings.EqualFold(key, "data") {
-			data = raw
+		// encoding/json matches struct fields case-insensitively and merges
+		// duplicate map fields. Reject duplicates so each port has one value.
+		if isData {
+			if err := validateEntryDataJSON(raw); err != nil {
+				return err
+			}
 		}
 	}
 	if _, err := decoder.Token(); err != nil {
@@ -242,9 +249,6 @@ func validateEntryPlaintext(plaintext []byte) error {
 			return errors.New("entry has trailing JSON")
 		}
 		return err
-	}
-	if data != nil {
-		return validateEntryDataJSON(data)
 	}
 	return nil
 }

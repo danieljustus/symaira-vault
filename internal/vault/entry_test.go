@@ -2,6 +2,7 @@ package vault
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -168,9 +169,21 @@ func TestEntryJSONShapeBudgetIsSharedWithRust(t *testing.T) {
 }
 
 func TestEntryJSONShapeBudgetMatchesCaseInsensitiveGoFieldNames(t *testing.T) {
-	plaintext := []byte(`{"DATA":{"oversized":"` + strings.Repeat("x", maxEntryValueBytes+1) + `"}}`)
-	if err := validateEntryPlaintext(plaintext); err == nil {
+	oversized := strings.Repeat("x", maxEntryValueBytes+1)
+	caseVariant := []byte(`{"DATA":{"oversized":"` + oversized + `"}}`)
+	if err := validateEntryPlaintext(caseVariant); err == nil {
 		t.Fatal("case-insensitive Data field bypassed the string limit")
+	}
+	plaintext := []byte(`{"data":{"oversized":"` + oversized + `"},"DATA":{}}`)
+	var merged Entry
+	if err := json.Unmarshal(plaintext, &merged); err != nil {
+		t.Fatalf("decode duplicate map fields: %v", err)
+	}
+	if merged.Data["oversized"] != oversized {
+		t.Fatal("Go did not merge the case-insensitive duplicate Data map")
+	}
+	if err := validateEntryPlaintext(plaintext); err == nil {
+		t.Fatal("case-insensitive duplicate Data members were accepted")
 	}
 }
 
