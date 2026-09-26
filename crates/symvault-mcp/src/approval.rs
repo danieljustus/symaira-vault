@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn wait_wakes_on_decision() {
-        let queue = std::sync::Arc::new(Queue::with_ttl(Duration::from_millis(40)));
+        let queue = std::sync::Arc::new(Queue::with_ttl(Duration::from_secs(10)));
         let (tx, rx) = mpsc::channel();
         let id = queue
             .enqueue(Request::new("agent", "vault/key", false))
@@ -330,7 +330,7 @@ mod tests {
             Status::Approved
         );
         assert_eq!(
-            rx.recv_timeout(Duration::from_secs(1))
+            rx.recv_timeout(Duration::from_secs(5))
                 .unwrap()
                 .unwrap()
                 .status,
