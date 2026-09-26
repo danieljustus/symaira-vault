@@ -43,6 +43,20 @@ impl std::fmt::Display for SafeIoError {
     }
 }
 
+#[cfg(unix)]
+fn is_nofollow_symlink(error: rustix::io::Errno) -> bool {
+    if error == rustix::io::Errno::LOOP {
+        return true;
+    }
+    // FreeBSD reports EMLINK for a final symlink opened with O_NOFOLLOW.
+    #[cfg(target_os = "freebsd")]
+    {
+        return error == rustix::io::Errno::MLINK;
+    }
+    #[cfg(not(target_os = "freebsd"))]
+    false
+}
+
 /// Reads `path`, or reports `Ok(None)` when it does not exist.
 pub fn read(path: &Path) -> Result<Option<Vec<u8>>, SafeIoError> {
     read_bounded(path, u64::MAX)
@@ -84,7 +98,7 @@ pub fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
     ) {
         Ok(descriptor) => descriptor,
         Err(error) if error == Errno::NOENT => return Ok(None),
-        Err(error) if error == Errno::LOOP => return Err(SafeIoError::NotRegularFile),
+        Err(error) if is_nofollow_symlink(error) => return Err(SafeIoError::NotRegularFile),
         Err(error) => return Err(SafeIoError::Io(error.into())),
     };
     let metadata = fstat(&descriptor).map_err(|error| SafeIoError::Io(error.into()))?;
@@ -168,7 +182,6 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
     #[cfg(unix)]
     {
         use rustix::fs::{FileType, Mode, OFlags, fstat, open};
-        use rustix::io::Errno;
         let descriptor = open(
             path,
             OFlags::WRONLY
@@ -180,7 +193,7 @@ pub fn open_append(path: &Path) -> Result<File, SafeIoError> {
             Mode::from_raw_mode(FILE_MODE as _),
         )
         .map_err(|error| {
-            if error == Errno::LOOP {
+            if is_nofollow_symlink(error) {
                 SafeIoError::NotRegularFile
             } else {
                 SafeIoError::Io(error.into())
@@ -206,14 +219,13 @@ pub fn secure_delete(path: &Path, max_bytes: u64) -> Result<(), SafeIoError> {
     #[cfg(unix)]
     let result = (|| {
         use rustix::fs::{FileType, Mode, OFlags, fstat, open};
-        use rustix::io::Errno;
         let descriptor = match open(
             path,
             OFlags::WRONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
             Mode::empty(),
         ) {
             Ok(descriptor) => descriptor,
-            Err(error) if error == Errno::LOOP => return Err(SafeIoError::NotRegularFile),
+            Err(error) if is_nofollow_symlink(error) => return Err(SafeIoError::NotRegularFile),
             Err(error) => return Err(SafeIoError::Io(error.into())),
         };
         let metadata = fstat(&descriptor).map_err(|error| SafeIoError::Io(error.into()))?;

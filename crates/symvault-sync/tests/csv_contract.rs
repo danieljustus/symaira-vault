@@ -46,6 +46,11 @@ fn csv_profiles_and_paths_match_production_go() {
         } else {
             importer::parse(format, &input)
         };
+        if case["name"] == "chrome_distinct_invalid_titles" {
+            let error = result.expect_err("Rust cannot safely represent these distinct Go paths");
+            assert!(error.to_string().contains("distinct CSV paths"));
+            continue;
+        }
         assert_eq!(
             result.is_err(),
             case["failed"].as_bool().unwrap(),
@@ -75,6 +80,15 @@ fn csv_profiles_and_paths_match_production_go() {
             expected.as_str().unwrap()
         );
     }
+}
+
+#[test]
+fn chrome_csv_rejects_distinct_invalid_byte_paths_that_collapse_in_rust() {
+    let input = b"name,url,username,password,note\n\xFF,https://one.example,u1,p1,\n\xFE,https://two.example,u2,p2,\n";
+    let error = importer::parse(Format::Chrome, input)
+        .expect_err("distinct byte paths cannot share one Rust UTF-8 path");
+    assert!(error.to_string().contains("distinct CSV paths"));
+    assert!(error.to_string().contains('\u{FFFD}'));
 }
 
 #[test]
@@ -114,4 +128,26 @@ fn csv_detection_matches_production_profile_priority() {
         };
         assert_eq!(actual, expected.as_str().unwrap(), "{header:?}");
     }
+}
+
+#[test]
+fn delimited_and_bitwarden_parsers_accept_inputs_over_100_mib() {
+    const LIMIT: usize = 100 * 1024 * 1024;
+    let large_field = "x".repeat(LIMIT + 1);
+    let mut csv = b"title,username,password,url,notes,otp,name,note,OTPAuth,ignored\nentry,user,pw,https://example.test,n,,entry,n,,".to_vec();
+    csv.extend_from_slice(large_field.as_bytes());
+    csv.push(b'\n');
+    for format in [Format::Csv, Format::Apple, Format::Chrome, Format::Firefox] {
+        let entries = importer::parse(format, &csv)
+            .unwrap_or_else(|error| panic!("{format:?} rejected CSV over 100 MiB: {error}"));
+        assert_eq!(entries.len(), 1, "{format:?}");
+    }
+
+    let mut bitwarden = br#"{"items":[{"type":1,"name":"entry","notes":""#.to_vec();
+    bitwarden.extend_from_slice(large_field.as_bytes());
+    bitwarden.extend_from_slice(br#""}]}"#);
+    let entries = importer::parse(Format::Bitwarden, &bitwarden)
+        .expect("Bitwarden parser accepts input over 100 MiB");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].data["notes"].as_str().unwrap().len(), LIMIT + 1);
 }

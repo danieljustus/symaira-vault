@@ -1,0 +1,93 @@
+Quick Start:
+  symvault init            create a vault and identity
+  symvault add <name>      add a credential
+  symvault get <name>      retrieve a credential
+
+Symaira Vault is a Go CLI password manager with an interactive TUI, multi-device
+sync via Git, and an MCP server for AI-agent integration.
+
+First-time setup:
+   1. symvault init         create a vault and identity (non-interactive)
+   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)
+   3. symvault doctor       health-check and self-heal
+
+Daily use:
+  symvault add <name>      add a credential (interactive form)
+  symvault ui              browse and edit the vault in a TUI
+  symvault get <name>      print a credential
+  symvault --help          full command list
+
+Usage:
+  symvault [command]
+
+Essentials:
+  add              Add a new password entry
+  delete           Delete a password entry
+  doctor           Check vault health and configuration
+  edit             Edit an existing password entry
+  find             Search for entries
+  get              Get a password entry
+  init             Initialize a new password vault
+  list             List password entries
+  set              Set a password entry or field
+  setup            Interactive setup wizard for Symaira Vault
+  ui               Launch the interactive terminal UI
+
+Vault:
+  broker           Run the egress credential broker (loopback MITM proxy)
+  dynamic          Generate dynamic secrets with time-limited leases
+  file             Store, export, and consume file attachments in the vault
+  generate         Generate a secure password
+  recipients       Manage vault recipients for multi-user encryption
+  run              Run a command with secrets injected as environment variables
+  template         Generate configuration files from templates
+
+Sharing & Sync:
+  backup           Create a backup archive of the vault
+  device           Manage paired devices for multi-device vault access
+  export           Export vault entries to CSV or JSON
+  git              Git operations on vault
+  import           Import entries from another password manager
+  intake           Review-gated credential intake from loose files
+  remote           Manage git remote for vault sync
+  restore          Restore vault from a backup archive
+  share            Manage secret sharing between agents
+  sync             Sync vault with remote (pull + optional push)
+
+Agents & MCP:
+  agent            Manage agent profiles
+  approval         List and decide pending agent approval requests
+  mcp              Start MCP server for agent access
+
+Auth & Access:
+  auth             Manage vault unlock authentication
+  lock             Lock the vault (clear session)
+  unlock           Unlock the vault and cache the passphrase
+
+Administration:
+  audit            View MCP audit logs
+  config           Manage Symaira Vault configuration
+  migrate          Vault migration commands
+  policy           Manage declarative policies
+  profile          Manage vault profiles
+  startup-profile  Measure and report CLI startup time
+  update           Check for Symaira Vault updates
+  verify           Verify vault entry integrity against manifest
+
+Additional Commands:
+  completion       Generate the autocompletion script for the specified shell
+  help             Help about any command
+  version          Print the version of Symaira Vault
+
+Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+  -h, --help              help for symvault
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")
+
+Use "symvault [command] --help" for more information about a command.

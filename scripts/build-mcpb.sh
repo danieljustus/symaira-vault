@@ -87,6 +87,21 @@ else
   MCPB_FILE="$(pwd)/${DIST_DIR}/${NAME}_${VERSION_CLEAN}_${GOOS}_${GOARCH}.mcpb"
 fi
 mkdir -p "$(dirname "$MCPB_FILE")"
-(cd "$TMPDIR" && zip -q -r "$MCPB_FILE" .)
+if command -v zip >/dev/null 2>&1; then
+  (cd "$TMPDIR" && zip -q -r "$MCPB_FILE" .)
+else
+  PYTHON_BIN=$(command -v python3 || command -v python)
+  "$PYTHON_BIN" - "$TMPDIR" "$MCPB_FILE" "$BINARY_NAME" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+root, output, binary = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as bundle:
+    bundle.write(root / "manifest.json", "manifest.json")
+    bundle.write(root / "server", "server/")
+    bundle.write(root / "server" / binary, "server/" + binary)
+PY
+fi
 
 echo "Created: $MCPB_FILE"

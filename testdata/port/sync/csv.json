@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "b1fc71fdb3a0e8668bcde63dbdd743d3f0180bb3267192d2b6de1f67ad286823",
+  "generator_digest": "dddd164edecee7f0ebea3be741112c70a61351a8c8f8bb50f12861f68cb37ff0",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -233,6 +233,271 @@
           "data": {
             "notes": "",
             "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_fields",
+      "format": "bitwarden",
+      "input": "{\"Items\":[{\"Type\":1,\"Name\":\"x\"}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_item_duplicate_variants_last_wins",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"first\",\"Name\":\"last\"}]}",
+      "entries": [
+        {
+          "path": "last",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_variants_last_wins",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"first\",\"Name\":\"last\"}],\"Items\":[{\"Type\":1,\"Name\":\"second\"}]}",
+      "entries": [
+        {
+          "path": "second",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_unicode_simple_fold",
+      "format": "bitwarden",
+      "input": "{\"itemſ\":[{\"Type\":1,\"Name\":\"folded\"}]}",
+      "entries": [
+        {
+          "path": "folded",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_nested_fields",
+      "format": "bitwarden",
+      "input": "{\"FOLDERS\":[{\"ID\":\"f\",\"NAME\":\"folder\"}],\"ITEMS\":[{\"Type\":1,\"Name\":\"x\",\"FOLDERID\":\"f\",\"LOGIN\":{\"USERNAME\":\"u\",\"URIS\":[{\"URI\":\"https://example.test\"}]}}]}",
+      "entries": [
+        {
+          "path": "folder/x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "https://example.test",
+            "urls": [
+              "https://example.test"
+            ],
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_login_merges",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"x\",\"login\":{\"username\":\"a\"},\"LOGIN\":{\"password\":\"b\"}}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "",
+            "password": "b",
+            "url": "",
+            "urls": [],
+            "username": "a"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_login_null_preserves",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"x\",\"login\":{\"username\":\"a\"},\"LOGIN\":null}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": "a"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_card_merges",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":2,\"name\":\"card\",\"card\":{\"number\":\"123\"},\"CARD\":{\"code\":\"456\"},\"card\":null}]}",
+      "entries": [
+        {
+          "path": "card",
+          "data": {
+            "card_number": "123",
+            "cardholder": "",
+            "cvc": "456",
+            "expiry_month": "",
+            "expiry_year": "",
+            "subtype": "card"
+          },
+          "warnings": null,
+          "secret_type": "payment"
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_scalar_null_preserves",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"Type\":null,\"name\":\"x\",\"notes\":\"keep\",\"NOTES\":null}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "keep",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_casefold_duplicate_slices_null_clears",
+      "format": "bitwarden",
+      "input": "{\"items\":[{\"type\":1,\"name\":\"x\",\"fields\":[{\"name\":\"custom\",\"value\":\"keep\"}],\"FIELDS\":null,\"login\":{\"uris\":[{\"uri\":\"https://example.test\"}]},\"LOGIN\":{\"URIS\":null}}]}",
+      "entries": [
+        {
+          "path": "x",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_in_string",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6Iv8ifX1dfQ==",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "�",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_truncated_utf8_in_string",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6IuKCIn19XX0=",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "��",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_outside_string",
+      "format": "bitwarden",
+      "input_b64": "e/8iaXRlbXMiOltdfQ==",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "bw_invalid_utf8_in_invalid_escape",
+      "format": "bitwarden",
+      "input_b64": "eyJhIjoiw6kiLCJiIjoiXP8ifQ==",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "bw_invalid_utf8_after_escaped_backslash",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IkEiLCJsb2dpbiI6eyJwYXNzd29yZCI6Ilxc/yJ9fV19",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "\\�",
             "url": "",
             "urls": [],
             "username": ""

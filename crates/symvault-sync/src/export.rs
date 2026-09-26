@@ -139,7 +139,7 @@ fn value_string(value: &Value) -> String {
         Value::String(value) => value.clone(),
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
+        Value::Number(value) => go_number_string(value),
         Value::Array(values) => format!(
             "[{}]",
             values
@@ -157,6 +157,51 @@ fn value_string(value: &Value) -> String {
                 .join(" ")
         ),
     }
+}
+
+fn go_number_string(value: &serde_json::Number) -> String {
+    let Some(value) = value.as_f64() else {
+        return value.to_string();
+    };
+    let Some(number) = serde_json::Number::from_f64(value) else {
+        return value.to_string();
+    };
+    let rendered = number.to_string();
+    let Some((mantissa, exponent)) = rendered.split_once('e') else {
+        let rendered = rendered.strip_suffix(".0").unwrap_or(&rendered);
+        if rendered == "-0" {
+            return "-0".to_owned();
+        }
+        let (sign, unsigned) = rendered
+            .strip_prefix('-')
+            .map_or(("", rendered), |unsigned| ("-", unsigned));
+        let whole_digits = unsigned.split('.').next().unwrap_or_default().len() as i32;
+        let digits: String = unsigned
+            .chars()
+            .filter(|character| *character != '.')
+            .collect();
+        let Some((first, _)) = digits
+            .char_indices()
+            .find(|(_, character)| *character != '0')
+        else {
+            return "0".to_owned();
+        };
+        let decimal_exponent = whole_digits - first as i32 - 1;
+        if !(-4..6).contains(&decimal_exponent) {
+            let significant = digits[first..].trim_end_matches('0');
+            let fraction = &significant[1..];
+            let mantissa = if fraction.is_empty() {
+                significant[..1].to_owned()
+            } else {
+                format!("{}.{}", &significant[..1], fraction)
+            };
+            return format!("{sign}{mantissa}e{:+03}", decimal_exponent);
+        }
+        return format!("{sign}{unsigned}");
+    };
+    let exponent = exponent.parse::<i32>().unwrap_or_default();
+    let mantissa = mantissa.strip_suffix(".0").unwrap_or(mantissa);
+    format!("{mantissa}e{exponent:+03}")
 }
 
 fn is_attachment(key: &str) -> bool {

@@ -273,7 +273,7 @@ func (p *Proxy) serveInner(w http.ResponseWriter, r *http.Request) {
 	// the MCP execute_api_request path: a request outside allowed_endpoints
 	// or allowed_methods must never receive injected credentials. Empty
 	// allowlists declare no constraint and are not enforced.
-	if len(tmpl.AllowedEndpoints) > 0 && !endpointAllowed(r.URL.Path, tmpl.AllowedEndpoints) {
+	if len(tmpl.AllowedEndpoints) > 0 && !endpointAllowed(r.URL.Path, r.URL.EscapedPath(), tmpl.AllowedEndpoints) {
 		p.audit(host, "broker_denied", false, "endpoint")
 		http.Error(w, "endpoint not allowed by template", http.StatusForbidden)
 		return
@@ -540,8 +540,22 @@ func templateHost(baseURL string) string {
 // allowed-endpoint globs. Semantics mirror the MCP execute_api_request path
 // (internal/mcp/server/tools_execute_api_request.go): standard path.Match
 // plus multi-segment matching for patterns ending in /*.
-func endpointAllowed(endpoint string, patterns []string) bool {
+func endpointAllowed(endpoint, escapedEndpoint string, patterns []string) bool {
 	if len(patterns) == 0 {
+		return false
+	}
+	// Match the path the upstream may normalize. Dot segments and encoded
+	// separators can make a prefix match resolve outside its allowed route.
+	if strings.Contains(endpoint, "\\") {
+		return false
+	}
+	for _, segment := range strings.Split(endpoint, "/") {
+		if segment == "." || segment == ".." {
+			return false
+		}
+	}
+	escapedLower := strings.ToLower(escapedEndpoint)
+	if strings.Contains(escapedLower, "%2f") || strings.Contains(escapedLower, "%5c") {
 		return false
 	}
 	for _, pattern := range patterns {

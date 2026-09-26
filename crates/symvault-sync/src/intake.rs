@@ -17,6 +17,7 @@ pub const MAX_BATCH_SIZE: u64 = 32 << 20;
 pub const MAX_FILES: usize = 100;
 pub const ATTACHMENT_FIELD: &str = "attachment";
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SourceType {
     Text,
     Env,
@@ -35,7 +36,7 @@ pub struct Provenance {
     pub source_type: SourceType,
     pub size: u64,
     pub sha256: String,
-    pub mtime: u64,
+    pub mtime: String,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Suggestion {
@@ -44,15 +45,23 @@ pub struct Suggestion {
     pub confidence: f64,
     #[serde(skip)]
     pub(crate) value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    #[serde(skip_serializing_if = "is_false")]
     pub attachment: bool,
+}
+fn is_false(value: &bool) -> bool {
+    !value
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FileResult {
     pub file: String,
     pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<Provenance>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub suggestions: Vec<Suggestion>,
     #[serde(skip)]
     pub spool_path: Option<PathBuf>,
@@ -62,7 +71,7 @@ pub enum IntakeError {
     #[error("source is not a stable regular file: {0}")]
     InvalidSource(String),
     #[error("source exceeds limit")]
-    Limit,
+    Limit { size: Option<u64> },
     #[error("staged copy verification failed")]
     Verification,
     #[error("I/O failed: {0}")]
@@ -144,15 +153,13 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
         }]
     };
     match kind {
-        SourceType::Env | SourceType::Text => {
+        SourceType::Env => {
             let mut out = Vec::new();
             for line in String::from_utf8_lossy(data).lines() {
-                let (k, v) = if kind == SourceType::Env {
-                    line.split_once('=').map(|(a, b)| (a, b.trim()))
-                } else {
-                    line.split_once(':').map(|(a, b)| (a, b.trim()))
-                }
-                .unwrap_or(("", ""));
+                let (k, v) = line
+                    .split_once('=')
+                    .map(|(a, b)| (a, b.trim()))
+                    .unwrap_or(("", ""));
                 if k.is_empty() || v.is_empty() {
                     continue;
                 }
@@ -169,6 +176,57 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
                     warning: None,
                     attachment: false,
                 });
+            }
+            if out.is_empty() { attachment() } else { out }
+        }
+        SourceType::Text => {
+            // Go's text parser recognizes these hints in order; arbitrary
+            // colon-separated lines do not become credential suggestions.
+            const HINTS: &[(&str, &str, f64)] = &[
+                ("username:", "username", 0.8),
+                ("user name:", "username", 0.8),
+                ("user:", "username", 0.8),
+                ("login:", "username", 0.8),
+                ("login id:", "username", 0.8),
+                ("account:", "username", 0.6),
+                ("email:", "username", 0.7),
+                ("password:", "password", 0.85),
+                ("pass:", "password", 0.8),
+                ("passwd:", "password", 0.8),
+                ("pwd:", "password", 0.8),
+                ("secret:", "password", 0.7),
+                ("token:", "token", 0.8),
+                ("api key:", "token", 0.85),
+                ("api-key:", "token", 0.85),
+                ("apikey:", "token", 0.85),
+                ("access token:", "token", 0.85),
+                ("auth token:", "token", 0.8),
+                ("totp:", "totp", 0.8),
+                ("otp:", "totp", 0.8),
+                ("2fa:", "totp", 0.7),
+                ("client id:", "client_id", 0.7),
+                ("client secret:", "client_secret", 0.8),
+            ];
+            let mut out = Vec::new();
+            for line in String::from_utf8_lossy(data).lines() {
+                let line = line.trim();
+                let lower = line.to_ascii_lowercase();
+                if let Some((prefix, field, confidence)) = HINTS
+                    .iter()
+                    .find(|(prefix, _, _)| lower.starts_with(*prefix))
+                {
+                    let value = line[prefix.len()..].trim();
+                    if !value.is_empty() {
+                        out.push(Suggestion {
+                            path: path.clone(),
+                            field: (*field).into(),
+                            confidence: *confidence,
+                            value: Some(value.into()),
+                            warning: None,
+                            attachment: false,
+                        });
+                    }
+                }
             }
             if out.is_empty() { attachment() } else { out }
         }
@@ -257,7 +315,9 @@ impl Spool {
             return Err(IntakeError::InvalidSource(path.display().to_string()));
         }
         if m.len() > limit {
-            return Err(IntakeError::Limit);
+            return Err(IntakeError::Limit {
+                size: Some(m.len()),
+            });
         }
         // The shared reader refuses links and non-regular files without blocking
         // if a concurrent writer replaces the preflight path with a FIFO.
@@ -279,7 +339,7 @@ impl Spool {
             .take(limit.saturating_add(1))
             .read_to_end(&mut data)?;
         if data.len() as u64 > limit {
-            return Err(IntakeError::Limit);
+            return Err(IntakeError::Limit { size: None });
         }
         let after = fs::symlink_metadata(path)?;
         if data.len() as u64 != m.len()
@@ -319,7 +379,19 @@ impl Spool {
                 .modified()
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
-                .map_or(0, |d| d.as_secs()),
+                .and_then(|duration| {
+                    time::OffsetDateTime::from_unix_timestamp_nanos(duration.as_nanos() as i128)
+                        .ok()
+                })
+                .and_then(|timestamp| {
+                    let offset =
+                        time::UtcOffset::local_offset_at(timestamp).unwrap_or(time::UtcOffset::UTC);
+                    timestamp
+                        .to_offset(offset)
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .ok()
+                })
+                .unwrap_or_else(|| "1970-01-01T00:00:00Z".into()),
         };
         Ok((data, provenance, staged_path))
     }
@@ -346,6 +418,7 @@ pub struct Options {
     pub max_files: usize,
     pub debounce: Duration,
     pub interval: Duration,
+    pub ocr_text: Option<PathBuf>,
 }
 impl Default for Options {
     fn default() -> Self {
@@ -355,6 +428,7 @@ impl Default for Options {
             max_files: MAX_FILES,
             debounce: Duration::from_secs(5),
             interval: Duration::from_secs(10),
+            ocr_text: None,
         }
     }
 }
@@ -363,23 +437,56 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
     match spool.stage(path, opts.max_file_size) {
         Ok((data, mut p, spool_path)) => {
             p.source_type = source_type(&p.source_name, &data);
+            let suggestions = if matches!(p.source_type, SourceType::Image | SourceType::Pdf)
+                && let Some(ocr_path) = opts.ocr_text.as_deref()
+            {
+                match fs::read(ocr_path) {
+                    Ok(ocr) => suggestions(&ocr, SourceType::Text, &p.source_name),
+                    Err(error) => {
+                        return FileResult {
+                            file: path.to_string_lossy().into(),
+                            status: "error".into(),
+                            reason: Some(format!("read OCR text: {error}")),
+                            provenance: Some(p),
+                            suggestions: Vec::new(),
+                            spool_path: Some(spool_path),
+                        };
+                    }
+                }
+            } else {
+                suggestions(&data, p.source_type, &p.source_name)
+            };
             FileResult {
                 file: path.to_string_lossy().into(),
                 status: "ok".into(),
                 reason: None,
                 provenance: Some(p.clone()),
-                suggestions: suggestions(&data, p.source_type, &p.source_name),
+                suggestions,
                 spool_path: Some(spool_path),
             }
         }
-        Err(IntakeError::Limit) => FileResult {
-            file: path.to_string_lossy().into(),
-            status: "skipped".into(),
-            reason: Some("source exceeds limit".into()),
-            provenance: None,
-            suggestions: Vec::new(),
-            spool_path: None,
-        },
+        Err(IntakeError::Limit { size }) => {
+            let reason = match size {
+                Some(size) => format!(
+                    "reject {:?}: {size} bytes exceeds the {} byte per-file limit",
+                    path.display().to_string(),
+                    opts.max_file_size
+                ),
+                None => format!(
+                    "reject {:?}: file exceeds the {} byte per-file limit",
+                    path.display().to_string(),
+                    opts.max_file_size
+                ),
+            };
+            FileResult {
+                file: path.to_string_lossy().into(),
+                status: "skipped".into(),
+                reason: Some(reason),
+                provenance: None,
+                suggestions: Vec::new(),
+                spool_path: None,
+            }
+        }
         Err(e) => FileResult {
             file: path.to_string_lossy().into(),
             status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {
@@ -395,6 +502,56 @@ pub fn process(spool: &Spool, path: impl AsRef<Path>, opts: &Options) -> FileRes
         },
     }
 }
+
+/// Processes an explicit file batch with the same file-count and total-byte
+/// limits as the Go intake command. Per-file failures remain reportable rows.
+pub fn process_files(
+    spool: &Spool,
+    paths: &[PathBuf],
+    opts: &Options,
+) -> Result<Vec<FileResult>, String> {
+    let max_files = if opts.max_files == 0 {
+        MAX_FILES
+    } else {
+        opts.max_files
+    };
+    let max_batch_size = if opts.max_batch_size == 0 {
+        MAX_BATCH_SIZE
+    } else {
+        opts.max_batch_size
+    };
+    if paths.is_empty() {
+        return Err("no input files".into());
+    }
+    if paths.len() > max_files {
+        return Err(format!(
+            "batch exceeds the {max_files} file limit ({} given)",
+            paths.len()
+        ));
+    }
+    let mut total = 0u64;
+    let mut results = Vec::with_capacity(paths.len());
+    for path in paths {
+        let mut result = process(spool, path, opts);
+        if let Some(provenance) = &result.provenance {
+            total = total.saturating_add(provenance.size);
+            if total > max_batch_size {
+                result = FileResult {
+                    file: path.to_string_lossy().into(),
+                    status: "skipped".into(),
+                    reason: Some(format!(
+                        "batch exceeds the {max_batch_size} byte total limit"
+                    )),
+                    provenance: None,
+                    suggestions: Vec::new(),
+                    spool_path: None,
+                };
+            }
+        }
+        results.push(result);
+    }
+    Ok(results)
+}
 /// A sink keeps quarantine writes testable without a vault, keychain, OCR, or network service.
 pub trait QuarantineSink {
     fn write(
@@ -405,6 +562,7 @@ pub trait QuarantineSink {
         provenance: &Provenance,
     ) -> io::Result<()>;
     fn contains_hash(&self, hash: &str) -> bool;
+    fn contains_path(&self, path: &str) -> bool;
 }
 pub fn quarantine<S: QuarantineSink>(
     sink: &mut S,
@@ -420,17 +578,27 @@ pub fn quarantine<S: QuarantineSink>(
         let Some(p) = r.provenance.as_ref() else {
             continue;
         };
+        let path = format!("quarantine/{import_id}/{}", proposed_path(&p.source_name));
+        if sink.contains_path(&path) {
+            continue;
+        }
         if sink.contains_hash(&p.sha256) {
             continue;
         }
-        let path = format!("quarantine/{import_id}/{}", proposed_path(&p.source_name));
         let mut fields = BTreeMap::new();
         for s in &r.suggestions {
-            if !s.attachment {
-                fields
-                    .entry(s.field.clone())
-                    .or_insert_with(|| s.value.clone().unwrap_or_default());
+            if s.attachment || s.field == ATTACHMENT_FIELD {
+                continue;
             }
+            let Some(value) = s.value.as_deref() else {
+                continue;
+            };
+            if value.is_empty() || value.len() > 4096 {
+                continue;
+            }
+            fields
+                .entry(s.field.clone())
+                .or_insert_with(|| value.into());
         }
         if !dry_run {
             sink.write(&path, &fields, data, p)?;
@@ -610,4 +778,109 @@ impl Watcher {
 #[must_use]
 pub fn encode_attachment(data: &[u8]) -> String {
     STANDARD.encode(data)
+}
+
+#[cfg(test)]
+mod quarantine_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[derive(Default)]
+    struct Sink {
+        paths: BTreeSet<String>,
+        writes: Vec<(String, BTreeMap<String, String>)>,
+    }
+
+    impl QuarantineSink for Sink {
+        fn write(
+            &mut self,
+            path: &str,
+            fields: &BTreeMap<String, String>,
+            _: &[u8],
+            _: &Provenance,
+        ) -> io::Result<()> {
+            self.paths.insert(path.into());
+            self.writes.push((path.into(), fields.clone()));
+            Ok(())
+        }
+
+        fn contains_hash(&self, _: &str) -> bool {
+            false
+        }
+
+        fn contains_path(&self, path: &str) -> bool {
+            self.paths.contains(path)
+        }
+    }
+
+    fn result(name: &str, suggestions: Vec<Suggestion>) -> FileResult {
+        FileResult {
+            file: name.into(),
+            status: "ok".into(),
+            reason: None,
+            provenance: Some(Provenance {
+                source_path: name.into(),
+                source_name: name.into(),
+                source_type: SourceType::Text,
+                size: 1,
+                sha256: format!("hash-{name}"),
+                mtime: "1970-01-01T00:00:00Z".into(),
+            }),
+            suggestions,
+            spool_path: None,
+        }
+    }
+
+    fn suggestion(field: &str, value: Option<String>, attachment: bool) -> Suggestion {
+        Suggestion {
+            path: "ignored".into(),
+            field: field.into(),
+            confidence: 1.0,
+            value,
+            warning: None,
+            attachment,
+        }
+    }
+
+    #[test]
+    fn skips_path_collisions_and_go_invalid_field_suggestions() {
+        let colliding = result("existing.txt", vec![]);
+        let valid = result(
+            "valid.txt",
+            vec![
+                suggestion("empty", Some(String::new()), false),
+                suggestion("missing", None, false),
+                suggestion("oversize", Some("x".repeat(4097)), false),
+                suggestion("boundary", Some("x".repeat(4096)), false),
+                suggestion("attachment", Some("suggested bytes".into()), false),
+                suggestion("marked", Some("ignored".into()), true),
+                suggestion("username", Some("alice".into()), false),
+            ],
+        );
+        let mut sink = Sink {
+            paths: ["quarantine/batch/existing".into()].into_iter().collect(),
+            ..Sink::default()
+        };
+
+        let written = quarantine(
+            &mut sink,
+            &[(colliding, b"a".to_vec()), (valid, b"b".to_vec())],
+            "batch",
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(written, ["quarantine/batch/valid"]);
+        assert_eq!(sink.writes.len(), 1);
+        assert_eq!(sink.writes[0].0, "quarantine/batch/valid");
+        let fields = &sink.writes[0].1;
+        assert_eq!(fields.len(), 2);
+        assert_eq!(fields["boundary"].len(), 4096);
+        assert_eq!(fields["username"], "alice");
+        assert!(!fields.contains_key("empty"));
+        assert!(!fields.contains_key("missing"));
+        assert!(!fields.contains_key("oversize"));
+        assert!(!fields.contains_key("attachment"));
+        assert!(!fields.contains_key("marked"));
+    }
 }

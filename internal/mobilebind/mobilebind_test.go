@@ -1,6 +1,9 @@
 package mobilebind_test
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +11,39 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/mobilebind"
 )
+
+func TestMobileBind_OpenFrozenGoVaultFixture(t *testing.T) {
+	raw, err := os.ReadFile("../../crates/symvault-ffi/tests/fixtures/go-mobile-vault.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Passphrase        string `json:"passphrase"`
+		Identity          string `json:"identity"`
+		IdentityAgeBase64 string `json:"identity_age_base64"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	encrypted, err := base64.StdEncoding.DecodeString(fixture.IdentityAgeBase64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte(fmt.Sprintf("vaultDir: %q\nvault:\n  format_version: 2\n", vaultDir)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vaultDir, "identity.age"), encrypted, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mobilebind.OpenVaultWithPassphrase(vaultDir, fixture.Passphrase)
+	if err != nil || got != fixture.Identity {
+		t.Fatalf("Go mobile vault fixture = %q, %v", got, err)
+	}
+}
 
 func TestMobileBind_CryptoEndToEnd(t *testing.T) {
 	// 1. Generate identity
@@ -82,7 +118,7 @@ func TestMobileBind_VaultEndToEnd(t *testing.T) {
 	}
 
 	// 3. Write entry JSON
-	entryJSON := `{"data":{"username":"alice","password":"secretpassword123","url":"https://example.com"}}`
+	entryJSON := `{"data":{"username":"alice","password":"secretpassword123","url":"https://example.com","large_integer":9007199254740993,"decimal":1.234567890123456789,"exponent":1e+30,"nested":{"integer":9007199254740993,"values":[1e-7,1e+30]}}}`
 	if err := mobilebind.WriteEntryJSON(vaultDir, "services/example", entryJSON, idStr); err != nil {
 		t.Fatalf("WriteEntryJSON: %v", err)
 	}
@@ -94,6 +130,29 @@ func TestMobileBind_VaultEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(readJSON, "secretpassword123") {
 		t.Fatalf("ReadEntryJSON missing password: %s", readJSON)
+	}
+	var readEntry struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(readJSON), &readEntry); err != nil {
+		t.Fatalf("decode ReadEntryJSON: %v", err)
+	}
+	if got := readEntry.Data["large_integer"]; got != float64(9007199254740992) {
+		t.Fatalf("Go JSON integer conversion = %v, want float64(9007199254740992)", got)
+	}
+	if got := readEntry.Data["decimal"]; got != float64(1.2345678901234567) {
+		t.Fatalf("Go JSON decimal conversion = %.17g, want %.17g", got, float64(1.2345678901234567))
+	}
+	if got := readEntry.Data["exponent"]; got != float64(1e30) {
+		t.Fatalf("Go JSON exponent conversion = %v, want %v", got, float64(1e30))
+	}
+	nested := readEntry.Data["nested"].(map[string]any)
+	if got := nested["integer"]; got != float64(9007199254740992) {
+		t.Fatalf("Go JSON nested integer conversion = %v, want float64(9007199254740992)", got)
+	}
+	values := nested["values"].([]any)
+	if values[0] != float64(1e-7) || values[1] != float64(1e30) {
+		t.Fatalf("Go JSON nested exponent conversion = %v, want [%v %v]", values, float64(1e-7), float64(1e30))
 	}
 
 	// 5. List entries JSON

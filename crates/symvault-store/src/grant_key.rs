@@ -266,6 +266,7 @@ mod tests {
     use super::*;
     use symvault_core::session::MemoryKeyring;
 
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     #[test]
     fn keyring_roundtrip_uses_go_address_and_hex_payload() {
         let directory = tempfile::tempdir().expect("temporary directory");
@@ -285,6 +286,7 @@ mod tests {
         assert!(!directory.path().join("grant-signing-key").exists());
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     #[test]
     fn malformed_keyring_value_is_regenerated_like_go() {
         let directory = tempfile::tempdir().expect("temporary directory");
@@ -301,6 +303,7 @@ mod tests {
         assert_ne!(encoded, b"not-a-32-byte-hex-key");
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
     #[test]
     fn valid_non_32_byte_hex_key_is_preserved_like_go() {
         let directory = tempfile::tempdir().expect("temporary directory");
@@ -311,6 +314,36 @@ mod tests {
             .expect("load short key");
         assert_eq!(loaded.as_bytes(), &[0xab]);
     }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    #[test]
+    fn unsupported_platform_entrypoint_uses_encrypted_file_fallback() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().canonicalize().unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let keyring = MemoryKeyring::new();
+        let address = grant_keyring_address(&root).unwrap();
+
+        let first = load_or_create_grant_signing_key(&root, &keyring, Some(&identity)).unwrap();
+        assert_eq!(first.as_bytes().len(), KEY_BYTES);
+        assert!(
+            fs::read(root.join(KEY_FILE_NAME))
+                .unwrap()
+                .starts_with(AGE_HEADER)
+        );
+        assert!(matches!(
+            keyring.get(&address),
+            Err(symvault_core::session::SessionError::NotFound)
+        ));
+
+        let second = load_or_create_grant_signing_key(&root, &keyring, Some(&identity)).unwrap();
+        assert_eq!(first.as_bytes(), second.as_bytes());
+        assert!(matches!(
+            keyring.get(&address),
+            Err(symvault_core::session::SessionError::NotFound)
+        ));
+    }
+
     #[test]
     fn file_fallback_encrypts_and_migrates_plaintext() {
         let directory = tempfile::tempdir().unwrap();

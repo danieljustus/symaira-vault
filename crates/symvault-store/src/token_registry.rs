@@ -1,11 +1,11 @@
-//! Agent-scoped MCP token registry mutations (`new`, `revoke`, `rotate`).
+//! Agent-scoped MCP token registry loading and mutations (`new`, `revoke`, `rotate`).
 //!
 //! Mirrors `internal/mcp/auth/token.go`'s `Create`/`Revoke`/`Save`. The Go
 //! `agent token` subcommands construct `auth.NewTokenRegistry` without an age
-//! identity, so `mcp-tokens.json` is always read and written in plaintext
-//! here — the encrypted `registry.age` path is out of scope for this
-//! no-unlock command family, matching `agent_list_commands::load_tokens` on
-//! the Rust side and Go's own command wiring.
+//! no-unlock command family, so those mutations read and write the plaintext
+//! `mcp-tokens.json` compatibility file. Read-only consumers with an unlocked
+//! age identity can load `registry.age` first, matching Go's optional encrypted
+//! registry path.
 //!
 //! Persistence reuses the same write lock and atomic publication primitives
 //! `sharing.rs` uses. Unlike Go's single in-memory `Load`-then-`Save`, every
@@ -14,16 +14,116 @@
 //! deliberate safety improvement over the Go oracle's process-local map that
 //! does not change single-writer observable behavior.
 
-use std::{collections::BTreeMap, fs, io, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::{self, Read},
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 
 use crate::{StoreError, read_open_regular_with_metadata, sha256_hex};
+use symvault_crypto::{Identity, decrypt};
+use zeroize::Zeroizing;
 
 /// The Go token registry file name used below a vault directory.
 pub const TOKEN_REGISTRY_FILE: &str = "mcp-tokens.json";
 const TOKEN_REGISTRY_VERSION: i64 = 2;
+const MAX_READ_ONLY_REGISTRY_BYTES: u64 = 1024 * 1024;
+
+/// Separate Go-compatible store for dynamically registered OAuth clients.
+pub const OAUTH_CLIENTS_FILE: &str = "mcp-oauth-clients.json";
+
+/// Loads a token registry without changing it.
+///
+/// When `identity` is provided and `registry.age` exists, the encrypted
+/// registry takes precedence over the legacy plaintext file. A missing
+/// encrypted file falls back to `mcp-tokens.json`; without an identity only
+/// the plaintext compatibility file is considered. Registry reads reject
+/// symlinks, non-regular files, and files larger than one MiB.
+pub fn load_read_only(
+    root: &Path,
+    identity: Option<&Identity>,
+) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
+    let _root_cap = open_root(root)?;
+    if let Some(identity) = identity {
+        let encrypted_path = root.join("registry.age");
+        if let Some(ciphertext) = read_registry_file(&encrypted_path)? {
+            let plaintext = Zeroizing::new(decrypt(&ciphertext, identity).map_err(|_| {
+                StoreError::Config(String::from(
+                    "load token registry: decrypt encrypted token registry",
+                ))
+            })?);
+            return parse_registry(&plaintext, &encrypted_path);
+        }
+    }
+
+    let plaintext_path = root.join(TOKEN_REGISTRY_FILE);
+    match read_registry_file(&plaintext_path)? {
+        Some(bytes) => parse_registry(&bytes, &plaintext_path),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+fn read_registry_file(path: &Path) -> Result<Option<Vec<u8>>, StoreError> {
+    #[cfg(unix)]
+    let file = crate::open_nofollow_kind(path, false);
+    #[cfg(not(unix))]
+    let file = crate::open_nofollow(path);
+    let file = match file {
+        Ok(file) => file,
+        Err(source) if source.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(source) => {
+            return Err(StoreError::Read {
+                path: path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    let metadata = file.metadata().map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path.to_path_buf()));
+    }
+    if metadata.len() > MAX_READ_ONLY_REGISTRY_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_READ_ONLY_REGISTRY_BYTES,
+        });
+    }
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
+    file.take(MAX_READ_ONLY_REGISTRY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|source| StoreError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    if bytes.len() as u64 > MAX_READ_ONLY_REGISTRY_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_READ_ONLY_REGISTRY_BYTES,
+        });
+    }
+    Ok(Some(bytes))
+}
+
+fn parse_registry(bytes: &[u8], path: &Path) -> Result<BTreeMap<String, TokenRecord>, StoreError> {
+    if bytes.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let raw: RawFile = serde_json::from_slice(bytes).map_err(|error| {
+        StoreError::Config(format!(
+            "load token registry: parse token registry {}: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(raw.tokens.unwrap_or_default())
+}
 
 /// One on-disk token registry entry, matching Go's `TokenData` JSON layout
 /// field-for-field so unrelated entries (including fields this command
@@ -85,6 +185,50 @@ pub struct TokenRecord {
     pub refresh_expires_at: Option<String>,
 }
 
+/// Returns whether a token can authenticate at `now`.
+///
+/// Go's `TokenRegistry.Get` rejects revoked tokens and treats an expiry as
+/// expired only when `now.After(expires_at)`, so equality remains active.
+pub fn is_active_at(token: &TokenRecord, now: OffsetDateTime) -> Result<bool, time::error::Parse> {
+    if token.revoked {
+        return Ok(false);
+    }
+    token
+        .expires_at
+        .as_deref()
+        .map(|expires_at| parse_rfc3339(expires_at).map(|expires_at| now <= expires_at))
+        .unwrap_or(Ok(true))
+}
+
+/// Looks up a raw bearer without exposing a hash-at-call-site requirement.
+/// The stored registry continues to contain only the SHA-256 digest.
+pub fn lookup_raw_bearer<'a>(
+    entries: &'a BTreeMap<String, TokenRecord>,
+    bearer: &str,
+    now: OffsetDateTime,
+) -> Result<Option<&'a TokenRecord>, time::error::Parse> {
+    let hash = sha256_hex(bearer.as_bytes());
+    let Some(token) = entries.values().find(|token| token.hash == hash) else {
+        return Ok(None);
+    };
+    if is_active_at(token, now)? {
+        Ok(Some(token))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Checks one already-canonical MCP tool name against an exact scope or `*`.
+/// Tool aliases are resolved by the transport/catalog layer, outside this
+/// registry contract.
+pub fn is_tool_allowed(token: &TokenRecord, canonical_tool_name: &str) -> bool {
+    token.allowed_tools.as_deref().is_some_and(|allowed| {
+        allowed
+            .iter()
+            .any(|name| name == "*" || name == canonical_tool_name)
+    })
+}
+
 /// Inputs for a freshly minted token, shared by `create` and `rotate`.
 pub struct NewToken<'a> {
     pub label: &'a str,
@@ -94,6 +238,134 @@ pub struct NewToken<'a> {
     /// matching Go's `if ttl > 0` guard on `ExpiresAt`.
     pub ttl: Option<time::Duration>,
     pub tool_registry_hash: &'a str,
+}
+
+/// Public OAuth client metadata persisted by Go's serverbootstrap store.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct OAuthClient {
+    pub client_id: String,
+    pub redirect_uris: Vec<String>,
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ttl_seconds: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct OAuthClientFile {
+    version: i64,
+    clients: BTreeMap<String, Option<OAuthClient>>,
+}
+
+/// Persists a registered OAuth client under the vault's standard file lock.
+pub fn register_oauth_client(
+    root: &Path,
+    redirect_uris: Vec<String>,
+    now: OffsetDateTime,
+) -> Result<OAuthClient, StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(OAUTH_CLIENTS_FILE);
+    let mut file = read_oauth_clients(&target)?;
+    let mut random = [0_u8; 16];
+    getrandom::fill(&mut random)
+        .map_err(|error| StoreError::Config(format!("register oauth client: {error}")))?;
+    let client_id = encode_hex(&random);
+    let client = OAuthClient {
+        client_id: client_id.clone(),
+        redirect_uris,
+        created_at: go_rfc3339(now),
+        ttl_seconds: None,
+        expires_at: None,
+    };
+    file.version = 1;
+    file.clients.insert(client_id, Some(client.clone()));
+    write_oauth_clients(&root_cap, &target, &file)?;
+    Ok(client)
+}
+
+/// Loads a registered client, treating an expired record as unknown.
+pub fn get_oauth_client(
+    root: &Path,
+    client_id: &str,
+    now: OffsetDateTime,
+) -> Result<Option<OAuthClient>, StoreError> {
+    let file = read_oauth_clients(&root.join(OAUTH_CLIENTS_FILE))?;
+    let Some(Some(client)) = file.clients.get(client_id) else {
+        return Ok(None);
+    };
+    let expired = client
+        .expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid OAuth client expiry: {error}")))?
+        .is_some_and(|expires_at| now > expires_at);
+    Ok((!expired).then(|| client.clone()))
+}
+
+fn read_oauth_clients(path: &Path) -> Result<OAuthClientFile, StoreError> {
+    #[cfg(unix)]
+    let opened = crate::open_nofollow_kind(path, false);
+    #[cfg(not(unix))]
+    let opened = crate::open_nofollow(path);
+    let file = match opened {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Ok(OAuthClientFile {
+                version: 1,
+                clients: BTreeMap::new(),
+            });
+        }
+        Err(error) => {
+            return Err(StoreError::Read {
+                path: path.to_path_buf(),
+                source: error,
+            });
+        }
+    };
+    let (bytes, _) = read_open_regular_with_metadata(file, path)?;
+    serde_json::from_slice(&bytes)
+        .map_err(|error| StoreError::Config(format!("parse OAuth client store: {error}")))
+}
+
+fn write_oauth_clients(
+    root_cap: &fs::File,
+    target: &Path,
+    file: &OAuthClientFile,
+) -> Result<(), StoreError> {
+    let mut bytes = serde_json::to_vec_pretty(file)
+        .map_err(|error| StoreError::Config(format!("marshal OAuth client store: {error}")))?;
+    bytes.push(b'\n');
+    crate::publication::replace(target, &bytes, root_cap)
+        .map_err(|error| StoreError::Config(format!("write OAuth client store: {error}")))
+}
+
+/// Checks the OAuth PKCE S256 verifier using the RFC 7636 base64url form.
+pub fn verify_s256_code_verifier(verifier: &str, challenge: &str) -> bool {
+    use base64::Engine as _;
+
+    if !(43..=128).contains(&verifier.len())
+        || !verifier
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte))
+        || challenge.is_empty()
+    {
+        return false;
+    }
+    let digest = Sha256::digest(verifier.as_bytes());
+    let expected = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+    if expected.len() != challenge.len() {
+        return false;
+    }
+    expected
+        .bytes()
+        .zip(challenge.bytes())
+        .fold(0_u8, |difference, (left, right)| {
+            difference | (left ^ right)
+        })
+        == 0
 }
 
 #[derive(Default, Deserialize)]
@@ -124,6 +396,127 @@ pub fn create(
     entries.insert(record.id.clone(), record.clone());
     write(&root_cap, &target, &entries)?;
     Ok((record, raw_token))
+}
+
+/// Creates an access token and paired refresh token, persisting only hashes.
+pub fn create_with_refresh(
+    root: &Path,
+    new: &NewToken<'_>,
+    refresh_ttl: Option<time::Duration>,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    let (mut record, raw_access) = new_record(new, now)?;
+    let mut refresh_bytes = [0_u8; 32];
+    getrandom::fill(&mut refresh_bytes).map_err(|error| {
+        StoreError::Config(format!("create token: generate refresh token: {error}"))
+    })?;
+    let raw_refresh = encode_hex(&refresh_bytes);
+    record.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
+    record.refresh_expires_at = refresh_ttl
+        .filter(|ttl| *ttl > time::Duration::ZERO)
+        .map(|ttl| go_rfc3339(now + ttl));
+    entries.insert(record.id.clone(), record.clone());
+    write(&root_cap, &target, &entries)?;
+    Ok((record, raw_access, raw_refresh))
+}
+
+/// Rotates a refresh token once, revoking its associated access token.
+pub fn rotate_via_refresh_token(
+    root: &Path,
+    raw_refresh_token: &str,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    rotate_via_refresh_token_inner(root, raw_refresh_token, None, now)
+}
+
+/// Rotates a refresh token and supplies a bounded access-token TTL when the
+/// prior access token has expired but the refresh token remains valid.
+pub fn rotate_via_refresh_token_with_access_ttl(
+    root: &Path,
+    raw_refresh_token: &str,
+    access_ttl_if_expired: time::Duration,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    if access_ttl_if_expired <= time::Duration::ZERO {
+        return Err(StoreError::Config(
+            "expired access-token replacement TTL must be positive".into(),
+        ));
+    }
+    rotate_via_refresh_token_inner(root, raw_refresh_token, Some(access_ttl_if_expired), now)
+}
+
+fn rotate_via_refresh_token_inner(
+    root: &Path,
+    raw_refresh_token: &str,
+    access_ttl_if_expired: Option<time::Duration>,
+    now: OffsetDateTime,
+) -> Result<(TokenRecord, String, String), StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    let refresh_hash = sha256_hex(raw_refresh_token.as_bytes());
+    let Some(old) = entries
+        .values()
+        .find(|token| token.refresh_token_hash == refresh_hash && !token.revoked)
+        .cloned()
+    else {
+        return Err(StoreError::Config("invalid refresh token".into()));
+    };
+    let access_expiry = old
+        .expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid token expiry: {error}")))?;
+    let refresh_expiry = old
+        .refresh_expires_at
+        .as_deref()
+        .map(parse_rfc3339)
+        .transpose()
+        .map_err(|error| StoreError::Config(format!("invalid refresh expiry: {error}")))?;
+    if (access_expiry.is_some_and(|expiry| now >= expiry) && access_ttl_if_expired.is_none())
+        || refresh_expiry.is_some_and(|expiry| now >= expiry)
+    {
+        return Err(StoreError::Config("invalid refresh token: expired".into()));
+    }
+
+    let allowed_tools = old.allowed_tools.clone().unwrap_or_default();
+    let access_ttl = match access_expiry {
+        Some(expiry) if now >= expiry => access_ttl_if_expired,
+        Some(expiry) => Some(expiry - now),
+        None => None,
+    };
+    let refresh_ttl = refresh_expiry.map(|expiry| (expiry - now).max(time::Duration::ZERO));
+    let new = NewToken {
+        label: &old.label,
+        allowed_tools,
+        agent_name: &old.agent_name,
+        ttl: access_ttl,
+        tool_registry_hash: &old.tool_registry_hash,
+    };
+    let (mut rotated, raw_access) = new_record(&new, now)?;
+    let mut refresh_bytes = [0_u8; 32];
+    getrandom::fill(&mut refresh_bytes).map_err(|error| {
+        StoreError::Config(format!("rotate token: generate refresh token: {error}"))
+    })?;
+    let raw_refresh = encode_hex(&refresh_bytes);
+    rotated.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
+    rotated.refresh_expires_at = refresh_ttl
+        .filter(|ttl| *ttl > time::Duration::ZERO)
+        .map(|ttl| go_rfc3339(now + ttl));
+    let old_entry = entries
+        .get_mut(&old.id)
+        .expect("old refresh token remains in locked registry");
+    old_entry.revoked = true;
+    old_entry.revoked_at = Some(go_rfc3339(now));
+    entries.insert(rotated.id.clone(), rotated.clone());
+    write(&root_cap, &target, &entries)?;
+    Ok((rotated, raw_access, raw_refresh))
 }
 
 /// Revokes one token owned by `agent_name`. Returns `false` when no such
@@ -510,6 +903,121 @@ mod tests {
     }
 
     #[test]
+    fn refresh_token_creation_persists_hashes_and_rotation_is_single_use() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let (original, raw_access, raw_refresh) = create_with_refresh(
+            &path,
+            &new_token("oauth"),
+            Some(time::Duration::hours(2)),
+            now,
+        )
+        .expect("create OAuth token pair");
+        assert_eq!(original.hash, sha256_hex(raw_access.as_bytes()));
+        assert_eq!(
+            original.refresh_token_hash,
+            sha256_hex(raw_refresh.as_bytes())
+        );
+        let on_disk = fs::read_to_string(path.join(TOKEN_REGISTRY_FILE)).expect("read registry");
+        assert!(!on_disk.contains(&raw_access));
+        assert!(!on_disk.contains(&raw_refresh));
+
+        let later = now + time::Duration::minutes(5);
+        let (rotated, new_access, new_refresh) =
+            rotate_via_refresh_token(&path, &raw_refresh, later).expect("rotate refresh token");
+        assert_ne!(new_access, raw_access);
+        assert_ne!(new_refresh, raw_refresh);
+        assert_eq!(
+            rotated.refresh_token_hash,
+            sha256_hex(new_refresh.as_bytes())
+        );
+        let stored = read(&path.join(TOKEN_REGISTRY_FILE)).expect("read rotated registry");
+        assert!(stored[&original.id].revoked);
+        assert_eq!(
+            stored[&original.id].revoked_at.as_deref(),
+            Some(go_rfc3339(later).as_str())
+        );
+        assert!(!stored[&rotated.id].revoked);
+        assert!(rotate_via_refresh_token(&path, &raw_refresh, later).is_err());
+        assert!(rotate_via_refresh_token(&path, &new_refresh, later).is_ok());
+    }
+
+    #[test]
+    fn oauth_refresh_after_access_expiry_gets_a_bounded_new_access_ttl() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let mut expiring = new_token("oauth");
+        expiring.ttl = Some(time::Duration::seconds(1));
+        let (_, _, refresh) =
+            create_with_refresh(&path, &expiring, Some(time::Duration::hours(2)), now)
+                .expect("create expiring OAuth token pair");
+
+        let later = now + time::Duration::seconds(2);
+        let (rotated, _, _) = rotate_via_refresh_token_with_access_ttl(
+            &path,
+            &refresh,
+            time::Duration::hours(24),
+            later,
+        )
+        .expect("valid refresh can renew expired access token");
+        assert_eq!(
+            rotated.expires_at.as_deref(),
+            Some(go_rfc3339(later + time::Duration::hours(24)).as_str())
+        );
+        assert_eq!(
+            rotated.refresh_expires_at.as_deref(),
+            Some(go_rfc3339(now + time::Duration::hours(2)).as_str())
+        );
+    }
+
+    #[test]
+    fn pkce_s256_matches_the_rfc_7636_vector_and_fails_closed() {
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        let challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM";
+        assert!(verify_s256_code_verifier(verifier, challenge));
+        assert!(!verify_s256_code_verifier(verifier, "wrong"));
+        assert!(!verify_s256_code_verifier("", challenge));
+        assert!(!verify_s256_code_verifier(&"a".repeat(42), challenge));
+        assert!(!verify_s256_code_verifier(&"a".repeat(129), challenge));
+        assert!(!verify_s256_code_verifier(
+            &format!("{}!", "a".repeat(42)),
+            challenge
+        ));
+    }
+
+    #[test]
+    fn oauth_clients_persist_in_go_file_shape_and_reload() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        let registered = register_oauth_client(
+            &path,
+            vec![
+                "http://localhost/callback".into(),
+                "symvault:callback".into(),
+            ],
+            now,
+        )
+        .expect("register client");
+        let source_file: serde_json::Value = serde_json::from_slice(
+            &fs::read(path.join(OAUTH_CLIENTS_FILE)).expect("read client store"),
+        )
+        .expect("parse client store");
+        assert_eq!(source_file["version"], 1);
+        assert_eq!(
+            source_file["clients"][&registered.client_id]["client_id"],
+            registered.client_id
+        );
+        assert_eq!(
+            source_file["clients"][&registered.client_id]["created_at"],
+            go_rfc3339(now)
+        );
+        assert_eq!(
+            get_oauth_client(&path, &registered.client_id, now).expect("reload client"),
+            Some(registered)
+        );
+    }
+
+    #[test]
     fn revoke_purges_expired_tokens_only_when_the_revoke_itself_succeeds() {
         let (_root, path) = vault_dir();
         let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
@@ -544,5 +1052,111 @@ mod tests {
         assert_eq!(go_rfc3339(zero_fraction), "2023-11-14T22:13:20Z");
         let with_fraction = zero_fraction + time::Duration::nanoseconds(120_000_000);
         assert_eq!(go_rfc3339(with_fraction), "2023-11-14T22:13:20.12Z");
+    }
+
+    #[test]
+    fn token_activity_uses_explicit_clock_and_expiry_equality_is_active() {
+        let mut token = TokenRecord {
+            id: "tok-active".into(),
+            label: String::new(),
+            hash: String::new(),
+            prefix: String::new(),
+            allowed_tools: Some(Vec::new()),
+            tool_registry_hash: String::new(),
+            agent_name: "alpha".into(),
+            created_at: "2026-09-23T00:00:00Z".into(),
+            expires_at: Some("2026-09-23T12:00:00Z".into()),
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        let now = parse_rfc3339("2026-09-23T12:00:00Z").unwrap();
+        assert!(is_active_at(&token, now).unwrap());
+        assert!(!is_active_at(&token, now + time::Duration::nanoseconds(1)).unwrap());
+        token.expires_at = None;
+        assert!(is_active_at(&token, now).unwrap());
+        token.expires_at = Some("2026-09-23T12:00:00Z".into());
+
+        token.revoked = true;
+        assert!(!is_active_at(&token, now).unwrap());
+    }
+
+    #[test]
+    fn malformed_expiry_fails_closed() {
+        let mut token = TokenRecord {
+            id: "tok-invalid".into(),
+            label: String::new(),
+            hash: String::new(),
+            prefix: String::new(),
+            allowed_tools: Some(Vec::new()),
+            tool_registry_hash: String::new(),
+            agent_name: "alpha".into(),
+            created_at: "2026-09-23T00:00:00Z".into(),
+            expires_at: None,
+            last_used_at: None,
+            revoked: false,
+            revoked_at: None,
+            refresh_token_hash: String::new(),
+            refresh_expires_at: None,
+        };
+        token.expires_at = Some("not-rfc3339".into());
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        assert!(is_active_at(&token, now).is_err());
+    }
+
+    #[test]
+    fn go_generated_token_lookup_fixture_matches_bearer_validation_and_scope() {
+        #[derive(Deserialize)]
+        struct Fixture {
+            now: String,
+            registry: Registry,
+            lookups: Vec<Lookup>,
+            scopes: Vec<Scope>,
+        }
+        #[derive(Deserialize)]
+        struct Registry {
+            tokens: BTreeMap<String, TokenRecord>,
+        }
+        #[derive(Deserialize)]
+        struct Lookup {
+            bearer: String,
+            found: bool,
+            token_id: Option<String>,
+        }
+        #[derive(Deserialize)]
+        struct Scope {
+            token_id: String,
+            tool: String,
+            allowed: bool,
+        }
+
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../../../testdata/port/auth/token-lookup.json"
+        ))
+        .expect("Go token lookup fixture");
+        let now = parse_rfc3339(&fixture.now).expect("fixture clock");
+        for case in &fixture.lookups {
+            let found = lookup_raw_bearer(&fixture.registry.tokens, &case.bearer, now)
+                .expect("valid fixture expiry");
+            assert_eq!(found.is_some(), case.found, "bearer {}", case.bearer);
+            assert_eq!(
+                found.map(|token| token.id.as_str()),
+                case.token_id.as_deref(),
+                "bearer {}",
+                case.bearer
+            );
+        }
+        for case in &fixture.scopes {
+            let token = &fixture.registry.tokens[&case.token_id];
+            assert_eq!(
+                is_tool_allowed(token, &case.tool),
+                case.allowed,
+                "tool {} on token {}",
+                case.tool,
+                case.token_id
+            );
+        }
     }
 }

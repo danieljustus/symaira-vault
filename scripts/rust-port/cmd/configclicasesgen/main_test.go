@@ -77,6 +77,12 @@ func TestHarnessCapturesRawBytesAndChangedConfig(t *testing.T) {
 }
 
 func TestOraclePinningAndFixtureEncoding(t *testing.T) {
+	if got := errorNeedle([]byte(`Using file-based grant signing key storage`), 0); got != "" {
+		t.Fatalf("successful platform warning became oracle error: %q", got)
+	}
+	if got := errorNeedle([]byte(`cannot load config`), 7); got != "cannot load config" {
+		t.Fatalf("failed command lost oracle error: %q", got)
+	}
 	for _, tc := range []struct {
 		check           bool
 		commit, release string

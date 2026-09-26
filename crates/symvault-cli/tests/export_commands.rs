@@ -120,7 +120,7 @@ fn cancellation_precedes_unlock_and_file_creation() {
         },
         || Ok(false),
         || panic!("canceled export must not unlock"),
-        |_, _| panic!("canceled export must not audit success"),
+        |_, _, _| panic!("canceled export must not audit success"),
     )
     .unwrap();
     assert!(!result.wrote_output);

@@ -378,7 +378,7 @@ fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
                 metadata: EntryMetadata {
                     created: "<fixture-time>".into(),
                     updated: "<fixture-time>".into(),
-                    version: 1,
+                    version: 0,
                     ..EntryMetadata::default()
                 },
                 secret_metadata: SecretMetadata::default(),
@@ -510,13 +510,13 @@ fn normalize_text(text: &str) -> (String, usize) {
     (output, marker_index)
 }
 
-fn normalize(value: &mut Value, actual_root: &str) -> usize {
+fn normalize(value: &mut Value, actual_root: &str, actual_updated: &str) -> usize {
     match value {
         Value::String(text) => {
             if (text.starts_with('{') || text.starts_with('['))
                 && let Ok(mut nested) = serde_json::from_str::<Value>(text)
             {
-                let count = normalize(&mut nested, actual_root);
+                let count = normalize(&mut nested, actual_root, actual_updated);
                 *text = symvault_gojson::to_string(&nested).expect("nested JSON encoding");
                 return count;
             }
@@ -524,17 +524,20 @@ fn normalize(value: &mut Value, actual_root: &str) -> usize {
             if path_count > 0 {
                 *text = "<fixture-vault>".into();
             }
+            if text == actual_updated {
+                *text = "<fixture-time>".into();
+            }
             let (normalized, marker_count) = normalize_text(text);
             *text = normalized;
             marker_count
         }
         Value::Array(items) => items
             .iter_mut()
-            .map(|item| normalize(item, actual_root))
+            .map(|item| normalize(item, actual_root, actual_updated))
             .sum(),
         Value::Object(map) => map
             .values_mut()
-            .map(|item| normalize(item, actual_root))
+            .map(|item| normalize(item, actual_root, actual_updated))
             .sum(),
         _ => 0,
     }
@@ -560,6 +563,12 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .find(|case| case.name == "initialized_read_only_calls")
         .expect("fixture has initialized read-only case");
     let (root, identity) = write_synthetic_vault();
+    let stored_updated = Store::open(root.path(), &identity)
+        .expect("reopen synthetic vault")
+        .get("github", &identity)
+        .expect("read synthetic entry")
+        .metadata
+        .updated;
     let runtime = ProtocolHandler::with_store_read_only_runtime(
         &fixture.server_name,
         &fixture.server_version,
@@ -586,11 +595,11 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
     let actual_root = fs::canonicalize(root.path()).expect("canonical synthetic vault root");
     let actual_markers = actual
         .iter_mut()
-        .map(|value| normalize(value, &actual_root.to_string_lossy()))
+        .map(|value| normalize(value, &actual_root.to_string_lossy(), &stored_updated))
         .collect::<Vec<_>>();
     let expected_markers = expected
         .iter_mut()
-        .map(|value| normalize(value, "<never-present-root>"))
+        .map(|value| normalize(value, "<never-present-root>", "<never-present-time>"))
         .collect::<Vec<_>>();
     assert_eq!(actual_markers, expected_markers, "marker counts");
     assert_eq!(actual, expected);

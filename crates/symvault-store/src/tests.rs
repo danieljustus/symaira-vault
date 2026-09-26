@@ -716,8 +716,15 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
     };
 
     store.write_new_entry("written", &entry, &identity).unwrap();
-    assert_eq!(store.get("written", &identity).unwrap(), entry);
+    let stored = store.get("written", &identity).unwrap();
+    assert_eq!(stored.path, entry.path);
+    assert_eq!(stored.data, entry.data);
+    assert_eq!(stored.metadata.version, 1);
+    assert!(!stored.metadata.created.starts_with("0001-01-01"));
+    assert_eq!(stored.metadata.created, stored.metadata.updated);
     assert!(root.join("entries/written.age").is_file());
+    let manifest = store.load_manifest(&identity).unwrap();
+    assert!(manifest.entries.contains_key("written"));
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -769,6 +776,7 @@ fn fresh_layout_write_supports_pseudonymized_nested_and_dotted_paths() {
     let got = store.get("nested.name/written.v1", &identity).unwrap();
     assert_eq!(got.path, "nested.name/written.v1");
     assert_eq!(got.data, entry.data);
+    assert_eq!(got.metadata.version, 1);
     assert!(!root.join("entries/nested.name").exists());
     let hash = symvault_crypto::pseudonymize_path(&identity, "nested.name/written.v1");
     assert!(
@@ -799,10 +807,11 @@ fn fresh_layout_write_uses_all_configured_recipients_and_preserves_dots() {
         .write_new_entry("service.v1", &entry, &identity)
         .unwrap();
     let ciphertext = fs::read(root.join("entries/service.v1.age")).unwrap();
-    assert_eq!(
-        symvault_crypto::decrypt(&ciphertext, &other).unwrap(),
-        serde_json::to_vec(&entry).unwrap()
-    );
+    let plaintext = symvault_crypto::decrypt(&ciphertext, &other).unwrap();
+    let decrypted: Entry = serde_json::from_slice(&plaintext).unwrap();
+    assert_eq!(decrypted.data, entry.data);
+    assert_eq!(decrypted.metadata.version, 1);
+    assert_eq!(decrypted.metadata.created, decrypted.metadata.updated);
 }
 
 #[test]

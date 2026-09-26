@@ -18,7 +18,7 @@ struct Case {
 fn export_matches_production_go_bytes_and_attachment_notices() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/sync/export.json")).unwrap();
-    assert_eq!(fixture.cases.len(), 5);
+    assert_eq!(fixture.cases.len(), 7);
     for case in fixture.cases {
         let mapping = case.mapping.unwrap_or_default();
         let (mut json, mut csv, mut notices) = (Vec::new(), Vec::new(), Vec::new());

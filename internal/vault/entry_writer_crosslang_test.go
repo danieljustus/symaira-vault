@@ -68,7 +68,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 	}
 
 	for _, pseudonymize := range []bool{false, true} {
-		for _, writer := range []string{"go", "rust", "go-single", "rust-single"} {
+		for _, writer := range []string{"go", "rust", "go-single", "rust-single", "rust-new"} {
 			t.Run(fmt.Sprintf("%s_write_pseudonym_%t", writer, pseudonymize), func(t *testing.T) {
 				singleRecipient := writer == "go-single" || writer == "rust-single"
 				root := t.TempDir()
@@ -85,7 +85,16 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 					t.Fatal(err)
 				}
 				logical := "nested.name/service.v1"
-				entry := &Entry{Data: map[string]any{"label": "cross-language-publication"}}
+				entry := &Entry{
+					Data: map[string]any{"label": "cross-language-publication"},
+					Metadata: EntryMetadata{
+						Created: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
+						Version: 7,
+						WriteHistory: []WriteRecord{{
+							Field: "label", Action: "set", Timestamp: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
+						}},
+					},
+				}
 				input, _ := json.Marshal(entry)
 				if writer == "go" || writer == "go-single" {
 					write := WriteEntryWithRecipients
@@ -101,6 +110,8 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 					action, caseID := "write", "rust_write_entry_with_recipients"
 					if singleRecipient {
 						action, caseID = "write-single", "rust_write_entry_single_recipient"
+					} else if writer == "rust-new" {
+						action, caseID = "write-new", "rust_write_new_entry"
 					}
 					mustCall(t, root, identity, action, logical, entry, &response)
 					if response["case_id"] != caseID {
@@ -140,8 +151,11 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 				if err := json.Unmarshal(plaintext, &decrypted); err != nil {
 					t.Fatal(err)
 				}
-				if !reflect.DeepEqual(decrypted.Data, entry.Data) || decrypted.Metadata.Version != 1 {
+				if !reflect.DeepEqual(decrypted.Data, entry.Data) || decrypted.Metadata.Version != entry.Metadata.Version+1 {
 					t.Fatal("stored payload or version differs")
+				}
+				if writer == "rust-new" && (!decrypted.Metadata.Created.Equal(entry.Metadata.Created) || decrypted.Metadata.Updated.IsZero() || !reflect.DeepEqual(decrypted.Metadata.WriteHistory, entry.Metadata.WriteHistory)) {
+					t.Fatal("new-entry writer did not preserve Go metadata exactly once")
 				}
 				wantClassification := int32(0)
 				if singleRecipient {
@@ -201,11 +215,61 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 				if !reflect.DeepEqual(goVerify.Unknown, wantUnknown) || !reflect.DeepEqual(rustVerify.Unknown, wantUnknown) {
 					t.Fatalf("unregistered raw candidate missing from integrity report: go=%#v rust=%#v", goVerify.Unknown, rustVerify.Unknown)
 				}
+
+				if !singleRecipient && writer != "rust-new" {
+					// Replacement uses the same production Go route as first write.
+					// Run it over an existing ciphertext to pin versioning, configured
+					// recipients, manifest refresh, and atomic target replacement.
+					updated := *goRead
+					updated.Data = make(map[string]any, len(goRead.Data))
+					for key, value := range goRead.Data {
+						updated.Data[key] = value
+					}
+					updated.Data["label"] = "replacement-publication"
+					if writer == "go" {
+						if err := WriteEntryWithRecipients(root, logical, &updated, identity); err != nil {
+							t.Fatalf("Go replacement: %v", err)
+						}
+						FlushManifestUpdates()
+					} else {
+						var response map[string]string
+						mustCall(t, root, identity, "write", logical, &updated, &response)
+					}
+					replaced, err := ReadEntry(root, logical, identity)
+					if err != nil {
+						t.Fatalf("read replaced entry: %v", err)
+					}
+					if replaced.Data["label"] != "replacement-publication" || replaced.Metadata.Version != updated.Metadata.Version+1 {
+						t.Fatalf("replacement payload/metadata = %#v", replaced)
+					}
+					var rustReplaced Entry
+					mustCall(t, root, identity, "read", logical, &Entry{}, &rustReplaced)
+					if !reflect.DeepEqual(replaced, &rustReplaced) {
+						t.Fatal("Go and Rust readers differ after replacement")
+					}
+					ciphertext, err = os.ReadFile(storage)
+					if err != nil {
+						t.Fatalf("read replacement ciphertext: %v", err)
+					}
+					plaintext, err = vaultcrypto.Decrypt(ciphertext, other)
+					if err != nil {
+						t.Fatalf("configured recipient cannot decrypt replacement: %v", err)
+					}
+					vaultcrypto.Wipe(plaintext)
+					FlushManifestUpdates()
+					goManifest, err = LoadManifest(root, other)
+					if err != nil {
+						t.Fatalf("load replacement manifest: %v", err)
+					}
+					if got := goManifest.Entries[logical]; got.SHA256 != fmt.Sprintf("%x", sha256.Sum256(ciphertext)) || got.Size != int64(len(ciphertext)) {
+						t.Fatal("manifest does not describe replacement ciphertext")
+					}
+				}
 			})
 		}
 	}
 
-	for _, writer := range []string{"go", "rust"} {
+	for _, writer := range []string{"go", "rust", "rust-new"} {
 		t.Run(writer+"_invalid_recipient_unchanged", func(t *testing.T) {
 			root := t.TempDir()
 			identity := testutil.TempIdentity(t)
@@ -214,7 +278,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 			if err := Init(root, identity, cfg); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(root, "recipients.txt"), []byte("invalid-recipient\n"), 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(root, "recipients.txt"), nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
 			snapshot := func() map[string]string {
@@ -246,17 +310,60 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 				}
 				return files
 			}
-			before := snapshot()
-			entry := &Entry{Data: map[string]any{"label": "negative"}}
+			entry := &Entry{Data: map[string]any{"label": "original"}}
+			const replacePath = "existing/nested.entry"
 			if writer == "go" {
-				if err := WriteEntryWithRecipients(root, "new/deep/entry.v1", entry, identity); err == nil {
+				if err := WriteEntryWithRecipients(root, replacePath, entry, identity); err != nil {
+					t.Fatalf("seed Go replacement target: %v", err)
+				}
+				FlushManifestUpdates()
+			} else {
+				action := "write"
+				if writer == "rust-new" {
+					action = "write-new"
+				}
+				var response map[string]string
+				mustCall(t, root, identity, action, replacePath, entry, &response)
+			}
+			if err := os.WriteFile(filepath.Join(root, "recipients.txt"), []byte("invalid-recipient\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			before := snapshot()
+			invalidEntry := &Entry{Data: map[string]any{"label": "negative"}}
+			if writer == "go" {
+				if err := WriteEntryWithRecipients(root, "new/deep/entry.v1", invalidEntry, identity); err == nil {
 					t.Fatal("Go accepted invalid recipient")
 				}
-			} else if _, err := call(t, root, identity, "write", "new/deep/entry.v1", entry); err == nil {
-				t.Fatal("Rust accepted invalid recipient")
+			} else {
+				action := "write"
+				if writer == "rust-new" {
+					action = "write-new"
+				}
+				if _, err := call(t, root, identity, action, "new/deep/entry.v1", invalidEntry); err == nil {
+					t.Fatal("Rust accepted invalid recipient")
+				}
 			}
 			if !reflect.DeepEqual(before, snapshot()) {
-				t.Fatal("invalid recipient changed filesystem")
+				t.Fatal("invalid recipient changed filesystem after rejected new write")
+			}
+
+			replacement := &Entry{Data: map[string]any{"label": "replacement"}}
+			if writer == "go" {
+				if err := WriteEntryWithRecipients(root, replacePath, replacement, identity); err == nil {
+					t.Fatal("Go accepted invalid recipient while replacing an entry")
+				}
+			} else {
+				if _, err := call(t, root, identity, "write", replacePath, replacement); err == nil {
+					t.Fatal("Rust accepted invalid recipient while replacing an entry")
+				}
+			}
+			if !reflect.DeepEqual(before, snapshot()) {
+				t.Fatal("invalid recipient changed existing entry or filesystem")
+			}
+			stored, err := ReadEntry(root, replacePath, identity)
+			if err != nil || stored.Data["label"] != "original" {
+				t.Fatalf("rejected replacement damaged old entry: entry=%#v error=%v", stored, err)
 			}
 		})
 	}

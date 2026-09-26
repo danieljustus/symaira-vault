@@ -142,7 +142,7 @@ fn entry_and_manifest_mutations_retain_opened_root_after_path_replacement() {
             reopened.get("new.nested/fresh.v2", &identity).unwrap().data,
             entry.data
         );
-        assert_eq!(reopened.verify_manifest(&identity).unwrap().ok, 1);
+        assert_eq!(reopened.verify_manifest(&identity).unwrap().ok, 2);
         assert_eq!(
             fs::read(outside.join("sentinel")).unwrap(),
             b"must not change"

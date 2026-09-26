@@ -31,7 +31,12 @@ impl Drop for TempFixture {
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
-    Command::new(binary)
+    run_from(binary, args, root, home, None)
+}
+
+fn run_from(binary: &Path, args: &[&str], root: &Path, home: &Path, cwd: Option<&Path>) -> Output {
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
@@ -40,9 +45,11 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_VAULT", root)
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
-        .env("CI", "1")
-        .output()
-        .expect("run CLI")
+        .env("CI", "1");
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    command.output().expect("run CLI")
 }
 
 // Compare search results against a freshly built Go index. The pinned Go
@@ -520,6 +527,28 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(
         first_json_output(&rust_generate, "Rust generate store"),
         first_json_output(&go_generate, "Go generate store")
+    );
+
+    let relative_vault = rust_root.file_name().unwrap().to_str().unwrap();
+    let args = [
+        "--vault",
+        relative_vault,
+        "generate",
+        "--length",
+        "16",
+        "--store",
+        "relative.password",
+        "--output",
+        "json",
+    ];
+    let cwd = rust_root.parent();
+    let go = run_from(&go_binary, &args, &rust_root, &home, cwd);
+    let rust = run_from(&rust_binary, &args, &rust_root, &home, cwd);
+    assert_success(&go, "Go generate through relative vault");
+    assert_success(&rust, "Rust generate through relative vault");
+    assert_eq!(
+        first_json_output(&rust, "Rust generate through relative vault"),
+        first_json_output(&go, "Go generate through relative vault")
     );
 
     let go_json = run(
@@ -1784,11 +1813,24 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     );
     assert_success(&add, "Go file add for file use");
 
+    let (shell, shell_arg) = if cfg!(windows) {
+        ("powershell.exe", "-Command")
+    } else {
+        ("sh", "-c")
+    };
     let script = |marker: &Path| {
-        format!(
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {} ; cat \"$SYMVAULT_FILE_CERT_P12\"",
-            marker.display()
-        )
+        if cfg!(windows) {
+            // Avoid cmd.exe /C quoting of generated paths in composite commands.
+            let marker = marker.display().to_string().replace('\'', "''");
+            format!(
+                "$f=$env:SYMVAULT_FILE_CERT_P12; if (!(Test-Path -LiteralPath $f)) {{ exit 1 }}; [IO.File]::WriteAllText('{marker}', $f); $b=$null; for ($i=0; $i -lt 40 -and $null -eq $b; $i++) {{ try {{ $b=[IO.File]::ReadAllBytes($f) }} catch {{ Start-Sleep -Milliseconds 50 }} }}; if ($null -eq $b) {{ throw 'attachment stayed locked' }}; [Console]::OpenStandardOutput().Write($b, 0, $b.Length)"
+            )
+        } else {
+            format!(
+                "test -f \"$SYMVAULT_FILE_CERT_P12\"; printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {} ; cat \"$SYMVAULT_FILE_CERT_P12\"",
+                marker.display()
+            )
+        }
     };
     let go_use = run(
         &go_binary,
@@ -1799,8 +1841,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
+            shell,
+            shell_arg,
             &script(&marker_go),
         ],
         &root,
@@ -1815,8 +1857,8 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
+            shell,
+            shell_arg,
             &script(&marker_rust),
         ],
         &root,
@@ -1829,9 +1871,16 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!String::from_utf8_lossy(&rust_use.stderr).contains("file-use-secret"));
     let go_materialized = fs::read_to_string(&marker_go).expect("Go marker");
     let rust_materialized = fs::read_to_string(&marker_rust).expect("Rust marker");
+    let go_materialized = go_materialized.trim();
+    let rust_materialized = rust_materialized.trim();
     assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
     assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
 
+    let failure_script = if cfg!(windows) {
+        "if (!(Test-Path -LiteralPath $env:SYMVAULT_FILE_CERT_P12)) { exit 1 }; exit 7"
+    } else {
+        "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7"
+    };
     let go_failure = run(
         &go_binary,
         &[
@@ -1841,9 +1890,9 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+            shell,
+            shell_arg,
+            failure_script,
         ],
         &root,
         &home,
@@ -1857,15 +1906,20 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
             "use",
             "work/file-use#cert_p12",
             "--",
-            "sh",
-            "-c",
-            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+            shell,
+            shell_arg,
+            failure_script,
         ],
         &root,
         &home,
     );
     assert!(!go_failure.status.success());
     assert!(!rust_failure.status.success());
+
+    // The remaining process-tree and link checks below exercise Unix shell tools.
+    if cfg!(windows) {
+        return;
+    }
 
     let timeout_script = |marker: &Path| {
         format!(

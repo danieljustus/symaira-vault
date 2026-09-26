@@ -117,7 +117,29 @@ fn decrypt_pass_file(gpg: &Path, path: &Path) -> Result<String, ImportError> {
             path.display()
         )));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(from_utf8_go_string(&output.stdout))
+}
+
+fn from_utf8_go_string(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len());
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(valid) => {
+                output.push_str(valid);
+                break;
+            }
+            Err(error) => {
+                let valid_len = error.valid_up_to();
+                output.push_str(std::str::from_utf8(&remaining[..valid_len]).unwrap());
+                output.push('\u{fffd}');
+                // Go's range over a string consumes one byte for each invalid
+                // UTF-8 encoding, including every byte of a truncated prefix.
+                remaining = &remaining[valid_len + 1..];
+            }
+        }
+    }
+    output
 }
 
 fn prepare_gpg_command(command: &mut Command) {

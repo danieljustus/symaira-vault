@@ -9,10 +9,9 @@ pub use totp::parse_totp;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use thiserror::Error;
-
-const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum ImportError {
@@ -22,6 +21,8 @@ pub enum ImportError {
     Limit(usize),
     #[error("import parse failed: {0}")]
     Parse(String),
+    #[error("distinct CSV paths collapse to the same UTF-8 path: {0}")]
+    PathCollision(String),
     #[error("import I/O failed: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -66,9 +67,6 @@ pub fn apply_prefix(prefix: &str, path: &str) -> String {
 }
 
 pub fn parse(format: Format, bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    if bytes.len() > MAX_IMPORT_BYTES {
-        return Err(ImportError::Limit(MAX_IMPORT_BYTES));
-    }
     match format {
         Format::Cxf => parse_cxf(bytes),
         Format::Csv | Format::Apple | Format::Chrome | Format::Firefox => {
@@ -149,6 +147,7 @@ pub fn parse_csv_profile(
     }
     let mut result = Vec::new();
     let mut used = std::collections::BTreeSet::new();
+    let mut emitted_paths = BTreeMap::<String, Vec<u8>>::new();
     let mut row = csv::ByteRecord::new();
     while reader
         .read_byte_record(&mut row)
@@ -201,11 +200,12 @@ pub fn parse_csv_profile(
             path = normalize_path(&host_from_url(url).to_lowercase());
             path_key = Some(normalize_path_key(path.as_bytes()));
         }
+        let raw_path_key = path_key
+            .clone()
+            .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
         if format != Format::Csv && !path.is_empty() {
             let base = path.clone();
-            let base_key = path_key
-                .take()
-                .unwrap_or_else(|| normalize_path_key(path.as_bytes()));
+            let base_key = raw_path_key.clone();
             let mut candidate_key = base_key.clone();
             let mut suffix = 2;
             while used.contains(&candidate_key) {
@@ -214,6 +214,15 @@ pub fn parse_csv_profile(
                 suffix += 1;
             }
             used.insert(candidate_key);
+        }
+        if !path.is_empty() {
+            if let Some(previous_key) = emitted_paths.get(&path) {
+                if previous_key != &raw_path_key {
+                    return Err(ImportError::PathCollision(path));
+                }
+            } else {
+                emitted_paths.insert(path.clone(), raw_path_key);
+            }
         }
         result.push(ImportedEntry {
             path,
@@ -415,75 +424,204 @@ fn host_from_url(raw: &str) -> &str {
     raw.split(':').next().unwrap_or("")
 }
 
-#[derive(Default, Deserialize)]
-struct Bw {
-    #[serde(default, deserialize_with = "null_default")]
-    folders: Vec<BwFolder>,
-    #[serde(default, deserialize_with = "null_default")]
-    items: Vec<BwItem>,
+// encoding/json matches tagged struct fields exactly first, then by Unicode
+// simple fold. Bitwarden's wire tags are ASCII and have no folded-name
+// collisions; these are the only non-ASCII runes that simple-fold to ASCII.
+fn bitwarden_field_matches(key: &str, tag: &str) -> bool {
+    let mut key_chars = key.chars();
+    tag.bytes().all(|tag_byte| {
+        let Some(key_char) = key_chars.next() else {
+            return false;
+        };
+        let folded = match key_char {
+            'ſ' => b's',
+            'K' => b'k',
+            c if c.is_ascii_alphabetic() => c.to_ascii_lowercase() as u8,
+            _ => return false,
+        };
+        folded == tag_byte.to_ascii_lowercase()
+    }) && key_chars.next().is_none()
 }
-#[derive(Default, Deserialize)]
-struct BwFolder {
-    #[serde(default, deserialize_with = "null_default")]
-    id: String,
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
+
+trait BitwardenMerge: Default {
+    fn merge<'de, D>(&mut self, deserializer: D) -> Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>;
 }
-#[derive(Default, Deserialize)]
-struct BwItem {
-    #[serde(rename = "type", default, deserialize_with = "null_default")]
-    kind: i64,
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
-    #[serde(rename = "folderId", default, deserialize_with = "null_default")]
-    folder_id: String,
-    #[serde(default, deserialize_with = "null_default")]
-    notes: String,
-    #[serde(default, deserialize_with = "null_default")]
-    login: BwLogin,
-    #[serde(default, deserialize_with = "null_default")]
-    card: BwCard,
-    #[serde(default, deserialize_with = "null_default")]
-    fields: Vec<BwField>,
+
+struct BitwardenMergeSeed<'a, T>(&'a mut T);
+impl<'de, T: BitwardenMerge> serde::de::DeserializeSeed<'de> for BitwardenMergeSeed<'_, T> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct OptionVisitor<'a, T>(&'a mut T);
+        impl<'de, T: BitwardenMerge> serde::de::Visitor<'de> for OptionVisitor<'_, T> {
+            type Value = ();
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("null or a Bitwarden object")
+            }
+
+            fn visit_none<E>(self) -> Result<(), E> {
+                Ok(())
+            }
+
+            fn visit_unit<E>(self) -> Result<(), E> {
+                Ok(())
+            }
+
+            fn visit_some<D>(self, deserializer: D) -> Result<(), D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                self.0.merge(deserializer)
+            }
+        }
+        deserializer.deserialize_option(OptionVisitor(self.0))
+    }
 }
-#[derive(Default, Deserialize)]
-struct BwLogin {
-    #[serde(default, deserialize_with = "null_default")]
-    username: String,
-    #[serde(default, deserialize_with = "null_default")]
-    password: String,
-    #[serde(default, deserialize_with = "null_default")]
-    totp: String,
-    #[serde(default, deserialize_with = "null_default")]
-    uris: Vec<BwUri>,
+
+struct BitwardenScalarSeed<'a, T>(&'a mut T);
+impl<'de, T: Deserialize<'de>> serde::de::DeserializeSeed<'de> for BitwardenScalarSeed<'_, T> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        if let Some(value) = Option::<T>::deserialize(deserializer)? {
+            *self.0 = value;
+        }
+        Ok(())
+    }
 }
-#[derive(Default, Deserialize)]
-struct BwUri {
-    #[serde(default, deserialize_with = "null_default")]
-    uri: String,
+
+struct BitwardenSliceSeed<'a, T>(&'a mut Vec<T>);
+impl<'de, T: Deserialize<'de>> serde::de::DeserializeSeed<'de> for BitwardenSliceSeed<'_, T> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        *self.0 = Option::<Vec<T>>::deserialize(deserializer)?.unwrap_or_default();
+        Ok(())
+    }
 }
-#[derive(Default, Deserialize)]
-struct BwCard {
-    #[serde(rename = "cardholderName", default, deserialize_with = "null_default")]
-    cardholder: String,
-    #[serde(default, deserialize_with = "null_default")]
-    number: String,
-    #[serde(rename = "expMonth", default, deserialize_with = "null_default")]
-    exp_month: String,
-    #[serde(rename = "expYear", default, deserialize_with = "null_default")]
-    exp_year: String,
-    #[serde(default, deserialize_with = "null_default")]
-    code: String,
+
+macro_rules! bitwarden_update_field {
+    ($map:ident, $value:expr, scalar) => {
+        $map.next_value_seed(BitwardenScalarSeed($value))?
+    };
+    ($map:ident, $value:expr, slice) => {
+        $map.next_value_seed(BitwardenSliceSeed($value))?
+    };
+    ($map:ident, $value:expr, merge) => {
+        $map.next_value_seed(BitwardenMergeSeed($value))?
+    };
 }
-#[derive(Default, Deserialize)]
-struct BwField {
-    #[serde(default, deserialize_with = "null_default")]
-    name: String,
-    #[serde(default, deserialize_with = "null_default")]
-    value: String,
+
+macro_rules! bitwarden_struct {
+    ($name:ident { $($field:ident: $ty:ty => $tag:literal, $mode:ident),+ $(,)? }) => {
+        #[derive(Default)]
+        struct $name { $($field: $ty),+ }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                let mut value = Self::default();
+                value.merge(deserializer)?;
+                Ok(value)
+            }
+        }
+
+        impl BitwardenMerge for $name {
+            fn merge<'de, D>(&mut self, deserializer: D) -> Result<(), D::Error>
+            where
+                D: serde::Deserializer<'de>,
+            {
+                struct ObjectVisitor<'a>(&'a mut $name);
+                impl<'de> serde::de::Visitor<'de> for ObjectVisitor<'_> {
+                    type Value = ();
+
+                    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        formatter.write_str("a Bitwarden object")
+                    }
+
+                    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+                    where
+                        M: serde::de::MapAccess<'de>,
+                    {
+                        while let Some(key) = map.next_key::<String>()? {
+                            match key.as_str() {
+                                $($tag => bitwarden_update_field!(map, &mut self.0.$field, $mode),)+
+                                _ => {
+                                    $(if bitwarden_field_matches(&key, $tag) {
+                                        bitwarden_update_field!(map, &mut self.0.$field, $mode);
+                                        continue;
+                                    })+
+                                    let _: serde::de::IgnoredAny = map.next_value()?;
+                                }
+                            }
+                        }
+                        Ok(())
+                    }
+                }
+                deserializer.deserialize_map(ObjectVisitor(self))
+            }
+        }
+    };
 }
+
+bitwarden_struct! { Bw {
+    folders: Vec<BwFolder> => "folders", slice,
+    items: Vec<BwItem> => "items", slice,
+} }
+bitwarden_struct! { BwFolder {
+    id: String => "id", scalar,
+    name: String => "name", scalar,
+} }
+bitwarden_struct! { BwItem {
+    kind: i64 => "type", scalar,
+    name: String => "name", scalar,
+    folder_id: String => "folderId", scalar,
+    notes: String => "notes", scalar,
+    login: BwLogin => "login", merge,
+    card: BwCard => "card", merge,
+    fields: Vec<BwField> => "fields", slice,
+} }
+bitwarden_struct! { BwLogin {
+    username: String => "username", scalar,
+    password: String => "password", scalar,
+    totp: String => "totp", scalar,
+    uris: Vec<BwUri> => "uris", slice,
+} }
+bitwarden_struct! { BwUri {
+    uri: String => "uri", scalar,
+} }
+bitwarden_struct! { BwCard {
+    cardholder: String => "cardholderName", scalar,
+    number: String => "number", scalar,
+    exp_month: String => "expMonth", scalar,
+    exp_year: String => "expYear", scalar,
+    code: String => "code", scalar,
+} }
+bitwarden_struct! { BwField {
+    name: String => "name", scalar,
+    value: String => "value", scalar,
+} }
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(bytes))
+    let repaired = if std::str::from_utf8(bytes).is_ok() {
+        Cow::Borrowed(bytes)
+    } else {
+        Cow::Owned(replace_invalid_utf8_in_json_strings(bytes))
+    };
+    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(repaired.as_ref()))
         .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?
         .unwrap_or_default();
     let folders: xhash::HashMap<String, String> = x
@@ -562,6 +700,62 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
         });
     }
     Ok(out)
+}
+
+fn replace_invalid_utf8_in_json_strings(bytes: &[u8]) -> Vec<u8> {
+    let mut result = Vec::with_capacity(bytes.len());
+    let (mut index, mut in_string, mut escaped) = (0, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if !in_string {
+            result.push(byte);
+            in_string = byte == b'"';
+            index += 1;
+            continue;
+        }
+        if escaped {
+            result.push(byte);
+            escaped = false;
+            index += 1;
+            continue;
+        }
+        match byte {
+            b'"' => {
+                result.push(byte);
+                in_string = false;
+                index += 1;
+            }
+            b'\\' => {
+                result.push(byte);
+                escaped = true;
+                index += 1;
+            }
+            0..=0x7f => {
+                result.push(byte);
+                index += 1;
+            }
+            _ => {
+                let width = match byte {
+                    0xc2..=0xdf => 2,
+                    0xe0..=0xef => 3,
+                    0xf0..=0xf4 => 4,
+                    _ => 0,
+                };
+                if width > 0
+                    && index + width <= bytes.len()
+                    && std::str::from_utf8(&bytes[index..index + width]).is_ok()
+                {
+                    result.extend_from_slice(&bytes[index..index + width]);
+                    index += width;
+                } else {
+                    // Go encoding/json replaces each invalid byte inside a string.
+                    result.extend_from_slice(br"\uFFFD");
+                    index += 1;
+                }
+            }
+        }
+    }
+    result
 }
 fn insert_totp(
     data: &mut BTreeMap<String, Value>,

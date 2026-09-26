@@ -1,0 +1,188 @@
+name: Rust distribution archive contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-archive:
+    name: Native archive (${{ matrix.goos }}-${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            rust_host: x86_64-unknown-linux-gnu
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            rust_host: aarch64-unknown-linux-gnu
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+            rust_host: aarch64-apple-darwin
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            rust_host: x86_64-apple-darwin
+          - runner: windows-2025
+            goos: windows
+            goarch: amd64
+            rust_host: x86_64-pc-windows-msvc
+          - runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            rust_host: aarch64-pc-windows-msvc
+    env:
+      GOTOOLCHAIN: go1.26.6
+      RUSTUP_TOOLCHAIN: 1.98.0
+      DIST_VERSION: 0.0.0
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go for the archive contract comparator
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: Install Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Verify native toolchain host
+        shell: bash
+        run: |
+          rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
+
+      - name: Build release CLI
+        shell: bash
+        run: SYMVAULT_VERSION="$DIST_VERSION" cargo +1.98.0 build --release -p symvault-cli --bin symvault --locked
+
+      - name: Generate GoReleaser manual-page sources
+        shell: bash
+        run: GOTOOLCHAIN=go1.26.6 go run . generate manpages dist/man
+
+      - name: Stage GoReleaser-named archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=target/release/symvault
+          if [[ "${{ matrix.goos }}" == windows ]]; then
+            binary+=".exe"
+          fi
+          python3 scripts/rust-port/stage-rust-archive.py \
+            --version "$DIST_VERSION" \
+            --goos "${{ matrix.goos }}" \
+            --goarch "${{ matrix.goarch }}" \
+            --binary "$binary" \
+            --output-dir dist/rust
+
+      - name: Compare staged archive with GoReleaser contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOTOOLCHAIN=go1.26.6 go run ./scripts/rust-port/cmd/distcontract \
+            --repo . \
+            --rust-dir dist/rust \
+            --version "$DIST_VERSION" \
+            --target "${{ matrix.goos }}/${{ matrix.goarch }}"
+
+      - name: Install and initialize the staged Rust archive in isolation
+        shell: bash
+        env:
+          DIST_GOOS: ${{ matrix.goos }}
+          DIST_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          archive="dist/rust/symaira-vault_${DIST_VERSION}_${DIST_GOOS}_${DIST_GOARCH}.tar.gz"
+          if [[ "$DIST_GOOS" == windows ]]; then
+            archive="dist/rust/symaira-vault_${DIST_VERSION}_${DIST_GOOS}_${DIST_GOARCH}.zip"
+          fi
+          python3 scripts/rust-port/install-smoke.py --archive "$archive" --version "$DIST_VERSION"
+
+  freebsd-archive:
+    name: Native archive (freebsd-${{ matrix.go_arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            rust_host: x86_64-unknown-freebsd
+            go_arch: amd64
+            go_sha256: 9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
+          - arch: aarch64
+            rust_host: aarch64-unknown-freebsd
+            go_arch: arm64
+            go_sha256: 577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build and check archive in native FreeBSD VM
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        with:
+          release: '15.1'
+          arch: ${{ matrix.arch }}
+          copyback: false
+          usesh: true
+          prepare: |
+            set -eu
+            pkg install -y bash ca_root_nss curl git gmake python3 rust
+            pw groupadd symvault-ci
+            pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
+            go_archive="/tmp/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            test "$(sha256 -q "$go_archive")" = '${{ matrix.go_sha256 }}'
+            tar -C /usr/local -xzf "$go_archive"
+          run: |
+            set -eu
+            workspace="$(pwd -P)"
+            test "$workspace" = "$GITHUB_WORKSPACE"
+            chown -R symvault-ci:symvault-ci "$workspace"
+            su -m symvault-ci -c '
+              set -eu
+              export HOME=/home/symvault-ci
+              export PATH="/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin"
+              export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
+              cd "$GITHUB_WORKSPACE"
+              rustc --version | grep -Eq "^rustc 1[.]98[.]"
+              rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
+              go version | grep -q "^go version go1[.]26[.]6 "
+              GOTOOLCHAIN=go1.26.6 go run . generate manpages dist/man
+              SYMVAULT_VERSION=0.0.0 cargo build --release -p symvault-cli --bin symvault --locked
+              python3 scripts/rust-port/stage-rust-archive.py \
+                --version 0.0.0 \
+                --goos freebsd \
+                --goarch "${{ matrix.go_arch }}" \
+                --binary target/release/symvault \
+                --output-dir dist/rust
+              go run ./scripts/rust-port/cmd/distcontract \
+                --repo . \
+                --rust-dir dist/rust \
+                --version 0.0.0 \
+                --target "freebsd/${{ matrix.go_arch }}"
+              python3 scripts/rust-port/install-smoke.py \
+                --archive "dist/rust/symaira-vault_0.0.0_freebsd_${{ matrix.go_arch }}.tar.gz" \
+                --version 0.0.0
+            '

@@ -88,9 +88,11 @@ impl Installer {
             port,
             bind,
             #[cfg(any(target_os = "macos", test))]
-            log_path: home.join("Logs").join(LOG_FILE),
+            log_path: crate::agent_list_commands::clean_path(&home.join("Logs").join(LOG_FILE)),
             #[cfg(any(target_os = "macos", test))]
-            err_log_path: home.join("Logs").join(ERR_LOG_FILE),
+            err_log_path: crate::agent_list_commands::clean_path(
+                &home.join("Logs").join(ERR_LOG_FILE),
+            ),
         })
     }
 
@@ -130,7 +132,9 @@ impl Installer {
     fn plist_path(&self) -> Result<PathBuf, CliError> {
         let home = home_dir()
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
-        Ok(home.join("LaunchAgents").join(PLIST_FILE))
+        Ok(crate::agent_list_commands::clean_path(
+            &home.join("LaunchAgents").join(PLIST_FILE),
+        ))
     }
 }
 
@@ -448,7 +452,9 @@ impl Installer {
     fn linux_service_file_path(&self) -> Result<PathBuf, CliError> {
         let home = home_dir()
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
-        Ok(home.join(SYSTEMD_USER_DIR).join(SYSTEMD_UNIT_NAME))
+        Ok(crate::agent_list_commands::clean_path(
+            &home.join(SYSTEMD_USER_DIR).join(SYSTEMD_UNIT_NAME),
+        ))
     }
 
     #[cfg(any(target_os = "linux", test))]

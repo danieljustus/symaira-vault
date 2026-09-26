@@ -8,6 +8,7 @@ use super::{ImportError, ImportedEntry, insert_totp};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     io::{Cursor, Read},
 };
@@ -150,7 +151,12 @@ fn parse_1pux_with_limits(
         break;
     }
     let raw = raw.ok_or_else(|| ImportError::Parse("export.json not found in 1pux zip".into()))?;
-    let mut decoder = serde_json::Deserializer::from_slice(&raw);
+    let json = if std::str::from_utf8(&raw).is_ok() {
+        Cow::Borrowed(raw.as_slice())
+    } else {
+        Cow::Owned(super::replace_invalid_utf8_in_json_strings(&raw))
+    };
+    let mut decoder = serde_json::Deserializer::from_slice(json.as_ref());
     let export = Option::<Export>::deserialize(&mut decoder)
         .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?
         .unwrap_or_default();

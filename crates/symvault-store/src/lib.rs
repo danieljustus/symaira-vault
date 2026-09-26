@@ -273,7 +273,9 @@ fn go_zero_time() -> String {
     "0001-01-01T00:00:00Z".into()
 }
 
-fn utc_now_string(path: &Path) -> Result<String, StoreError> {
+/// Formats the current UTC time using Go-compatible RFC3339Nano precision.
+/// `path` supplies the context on the rare formatting failure.
+pub fn utc_now_string(path: &Path) -> Result<String, StoreError> {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|source| StoreError::Read {
@@ -727,12 +729,12 @@ impl Store {
         Err(StoreError::EntryNotFound(path.to_owned()))
     }
 
-    /// Writes a new encrypted entry to the current `entries/` layout.
+    /// Writes a new encrypted entry to the current `entries/` layout using
+    /// Go-compatible metadata, recipient, and manifest rules.
     ///
-    /// This first write slice intentionally refuses replacement, path
-    /// pseudonymization, and implicit directory creation. Those operations
-    /// remain separate STORE-003 work so this method cannot silently claim
-    /// parity for unimplemented atomic-update semantics.
+    /// This first-write slice intentionally refuses replacement. Parent
+    /// creation and publication stay rooted to the opened vault, so this
+    /// method does not claim parity for atomic-update semantics.
     pub fn write_new_entry(
         &self,
         path: &str,
@@ -761,10 +763,13 @@ impl Store {
                 ENTRY_EXTENSION
             ))
         };
-        let mut stored = entry.clone();
-        if self.config.pseudonymize_paths {
-            stored.path = path.to_owned();
-        }
+        let now = utc_now_string(&self.root)?;
+        let stored =
+            metadata::prepare_entry(entry, &now, path, self.config.pseudonymize_paths, None)
+                .map_err(|detail| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail,
+                })?;
         let plaintext =
             Zeroizing::new(
                 serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
@@ -800,7 +805,12 @@ impl Store {
                 "entry replacement is not part of the new-entry slice".into(),
             ));
         }
-        atomic_create(&target, &ciphertext, &parent_cap)
+        atomic_create(&target, &ciphertext, &parent_cap)?;
+        // Match Go's high-level writer: publish the entry first, then make a
+        // best-effort manifest update without turning bookkeeping failure into
+        // a failed primary write.
+        let _ = self.update_manifest_entry(path, &ciphertext, identity);
+        Ok(())
     }
 
     /// Returns only the metadata portion of an entry after decryption.
@@ -1115,10 +1125,22 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let entries_root = root.join(ENTRIES_DIR);
     if entries_root.is_dir() {
         for item in WalkDir::new(&entries_root).follow_links(false) {
-            let item = item.map_err(|error| StoreError::Read {
-                path: entries_root.clone(),
-                source: io::Error::other(error.to_string()),
-            })?;
+            let item = match item {
+                Ok(item) => item,
+                Err(error)
+                    if error
+                        .io_error()
+                        .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
+                {
+                    continue;
+                }
+                Err(error) => {
+                    return Err(StoreError::Read {
+                        path: entries_root.clone(),
+                        source: io::Error::other(error.to_string()),
+                    });
+                }
+            };
             if item.file_type().is_symlink() {
                 return Err(StoreError::Symlink(item.path().to_path_buf()));
             }
@@ -1147,10 +1169,22 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
         }
     }
     for item in WalkDir::new(root).max_depth(64).follow_links(false) {
-        let item = item.map_err(|error| StoreError::Read {
-            path: root.to_path_buf(),
-            source: io::Error::other(error.to_string()),
-        })?;
+        let item = match item {
+            Ok(item) => item,
+            Err(error)
+                if error
+                    .io_error()
+                    .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
+            {
+                continue;
+            }
+            Err(error) => {
+                return Err(StoreError::Read {
+                    path: root.to_path_buf(),
+                    source: io::Error::other(error.to_string()),
+                });
+            }
+        };
         if item.path() == root || item.path().starts_with(&entries_root) {
             continue;
         }
@@ -1991,7 +2025,7 @@ impl Store {
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
         let target = self.configured_entry_path(path, identity)?;
         let parent_cap = self.entry_parent_cap(&target)?;
-        publication::replace(&target, &encrypted, &parent_cap)?;
+        publication::replace_entry(&target, &encrypted, &parent_cap)?;
         // Go publishes the primary entry first and intentionally discards
         // queued manifest failures from this high-level mutation.
         let _ = self.update_manifest_entry(path, &encrypted, identity);

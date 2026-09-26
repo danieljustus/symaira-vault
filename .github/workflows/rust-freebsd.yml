@@ -1,0 +1,75 @@
+name: Rust native FreeBSD
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-freebsd:
+    name: Rust native (FreeBSD ${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            rust_host: x86_64-unknown-freebsd
+            go_arch: amd64
+            go_sha256: 9c805b762d9cd33c04c0dd414c1f4e86065a6ddce06e97e194e9bc806b120fc7
+          - arch: aarch64
+            rust_host: aarch64-unknown-freebsd
+            go_arch: arm64
+            go_sha256: 577a874da5171c0a31ceafe10d75faddcf6a17baad99c2c471062bde2c9ec49b
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Test in FreeBSD 15.1 ${{ matrix.arch }} VM
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        with:
+          release: '15.1'
+          arch: ${{ matrix.arch }}
+          copyback: false
+          usesh: true
+          prepare: |
+            set -eu
+            pkg install -y bash curl ca_root_nss git gmake rust
+            pw groupadd symvault-ci
+            pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
+            # SHA-256 values are from https://go.dev/dl/ for Go 1.26.6.
+            go_archive="/tmp/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            /usr/local/bin/curl --proto '=https' --proto-redir '=https' --tlsv1.2 -sSfL -o "$go_archive" "https://go.dev/dl/go1.26.6.freebsd-${{ matrix.go_arch }}.tar.gz"
+            test "$(sha256 -q "$go_archive")" = '${{ matrix.go_sha256 }}'
+            tar -C /usr/local -xzf "$go_archive"
+          run: |
+            set -eu
+            workspace="$(pwd -P)"
+            test "$workspace" = "$GITHUB_WORKSPACE"
+            chown -R symvault-ci:symvault-ci "$workspace"
+            su -m symvault-ci -c '
+              set -eu
+              export HOME=/home/symvault-ci
+              export PATH="/usr/local/bin:/usr/local/go/bin:/usr/bin:/bin"
+              export CARGO_BUILD_JOBS=2 GOMAXPROCS=2
+              cd "$GITHUB_WORKSPACE"
+              rustc --version | grep -Eq "^rustc 1[.]98[.]"
+              rustc -vV | grep -Fx "host: ${{ matrix.rust_host }}"
+              go version | grep -q "^go version go1[.]26[.]6 "
+              gmake port-contract
+              gmake pairing-fixtures-check store-differential audit-fixtures-check
+              go test ./internal/vault -run "^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$" -count=1 -timeout=20m
+              mkdir -p target/audit
+              cargo run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
+              test -s target/audit/rust-output.jsonl
+              go run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+              cargo test --workspace --all-features --locked
+              cargo build -p symvault-cli --bin symvault --locked
+              target/debug/symvault version
+            '

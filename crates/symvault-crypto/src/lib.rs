@@ -646,7 +646,10 @@ fn derive_index_key(identity: &Identity, salt: &[u8]) -> Vec<u8> {
     key
 }
 
-fn encrypt_with_key(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
+/// Encrypts bytes with a raw 32-byte ChaCha20-Poly1305 key, prefixing the
+/// random 12-byte nonce to the ciphertext. This matches Go's
+/// `internal/crypto.EncryptWithKey` wire format.
+pub fn encrypt_with_key(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
     if plaintext.is_empty() || key.len() != KEY_BYTES {
         return Err(CryptoError::new(
             FailureClass::InvalidInput,
@@ -667,7 +670,8 @@ fn encrypt_with_key(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError
     Ok(result)
 }
 
-fn decrypt_with_key(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
+/// Decrypts bytes produced by [`encrypt_with_key`].
+pub fn decrypt_with_key(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
     if ciphertext.len() < 12 || key.len() != KEY_BYTES {
         return Err(CryptoError::new(
             FailureClass::MalformedEnvelope,

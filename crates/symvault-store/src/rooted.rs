@@ -145,19 +145,25 @@ fn walk_directory(
         let relative = prefix.join(&name);
         let entry_display = display.join(&relative);
         use rustix::fs::{AtFlags, FileType, statat};
-        let metadata = statat(directory, &name, AtFlags::SYMLINK_NOFOLLOW).map_err(|source| {
-            StoreError::Read {
-                path: entry_display.clone(),
-                source: source.into(),
+        let metadata = match statat(directory, &name, AtFlags::SYMLINK_NOFOLLOW) {
+            Ok(metadata) => metadata,
+            // A concurrent atomic writer can remove its temporary name after
+            // readdir but before stat. It was never part of this snapshot.
+            Err(rustix::io::Errno::NOENT) => continue,
+            Err(source) => {
+                return Err(StoreError::Read {
+                    path: entry_display.clone(),
+                    source: source.into(),
+                });
             }
-        })?;
+        };
         match FileType::from_raw_mode(metadata.st_mode) {
             FileType::Directory => {
-                entries.push(RootedEntry {
-                    relative: relative.clone(),
-                    regular: false,
-                });
                 if max_depth.is_some_and(|limit| depth + 1 >= limit) {
+                    entries.push(RootedEntry {
+                        relative,
+                        regular: false,
+                    });
                     continue;
                 }
                 let child = rustix::fs::openat(
@@ -167,11 +173,21 @@ fn walk_directory(
                         | rustix::fs::OFlags::DIRECTORY
                         | rustix::fs::OFlags::NOFOLLOW,
                     rustix::fs::Mode::empty(),
-                )
-                .map_err(|source| StoreError::Read {
-                    path: entry_display,
-                    source: source.into(),
-                })?;
+                );
+                let child = match child {
+                    Ok(child) => child,
+                    Err(rustix::io::Errno::NOENT) => continue,
+                    Err(source) => {
+                        return Err(StoreError::Read {
+                            path: entry_display,
+                            source: source.into(),
+                        });
+                    }
+                };
+                entries.push(RootedEntry {
+                    relative: relative.clone(),
+                    regular: false,
+                });
                 walk_directory(
                     &fs::File::from(child),
                     &relative,

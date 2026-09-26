@@ -217,7 +217,7 @@ func TestFlagNamesReadsOnlyTheOptionSection(t *testing.T) {
 }
 
 func TestSubcommandsSkipsGeneratedHelpers(t *testing.T) {
-	help := "Commands:\n  get   Read an entry\n  help  Print this message\n  completion  Generate a shell completion\n\nOptions:\n  -h, --help\n"
+	help := "Commands:\n  get   Read an entry\n  help  Print this message\n  completion  Generate a shell completion\n\nArguments:\n  [DIRECTORY]  Directory to scan\n\nOptions:\n  -h, --help\n"
 	got := subcommands(help)
 	if len(got) != 1 || got[0] != "get" {
 		t.Errorf("subcommands = %v, want only get", got)

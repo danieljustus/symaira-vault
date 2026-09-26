@@ -36,9 +36,9 @@ func identityMetadataCases() []sessionCase {
 		}
 		backend.values[key] = string(data)
 	}
-	old, err := json.Marshal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		panic(err)
+	old, marshalErr := json.Marshal(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if marshalErr != nil {
+		panic(marshalErr)
 	}
 	for _, key := range []string{sessionKey, identityKey} {
 		value := decode(key)
@@ -46,6 +46,13 @@ func identityMetadataCases() []sessionCase {
 		value["ttl_ns"] = json.RawMessage("9223372036854775807")
 		store(key, value)
 	}
+	if value, err := manager.PeekIdentity(vault); err != nil || value != "fixture-identity" {
+		panic(fmt.Errorf("identity peek returned %q: %w", value, err))
+	}
+	if string(decode(sessionKey)["last_access"]) != string(old) || string(decode(identityKey)["last_access"]) != string(old) {
+		panic("identity peek refreshed a cache record")
+	}
+	peek := sessionCase{Name: "identity_peek_does_not_refresh", Operations: []string{"save_passphrase", "save_identity", "age_both_last_access", "peek_identity"}, Expected: "both_unchanged"}
 	if value, err := manager.LoadIdentity(vault); err != nil {
 		panic(fmt.Errorf("identity refresh: %w", err))
 	} else if value != "fixture-identity" {
@@ -63,5 +70,27 @@ func identityMetadataCases() []sessionCase {
 		panic("identity expiry ignored expired shared session")
 	}
 	expiry := sessionCase{Name: "identity_expiry_uses_shared_session", Operations: []string{"expire_session_only", "is_identity_expired"}, Expected: "expired"}
-	return []sessionCase{refresh, expiry}
+	clearBackend := &fakeKeyring{values: map[string]string{}}
+	clearManager := session.NewManager(clearBackend, nil)
+	if err := clearManager.SavePassphrase(vault, []byte("fixture-secret"), time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.SaveIdentity(vault, "fixture-identity", time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearIdentity(vault); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearIdentity(vault); err != nil {
+		panic(err)
+	}
+	if _, present := clearBackend.values[identityKey]; present {
+		panic("Go clear identity retained identity account")
+	}
+	passphrase, err := clearManager.LoadPassphrase(vault)
+	if err != nil || string(passphrase) != "fixture-secret" || len(clearBackend.values) != 2 {
+		panic(fmt.Sprintf("Go clear identity removed shared session: %q %v", passphrase, err))
+	}
+	clear := sessionCase{Name: "clear_identity_preserves_session", Operations: []string{"save_passphrase", "save_identity", "clear_identity", "clear_identity", "load_passphrase"}, Expected: "session_preserved"}
+	return []sessionCase{peek, refresh, expiry, clear}
 }

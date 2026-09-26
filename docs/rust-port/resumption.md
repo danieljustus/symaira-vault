@@ -1,5 +1,129 @@
 # Rust migration handover — 2026-09-09
 
+## Aktueller Migrationsstand 2026-09-23 — aktives Ziel, kein Cutover
+
+- **Integrationszweig:** `codex/rust-migration-integration`, Draft-PR #1137.
+  Der lokale Stand enthält 27 quellgebundene HTTP-Fälle, typisierte
+  `get`-Exitcodes, `intake watch disable` und `--once`, aktualisierte
+  FFI-Provenienz sowie den FreeBSD-`O_NOFOLLOW`-Fix. `intake watch --once`
+  speichert stabile Dateien nun in verschlüsselter Quarantäne. Go bleibt
+  Produktionspfad. Release, Cutover,
+  Go-Abbau und destruktives Aufräumen sind nicht autorisiert.
+- **Ausführbare lokale Evidenz:** HTTP-Go-Fixture-Prüfung, 18 Rust-HTTP-Unit-
+  und drei Replay-Tests, FFI-KDF-Fixture und fünf Safe-I/O-Tests bestanden.
+  `make config-cli-differential` bestand vollständig mit dem gepinnten
+  Go-Oracle, einschließlich 75 Go-Fixture-Fällen, CLI-Differential und
+  ignoriertem KDF-Migrationsfall. Fokussierte `intake watch --once`- und
+  Rollback-Differentialtests bestanden ebenfalls. Für `list` und `get` sind
+  Text/JSON/YAML-Differentiale sowie ganze `get`-Einträge in JSON/YAML grün;
+  ein stabiler Intake-Kandidat wurde
+  verschlüsselt geschrieben und von Go und Rust gelesen, ohne die Quelldatei
+  zu verändern. Ein fokussierter Rust-Test prüft vorhandene Quarantäne-Pfade
+  und die Feldgrenze bei 4096 Byte. Wiederholte Scans deduplizieren denselben
+  Kandidaten; zu große Dateien werden mit Go-gleichem Grund übersprungen.
+  Der HTTP-Listener wiederverwendet eine authentifizierte Verbindung für
+  sequenzielle Anfragen bis zur Grenze von 16 Requests; das lokale Go/Rust-
+  Keep-Alive-Replay besteht. Rusts 10-Sekunden-Socket-Timeout bleibt kürzer
+  als Go's 120-Sekunden-Idle-Timeout.
+  Nach einem erzwungenen Neubau des gemeinsam genutzten Cargo-Targets bestand
+  `make config-cli-differential` vollständig, einschließlich der neuen
+  `get`-Ausgabe- und Intake-Fälle sowie des ignorierten KDF-Migrationsfalls.
+  Ein zusätzlicher Go-generierter Exportfall belegt doppelte CSV-Spaltennamen
+  bei kollidierenden Feld-Mappings; der Rust-Export-Replay besteht lokal.
+  `intake watch` verarbeitet nun fortlaufend Poll-Intervalle. Ein Prozess-
+  Differential legt nach dem Start eine Datei an, vergleicht Persistenz und
+  unveränderte Quelle und beendet Go und Rust per SIGTERM mit Exit 0 und
+  leerem Spool. Der Test ist Unix-only; Windows-Stop und die macOS-Mitteilung
+  im Nicht-JSON-Modus sind offen.
+  `get`/`list`-Hilfe und Zusatzargument-Fehler wurden lokal bytegenau gegen
+  Go verglichen. Der integrierte Cherry-pick ist formatiert; wegen knappem
+  externen Build-Speicher wartet seine exakte Runtime-Evidenz auf CI.
+  HTTP/1.0-Initialisierung wurde entlang des vorhandenen Go-Fixtures ergänzt;
+  der neue Rust-Replay ist vor dem CI-Lauf noch nicht ausgeführt. HTTP/1.0-
+  Fehlerantworten und `Connection: keep-alive` bleiben offen.
+  `ui --print-keybindings` und der `intake`-Elternbefehl mit Dry-run,
+  Datei-/Byte-Limit und OCR-Text sind als Quelländerungen integriert. Ihre
+  gepinnten Go-Differentiale laufen im nächsten nativen CLI-Gate; am neuen
+  Head liegen noch keine Runtime-Ergebnisse vor. `--move-to-trash` bleibt
+  auf macOS offen und wird dort von Rust nicht ausgeführt.
+  Der versteckte, veraltete Befehl `agent setup` und `dynamic generate`
+  haben nun Quellimplementierungen und gepinnte Go-Differentiale. Go hat
+  im aktuellen CLI-Manager keine dynamischen Engines registriert; der
+  geprüfte Fehlerpfad ruft keinen externen Provider. Beide neuen Tests
+  warten auf einen nativen Lauf am integrierten Head.
+  Der nicht-interaktive `setup`-Fehlerpfad hat ebenfalls einen Go-Vergleich;
+  der interaktive Wizard bleibt unimplementiert. Der FreeBSD-Lauf erreichte
+  `audit_rotate_key_cli_flow` und fand eine fehlende Passphrase in dessen
+  isoliertem Testprozess. Der Test setzt sie nun explizit; die erneute
+  FreeBSD-Ausführung steht aus.
+  Gepinnte Go-Hilfeseiten für `dynamic`, `dynamic generate` und `setup`
+  wurden bytegleich erfasst; der Rust-Lauf ist im nächsten CLI-Gate vorgesehen.
+  Der Linux-Portvertrag am vorherigen Head erreichte `cli_dynamic_generate`:
+  Rust zeigte trotz `SYMVAULT_NO_ENV_WARNING=1` eine Warnung, die Go korrekt
+  unterdrückt. Der gemeinsame Rust-Entsperrpfad beachtet diese Variable nun;
+  der neue Head muss den Differentialtest erneut ausführen.
+  Windows fand außerdem im `agent list`-Differential ein unvollständig
+  isoliertes Home: Go liest `USERPROFILE`, Rust las `HOME`. Der Test setzt
+  beide auf dasselbe temporäre Verzeichnis. Direkte `--help`-Aufrufe für
+  `dynamic`, `dynamic generate` und `setup` laufen nun ebenfalls durch den
+  gepinnten Go-Vergleich. Ein Go-Produktionshandler-Test und Rust-Listener-
+  Test prüfen HTTP/1.0-Fehler samt Standard-Close und explizitem Keep-Alive.
+  Das echte HTTP-401-Git-Differential ist nach lokaler Deaktivierung geerbter
+  Credential-Helper auch unter Windows aktiviert. Native Ausführung steht aus.
+  Die drei `run`-Broker-Flags werden nun geparst. Solange der Rust-Broker
+  fehlt, beendet `--broker` nach Vault-Prüfung explizit, bevor ein Kindprozess
+  startet; ein fokussierter Test prüft diese Sperre. Die Go-HTTP-Quelle hat
+  keinen SSE-Stream: Sie verhandelt `Accept`, schreibt aber vollständiges JSON
+  ohne Event-Framing oder Flush. SSE-Stream-Parität ist deshalb am gepinnten
+  Oracle derzeit nicht anwendbar; HTTP-Timeout und Shutdown bleiben offen.
+  Als begrenzter HTTP-003-Slice liefert Rust nun das quellgeprüfte
+  Protected-Resource-Discovery-Dokument. Ein Go-Handler-Test und ein Rust-
+  Loopback-Test sind im Differential-Gate; OAuth-Registrierung, PKCE,
+  Tokenausgabe und Refresh bleiben unportiert und werden nicht beworben.
+  Für DIST-001 ist eine native Acht-Ziel-Matrix integriert: Linux, Darwin,
+  Windows und FreeBSD jeweils amd64/arm64 mit einem expliziten Rust-CLI-Build
+  und `version`-Smoke. Die FreeBSD-arm64-Spur führt vorerst nur diesen Smoke
+  aus; die CI-Ausführung und volle Differentiale dort stehen aus.
+  Der vollständige Go-Coverage-Lauf
+  erreichte 63,7 % und bestand alle fünf Paketgrenzen.
+- **Native Evidenz:** Am gepushten Head `f286f2f` bestanden Rust/Miri,
+  macOS und Windows native Rust-Tests, Ubuntu-Go-Tests, iOS-Simulator sowie
+  Audit/Pairing. `port-contract` und FreeBSD stoppten am gleichen
+  Empty-`HOME`-Intake-Test; der plattformabhängige Go-Start-Exit ist lokal
+  korrigiert, aber noch nicht am integrierten Head ausgeführt. Der
+  FreeBSD-`O_NOFOLLOW`-Fix wurde am späteren `01ba082` in den nativen
+  Safe-I/O-Tests erreicht und bestand. Danach scheiterte ein Go-gegen-Go-
+  Selbsttest an einem zeitgestempelten FreeBSD-Startlog; der isolierte
+  Differential-Harness unterdrückt diesen Logeintrag nun gezielt, benötigt
+  aber einen erneuten FreeBSD-Lauf. Am `01ba082` waren Linux-Port-Contract,
+  Audit und iOS-Simulator grün; Rust-Clippy scheiterte auf drei Plattformen
+  an einem lokalen Intake-Initializer (nun korrigiert), Ubuntu-Go-Coverage
+  lag bei 63,4 % unter dem 63,5-%-Gate (HTTP-Generator jetzt im Go-Test),
+  und Windows-Pairing hatte einen einzelnen Zugriffsfehler beim Anlegen eines
+  temporären Git-Repos. Am gepushten `6bb47dc` bestanden Ubuntu-Go und alle
+  drei Audit-Jobs; Pairing auf Linux/macOS/Windows stoppte vor dem eigentlichen
+  Differential an einem veralteten Generator-Hash im Config-Profile-Fixture.
+  Der Hash ist lokal aus dem gepinnten Oracle erneuert und erneut geprüft.
+  Der `6bb47dc`-Lint-Lauf stoppte am `goconst`-Befund im FreeBSD-Harness-Test;
+  der Test ist lokal korrigiert. `port-contract` desselben Heads stoppte am
+  gleichen alten Fixture-Hash. Der native macOS-Lauf fand einen doppelten
+  Slash im Rust-Pfad für die Service-Datei; die Pfadbildung ist korrigiert,
+  und der gezielte Go/Rust-Differentialtest besteht auch bei `TMPDIR` mit
+  doppeltem Slash. Windows bestand Rust-Clippy und alle Rust-Tests, scheiterte
+  dann im neuen CLI-Gate am Go-Binary ohne `.exe`; das Skript wählt nun den
+  Windows-Suffix. Linux-Rust und iOS-Simulator bestanden, FreeBSD erreichte
+  die Config-Fixtures und stoppte ebenfalls am erneuerten Hash. Miri bestand.
+  Alle Korrekturen warten auf native Läufe am nächsten integrierten SHA.
+- **Ledger:** `contract-matrix.md` führt weiterhin offene CLI-, HTTP-, FFI-,
+  Broker-, Distributions-, Wert- und native Plattformzeilen. `cligap` maß
+  am lokalen Binary `e15b47a` nach Korrektur des Help-Parsers 134 Go-Pfade,
+  105 Rust-Pfade, 10 fehlende Pfade, acht Flag-Lücken und keine Alias-Lücke.
+  Diese Oberflächenmessung belegt
+  keine Verhaltensparität. Ein grüner PR oder Slice erfüllt das Ziel nicht.
+- **Nächster Schritt:** Den neuen Head integrieren, CI und native
+  Zielplattformen auswerten, Befunde beheben und weitere implementierbare
+  Ledger-Zeilen bearbeiten.
+
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
 - **Basis:** `main` @ `d4aa2b13` (Merge `b9a48ac7` + Ledger `d4aa2b13`);

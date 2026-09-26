@@ -16,6 +16,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::PathBuf,
+    process::Command,
     sync::atomic::{AtomicUsize, Ordering},
 };
 use symvault_crypto::SecretBytes;
@@ -105,7 +106,7 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     fs::write(&malformed, b"title,password\n\"unterminated,secret\n").expect("malformed");
     let malformed_options = import_commands::ImportOptions {
         source: malformed,
-        ..options
+        ..options.clone()
     };
     let mut malformed_writes = 0;
     let error = import_commands::run_import(
@@ -122,6 +123,33 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
     .expect_err("malformed import must fail");
     assert!(error.contains("parse import source"));
     assert_eq!(malformed_writes, 0);
+
+    let collision = root.join("collision.csv");
+    fs::write(
+        &collision,
+        b"name,url,username,password,note\n\xFF,https://one.example,u1,p1,\n\xFE,https://two.example,u2,p2,\n",
+    )
+    .expect("collision source");
+    let collision_options = import_commands::ImportOptions {
+        source: collision,
+        format: Some("chrome".into()),
+        ..options
+    };
+    let mut collision_writes = 0;
+    let error = import_commands::run_import(
+        &root,
+        &identity,
+        &collision_options,
+        |_, _, _, _| {
+            collision_writes += 1;
+            Ok(())
+        },
+        |_, _, _, _| Ok(()),
+        |_, _, _, _| panic!("unexpected secret metadata"),
+    )
+    .expect_err("colliding paths must fail before writes");
+    assert!(error.contains("distinct CSV paths"));
+    assert_eq!(collision_writes, 0);
     assert!(
         Store::open(&root, &identity)
             .unwrap()
@@ -143,6 +171,60 @@ fn mapping_parser_matches_go_empty_segments_and_duplicate_keys() {
         ])
     );
     assert!(export_commands::parse_mapping("title").is_err());
+}
+
+#[test]
+fn quarantine_prefix_uses_go_import_id_shape_and_rejects_prefix() {
+    let (prefix, import_id) =
+        import_commands::resolve_import_prefix("", true).expect("quarantine prefix");
+    let import_id = import_id.expect("quarantine import ID");
+    assert_eq!(prefix, format!("quarantine/{import_id}"));
+    assert_eq!(
+        symvault_sync::importer::apply_prefix(&prefix, "example"),
+        format!("quarantine/{import_id}/example")
+    );
+    let suffix = import_id.strip_prefix("import-").expect("import prefix");
+    let (date, random) = suffix.split_once('-').expect("date separator");
+    assert_eq!(date.len(), 8);
+    assert!(date.bytes().all(|byte| byte.is_ascii_digit()));
+    assert_eq!(random.len(), 8);
+    assert!(
+        random
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    );
+    assert_eq!(
+        import_commands::resolve_import_prefix("work", true).unwrap_err(),
+        "--quarantine and --prefix cannot be used together"
+    );
+    assert_eq!(
+        import_commands::resolve_import_prefix("work", false).unwrap(),
+        ("work".into(), None)
+    );
+}
+
+#[test]
+fn import_format_error_precedes_quarantine_conflict() {
+    let binary = std::env::var_os("CARGO_BIN_EXE_symvault").expect("Rust CLI binary");
+    let output = Command::new(binary)
+        .args([
+            "import",
+            "source.csv",
+            "--format",
+            "unknown",
+            "--quarantine",
+            "--prefix",
+            "work",
+        ])
+        .output()
+        .expect("run import");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("unsupported import format: unknown"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("--quarantine and --prefix"), "{stderr}");
 }
 
 #[test]

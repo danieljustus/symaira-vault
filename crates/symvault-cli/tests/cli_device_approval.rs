@@ -94,6 +94,23 @@ fn run_with_stdin(
     }
 }
 
+#[test]
+fn approval_pair_requires_an_initialized_vault_before_server_metadata() {
+    let binary = rust_binary();
+    let (_guard, home, root) = disposable_roots();
+
+    let output = run(
+        &binary,
+        &["device", "approval-pair", "--host", "192.168.1.42"],
+        &root,
+        &home,
+    );
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("vault not initialized"), "{output:?}");
+    assert!(!stderr.contains("running server"), "{output:?}");
+}
+
 fn read_store(root: &Path) -> String {
     std::fs::read_to_string(root.join(STORE)).expect("read store")
 }

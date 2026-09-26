@@ -1,0 +1,131 @@
+name: Rust paired value sample
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-value-bench.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'crates/**'
+      - 'scripts/rust-port/paired_cli_bench.py'
+      - 'scripts/rust-port/test_paired_cli_bench.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paired-sample:
+    name: Paired value sample (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            go_asset: darwin_arm64
+            go_sha256: 9cddbf1ad159cfc9b432ee8b30992b9795be6e15915509bf08597379d44a4b77
+            expected_arch: arm64
+          - os: ubuntu-24.04
+            go_asset: linux_amd64
+            go_sha256: fa54a4c16ac13389614475f91c71d7e6bd6f91de0f30e320bf0dd25727c17d46
+            expected_arch: x86_64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify native architecture
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.expected_arch }}"
+
+      - name: Download and verify frozen Go oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/symaira-vault_0.22.1_${{ matrix.go_asset }}.tar.gz"
+          url="https://github.com/danieljustus/symaira-vault/releases/download/v0.22.1/symaira-vault_0.22.1_${{ matrix.go_asset }}.tar.gz"
+          curl --fail --location --silent --show-error "$url" --output "$archive"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            echo "${{ matrix.go_sha256 }}  $archive" | shasum -a 256 -c
+          else
+            echo "${{ matrix.go_sha256 }}  $archive" | sha256sum --check
+          fi
+          mkdir -p "$RUNNER_TEMP/go-oracle"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/go-oracle"
+          go_binary="$(find "$RUNNER_TEMP/go-oracle" -type f -name symvault -print -quit)"
+          test -n "$go_binary"
+          chmod +x "$go_binary"
+          echo "GO_ORACLE_BINARY=$go_binary" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Build Rust release CLI
+        run: cargo +1.98.0 build --release -p symvault-cli --bin symvault --locked
+
+      - name: Check benchmark helper
+        run: PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_paired_cli_bench.py
+
+      - name: Run bounded paired sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/paired-value-benchmark.json"
+          PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/paired_cli_bench.py \
+            --go-binary "$GO_ORACLE_BINARY" \
+            --rust-binary target/release/symvault \
+            --runs 30 \
+            --warmups 3 \
+            --entries 32 | tee "$report"
+
+      - name: Check timing decomposition fields
+        shell: bash
+        run: |
+          python3 - "$RUNNER_TEMP/paired-value-benchmark.json" <<'PY'
+          import json
+          import math
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as report_file:
+              report = json.load(report_file)
+          sampling = report["sampling"]
+          decomposition = sampling["timing_decomposition"]
+          assert sampling["runs_per_binary"] == 30
+          assert sampling["warmups_per_binary"] == 3
+          assert decomposition["startup_command"] == "version"
+          assert decomposition["remainder_isolated"] is False
+          for label in ("go", "rust"):
+              assert all(
+                  key in report["measurements"][label]
+                  for key in (
+                      "startup_p50_ms",
+                      "startup_p95_ms",
+                      "read_p50_ms",
+                      "read_p95_ms",
+                      "startup_adjusted_read_p50_ms",
+                      "startup_adjusted_read_p95_ms",
+                  )
+              )
+              for key in (
+                  "startup_samples_ms",
+                  "read_samples_ms",
+                  "startup_adjusted_read_samples_ms",
+              ):
+                  samples = report["measurements"][label][key]
+                  assert len(samples) == sampling["runs_per_binary"]
+                  assert all(type(value) in (int, float) and math.isfinite(value) for value in samples)
+          assert "rust_startup_adjusted_read_p95_ratio" in report["comparison"]
+          PY
+
+      - name: Retain paired timing sample
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: paired-value-benchmark-${{ matrix.os }}
+          path: ${{ runner.temp }}/paired-value-benchmark.json
+          if-no-files-found: warn

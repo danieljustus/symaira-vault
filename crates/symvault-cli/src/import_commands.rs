@@ -33,6 +33,38 @@ pub struct ImportResult {
     pub format: String,
     pub imported: usize,
     pub skipped: usize,
+    pub imported_paths: Vec<String>,
+}
+
+/// Resolves the import prefix, assigning quarantined imports a Go-compatible batch ID.
+pub fn resolve_import_prefix(
+    prefix: &str,
+    quarantine: bool,
+) -> Result<(String, Option<String>), String> {
+    if quarantine {
+        if !prefix.is_empty() {
+            return Err("--quarantine and --prefix cannot be used together".into());
+        }
+        let now = time::OffsetDateTime::now_utc();
+        let mut random = [0_u8; 4];
+        let suffix = if getrandom::fill(&mut random).is_ok() {
+            format!(
+                "{:02x}{:02x}{:02x}{:02x}",
+                random[0], random[1], random[2], random[3]
+            )
+        } else {
+            let nanos = now.unix_timestamp_nanos().max(0) as u64 % 0x1_0000_0000;
+            format!("{nanos:08x}")
+        };
+        let import_id = format!(
+            "import-{:04}{:02}{:02}-{suffix}",
+            now.year(),
+            now.month() as u8,
+            now.day()
+        );
+        return Ok((format!("quarantine/{import_id}"), Some(import_id)));
+    }
+    Ok((prefix.to_owned(), None))
 }
 
 /// Resolves an explicit format or the formats that the Go command derives
@@ -136,6 +168,7 @@ where
 
     let mut imported = 0;
     let mut skipped = 0;
+    let mut imported_paths = Vec::new();
     for entry in entries {
         let path = importer::apply_prefix(&options.prefix, &entry.path);
         if path.is_empty() {
@@ -152,6 +185,7 @@ where
             continue;
         }
         if options.dry_run {
+            imported_paths.push(path);
             imported += 1;
             continue;
         }
@@ -168,12 +202,14 @@ where
             set_secret_type(root, identity, &path, secret_type)
                 .map_err(|error| format!("cannot set secret metadata {path}: {error}"))?;
         }
+        imported_paths.push(path);
         imported += 1;
     }
     Ok(ImportResult {
         format: format_name(format).to_owned(),
         imported,
         skipped,
+        imported_paths,
     })
 }
 

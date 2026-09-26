@@ -239,6 +239,19 @@ impl GoTime {
         })
     }
 
+    pub(crate) fn unix_timestamp_nanos(self) -> Result<i128, PairingError> {
+        let month = time::Month::try_from(self.month)
+            .map_err(|error| PairingError::Time(error.to_string()))?;
+        let date = time::Date::from_calendar_date(self.year, month, self.day)
+            .map_err(|error| PairingError::Time(error.to_string()))?;
+        let clock = time::Time::from_hms_nano(self.hour, self.minute, self.second, self.nanosecond)
+            .map_err(|error| PairingError::Time(error.to_string()))?;
+        Ok(time::PrimitiveDateTime::new(date, clock)
+            .assume_utc()
+            .unix_timestamp_nanos()
+            - i128::from(self.offset_seconds) * 1_000_000_000)
+    }
+
     /// Renders the value the way Go's `time.Time::MarshalJSON` does, without
     /// the surrounding quotes: RFC3339 with trailing zeros stripped from the
     /// fraction and the fraction omitted entirely when it is zero.

@@ -63,10 +63,13 @@ type sessionFixture struct {
 }
 
 type sessionCase struct {
-	Name       string   `json:"name"`
-	Operations []string `json:"operations"`
-	Expected   string   `json:"expected"`
-	ErrorClass string   `json:"error_class,omitempty"`
+	Name        string          `json:"name"`
+	Operations  []string        `json:"operations"`
+	Input       json.RawMessage `json:"input,omitempty"`
+	WrapKey     string          `json:"wrap_key,omitempty"`
+	Expected    string          `json:"expected"`
+	ErrorClass  string          `json:"error_class,omitempty"`
+	NonMutating bool            `json:"non_mutating,omitempty"`
 }
 
 type quotaFixture struct {
@@ -112,11 +115,12 @@ func (f *fakeKeyring) Get(key string) (string, error) {
 func (f *fakeKeyring) Set(key, value string) error { f.values[key] = value; return nil }
 func (f *fakeKeyring) Delete(key string) error     { delete(f.values, key); return nil }
 
+//nolint:gocyclo // Each branch records a separate production Go session contract case.
 func buildSessionFixture(meta oracle) sessionFixture {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	cases := make([]sessionCase, 0, 5)
+	cases := make([]sessionCase, 0, 16)
 	missing := &fakeKeyring{values: map[string]string{}}
 	_, err := session.NewManager(missing, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("missing", []string{"load_passphrase"}, err))
@@ -148,6 +152,121 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	malformed := &fakeKeyring{values: map[string]string{key: "not-json"}}
 	_, err = session.NewManager(malformed, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("malformed", []string{"load_passphrase"}, err))
+
+	// encoding/json rejects impossible calendar dates in time.Time fields.
+	// Probes treat that record as expired without rewriting or evicting it.
+	const invalidCalendarTimestamp = `{"saved_at":"2099-02-30T00:00:00Z","last_access":"2099-02-30T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"x","nonce":"x"}`
+	probe := &fakeKeyring{values: map[string]string{key: invalidCalendarTimestamp}}
+	if !session.NewManager(probe, nil).IsSessionExpired(v) {
+		panic("invalid calendar timestamp was not expired")
+	}
+	if probe.values[key] != invalidCalendarTimestamp {
+		panic("expiry probe mutated malformed session")
+	}
+	cases = append(cases, sessionCase{
+		Name:        "invalid_calendar_timestamp_probe",
+		Operations:  []string{"is_session_expired"},
+		Input:       json.RawMessage(invalidCalendarTimestamp),
+		Expected:    "expired",
+		NonMutating: true,
+	})
+	for _, input := range []struct{ name, raw string }{
+		{"empty_encrypted_passphrase", `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"","nonce":"AAAAAAAAAAAAAAAA"}`},
+		{"empty_nonce", `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"encrypted_passphrase":"eA==","nonce":""}`},
+	} {
+		backend := &fakeKeyring{values: map[string]string{key: input.raw}}
+		_, loadErr := session.NewManager(backend, nil).LoadPassphrase(v)
+		item := resultCase(input.name, []string{"load_passphrase"}, loadErr)
+		item.Input = json.RawMessage(input.raw)
+		item.NonMutating = backend.values[key] == input.raw
+		cases = append(cases, item)
+	}
+	const maxExpired = `{"saved_at":"2000-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","ttl_ns":3600000000000,"max_lifetime_ns":3600000000000,"encrypted_passphrase":"eA==","nonce":"AAAAAAAAAAAAAAAA"}`
+	maxBackend := &fakeKeyring{values: map[string]string{key: maxExpired}}
+	_, err = session.NewManager(maxBackend, nil).LoadPassphrase(v)
+	maxResult := resultCase("max_lifetime_expiry_evicts", []string{"load_passphrase"}, err)
+	if maxResult.ErrorClass != "expired" || len(maxBackend.values) != 0 {
+		panic("absolute lifetime did not expire and evict the Go session")
+	}
+	maxResult.Input = json.RawMessage(maxExpired)
+	maxResult.Expected = "expired_and_evicted"
+	cases = append(cases, maxResult)
+	const goWrapKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
+	const goEncrypted = `{"saved_at":"2000-01-01T00:00:00Z","last_access":"2000-01-01T00:00:00Z","ttl_ns":9223372036854775807,"max_lifetime_ns":9223372036854775807,"encrypted_passphrase":"JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=","nonce":"AAECAwQFBgcICQoL"}`
+	goBackend := &fakeKeyring{values: map[string]string{
+		key:                           goEncrypted,
+		"symvault:" + v + "|wrap-key": goWrapKey,
+	}}
+	goLoaded, err := session.NewManager(goBackend, nil).LoadPassphrase(v)
+	if err != nil || string(goLoaded) != "cross-language-passphrase" {
+		panic(fmt.Sprintf("Go cannot load its base64 keyring session: %q %v", goLoaded, err))
+	}
+	cases = append(cases, sessionCase{
+		Name: "go_base64_wrap_key_load", Operations: []string{"load_passphrase"},
+		Input: json.RawMessage(goEncrypted), WrapKey: goWrapKey, Expected: string(goLoaded),
+	})
+	const legacyWire = `{"saved_at":"2099-01-01T00:00:00Z","last_access":"2099-01-01T00:00:00Z","passphrase":"fixture-legacy-passphrase","ttl_ns":3600000000000}`
+	legacyBackend := &fakeKeyring{values: map[string]string{key: legacyWire}}
+	legacyManager := session.NewManager(legacyBackend, nil)
+	migrated, err := legacyManager.MigrateSession(v)
+	if err != nil || !migrated {
+		panic(fmt.Sprintf("Go did not migrate legacy session: %v", err))
+	}
+	var migratedPayload map[string]any
+	if decodeErr := json.Unmarshal([]byte(legacyBackend.values[key]), &migratedPayload); decodeErr != nil {
+		panic(decodeErr)
+	}
+	if _, present := migratedPayload["passphrase"]; present || migratedPayload["max_lifetime_ns"] != float64(int64(8*time.Hour)) {
+		panic("Go migration retained plaintext or omitted default max lifetime")
+	}
+	loadedLegacy, err := legacyManager.LoadPassphrase(v)
+	if err != nil || string(loadedLegacy) != "fixture-legacy-passphrase" {
+		panic(fmt.Sprintf("Go could not load migrated legacy session: %q %v", loadedLegacy, err))
+	}
+	cases = append(cases, sessionCase{
+		Name: "legacy_plaintext_migration", Operations: []string{"migrate_session", "load_passphrase"},
+		Input: json.RawMessage(legacyWire), Expected: string(loadedLegacy),
+	})
+	missingMigration := &fakeKeyring{values: map[string]string{}}
+	missingManager := session.NewManager(missingMigration, nil)
+	legacyPresent, err := missingManager.HasLegacyPlaintextSession(v)
+	if err != nil || legacyPresent {
+		panic(fmt.Sprintf("Go missing legacy probe: %v %v", legacyPresent, err))
+	}
+	migrated, err = missingManager.MigrateSession(v)
+	if err != nil || migrated || len(missingMigration.values) != 0 {
+		panic(fmt.Sprintf("Go missing session migration was not a no-op: %v %v", migrated, err))
+	}
+	cases = append(cases, sessionCase{Name: "missing_migration_noop", Operations: []string{"has_legacy_plaintext_session", "migrate_session"}, Expected: "unchanged"})
+	goEncryptedBefore := goBackend.values[key]
+	migrated, err = session.NewManager(goBackend, nil).MigrateSession(v)
+	if err != nil || migrated || goBackend.values[key] != goEncryptedBefore {
+		panic(fmt.Sprintf("Go encrypted session migration was not a no-op: %v %v", migrated, err))
+	}
+	cases = append(cases, sessionCase{Name: "encrypted_migration_noop", Operations: []string{"migrate_session"}, Input: json.RawMessage(goEncrypted), WrapKey: goWrapKey, Expected: "unchanged"})
+
+	clearBackend := &fakeKeyring{values: map[string]string{}}
+	clearManager := session.NewManager(clearBackend, nil)
+	if err := clearManager.SavePassphrase(v, []byte("fixture-secret"), time.Hour); err != nil {
+		panic(err)
+	}
+	if err := clearManager.SaveIdentity(v, "fixture-identity", time.Hour); err != nil {
+		panic(err)
+	}
+	if len(clearBackend.values) != 3 {
+		panic("Go session did not save all three cache accounts")
+	}
+	if err := clearManager.ClearSession(v); err != nil {
+		panic(err)
+	}
+	if err := clearManager.ClearSession(v); err != nil || len(clearBackend.values) != 0 {
+		panic("Go session clear was not complete and idempotent")
+	}
+	cases = append(cases, sessionCase{
+		Name:       "clear_all_accounts_twice",
+		Operations: []string{"save_passphrase", "save_identity", "clear_session", "clear_session"},
+		Expected:   "all_cleared",
+	})
 	cases = append(cases, identityMetadataCases()...)
 	_ = meta
 	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}

@@ -8,6 +8,7 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
     Command::new(binary)
         .args(args)
         .env("HOME", home)
+        .env("USERPROFILE", home)
         .env("XDG_CONFIG_HOME", home.join("config"))
         .env("XDG_DATA_HOME", home.join("data"))
         .env("XDG_CACHE_HOME", home.join("cache"))

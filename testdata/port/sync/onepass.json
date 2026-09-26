@@ -9,7 +9,7 @@
     "internal/secrets/filter.go"
   ],
   "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
-  "generator_digest": "e5c2104b3d12f2a4b35445a5d7c4db9b2537bc9d62fb7a59fcf58268d7b203c7",
+  "generator_digest": "6efec216a7373ea0f7cb61762f513fa3920f555bd84a4544fd85e943eba1b9e3",
   "cases": [
     {
       "name": "pass_adapter_recursive_and_warning",
@@ -26,6 +26,10 @@
         {
           "path": "work/slash\\name.gpg",
           "content": "pw\n"
+        },
+        {
+          "path": "work/truncated-utf8.gpg",
+          "content_base64": "YmFkLeKC"
         }
       ],
       "expected": [
@@ -52,6 +56,13 @@
           "path": "work/slashname",
           "data": {
             "password": "pw"
+          },
+          "warnings": null
+        },
+        {
+          "path": "work/truncated-utf8",
+          "data": {
+            "password": "bad-\ufffd\ufffd"
           },
           "warnings": null
         }
@@ -84,6 +95,60 @@
         }
       ],
       "failed": false
+    },
+    {
+      "name": "onepux_invalid_utf8_in_string",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpaTElP8Qdm0sGAICAAD//1BLBwgjDky/RwAAAFIAAABQSwECFAAUAAgACAAAAAAAIw5Mv0cAAABSAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAgAAAAAAA",
+      "expected": [
+        {
+          "path": "bad�title",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_invalid_utf8_after_escaped_backslash",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpcMrkxJTYmL+Q/i1sWAICAAA//9QSwcI6y1i00sAAABWAAAAUEsBAhQAFAAIAAgAAAAAAOstYtNLAAAAVgAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAIQAAAAAAA==",
+      "expected": [
+        {
+          "path": "ébad\\�title",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_malformed_escaped_invalid_utf8",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrKKrlYqSyzNgTIzS1JzIazkxJLU9PyiytDSzBQlKyUDA0MlHaWSzJKcVCUrpcMrkxJTYv5DuLWxYAgIAAD//1BLBwjcz1SnSgAAAFUAAABQSwECFAAUAAgACAAAAAAA3M9Up0oAAABVAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAgwAAAAAA",
+      "expected": [],
+      "failed": true,
+      "error_contains": "parse export.json"
+    },
+    {
+      "name": "onepux_invalid_utf8_outside_string",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb26qVkpMTs4vzSspVrL6XwsIAAD//1BLBwgNpKrrFAAAAA4AAABQSwECFAAUAAgACAAAAAAADaSq6xQAAAAOAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAATQAAAAAA",
+      "expected": [],
+      "failed": true,
+      "error_contains": "parse export.json"
     },
     {
       "name": "onepux_first_invalid_totp",

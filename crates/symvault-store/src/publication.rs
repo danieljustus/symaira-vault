@@ -30,6 +30,32 @@ pub(super) fn replace(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<
     )
 }
 
+/// Publishes an entry with Go's `AtomicWriteFile` result contract: after the
+/// same-directory rename succeeds, later directory-sync/cleanup failures do
+/// not turn the completed write into an error.
+pub(super) fn replace_entry(
+    target: &Path,
+    bytes: &[u8],
+    parent: &fs::File,
+) -> Result<(), StoreError> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let name = basename(target)?;
+    replace_using_names_with_ops_and_post_publish_policy(
+        target,
+        bytes,
+        parent,
+        (0..32).map(|_| {
+            format!(
+                ".{name}.tmp-{}-{}",
+                std::process::id(),
+                COUNTER.fetch_add(1, Ordering::Relaxed)
+            )
+        }),
+        &production_ops(),
+        true,
+    )
+}
+
 type CreateTemp<'a> = Box<dyn Fn(&fs::File, &Path, &str) -> io::Result<fs::File> + 'a>;
 type WriteAll<'a> = Box<dyn Fn(&mut fs::File, &[u8]) -> io::Result<()> + 'a>;
 type SyncFile<'a> = Box<dyn Fn(&fs::File) -> io::Result<()> + 'a>;
@@ -120,6 +146,17 @@ fn replace_using_names_with_ops(
     names: impl IntoIterator<Item = String>,
     ops: &PublicationOps<'_>,
 ) -> Result<(), StoreError> {
+    replace_using_names_with_ops_and_post_publish_policy(target, bytes, parent, names, ops, false)
+}
+
+fn replace_using_names_with_ops_and_post_publish_policy(
+    target: &Path,
+    bytes: &[u8],
+    parent: &fs::File,
+    names: impl IntoIterator<Item = String>,
+    ops: &PublicationOps<'_>,
+    go_atomic_write_result: bool,
+) -> Result<(), StoreError> {
     (ops.validate_target)(parent, target)?;
     for temporary in names {
         // Never clean up a name until exclusive creation succeeds: a collision
@@ -129,6 +166,7 @@ fn replace_using_names_with_ops(
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(write_error(target, error)),
         };
+        let mut published = false;
         let result = (|| {
             super::set_private_permissions(&file).map_err(|error| write_error(target, error))?;
             (ops.write_all)(&mut file, bytes).map_err(|error| write_error(target, error))?;
@@ -139,9 +177,16 @@ fn replace_using_names_with_ops(
             (ops.validate_target)(parent, target)?;
             (ops.publish)(parent, target, &temporary)
                 .map_err(|error| write_error(target, error))?;
+            published = true;
             (ops.sync_parent)(parent).map_err(|error| write_error(target, error))
         })();
         drop(file);
+        if go_atomic_write_result && published {
+            // Rename consumed our temporary name. Go returns as soon as this
+            // succeeds; syncing/removing afterward can report failure even
+            // though the replacement is already visible.
+            return Ok(());
+        }
         let cleanup = (ops.cleanup_temp)(parent, target, &temporary)
             .and_then(|()| (ops.sync_parent)(parent))
             .map_err(|error| write_error(target, error));
@@ -179,9 +224,38 @@ fn publish(parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> 
     rustix::fs::renameat(parent, temporary, parent, target.file_name().unwrap()).map_err(Into::into)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
+    rename_with_retry(target, temporary, |source, destination| {
+        fs::rename(source, destination)
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
     fs::rename(target.with_file_name(temporary), target)
+}
+
+#[cfg(any(windows, test))]
+fn rename_with_retry(
+    target: &Path,
+    temporary: &str,
+    mut rename: impl FnMut(&Path, &Path) -> io::Result<()>,
+) -> io::Result<()> {
+    use std::time::Duration;
+
+    let temporary_path = target.with_file_name(temporary);
+    let mut last_error = None;
+    for attempt in 0..10 {
+        match rename(&temporary_path, target) {
+            Ok(()) => return Ok(()),
+            Err(error) => last_error = Some(error),
+        }
+        if attempt < 9 {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    Err(last_error.expect("at least one rename attempt"))
 }
 
 #[cfg(unix)]
@@ -254,6 +328,34 @@ mod tests {
             b"other writer"
         );
         assert!(!dir.path().join("owned").exists());
+    }
+
+    #[test]
+    fn windows_rename_retries_a_transient_failure() {
+        use std::cell::Cell;
+
+        let dir = tempdir();
+        let target = dir.path().join("entry.age");
+        let temporary = dir.path().join("temporary");
+        fs::write(&target, b"old").unwrap();
+        fs::write(&temporary, b"new").unwrap();
+        let attempts = Cell::new(0);
+        rename_with_retry(&target, "temporary", |source, destination| {
+            let attempt = attempts.get();
+            attempts.set(attempt + 1);
+            if attempt == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "transient sharing violation",
+                ));
+            }
+            fs::rename(source, destination)
+        })
+        .unwrap();
+
+        assert_eq!(attempts.get(), 2);
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+        assert!(!temporary.exists());
     }
 
     #[test]
@@ -386,6 +488,26 @@ mod tests {
         assert!(
             matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected parent sync")
         );
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+        assert!(!dir.path().join("owned").exists());
+    }
+
+    #[test]
+    fn entry_replacement_matches_go_success_after_rename() {
+        let dir = tempdir();
+        let parent = super::super::ensure_directory(dir.path()).unwrap();
+        let target = dir.path().join("entry.age");
+        fs::write(&target, b"old").unwrap();
+        let result = replace_using_names_with_ops_and_post_publish_policy(
+            &target,
+            b"new",
+            &parent,
+            ["owned".to_owned()],
+            &fault_ops(false, false, false, Some(1)),
+            true,
+        );
+
+        assert!(result.is_ok());
         assert_eq!(fs::read(&target).unwrap(), b"new");
         assert!(!dir.path().join("owned").exists());
     }

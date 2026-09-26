@@ -1,0 +1,165 @@
+name: Rust MCPB contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-mcpb-contract.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.goreleaser.yml'
+      - 'crates/**'
+      - 'scripts/build-mcpb.sh'
+      - 'scripts/rust-port/validate_mcpb_contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: MCPB (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            rust_host: x86_64-unknown-linux-gnu
+            python: python3
+            go_sha256: d2985abd30aa2f8d97c95c0b9f5f94dde21d9a9f59f58c5cd7809dc0ef289130
+          - runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            rust_host: aarch64-unknown-linux-gnu
+            python: python3
+            go_sha256: 5f4106bdde10a8606dc0945abc2b1d0652dabd17fe7be60009451048cf6a36b3
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            rust_host: x86_64-apple-darwin
+            python: python3
+            go_sha256: d57b89e65a2a3005c38f08c71b2c4da0e9e440a8c60bfc49bd5635b1ec2bd5f3
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            rust_host: aarch64-apple-darwin
+            python: python3
+            go_sha256: 5b6a68d5b55286050ce8f67cd13644e6c2f190d362ace1cf829e95b82738fdbc
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+            rust_host: x86_64-pc-windows-msvc
+            python: python
+            go_sha256: 39b8efe7fa62b69c9bc1baa81eaa80dd7cd705381c4079de355148dafc2cc3aa
+          - runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            rust_host: aarch64-pc-windows-msvc
+            python: python
+            go_sha256: b46ef5cc1e9d053c91ab8a1723252f57e3ea36908754d39f2a8dafad8ac91653
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Build, package, and verify against Go release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rust_host="$(rustc +1.98.0 -vV | sed -n 's/^host: //p')"
+          test "$rust_host" = "${{ matrix.rust_host }}"
+          version="0.0.0-ci"
+          SYMVAULT_VERSION="$version" cargo +1.98.0 build --release -p symvault-cli --bin symvault --locked
+          binary=target/release/symvault
+          if [[ "${{ matrix.goos }}" == windows ]]; then
+            binary+=.exe
+          fi
+          test -f "$binary"
+          mkdir -p dist
+          bash scripts/build-mcpb.sh --version "$version" --os "${{ matrix.goos }}" --arch "${{ matrix.goarch }}" --binary "$binary"
+          bundle="dist/symvault_${version}_${{ matrix.goos }}_${{ matrix.goarch }}.mcpb"
+          reference="go-reference.mcpb"
+          curl --fail --location --silent --show-error \
+            "https://github.com/danieljustus/symaira-vault/releases/download/v0.22.1/symvault_0.22.1_${{ matrix.goos }}_${{ matrix.goarch }}.mcpb" \
+            --output "$reference"
+          "${{ matrix.python }}" scripts/rust-port/validate_mcpb_contract.py \
+            --bundle "$bundle" \
+            --reference-bundle "$reference" \
+            --reference-sha256 "${{ matrix.go_sha256 }}" \
+            --version "$version" \
+            --os "${{ matrix.goos }}" \
+            --arch "${{ matrix.goarch }}"
+
+  freebsd:
+    name: MCPB (freebsd/${{ matrix.goarch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: amd64
+            arch: x86_64
+            rust_host: x86_64-unknown-freebsd
+            go_sha256: caac3fab78eaec04110133c7f34deaf6eb5d02916b4fba22ab3a45b76bd24858
+          - goarch: arm64
+            arch: aarch64
+            rust_host: aarch64-unknown-freebsd
+            go_sha256: 90f77a7313ccfc9220d4532f55f9e80f578eb7c71ad52e3759c7cdf029ee1844
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build, package, and verify in FreeBSD VM
+        uses: vmactions/freebsd-vm@83b151f58c6047089f4c80eb5ba2039d158ce093 # v1.5.3
+        with:
+          release: '15.1'
+          arch: ${{ matrix.arch }}
+          copyback: false
+          usesh: true
+          prepare: |
+            set -eu
+            pkg install -y bash curl ca_root_nss git gmake python3 zip rust
+            pw groupadd symvault-ci
+            pw useradd -n symvault-ci -g symvault-ci -m -s /bin/sh
+          run: |
+            set -eu
+            workspace="$(pwd -P)"
+            test "$workspace" = "$GITHUB_WORKSPACE"
+            chown -R symvault-ci:symvault-ci "$workspace"
+            su -m symvault-ci -c '
+              set -eu
+              export HOME=/home/symvault-ci
+              export PATH="/usr/local/bin:/usr/bin:/bin"
+              export CARGO_BUILD_JOBS=2 CARGO_INCREMENTAL=0
+              cd "$GITHUB_WORKSPACE"
+              rustc --version | grep -Eq "^rustc 1[.]98[.]"
+              rust_host="$(rustc -vV | sed -n "s/^host: //p")"
+              test "$rust_host" = "${{ matrix.rust_host }}"
+              version="0.0.0-ci"
+              SYMVAULT_VERSION="$version" cargo build --release -p symvault-cli --bin symvault --locked
+              mkdir -p dist
+              bash scripts/build-mcpb.sh --version "$version" --os freebsd --arch "${{ matrix.goarch }}" --binary target/release/symvault
+              reference="/tmp/go-reference.mcpb"
+              /usr/local/bin/curl --proto "=https" --proto-redir "=https" --tlsv1.2 -sSfL \
+                "https://github.com/danieljustus/symaira-vault/releases/download/v0.22.1/symvault_0.22.1_freebsd_${{ matrix.goarch }}.mcpb" \
+                -o "$reference"
+              python3 scripts/rust-port/validate_mcpb_contract.py \
+                --bundle "dist/symvault_${version}_freebsd_${{ matrix.goarch }}.mcpb" \
+                --reference-bundle "$reference" \
+                --reference-sha256 "${{ matrix.go_sha256 }}" \
+                --version "$version" \
+                --os freebsd \
+                --arch "${{ matrix.goarch }}"
+            '

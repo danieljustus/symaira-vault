@@ -2,7 +2,7 @@ use base64::{Engine as _, engine::general_purpose};
 use serde::Deserialize;
 use serde_json::Value;
 use std::io::{Cursor, Write};
-use symvault_sync::importer::{ImportedEntry, parse_cxf};
+use symvault_sync::importer::{self, Format, ImportedEntry, parse_cxf};
 use zip::ZipWriter;
 use zip::write::SimpleFileOptions;
 
@@ -71,7 +71,7 @@ fn cxf_matches_pinned_go_fixture_and_negative_controls() {
 #[test]
 fn cxf_rejects_total_input_at_limit_without_allocating_a_zip() {
     let input = vec![0_u8; 100 * 1024 * 1024];
-    let error = parse_cxf(&input).expect_err("input at the Go limit must fail");
+    let error = importer::parse(Format::Cxf, &input).expect_err("input at the Go limit must fail");
     assert!(error.to_string().contains("104857600"));
 }
 

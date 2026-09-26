@@ -1,21 +1,20 @@
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::time::Instant;
 use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
     process::{Command, Output},
 };
-// Only the POSIX-gated git-IO cases spawn a fixture server or a `#!/bin/sh` helper.
-#[cfg(unix)]
-use std::io::Write;
-#[cfg(unix)]
 use std::{
-    io::Read,
+    io::{Read, Write},
     net::TcpListener,
+    sync::mpsc,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use symvault_sync::NETWORK_MESSAGE;
 use symvault_sync::git::{CommitOptions, GitRepository};
@@ -366,45 +365,58 @@ fn pull_aborts_merge_state_created_by_this_invocation() {
     assert!(unresolved.is_empty(), "pull left unresolved index state");
 }
 
-#[cfg(unix)]
-fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
+fn auth_server(status: &str) -> (u16, mpsc::Sender<()>, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind auth server");
     let port = listener.local_addr().unwrap().port();
     let status = status.to_owned();
+    let (stop, stopped) = mpsc::channel::<()>();
     let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(3);
         listener.set_nonblocking(true).expect("set nonblocking");
-        while Instant::now() < deadline {
+        while matches!(stopped.try_recv(), Err(mpsc::TryRecvError::Empty)) {
             let Ok((mut stream, _)) = listener.accept() else {
                 thread::sleep(Duration::from_millis(10));
                 continue;
             };
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
-            let mut request = [0u8; 1024];
-            let _ = stream.read(&mut request);
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+            // Drain the complete header before replying: closing with unread
+            // request bytes can reset the connection on Windows before Git
+            // receives the 401. Read one byte at a time so header bytes are
+            // not left queued when the connection closes.
+            let mut request = Vec::with_capacity(1024);
+            let mut byte = [0u8; 1];
+            loop {
+                if stream.read_exact(&mut byte).is_err() {
+                    break;
+                }
+                request.push(byte[0]);
+                if request.ends_with(b"\r\n\r\n") || request.len() >= 16 * 1024 {
+                    break;
+                }
+            }
+            if !request.ends_with(b"\r\n\r\n") {
+                continue;
+            }
             let response = format!(
                 "HTTP/1.1 {status}\r\nWWW-Authenticate: Basic realm=fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             );
             let _ = stream.write_all(response.as_bytes());
-            break;
         }
     });
-    (port, handle)
+    (port, stop, handle)
 }
 
-// Windows git goes through the Git Credential Manager, which intercepts the
-// unauthenticated request and reports a network error instead of letting the
-// fixture's 401 surface as an authentication failure. The Go oracle's
-// classification is only reachable with a POSIX git, as for the shim tests below.
-#[cfg(unix)]
 #[test]
 fn pull_projects_auth_failure_from_a_real_http_remote() {
     let contract = git_io_case("GIT-002-go-auth");
     let (_root, repo, _remote) = pair();
-    let (port, server) = auth_server("401 Unauthorized");
+    // An empty local helper value clears inherited helpers (including GCM),
+    // so Git exposes the fixture's 401 instead of asking the host credential UI.
+    git(repo.root(), &["config", "--local", "credential.helper", ""]);
+    let (port, stop, server) = auth_server("401 Unauthorized");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
     let result = repo.pull("origin");
+    drop(stop);
     server.join().expect("auth server");
     let error = result.error.as_ref().expect("auth error").to_string();
     assert_pull_projection(&result, &contract.expected);
@@ -474,7 +486,7 @@ fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
 #[test]
 fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
     let (root, repo, _remote) = pair();
-    let (port, server) = auth_server("401 Unauthorized");
+    let (port, stop, server) = auth_server("401 Unauthorized");
     let marker = root.path().join("askpass-called");
     let helper = root.path().join("askpass.sh");
     write_executable(
@@ -491,6 +503,7 @@ fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
         &["config", "core.askPass", helper.to_str().unwrap()],
     );
     let result = repo.pull("origin");
+    drop(stop);
     server.join().expect("auth server");
     assert!(result.error.is_some());
     assert_eq!(

@@ -1,0 +1,27 @@
+Generate a dynamic secret
+
+Usage:
+  symvault dynamic generate [flags]
+
+Examples:
+  # Generate a PostgreSQL secret with readonly role
+  symvault dynamic generate --engine postgres --role readonly --ttl 1h
+
+  # Generate AWS STS credentials for a specific role
+  symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m
+
+Flags:
+      --engine string   Secret engine type (postgres, aws-sts)
+  -h, --help            help for generate
+      --role string     Role or permission level
+      --ttl duration    Time-to-live duration (e.g., 1h, 30m) (default 1h0m0s)
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")

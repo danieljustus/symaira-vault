@@ -1,0 +1,40 @@
+Retrieves and displays a password entry. Use path.field syntax to get specific fields.
+
+Usage:
+  symvault get <path[.field]> [flags]
+
+Aliases:
+  get, show, cat
+
+Examples:
+  # Get a specific field (auto-copies to clipboard on TTY)
+  symvault get github.password
+
+  # Substring search fallback (when exact path doesn't exist)
+  symvault get git
+
+  # Explicitly print to stdout instead of clipboard
+  symvault get github.password --print
+
+  # Output as JSON
+  symvault get github --output json
+
+  # Use a specific profile
+  symvault get github.password --profile work
+
+Flags:
+      --digest     Print sha256 digest (first 12 hex chars) of the value only
+  -h, --help       help for get
+      --length     Print byte length of the stored string value only
+      --metadata   Print JSON metadata (length and sha256_12) of the value only
+  -p, --print      Print value to stdout instead of copying to clipboard
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")

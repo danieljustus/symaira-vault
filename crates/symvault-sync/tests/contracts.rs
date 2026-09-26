@@ -265,6 +265,10 @@ impl intake::QuarantineSink for Sink {
     fn contains_hash(&self, _: &str) -> bool {
         false
     }
+
+    fn contains_path(&self, path: &str) -> bool {
+        self.paths.contains(path)
+    }
 }
 #[test]
 fn quarantine_is_review_gated_and_dry_run_has_no_side_effect() {
@@ -278,7 +282,7 @@ fn quarantine_is_review_gated_and_dry_run_has_no_side_effect() {
             source_type: intake::SourceType::Text,
             size: 3,
             sha256: "hash".into(),
-            mtime: 0,
+            mtime: "1970-01-01T00:00:00Z".into(),
         }),
         suggestions: vec![],
         spool_path: None,

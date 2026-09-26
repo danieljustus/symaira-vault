@@ -692,7 +692,10 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     } else {
         op
     };
-    format!("{op} {}: {err_msg}", path.display())
+    format!(
+        "{op} {}: {err_msg}",
+        crate::agent_list_commands::clean_path(path).display()
+    )
 }
 
 pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {

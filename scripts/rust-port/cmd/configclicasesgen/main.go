@@ -703,7 +703,7 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 			Expected: expected{
 				ExitCode:       exitCode,
 				StdoutBytes:    byteValues(stdout.Bytes()),
-				StderrContains: errorNeedle(stderr.Bytes()),
+				StderrContains: errorNeedle(stderr.Bytes(), exitCode),
 			},
 		}
 		if input.writeConfig {
@@ -732,7 +732,10 @@ func cleanupCase(tempRoot string, cause error) error {
 	return cause
 }
 
-func errorNeedle(stderr []byte) string {
+func errorNeedle(stderr []byte, exitCode int) string {
+	if exitCode == 0 {
+		return ""
+	}
 	for _, needle := range []string{"config is invalid after update", "cannot determine config file path", "cannot load config", "key ", "cannot access key"} {
 		if bytes.Contains(stderr, []byte(needle)) {
 			return needle

@@ -1606,21 +1606,18 @@ mod tests {
             marker.display()
         );
         fs::write(&script, script_body).expect("write timeout helper");
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
-                .expect("make timeout helper executable");
-        }
-
         let started = Instant::now();
         let error = run_process_with_timeout(
-            script.to_str().expect("script path"),
-            &[],
+            "/bin/sh",
+            &[script.to_str().expect("script path")],
             None,
             Duration::from_secs(1),
         )
         .expect_err("helper must exceed the deadline");
-        assert!(matches!(error, GitError::Timeout { .. }));
+        assert!(
+            matches!(error, GitError::Timeout { .. }),
+            "expected timeout, got {error:?}"
+        );
         assert!(started.elapsed() < Duration::from_secs(2));
 
         let pid = fs::read_to_string(&marker)

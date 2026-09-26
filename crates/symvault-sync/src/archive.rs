@@ -63,8 +63,12 @@ fn mode(meta: &fs::Metadata) -> u32 {
     }
     #[cfg(not(unix))]
     {
-        let _ = meta;
-        0
+        match (meta.is_dir(), meta.permissions().readonly()) {
+            (true, false) => 0o777,
+            (true, true) => 0o555,
+            (false, false) => 0o666,
+            (false, true) => 0o444,
+        }
     }
 }
 fn copy_and_hash(mut input: impl Read, mut output: impl Write) -> io::Result<(u64, String)> {
@@ -138,7 +142,13 @@ pub fn backup(
             .to_string_lossy()
             .replace(std::path::MAIN_SEPARATOR, "/");
         if meta.is_dir() {
-            builder.append_dir(&rel, &path)?;
+            let mut h = Header::new_gnu();
+            h.set_metadata(&meta);
+            h.set_mode(mode(&meta));
+            h.set_size(0);
+            h.set_entry_type(EntryType::Directory);
+            h.set_cksum();
+            builder.append_data(&mut h, &rel, io::empty())?;
             manifest.push(ArchiveEntry {
                 path: slash,
                 directory: true,

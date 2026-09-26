@@ -1,0 +1,802 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "08c162e5",
+    "commit_sha": "08c162e5090b6450889e2840b4caaf1b4c963cef",
+    "source_files": [
+      "internal/mcp/auth/auth.go",
+      "internal/mcp/auth/token.go",
+      "internal/mcp/server/http_helpers.go",
+      "internal/mcp/server/prompt_registry.go",
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/serverbootstrap/http.go",
+      "internal/mcp/serverbootstrap/http_setup.go",
+      "internal/mcp/transport/transport.go"
+    ],
+    "source_digest": "dee03f837dc962d746609a6e20686c9f4a399f524ee1da2b0ec29b570a1447ef"
+  },
+  "server_name": "symaira",
+  "server_version": "1.0.0",
+  "cases": [
+    {
+      "name": "initialize",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream, application/json",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1083",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
+    },
+    {
+      "name": "authenticated_prompts_list_after_initialize",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1754",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_sse_only_prompts_list_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_initialized_notification_accepted",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}"
+      },
+      "response": {
+        "status": 202,
+        "headers": {
+          "Content-Length": "0"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_prompts_list_after_initialized_notification",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1755",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":21,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_sse_get_rejected_with_allow_post",
+      "go_authenticated": true,
+      "request": {
+        "method": "GET",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": true,
+        "body": ""
+      },
+      "response": {
+        "status": 405,
+        "headers": {
+          "Allow": "POST",
+          "Content-Length": "73",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"method not allowed\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_unsupported_protocol_version",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "1999-01-01",
+        "agent": "default",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Length": "94",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"unsupported MCP-Protocol-Version\",\"code\":-32600},\"jsonrpc\":\"2.0\",\"id\":3}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "missing_bearer_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Length": "13",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "unauthorized\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "initialize_health_token",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1083",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":8,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_allowed_health_tool",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream, application/json",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "188",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"text\":\"{\\\"server\\\":\\\"Symaira Vault MCP\\\",\\\"status\\\":\\\"healthy\\\",\\\"transport\\\":\\\"\\\",\\\"version\\\":\\\"1.0.0\\\"}\",\"type\":\"text\"}],\"isError\":false}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_sse_only_health_tool_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":24,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "token_agent_mismatch_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "other",
+        "token_name": "health",
+        "token_agent": "default",
+        "allowed_tools": [
+          "health"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"arguments\":{}}}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "61",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "forbidden: token agent does not match X-Symaira-Agent header\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "initialize_limited_token",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "limited",
+        "token_agent": "default",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1083",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "authenticated_tool_scope_denied",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "limited",
+        "token_agent": "default",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"get_entry\",\"arguments\":{\"path\":\"fixture\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "137",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"text\":\"Tool \\\"get_entry\\\" requires tier \\\"token_scope\\\"\",\"type\":\"text\"}],\"isError\":true}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "foreign_origin_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "https://attacker.example",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "76",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "malformed_origin_rejected",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://%",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "Content-Length": "76",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "matching_host_and_origin_reaches_authentication",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "attacker.example",
+        "origin": "https://attacker.example",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"initialize\"}"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "Content-Length": "13",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "unauthorized\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "malformed_content_type_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json; charset=\"broken;still",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 415,
+        "headers": {
+          "Content-Length": "92",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Content-Type must be application/json\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "malformed_accept_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "text/event-stream, application/json; q=\"broken,still",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "oversized_body_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "",
+        "body_repeat": 1048577
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Length": "67",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"invalid JSON\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "oversized_header_reaches_mcp_handler",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}",
+        "header_repeat": 17408
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1084",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":15,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
+    },
+    {
+      "name": "content_type_quoted_semicolon_accepted",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json; profile=\"a;b\"",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1755",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":16,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "accept_quoted_comma_rejected",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json; q=\"a,b\", text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"prompts/list\"}"
+      },
+      "response": {
+        "status": 406,
+        "headers": {
+          "Content-Length": "113",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"error\":{\"message\":\"Accept must include application/json and text/event-stream\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n",
+        "connection_reused": true
+      }
+    },
+    {
+      "name": "duplicate_authorization_first_value_reaches_handler",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"prompts/list\"}",
+        "duplicate_authorization": true
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1755",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":18,\"result\":{\"prompts\":[{\"arguments\":[{\"description\":\"Friendly name of the service, e.g. 'GitHub' or 'AWS prod'\",\"name\":\"service_name\",\"required\":false},{\"description\":\"Vault entry path. If omitted, derive a slug from service_name.\",\"name\":\"path\",\"required\":false}],\"description\":\"Guided workflow to add a new credential to the Symaira Vault vault. Sensitive fields are collected via secure dialog so the agent never sees the value.\",\"name\":\"add-credential\"},{\"arguments\":[{\"description\":\"Vault entry path to rotate\",\"name\":\"path\",\"required\":true},{\"description\":\"New password length (default 32)\",\"name\":\"length\",\"required\":false}],\"description\":\"Rotate the password/token on an existing Symaira Vault entry by generating a new value, storing it, and reminding the user to update it server-side.\",\"name\":\"rotate-credential\"},{\"arguments\":[{\"description\":\"Search query\",\"name\":\"query\",\"required\":true},{\"description\":\"What the user wants to do with the credential (login / curl / terraform / ...)\",\"name\":\"task\",\"required\":false}],\"description\":\"Find an Symaira Vault entry by query and suggest the right consumption tool (copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.\",\"name\":\"find-and-use\"},{\"arguments\":[{\"description\":\"Vault entry path to share\",\"name\":\"path\",\"required\":true},{\"description\":\"Name of the receiving agent profile\",\"name\":\"to_agent\",\"required\":true},{\"description\":\"Time-to-live for the grant, default '1h'\",\"name\":\"ttl\",\"required\":false},{\"description\":\"Optional single field to share instead of the whole entry\",\"name\":\"secret_field\",\"required\":false}],\"description\":\"Create a share grant for another agent and explain the human-approval flow.\",\"name\":\"share-credential\"}]}}\n"
+      }
+    },
+    {
+      "name": "duplicate_content_length_rejected_by_go_parser",
+      "go_authenticated": false,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "authenticated": false,
+        "body": "",
+        "duplicate_content_length": true
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "Content-Length": "-1",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "400 Bad Request"
+      }
+    },
+    {
+      "name": "http_10_initialize_accepted",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}",
+        "http_version": "HTTP/1.0"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1084",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":19,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
+    },
+    {
+      "name": "oversized_request_line_reaches_handler",
+      "go_authenticated": true,
+      "request": {
+        "method": "POST",
+        "path": "/mcp",
+        "host": "127.0.0.1",
+        "origin": "http://127.0.0.1",
+        "content_type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "protocol_version": "2025-11-25",
+        "agent": "default",
+        "token_name": "health",
+        "authenticated": true,
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}",
+        "request_line_repeat": 16384
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Length": "1084",
+          "Content-Type": "application/json"
+        },
+        "absent_headers": [
+          "MCP-Protocol-Version"
+        ],
+        "body": "{\"jsonrpc\":\"2.0\",\"id\":20,\"result\":{\"capabilities\":{\"tools\":{},\"prompts\":{}},\"serverInfo\":{\"name\":\"symaira\",\"version\":\"1.0.0\"},\"protocolVersion\":\"2025-11-25\",\"instructions\":\"SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \\\"handle\\\", e.g. op://path/field) instead of the plaintext, plus a per-field \\\"usage\\\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\\n\\nTo consume a secret without seeing it:\\n  - run_command / execute_with_secret: pass \\\"path.field\\\" (not the op:// handle) as an env map value, e.g. {\\\"env\\\": {\\\"GH_TOKEN\\\": \\\"github.token\\\"}}. SymVault resolves and injects it; only the child process sees the value.\\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\\n  - request_credential: ask the user to supply or confirm a credential directly.\\n\\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.\"}}\n"
+      }
+    }
+  ]
+}

@@ -11,20 +11,27 @@ mod agent_token_commands;
 mod agent_uninstall_commands;
 mod agent_upgrade_commands;
 mod agent_whoami_commands;
+mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod broker_commands;
+mod completion_commands;
 mod config;
 mod daemon_commands;
 mod device;
 mod device_approval;
 mod doctor_commands;
+mod dynamic_commands;
 mod edit_commands;
 mod export_commands;
 mod file_commands;
+mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod intake_commands;
+mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
@@ -37,9 +44,12 @@ mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod setup_commands;
 mod share_commands;
+mod startup_profile_commands;
 mod sync_commands;
 mod template_commands;
+mod ui_commands;
 mod update_commands;
 mod utility_commands;
 mod vault_commands;
@@ -50,14 +60,18 @@ use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     process::ExitCode,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use symaira_core_version::new as new_version;
 #[cfg(target_os = "macos")]
 use symvault_core::platform::TouchId;
@@ -73,6 +87,7 @@ use symvault_core::session::MemoryKeyring;
 use symvault_core::{
     TOOL_NAME,
     config::{AuthMethod, Config, PathResolver, VaultConfig},
+    error::CliError,
     session::SessionManager,
 };
 use symvault_crypto::{SecretBytes, decrypt_identity, encrypt_identity_scrypt};
@@ -125,6 +140,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Generate a shell completion script.
+    Completion {
+        #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
+        shell: String,
+    },
     /// Run a command with secrets injected as environment variables.
     Run {
         #[arg(short = 'e', long = "env")]
@@ -137,8 +157,45 @@ enum Command {
         working_dir: Option<PathBuf>,
         #[arg(short = 't', long)]
         timeout: Option<String>,
+        #[arg(long)]
+        broker: bool,
+        #[arg(long)]
+        broker_strict: bool,
+        #[arg(long, value_delimiter = ',')]
+        broker_passthrough: Vec<String>,
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Run the loopback egress broker's explicit CONNECT passthrough subset.
+    Broker {
+        /// Loopback listen address (0 selects an ephemeral port).
+        #[arg(long, default_value = "127.0.0.1:0")]
+        addr: String,
+        /// Reject hosts outside the passthrough allowlist with 403.
+        #[arg(long)]
+        strict: bool,
+        /// Hosts tunneled without TLS interception (comma-separated, domain suffixes match).
+        /// At least one host is required by this Rust broker slice.
+        #[arg(long, value_delimiter = ',')]
+        passthrough: Vec<String>,
+    },
+    /// Manage local credential intake.
+    #[command(subcommand_precedence_over_arg = true)]
+    Intake {
+        #[arg(value_name = "FILE", num_args = 0..)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value_t = 32 * 1024 * 1024)]
+        batch_limit: i64,
+        #[arg(long, default_value_t = 100)]
+        max_files: i64,
+        #[arg(long)]
+        move_to_trash: bool,
+        #[arg(long)]
+        ocr_text: Option<PathBuf>,
+        #[command(subcommand)]
+        command: Option<IntakeCommand>,
     },
     /// Manage secret sharing between agents.
     Share {
@@ -215,12 +272,16 @@ enum Command {
     List {
         #[arg(value_name = "PREFIX")]
         prefix: Option<String>,
+        #[arg(value_name = "EXTRA")]
+        extra: Vec<String>,
     },
     /// Get a password entry or field.
     #[command(alias = "show", alias = "cat")]
     Get {
         #[arg(value_name = "PATH[.FIELD]")]
         query: String,
+        #[arg(value_name = "EXTRA")]
+        extra: Vec<String>,
         #[arg(short, long)]
         _print: bool,
         #[arg(long)]
@@ -251,6 +312,8 @@ enum Command {
         reveal: bool,
         #[arg(long)]
         quiet: bool,
+        #[command(subcommand)]
+        subcommand: Option<GenerateCommand>,
     },
     /// Check vault health and configuration
     Doctor {
@@ -361,17 +424,42 @@ enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Measure and report CLI startup time.
+    StartupProfile {
+        #[arg(short = 'n', long, default_value_t = 10)]
+        count: i64,
+        #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
+        top: i64,
+        #[arg(long)]
+        trace: Option<PathBuf>,
+    },
     /// Start the MCP server for agent access.
+    #[command(alias = "serve")]
     Mcp {
         #[command(subcommand)]
         action: Option<McpAction>,
-        /// Agent profile used by the stdio server.
+        /// Agent profile used by this server (required in both transports).
         #[arg(long)]
         agent: Option<String>,
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Permit a locked vault (unsupported by the native stdio runtime).
+        /// Bind address for HTTP mode (remote binds require TLS).
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+        /// Server port.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// PEM TLS certificate file path.
+        #[arg(long, default_value = "")]
+        tls_cert: String,
+        /// PEM TLS private key file path.
+        #[arg(long, default_value = "")]
+        tls_key: String,
+        /// PEM client CA file path; enables mandatory mTLS.
+        #[arg(long, default_value = "")]
+        tls_ca: String,
+        /// Permit a locked vault (unsupported by the native runtime).
         #[arg(long)]
         allow_locked: bool,
     },
@@ -433,15 +521,50 @@ enum Command {
         skip_existing: bool,
         #[arg(long)]
         overwrite: bool,
+        #[arg(
+            long,
+            help = "Import entries into quarantine/<import-id>/ for human review"
+        )]
+        quarantine: bool,
         #[arg(long, default_value = "")]
         mapping: String,
     },
+    /// Launch the interactive terminal UI.
+    Ui {
+        #[arg(long)]
+        experimental: bool,
+        #[arg(long)]
+        print_keybindings: bool,
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        extra: Vec<String>,
+    },
+    /// Launch the interactive setup wizard.
+    Setup {
+        /// Do not resume setup after an abort.
+        #[arg(long = "no-resume")]
+        no_resume: bool,
+        /// Keep vault initialization artifacts when a later step fails.
+        #[arg(long = "keep-on-error")]
+        keep_on_error: bool,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
+    },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
+    /// Help about any command.
+    Help {
+        #[arg(value_name = "COMMAND", num_args = 0..)]
+        path: Vec<String>,
+    },
     /// Manage paired devices for multi-device vault access.
     Device {
         #[command(subcommand)]
         command: DeviceCommand,
+    },
+    /// List and decide pending agent approval requests.
+    Approval {
+        #[command(subcommand)]
+        command: ApprovalCommand,
     },
     /// Inspect the YAML configuration file.
     Config {
@@ -462,13 +585,27 @@ enum Command {
     Update {
         /// Catch-all: cobra Find dispatches on the first non-flag word
         /// (`info`); unknown words reach the runner for byte-exact errors.
-        #[arg(value_name = "COMMAND", num_args = 0..)]
+        #[arg(value_name = "COMMAND", num_args = 0.., allow_hyphen_values = true)]
         args: Vec<OsString>,
+    },
+    /// Generate dynamic secrets with time-limited leases.
+    Dynamic {
+        #[command(subcommand)]
+        command: DynamicCommand,
     },
     /// Manage vault authentication and session status.
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GenerateCommand {
+    /// Generate manual pages.
+    Manpages {
+        #[arg(value_name = "DIRECTORY")]
+        directory: PathBuf,
     },
 }
 
@@ -478,13 +615,28 @@ enum Command {
 enum McpAction {
     /// Run the MCP server over the selected transport.
     Serve {
-        /// Agent profile used by the stdio server.
+        /// Agent profile used by this server (required in both transports).
         #[arg(long)]
         agent: Option<String>,
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Permit a locked vault (unsupported by the native stdio runtime).
+        /// Bind address for HTTP mode (remote binds require TLS).
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+        /// Server port.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// PEM TLS certificate file path.
+        #[arg(long, default_value = "")]
+        tls_cert: String,
+        /// PEM TLS private key file path.
+        #[arg(long, default_value = "")]
+        tls_key: String,
+        /// PEM client CA file path; enables mandatory mTLS.
+        #[arg(long, default_value = "")]
+        tls_ca: String,
+        /// Permit a locked vault (unsupported by the native runtime).
         #[arg(long)]
         allow_locked: bool,
     },
@@ -532,8 +684,76 @@ enum ShareCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum DynamicCommand {
+    /// Generate a dynamic secret.
+    Generate {
+        #[arg(long)]
+        engine: Option<String>,
+        #[arg(long)]
+        role: Option<String>,
+        #[arg(long, default_value = "1h0m0s", value_parser = parse_dynamic_ttl)]
+        ttl: String,
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        _args: Vec<OsString>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeCommand {
+    Watch {
+        directory: Option<PathBuf>,
+        #[arg(long)]
+        once: bool,
+        #[arg(long, default_value = "10s", value_parser = parse_watch_interval)]
+        interval: std::time::Duration,
+        #[arg(long, default_value = "5s", value_parser = parse_watch_debounce)]
+        debounce: std::time::Duration,
+        #[command(subcommand)]
+        command: Option<IntakeWatchCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeWatchCommand {
+    Disable,
+}
+
+fn parse_watch_interval(value: &str) -> Result<std::time::Duration, String> {
+    parse_watch_duration(value, std::time::Duration::from_secs(10))
+}
+
+fn parse_dynamic_ttl(value: &str) -> Result<String, String> {
+    symvault_core::config::parse_duration_nanos(value)
+        .map(|_| value.to_owned())
+        .ok_or_else(|| format!("invalid duration {value:?}"))
+}
+
+fn parse_watch_debounce(value: &str) -> Result<std::time::Duration, String> {
+    parse_watch_duration(value, std::time::Duration::from_secs(5))
+}
+
+fn parse_watch_duration(
+    value: &str,
+    fallback: std::time::Duration,
+) -> Result<std::time::Duration, String> {
+    let nanos = symvault_core::config::parse_duration_nanos(value)
+        .ok_or_else(|| format!("invalid duration {value:?}"))?;
+    if nanos <= 0 {
+        return Ok(fallback);
+    }
+    u64::try_from(nanos)
+        .map(std::time::Duration::from_nanos)
+        .map_err(|_| format!("invalid duration {value:?}"))
+}
+
+#[derive(Debug, Subcommand)]
 enum AgentCommand {
     List,
+    #[command(hide = true)]
+    Setup {
+        #[arg(value_name = "ARG", num_args = 0.., allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     Doctor {
         name: String,
     },
@@ -937,6 +1157,29 @@ enum DeviceCommand {
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
     },
+    /// Mint a pairing code for an approval device.
+    ApprovalPair {
+        /// LAN address the phone should use to reach the running server.
+        #[arg(long, value_name = "HOST")]
+        host: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ApprovalCommand {
+    /// List pending approval requests.
+    List,
+    /// Approve or deny a pending request.
+    Decide {
+        #[arg(value_name = "REQUEST_ID", num_args = 0..)]
+        args: Vec<String>,
+        /// Approve the request.
+        #[arg(long)]
+        approve: bool,
+        /// Deny the request.
+        #[arg(long)]
+        deny: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -998,6 +1241,12 @@ struct VersionArgs {
 /// device-list differential is the regression check for this.
 const CLI_STACK_SIZE: usize = 16 * 1024 * 1024;
 
+fn print_arg_count_error(accepted: &str, received: usize) -> ExitCode {
+    let message = format!("accepts {accepted} arg(s), received {received}");
+    eprintln!("Error: {message}\nError: {message}");
+    ExitCode::from(1)
+}
+
 fn main() -> ExitCode {
     match std::thread::Builder::new()
         .name("symvault".to_string())
@@ -1016,6 +1265,16 @@ fn run_cli() -> ExitCode {
         return write_unknown_version_flag();
     }
 
+    if let Some(topic) = help_commands::flag_help_topic(&args) {
+        return match help_commands::write_nested(topic, &mut io::stdout().lock()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Error: help: {error}");
+                ExitCode::from(1)
+            }
+        };
+    }
+
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(error) => {
@@ -1028,6 +1287,9 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Completion { shell }) => {
+            completion_commands::generate(&shell, Cli::command())
+        }
         Some(Command::Init { vault_dir, auth }) => {
             run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
         }
@@ -1095,32 +1357,45 @@ fn run_cli() -> ExitCode {
             })();
             finish_vault_result(result)
         }
-        Some(Command::List { prefix }) => run_list(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            prefix.as_deref().unwrap_or(""),
-            cli.output.as_deref().unwrap_or("text"),
-            cli.json,
-            cli.quiet,
-        ),
+        Some(Command::List { prefix, extra }) => {
+            if extra.is_empty() {
+                run_list(
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    prefix.as_deref().unwrap_or(""),
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    cli.quiet,
+                )
+            } else {
+                print_arg_count_error("at most 1", 1 + extra.len())
+            }
+        }
         Some(Command::Get {
             query,
+            extra,
             _print,
             length,
             digest,
             metadata,
-        }) => run_get(
-            cli.vault.as_deref(),
-            cli._profile.as_deref(),
-            &query,
-            cli.output.as_deref().unwrap_or("text"),
-            cli.json,
-            _print,
-            length,
-            digest,
-            metadata,
-            cli.quiet,
-        ),
+        }) => {
+            if extra.is_empty() {
+                run_get(
+                    cli.vault.as_deref(),
+                    cli._profile.as_deref(),
+                    &query,
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    _print,
+                    length,
+                    digest,
+                    metadata,
+                    cli.quiet,
+                )
+            } else {
+                print_arg_count_error("1", 1 + extra.len())
+            }
+        }
         Some(Command::Find { query, url }) => run_find(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1130,12 +1405,37 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Ui {
+            experimental: _,
+            print_keybindings,
+            extra,
+        }) => ui_commands::run(
+            print_keybindings,
+            &extra,
+            &mut io::stdout().lock(),
+            &mut io::stderr().lock(),
+        ),
+        Some(Command::Setup {
+            no_resume,
+            keep_on_error,
+            _extra: _,
+        }) => setup_commands::run(
+            no_resume,
+            keep_on_error,
+            io::stdin().is_terminal(),
+            &mut io::stderr().lock(),
+        ),
+        Some(Command::Generate {
+            subcommand: Some(GenerateCommand::Manpages { directory }),
+            ..
+        }) => run_generate_manpages(&directory),
         Some(Command::Generate {
             length,
             symbols,
             store,
             reveal,
             quiet,
+            subcommand: None,
         }) => run_generate(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -1148,6 +1448,11 @@ fn run_cli() -> ExitCode {
             cli.json,
             cli.quiet,
         ),
+        Some(Command::Help { path }) => {
+            let result = help_commands::write(Cli::command(), &path, &mut io::stdout().lock())
+                .map_err(|error| format!("help: {error}"));
+            finish_vault_result(result)
+        }
         Some(Command::Doctor {
             no_network,
             strict,
@@ -1283,9 +1588,15 @@ fn run_cli() -> ExitCode {
             passthrough,
             working_dir,
             timeout,
+            broker,
+            broker_strict,
+            broker_passthrough,
             command,
         }) => {
             let result = (|| {
+                if broker && broker_passthrough.iter().all(|host| host.trim().is_empty()) {
+                    return Err("--broker-passthrough requires at least one host".to_owned());
+                }
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let identity = device::unlock_vault(&root)?;
@@ -1298,15 +1609,51 @@ fn run_cli() -> ExitCode {
                     .map(session_commands::parse_ttl_override)
                     .transpose()?
                     .flatten();
+                let broker = if broker {
+                    let address = broker_commands::validate_address("127.0.0.1:0")?;
+                    let listener = broker_commands::bind(address)?;
+                    let proxy_url = format!(
+                        "http://{}",
+                        listener.local_addr().map_err(|error| error.to_string())?
+                    );
+                    let stopping = Arc::new(AtomicBool::new(false));
+                    let server_stopping = Arc::clone(&stopping);
+                    let server_hosts = broker_passthrough.clone();
+                    let server = thread::spawn(move || {
+                        symvault_mcp::broker::serve_connect_passthrough(
+                            listener,
+                            server_hosts,
+                            broker_strict,
+                            &server_stopping,
+                            false,
+                        )
+                    });
+                    Some((stopping, server, proxy_url))
+                } else {
+                    None
+                };
+                let extra_environment: Vec<(OsString, OsString)> = broker
+                    .as_ref()
+                    .map(|(_, _, proxy_url)| {
+                        [
+                            ("HTTP_PROXY", proxy_url.as_str()),
+                            ("HTTPS_PROXY", proxy_url.as_str()),
+                            ("NO_PROXY", "127.0.0.1,localhost"),
+                        ]
+                        .into_iter()
+                        .map(|(name, value)| (name.into(), value.into()))
+                        .collect()
+                    })
+                    .unwrap_or_default();
                 let redactions: Vec<_> = environment
                     .values
                     .values()
                     .map(|value| value.as_bytes().to_vec())
                     .collect();
-                let result = run_commands::run_process(run_commands::ProcessOptions {
+                let process_result = run_commands::run_process(run_commands::ProcessOptions {
                     command: &command,
                     environment: &environment.values,
-                    extra_environment: &[],
+                    extra_environment: &extra_environment,
                     generic_redaction: true,
                     passthrough: &passthrough,
                     working_directory: working_dir
@@ -1315,7 +1662,15 @@ fn run_cli() -> ExitCode {
                     timeout,
                     redactions: &redactions,
                     whitelist: run_commands::RUN_ENV_WHITELIST,
-                })?;
+                });
+                if let Some((stopping, server, _)) = broker {
+                    stopping.store(true, Ordering::Relaxed);
+                    let server_result = server
+                        .join()
+                        .map_err(|_| "broker listener thread panicked".to_owned())?;
+                    server_result?;
+                }
+                let result = process_result?;
                 if result.timed_out {
                     return Err(format!(
                         "command timed out after {}",
@@ -1329,11 +1684,147 @@ fn run_cli() -> ExitCode {
                 }
                 Ok(())
             })();
+            if result
+                .as_ref()
+                .is_err_and(|error| error == "vault not initialized. Run 'symvault init' first")
+            {
+                print_error_like_go("vault not initialized. Run 'symvault init' first");
+                eprintln!(
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+                return ExitCode::from(3);
+            }
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
         }
+        Some(Command::Broker {
+            addr,
+            strict,
+            passthrough,
+        }) => {
+            let result = (|| {
+                if passthrough.iter().all(|host| host.trim().is_empty()) {
+                    return Err("--passthrough requires at least one host".to_owned());
+                }
+                let address = broker_commands::validate_address(&addr)?;
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&root)?;
+                let _identity = device::unlock_vault(&root)?;
+                let listener = broker_commands::bind(address)?;
+                broker_commands::serve(listener, strict, passthrough)
+            })();
+            finish_vault_result(result)
+        }
+        Some(Command::Intake {
+            files,
+            dry_run,
+            batch_limit,
+            max_files,
+            move_to_trash,
+            ocr_text,
+            command,
+        }) => match command {
+            None if files.is_empty() => {
+                let message = "requires at least 1 arg(s), only received 0";
+                let _ = writeln!(io::stderr(), "Error: {message}\nError: {message}");
+                ExitCode::from(1)
+            }
+            None => match intake_commands::intake_files(
+                &files,
+                dry_run,
+                batch_limit,
+                max_files,
+                move_to_trash,
+                ocr_text.as_deref(),
+                cli.json,
+                cli.quiet,
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err((code, error)) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}\nError: {error}");
+                    ExitCode::from(code)
+                }
+            },
+            Some(IntakeCommand::Watch {
+                directory,
+                once,
+                interval,
+                debounce,
+                command,
+            }) => {
+                if dry_run
+                    || batch_limit != 32 * 1024 * 1024
+                    || max_files != 100
+                    || move_to_trash
+                    || ocr_text.is_some()
+                {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Error: intake parent flags cannot be used with intake watch"
+                    );
+                    return ExitCode::from(2);
+                }
+                if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                    return match intake_commands::watch_disable(cli.quiet) {
+                        Ok(()) => ExitCode::SUCCESS,
+                        Err(error) => {
+                            for _ in 0..2 {
+                                let _ = writeln!(io::stderr(), "Error: {error}");
+                            }
+                            ExitCode::from(match error {
+                                intake_commands::WatchDisableError::UnsupportedPlatform => 9,
+                                intake_commands::WatchDisableError::Remove(_) => 1,
+                            })
+                        }
+                    };
+                }
+                let Some(directory) = directory else {
+                    return print_arg_count_error("1", 0);
+                };
+                let result = if once {
+                    intake_commands::watch_once(
+                        &directory,
+                        interval,
+                        debounce,
+                        cli.json,
+                        cli.quiet,
+                        cli.vault.as_deref(),
+                        cli._profile.as_deref(),
+                    )
+                } else {
+                    intake_commands::watch_continuous(
+                        &directory,
+                        interval,
+                        debounce,
+                        cli.json,
+                        cli.quiet,
+                        cli.vault.as_deref(),
+                        cli._profile.as_deref(),
+                    )
+                };
+                match result {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        let code = if matches!(
+                            &error,
+                            intake_commands::WatchOnceError::InvalidDirectory(_)
+                        ) {
+                            9
+                        } else {
+                            1
+                        };
+                        for _ in 0..2 {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                        }
+                        ExitCode::from(code)
+                    }
+                }
+            }
+        },
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
         }) => {
@@ -1437,6 +1928,24 @@ fn run_cli() -> ExitCode {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
+        }
+        Some(Command::Agent {
+            command: AgentCommand::Setup { args },
+        }) => {
+            if let Some(flag) = args.iter().find(|arg| arg.starts_with('-')) {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Error: unknown flag: {flag}\nError: unknown flag: {flag}"
+                );
+                return ExitCode::from(1);
+            }
+            const MESSAGE: &str =
+                "This command is deprecated in v4.0. Use: symvault agent install <name>";
+            let _ = writeln!(
+                io::stderr(),
+                "{MESSAGE}\nError: {MESSAGE}\nError: {MESSAGE}\nTry: symvault find <search-term>"
+            );
+            ExitCode::from(2)
         }
         Some(Command::Agent {
             command: AgentCommand::List,
@@ -1837,10 +2346,37 @@ fn run_cli() -> ExitCode {
             yes,
             cli.quiet,
         ),
+        Some(Command::StartupProfile { count, top, trace }) => {
+            let format = if cli.json {
+                Some("json")
+            } else {
+                cli.output.as_deref()
+            };
+            if let Some(format) = format.filter(|format| *format != "text") {
+                let _ = writeln!(
+                    io::stderr(),
+                    "Error: output format {format:?} is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
+                );
+                ExitCode::from(9)
+            } else {
+                match startup_profile_commands::run(count, top, trace.as_deref()) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        let _ = writeln!(io::stderr(), "Error: {error}");
+                        ExitCode::from(1)
+                    }
+                }
+            }
+        }
         Some(Command::Mcp {
             action,
             agent,
             stdio,
+            bind,
+            port,
+            tls_cert,
+            tls_key,
+            tls_ca,
             allow_locked,
         }) => match action {
             Some(McpAction::Install) => {
@@ -1855,12 +2391,22 @@ fn run_cli() -> ExitCode {
             Some(McpAction::Serve {
                 agent,
                 stdio,
+                bind,
+                port,
+                tls_cert,
+                tls_key,
+                tls_ca,
                 allow_locked,
             }) => run_mcp(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 agent.as_deref(),
                 stdio,
+                bind.as_str(),
+                port,
+                tls_cert.as_str(),
+                tls_key.as_str(),
+                tls_ca.as_str(),
                 allow_locked,
                 cli.quiet,
             ),
@@ -1869,6 +2415,11 @@ fn run_cli() -> ExitCode {
                 cli._profile.as_deref(),
                 agent.as_deref(),
                 stdio,
+                bind.as_str(),
+                port,
+                tls_cert.as_str(),
+                tls_key.as_str(),
+                tls_ca.as_str(),
                 allow_locked,
                 cli.quiet,
             ),
@@ -1917,6 +2468,7 @@ fn run_cli() -> ExitCode {
             prefix,
             skip_existing,
             overwrite,
+            quarantine,
             mapping,
         }) => {
             // cobra Find: only the FIRST non-flag word can name a
@@ -1948,6 +2500,7 @@ fn run_cli() -> ExitCode {
                     &prefix,
                     skip_existing,
                     overwrite,
+                    quarantine,
                     &mapping,
                     cli.quiet,
                 )
@@ -2042,9 +2595,36 @@ fn run_cli() -> ExitCode {
             dry_run,
             cli.quiet,
         ),
-        Some(Command::Update { args }) => {
-            update_commands::run(&args, cli.output.as_deref().unwrap_or("text"), cli.json)
-        }
+        Some(Command::Update { args }) => update_commands::run(
+            &args,
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Dynamic {
+            command:
+                DynamicCommand::Generate {
+                    engine,
+                    role,
+                    ttl,
+                    _args: _,
+                },
+        }) => match dynamic_commands::generate(
+            engine.as_deref(),
+            role.as_deref(),
+            &ttl,
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+        ) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err((code, error, hint)) => {
+                print_error_like_go(&error);
+                if let Some(hint) = hint {
+                    let _ = writeln!(io::stderr(), "{hint}");
+                }
+                ExitCode::from(code)
+            }
+        },
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -2080,6 +2660,52 @@ fn run_cli() -> ExitCode {
                 Ok::<(), String>(())
             })();
             finish_vault_result(result)
+        }
+        Some(Command::Approval {
+            command: ApprovalCommand::List,
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&vault)?;
+                approval_commands::list(
+                    &vault,
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    cli.quiet,
+                )
+            })();
+            finish_vault_result(result)
+        }
+        Some(Command::Approval {
+            command:
+                ApprovalCommand::Decide {
+                    args,
+                    approve,
+                    deny,
+                },
+        }) => {
+            if args.len() != 1 {
+                print_arg_count_error("1", args.len())
+            } else if approve == deny {
+                finish_vault_result(Err(
+                    "exactly one of --approve or --deny is required".to_owned()
+                ))
+            } else {
+                let result = (|| {
+                    let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                    require_initialized(&vault)?;
+                    approval_commands::decide(
+                        &vault,
+                        &args[0],
+                        approve,
+                        deny,
+                        cli.output.as_deref().unwrap_or("text"),
+                        cli.json,
+                        cli.quiet,
+                    )
+                })();
+                finish_vault_result(result)
+            }
         }
         Some(Command::Device { command }) => {
             let vault = match resolve_vault(cli.vault.as_deref(), cli._profile.as_deref()) {
@@ -2119,6 +2745,19 @@ fn run_cli() -> ExitCode {
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
+                DeviceCommand::ApprovalPair { host } => (|| {
+                    require_initialized(vault)?;
+                    let host = host.as_deref().ok_or_else(|| {
+                        "--host is required by this Rust CLI slice; pass the LAN address reachable by the phone"
+                            .to_owned()
+                    })?;
+                    approval_commands::pair(
+                        vault,
+                        host,
+                        cli.json || cli.output.as_deref() == Some("json"),
+                        cli.quiet,
+                    )
+                })(),
                 DeviceCommand::ApprovalRevoke { yes, args } => {
                     if args.len() != 1 {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))
@@ -2454,8 +3093,22 @@ fn run_audit_export(
                 .keyring
                 .as_deref()
                 .ok_or_else(|| "audit keyring unavailable".to_owned())?;
-            let key = symvault_store::audit::load_or_create_key_with_keyring(&vault, keyring)
-                .map_err(|error| format!("load HMAC key: {error}"))?;
+            let identity = if cfg!(any(
+                target_os = "freebsd",
+                target_os = "openbsd",
+                target_os = "netbsd"
+            )) {
+                require_initialized(&vault)?;
+                Some(device::unlock_vault(&vault)?)
+            } else {
+                None
+            };
+            let key = symvault_store::audit::load_or_create_key_for_platform(
+                &vault,
+                keyring,
+                identity.as_ref(),
+            )
+            .map_err(|error| format!("load HMAC key: {error}"))?;
             let kid = key.fingerprint();
             let keys = BTreeMap::from([(kid.clone(), key)]);
             audit_export_commands::export_with_keys(
@@ -2547,8 +3200,18 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
             .keyring
             .as_deref()
             .ok_or_else(|| "audit keyring unavailable".to_owned())?;
+        let identity = if cfg!(any(
+            target_os = "freebsd",
+            target_os = "openbsd",
+            target_os = "netbsd"
+        )) && vault.join("identity.age").is_file()
+        {
+            Some(device::unlock_vault(&vault)?)
+        } else {
+            None
+        };
         let (new_key, archive_path) =
-            symvault_store::audit::rotate_key_with_keyring(&vault, keyring)
+            symvault_store::audit::rotate_key_for_platform(&vault, keyring, identity.as_ref())
                 .map_err(|error| format!("rotate HMAC key: {error}"))?;
         let mut stderr = io::stderr().lock();
         writeln!(stderr, "New key: {} (first 4 bytes)", new_key.preview_hex())
@@ -2629,7 +3292,8 @@ fn run_auth_set(
                         fs::read(&config_path).map_err(|error| format!("read config: {error}"))?;
                     let identity_bytes = fs::read(vault.join("identity.age"))
                         .map_err(|error| format!("read identity: {error}"))?;
-                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+                    let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)
+                        .map_err(|error| error.to_string())?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
                     let keyring = runtime.keyring.as_deref().ok_or_else(|| {
@@ -2817,10 +3481,11 @@ fn run_auth_rotate_passphrase(
         }
 
         if let Some(keyring) = runtime.keyring.as_deref()
-            && let Ok(mut logger) = symvault_store::audit::open_with_keyring(
+            && let Ok(mut logger) = symvault_store::audit::open_with_keyring_and_identity(
                 "symvault",
                 &vault,
                 keyring,
+                Some(&identity),
                 symvault_store::audit::RotationConfig::default(),
             )
         {
@@ -3041,10 +3706,10 @@ fn run_get(
         print_error_like_go("--print, --length, --digest, and --metadata are mutually exclusive");
         return ExitCode::from(9);
     }
-    let result = (|| {
-        let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
+    let result = (|| -> Result<(), CliError> {
+        let vault = resolve_vault(explicit_vault, profile).map_err(CliError::internal)?;
+        require_initialized(&vault).map_err(|_| CliError::vault_not_initialized())?;
+        let identity = device::unlock_vault_for_cli(&vault)?;
         let result = vault_commands::get(&vault, &identity, query);
         if length || digest || metadata {
             let value = match result {
@@ -3057,9 +3722,9 @@ fn run_get(
                         io::stderr(),
                         "Error: field is required for --length, --digest, or --metadata"
                     );
-                    return Err(
-                        "field is required for --length, --digest, or --metadata".to_owned()
-                    );
+                    return Err(CliError::invalid_input(
+                        "field is required for --length, --digest, or --metadata",
+                    ));
                 }
             };
             let str_value = match &value {
@@ -3106,7 +3771,7 @@ fn run_get(
         let format = if json { "json" } else { output };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|error| error.to_string())?
+            .map_err(|error| CliError::internal(error.to_string()))?
             .as_secs() as i64;
         vault_commands::write_get_at(
             &mut io::stdout().lock(),
@@ -3116,8 +3781,9 @@ fn run_get(
             quiet,
             now,
         )
+        .map_err(CliError::internal)
     })();
-    finish_vault_result(result)
+    finish_get_result(result)
 }
 
 fn run_find(
@@ -3181,6 +3847,26 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             } else {
                 ExitCode::from(1)
             }
+        }
+    }
+}
+
+fn finish_get_result(result: Result<(), CliError>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            if error.effective_exit_code() == symvault_core::error::ExitCode::NotInitialized {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+                let _ = writeln!(
+                    io::stderr(),
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+            }
+            if let Some(hint) = error.hint() {
+                let _ = writeln!(io::stderr(), "Hint: {hint}");
+            }
+            ExitCode::from(error.effective_exit_code().value())
         }
     }
 }
@@ -3353,6 +4039,19 @@ fn run_generate(
     finish_vault_result(result)
 }
 
+fn run_generate_manpages(directory: &Path) -> ExitCode {
+    let result = (|| {
+        let output_dir = manpage_commands::generate(Cli::command(), directory)?;
+        writeln!(
+            io::stdout().lock(),
+            "Generated manpages in {}",
+            output_dir.display()
+        )
+        .map_err(|error| format!("write manpage result: {error}"))
+    })();
+    finish_vault_result(result)
+}
+
 fn run_backup(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -3418,13 +4117,13 @@ fn run_export(
                 require_initialized(&vault)?;
                 device::unlock_vault(&vault)
             },
-            |root, _entries| {
+            |root, _entries, identity| {
                 let runtime = runtime_session_manager();
                 let keyring = runtime
                     .keyring
                     .as_deref()
                     .ok_or_else(|| "audit keyring unavailable".to_owned())?;
-                export_commands::audit_export(root, keyring)
+                export_commands::audit_export(root, keyring, identity)
             },
         )?;
         if exported.canceled {
@@ -3828,24 +4527,60 @@ fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpServic
     finish_vault_result(result)
 }
 
+#[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
 fn run_mcp(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
     agent: Option<&str>,
     stdio: bool,
+    bind: &str,
+    port: u16,
+    tls_cert: &str,
+    tls_key: &str,
+    tls_ca: &str,
     allow_locked: bool,
     _quiet: bool,
 ) -> ExitCode {
     let result = (|| {
+        let tls_enabled = !tls_cert.is_empty() && !tls_key.is_empty();
+        if !stdio && tls_cert.is_empty() != tls_key.is_empty() {
+            return Err("native MCP HTTP requires both --tls-cert and --tls-key".to_owned());
+        }
+        if !stdio && !tls_ca.is_empty() && !tls_enabled {
+            return Err("native MCP HTTP --tls-ca requires --tls-cert and --tls-key".to_owned());
+        }
         if !stdio {
-            return Err("native MCP currently supports only --stdio".to_owned());
+            let bind_ip = if bind == "localhost" {
+                "127.0.0.1"
+                    .parse::<std::net::IpAddr>()
+                    .expect("literal loopback IP")
+            } else {
+                bind.parse::<std::net::IpAddr>()
+                    .map_err(|_| "native MCP HTTP --bind must be an IP address".to_owned())?
+            };
+            if bind_ip.is_unspecified() {
+                return Err(
+                    "native MCP HTTP wildcard binds are unavailable; choose a concrete IP"
+                        .to_owned(),
+                );
+            }
+            if !bind_ip.is_loopback() && !tls_enabled {
+                return Err(
+                    "native MCP HTTP non-loopback binds require --tls-cert and --tls-key"
+                        .to_owned(),
+                );
+            }
+        }
+        if allow_locked && !stdio {
+            return Err("--allow-locked is only supported in --stdio mode".to_owned());
         }
         if allow_locked {
             return Err("--allow-locked is not supported by the native MCP runtime".to_owned());
         }
-        let agent = agent
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| "--agent is required in --stdio mode".to_owned())?;
+        let agent = agent.filter(|name| !name.is_empty());
+        if stdio && agent.is_none() {
+            return Err("--agent is required for the native MCP stdio server".to_owned());
+        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -3854,15 +4589,27 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
-        mcp_commands::run(&vault, agent, identity, keyring, || {
-            let cache = runtime.cache_status();
-            (
-                touch_id_available(),
-                cache.backend,
-                cache.persistent,
-                cache.message,
-            )
-        })
+        mcp_commands::run(
+            &vault,
+            agent,
+            identity,
+            keyring,
+            stdio,
+            bind,
+            port,
+            tls_cert,
+            tls_key,
+            tls_ca,
+            || {
+                let cache = runtime.cache_status();
+                (
+                    touch_id_available(),
+                    cache.backend,
+                    cache.persistent,
+                    cache.message,
+                )
+            },
+        )
     })();
     finish_vault_result(result)
 }
@@ -4048,9 +4795,25 @@ fn run_import(
     prefix: &str,
     skip_existing: bool,
     overwrite: bool,
+    quarantine: bool,
     mapping: &str,
     quiet: bool,
 ) -> ExitCode {
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
+    if skip_existing && overwrite {
+        return finish_vault_result(Err(
+            "--skip-existing and --overwrite cannot be used together".into(),
+        ));
+    }
+    let (prefix, import_id) = match import_commands::resolve_import_prefix(prefix, quarantine) {
+        Ok(value) => value,
+        Err(error) => return finish_vault_result(Err(error)),
+    };
+    if !quiet && let Some(import_id) = &import_id {
+        println!("Quarantine import ID: {import_id}");
+    }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
@@ -4062,7 +4825,7 @@ fn run_import(
                 source: source.to_owned(),
                 format: format.map(str::to_owned),
                 dry_run,
-                prefix: prefix.to_owned(),
+                prefix,
                 skip_existing,
                 overwrite,
                 mapping: mapping.to_owned(),
@@ -4074,6 +4837,12 @@ fn run_import(
             },
         )?;
         if !quiet {
+            for path in &result.imported_paths {
+                println!(
+                    "{}: {path}",
+                    if dry_run { "Would import" } else { "Imported" }
+                );
+            }
             println!(
                 "Import summary: {} imported, {} skipped",
                 result.imported, result.skipped
@@ -4129,7 +4898,8 @@ fn run_unlock(
             fs::read(vault.join("config.yaml")).map_err(|error| format!("read config: {error}"))?;
         let identity_bytes = fs::read(vault.join("identity.age"))
             .map_err(|error| format!("read identity: {error}"))?;
-        let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
+        let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)
+            .map_err(|error| error.to_string())?;
         let secret = SecretBytes::new(passphrase.as_bytes());
         let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
@@ -4179,19 +4949,21 @@ fn unlock_passphrase(
     config: &Config,
     vault: &Path,
     runtime: &RuntimeSession,
-) -> Result<Zeroizing<String>, String> {
-    let vault_string = vault
-        .to_str()
-        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+) -> Result<Zeroizing<String>, session_input::PassphraseInputError> {
+    let vault_string = vault.to_str().ok_or_else(|| {
+        session_input::PassphraseInputError::Other("vault path is not valid UTF-8".to_owned())
+    })?;
     // An explicit unlock first reuses a valid cached passphrase. This mirrors
     // Go's session resolver and avoids prompting or invoking Touch ID when a
     // persistent session is already available.
     if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
         && !bytes.is_empty()
     {
-        return String::from_utf8(bytes)
-            .map(Zeroizing::new)
-            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+        return String::from_utf8(bytes).map(Zeroizing::new).map_err(|_| {
+            session_input::PassphraseInputError::Other(
+                "cached session passphrase is not valid UTF-8".to_owned(),
+            )
+        });
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (config, vault, runtime);
@@ -4203,12 +4975,15 @@ fn unlock_passphrase(
     {
         let touch_id = symvault_platform::MacOsTouchId;
         if let Ok(bytes) = session_commands::load_touch_id_passphrase(vault, keyring, &touch_id) {
-            let passphrase = String::from_utf8(bytes.to_vec())
-                .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
+            let passphrase = String::from_utf8(bytes.to_vec()).map_err(|_| {
+                session_input::PassphraseInputError::Other(
+                    "Touch ID passphrase is not valid UTF-8".to_owned(),
+                )
+            })?;
             return Ok(Zeroizing::new(passphrase));
         }
     }
-    session_input::unlock_passphrase_for_session(config_bytes)
+    session_input::unlock_passphrase_for_session_typed(config_bytes)
 }
 
 fn run_auth_status(

@@ -281,6 +281,12 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // ponytail: process-group scope; detached descendants need OS-specific supervision.
+        child_command.process_group(0);
+    }
     child_command.env_clear();
     for &key in options.whitelist {
         if let Some(value) = std::env::var_os(key) {
@@ -352,7 +358,7 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
                     .is_some_and(|limit| started.elapsed() >= limit)
                 {
                     timed_out = true;
-                    let _ = child.kill();
+                    terminate_process_tree(&mut child);
                     break child
                         .wait()
                         .map_err(|error| format!("wait for timed out command: {error}"))?;
@@ -360,7 +366,7 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
                 thread::sleep(Duration::from_millis(5));
             }
             Err(error) => {
-                let _ = child.kill();
+                terminate_process_tree(&mut child);
                 let _ = child.wait();
                 return Err(format!("wait for command: {error}"));
             }
@@ -404,6 +410,17 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     })
 }
 
+fn terminate_process_tree(child: &mut std::process::Child) {
+    // ponytail: Windows kills the direct child; Job Objects can extend this later.
+    #[cfg(unix)]
+    if let Some(pid) = rustix::process::Pid::from_raw(child.id() as i32)
+        && rustix::process::kill_process_group(pid, rustix::process::Signal::KILL).is_ok()
+    {
+        return;
+    }
+    let _ = child.kill();
+}
+
 #[cfg(windows)]
 fn has_system_root_assignment(
     environment: &BTreeMap<String, String>,
@@ -425,7 +442,7 @@ fn terminate_after_spawn_failure<T>(
     child: &mut std::process::Child,
     message: &str,
 ) -> Result<T, String> {
-    let _ = child.kill();
+    terminate_process_tree(child);
     let _ = child.wait();
     Err(message.to_owned())
 }
@@ -904,6 +921,66 @@ mod tests {
             redact_process_output(input.as_bytes(), &redactions, true),
             "*** [REDACTED]"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_timeout_kills_descendants_in_the_child_process_group() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let marker = directory.path().join("survivor");
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "(sleep 0.4; printf survivor > \"$1\") & wait".to_owned(),
+            "sh".to_owned(),
+            marker.to_string_lossy().into_owned(),
+        ];
+        let empty = BTreeMap::new();
+        let result = run_process(ProcessOptions {
+            command: &command,
+            environment: &empty,
+            extra_environment: &[],
+            passthrough: &[],
+            working_directory: None,
+            timeout: Some(Duration::from_millis(120)),
+            redactions: &[],
+            generic_redaction: false,
+            whitelist: &[],
+        })
+        .expect("timed out child should return a result");
+
+        assert!(result.timed_out);
+        assert_eq!(result.exit_code, -1);
+        thread::sleep(Duration::from_millis(500));
+        assert!(!marker.exists(), "descendant survived command timeout");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_execution_redacts_injected_secret_from_real_child_output() {
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "printf 'secret=%s\\n' \"$TOKEN\"".to_owned(),
+        ];
+        let environment =
+            BTreeMap::from([("TOKEN".to_owned(), "synthetic-secret-value".to_owned())]);
+        let redactions = vec![b"synthetic-secret-value".to_vec()];
+        let result = run_process(ProcessOptions {
+            command: &command,
+            environment: &environment,
+            extra_environment: &[],
+            passthrough: &[],
+            working_directory: None,
+            timeout: Some(Duration::from_secs(2)),
+            redactions: &redactions,
+            generic_redaction: false,
+            whitelist: &[],
+        })
+        .expect("child command should succeed");
+
+        assert_eq!(result.stdout, "secret=***\n");
+        assert_eq!(result.exit_code, 0);
     }
 
     #[test]

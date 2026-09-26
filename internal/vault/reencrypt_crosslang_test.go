@@ -184,7 +184,8 @@ func TestReencryptJournalGoRustIntegration(t *testing.T) {
 		}()
 
 		journal := reencryptJournalPath(root)
-		deadline := time.Now().Add(15 * time.Second)
+		// FreeBSD ARM runs under emulation and can exceed the old 15s window during KDF setup.
+		deadline := time.Now().Add(time.Minute)
 		killed := false
 		for time.Now().Before(deadline) {
 			if _, err := os.Stat(journal); err == nil {

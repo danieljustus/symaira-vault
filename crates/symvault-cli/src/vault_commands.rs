@@ -14,10 +14,11 @@ use std::{
 
 use serde::Serialize;
 use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
+use symvault_core::error::CliError;
 use symvault_crypto::{
     Argon2idParams, Identity, SecretBytes, encrypt_identity_argon2id, generate_identity,
 };
-use symvault_store::{Entry, Store};
+use symvault_store::{Entry, Store, StoreError};
 use symvault_sync::safeio;
 
 /// Metadata emitted by `list --output json`.
@@ -34,6 +35,17 @@ pub struct ListEntryInfo {
     pub has_value: bool,
     #[serde(skip_serializing_if = "is_zero")]
     pub field_count: usize,
+}
+
+#[derive(Serialize)]
+struct ListEntryYaml<'a> {
+    path: &'a str,
+    #[serde(rename = "type")]
+    secret_type: &'a str,
+    usagehint: &'a str,
+    autorotate: bool,
+    hasvalue: bool,
+    fieldcount: usize,
 }
 
 fn is_zero(value: &usize) -> bool {
@@ -71,6 +83,14 @@ struct GetEntryOutput<'a> {
     path: &'a str,
     #[serde(rename = "Modified")]
     modified: String,
+}
+
+#[derive(Serialize)]
+struct GetEntryYaml<'a> {
+    fields: &'a BTreeMap<String, serde_json::Value>,
+    totp: Option<&'a TotpOutput>,
+    path: &'a str,
+    modified: &'a str,
 }
 
 /// Opens an existing vault using a caller-provided unlocked identity.
@@ -180,8 +200,8 @@ fn has_value(entry: &Entry) -> bool {
 }
 
 /// Resolves an exact path or `path.field` query.
-pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, String> {
-    let store = open_vault(root, identity)?;
+pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, CliError> {
+    let store = open_vault(root, identity).map_err(CliError::internal)?;
     if let Some((path, field)) = query
         .rsplit_once('.')
         .filter(|(_, field)| !field.is_empty())
@@ -207,7 +227,7 @@ pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, S
     let needle = query.to_ascii_lowercase();
     let matches: Vec<_> = store
         .list(identity)
-        .map_err(|error| format!("cannot read entry: {error}"))?
+        .map_err(|error| CliError::internal(format!("cannot read entry: {error}")))?
         .into_iter()
         .filter(|path| path.to_ascii_lowercase().contains(&needle))
         .collect();
@@ -215,14 +235,21 @@ pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, S
         [path] => {
             let entry = store
                 .get(path, identity)
-                .map_err(|error| format!("cannot read entry: {error}"))?;
+                .map_err(|error| CliError::internal(format!("cannot read entry: {error}")))?;
             Ok(GetResult::Entry {
                 path: path.clone(),
                 entry: Box::new(entry),
             })
         }
-        [] => Err(format!("cannot read entry: {exact_error}")),
-        _ => Err(format!("ambiguous path: {query}")),
+        [] => match exact_error {
+            StoreError::EntryNotFound(path) => {
+                Err(CliError::not_found(format!("entry not found: {path}"))
+                    .with_hint("Try: symvault find <search-term>"))
+            }
+            error => Err(CliError::internal(format!("cannot read entry: {error}"))),
+        },
+        _ => Err(CliError::not_found(format!("ambiguous path: {query}"))
+            .with_hint("Try: symvault find <search-term>")),
     }
 }
 
@@ -241,11 +268,33 @@ pub fn write_list<W: Write>(
             writeln!(output, "{}", entry.path).map_err(|error| error.to_string())
         }),
         "json" => {
+            // Go's ListEntryInfos returns a nil slice for an empty vault, so
+            // PrintResult emits JSON null rather than an empty array.
+            if entries.is_empty() {
+                output
+                    .write_all(b"null\n")
+                    .map_err(|error| error.to_string())?;
+                return Ok(());
+            }
             serde_json::to_writer(&mut *output, entries).map_err(|error| error.to_string())?;
             writeln!(output).map_err(|error| error.to_string())
         }
+        "yaml" => {
+            let yaml_entries: Vec<_> = entries
+                .iter()
+                .map(|entry| ListEntryYaml {
+                    path: &entry.path,
+                    secret_type: &entry.secret_type,
+                    usagehint: &entry.usage_hint,
+                    autorotate: entry.auto_rotate,
+                    hasvalue: entry.has_value,
+                    fieldcount: entry.field_count,
+                })
+                .collect();
+            serde_yaml_ng::to_writer(output, &yaml_entries).map_err(|error| error.to_string())
+        }
         other => Err(format!(
-            "unknown output format: {other:?} (valid: text, json)"
+            "unknown output format: {other:?} (valid: text, json, yaml)"
         )),
     }
 }
@@ -288,6 +337,10 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => {
+                let text = value_text(value);
+                serde_yaml_ng::to_writer(output, &text).map_err(|e| e.to_string())
+            }
             other => Err(format!(
                 "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
@@ -326,8 +379,30 @@ pub fn write_get_at<W: Write, E: Write>(
                 serde_json::to_writer(&mut *output, &value).map_err(|e| e.to_string())?;
                 writeln!(output).map_err(|e| e.to_string())
             }
+            "yaml" => {
+                if quiet {
+                    return Ok(());
+                }
+                let modified = modified_text(&entry.metadata.updated);
+                let totp = entry_totp(entry, unix_time).ok().flatten();
+                let value = GetEntryYaml {
+                    fields: &entry.data,
+                    totp: totp.as_ref(),
+                    path,
+                    modified: &modified,
+                };
+                let yaml = serde_yaml_ng::to_string(&value).map_err(|error| error.to_string())?;
+                for line in yaml.lines() {
+                    let indent = line.len() - line.trim_start().len();
+                    for _ in 0..indent * 2 {
+                        output.write_all(b" ").map_err(|error| error.to_string())?;
+                    }
+                    writeln!(output, "{}", line.trim_start()).map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            }
             other => Err(format!(
-                "unknown output format: {other:?} (valid: text, json)"
+                "unknown output format: {other:?} (valid: text, json, yaml)"
             )),
         },
     }

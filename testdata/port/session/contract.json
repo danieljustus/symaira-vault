@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "28a0fbaa88e373a8bdb74632752297a553d52db275f262be6dc97460d2eb02e4"
+    "generator_digest": "b8cc117be19ca3c4347a5c51a3d394915dc59ad0deb7d6f8e07d295b7eb998a0"
   },
   "cases": [
     {
@@ -59,6 +59,143 @@
       "error_class": "malformed"
     },
     {
+      "name": "invalid_calendar_timestamp_probe",
+      "operations": [
+        "is_session_expired"
+      ],
+      "input": {
+        "saved_at": "2099-02-30T00:00:00Z",
+        "last_access": "2099-02-30T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "x",
+        "nonce": "x"
+      },
+      "expected": "expired",
+      "non_mutating": true
+    },
+    {
+      "name": "empty_encrypted_passphrase",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2099-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "",
+        "nonce": "AAAAAAAAAAAAAAAA"
+      },
+      "expected": "error",
+      "error_class": "expired",
+      "non_mutating": true
+    },
+    {
+      "name": "empty_nonce",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2099-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "encrypted_passphrase": "eA==",
+        "nonce": ""
+      },
+      "expected": "error",
+      "error_class": "expired",
+      "non_mutating": true
+    },
+    {
+      "name": "max_lifetime_expiry_evicts",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2000-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "ttl_ns": 3600000000000,
+        "max_lifetime_ns": 3600000000000,
+        "encrypted_passphrase": "eA==",
+        "nonce": "AAAAAAAAAAAAAAAA"
+      },
+      "expected": "expired_and_evicted",
+      "error_class": "expired"
+    },
+    {
+      "name": "go_base64_wrap_key_load",
+      "operations": [
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2000-01-01T00:00:00Z",
+        "last_access": "2000-01-01T00:00:00Z",
+        "ttl_ns": 9223372036854775807,
+        "max_lifetime_ns": 9223372036854775807,
+        "encrypted_passphrase": "JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=",
+        "nonce": "AAECAwQFBgcICQoL"
+      },
+      "wrap_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": "cross-language-passphrase"
+    },
+    {
+      "name": "legacy_plaintext_migration",
+      "operations": [
+        "migrate_session",
+        "load_passphrase"
+      ],
+      "input": {
+        "saved_at": "2099-01-01T00:00:00Z",
+        "last_access": "2099-01-01T00:00:00Z",
+        "passphrase": "fixture-legacy-passphrase",
+        "ttl_ns": 3600000000000
+      },
+      "expected": "fixture-legacy-passphrase"
+    },
+    {
+      "name": "missing_migration_noop",
+      "operations": [
+        "has_legacy_plaintext_session",
+        "migrate_session"
+      ],
+      "expected": "unchanged"
+    },
+    {
+      "name": "encrypted_migration_noop",
+      "operations": [
+        "migrate_session"
+      ],
+      "input": {
+        "saved_at": "2000-01-01T00:00:00Z",
+        "last_access": "2000-01-01T00:00:00Z",
+        "ttl_ns": 9223372036854775807,
+        "max_lifetime_ns": 9223372036854775807,
+        "encrypted_passphrase": "JHC5aLbIrnrjJuLq1oxVHeKl9ESYCT4PXdAvm/mxzs8n1VCAIVTIv3c=",
+        "nonce": "AAECAwQFBgcICQoL"
+      },
+      "wrap_key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "expected": "unchanged"
+    },
+    {
+      "name": "clear_all_accounts_twice",
+      "operations": [
+        "save_passphrase",
+        "save_identity",
+        "clear_session",
+        "clear_session"
+      ],
+      "expected": "all_cleared"
+    },
+    {
+      "name": "identity_peek_does_not_refresh",
+      "operations": [
+        "save_passphrase",
+        "save_identity",
+        "age_both_last_access",
+        "peek_identity"
+      ],
+      "expected": "both_unchanged"
+    },
+    {
       "name": "identity_refreshes_shared_session",
       "operations": [
         "save_passphrase",
@@ -76,6 +213,17 @@
         "is_identity_expired"
       ],
       "expected": "expired"
+    },
+    {
+      "name": "clear_identity_preserves_session",
+      "operations": [
+        "save_passphrase",
+        "save_identity",
+        "clear_identity",
+        "clear_identity",
+        "load_passphrase"
+      ],
+      "expected": "session_preserved"
     }
   ]
 }

@@ -1,5 +1,15 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential approval-live-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: dist-archive-metadata-test dist-archive-metadata-check
 
+DIST_VERSION ?=
+RUST_DIST_DIR ?= dist/rust
+
+dist-archive-metadata-test:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/distcontract -count=1
+
+dist-archive-metadata-check: dist-archive-metadata-test
+	test -n "$(DIST_VERSION)" || { echo "set DIST_VERSION to the staged Rust release version" >&2; exit 2; }
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/distcontract --repo . --rust-dir "$(RUST_DIST_DIR)" --version "$(DIST_VERSION)"
 # Variables
 BINARY_NAME := symvault
 GO := go
@@ -216,6 +226,7 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
+PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
@@ -353,6 +364,36 @@ pairing-differential: pairing-fixtures-check
 	$(CARGO) test -p symvault-sync --test pairing_contract --locked
 	$(CARGO) test -p symvault-sync --lib --locked
 
+.PHONY: device-session-fixtures-generate device-session-fixtures-check device-session-differential
+device-session-fixtures-generate:
+	UPDATE_DEVICE_SESSION_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/pairing -run '^TestDeviceSessionFixture$$' -count=1
+
+device-session-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/pairing -run '^TestDeviceSessionFixture$$' -count=1
+
+device-session-differential: device-session-fixtures-check
+	$(CARGO) test -p symvault-sync --test device_sessions_contract --locked
+	$(CARGO) test -p symvault-sync --lib --locked
+
+.PHONY: token-lookup-differential
+token-lookup-differential:
+	SYMAIRA_CHECK_TOKEN_PORT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/auth -run '^TestTokenPortFixture$$' -count=1
+	$(CARGO) test -p symvault-store --lib token_registry::tests --locked
+
+.PHONY: token-registry-encrypted-differential
+token-registry-encrypted-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(CARGO) test -p symvault-store --test token_registry_encrypted go_generated_envelope_loads_with_rust_age_identity --locked -- --ignored
+
+.PHONY: ffi-crypto-contract ffi-abi-smoke
+ffi-crypto-contract:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mobilebind ./pkg/mobilebind -run '^(TestMobileBind_CryptoEndToEnd|TestMobileBind_VaultEndToEnd|TestPkgMobilebindReexport)$$' -count=1
+	$(CARGO) test -p symvault-ffi --lib --locked
+
+ffi-abi-smoke:
+	$(CARGO) build -p symvault-ffi --locked
+	$(CC) -Wall -Wextra -Werror -I crates/symvault-ffi/include crates/symvault-ffi/tests/abi_smoke.c $(CARGO_TARGET_DIR)/debug/libsymvault_ffi.a -framework Security -framework CoreFoundation -o $(CARGO_TARGET_DIR)/debug/symvault-ffi-abi-smoke
+	$(CARGO_TARGET_DIR)/debug/symvault-ffi-abi-smoke
+
 .PHONY: device-list-differential
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
@@ -405,9 +446,33 @@ mcp-init-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
 		--check --output $(PORT_MCP_INIT_FIXTURE)
 
+ffi-kdf-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/ffikdfgen --check
+
+ffi-mobile-json-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mobilejsonnumgen --check
+
 # MCP-001 differential: the Go corpus replayed against the Rust transport.
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
+
+# HTTP-001 source-bound loopback oracle plus Rust adapter replay.
+.PHONY: mcp-http-init-fixtures-check mcp-http-init-differential
+mcp-http-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen \
+		--check --output $(PORT_MCP_HTTP_INIT_FIXTURE)
+
+mcp-http-init-differential: mcp-http-init-fixtures-check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
+	$(CARGO) test -p symvault-mcp --lib http::tests --locked
+	$(CARGO) test -p symvault-mcp --test http_initialize --locked
+
+# HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
+.PHONY: mcp-oauth-contract
+mcp-oauth-contract:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
+	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
+	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
 
 mcp-stdio-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
@@ -479,6 +544,11 @@ config-session-differential: rust-007-differential config-profile-differential
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
 
+# Record the integrated CLI surface after the differential has built the binary.
+.PHONY: cli-gap-inventory
+cli-gap-inventory: config-cli-differential
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cligap --binary $(RUST_BINARY)
+
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
@@ -493,9 +563,12 @@ crypto-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
 	$(MAKE) crypto-fuzz-smoke
 
+# ponytail: Go 1.26 timed fuzz can spuriously time out on FreeBSD;
+# use at least 100k executions there and revisit when Go reaches 1.27.
+CRYPTO_FUZZTIME := $(if $(filter FreeBSD,$(shell uname -s)),100000x,3s)
 crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=$(CRYPTO_FUZZTIME) -timeout=120s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=$(CRYPTO_FUZZTIME) -timeout=120s ./internal/crypto
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
 # cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
@@ -559,7 +632,12 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: dist-archive-metadata-test reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential cli-gap-inventory mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-oauth-contract mcp-stdio-fixtures-check ffi-kdf-fixtures-check ffi-mobile-json-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check device-session-differential token-lookup-differential token-registry-encrypted-differential ffi-crypto-contract sync-io-differential differential-go-selftest crypto-differential
+
+# Run after building the Rust CLI; the helper starts the production Go local
+# approval handler on a disposable loopback TLS listener and invokes that binary.
+approval-live-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/approvallive --rust-binary "$(RUST_BINARY)"
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -860,10 +938,10 @@ export-differential:
 .PHONY: mcp-call-fixtures-check mcp-call-differential
 mcp-call-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpcallgen -check
-	SYMAIRA_CHECK_MCP_RATE_LIMIT_FIXTURE=1 SYMAIRA_CHECK_MCP_SEARCH_FETCH_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TEMPLATE_FIXTURE=1 SYMAIRA_CHECK_MCP_SYMAIRA_SEARCH_FIXTURE=1 SYMAIRA_CHECK_MCP_SANITIZE_OUTPUT_FIXTURE=1 SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus|AuditSelf|SanitizeOutput|SymairaSearch|GenerateTemplate|SearchFetch|RateLimit)Fixture$$' -count=1
+	SYMAIRA_CHECK_MCP_RATE_LIMIT_FIXTURE=1 SYMAIRA_CHECK_MCP_SEARCH_FETCH_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TEMPLATE_FIXTURE=1 SYMAIRA_CHECK_MCP_SYMAIRA_SEARCH_FIXTURE=1 SYMAIRA_CHECK_MCP_SANITIZE_OUTPUT_FIXTURE=1 SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 SYMAIRA_CHECK_MCP_SECRET_UNSEAL_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus|AuditSelf|SanitizeOutput|SymairaSearch|GenerateTemplate|SearchFetch|RateLimit|SecretUnseal)Fixture$$' -count=1
 
 mcp-call-differential: mcp-call-fixtures-check
-	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --locked
+	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked
 
 .PHONY: export-cli-fixtures-check
 export-cli-fixtures-check:
@@ -872,4 +950,4 @@ export-cli-fixtures-check:
 .PHONY: reencrypt-journal-differential
 reencrypt-journal-differential:
 	$(CARGO) build -p symvault-cli --locked
-	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1 -timeout=20m

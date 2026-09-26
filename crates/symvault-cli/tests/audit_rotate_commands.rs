@@ -43,6 +43,9 @@ fn run_cli(vault: &Path, home: &Path, args: &[&str]) -> Output {
         .env("SYMVAULT_VAULT", vault)
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
+        .env("SYMVAULT_PASSPHRASE", "test-passphrase-123")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .env("SYMVAULT_NO_ENV_WARNING", "1")
         .env("NO_COLOR", "1")
         .output()
         .expect("run symvault CLI")
@@ -88,7 +91,7 @@ fn audit_rotate_key_cli_flow() {
 
     // 2. First rotation bootstraps because no key exists yet
     let out1 = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
-    assert_eq!(out1.status.code(), Some(0));
+    assert_eq!(out1.status.code(), Some(0), "{:?}", out1.stderr);
     let stderr1 = String::from_utf8_lossy(&out1.stderr);
     assert!(stderr1.contains("New key: "));
     assert!(stderr1.contains("(first 4 bytes)"));
@@ -118,9 +121,20 @@ fn audit_rotate_key_cli_flow() {
     assert!(stderr2.contains("HMAC key rotated successfully."));
     assert!(stderr2.contains("Old key archived to: "));
     assert!(stderr2.contains("audit-hmac-key.rotated."));
+    #[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
+    {
+        assert!(vault.join("audit-hmac-key").is_file());
+        assert!(!vault.join("audit-hmac-key.kek").exists());
+        assert!(
+            fs::read(vault.join("audit-hmac-key"))
+                .unwrap()
+                .starts_with(b"age-encryption.org/")
+        );
+    }
+    #[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
     assert!(
         !vault.join("audit-hmac-key").exists(),
-        "legacy key must be removed after rotation"
+        "legacy key is removed after successful keyring migration"
     );
 
     let rotated_files: Vec<_> = fs::read_dir(&vault)
@@ -158,6 +172,42 @@ fn audit_rotate_key_cli_flow() {
         .filter(|e| e.file_name().to_string_lossy().contains(".rotated."))
         .collect();
     assert_eq!(rotated_files.len(), 2, "two distinct archives must exist");
+}
+
+#[cfg(any(target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
+#[test]
+fn audit_rotate_key_reloads_durable_fallback_across_cli_processes() {
+    let home = TempDir::new("bsd-fallback-home");
+    let vault = home.0.join("vault");
+    fs::create_dir_all(&vault).unwrap();
+
+    let bootstrap = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
+    assert_eq!(bootstrap.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&bootstrap.stderr).contains("HMAC key bootstrapped"));
+
+    let rotate = run_cli(&vault, &home.0, &["audit", "rotate-key"]);
+    assert_eq!(rotate.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&rotate.stderr).contains("HMAC key rotated successfully"));
+
+    let current = fs::read(vault.join("audit-hmac-key")).unwrap();
+    assert!(current.starts_with(b"sv-local-v1:"));
+    assert_eq!(
+        fs::metadata(vault.join("audit-hmac-key.kek"))
+            .unwrap()
+            .len(),
+        32
+    );
+    let archives: Vec<_> = fs::read_dir(&vault)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().contains(".rotated."))
+        .collect();
+    assert_eq!(archives.len(), 1);
+    assert!(
+        fs::read(archives[0].path())
+            .unwrap()
+            .starts_with(b"sv-local-v1:")
+    );
 }
 
 #[test]

@@ -21,7 +21,7 @@ fn run(binary: &Path, args: &[&str], home: &Path, xdg: (&Path, &Path, &Path)) ->
 
 fn fixture(name: &str) -> (TempDir, PathBuf, (PathBuf, PathBuf, PathBuf)) {
     let root = tempfile::tempdir().expect("fixture root");
-    let home = root.path().join(name);
+    let home = root.path().join(".").join(name);
     let config = root.path().join("xdg-config");
     let data = root.path().join("xdg-data");
     let cache = root.path().join("xdg-cache");

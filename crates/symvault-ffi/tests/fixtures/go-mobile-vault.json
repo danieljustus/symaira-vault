@@ -1,0 +1,6 @@
+{
+  "oracle": "pkg/mobilebind.InitVault and OpenVaultWithPassphrase using Go 1.26.6",
+  "passphrase": "go-mobile-fixture-passphrase-v1",
+  "identity": "AGE-SECRET-KEY-16N9PN5CSHGTMF6FG389A5FSY5527P8JGNC84SZQTY2J0QE524JZSAU794G",
+  "identity_age_base64": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDkrejZOSWRrRXZRZDBaaEhqM1RyUncgdD0zLG09NjU1MzYscD00CjFXUDMyWnd5dm1PMzJBejl1cHhVZThuZnRsNU1vbjhxSnlkSDNCbHFpR1p5NXNiU3BoYVFIcDhOUVBzCi0tLSB3U3dKRGVUOFJHSWZNc25ielA3NHlnQjJtV1FMYTE5c00yNXpLMkdoOFo0ComeTe3/SN3mumk7EyihKqKC3+TPs/cH2LY4e1MYyDrgyNAvvSZV9ggtXvdCAnvpu/7VZtRxZHxcTE/P4+5qyFHquFnr7TMYpDjjVZuqx85JELLC7FcR4O+PTF/zpsoujy3vRbCMMz//WU0="
+}
