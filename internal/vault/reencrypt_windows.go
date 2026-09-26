@@ -4,7 +4,6 @@ package vault
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,7 +49,7 @@ func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*r
 		_ = file.Close()
 		return nil, fmt.Errorf("entry %q changed while opening", path)
 	}
-	data, err := io.ReadAll(file)
+	data, err := readEntryStreamBounded(file, path)
 	closeErr := file.Close()
 	if err != nil {
 		return nil, fmt.Errorf("read entry %q: %w", path, err)

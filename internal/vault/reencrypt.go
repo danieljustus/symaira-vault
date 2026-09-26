@@ -191,8 +191,11 @@ func ReencryptBytes(raw []byte, identity *age.X25519Identity, recipients []*age.
 	if len(recipients) == 0 {
 		return nil, fmt.Errorf("no recipients provided for re-encryption")
 	}
+	if len(raw) > maxEntryCiphertextBytesV1 {
+		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	}
 
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}

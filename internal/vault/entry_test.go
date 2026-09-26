@@ -3,9 +3,11 @@ package vault
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +99,99 @@ func TestEntryReadBudgetV1CiphertextExactLimitAndOverflow(t *testing.T) {
 	}
 	if _, err := readEntryFileBounded(path); !errors.Is(err, errEntryReadLimit) {
 		t.Fatalf("ciphertext limit + 1 error = %v, want size limit", err)
+	}
+}
+
+func TestEntryReadBudgetBoundsEveryFileReadSurface(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	vaultDir := t.TempDir()
+	filePath := filepath.Join(vaultDir, "oversized.age")
+	if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(filePath, maxEntryCiphertextBytesV1+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readEntryFileBounded(filePath); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("ReadEntryFile oversized ciphertext error = %v, want limit", err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filePath, filepath.Join(vaultDir, "entries", "oversized.age")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetEntryMetadata(vaultDir, "oversized", identity); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("GetEntryMetadata oversized ciphertext error = %v, want limit", err)
+	}
+}
+
+func TestEntryReadRejectsParentSymlinkEscape(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	outside := t.TempDir()
+	if err := WriteEntry(outside, "leak", &Entry{Data: map[string]any{"secret": "outside"}}, identity); err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(vaultDir, "entries", "linked")
+	if err := os.Symlink(filepath.Join(outside, "entries"), link); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+	if _, err := ReadEntry(vaultDir, "linked/leak", identity); err == nil {
+		t.Fatal("ReadEntry followed parent symlink outside the vault")
+	}
+	if _, err := GetEntryMetadata(vaultDir, "linked/leak", identity); err == nil {
+		t.Fatal("GetEntryMetadata followed parent symlink outside the vault")
+	}
+	if _, err := ReadEntryFile(vaultDir, filepath.Join(link, "leak.age"), identity); err == nil {
+		t.Fatal("ReadEntryFile followed parent symlink outside the vault")
+	}
+}
+
+func TestEntryJSONShapeBudgetIsSharedWithRust(t *testing.T) {
+	if err := validateEntryData(map[string]any{"array": make([]any, maxEntryArrayItems)}); err != nil {
+		t.Fatalf("exact array limit rejected: %v", err)
+	}
+	if err := validateEntryData(map[string]any{"array": make([]any, maxEntryArrayItems+1)}); err == nil {
+		t.Fatal("array above Rust limit accepted")
+	}
+	value := any("leaf")
+	for range maxEntryDepth {
+		value = map[string]any{"nested": value}
+	}
+	if err := validateEntryData(map[string]any{"root": value}); err == nil {
+		t.Fatal("value deeper than Rust limit accepted")
+	}
+}
+
+func TestEntryPathDepthBudget(t *testing.T) {
+	path64 := strings.TrimSuffix(strings.Repeat("d/", maxVaultEntryPathDepth-1), "/") + "/entry"
+	if err := validateEntryPath(t.TempDir(), path64); err != nil {
+		t.Fatalf("path at exact depth limit rejected: %v", err)
+	}
+	path65 := "d/" + path64
+	if err := validateEntryPath(t.TempDir(), path65); err == nil {
+		t.Fatal("path above the Rust traversal depth limit accepted")
+	}
+}
+
+func TestWriteEntryRejectsPayloadAboveReadBudget(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	data := make(map[string]any, 17)
+	value := strings.Repeat("x", maxEntryValueBytes)
+	for i := 0; i < 17; i++ {
+		data[fmt.Sprintf("field-%02d", i)] = value
+	}
+	err := WriteEntry(vaultDir, "too-large", &Entry{Data: data}, identity)
+	if !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("WriteEntry oversized payload error = %v, want read-budget error", err)
+	}
+	if _, statErr := os.Stat(entryFilePath(vaultDir, "too-large")); !os.IsNotExist(statErr) {
+		t.Fatalf("oversized entry was published; stat error = %v", statErr)
 	}
 }
 

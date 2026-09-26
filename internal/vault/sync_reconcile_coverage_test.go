@@ -51,7 +51,7 @@ func TestVersionAfter(t *testing.T) {
 
 func TestPreserveConflictCopyErrorsAndCollision(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := preserveConflictCopy(filepath.Join(dir, "missing.age")); !os.IsNotExist(err) {
+	if _, err := preserveConflictCopy(dir, filepath.Join(dir, "missing.age")); !os.IsNotExist(err) {
 		t.Fatalf("missing source error = %v, want not-exist", err)
 	}
 
@@ -59,7 +59,7 @@ func TestPreserveConflictCopyErrorsAndCollision(t *testing.T) {
 	if err := os.Mkdir(directory, 0o700); err != nil {
 		t.Fatalf("create source directory: %v", err)
 	}
-	if _, err := preserveConflictCopy(directory); err == nil {
+	if _, err := preserveConflictCopy(dir, directory); err == nil {
 		t.Fatal("directory source should be rejected")
 	}
 
@@ -68,11 +68,11 @@ func TestPreserveConflictCopyErrorsAndCollision(t *testing.T) {
 	if err := os.WriteFile(src, want, 0o600); err != nil {
 		t.Fatalf("seed source: %v", err)
 	}
-	first, err := preserveConflictCopy(src)
+	first, err := preserveConflictCopy(dir, src)
 	if err != nil {
 		t.Fatalf("first conflict copy: %v", err)
 	}
-	second, err := preserveConflictCopy(src)
+	second, err := preserveConflictCopy(dir, src)
 	if err != nil {
 		t.Fatalf("second conflict copy: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestPreserveConflictCopyUnreadableSource(t *testing.T) {
 	}
 	defer os.Chmod(src, 0o600) // restore so t.TempDir cleanup can remove it
 
-	if _, err := preserveConflictCopy(src); err == nil {
+	if _, err := preserveConflictCopy(dir, src); err == nil {
 		t.Fatal("unreadable source should fail")
 	}
 }
@@ -114,7 +114,7 @@ func TestPreserveConflictCopyUnwritableTargetDir(t *testing.T) {
 	}
 	defer os.Chmod(dir, 0o700) // restore so t.TempDir cleanup can remove it
 
-	if _, err := preserveConflictCopy(src); err == nil {
+	if _, err := preserveConflictCopy(dir, src); err == nil {
 		t.Fatal("unwritable target directory should fail")
 	}
 }

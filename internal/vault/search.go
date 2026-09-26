@@ -151,7 +151,6 @@
 package vault
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -313,9 +312,26 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	// First pass: walk filesystem to collect all .age file paths.
 	// This is fast O(n) and does not involve decryption.
 	var filePaths []string
+	visited := 0
 	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if filepath.Clean(filePath) != filepath.Clean(entriesDir(vaultDir)) {
+			visited++
+		}
+		if visited > maxVaultEntryCount {
+			return errEntryEnumerationLimit
+		}
+		rel, relErr := filepath.Rel(entriesDir(vaultDir), filePath)
+		if relErr != nil {
+			return relErr
+		}
+		if pathDepth(rel) > maxVaultEntryPathDepth {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			return nil
@@ -356,23 +372,21 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		go func() {
 			defer wg.Done()
 			for fp := range fileChan {
-				// #nosec G304 -- fp comes from filepath.WalkDir of the vault entries directory
-				raw, readErr := os.ReadFile(fp)
+				raw, readErr := readVaultEntryBounded(vaultDir, fp)
 				if readErr != nil {
 					continue
 				}
 
-				plaintext, decryptErr := vaultcrypto.Decrypt(raw, identity)
+				plaintext, decryptErr := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 				if decryptErr != nil {
 					continue
 				}
 
-				var entry Entry
-				if jsonErr := json.Unmarshal(plaintext, &entry); jsonErr != nil {
-					vaultcrypto.Wipe(plaintext)
+				entry, jsonErr := decodeEntryBounded(plaintext)
+				vaultcrypto.Wipe(plaintext)
+				if jsonErr != nil {
 					continue
 				}
-				vaultcrypto.Wipe(plaintext)
 
 				entryPath := entry.Path
 				if entryPath == "" {
