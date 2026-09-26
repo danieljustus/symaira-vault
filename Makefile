@@ -290,10 +290,10 @@ core-fixtures-check: quota-fixtures-check
 		--crypto-output $(PORT_CRYPTO_FIXTURE)
 
 # STORE-002's fixture advances its own oracle past the frozen baseline
-# (3232e31f, "unreleased"), same pattern as AUDIT-001/002 and APPROVAL-001;
+# (cf496d43, "unreleased"), same pattern as AUDIT-001/002 and APPROVAL-001;
 # storemetagen has no built-in default, unlike sibling *gen tools, so the
 # pin lives here rather than as a Go constant.
-STORE_METADATA_ORACLE_COMMIT := 3232e31fb91362b6e6202774f7e95f6d477305d2
+STORE_METADATA_ORACLE_COMMIT := cf496d4315181b8e444e62520dfc4dce0fb94e5c
 STORE_METADATA_ORACLE_RELEASE := unreleased
 
 store-metadata-fixtures-check:
