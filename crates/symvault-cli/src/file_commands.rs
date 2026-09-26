@@ -386,7 +386,7 @@ fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> 
 
         let mut reader = fs::OpenOptions::new();
         reader.read(true).share_mode(0x1);
-        return reader.open(path);
+        reader.open(path)
     }
 
     #[cfg(not(windows))]
