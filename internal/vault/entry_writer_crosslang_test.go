@@ -68,7 +68,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 	}
 
 	for _, pseudonymize := range []bool{false, true} {
-		for _, writer := range []string{"go", "rust", "go-single", "rust-single"} {
+		for _, writer := range []string{"go", "rust", "go-single", "rust-single", "rust-new"} {
 			t.Run(fmt.Sprintf("%s_write_pseudonym_%t", writer, pseudonymize), func(t *testing.T) {
 				singleRecipient := writer == "go-single" || writer == "rust-single"
 				root := t.TempDir()
@@ -85,7 +85,16 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 					t.Fatal(err)
 				}
 				logical := "nested.name/service.v1"
-				entry := &Entry{Data: map[string]any{"label": "cross-language-publication"}}
+				entry := &Entry{
+					Data: map[string]any{"label": "cross-language-publication"},
+					Metadata: EntryMetadata{
+						Created: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
+						Version: 7,
+						WriteHistory: []WriteRecord{{
+							Field: "label", Action: "set", Timestamp: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
+						}},
+					},
+				}
 				input, _ := json.Marshal(entry)
 				if writer == "go" || writer == "go-single" {
 					write := WriteEntryWithRecipients
@@ -101,6 +110,8 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 					action, caseID := "write", "rust_write_entry_with_recipients"
 					if singleRecipient {
 						action, caseID = "write-single", "rust_write_entry_single_recipient"
+					} else if writer == "rust-new" {
+						action, caseID = "write-new", "rust_write_new_entry"
 					}
 					mustCall(t, root, identity, action, logical, entry, &response)
 					if response["case_id"] != caseID {
@@ -140,8 +151,11 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 				if err := json.Unmarshal(plaintext, &decrypted); err != nil {
 					t.Fatal(err)
 				}
-				if !reflect.DeepEqual(decrypted.Data, entry.Data) || decrypted.Metadata.Version != 1 {
+				if !reflect.DeepEqual(decrypted.Data, entry.Data) || decrypted.Metadata.Version != entry.Metadata.Version+1 {
 					t.Fatal("stored payload or version differs")
+				}
+				if writer == "rust-new" && (!decrypted.Metadata.Created.Equal(entry.Metadata.Created) || decrypted.Metadata.Updated.IsZero() || !reflect.DeepEqual(decrypted.Metadata.WriteHistory, entry.Metadata.WriteHistory)) {
+					t.Fatal("new-entry writer did not preserve Go metadata exactly once")
 				}
 				wantClassification := int32(0)
 				if singleRecipient {
@@ -205,7 +219,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 		}
 	}
 
-	for _, writer := range []string{"go", "rust"} {
+	for _, writer := range []string{"go", "rust", "rust-new"} {
 		t.Run(writer+"_invalid_recipient_unchanged", func(t *testing.T) {
 			root := t.TempDir()
 			identity := testutil.TempIdentity(t)
@@ -252,8 +266,14 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 				if err := WriteEntryWithRecipients(root, "new/deep/entry.v1", entry, identity); err == nil {
 					t.Fatal("Go accepted invalid recipient")
 				}
-			} else if _, err := call(t, root, identity, "write", "new/deep/entry.v1", entry); err == nil {
-				t.Fatal("Rust accepted invalid recipient")
+			} else {
+				action := "write"
+				if writer == "rust-new" {
+					action = "write-new"
+				}
+				if _, err := call(t, root, identity, action, "new/deep/entry.v1", entry); err == nil {
+					t.Fatal("Rust accepted invalid recipient")
+				}
 			}
 			if !reflect.DeepEqual(before, snapshot()) {
 				t.Fatal("invalid recipient changed filesystem")

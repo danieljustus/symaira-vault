@@ -50,6 +50,12 @@ fn run() -> Result<(), String> {
                 .map_err(|error| error.to_string())?;
             serde_json::json!({"case_id": "rust_write_entry_single_recipient"})
         }
+        "write-new" => {
+            store
+                .write_new_entry(&request.path, &request.entry, &identity)
+                .map_err(|error| error.to_string())?;
+            serde_json::json!({"case_id": "rust_write_new_entry"})
+        }
         "read" => serde_json::to_value(
             store
                 .get(&request.path, &identity)

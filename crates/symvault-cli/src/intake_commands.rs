@@ -20,9 +20,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use symvault_crypto::Identity;
 use symvault_store::{AttachmentInfo, Entry, Store};
-use symvault_sync::{
-    GoTime,
-    intake::{FileResult, Options, Provenance, QuarantineSink, ScanResult, Spool, Watcher},
+use symvault_sync::intake::{
+    FileResult, Options, Provenance, QuarantineSink, ScanResult, Spool, Watcher,
 };
 
 #[allow(clippy::too_many_arguments)] // Direct CLI flag projection.
@@ -465,29 +464,9 @@ impl QuarantineSink for StoreQuarantineSink<'_> {
                 sha256: provenance.sha256.clone(),
             },
         );
-        let created = GoTime::now().to_rfc3339_nano();
-        entry.metadata.created = created.clone();
-        entry.metadata.updated = created;
-        entry.metadata.version = 1;
-        let now = GoTime::now().to_rfc3339_nano();
-        let entry = symvault_store::metadata::prepare_entry(
-            &entry,
-            &now,
-            path,
-            self.store.config().pseudonymize_paths,
-            None,
-        )
-        .map_err(io::Error::other)?;
         self.store
             .write_new_entry(path, &entry, self.identity)
             .map_err(io::Error::other)?;
-        if let Ok(stored_path) = self.store.configured_entry_path(path, self.identity)
-            && let Ok(Some(ciphertext)) = symvault_sync::safeio::read(&stored_path)
-        {
-            let _ = self
-                .store
-                .update_manifest_entry(path, &ciphertext, self.identity);
-        }
         crate::write_commands::auto_commit(self.store, self.identity, path, "Update");
         self.existing_paths.push(path.to_owned());
         Ok(())

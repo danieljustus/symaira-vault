@@ -729,12 +729,12 @@ impl Store {
         Err(StoreError::EntryNotFound(path.to_owned()))
     }
 
-    /// Writes a new encrypted entry to the current `entries/` layout.
+    /// Writes a new encrypted entry to the current `entries/` layout using
+    /// Go-compatible metadata, recipient, and manifest rules.
     ///
-    /// This first write slice intentionally refuses replacement, path
-    /// pseudonymization, and implicit directory creation. Those operations
-    /// remain separate STORE-003 work so this method cannot silently claim
-    /// parity for unimplemented atomic-update semantics.
+    /// This first-write slice intentionally refuses replacement. Parent
+    /// creation and publication stay rooted to the opened vault, so this
+    /// method does not claim parity for atomic-update semantics.
     pub fn write_new_entry(
         &self,
         path: &str,
@@ -763,10 +763,13 @@ impl Store {
                 ENTRY_EXTENSION
             ))
         };
-        let mut stored = entry.clone();
-        if self.config.pseudonymize_paths {
-            stored.path = path.to_owned();
-        }
+        let now = utc_now_string(&self.root)?;
+        let stored =
+            metadata::prepare_entry(entry, &now, path, self.config.pseudonymize_paths, None)
+                .map_err(|detail| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail,
+                })?;
         let plaintext =
             Zeroizing::new(
                 serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
@@ -802,7 +805,12 @@ impl Store {
                 "entry replacement is not part of the new-entry slice".into(),
             ));
         }
-        atomic_create(&target, &ciphertext, &parent_cap)
+        atomic_create(&target, &ciphertext, &parent_cap)?;
+        // Match Go's high-level writer: publish the entry first, then make a
+        // best-effort manifest update without turning bookkeeping failure into
+        // a failed primary write.
+        let _ = self.update_manifest_entry(path, &ciphertext, identity);
+        Ok(())
     }
 
     /// Returns only the metadata portion of an entry after decryption.
