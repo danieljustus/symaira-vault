@@ -141,12 +141,12 @@ func TestGenerateMCPListEntriesFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpListEntriesSourceFiles)
 	pinned := mcpListEntriesGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go list_entries sources differ from 3232e31f: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go list_entries sources differ from c42b96bb: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpListEntriesFixture{
 		SchemaVersion: 1,
 		Oracle: mcpListEntriesOracle{
-			Commit: "3232e31f", CommitSHA: "3232e31fb91362b6e6202774f7e95f6d477305d2",
+			Commit: "c42b96bb", CommitSHA: "c42b96bb4dd2a2d6cea1ade0770f55650045e5b3",
 			SourceFiles: mcpListEntriesSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpListEntriesGeneratorHash(t),
 		},
@@ -201,7 +201,7 @@ func mcpListEntriesGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpListEntriesSourceFiles {
-		cmd := exec.Command("git", "show", "3232e31f:"+name)
+		cmd := exec.Command("git", "show", "c42b96bb:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {
