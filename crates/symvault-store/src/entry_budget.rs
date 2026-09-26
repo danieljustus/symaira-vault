@@ -12,12 +12,6 @@ struct Budget {
 }
 
 impl Budget {
-    fn reset(&mut self) {
-        self.violation = None;
-        self.top_level_fields = 0;
-        self.nested_fields = 0;
-    }
-
     fn fail(&mut self, reason: &'static str) {
         if self.violation.is_none() {
             self.violation = Some(reason);
@@ -66,13 +60,16 @@ impl<'de> Visitor<'de> for RootVisitor<'_> {
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<(), A::Error> {
+        let mut seen_data = false;
         while let Some(key) = map.next_key::<String>()? {
-            if key == "data" {
-                // Go's JSON map semantics use the last duplicate envelope key.
-                // Reset so an overwritten earlier `data` does not cause a
-                // Rust-only rejection.
-                self.0.reset();
-                map.next_value_seed(DataSeed(self.0))?;
+            if key.eq_ignore_ascii_case("data") {
+                if seen_data {
+                    self.0.fail("duplicate data fields");
+                    map.next_value::<IgnoredAny>()?;
+                } else {
+                    seen_data = true;
+                    map.next_value_seed(DataSeed(self.0))?;
+                }
             } else {
                 map.next_value::<IgnoredAny>()?;
             }
