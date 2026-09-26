@@ -233,6 +233,15 @@ pub(crate) fn load_for_doctor(vault_dir: &Path) -> Result<Vec<DeviceSession>, St
 fn decode_sessions(data: &[u8]) -> Result<(BTreeMap<String, DeviceSession>, bool), String> {
     let raw: BTreeMap<String, Option<DeviceSession>> =
         serde_json::from_slice(data).map_err(|error| format!("parse device sessions: {error}"))?;
+    for session in raw.values().flatten() {
+        for (field, stamp) in [
+            ("created_at", session.created_at.as_str()),
+            ("expires_at", session.expires_at.as_str()),
+        ] {
+            GoTime::parse_rfc3339(stamp)
+                .map_err(|_| format!("parse device sessions: invalid {field} timestamp {stamp:?}"))?;
+        }
+    }
     let mut migrated = false;
     let mut sessions = BTreeMap::new();
     for (key, session) in raw {
