@@ -1,11 +1,13 @@
 package vault
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +16,58 @@ import (
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
+
+func TestListEntriesFastHonorsSharedDepthLimit(t *testing.T) {
+	root := t.TempDir()
+	path64 := strings.TrimSuffix(strings.Repeat("d/", maxVaultEntryPathDepth-1), "/") + "/entry.age"
+	path65 := "d/" + path64
+	for _, path := range []string{path64, path65} {
+		filePath := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seen := make(map[string]struct{})
+	if err := listEntriesFast(root, root, "", seen, false); err != nil {
+		t.Fatalf("listEntriesFast: %v", err)
+	}
+	if _, ok := seen[strings.TrimSuffix(path64, ".age")]; !ok {
+		t.Fatalf("entry at depth %d was skipped", maxVaultEntryPathDepth)
+	}
+	if _, ok := seen[strings.TrimSuffix(path65, ".age")]; ok {
+		t.Fatalf("entry deeper than %d was listed", maxVaultEntryPathDepth)
+	}
+}
+
+func TestEntryScansRejectSharedEnumerationLimit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	entriesRoot := entriesDir(vaultDir)
+	if err := os.MkdirAll(entriesRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	identity := testutil.TempIdentity(t)
+	if err := writeManifest(vaultDir, &Manifest{Version: 1, Entries: map[string]ManifestEntry{}}, identity); err != nil {
+		t.Fatalf("write empty manifest: %v", err)
+	}
+	for i := 0; i <= maxVaultEntryCount; i++ {
+		path := filepath.Join(entriesRoot, fmt.Sprintf("item-%06d.bin", i))
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			t.Fatalf("create item %d: %v", i, err)
+		}
+	}
+	if err := listEntriesFast(entriesRoot, entriesRoot, "", make(map[string]struct{}), false); !errors.Is(err, errEntryEnumerationLimit) {
+		t.Fatalf("listEntriesFast error = %v, want enumeration limit", err)
+	}
+	if _, err := DetectOutOfBandEntries(vaultDir, identity, testConfig(vaultDir)); !errors.Is(err, errEntryEnumerationLimit) {
+		t.Fatalf("DetectOutOfBandEntries error = %v, want enumeration limit", err)
+	}
+}
 
 func TestListReturnsAllEntriesWithoutPrefix(t *testing.T) {
 	vaultDir := t.TempDir()

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,12 +50,18 @@ const manifestFileName = "manifest.age"
 // error if the file does not exist.
 func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, error) {
 	manifestPath := filepath.Join(vaultDir, manifestFileName)
-	raw, err := os.ReadFile(manifestPath) //#nosec G304 -- vaultDir is controlled
+	raw, err := readVaultEntryBounded(vaultDir, manifestPath)
 	if err != nil {
 		return nil, err
 	}
+	// Rust's root-file reader caps manifest.age at MAX_FILE_BYTES (16 MiB).
+	// Keep the same accepted ciphertext range even though entry files allow
+	// extra room for Age framing.
+	if int64(len(raw)) > maxEntryPlaintextBytesV1 {
+		return nil, fmt.Errorf("%w: manifest ciphertext", errEntryReadLimit)
+	}
 
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt manifest: %w", err)
 	}
@@ -68,6 +75,74 @@ func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, err
 		m.Entries = make(map[string]ManifestEntry)
 	}
 	return &m, nil
+}
+
+// walkVaultEntriesBounded applies the same traversal limits as Rust's
+// entry_candidates: count every descendant filesystem item, and do not enter
+// paths deeper than the shared logical-path limit.
+func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry) error) error {
+	rootCap, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer rootCap.Close()
+
+	visited := 0
+	var walk func(relative string, depth int) error
+	walk = func(relative string, depth int) error {
+		directory, err := rootCap.Open(relative)
+		if err != nil {
+			return err
+		}
+		defer directory.Close()
+		info, err := directory.Stat()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("vault scan expected directory: %q", relative)
+		}
+		// ReadDir(n) bounds a single directory's temporary allocation too;
+		// requesting all children first would bypass the item budget.
+		entries, err := directory.ReadDir(maxVaultEntryCount - visited + 1)
+		if err != nil && err != io.EOF {
+			return err
+		}
+		for _, d := range entries {
+			visited++
+			if visited > maxVaultEntryCount {
+				return errEntryEnumerationLimit
+			}
+			childDepth := depth + 1
+			if childDepth > maxVaultEntryPathDepth {
+				continue
+			}
+			child := filepath.Join(relative, d.Name())
+			path := filepath.Join(root, child)
+			if d.Type()&os.ModeSymlink != 0 {
+				continue
+			}
+			if d.IsDir() {
+				if err := visit(path, d); err != nil {
+					if err == filepath.SkipDir {
+						continue
+					}
+					return err
+				}
+				if childDepth < maxVaultEntryPathDepth {
+					if err := walk(child, childDepth); err != nil {
+						return err
+					}
+				}
+				continue
+			}
+			if err := visit(path, d); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return walk(".", 0)
 }
 
 // writeManifest marshals the manifest to JSON, encrypts it for all recipients,
@@ -201,11 +276,8 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 	}
 
 	entriesPath := entriesDir(vaultDir)
-	_ = filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
+	if err := walkVaultEntriesBounded(entriesPath, func(path string, d os.DirEntry) error {
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".age") {
 			return nil
 		}
 		if !storagePaths[path] {
@@ -213,7 +285,9 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 			result.Unknown = append(result.Unknown, rel)
 		}
 		return nil
-	})
+	}); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -240,11 +314,8 @@ func DetectOutOfBandEntries(vaultDir string, identity *age.X25519Identity, cfg *
 
 	var outOfBand []string
 	entriesPath := entriesDir(vaultDir)
-	_ = filepath.Walk(entriesPath, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return nil
-		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
+	if err := walkVaultEntriesBounded(entriesPath, func(path string, d os.DirEntry) error {
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".age") {
 			return nil
 		}
 		if !expected[path] {
@@ -254,7 +325,9 @@ func DetectOutOfBandEntries(vaultDir string, identity *age.X25519Identity, cfg *
 			}
 		}
 		return nil
-	})
+	}); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
 
 	return outOfBand, nil
 }

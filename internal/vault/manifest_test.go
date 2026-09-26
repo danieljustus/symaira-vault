@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +11,25 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
+
+func TestLoadManifestRejectsCiphertextAboveSharedReadBudget(t *testing.T) {
+	vaultDir := t.TempDir()
+	manifestPath := filepath.Join(vaultDir, manifestFileName)
+	file, err := os.Create(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxEntryPlaintextBytesV1 + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(vaultDir, nil); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("LoadManifest error = %v, want shared read limit", err)
+	}
+}
 
 func testConfig(vaultDir string) *config.Config {
 	cfg := config.Default()

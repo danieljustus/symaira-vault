@@ -566,10 +566,7 @@ func listViaManifest(vaultDir string, identity *age.X25519Identity) []string {
 }
 
 func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool) error {
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	return walkVaultEntriesBounded(root, func(path string, d os.DirEntry) error {
 		if d.IsDir() {
 			if legacy && path != root && (d.Name() == entriesDirName || d.Name() == ".git") {
 				return filepath.SkipDir
