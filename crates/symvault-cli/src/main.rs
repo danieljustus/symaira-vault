@@ -86,7 +86,6 @@ use symvault_platform::FallbackKeyring;
     target_os = "netbsd"
 ))]
 use symvault_platform::OsKeyring;
-use symvault_store::Store;
 use symvault_sync::{CommitOptions, GitError, GitRepository, GoTime};
 use zeroize::Zeroizing;
 
@@ -3327,7 +3326,8 @@ fn run_generate(
                 serde_json::Value::String(password.to_string()),
             )]),
         )?;
-        let store = Store::open(&vault, &identity).map_err(|error| error.to_string())?;
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
+            .map_err(|error| error.to_string())?;
         let file = store
             .configured_entry_path(store_path, &identity)
             .map_err(|error| error.to_string())?;
@@ -3644,7 +3644,7 @@ fn run_migrate_pseudonymize(
         }
 
         let identity = device::unlock_vault(&vault)?;
-        let store = symvault_store::Store::open(&vault, &identity)
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
             .migrate_pseudonymize(&identity)

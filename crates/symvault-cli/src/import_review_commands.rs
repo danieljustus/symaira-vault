@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use symvault_crypto::Identity;
-use symvault_store::{Store, StoreError};
+use symvault_store::StoreError;
 use symvault_sync::GoTime;
 
 use crate::write_commands::auto_commit;
@@ -18,7 +18,8 @@ use crate::write_commands::auto_commit;
 /// segment and print one line per batch, ascending (BTreeMap order equals
 /// Go's sorted map keys).
 pub(crate) fn list(root: &Path, identity: &Identity, quiet: bool) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let entries = store
         .list(identity)
         .map_err(|error| format!("list quarantine: {error}"))?;
@@ -60,7 +61,8 @@ pub(crate) fn promote(
     overwrite: bool,
     quiet: bool,
 ) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let prefix = format!("quarantine/{import_id}/");
     let entries: Vec<String> = store
         .list(identity)

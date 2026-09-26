@@ -382,6 +382,16 @@ impl Store {
         Ok(store)
     }
 
+    /// Opens a vault and performs the legacy migration Go runs during Vault.Open.
+    pub fn open_with_legacy_migration(
+        root: impl AsRef<Path>,
+        identity: &Identity,
+    ) -> Result<Self, StoreError> {
+        let store = Self::open(root, identity)?;
+        store.migrate_legacy()?;
+        Ok(store)
+    }
+
     fn open_with_root_acquisition(
         root: impl AsRef<Path>,
         acquire_hook: impl FnOnce(&Path),
@@ -457,6 +467,8 @@ impl Store {
         let layout = detect_layout_rooted(&root_cap, &root)?;
         #[cfg(not(unix))]
         let layout = detect_layout(&root)?;
+        #[cfg(unix)]
+        reject_user_owned_root_symlink(requested_root)?;
         Ok(Self {
             root,
             #[cfg(unix)]
@@ -1408,6 +1420,20 @@ fn root_identity(path: &Path) -> Result<RootIdentity, StoreError> {
         device: metadata.dev(),
         inode: metadata.ino(),
     })
+}
+
+#[cfg(unix)]
+fn reject_user_owned_root_symlink(path: &Path) -> Result<(), StoreError> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = fs::symlink_metadata(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if metadata.file_type().is_symlink() && metadata.uid() != 0 {
+        return Err(StoreError::Symlink(path.to_path_buf()));
+    }
+    Ok(())
 }
 
 #[cfg(unix)]

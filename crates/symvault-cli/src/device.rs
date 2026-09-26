@@ -91,12 +91,6 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
 }
 
 pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(), String> {
-    // Go's Open skips legacy migration entirely once this marker exists. Keep
-    // unlock from preflighting the entry layout in that case; individual
-    // commands retain their own, more specific validation order.
-    if fs::metadata(vault.join(".symvault-migrated")).is_ok() {
-        return Ok(());
-    }
     let store = symvault_store::Store::open(vault, identity).map_err(|error| error.to_string())?;
     store
         .migrate_legacy()
@@ -126,6 +120,7 @@ fn unlock_vault_with_runtime(
         && let Ok(text) = std::str::from_utf8(&cached)
         && let Ok(identity) = parse_identity(text.trim())
     {
+        open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
         return Ok(identity);
     }
 
@@ -143,6 +138,7 @@ fn unlock_vault_with_runtime(
         .map(zeroize::Zeroizing::new)
         && let Ok(identity) = decrypt_identity(&data, &SecretBytes::new(&cached))
     {
+        open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
         save_unlocked_session(runtime, vault_string, &config, &cached, &identity)?;
         return Ok(identity);
     }
@@ -150,6 +146,7 @@ fn unlock_vault_with_runtime(
     let passphrase = crate::unlock_passphrase(&config_bytes, &config, vault, runtime)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
     let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
+    open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
     if !input::env_passphrase_selected(&config_bytes) {
         save_unlocked_session(
             runtime,

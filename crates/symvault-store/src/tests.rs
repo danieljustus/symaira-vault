@@ -1442,6 +1442,30 @@ fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
 
 #[cfg(unix)]
 #[test]
+fn open_rejects_user_owned_final_root_symlink() {
+    use std::os::unix::{fs::MetadataExt, fs::symlink};
+
+    let temp = tempfile::tempdir().unwrap();
+    let real = temp.path().join("real");
+    let alias = temp.path().join("alias");
+    fs::create_dir_all(&real).unwrap();
+    fs::write(
+        real.join(CONFIG_FILE),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(real.join(IDENTITY_FILE), b"identity").unwrap();
+    symlink(&real, &alias).unwrap();
+    if fs::symlink_metadata(&alias).unwrap().uid() == 0 {
+        return;
+    }
+
+    let error = Store::open(&alias, &parse_identity(IDENTITY).unwrap()).unwrap_err();
+    assert!(matches!(error, StoreError::Symlink(path) if path == alias));
+}
+
+#[cfg(unix)]
+#[test]
 fn legacy_migration_rejects_user_owned_symlink_ancestors() {
     use std::os::unix::{fs::MetadataExt, fs::symlink};
 

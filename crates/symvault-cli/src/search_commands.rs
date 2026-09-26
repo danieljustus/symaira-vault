@@ -7,7 +7,9 @@ use std::{collections::BTreeSet, path::Path};
 use serde::Serialize;
 use symvault_core::go_to_lower;
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store};
+use symvault_store::Entry;
+#[cfg(test)]
+use symvault_store::Store;
 use url::Url;
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -24,8 +26,8 @@ pub fn find(
     query: &str,
     url_filter: Option<&str>,
 ) -> Result<Vec<SearchMatch>, String> {
-    let store =
-        Store::open(root, identity).map_err(|error| format!("cannot open vault: {error}"))?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| format!("cannot open vault: {error}"))?;
     let mut paths = store
         .list(identity)
         .map_err(|error| format!("cannot list entries: {error}"))?;

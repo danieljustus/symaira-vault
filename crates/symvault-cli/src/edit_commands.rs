@@ -15,7 +15,7 @@ use std::{
 };
 
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError};
+use symvault_store::{Entry, StoreError};
 use symvault_sync::{GoTime, safeio};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -34,7 +34,8 @@ pub struct EditResult {
 
 /// Edits an existing entry with an external editor and persists the result.
 pub fn edit(root: &Path, identity: &Identity, options: &EditOptions) -> Result<EditResult, String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let entry = store
         .get(&options.path, identity)
         .map_err(|error| match error {
