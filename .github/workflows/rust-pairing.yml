@@ -207,6 +207,13 @@ jobs:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
         run: python3 scripts/rust-port/native_closeout.py daemon
 
+      - name: Native disposable clipboard round trip
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        shell: bash
+        env:
+          SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
+        run: python3 scripts/rust-port/native_closeout.py clipboard
+
 
       - name: Retain native closeout observations
         if: always()
