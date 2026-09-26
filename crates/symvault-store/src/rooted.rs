@@ -118,18 +118,6 @@ pub(super) fn walk_from_with_limits(
     Ok(entries)
 }
 
-pub(super) fn walk(root: &fs::File, display: &Path) -> Result<Vec<RootedEntry>, StoreError> {
-    walk_with_max_depth(root, display, None)
-}
-
-pub(super) fn walk_with_max_depth(
-    root: &fs::File,
-    display: &Path,
-    max_depth: Option<usize>,
-) -> Result<Vec<RootedEntry>, StoreError> {
-    walk_with_limits(root, display, max_depth, None)
-}
-
 pub(super) fn walk_with_limits(
     root: &fs::File,
     display: &Path,
