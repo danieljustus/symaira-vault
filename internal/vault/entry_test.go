@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -8,6 +10,7 @@ import (
 	"time"
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
@@ -35,6 +38,65 @@ func TestEntryJSONSerialization(t *testing.T) {
 
 	if !reflect.DeepEqual(got, entry) {
 		t.Fatalf("roundtrip mismatch:\n got: %#v\nwant: %#v", got, entry)
+	}
+}
+
+func TestEntryReadBudgetV1PlaintextExactLimitAndOverflow(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	for _, tc := range []struct {
+		plaintext string
+		wantError bool
+	}{{"12345", false}, {"123456", true}} {
+		ciphertext, err := vaultcrypto.Encrypt([]byte(tc.plaintext), identity.Recipient())
+		if err != nil {
+			t.Fatalf("encrypt: %v", err)
+		}
+		got, err := decryptEntryBounded(ciphertext, identity, 5)
+		if tc.wantError {
+			if !errors.Is(err, errEntryReadLimit) {
+				t.Fatalf("decryptEntryBounded(%q) error = %v, want size limit", tc.plaintext, err)
+			}
+			continue
+		}
+		if err != nil || string(got) != tc.plaintext {
+			t.Fatalf("decryptEntryBounded(%q) = %q, %v", tc.plaintext, got, err)
+		}
+	}
+}
+
+func TestEntryReadBudgetV1MaximumPlaintextFitsCiphertextBudget(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	plaintext := bytes.Repeat([]byte{'x'}, maxEntryPlaintextBytesV1)
+	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if len(ciphertext) > maxEntryCiphertextBytesV1 {
+		t.Fatalf("Age ciphertext = %d bytes, budget = %d", len(ciphertext), maxEntryCiphertextBytesV1)
+	}
+	got, err := decryptEntryBounded(ciphertext, identity, maxEntryPlaintextBytesV1)
+	if err != nil || !bytes.Equal(got, plaintext) {
+		t.Fatalf("decrypt maximum V1 plaintext: got %d bytes, err %v", len(got), err)
+	}
+}
+
+func TestEntryReadBudgetV1CiphertextExactLimitAndOverflow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "entry.age")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, maxEntryCiphertextBytesV1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readEntryFileBounded(path)
+	if err != nil || len(got) != maxEntryCiphertextBytesV1 {
+		t.Fatalf("exact ciphertext limit read = %d bytes, %v", len(got), err)
+	}
+	if err := os.Truncate(path, maxEntryCiphertextBytesV1+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readEntryFileBounded(path); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("ciphertext limit + 1 error = %v, want size limit", err)
 	}
 }
 

@@ -1,9 +1,11 @@
 package vault
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,6 +16,16 @@ import (
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
+
+// EntryReadBudgetV1 keeps Go and Rust entry reads on the same allocation
+// envelope. Ciphertext allows room for Age armor and framing around the full
+// plaintext budget.
+const (
+	maxEntryCiphertextBytesV1 = 24 * 1024 * 1024
+	maxEntryPlaintextBytesV1  = 16 * 1024 * 1024
+)
+
+var errEntryReadLimit = errors.New("entry exceeds read size limit")
 
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	cache := listCacheFor(vaultDir)
@@ -59,26 +71,26 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 		return nil, err
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
-	raw, err := SafeReadFile(filePath)
+	raw, err := readEntryFileBounded(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		// A vault may still hold entries under their plaintext names while
 		// pseudonymize_paths is already enabled — an interrupted or previously
 		// buggy migration leaves exactly that state. Reading must fall back to
 		// the entries/<plain>.age layout, not only to the pre-entries/ legacy
 		// root, or the entries become unreachable even though they exist.
-		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+		raw, err = readEntryFileBounded(entryFilePath(vaultDir, path))
 	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = readEntryFileBounded(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
@@ -116,24 +128,24 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	} else {
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}
-	raw, err := SafeReadFile(filePath)
+	raw, err := readEntryFileBounded(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		// See ReadEntry: an entry may still live under its plaintext name in
 		// entries/ while pseudonymize_paths is enabled.
-		raw, err = SafeReadFile(entryFilePath(vaultDir, path))
+		raw, err = readEntryFileBounded(entryFilePath(vaultDir, path))
 	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = readEntryFileBounded(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	start := time.Now()
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
@@ -149,6 +161,29 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	}
 	MigrateBackupCodes(&entry)
 	return &entry, nil
+}
+
+func decryptEntryBounded(ciphertext []byte, identity *age.X25519Identity, limit int64) ([]byte, error) {
+	if identity == nil {
+		return nil, errors.New("nil identity")
+	}
+	if len(ciphertext) == 0 {
+		return nil, vaultcrypto.ErrEmptyCiphertext
+	}
+	reader, err := age.Decrypt(bytes.NewReader(ciphertext), identity)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", vaultcrypto.ErrDecryptionFailed, err)
+	}
+	plaintext, err := io.ReadAll(io.LimitReader(reader, limit+1))
+	if err != nil {
+		vaultcrypto.Wipe(plaintext)
+		return nil, fmt.Errorf("read decrypted entry: %w", err)
+	}
+	if int64(len(plaintext)) > limit {
+		vaultcrypto.Wipe(plaintext)
+		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
+	}
+	return plaintext, nil
 }
 
 // InferClassification scans all string values in entry.Data.
