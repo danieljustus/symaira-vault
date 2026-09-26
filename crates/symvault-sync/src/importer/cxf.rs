@@ -104,7 +104,10 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
     let mut archive = ZipArchive::new(Cursor::new(bytes))
         .map_err(|error| ImportError::Parse(format!("open cxf zip: {error}")))?;
     let payload = read_payload(&mut archive)?;
-    let export: Option<CxfExport> = serde_json::from_slice(&payload)
+    let mut document: Value = serde_json::from_slice(&payload)
+        .map_err(|error| ImportError::Parse(format!("parse CXF JSON document: {error}")))?;
+    normalize_export_fields(&mut document);
+    let export: Option<CxfExport> = serde_json::from_value(document)
         .map_err(|error| ImportError::Parse(format!("parse CXF JSON document: {error}")))?;
 
     let mut entries = Vec::new();
@@ -112,6 +115,118 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
         entries.extend(account_entries(account));
     }
     Ok(entries)
+}
+
+// Go's encoding/json matches tagged struct fields without regard to ASCII
+// case. Normalize only fields belonging to known CXF structs; passkey data
+// remains opaque, and credential `type` retains its exact map-key lookup.
+fn normalize_export_fields(value: &mut Value) {
+    let Some(export) = value.as_object_mut() else {
+        return;
+    };
+    normalize_keys(export, &["version", "accounts"]);
+    if let Some(version) = export.get_mut("version").and_then(Value::as_object_mut) {
+        normalize_keys(version, &["major", "minor"]);
+    }
+    if let Some(accounts) = export.get_mut("accounts").and_then(Value::as_array_mut) {
+        for account in accounts.iter_mut().filter_map(Value::as_object_mut) {
+            normalize_keys(
+                account,
+                &["id", "username", "email", "collections", "items"],
+            );
+            if let Some(collections) = account.get_mut("collections").and_then(Value::as_array_mut)
+            {
+                normalize_collections(collections);
+            }
+            if let Some(items) = account.get_mut("items").and_then(Value::as_array_mut) {
+                for item in items.iter_mut().filter_map(Value::as_object_mut) {
+                    normalize_item(item);
+                }
+            }
+        }
+    }
+}
+
+fn normalize_collections(collections: &mut [Value]) {
+    for collection in collections.iter_mut().filter_map(Value::as_object_mut) {
+        normalize_keys(
+            collection,
+            &["id", "title", "name", "items", "subCollections"],
+        );
+        if let Some(items) = collection.get_mut("items").and_then(Value::as_array_mut) {
+            for linked in items.iter_mut().filter_map(Value::as_object_mut) {
+                normalize_keys(linked, &["item", "account"]);
+            }
+        }
+        if let Some(children) = collection
+            .get_mut("subCollections")
+            .and_then(Value::as_array_mut)
+        {
+            normalize_collections(children);
+        }
+    }
+}
+
+fn normalize_item(item: &mut Map<String, Value>) {
+    normalize_keys(
+        item,
+        &["id", "title", "name", "scope", "credentials", "tags"],
+    );
+    if let Some(scope) = item.get_mut("scope").and_then(Value::as_object_mut) {
+        normalize_keys(scope, &["urls"]);
+    }
+    if let Some(credentials) = item.get_mut("credentials").and_then(Value::as_array_mut) {
+        for credential in credentials.iter_mut().filter_map(Value::as_object_mut) {
+            let Some(credential_type) = credential.get("type").and_then(Value::as_str) else {
+                continue;
+            };
+            let fields: &[&str] = match normalize_type(credential_type).as_str() {
+                "basicauth" => &["username", "password", "urls"],
+                "totp" => &[
+                    "secret",
+                    "period",
+                    "digits",
+                    "algorithm",
+                    "issuer",
+                    "username",
+                ],
+                "note" => &["content"],
+                "sshkey" | "cryptographickey" => {
+                    &["keyType", "privateKey", "privateKeyPem", "keyComment"]
+                }
+                "creditcard" => &[
+                    "number",
+                    "fullName",
+                    "cardType",
+                    "verificationNumber",
+                    "expiryDate",
+                ],
+                _ => continue,
+            };
+            normalize_keys(credential, fields);
+            for field in fields {
+                if let Some(wrapper) = credential.get_mut(*field).and_then(Value::as_object_mut) {
+                    normalize_keys(wrapper, &["value"]);
+                }
+            }
+        }
+    }
+}
+
+fn normalize_keys(object: &mut Map<String, Value>, fields: &[&str]) {
+    for field in fields {
+        if object.contains_key(*field) {
+            continue;
+        }
+        if let Some(key) = object
+            .keys()
+            .find(|key| key.eq_ignore_ascii_case(field))
+            .cloned()
+            && let Some(value) = object.remove(&key)
+        {
+            object.insert((*field).to_owned(), value);
+        }
+    }
 }
 
 struct JsonCandidate {

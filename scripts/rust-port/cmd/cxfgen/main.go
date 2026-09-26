@@ -73,7 +73,7 @@ func main() {
 		if checkErr := checkFixture(root, *output, meta); checkErr != nil {
 			fail(checkErr)
 		}
-		fmt.Println("PASS Go CXF oracle fixture (19 synthetic cases)")
+		fmt.Println("PASS Go CXF oracle fixture (20 synthetic cases)")
 		return
 	}
 	cases, err := runOracle(root)
@@ -451,7 +451,31 @@ func invalidTypedPayload(kind string) []byte {
   }
   b, e := json.Marshal(x); fail(e); return b
 }
-func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-019-totp-structured",zipData(map[string][]byte{"payload.json":totpEdgesPayload()})),run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
+func caseInsensitiveTagsPayload() []byte {
+  field := func(value string) map[string]any { return map[string]any{"VaLuE": value} }
+  item := map[string]any{
+    "Id": "tagged", "TiTle": "Tagged fields", "TaGs": []string{"fixture"},
+    "ScOpE": map[string]any{"URLs": []string{"https://example.test"}},
+    "CrEdEnTiAlS": []any{
+      map[string]any{"type": "basic-auth", "USERNAME": field("fixture-user"), "PassWord": field("fixture-pass")},
+      map[string]any{"type": "totp", "SeCrEt": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", "PeRiOd": 45, "DiGiTs": 8, "AlGoRiThM": "SHA256", "ISSUER": "fixture", "USERNAME": "fixture-user"},
+      map[string]any{"type": "note", "CONTENT": field("fixture-note")},
+      map[string]any{"type": "ssh-key", "KEYTYPE": "ssh-ed25519", "PRIVATEKEY": "fixture-key!", "PRIVATEKEYPEM": "ignored", "KEYCOMMENT": "fixture"},
+      map[string]any{"type": "credit-card", "NUMBER": field("4111111111111111"), "FULLNAME": field("Fixture User"), "CARDTYPE": field("visa"), "VERIFICATIONNUMBER": field("123"), "EXPIRYDATE": field("2027-08")},
+      map[string]any{"TYPE": "note", "Content": field("dynamic type remains exact")},
+    },
+  }
+  x := map[string]any{
+    "VERSION": map[string]any{"MAJOR": 1, "MINOR": 0},
+    "ACCOUNTS": []any{map[string]any{
+      "Id": "account",
+      "COLLECTIONS": []any{map[string]any{"TITLE": "Work", "ITEMS": []any{map[string]any{"ITEM": "tagged"}}, "SUBCOLLECTIONS": []any{}}},
+      "ITEMS": []any{item},
+    }},
+  }
+  b, e := json.Marshal(x); fail(e); return b
+}
+func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-020-case-insensitive-tags",zipData(map[string][]byte{"nested/payload.json":caseInsensitiveTagsPayload()})),run("CXF-019-totp-structured",zipData(map[string][]byte{"payload.json":totpEdgesPayload()})),run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
 `
 
 func runOracle(root string) ([]fixtureCase, error) {
