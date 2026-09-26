@@ -118,7 +118,10 @@ import/export command parity. MCP additionally supports the tool registry,
 `tools/list`, prompt list/get, and shared output sanitization; productive tool
 execution and HTTP/OAuth remain under development.
 
-Native keyring Go-to-Rust-to-Go interoperability passed on Linux, macOS and
-Windows in run 35249056550, for head bc62c5cb (merge 3fab62b9). Later local
-session/export changes require their own checks. No percentage is inferred
-from the count of passing contract rows.
+Update 2026-09-26: native Go-write/Rust-update/Go-read keyring interoperability
+passed on Linux, macOS and Windows at exact head `a4e0469166f91e2a109e67a86df42e91f2d434d2`
+in run `36050829754`; the macOS report confirms a private test keychain. The
+same run passed the disposable-home macOS LaunchAgent lifecycle. A guarded
+macOS CI clipboard set/read/clear proof is implemented and awaits execution;
+Touch ID and GUI/autotype permission evidence remain open. No percentage is
+inferred from the count of passing contract rows.

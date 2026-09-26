@@ -25,7 +25,7 @@ def checked(argv, root, env):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=["portable", "keyring", "daemon"])
+    parser.add_argument("mode", choices=["portable", "keyring", "daemon", "clipboard"])
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[2]
     env = os.environ.copy()
@@ -86,6 +86,9 @@ def main():
     elif args.mode == "daemon":
         assert platform.system() == "Darwin"
         commands = [cargo + ["-p", "symvault-platform", "--test", "native_daemon", "--all-features", "--", "--ignored", "--exact", "native_daemon_private_home_lifecycle_attempt", "--nocapture"]]
+    elif args.mode == "clipboard":
+        assert platform.system() == "Darwin"
+        commands = [cargo + ["-p", "symvault-platform", "--test", "native_clipboard", "--all-features", "--", "--ignored", "--exact", "native_clipboard_set_read_clear", "--nocapture"]]
     else:
         stages = [
             ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "write"],
