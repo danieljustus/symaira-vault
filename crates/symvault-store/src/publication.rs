@@ -226,7 +226,9 @@ fn publish(parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> 
 
 #[cfg(windows)]
 fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
-    rename_with_retry(target, temporary, fs::rename)
+    rename_with_retry(target, temporary, |source, destination| {
+        fs::rename(source, destination)
+    })
 }
 
 #[cfg(not(any(unix, windows)))]
