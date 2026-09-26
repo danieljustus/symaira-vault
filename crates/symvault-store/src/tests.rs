@@ -754,13 +754,55 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
 fn entry_shape_budget_is_checked_before_entry_deserialization() {
     let too_many =
         serde_json::json!({"data": {"array": vec![serde_json::Value::Null; MAX_ARRAY_ITEMS + 1]}});
-    assert!(validate_entry_json(&too_many).is_err());
+    assert!(entry_budget::validate(&serde_json::to_vec(&too_many).unwrap(), "test").is_err());
 
     let mut deep = serde_json::Value::String("leaf".into());
     for _ in 0..MAX_ENTRY_DEPTH {
         deep = serde_json::json!({"nested": deep});
     }
-    assert!(validate_entry_json(&serde_json::json!({"data": {"root": deep}})).is_err());
+    let deep = serde_json::json!({"data": {"root": deep}});
+    assert!(entry_budget::validate(&serde_json::to_vec(&deep).unwrap(), "test").is_err());
+}
+
+#[test]
+fn entry_shape_budget_counts_duplicate_raw_keys_like_go() {
+    let duplicate_fields = std::iter::repeat_n("\"x\":0", MAX_ENTRY_FIELDS + 1)
+        .collect::<Vec<_>>()
+        .join(",");
+    let plaintext = format!("{{\"data\":{{{duplicate_fields}}}}}");
+    assert!(matches!(
+        entry_budget::validate(plaintext.as_bytes(), "duplicate-keys"),
+        Err(StoreError::ValueLimit(_))
+    ));
+
+    // Go unmarshals duplicate envelope members into a map, so only the final
+    // `data` member is checked against the entry value limits.
+    assert!(entry_budget::validate(br#"{"data":false,"data":{}}"#, "overwritten").is_ok());
+}
+
+#[test]
+fn file_manifest_enumeration_obeys_depth_and_entry_limits() {
+    let temp = tempfile::tempdir().unwrap();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let (_, value) = fixture();
+    materialize(temp.path(), &value.vaults[0]);
+    fs::create_dir_all(temp.path().join("shallow")).unwrap();
+    fs::write(temp.path().join("shallow/file"), b"ok").unwrap();
+    fs::create_dir_all(temp.path().join("deep/one/two")).unwrap();
+    fs::write(temp.path().join("deep/one/two/file"), b"too deep").unwrap();
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    let files = store.files_with_limits(2, 100).unwrap();
+    assert!(files.iter().any(|item| item.path == "shallow"));
+    assert!(
+        !files
+            .iter()
+            .any(|item| item.path.ends_with("deep/one/two/file"))
+    );
+    assert!(matches!(
+        store.files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, 1),
+        Err(StoreError::ValueLimit(_))
+    ));
 }
 
 #[test]
@@ -2065,7 +2107,7 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
                     .to_path_buf()
             })
             .collect::<Vec<_>>();
-        let mut actual = rooted::walk_with_max_depth(&root, temp.path(), Some(depth))
+        let mut actual = rooted::walk_with_limits(&root, temp.path(), Some(depth), None)
             .unwrap()
             .into_iter()
             .map(|entry| entry.relative)

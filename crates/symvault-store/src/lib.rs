@@ -41,6 +41,7 @@ pub mod sharing;
 /// Go-compatible agent-scoped MCP token registry mutations.
 pub mod token_registry;
 
+mod entry_budget;
 mod publication;
 mod reencrypt_journal;
 
@@ -853,9 +854,22 @@ impl Store {
 
     /// Returns a sorted recursive manifest of the vault tree.
     pub fn files(&self) -> Result<Vec<FileInfo>, StoreError> {
+        self.files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, MAX_VAULT_ENTRY_COUNT)
+    }
+
+    fn files_with_limits(
+        &self,
+        max_depth: usize,
+        max_entries: usize,
+    ) -> Result<Vec<FileInfo>, StoreError> {
         let mut result = Vec::new();
         #[cfg(unix)]
-        for item in rooted::walk(&self.root_cap, &self.root)? {
+        for item in rooted::walk_with_limits(
+            &self.root_cap,
+            &self.root,
+            Some(max_depth),
+            Some(max_entries),
+        )? {
             let metadata = rooted::metadata(
                 &self.root_cap,
                 &item.relative,
@@ -864,13 +878,24 @@ impl Store {
             result.push(self.file_info(&item.relative, metadata)?);
         }
         #[cfg(not(unix))]
-        for item in WalkDir::new(&self.root).follow_links(false) {
+        let mut visited = 0usize;
+        #[cfg(not(unix))]
+        for item in WalkDir::new(&self.root)
+            .max_depth(max_depth)
+            .follow_links(false)
+        {
             let item = item.map_err(|error| StoreError::Read {
                 path: self.root.clone(),
                 source: io::Error::other(error.to_string()),
             })?;
             if item.path() == self.root {
                 continue;
+            }
+            visited += 1;
+            if visited > max_entries {
+                return Err(StoreError::ValueLimit(
+                    "vault entry enumeration limit exceeded".into(),
+                ));
             }
             let relative = item
                 .path()
@@ -984,18 +1009,19 @@ impl Store {
             }
             Err(error) => return Err(StoreError::Decryption(error.to_string())),
         };
-        let result = serde_json::from_slice::<serde_json::Value>(&plaintext)
-            .map_err(|error| StoreError::Entry {
-                path: candidate.logical.clone(),
-                detail: error.to_string(),
-            })
-            .and_then(|value| {
-                validate_entry_json(&value)?;
-                serde_json::from_value(value).map_err(|error| StoreError::Entry {
+        let result = entry_budget::validate(&plaintext, &candidate.logical).and_then(|()| {
+            serde_json::from_slice::<serde_json::Value>(&plaintext)
+                .map_err(|error| StoreError::Entry {
                     path: candidate.logical.clone(),
                     detail: error.to_string(),
                 })
-            });
+                .and_then(|value| {
+                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
+                        path: candidate.logical.clone(),
+                        detail: error.to_string(),
+                    })
+                })
+        });
         plaintext.zeroize();
         result
     }
@@ -1019,31 +1045,6 @@ impl Store {
 
 fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
     validate_entry_data(&entry.data)
-}
-
-fn validate_entry_json(value: &serde_json::Value) -> Result<(), StoreError> {
-    let Some(data) = value.get("data") else {
-        return Ok(());
-    };
-    if data.is_null() {
-        return Ok(());
-    }
-    let Some(data) = data.as_object() else {
-        return Err(StoreError::ValueLimit(
-            "entry data must be an object".into(),
-        ));
-    };
-    if data.len() > MAX_ENTRY_FIELDS {
-        return Err(StoreError::ValueLimit("too many top-level fields".into()));
-    }
-    let mut fields = 0usize;
-    for (key, value) in data {
-        if key.len() > MAX_VALUE_BYTES {
-            return Err(StoreError::ValueLimit("field name too large".into()));
-        }
-        validate_json_value(value, 1, &mut fields)?;
-    }
-    Ok(())
 }
 
 fn validate_entry_data(data: &BTreeMap<String, serde_json::Value>) -> Result<(), StoreError> {
