@@ -9,7 +9,7 @@
     "internal/secrets/filter.go"
   ],
   "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
-  "generator_digest": "e5c2104b3d12f2a4b35445a5d7c4db9b2537bc9d62fb7a59fcf58268d7b203c7",
+  "generator_digest": "c6c3250db113adf90dd100076e2c23f69c5d1b122f84842497cca0047cedb8f8",
   "cases": [
     {
       "name": "pass_adapter_recursive_and_warning",
@@ -26,6 +26,10 @@
         {
           "path": "work/slash\\name.gpg",
           "content": "pw\n"
+        },
+        {
+          "path": "work/invalid-utf8.gpg",
+          "content_base64": "4oIK/wo="
         }
       ],
       "expected": [
@@ -36,6 +40,14 @@
             "password": "example-secret",
             "url": "https://example.test",
             "username": "example-user"
+          },
+          "warnings": null
+        },
+        {
+          "path": "work/invalid-utf8",
+          "data": {
+            "notes": "\ufffd",
+            "password": "\ufffd\ufffd"
           },
           "warnings": null
         },

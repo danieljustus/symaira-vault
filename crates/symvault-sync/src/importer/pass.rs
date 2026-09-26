@@ -4,7 +4,7 @@
 // The command receives a Go-compatible allowlisted environment and no
 // caller environment is inherited implicitly.
 
-use super::{ImportError, ImportedEntry, normalize_path, parse_totp};
+use super::{ImportError, ImportedEntry, go_string_from_bytes, normalize_path, parse_totp};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -117,7 +117,7 @@ fn decrypt_pass_file(gpg: &Path, path: &Path) -> Result<String, ImportError> {
             path.display()
         )));
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    Ok(go_string_from_bytes(&output.stdout))
 }
 
 fn prepare_gpg_command(command: &mut Command) {
