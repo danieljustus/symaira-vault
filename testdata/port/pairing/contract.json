@@ -2,7 +2,7 @@
   "schema_version": 1,
   "oracle": {
     "commit": "cf496d4315181b8e444e62520dfc4dce0fb94e5c",
-    "release": "v0.22.1",
+    "release": "unreleased",
     "source_files": [
       "cmd/device.go",
       "internal/crypto/age.go",
@@ -19,7 +19,7 @@
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "e106e1407c167322e6b23afc9ff81fc78afaa0e69d1c905e6bd6c298b79b2b4b"
+    "generator_digest": "85484252513863fb654c48de8bf81e7016558685e385feccc57130ec06a5a82f"
   },
   "cases": [
     {

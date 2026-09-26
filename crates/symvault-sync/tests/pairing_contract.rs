@@ -52,7 +52,7 @@ fn every_pairing_case_is_replayed() {
         fixture["oracle"]["commit"],
         "cf496d4315181b8e444e62520dfc4dce0fb94e5c"
     );
-    assert_eq!(fixture["oracle"]["release"], "v0.22.1");
+    assert_eq!(fixture["oracle"]["release"], "unreleased");
 
     let cases = fixture["cases"].as_array().expect("cases array");
     assert!(!cases.is_empty(), "fixture holds no cases");
