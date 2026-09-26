@@ -134,12 +134,12 @@ func TestGenerateMCPGenerateTOTPFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpGenerateTOTPSourceFiles)
 	pinned := mcpGenerateTOTPGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go generate_totp sources differ from c42b96bb: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go generate_totp sources differ from c98b560f: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGenerateTOTPFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGenerateTOTPOracle{
-			Commit: "c42b96bb", CommitSHA: "c42b96bb4dd2a2d6cea1ade0770f55650045e5b3",
+			Commit: "c98b560f", CommitSHA: "c98b560f51fd0e10c3bb7e10c6c7621cafbebdfb",
 			SourceFiles: mcpGenerateTOTPSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGenerateTOTPGeneratorHash(t),
 		},
@@ -194,7 +194,7 @@ func mcpGenerateTOTPGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpGenerateTOTPSourceFiles {
-		cmd := exec.Command("git", "show", "c42b96bb:"+name)
+		cmd := exec.Command("git", "show", "c98b560f:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {
