@@ -112,6 +112,11 @@ func TestSessionPortTimestampBoundaryContract(t *testing.T) {
 	}{
 		{`"1970-01-01T00:00:00,000Z"`, true},
 		{`"2026-09-23T12:00:00++1:00"`, false},
+		{`"2024-02-29T00:00:00Z"`, true},
+		{`"2023-02-29T00:00:00Z"`, false},
+		{`"2099-02-30T00:00:00Z"`, false},
+		{`"2099-04-31T00:00:00Z"`, false},
+		{`"2099-01-01T00:00:60Z"`, false},
 	} {
 		var parsed time.Time
 		err := json.Unmarshal([]byte(tc.input), &parsed)
@@ -132,6 +137,19 @@ func TestSessionPortTimestampBoundaryContract(t *testing.T) {
 	}
 	if got, err := malformedKeyring.Get(malformedKey); err != nil || got != malformedPayload {
 		t.Fatal("expiry probe must not delete malformed session")
+	}
+	calendarMgr, calendarKeyring := newTestManager(t)
+	calendarVault := "malformed-calendar-port-contract"
+	calendarKey := keyFor(serviceNameForVault(calendarVault), sessionAccount)
+	const calendarPayload = `{"saved_at":"2099-02-30T00:00:00Z","last_access":"2099-02-30T00:00:00Z","ttl_ns":3600000000000}`
+	if err := calendarKeyring.Set(calendarKey, calendarPayload); err != nil {
+		t.Fatal(err)
+	}
+	if !calendarMgr.IsSessionExpired(calendarVault) {
+		t.Fatal("invalid calendar date must fail closed")
+	}
+	if got, err := calendarKeyring.Get(calendarKey); err != nil || got != calendarPayload {
+		t.Fatal("expiry probe must not delete invalid calendar record")
 	}
 	mgr, keyring := newTestManager(t)
 	vault := "pre-epoch-port-contract"

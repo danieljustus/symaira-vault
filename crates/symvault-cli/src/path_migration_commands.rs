@@ -29,6 +29,10 @@ pub(crate) fn preview(
     quiet: bool,
     output: &mut impl Write,
 ) -> Result<(), String> {
+    // Go builds every root here with filepath.Join (internal/config/migrate.go
+    // and config.go), whose Clean collapses structural quirks such as a
+    // doubled slash coming from $HOME or an XDG variable; raw PathBuf joins
+    // keep it and would print both plan sides differently.
     let legacy = crate::agent_list_commands::clean_path(&home.join(LEGACY_SUBDIR));
     let metadata = match fs::symlink_metadata(&legacy) {
         Ok(metadata) => metadata,

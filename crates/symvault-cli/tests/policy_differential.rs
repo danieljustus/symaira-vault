@@ -146,6 +146,21 @@ fn policy_validate_and_list_match_go() {
         "tilde policy path",
     );
 
+    if cfg!(windows) {
+        let backslash_args = ["policy", "validate", "~\\tilde-policy.yaml"];
+        let go_result = run(&go, &home.0, &backslash_args);
+        let rust_result = run(&rust, &home.0, &backslash_args);
+        assert!(
+            go_result.status.success(),
+            "Go accepts the home-relative path"
+        );
+        assert_same(
+            &go_result,
+            &rust_result,
+            "Windows tilde-backslash policy path",
+        );
+    }
+
     let source = fixture.0.join("dev.yaml");
     fs::write(
         &source,
@@ -166,6 +181,27 @@ fn policy_validate_and_list_match_go() {
         &run(&rust, &home.0, &apply_args),
         "apply valid policy",
     );
+
+    if cfg!(windows) {
+        let backslash_apply = [
+            "--vault",
+            apply_root.to_str().expect("apply root"),
+            "policy",
+            "apply",
+            "~\\tilde-policy.yaml",
+        ];
+        let go_result = run(&go, &home.0, &backslash_apply);
+        let rust_result = run(&rust, &home.0, &backslash_apply);
+        assert!(
+            go_result.status.success(),
+            "Go applies the home-relative policy"
+        );
+        assert_same(
+            &go_result,
+            &rust_result,
+            "Windows tilde-backslash policy apply",
+        );
+    }
 
     let go_remove_root = fixture.0.join("go-remove-root");
     let rust_remove_root = fixture.0.join("rust-remove-root");

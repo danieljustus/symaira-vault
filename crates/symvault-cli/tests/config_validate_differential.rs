@@ -106,6 +106,27 @@ fn config_validate_matches_go_contract() {
     let res_rust = run(&rust, &home.0, &["config", "validate", valid_str]);
     assert_same(&res_go, &res_rust, "config validate valid text");
 
+    // Go rejects a parent-directory component before filepath.Clean can turn
+    // this into the existing valid config, even if the intermediate directory
+    // has never existed.
+    let traversal = home.0.join("missing/../valid.yaml");
+    let traversal_str = traversal.to_str().unwrap();
+    for args in [
+        vec!["config", "validate", traversal_str],
+        vec!["config", "validate", traversal_str, "--output", "json"],
+    ] {
+        let res_go = run(&go, &home.0, &args);
+        let res_rust = run(&rust, &home.0, &args);
+        assert!(!res_go.status.success(), "Go must reject path traversal");
+        assert_same(&res_go, &res_rust, "config validate traversal");
+    }
+
+    let dot_args = ["config", "validate", ".", "--output", "json"];
+    let res_go = run(&go, &home.0, &dot_args);
+    let res_rust = run(&rust, &home.0, &dot_args);
+    assert!(!res_go.status.success(), "a directory is not a config file");
+    assert_same(&res_go, &res_rust, "config validate current directory");
+
     // Case 4: Valid config with --output json
     let res_go = run(
         &go,
@@ -127,4 +148,64 @@ fn config_validate_matches_go_contract() {
         &["--quiet", "config", "validate", valid_str],
     );
     assert_same(&res_go, &res_rust, "config validate valid quiet");
+}
+
+#[test]
+fn config_inspect_cleans_read_paths_but_preserves_set_target() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("inspect-path");
+    let valid = home.0.join("valid.yaml");
+    let original = b"vaultDir: /fixture/vault\n";
+    fs::write(&valid, original).expect("write isolated config");
+    let raw = home.0.join("missing/../valid.yaml");
+    let raw = raw.to_str().expect("temporary path is UTF-8");
+
+    for args in [
+        vec!["config", "get", "vaultDir", "--file", raw],
+        vec!["config", "list", "--file", raw],
+        vec!["config", "set", "vaultDir", "/updated", "--file", raw],
+    ] {
+        let go_result = run(&go, &home.0, &args);
+        let go_file = fs::read(&valid).expect("Go config state");
+        fs::write(&valid, original).expect("reset config before Rust run");
+        let rust_result = run(&rust, &home.0, &args);
+        let rust_file = fs::read(&valid).expect("Rust config state");
+        assert_eq!(rust_file, go_file, "config {} file differs", args[1]);
+        fs::write(&valid, original).expect("reset config for next case");
+        if args[1] == "set" {
+            assert_eq!(go_result.status.code(), rust_result.status.code());
+            assert_eq!(go_result.stdout, rust_result.stdout);
+            assert!(!go_result.status.success());
+            if cfg!(windows) {
+                // Windows resolves the rename, but Go rejects `..` on reload.
+                assert_ne!(go_file, original);
+                for result in [&go_result, &rust_result] {
+                    assert!(
+                        String::from_utf8_lossy(&result.stderr)
+                            .contains("config file path escapes expected directory"),
+                        "set must reject traversal after writing on Windows"
+                    );
+                }
+            } else {
+                assert_eq!(go_file, original);
+                for result in [&go_result, &rust_result] {
+                    assert!(
+                        String::from_utf8_lossy(&result.stderr).contains("cannot write config"),
+                        "set must fail at the write stage, not the read stage"
+                    );
+                }
+            }
+        } else {
+            assert_same(
+                &go_result,
+                &rust_result,
+                &format!("config {} lexical path", args[1]),
+            );
+        }
+    }
 }

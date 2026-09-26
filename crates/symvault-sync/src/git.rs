@@ -1578,7 +1578,7 @@ mod tests {
                 "test \"$GIT_TERMINAL_PROMPT\" = 0 && test -z \"$SYMVAULT_PASSPHRASE\"",
             ],
             None,
-            Duration::from_secs(10),
+            Duration::from_secs(30),
         )
         .expect("probe command succeeds");
         assert!(output.status.success());

@@ -126,11 +126,47 @@ jobs:
           test "$(go env GOVERSION)" = "go1.26.6"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
 
+      - name: Run stateful CLI differential against Go v0.22.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          oracle_tag_commit="$(git rev-parse 'refs/tags/v0.22.1^{commit}')"
+          test "$oracle_tag_commit" = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+
+          temp_root="$RUNNER_TEMP"
+          executable_suffix=
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            temp_root="$(cygpath -u "$RUNNER_TEMP")"
+            executable_suffix=.exe
+          fi
+          oracle_source="$temp_root/symvault-go-v0.22.1-source"
+          oracle_binary="$temp_root/symvault-go-v0.22.1$executable_suffix"
+
+          git worktree add --detach "$oracle_source" refs/tags/v0.22.1
+          test "$(git -C "$oracle_source" rev-parse HEAD)" = "$oracle_tag_commit"
+          GOWORK=off go -C "$oracle_source" build -o "$oracle_binary" .
+          test -f "$oracle_binary"
+          export SYMVAULT_GO_BINARY="$oracle_binary"
+          test -f "$SYMVAULT_GO_BINARY"
+          cargo test -p symvault-cli --test cli_differential --locked \
+            init_list_get_match_go_cli_on_a_disposable_vault -- --exact
+
       - name: Run config profile differential against the pinned Go oracle
         shell: bash
         run: |
           set -euo pipefail
           make config-profile-differential
+
+      - name: Run Windows config and policy path differential
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $oracle = Join-Path $env:RUNNER_TEMP 'symvault-go.exe'
+          go build -o $oracle .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:SYMVAULT_GO_BINARY = $oracle
+          cargo test -p symvault-cli --test config_validate_differential --test policy_differential --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run pairing differential against the pinned Go oracle
         shell: bash
@@ -170,6 +206,13 @@ jobs:
         env:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
         run: python3 scripts/rust-port/native_closeout.py daemon
+
+      - name: Native disposable clipboard round trip
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        shell: bash
+        env:
+          SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
+        run: python3 scripts/rust-port/native_closeout.py clipboard
 
 
       - name: Retain native closeout observations

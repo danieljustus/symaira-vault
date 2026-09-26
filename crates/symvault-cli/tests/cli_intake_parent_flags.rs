@@ -15,6 +15,7 @@ fn run(binary: &Path, home: &Path, args: &[&str]) -> Output {
         .env("TMPDIR", home.join(".tmp"))
         .env("TMP", home.join(".tmp"))
         .env("TEMP", home.join(".tmp"))
+        .env("TZ", "UTC")
         .env("SYMVAULT_PASSPHRASE", "fixture-passphrase-123")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
         .env("SYMVAULT_NO_ENV_WARNING", "1")

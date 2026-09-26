@@ -233,7 +233,11 @@ pub(crate) fn clean_path(path: &Path) -> PathBuf {
             }
         }
     }
-    clean
+    if clean.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        clean
+    }
 }
 
 fn parse_manifest(data: &[u8]) -> Option<SkillManifest> {

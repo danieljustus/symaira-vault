@@ -4014,10 +4014,14 @@ fn run_generate(
         let file = store
             .configured_entry_path(store_path, &identity)
             .map_err(|error| error.to_string())?;
-        let file = vault.join(
-            file.strip_prefix(store.root())
-                .map_err(|error| error.to_string())?,
-        );
+        // Go prints entryStoragePath(v.Dir, ...) — the RAW vault dir as
+        // requested. Store::open canonicalizes its root for the fd-based
+        // hardening, so rebase the configured path onto the requested vault
+        // for display only; all file operations keep the canonical root.
+        let file = file
+            .strip_prefix(store.root())
+            .map(|relative| vault.join(relative))
+            .unwrap_or(file);
         let file = file.to_string_lossy();
         utility_commands::render_stored(
             &mut io::stdout().lock(),
@@ -5184,19 +5188,31 @@ fn format_duration(duration: std::time::Duration) -> String {
     }
 }
 
+/// Mirror cmd/policy.go: policy file arguments are taken verbatim; only a
+/// leading `~` is expanded, via `filepath.Join(home, path[1:])` in Go (which
+/// cleans the joined result). Unlike vault paths, plain policy arguments are
+/// NOT passed through filepath.Clean, so `//` from a fixture root stays.
 fn expand_policy_path(path: &Path) -> Result<PathBuf, String> {
     let raw = path
         .to_str()
         .ok_or_else(|| "policy path must be UTF-8".to_owned())?;
-    let Some(rest) = raw.strip_prefix('~') else {
-        return Ok(path.to_path_buf());
-    };
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| "cannot determine home directory".to_owned())?;
-    Ok(agent_list_commands::clean_path(
-        &PathBuf::from(home).join(rest.trim_start_matches('/')),
-    ))
+    if let Some(rest) = raw.strip_prefix('~') {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        // Go's filepath.Join(home, path[1:]) keeps a separator-prefixed rest
+        // under home; PathBuf::join would instead replace home. A backslash
+        // is a separator only on Windows, and a literal filename byte on Unix.
+        let rest = if cfg!(windows) {
+            rest.trim_start_matches(['/', '\\'])
+        } else {
+            rest.trim_start_matches('/')
+        };
+        return Ok(agent_list_commands::clean_path(
+            &PathBuf::from(home).join(rest),
+        ));
+    }
+    Ok(path.to_path_buf())
 }
 
 fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
