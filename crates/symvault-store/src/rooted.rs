@@ -97,11 +97,12 @@ pub(super) fn open_lock(root: &fs::File, display: &Path) -> Result<fs::File, Sto
     Ok(fs::File::from(file))
 }
 
-pub(super) fn walk_from(
+pub(super) fn walk_from_with_limits(
     root: &fs::File,
     relative: &Path,
     display: &Path,
     max_depth: Option<usize>,
+    max_entries: Option<usize>,
 ) -> Result<Vec<RootedEntry>, StoreError> {
     let directory = directory(root, relative, display, false)?;
     let mut entries = Vec::new();
@@ -112,6 +113,7 @@ pub(super) fn walk_from(
         &mut entries,
         relative.components().count(),
         max_depth,
+        max_entries,
     )?;
     Ok(entries)
 }
@@ -125,8 +127,25 @@ pub(super) fn walk_with_max_depth(
     display: &Path,
     max_depth: Option<usize>,
 ) -> Result<Vec<RootedEntry>, StoreError> {
+    walk_with_limits(root, display, max_depth, None)
+}
+
+pub(super) fn walk_with_limits(
+    root: &fs::File,
+    display: &Path,
+    max_depth: Option<usize>,
+    max_entries: Option<usize>,
+) -> Result<Vec<RootedEntry>, StoreError> {
     let mut entries = Vec::new();
-    walk_directory(root, Path::new(""), display, &mut entries, 0, max_depth)?;
+    walk_directory(
+        root,
+        Path::new(""),
+        display,
+        &mut entries,
+        0,
+        max_depth,
+        max_entries,
+    )?;
     Ok(entries)
 }
 
@@ -137,11 +156,18 @@ fn walk_directory(
     entries: &mut Vec<RootedEntry>,
     depth: usize,
     max_depth: Option<usize>,
+    max_entries: Option<usize>,
 ) -> Result<(), StoreError> {
     if max_depth.is_some_and(|limit| depth >= limit) {
         return Ok(());
     }
-    for name in read_directory_names(directory, display)? {
+    let remaining = max_entries.map(|limit| limit.saturating_sub(entries.len()));
+    for name in read_directory_names(directory, display, remaining)? {
+        if max_entries.is_some_and(|limit| entries.len() >= limit) {
+            return Err(StoreError::ValueLimit(
+                "vault entry enumeration limit exceeded".into(),
+            ));
+        }
         let relative = prefix.join(&name);
         let entry_display = display.join(&relative);
         use rustix::fs::{AtFlags, FileType, statat};
@@ -195,6 +221,7 @@ fn walk_directory(
                     entries,
                     depth + 1,
                     max_depth,
+                    max_entries,
                 )?;
             }
             FileType::RegularFile => entries.push(RootedEntry {
@@ -211,7 +238,11 @@ fn walk_directory(
     Ok(())
 }
 
-fn read_directory_names(directory: &fs::File, display: &Path) -> Result<Vec<OsString>, StoreError> {
+fn read_directory_names(
+    directory: &fs::File,
+    display: &Path,
+    max_names: Option<usize>,
+) -> Result<Vec<OsString>, StoreError> {
     use rustix::fs::Dir;
     use std::os::unix::ffi::OsStringExt;
 
@@ -228,6 +259,11 @@ fn read_directory_names(directory: &fs::File, display: &Path) -> Result<Vec<OsSt
         let name = entry.file_name().to_bytes();
         if name == b"." || name == b".." {
             continue;
+        }
+        if max_names.is_some_and(|limit| names.len() >= limit) {
+            return Err(StoreError::ValueLimit(
+                "vault entry enumeration limit exceeded".into(),
+            ));
         }
         names.push(OsString::from_vec(name.to_vec()));
     }

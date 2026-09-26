@@ -751,6 +751,48 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
 }
 
 #[test]
+fn entry_shape_budget_is_checked_before_entry_deserialization() {
+    let too_many =
+        serde_json::json!({"data": {"array": vec![serde_json::Value::Null; MAX_ARRAY_ITEMS + 1]}});
+    assert!(validate_entry_json(&too_many).is_err());
+
+    let mut deep = serde_json::Value::String("leaf".into());
+    for _ in 0..MAX_ENTRY_DEPTH {
+        deep = serde_json::json!({"nested": deep});
+    }
+    assert!(validate_entry_json(&serde_json::json!({"data": {"root": deep}})).is_err());
+}
+
+#[test]
+fn writer_refuses_entries_larger_than_the_read_budget() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut data = BTreeMap::new();
+    let value = "x".repeat(MAX_VALUE_BYTES);
+    for index in 0..17 {
+        data.insert(
+            format!("field-{index:02}"),
+            serde_json::Value::String(value.clone()),
+        );
+    }
+    let entry = Entry {
+        data,
+        ..Entry::default()
+    };
+    assert!(matches!(
+        store.write_new_entry("too-large", &entry, &identity),
+        Err(StoreError::Limit {
+            limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
+            ..
+        })
+    ));
+    assert!(!temp.path().join("entries/too-large.age").exists());
+}
+
+#[test]
 fn fresh_layout_write_supports_pseudonymized_nested_and_dotted_paths() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
@@ -935,6 +977,8 @@ fn path_validation_and_symlink_reads_fail_closed() {
     ] {
         assert!(validate_entry_path(path).is_err(), "accepted {path:?}");
     }
+    assert!(validate_entry_path(&vec!["d"; MAX_VAULT_ENTRY_PATH_DEPTH + 1].join("/")).is_err());
+    assert!(validate_entry_path(&vec!["d"; MAX_VAULT_ENTRY_PATH_DEPTH].join("/")).is_ok());
     let (_, value) = fixture();
     let _identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
@@ -1940,9 +1984,9 @@ fn open_preserves_legacy_validation_error_order() {
 
 #[cfg(unix)]
 #[test]
-fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
+fn fresh_and_legacy_scans_keep_the_shared_path_depth_limit() {
     let identity = parse_identity(IDENTITY).unwrap();
-    let deep = (0..65).map(|_| "deep").collect::<Vec<_>>().join("/");
+    let deep = (0..63).map(|_| "deep").collect::<Vec<_>>().join("/");
     let path = format!("{deep}/entry");
     let fresh_temp = tempfile::tempdir().unwrap();
     fs::create_dir(fresh_temp.path().join("entries")).unwrap();
@@ -1995,7 +2039,7 @@ fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
     fs::remove_dir_all(legacy_temp.path().join("entries")).unwrap();
     fs::create_dir(legacy_temp.path().join("entries")).unwrap();
     let legacy = Store::open(legacy_temp.path(), &identity).unwrap();
-    assert!(legacy.list(&identity).unwrap().is_empty());
+    assert_eq!(legacy.list(&identity).unwrap(), vec![path]);
 }
 
 #[cfg(unix)]
@@ -2030,6 +2074,19 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
         actual.sort();
         assert_eq!(actual, expected, "depth {depth}");
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn rooted_walk_rejects_entry_count_overflow() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join("one.age"), b"1").unwrap();
+    fs::write(temp.path().join("two.age"), b"2").unwrap();
+    let root = fs::File::open(temp.path()).unwrap();
+    assert!(matches!(
+        rooted::walk_with_limits(&root, temp.path(), None, Some(1)),
+        Err(StoreError::ValueLimit(_))
+    ));
 }
 #[derive(Debug, Deserialize, Serialize)]
 struct Store004Fixture {
