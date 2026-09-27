@@ -1,6 +1,6 @@
 use std::{
     env, fs,
-    io::{self, Write},
+    io::{self, IsTerminal, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -696,7 +696,11 @@ fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
 }
 
 pub fn validate(path: &Path, fix: bool, output: &str, quiet: bool) -> Result<(), String> {
-    if fix {
+    // Go only enters its repair flow when stdin is an interactive terminal.
+    // This Rust build does not yet implement that TTY editor/prompt flow, but
+    // `--fix` must remain a no-op for pipes and redirected invocations, where
+    // Go performs ordinary validation.
+    if fix && std::io::stdin().is_terminal() {
         return Err("config validate --fix is not supported by this build".to_owned());
     }
     let json = output == "json";
