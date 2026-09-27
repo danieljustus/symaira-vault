@@ -207,8 +207,14 @@ jobs:
             temp_root="$(cygpath -u "$RUNNER_TEMP")"
             executable_suffix=.exe
           fi
-          export SYMVAULT_GO_BINARY="$temp_root/symvault-go-auth$executable_suffix"
-          test -f "$SYMVAULT_GO_BINARY"
+          oracle_binary="$temp_root/symvault-go-auth$executable_suffix"
+          test -f "$oracle_binary"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            native_binary="$(cygpath -w "$oracle_binary")"
+            export SYMVAULT_GO_BINARY="$native_binary"
+          else
+            export SYMVAULT_GO_BINARY="$oracle_binary"
+          fi
           cargo test -p symvault-cli --test startup_profile_differential --locked
 
       - name: Run config profile differential against the pinned Go oracle
