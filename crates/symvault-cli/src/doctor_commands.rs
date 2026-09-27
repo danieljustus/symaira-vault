@@ -1685,6 +1685,7 @@ fn check_scrypt_benchmark(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
                 false,
             );
         }
+        std::hint::black_box(output);
         elapsed = start.elapsed();
         if elapsed >= Duration::from_millis(250) {
             recommended = wf;
@@ -1705,6 +1706,7 @@ fn check_scrypt_benchmark(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
                 false,
             );
         }
+        std::hint::black_box(output);
         elapsed = start.elapsed();
     }
 
