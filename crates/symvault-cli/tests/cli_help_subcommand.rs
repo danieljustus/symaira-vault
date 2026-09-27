@@ -30,7 +30,14 @@ fn help_command_reaches_root_and_nested_help_like_go() {
         let rust_stdout = String::from_utf8_lossy(&rust_output.stdout).to_lowercase();
         assert!(rust_stdout.contains("usage:"));
         if args.len() == 3 {
-            assert!(rust_stdout.contains("symvault config validate"));
+            let usage = rust_stdout.replace("symvault.exe", "symvault");
+            let words = usage.split_whitespace().collect::<Vec<_>>();
+            assert!(
+                words
+                    .windows(3)
+                    .any(|words| words == ["symvault", "config", "validate"]),
+                "{rust_stdout}"
+            );
         }
 
         if let Some(go) = &go {
