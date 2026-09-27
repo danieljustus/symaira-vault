@@ -1,13 +1,10 @@
 //! CLI dispatch contract for `symvault import --quarantine`.
 //!
 //! `cmd/admin/import.go` resolves and validates the import format before it
-//! checks any flag conflict (`RunE`: format detection → `isSupportedImportFormat`
-//! → CSV sniff → dry-run report → `--skip-existing`/`--overwrite` →
-//! `--quarantine`/`--prefix`), so an invocation that cannot run reports the
-//! format error and never announces a quarantine batch ID. The module-level
-//! tests in `import_commands.rs` cover the prefix resolver itself; these cases
-//! pin the ordering in the command dispatcher, which also proves the conflict
-//! checks run before any vault is resolved or unlocked.
+//! checks flag conflicts, so an undetectable extension wins and no quarantine
+//! batch ID is announced. These tests pin that order before vault access.
+//! Go also prints a dry-run format and mapping report before conflict checks;
+//! that report is an existing, separate gap in the Rust import command.
 use std::env;
 use std::path::PathBuf;
 use std::process::{Command, Output};
