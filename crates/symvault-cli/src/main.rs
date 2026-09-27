@@ -14,6 +14,7 @@ mod agent_whoami_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod completion_commands;
 mod config;
 mod daemon_commands;
 mod device;
@@ -124,6 +125,13 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Generate a shell completion script.
+    Completion {
+        #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
+        shell: Option<String>,
+        #[arg(long)]
+        no_descriptions: bool,
+    },
     /// Run a command with secrets injected as environment variables.
     Run {
         #[arg(short = 'e', long = "env")]
@@ -1045,6 +1053,10 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Completion {
+            shell,
+            no_descriptions,
+        }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
         Some(Command::Init { vault_dir, auth }) => {
             run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
         }
