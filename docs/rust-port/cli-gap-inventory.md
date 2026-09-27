@@ -110,12 +110,13 @@ accepted-and-ignored flag scaffolding.
 The command group exists in Rust, but only part of Go's check registry is ported.
 Measured with `--json --no-network` against the pinned Go oracle
 (`parent-doctor-matrix.py`, fixtures `empty`, `corrupt`, `env` and `initialized`):
-Go runs **35** non-network checks, Rust **34**. For the 34 shared IDs the
+Go and Rust each run **35** non-network checks. For the original 34 shared IDs the
 name/status/message/hint/fixable fields are byte-identical on a missing vault, on a
 missing vault with the env-passphrase variables set, and on an oracle-initialized
-vault (**0 field deviations**). The remaining ID is **not implemented** and is
-therefore *absent* from the output rather than reported as OK — a missing check may
-never look like a passing one.
+vault (**0 field deviations**). The Scrypt benchmark now runs for legacy vaults;
+its measured duration and recommended factor are host-dependent, so the added
+differential compares the Argon2id branch exactly and the legacy branch's result
+shape and warning hint.
 
 ### Known deviation: config-loader syntax-error dialect (not yet parity)
 
@@ -137,22 +138,22 @@ corrupt fixture as well (`differential_doctor_session_tooling_checks`); the two 
 config checks from wave 2b quote parser errors and are pinned for the missing and
 initialized fixtures only (`differential_doctor_mcp_config_checks`).
 
-Ported IDs (37 in the registry, 34 of them without network):
+Ported IDs (38 in the registry, 35 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
 `vault.identity.encrypted`, `vault.permissions`, `auth.method`, `session.cache`,
 `git.repo`, `git.remote`, `git.gitignore.protects`, `git.lastsync.fresh` (network),
 `recipients.count`, `recipients.recovery`, `audit.log`, `audit.keyring.orphans`,
 `update.available` (network), `vault.size`, `vault.stale_temp_files`,
-`vault.conflict_files`, `vault.search_index.persistence`, `crypto.kdf.modern`,
+`vault.conflict_files`, `vault.search_index.persistence`, `crypto.scrypt.benchmark`
+(slow), `crypto.kdf.modern`,
 `vault.manifest.intact`, `auth.passphrase.rotation`, `tooling.autotype.backend`,
 `tooling.clipboard.backend`, `daemon.status`, `mcp.approval.tls`, `tooling.secureui`,
 `tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
 `security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`,
 `mcp.server.reachable` (network), `mcp.tokens`.
 
-Still open (1): `crypto.scrypt.benchmark`. The network-tagged
-`mcp.server.reachable` check now uses a controlled loopback HTTP fixture and is
+The network-tagged `mcp.server.reachable` check uses a controlled loopback HTTP fixture and is
 differentially covered for HTTP 200 (with and without a token file), HTTP 503,
 and an unreachable port. The Go implementation at oracle commit
 `fca3f89401833b5e14ec4ec74ef736b0f63bca74` is source-identical for
@@ -185,13 +186,12 @@ active/inactive result follows the machine running the test. The Go oracle's
 `fca3f89401833b5e14ec4ec74ef736b0f63bca74` (blob
 `cbd27b9bfc4caefaa811f88e14376c0263f944b3`).
 
-The remaining open check was implemented at some point, measured against the oracle
-and then **withdrawn again** because it cannot be byte-pinned — do not re-add it
-without a new decision:
-
-- `crypto.scrypt.benchmark`: Go embeds a *measured* duration and its recommended work
-  factor for this machine in the message (the argon2id branch *is* stable, the scrypt
-  branch is not).
+The earlier `crypto.scrypt.benchmark` attempt was withdrawn because its measured
+duration and recommended work factor cannot be byte-pinned. This slice adopts
+an explicit shape-only comparison for the legacy Scrypt branch: both binaries
+must run the check, emit a valid status and explain any below-target warning;
+pure branch tests pin the exact text for fixed inputs. Argon2id and `--quick`
+remain exact comparisons. This does not claim identical measurements.
 
 `mcp.tokens` is now ported. A disposable differential checks an existing registry
 without changing its bytes or sibling legacy-token file, and tests both legacy-token
@@ -219,9 +219,6 @@ oracle's status.
 
 The `mcp.server.reachable` check now has a controlled loopback HTTP differential
 fixture; its internet connectivity and external-host branches are not exercised.
-
-`crypto.scrypt.benchmark` stays out unless a shape-only comparison is explicitly
-accepted as such.
 
 Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
 stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and
