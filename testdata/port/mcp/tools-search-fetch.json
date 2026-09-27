@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "c98b560f",
-    "commit_sha": "c98b560f51fd0e10c3bb7e10c6c7621cafbebdfb",
+    "commit": "179efb67",
+    "commit_sha": "179efb6746861f0fa9066dcd2cb9aa55c802cd9d",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -19,8 +19,8 @@
       "internal/vault/search.go",
       "internal/vault/taint/taint.go"
     ],
-    "source_hash": "e7b2bd7c9cb73cc11e435b492acc9d7ff844e77756ba40e5fbc6f95fc1228601",
-    "generator_hash": "5f47a8e02b1e0dac4537f77af042ec19d6a7a1b05258719fb127078b443771e9"
+    "source_hash": "ce3a151a305353bf7153782b9468c1f52a417f123f48f83cd2685af0771dee29",
+    "generator_hash": "6526d614f3d1a1409ce5323ff3ff80007734d79557fa719d49a77997611075ec"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-search-fetch-fixture",

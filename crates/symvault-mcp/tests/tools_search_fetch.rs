@@ -194,10 +194,10 @@ fn go_generated_search_fetch_fixture_matches_rust_stream() {
     ))
     .expect("valid Go-generated search/fetch fixture");
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "3232e31f");
+    assert_eq!(fixture.oracle.commit, "179efb67");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "3232e31fb91362b6e6202774f7e95f6d477305d2"
+        "179efb6746861f0fa9066dcd2cb9aa55c802cd9d"
     );
     assert!(!fixture.oracle.source_files.is_empty());
     assert_eq!(fixture.oracle.source_hash.len(), 64);

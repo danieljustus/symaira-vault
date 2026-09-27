@@ -548,11 +548,11 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
     .expect("valid Go-generated initialized tools/call fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+        "179efb6746861f0fa9066dcd2cb9aa55c802cd9d"
     );
     assert_eq!(
         fixture.oracle.source_hash.as_deref(),
-        Some("8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9")
+        Some("690126f431ea543c741f14d0d22abdb700829dcd3d92bbdb3f561414cb339324")
     );
     let case = fixture
         .cases
