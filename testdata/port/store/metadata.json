@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "cf496d4315181b8e444e62520dfc4dce0fb94e5c",
+    "commit": "1605b180010782eb636e8af9b65e064741837065",
     "release": "unreleased",
     "source_files": [
       "internal/vault/entry.go",
@@ -9,7 +9,7 @@
       "internal/vault/recipients.go",
       "internal/vault/entry_metadata.go"
     ],
-    "source_digest": "5cf6fd3c9119cc20b6db0087820ea18069b2826fb58c1e79ebcb9eaad857ffc7",
+    "source_digest": "908d00d98d9c6e5962f95521982aef268fdcbb087395b8fd46be276e761c4d96",
     "generator_files": [
       "scripts/rust-port/cmd/storemetagen/main.go"
     ],
