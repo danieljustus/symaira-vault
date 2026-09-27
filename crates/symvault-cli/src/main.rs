@@ -435,6 +435,8 @@ enum Command {
         overwrite: bool,
         #[arg(long, default_value = "")]
         mapping: String,
+        #[arg(long)]
+        quarantine: bool,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -1918,6 +1920,7 @@ fn run_cli() -> ExitCode {
             skip_existing,
             overwrite,
             mapping,
+            quarantine,
         }) => {
             // cobra Find: only the FIRST non-flag word can name a
             // subcommand, so `import file.csv review` is a parent call
@@ -1949,6 +1952,7 @@ fn run_cli() -> ExitCode {
                     skip_existing,
                     overwrite,
                     &mapping,
+                    quarantine,
                     cli.quiet,
                 )
             }
@@ -4049,12 +4053,24 @@ fn run_import(
     skip_existing: bool,
     overwrite: bool,
     mapping: &str,
+    quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
+        if quarantine && !prefix.is_empty() {
+            return Err("--quarantine and --prefix cannot be used together".into());
+        }
+        let quarantine_id = if quarantine {
+            Some(import_commands::generate_import_id()?)
+        } else {
+            None
+        };
+        if !quiet && let Some(import_id) = quarantine_id.as_deref() {
+            println!("Quarantine import ID: {import_id}");
+        }
         let result = import_commands::run_import(
             &vault,
             &identity,
@@ -4066,6 +4082,7 @@ fn run_import(
                 skip_existing,
                 overwrite,
                 mapping: mapping.to_owned(),
+                quarantine_id,
             },
             write_commands::import_fields,
             write_commands::replace_fields,
