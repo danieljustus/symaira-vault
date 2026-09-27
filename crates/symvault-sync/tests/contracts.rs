@@ -1,5 +1,5 @@
 use base64::Engine;
-use flate2::{Compression, write::GzEncoder};
+use flate2::{Compression, read::GzDecoder, write::GzEncoder};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -524,6 +524,34 @@ fn backup_exclude_git_matches_pinned_go_archive_members() {
             "{path}"
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn backup_skips_symlinked_root_like_pinned_go() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert_eq!(archive_case.expected["symlink_root_backup_empty"], true);
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let link = root.path().join("vault-link");
+    symlink(&source, &link).unwrap();
+
+    let archive_path = root.path().join("backup.tar.gz");
+    let manifest = archive::backup(&link, &archive_path, false).unwrap();
+    assert!(manifest.is_empty());
+
+    let file = fs::File::open(&archive_path).unwrap();
+    let mut tar = tar::Archive::new(GzDecoder::new(file));
+    let mut members = tar.entries().unwrap();
+    assert!(members.next().is_none());
 }
 
 #[test]

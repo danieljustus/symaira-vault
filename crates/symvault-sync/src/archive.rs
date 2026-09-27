@@ -168,10 +168,19 @@ pub fn backup(
     exclude_git: bool,
 ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
     let root = root.as_ref();
-    if !root.is_dir() {
+    let root_metadata = fs::symlink_metadata(root)?;
+    let symlink_root = root_metadata.file_type().is_symlink();
+    if !symlink_root && !root_metadata.is_dir() {
         return Err(ArchiveError::NotDirectory(root.to_path_buf()));
     }
-    let root = root.canonicalize()?;
+    // Go's filepath.Walk reports a symlink root as a symlink and CreateBackup
+    // skips it. Do not canonicalize this path: that would follow the link and
+    // archive the target's contents instead of producing an empty backup.
+    let root = if symlink_root {
+        root.to_path_buf()
+    } else {
+        root.canonicalize()?
+    };
     let output = output.as_ref();
     crate::safeio::refuse_unsafe_target(output)
         .map_err(|error| io::Error::other(error.to_string()))?;
@@ -191,7 +200,11 @@ pub fn backup(
     let encoder = GzEncoder::new(staged.as_file_mut(), Compression::default());
     let mut builder = Builder::new(encoder);
     let mut manifest = Vec::new();
-    let mut paths: Vec<_> = walkdir(&root)?.into_iter().collect();
+    let mut paths: Vec<_> = if symlink_root {
+        Vec::new()
+    } else {
+        walkdir(&root)?.into_iter().collect()
+    };
     paths.sort();
     for path in paths {
         if path == staged_path || path == output {

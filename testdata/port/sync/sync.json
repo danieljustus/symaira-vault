@@ -79,7 +79,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/syncgen/main.go"
     ],
-    "generator_digest": "0b7ca3a931c5b7c94425f311acb1c42fe33bb11184d84c844953693da8e6b5d4"
+    "generator_digest": "e11de63e162123bcaf8d8d815c6fc7c00f8f9beb53ce00190c4e31eb70fec422"
   },
   "cases": [
     {
@@ -315,7 +315,8 @@
             "sha256": "689f6a627384c7dcb2dcc1487e540223e77bdf9dcd0d8be8a326eda65b0ce9a4",
             "data": "aWRlbnRpdHk="
           }
-        ]
+        ],
+        "symlink_root_backup_empty": true
       }
     },
     {
