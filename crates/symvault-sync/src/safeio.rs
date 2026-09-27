@@ -284,7 +284,7 @@ pub fn create_dir_all(path: &Path) -> Result<(), SafeIoError> {
     Ok(dir_builder().create(path)?)
 }
 
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(windows)))]
 fn append_read_options() -> fs::OpenOptions {
     let mut options = fs::OpenOptions::new();
     options.read(true).append(true).create(true);
@@ -391,10 +391,7 @@ mod tests {
         let target = directory.path().join("target");
         let link = directory.path().join("recipients-link");
         fs::write(&target, b"sentinel\n").expect("target");
-        if let Err(error) = symlink_file(&target, &link) {
-            eprintln!("skipping symlink fixture: {error}");
-            return;
-        }
+        symlink_file(&target, &link).expect("create symlink fixture");
 
         // Exercise the post-open guard directly: this represents a reparse
         // point swapped in after open_append's initial path check.
