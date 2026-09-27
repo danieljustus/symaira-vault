@@ -1,6 +1,7 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! and `update check` for stable releases and non-release builds. `update
-//! apply` still requires its download and cosign path.
+//! `update check` for stable releases and non-release builds, and the local
+//! non-release `update apply --dry-run` early-return path. Applying stable
+//! releases still requires its download and cosign path.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -85,9 +86,102 @@ pub(crate) fn run(
             if word == "check" {
                 return check(rest, output_format, json_flag, quiet);
             }
+            if word == "apply" {
+                return apply_dry_run(rest, output_format, json_flag);
+            }
             unknown_command("symvault update", &word, true)
         }
     }
+}
+
+#[derive(Serialize)]
+struct ApplyDryRunJson<'a> {
+    method: &'static str,
+    old_version: &'a str,
+    new_version: &'a str,
+    binary_path: &'static str,
+    dry_run: bool,
+}
+
+/// Implements Go's local-only early return for `update apply --dry-run` on
+/// development builds. The Go checker rejects non-stable versions before it
+/// creates an HTTP client, so this path cannot access the network or release
+/// cache. Stable-version previews and actual installation remain unsupported
+/// until the verified download/Cosign/atomic-replacement path is ported.
+fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> ExitCode {
+    let mut want_json = json_flag;
+    let mut output_json = output_format == "json";
+    let mut dry_run = false;
+    let mut force = false;
+    let mut index = 1;
+    while let Some(arg) = rest.get(index) {
+        match arg.to_string_lossy().as_ref() {
+            "--json" => want_json = true,
+            "--dry-run" => dry_run = true,
+            "--force" => force = true,
+            "--output" => {
+                let Some(format) = rest.get(index + 1) else {
+                    return unknown_command("symvault update apply", "--output", false);
+                };
+                output_json = format == "json";
+                index += 1;
+            }
+            value if value.starts_with("--output=") => {
+                output_json = value.trim_start_matches("--output=") == "json";
+            }
+            flag if flag.starts_with('-') => {
+                return unknown_command("symvault update apply", flag, false);
+            }
+            extra => return unknown_command("symvault update apply", extra, false),
+        }
+        index += 1;
+    }
+
+    if !dry_run {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Error: update apply without --dry-run requires the verified release installer"
+        );
+        return ExitCode::from(1);
+    }
+
+    let version = crate::VERSION.trim();
+    if parse_stable_version(version).is_some() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Error: stable update apply --dry-run requires the verified release installer"
+        );
+        return ExitCode::from(1);
+    }
+    // `--force` is accepted to match Cobra's flag contract. The Go checker
+    // still returns locally for non-release versions, even when forced.
+    let _ = force;
+
+    if want_json || output_json {
+        let result = ApplyDryRunJson {
+            method: "",
+            old_version: version,
+            new_version: version,
+            binary_path: "",
+            dry_run: true,
+        };
+        match serde_json::to_string_pretty(&result) {
+            Ok(json) => {
+                let mut stdout = std::io::stdout().lock();
+                let _ = writeln!(stdout, "{json}");
+            }
+            Err(error) => {
+                let _ = writeln!(std::io::stderr(), "Error: encode JSON output: {error}");
+                return ExitCode::from(1);
+            }
+        }
+    } else {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Update checks are only available for stable release builds. Current version: {version}"
+        );
+    }
+    ExitCode::SUCCESS
 }
 
 #[derive(Serialize)]
