@@ -1,0 +1,57 @@
+{
+  "oracle": {
+    "commit": "147e2771a43d2e223c0ff1fb598e077183b05776",
+    "binary": "go build with main.version set by ldflags",
+    "go_version": "go1.27.1",
+    "captured": "2026-09-27",
+    "source_files": [
+      "main.go",
+      "cmd/admin/update.go",
+      "internal/update/checker.go",
+      "internal/cli/version.go",
+      "internal/config/schema.go",
+      "go.mod"
+    ],
+    "source_digest": "fb3fb0de5c29586e6833dc593601036ca2c324a021f4bc68d1ccb9c63315ee1b",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache"
+  },
+  "cases": [
+    {
+      "id": "apply-preview-update-text",
+      "version": "1.0.0",
+      "cache": "{\"Timestamp\":\"2099-01-01T00:00:00Z\",\"Release\":{\"TagName\":\"v1.5.0\",\"Body\":\"\",\"HTMLURL\":\"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\"Assets\":[]}}",
+      "json": false,
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Update available: 1.0.0 -> 1.5.0 (use --dry-run to preview)\n"
+    },
+    {
+      "id": "apply-preview-update-json",
+      "version": "1.0.0",
+      "cache": "{\"Timestamp\":\"2099-01-01T00:00:00Z\",\"Release\":{\"TagName\":\"v1.5.0\",\"Body\":\"\",\"HTMLURL\":\"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\"Assets\":[]}}",
+      "json": true,
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"\",\n  \"old_version\": \"1.0.0\",\n  \"new_version\": \"1.5.0\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "apply-preview-current-text",
+      "version": "1.5.0",
+      "cache": "{\"Timestamp\":\"2099-01-01T00:00:00Z\",\"Release\":{\"TagName\":\"v1.5.0\",\"Body\":\"\",\"HTMLURL\":\"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\"Assets\":[]}}",
+      "json": false,
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Symaira Vault is up to date (1.5.0).\n"
+    },
+    {
+      "id": "apply-preview-current-json",
+      "version": "1.5.0",
+      "cache": "{\"Timestamp\":\"2099-01-01T00:00:00Z\",\"Release\":{\"TagName\":\"v1.5.0\",\"Body\":\"\",\"HTMLURL\":\"https://github.com/danieljustus/symaira-vault/releases/tag/v1.5.0\",\"Assets\":[]}}",
+      "json": true,
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"\",\n  \"old_version\": \"1.5.0\",\n  \"new_version\": \"1.5.0\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n",
+      "stderr": ""
+    }
+  ]
+}

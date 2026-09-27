@@ -1,7 +1,7 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! `update check` for stable releases and non-release builds, and the local
-//! non-release `update apply --dry-run` early-return path. Applying stable
-//! releases still requires its download and cosign path.
+//! `update check` for stable releases and non-release builds, plus stable and
+//! non-release `update apply --dry-run` previews. Applying stable releases
+//! still requires its download and cosign path.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -103,11 +103,9 @@ struct ApplyDryRunJson<'a> {
     dry_run: bool,
 }
 
-/// Implements Go's local-only early return for `update apply --dry-run` on
-/// development builds. The Go checker rejects non-stable versions before it
-/// creates an HTTP client, so this path cannot access the network or release
-/// cache. Stable-version previews and actual installation remain unsupported
-/// until the verified download/Cosign/atomic-replacement path is ported.
+/// Implements Go's `update apply --dry-run` metadata preview. Stable releases
+/// use the existing hardened checker/cache path; non-release builds return
+/// before any network or cache access. No artifact is downloaded or installed.
 fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> ExitCode {
     let mut want_json = json_flag;
     let mut output_json = output_format == "json";
@@ -146,42 +144,24 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
     }
 
     let version = crate::VERSION.trim();
-    if parse_stable_version(version).is_some() {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Error: stable update apply --dry-run requires the verified release installer"
-        );
-        return ExitCode::from(1);
-    }
-    // `--force` is accepted to match Cobra's flag contract. The Go checker
-    // still returns locally for non-release versions, even when forced.
-    let _ = force;
-
-    if want_json || output_json {
-        let result = ApplyDryRunJson {
-            method: "",
-            old_version: version,
-            new_version: version,
-            binary_path: "",
-            dry_run: true,
-        };
-        match serde_json::to_string_pretty(&result) {
-            Ok(json) => {
-                let mut stdout = std::io::stdout().lock();
-                let _ = writeln!(stdout, "{json}");
-            }
-            Err(error) => {
-                let _ = writeln!(std::io::stderr(), "Error: encode JSON output: {error}");
-                return ExitCode::from(1);
-            }
+    let result = if let Some(current) = parse_stable_version(version) {
+        match cached_check(current, force, OffsetDateTime::now_utc()) {
+            Some(result) => Ok(result),
+            None => fetch_latest_check(current, version),
         }
     } else {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Update checks are only available for stable release builds. Current version: {version}"
-        );
-    }
-    ExitCode::SUCCESS
+        Ok(CheckResult {
+            current_version: version.to_owned(),
+            latest_version: String::new(),
+            release_url: String::new(),
+            checkable: false,
+            update_available: false,
+        })
+    };
+    let Ok(result) = result else {
+        return ExitCode::from(1);
+    };
+    write_check_output(render_apply_dry_run(&result, want_json || output_json))
 }
 
 #[derive(Serialize)]
@@ -668,6 +648,58 @@ struct CheckOutput {
     stderr: String,
 }
 
+fn render_apply_dry_run(result: &CheckResult, want_json: bool) -> CheckOutput {
+    if want_json {
+        let output = ApplyDryRunJson {
+            method: "",
+            old_version: &result.current_version,
+            new_version: if result.update_available {
+                &result.latest_version
+            } else {
+                &result.current_version
+            },
+            binary_path: "",
+            dry_run: true,
+        };
+        let Ok(mut text) = serde_json::to_string_pretty(&output) else {
+            return CheckOutput {
+                exit_code: ExitCode::from(1),
+                stdout: String::new(),
+                stderr: "Error: encode JSON output: serialize failed\n".into(),
+            };
+        };
+        text = escape_go_json(&text);
+        text.push('\n');
+        return CheckOutput {
+            exit_code: ExitCode::SUCCESS,
+            stdout: text,
+            stderr: String::new(),
+        };
+    }
+
+    let message = if !result.checkable {
+        format!(
+            "Update checks are only available for stable release builds. Current version: {}\n",
+            result.current_version
+        )
+    } else if result.update_available {
+        format!(
+            "Update available: {} -> {} (use --dry-run to preview)\n",
+            result.current_version, result.latest_version
+        )
+    } else {
+        format!(
+            "Symaira Vault is up to date ({}).\n",
+            result.current_version
+        )
+    };
+    CheckOutput {
+        exit_code: ExitCode::SUCCESS,
+        stdout: String::new(),
+        stderr: message,
+    }
+}
+
 fn render_check(result: &CheckResult, want_json: bool, quiet: bool) -> CheckOutput {
     if want_json {
         let output = CheckJson {
@@ -880,6 +912,87 @@ mod check_tests {
             time::Duration::hours(1)
         );
         assert_eq!(update_cache_ttl_at(None), time::Duration::hours(24));
+    }
+}
+
+#[cfg(test)]
+mod apply_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Oracle {
+        source_files: Vec<String>,
+        source_digest: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Case {
+        id: String,
+        version: String,
+        cache: String,
+        json: bool,
+        exit: u8,
+        stdout: String,
+        stderr: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixture {
+        oracle: Oracle,
+        cases: Vec<Case>,
+    }
+
+    fn fixture() -> Fixture {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/update-apply-stable/cases.json");
+        let raw = fs::read_to_string(path).expect("read stable update-apply fixture");
+        serde_json::from_str(&raw.replace("\r\n", "\n")).expect("parse stable update-apply fixture")
+    }
+
+    #[test]
+    fn stable_apply_preview_matches_go_oracle_bytes() {
+        let fixture = fixture();
+        let now = OffsetDateTime::parse("2026-09-27T12:00:00Z", &Rfc3339).unwrap();
+        for case in &fixture.cases {
+            let current = parse_stable_version(&case.version)
+                .unwrap_or_else(|| panic!("{}: invalid fixture version", case.id));
+            let result = cached_check_bytes(
+                case.cache.as_bytes(),
+                current,
+                now,
+                time::Duration::hours(24),
+            )
+            .unwrap_or_else(|| panic!("{}: cache should be fresh and usable", case.id));
+            let got = render_apply_dry_run(&result, case.json);
+            assert_eq!(
+                got.exit_code,
+                ExitCode::from(case.exit),
+                "{}: exit",
+                case.id
+            );
+            assert_eq!(got.stdout, case.stdout, "{}: stdout", case.id);
+            assert_eq!(got.stderr, case.stderr, "{}: stderr", case.id);
+        }
+    }
+
+    #[test]
+    fn fixture_source_digest_matches_pinned_go_sources() {
+        let fixture = fixture();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut hasher = Sha256::new();
+        for name in &fixture.oracle.source_files {
+            let data = fs::read(repo_root.join(name))
+                .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
+            hasher.update(name.as_bytes());
+            hasher.update([0]);
+            hasher.update(&data);
+            hasher.update([0]);
+        }
+        assert_eq!(
+            format!("{:x}", hasher.finalize()),
+            fixture.oracle.source_digest,
+            "pinned Go source changed; recapture the stable update-apply fixture"
+        );
     }
 }
 
