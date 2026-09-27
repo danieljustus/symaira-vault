@@ -70,9 +70,11 @@ tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
   the tree records only each node's own flags, so additional Rust entries are
   not called divergences; only oracle flags missing in Rust are listed.
 - Hidden commands stay invisible to both `--help` walks. They are not covered.
-- A path counted as present is only a help/parser-surface result. For example,
-  `update apply` and `update check` are still dispatched as unknown commands by
-  `update_commands::run`; their parser-surface rows do not claim runtime parity.
+- A path counted as present is only a help/parser-surface result. `update check`
+  and `update apply` are recognized by `update_commands::run`, but this does not
+  imply full runtime parity: `apply --dry-run` previews release metadata,
+  unsupported installation methods now fail closed before network access, and
+  the direct-download path still lacks signed artifact installation and rollback.
 
 ## Missing flags on probed paths
 
@@ -80,12 +82,11 @@ tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
 | --- | --- |
 | `mcp` | `--bind`, `--port`, `--tls-ca`, `--tls-cert`, `--tls-key` |
 | `run` | `--broker`, `--broker-passthrough`, `--broker-strict` |
-| `update apply` | `--dry-run`, `--force` |
-| `update check` | `--force` |
 
 `import --quarantine` is implemented. The `mcp` and `run` flags belong to
-unported HTTP/TLS and broker behavior. The `update` flags belong to the
-unported update runtime. Do not add accepted-and-ignored flag scaffolding.
+unported HTTP/TLS and broker behavior. Update flags are recognized only where
+the corresponding checker/preview path consumes them; do not add
+accepted-and-ignored flag scaffolding.
 
 ## `symvault doctor` check coverage (2026-09-19)
 

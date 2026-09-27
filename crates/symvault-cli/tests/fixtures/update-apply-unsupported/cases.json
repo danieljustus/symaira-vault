@@ -1,0 +1,37 @@
+{
+  "oracle": {
+    "commit": "147e2771a43d2e223c0ff1fb598e077183b05776",
+    "binary": "GOTOOLCHAIN=go1.26.6 go build -o target/symvault-go-update-oracle .",
+    "go_version": "go1.26.6",
+    "captured": "2026-09-27",
+    "environment": {
+      "HOMEBREW_PREFIX": "/",
+      "HOME": "disposable temporary directory"
+    },
+    "corekit_pin": "v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "source_files": [
+      "cmd/admin/update.go",
+      "go.mod",
+      "go.sum",
+      "internal/cli/version.go",
+      "internal/update/apply.go"
+    ],
+    "source_digest": "ec21a31ee26edda0610a9da99fce518de18fc712ee102b42607fccb16883bbaf"
+  },
+  "cases": [
+    {
+      "id": "apply-homebrew-refusal-text",
+      "argv": ["update", "apply"],
+      "exit": 2,
+      "stdout": "",
+      "stderr": "Error: self-update is not supported for homebrew installation\nGuidance: Update via Homebrew: brew update && brew upgrade symvault\nError: self-update not supported: self-update is not supported for homebrew installation\nTry: symvault find <search-term>\n"
+    },
+    {
+      "id": "apply-homebrew-refusal-json",
+      "argv": ["--json", "update", "apply"],
+      "exit": 2,
+      "stdout": "{\n  \"error\": \"self-update is not supported for homebrew installation\",\n  \"guidance\": \"Update via Homebrew: brew update \\u0026\\u0026 brew upgrade symvault\"\n}\n",
+      "stderr": "Error: self-update not supported: self-update is not supported for homebrew installation\nTry: symvault find <search-term>\n"
+    }
+  ]
+}

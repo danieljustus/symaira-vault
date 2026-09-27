@@ -136,6 +136,19 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
     }
 
     if !dry_run {
+        let info = match install_info() {
+            Ok(info) => info,
+            Err(error) => {
+                return write_check_output(CheckOutput {
+                    exit_code: ExitCode::from(1),
+                    stdout: String::new(),
+                    stderr: format!("Error: update apply: {error}\n"),
+                });
+            }
+        };
+        if !info.self_update_supported {
+            return write_check_output(render_unsupported_apply(&info, want_json || output_json));
+        }
         let _ = writeln!(
             std::io::stderr(),
             "Error: update apply without --dry-run requires the verified release installer"
@@ -646,6 +659,52 @@ struct CheckOutput {
     exit_code: ExitCode,
     stdout: String,
     stderr: String,
+}
+
+#[derive(Serialize)]
+struct UnsupportedApplyJson<'a> {
+    error: String,
+    guidance: &'a str,
+}
+
+/// Preserve Go's fail-closed refusal for package-managed and source-built
+/// installs before the direct-download installer is available in Rust.
+fn render_unsupported_apply(info: &InstallInfo, want_json: bool) -> CheckOutput {
+    let error = format!(
+        "self-update is not supported for {} installation",
+        info.method
+    );
+    let generic_error = format!("Error: self-update not supported: {error}\n");
+    if want_json {
+        let output = UnsupportedApplyJson {
+            error,
+            guidance: &info.guidance,
+        };
+        let stdout = match serde_json::to_string_pretty(&output) {
+            Ok(text) => format!("{}\n", escape_go_json(&text)),
+            Err(_) => {
+                return CheckOutput {
+                    exit_code: ExitCode::from(1),
+                    stdout: String::new(),
+                    stderr: "Error: encode JSON output: serialize failed\n".into(),
+                };
+            }
+        };
+        return CheckOutput {
+            exit_code: ExitCode::from(2),
+            stdout,
+            stderr: format!("{generic_error}Try: symvault find <search-term>\n"),
+        };
+    }
+
+    CheckOutput {
+        exit_code: ExitCode::from(2),
+        stdout: String::new(),
+        stderr: format!(
+            "Error: {error}\nGuidance: {}\n{generic_error}Try: symvault find <search-term>\n",
+            info.guidance
+        ),
+    }
 }
 
 fn render_apply_dry_run(result: &CheckResult, want_json: bool) -> CheckOutput {
