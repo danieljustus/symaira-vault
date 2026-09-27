@@ -542,6 +542,37 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
     }
 }
 
+#[test]
+fn restore_rejects_backslash_member_names_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["backslash_member_rejected"]
+            .as_bool()
+            .unwrap()
+    );
+
+    let root = tempdir().unwrap();
+    let archive_path = root.path().join("unsafe.tar.gz");
+    let destination = root.path().join("restored");
+    let encoder = GzEncoder::new(
+        fs::File::create(&archive_path).unwrap(),
+        Compression::default(),
+    );
+    let mut builder = tar::Builder::new(encoder);
+    let mut header = tar::Header::new_gnu();
+    header.set_size(1);
+    header.set_mode(0o600);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, r"..\outside", &b"x"[..])
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+
+    assert!(archive::restore(&archive_path, &destination, false).is_err());
+    assert_eq!(fs::read_dir(destination).unwrap().count(), 0);
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_does_not_follow_predictable_temporary_symlink() {

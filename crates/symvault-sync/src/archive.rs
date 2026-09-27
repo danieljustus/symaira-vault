@@ -55,6 +55,27 @@ fn safe_relative(path: &Path) -> Result<PathBuf, ArchiveError> {
     }
     Ok(out)
 }
+
+fn safe_restore_member(path: &Path) -> Result<PathBuf, ArchiveError> {
+    #[cfg(unix)]
+    let has_backslash = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().contains(&b'\\')
+    };
+    #[cfg(windows)]
+    let has_backslash = {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_os_str()
+            .encode_wide()
+            .any(|unit| unit == b'\\' as u16)
+    };
+    #[cfg(not(any(unix, windows)))]
+    let has_backslash = path.to_string_lossy().contains('\\');
+    if has_backslash {
+        return Err(ArchiveError::UnsafePath(path.display().to_string()));
+    }
+    safe_relative(path)
+}
 fn mode(meta: &fs::Metadata) -> u32 {
     #[cfg(unix)]
     {
@@ -227,7 +248,7 @@ pub fn restore(
         }
         let mut entry = item?;
         let raw = entry.path()?.into_owned();
-        let rel = safe_relative(&raw)?;
+        let rel = safe_restore_member(&raw)?;
         let target = dest.join(&rel);
         if !target.starts_with(dest) {
             return Err(ArchiveError::UnsafePath(raw.display().to_string()));
