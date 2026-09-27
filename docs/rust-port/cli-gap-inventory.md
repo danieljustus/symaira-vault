@@ -1,79 +1,65 @@
 # CLI surface gap (measured)
 
-Measured on **2026-09-20** against the Rust CLI built from `main` at `72c14890`
-and the pinned Go oracle command tree in `testdata/port/cli/command-tree.json`
-(`a518124f`, release `unreleased`), depth 3. The previous inventory in this file
-walked a different Rust revision by hand and is superseded below.
+Measured on **2026-09-27** against the Rust CLI built from candidate
+`8ec623b6` and the pinned Go command tree in
+`testdata/port/cli/command-tree.json` (oracle `3232e31f`, release
+`unreleased`), depth 3. This supersedes the 2026-09-20 report below: the rebuilt
+candidate has a different command surface.
 
-The report pins the probed artifact: `rust_binary_sha256` and
-`rust_binary_modified` name the exact file the numbers came from. The numbers
-below come from a binary with sha256 `9b332d8e10dd…`, modified
-`2026-09-20T15:11:21Z`.
+The probe pins the binary: SHA-256
+`bc3c6e73183b001714b843ab0fc1daba80b198dbdb23886fc6a2721abcca5412`, modified
+`2026-09-27T08:03:49Z`.
 
-**Rebuild before measuring.** An unrebuilt checkout holds an old
-`target/debug/symvault` and reports a smaller Rust surface — the stale binary
-still in this repository's target directory on 2026-09-20 (built 2026-09-16)
-listed **126** missing paths instead of 46. The hash in the report is what makes
-that visible instead of indistinguishable from a regression.
-
-Reproduce (no Go oracle binary required — the frozen tree is the oracle side):
+The source-tree `cligap` probe uses the pinned Go command-tree fixture; it does
+not need a Go oracle binary. Build the CLI after checking external build storage
+with `~/.local/bin/dev-external --status`, then run `cligap` against the binary
+produced by that build:
 
 ```sh
-cargo build -p symvault-cli
-go run ./scripts/rust-port/cmd/cligap
+~/.local/bin/dev-external cargo build --manifest-path crates/symvault-cli/Cargo.toml --locked
+GOTOOLCHAIN=go1.26.6 go run ./scripts/rust-port/cmd/cligap --binary <built-symvault-path>
 ```
 
-The tool writes `target/resume-evidence/cli-gap-inventory.json` and is
-deterministic: same tree, same binary, same report.
-
-**These are surface numbers only.** A reachable command is not a ported command.
-Behaviour, output bytes, exit codes, side effects and flag semantics stay with
-the behavioural rows (`CLI-005`..`CLI-007` and every non-CLI row); nothing here
-promotes a contract row.
+The report records the exact binary path, hash and modification time. These are
+surface probes only. Reachability and displayed flags do not prove behavior,
+output bytes, exit codes or side effects; the behavioral rows remain separate.
 
 ## Summary
 
 | | count |
 | --- | --- |
 | oracle command paths (depth ≤ 3) | 134 |
-| Rust command paths (walked from its own help) | 89 |
-| oracle paths **missing** in Rust | **46** |
-| oracle flags missing on reachable commands | **9** (on 3 commands) |
-| oracle aliases missing on reachable commands | **3** |
+| Rust command paths (walked from its own help) | 100 |
+| oracle paths **missing** in Rust | **24** |
+| oracle flags missing from probed paths | **11** (on 4 paths) |
+| oracle aliases missing on reachable commands | **0** |
 | Rust paths not present in the pinned tree | 1 |
 
-## Missing command paths (46)
+## Missing command paths (24)
 
 | cluster | count | paths |
 | --- | --- | --- |
-| `agent` | 6 | `install`, `setup`, `skill`, `skill export`, `skill refresh`, `upgrade` |
-| `serve` | 8 | `serve`, `install`, `status`, `uninstall`, `token`, `token create`, `token list`, `token revoke` |
-| `approval` | 3 | `approval`, `decide`, `list` |
-| `device` | 3 | `approval-list`, `approval-pair`, `approval-revoke` |
-| `intake` | 3 | `intake`, `watch`, `watch disable` |
-| `migrate` | 3 | `pseudonymize`, `session`, `v4` |
-| `update` | 4 | `update`, `apply`, `check`, `info` |
-| `mcp` | 6 | `token`, `token create`, `token list`, `token revoke`, `mcp-config`, `mcp-token-rotate` |
+| `agent` | 1 | `setup` |
+| `approval` | 3 | `approval`, `approval decide`, `approval list` |
+| `broker` | 1 | `broker` |
+| `device` | 1 | `approval-pair` |
 | `dynamic` | 2 | `dynamic`, `dynamic generate` |
-| `import` | 2 | `review list`, `review promote` |
-| single | 6 | `broker`, `generate manpages`, `help`, `setup`, `startup-profile`, `ui` |
+| single | 2 | `generate manpages`, `help` |
+| `intake` | 3 | `intake`, `intake watch`, `intake watch disable` |
+| `serve` | 8 | `serve`, `serve install`, `serve status`, `serve uninstall`, `serve token`, `serve token create`, `serve token list`, `serve token revoke` |
+| single | 3 | `setup`, `startup-profile`, `ui` |
 
-## Alias gaps (3)
+## Alias gaps (0)
 
-Cobra declares these aliases; the Rust parser rejects them. This was not
-reported by the previous inventory.
-
-| oracle node | missing alias |
-| --- | --- |
-| `symvault get` | `show` |
-| `symvault get` | `cat` |
-| `symvault list` | `ls` |
+The latest binary accepts all three aliases recorded by the pinned tree:
+`show` and `cat` for `get`, and `ls` for `list`. The 2026-09-20 alias-gap
+finding is resolved in the current candidate.
 
 ## Rust-only path (1)
 
-`symvault mcp serve` is reachable in Rust and absent from the pinned tree.
-The tree predates it; this is a re-pin decision, not a defect claim. `mcp
-install`, `status` and `uninstall` are present on both sides.
+`symvault mcp serve` is reachable in Rust and absent from the pinned tree. The
+tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
+`status` and `uninstall` are present on both sides.
 
 ## Deliberate non-claims
 
@@ -81,46 +67,25 @@ install`, `status` and `uninstall` are present on both sides.
   report argument errors with different exit codes and text, so the comparison
   would measure parser error style, not the contract.
 - Clap prints inherited global flags in every subcommand's options section while
-  the tree records only each node's own flags, so additional Rust entries are not
-  called divergences; only oracle flags **missing** in Rust are listed.
+  the tree records only each node's own flags, so additional Rust entries are
+  not called divergences; only oracle flags missing in Rust are listed.
 - Hidden commands stay invisible to both `--help` walks. They are not covered.
+- A path counted as present is only a help/parser-surface result. For example,
+  `update apply` and `update check` are still dispatched as unknown commands by
+  `update_commands::run`; their parser-surface rows do not claim runtime parity.
 
+## Missing flags on probed paths
 
-## Missing flags on commands that exist
-
-**Corrected 2026-09-18:** the first extraction scanned the whole `--help` text, so
-flags named only in prose or in a nested command's section were counted as gaps.
-Re-extracted from the local `Flags:`/`Options:` section only, comparing Go's flag
-definitions against Rust's:
-
-| Node | Really missing |
+| Path | Missing flags |
 | --- | --- |
-| `import` | `--quarantine` |
 | `mcp` | `--bind`, `--port`, `--tls-ca`, `--tls-cert`, `--tls-key` |
 | `run` | `--broker`, `--broker-passthrough`, `--broker-strict` |
+| `update apply` | `--dry-run`, `--force` |
+| `update check` | `--force` |
 
-Everything else the first pass reported is already covered: `file`, `file use`,
-`share`, `share list`, `migrate`, `remote`, `set`, `template`, `get` and
-`migrate kdf` show no local-flag difference, and `share list --status` (which the
-first pass listed under `share`) exists in both. `migrate --dry-run` exists only
-in `import`; `migrate`'s flag section defines nothing but `--help`.
-
-All three real gaps belong to feature slices that are not ported yet (broker,
-HTTP/TLS, quarantine rules), so they must be recorded as blocked rather than
-implemented as accepted-and-ignored flags.
-
-**Confirmed by the 2026-09-20 measurement:** exactly these nine flags (three on
-`import`, five on `mcp`, three on `run`) are missing on reachable commands — no
-more and no fewer. The correction above was right; it was made by hand, this one
-is reproducible.
-
-**Superseded:** the "missing top-level groups (10 of 45)" and "missing
-subcommands" tables that used to stand above this section came from a different
-walk of a different Rust revision and over-counted both directions: they listed
-`audit rotate-key`, `auth set`, `config validate`, `mcp install/status/uninstall`
-and `completion` as missing although those paths exist and are reachable now,
-and they omitted the alias gaps. Do not reinstate them; the measured summary at
-the top of this file replaces them.
+`import --quarantine` is implemented. The `mcp` and `run` flags belong to
+unported HTTP/TLS and broker behavior. The `update` flags belong to the
+unported update runtime. Do not add accepted-and-ignored flag scaffolding.
 
 ## `symvault doctor` check coverage (2026-09-19)
 
