@@ -787,6 +787,174 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    #[ignore = "requires public GitHub release access, cosign, and Go/Rust smoke binaries"]
+    fn public_release_apply_matches_go_in_isolated_targets() {
+        use std::process::Output;
+
+        fn run_cli(binary: &Path, args: &[&str], home: &Path, scratch: &Path) -> Output {
+            let mut command = Command::new(binary);
+            command
+                .args(args)
+                .env_clear()
+                .env("PATH", "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin")
+                .env("HOME", home)
+                .env("TMPDIR", scratch)
+                .env("GOPATH", home.join("gopath"))
+                .env("GOMODCACHE", home.join("gomodcache"));
+            command.output().expect("run isolated CLI")
+        }
+
+        let go_source = std::env::var_os("SYMAIRA_VAULT_GO_SMOKE_BINARY")
+            .map(PathBuf::from)
+            .expect("set SYMAIRA_VAULT_GO_SMOKE_BINARY to the controlled Go binary");
+        let rust_source = std::env::var_os("SYMAIRA_VAULT_RUST_SMOKE_BINARY")
+            .map(PathBuf::from)
+            .expect("set SYMAIRA_VAULT_RUST_SMOKE_BINARY to the controlled Rust binary");
+        let go_source = fs::canonicalize(go_source).expect("resolve Go smoke binary");
+        let rust_source = fs::canonicalize(rust_source).expect("resolve Rust smoke binary");
+        assert!(
+            go_source.is_file(),
+            "Go smoke source must be a regular file"
+        );
+        assert!(
+            rust_source.is_file(),
+            "Rust smoke source must be a regular file"
+        );
+
+        let dir = tempfile::tempdir().expect("create isolated differential root");
+        let root = fs::canonicalize(dir.path()).expect("resolve differential root");
+        let scratch = root.join("tmp");
+        fs::create_dir(&scratch).expect("create isolated temporary directory");
+        let mut binaries = Vec::new();
+        let mut homes = Vec::new();
+        for (name, source) in [("go", go_source), ("rust", rust_source)] {
+            let home = root.join(format!("{name}-home"));
+            let install = root.join(format!("{name}-install"));
+            fs::create_dir(&home).expect("create isolated home");
+            fs::create_dir(home.join("gopath")).expect("create isolated GOPATH");
+            fs::create_dir(home.join("gomodcache")).expect("create isolated Go module cache");
+            fs::create_dir(&install).expect("create isolated install target directory");
+            let binary = install.join(if cfg!(windows) {
+                "symvault.exe"
+            } else {
+                "symvault"
+            });
+            fs::copy(source, &binary).expect("seed isolated install target");
+            set_executable(&binary).expect("make isolated target executable");
+            assert!(
+                fs::canonicalize(&binary)
+                    .expect("resolve isolated target")
+                    .starts_with(&root),
+                "CLI install target must remain inside the temporary root"
+            );
+            binaries.push(binary);
+            homes.push(home);
+        }
+        let [go_binary, rust_binary] = binaries.as_slice() else {
+            unreachable!("exactly two smoke binaries are constructed")
+        };
+        let [go_home, rust_home] = homes.as_slice() else {
+            unreachable!("exactly two isolated homes are constructed")
+        };
+
+        for (binary, home) in [(go_binary, go_home), (rust_binary, rust_home)] {
+            let info = run_cli(binary, &["update", "info", "--json"], home, &scratch);
+            assert!(
+                info.status.success(),
+                "update info failed: {}",
+                String::from_utf8_lossy(&info.stderr)
+            );
+            let info: serde_json::Value =
+                serde_json::from_slice(&info.stdout).expect("parse install info JSON");
+            assert_eq!(info["method"], "direct-download");
+            assert_eq!(info["self_update_supported"], true);
+            assert_eq!(
+                info["binary_path"].as_str().map(Path::new),
+                Some(binary.as_path()),
+                "update info must identify the isolated executable"
+            );
+        }
+
+        let go = run_cli(
+            go_binary,
+            &["update", "apply", "--force", "--json"],
+            go_home,
+            &scratch,
+        );
+        let rust = run_cli(
+            rust_binary,
+            &["update", "apply", "--force", "--json"],
+            rust_home,
+            &scratch,
+        );
+        for (name, output) in [("Go", &go), ("Rust", &rust)] {
+            assert!(
+                output.status.success(),
+                "{name} update apply failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        let mut go_result: serde_json::Value =
+            serde_json::from_slice(&go.stdout).expect("parse Go apply result JSON");
+        let mut rust_result: serde_json::Value =
+            serde_json::from_slice(&rust.stdout).expect("parse Rust apply result JSON");
+        for result in [&go_result, &rust_result] {
+            assert_eq!(result["method"], "direct-download");
+            assert_eq!(result["old_version"], "0.0.1");
+            assert_eq!(result["dry_run"], false);
+        }
+        assert_eq!(
+            go_result["binary_path"].as_str().map(Path::new),
+            Some(go_binary.as_path())
+        );
+        assert_eq!(
+            rust_result["binary_path"].as_str().map(Path::new),
+            Some(rust_binary.as_path())
+        );
+        let latest = go_result["new_version"]
+            .as_str()
+            .expect("Go result includes installed release version")
+            .to_owned();
+        assert!(
+            !latest.is_empty(),
+            "latest release version must not be empty"
+        );
+        assert_eq!(rust_result["new_version"], latest);
+        go_result["binary_path"] = serde_json::Value::String("<isolated>/symvault".into());
+        rust_result["binary_path"] = serde_json::Value::String("<isolated>/symvault".into());
+        assert_eq!(
+            go_result, rust_result,
+            "sanitized apply outcomes must match"
+        );
+
+        let go_version = run_cli(go_binary, &["version"], go_home, &scratch);
+        let rust_version = run_cli(rust_binary, &["version"], rust_home, &scratch);
+        assert!(go_version.status.success());
+        assert!(rust_version.status.success());
+        assert_eq!(go_version.stdout, rust_version.stdout);
+        assert_eq!(
+            String::from_utf8_lossy(&go_version.stdout).trim(),
+            format!("symvault {latest}")
+        );
+        let go_hash = Sha256::digest(fs::read(go_binary).expect("read Go installed binary"));
+        let rust_hash = Sha256::digest(fs::read(rust_binary).expect("read Rust installed binary"));
+        assert_eq!(go_hash, rust_hash, "both CLIs must install identical bytes");
+        for binary in [go_binary, rust_binary] {
+            let mut entries = fs::read_dir(binary.parent().expect("install directory exists"))
+                .expect("list isolated install directory")
+                .map(|entry| entry.unwrap().file_name())
+                .collect::<Vec<_>>();
+            entries.sort();
+            assert_eq!(entries, vec![binary.file_name().unwrap().to_os_string()]);
+        }
+        println!(
+            "sanitized live Go/Rust update apply matched: release={latest}, method=direct-download, targets=<isolated>, post_install_files=[symvault], installed_binary_sha256={:x}",
+            go_hash
+        );
+    }
+
+    #[test]
     fn failed_rename_restores_previous_binary_and_removes_backup() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("symvault");

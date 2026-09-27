@@ -76,11 +76,16 @@ tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
   unsupported installation methods fail closed before network access, and
   direct-download apply verifies the signed checksum bytes, archive digest,
   extracted executable, and post-install version before deleting its rollback
-  backup. An ignored live smoke test passed against signed public release
-  `v0.22.1` on macOS arm64: Cosign/checksum verification, isolated installation,
-  `version`, and rollback after an injected validation failure. The smoke test
-  requires the external `cosign` CLI at runtime; a live Go/Rust differential
-  test remains unrun.
+  backup. Ignored live smokes passed against signed public release `v0.22.1`
+  on macOS arm64. The Rust smoke verified Cosign/checksum handling, isolated
+  installation, `version`, and rollback after an injected validation failure.
+  A paired Go 1.26.6/Rust `0.0.1` run with `update apply --force --json`
+  produced matching normalized outcomes, installed identical bytes
+  (`85c6e54b867ec8c497395f1afccfd4e8f1bfe2bebd668d88dcf015049ec67248`), and
+  left only `symvault` in each isolated install directory. The paired smoke is
+  repeatable with `SYMAIRA_VAULT_GO_SMOKE_BINARY` and
+  `SYMAIRA_VAULT_RUST_SMOKE_BINARY`; both live tests require public GitHub access
+  and the external `cosign` CLI.
 
 ## Missing flags on probed paths
 
