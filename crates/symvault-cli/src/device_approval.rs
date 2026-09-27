@@ -27,8 +27,11 @@
 //!   containing one of those three characters.
 
 use std::collections::BTreeMap;
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io::Read;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};

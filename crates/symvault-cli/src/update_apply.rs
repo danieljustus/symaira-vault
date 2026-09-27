@@ -552,6 +552,8 @@ fn extract_zip(archive: &[u8], expected: &str, destination: &Path) -> Result<boo
 }
 
 fn set_executable(path: &Path) -> Result<(), String> {
+    #[cfg(not(unix))]
+    let _ = path;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

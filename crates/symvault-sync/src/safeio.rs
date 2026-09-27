@@ -43,6 +43,8 @@ impl std::fmt::Display for SafeIoError {
     }
 }
 
+impl std::error::Error for SafeIoError {}
+
 /// Reads `path`, or reports `Ok(None)` when it does not exist.
 pub fn read(path: &Path) -> Result<Option<Vec<u8>>, SafeIoError> {
     read_bounded(path, u64::MAX)

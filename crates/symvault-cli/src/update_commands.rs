@@ -12,6 +12,7 @@
 //! `tests/cli_update_info.rs` replays every case against this code.
 
 use std::ffi::OsString;
+#[cfg(any(test, unix))]
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
