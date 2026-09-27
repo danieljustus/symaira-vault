@@ -58,6 +58,7 @@ pub(crate) struct DeviceSession {
     pub name: String,
     pub public_key: String,
     pub created_at: String,
+    #[serde(default = "zero_time_string")]
     pub expires_at: String,
     pub revoked: bool,
 }
@@ -219,11 +220,18 @@ fn looks_like_sha256_hex(value: &str) -> bool {
 
 /// Go `time.Now().After(expiresAt)` for an RFC3339 timestamp read from the
 /// store.
-fn is_expired(expires_at: &str) -> bool {
+pub(crate) fn is_expired(expires_at: &str) -> bool {
+    if expires_at.is_empty() {
+        return true;
+    }
     match OffsetDateTime::parse(expires_at, &Rfc3339) {
         Ok(expires) => OffsetDateTime::now_utc() > expires,
         Err(_) => false,
     }
+}
+
+fn zero_time_string() -> String {
+    "0001-01-01T00:00:00Z".to_owned()
 }
 
 /// Go's `time.Time.Format("2006-01-02 15:04")`: the stored wall clock as
@@ -500,6 +508,8 @@ mod tests {
         );
         assert_eq!(display_minutes("nonsense"), "nonsense");
         assert!(is_expired("2000-01-01T00:00:00Z"));
+        assert!(is_expired(&zero_time_string()));
+        assert!(is_expired(""));
         assert!(!is_expired("2999-01-01T00:00:00Z"));
         assert!(!is_expired("nonsense"));
     }

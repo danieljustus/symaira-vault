@@ -2053,46 +2053,19 @@ fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
 }
 
 fn approval_device_summary(vault_dir: &Path) -> String {
-    let data = match symvault_store::load_or_create_private_file(
-        vault_dir,
-        Path::new(".symvault/device-sessions.json"),
-        b"{}",
-    ) {
-        Ok(data) => data,
+    let store = match crate::device_approval::DeviceSessionStore::new(vault_dir) {
+        Ok(store) => store,
         Err(err) => return format!("approval devices: cannot load ({err})"),
     };
-    let sessions: std::collections::BTreeMap<String, serde_json::Value> =
-        match serde_json::from_slice(&data) {
-            Ok(s) => s,
-            Err(err) => return format!("approval devices: cannot load ({err})"),
-        };
-
     let mut active = 0usize;
     let mut expired = 0usize;
     let mut revoked = 0usize;
-    let now = time::OffsetDateTime::now_utc();
-
-    for session in sessions.values() {
-        if session
-            .get("revoked")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
+    for session in store.list() {
+        if session.revoked {
             revoked += 1;
             continue;
         }
-        let is_expired = if let Some(exp_str) = session.get("expires_at").and_then(|v| v.as_str()) {
-            if let Ok(exp_time) =
-                time::OffsetDateTime::parse(exp_str, &time::format_description::well_known::Rfc3339)
-            {
-                now > exp_time
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if is_expired {
+        if crate::device_approval::is_expired(&session.expires_at) {
             expired += 1;
         } else {
             active += 1;

@@ -1305,6 +1305,82 @@ fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_writ
 }
 
 #[test]
+fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_expiry() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-approval-tls-legacy-home");
+    let go_vault = temporary_root("mcp-approval-tls-legacy-go-vault");
+    let rust_vault = temporary_root("mcp-approval-tls-legacy-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    let raw_token = "SYNTHETIC-LEGACY-DEVICE-BEARER";
+    let already_hashed_key = "f".repeat(64);
+    let mut sessions = serde_json::Map::new();
+    sessions.insert(
+        raw_token.into(),
+        serde_json::json!({
+            "prefix": "",
+            "device_id": "legacy-device",
+            "public_key": "synthetic-public-key",
+            "created_at": "2026-01-02T03:04:05Z",
+            "revoked": false
+        }),
+    );
+    sessions.insert(
+        already_hashed_key,
+        serde_json::json!({
+            "prefix": "SYN2",
+            "device_id": "zero-expiry-device",
+            "public_key": "synthetic-public-key-2",
+            "created_at": "2026-01-02T03:04:05Z",
+            "expires_at": "0001-01-01T00:00:00Z",
+            "revoked": false
+        }),
+    );
+    let input = serde_json::to_vec(&sessions).unwrap();
+    for vault in [&go_vault, &rust_vault] {
+        fs::create_dir(vault.join(".symvault")).unwrap();
+        write_private_fixture(&vault.join(".symvault/device-sessions.json"), &input);
+    }
+
+    let out_go = run_mcp_approval_tls_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_approval_tls_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let go_result = doctor_result(&out_go);
+    let rust_result = doctor_result(&out_rust);
+    assert_eq!(go_result, rust_result);
+    assert!(
+        go_result["message"]
+            .as_str()
+            .unwrap()
+            .contains("0 approval device(s) active, 2 expired, 0 revoked")
+    );
+
+    let go_path = go_vault.join(".symvault/device-sessions.json");
+    let rust_path = rust_vault.join(".symvault/device-sessions.json");
+    let go_bytes = fs::read(&go_path).unwrap();
+    let rust_bytes = fs::read(&rust_path).unwrap();
+    assert_eq!(go_bytes, rust_bytes, "persisted migration bytes match");
+    assert!(
+        !go_bytes
+            .windows(raw_token.len())
+            .any(|window| window == raw_token.as_bytes())
+    );
+    let migrated: serde_json::Value = serde_json::from_slice(&rust_bytes).unwrap();
+    let expected_legacy_hash = symvault_store::sha256_hex(raw_token.as_bytes());
+    assert!(migrated.get(&expected_legacy_hash).is_some());
+    assert!(migrated.get(raw_token).is_none());
+    assert_eq!(migrated[&expected_legacy_hash]["prefix"], "SYNT");
+    assert_eq!(
+        migrated[&expected_legacy_hash]["expires_at"],
+        "0001-01-01T00:00:00Z"
+    );
+    assert_eq!(private_mode(&go_path), 0o600);
+    assert_eq!(private_mode(&rust_path), 0o600);
+}
+
+#[test]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
     let Some((go, rust)) = oracle_binaries() else {
         return;
