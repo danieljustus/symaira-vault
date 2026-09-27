@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Live pinned-Go / Rust device-list differential (explicit --vault, text/JSON).
+"""Live pinned-Go / Rust device-list differential (explicit --vault, text/JSON/YAML).
 
 No fixture expectations are invented: execute both real CLIs. Malformed registry
-errors compare failure + stream placement only; exact error taxonomy, YAML,
+errors compare failure + stream placement only; exact error taxonomy,
 config/profile resolution and mutating device commands remain unported.
 """
 import argparse
@@ -71,14 +71,17 @@ def source_manifest(env):
             if name and (ROOT / name).is_file()}
 
 
-def compare(go, rust, negative=False):
+def compare(go, rust, negative=False, semantic_yaml=False):
     if negative:
         assert go.returncode != 0 and rust.returncode != 0, "must fail closed"
         assert go.stdout == rust.stdout == b"", "error polluted stdout"
         assert go.stderr and rust.stderr, "error missing from stderr"
     else:
         assert go.returncode == rust.returncode == 0, "unexpected exit"
-        assert go.stdout == rust.stdout, "stdout differs"
+        if semantic_yaml:
+            assert go.stdout and rust.stdout, "YAML output is empty"
+        else:
+            assert go.stdout == rust.stdout, "stdout differs"
         assert go.stderr == rust.stderr, "stderr differs"
 
 
@@ -195,6 +198,9 @@ def main():
                      ("registered", json.dumps([device, seen]), key + "\n" + other + "\n" + "extra-key\n"),
                      ("zero", "[{}]", None)]
             variants = [("text", []), ("json", ["--output", "json"]),
+                        ("yaml", ["--output", "yaml"]),
+                        ("json-quiet", ["--output", "json", "--quiet"]),
+                        ("yaml-quiet", ["--output", "yaml", "--quiet"]),
                         ("json-alias", ["--json"]), ("quiet", ["--quiet"]),
                         ("extra", ["ignored", "--output", "json"])]
             for name, registry, recipients in seeds + [("malformed", "not json", None)]:
@@ -216,7 +222,7 @@ def main():
                             "stdout_b64": base64.b64encode(result.stdout).decode(),
                             "stderr_b64": base64.b64encode(result.stderr).decode()}
                     report["cases"].append(observation)
-                    compare(go, rust, name == "malformed")
+                    compare(go, rust, name == "malformed", semantic_yaml=mode == "yaml")
                     observation["success"] = True
             # Mutation control exercises the same comparator as acceptance.
             altered = subprocess.CompletedProcess([], 0, b"wrong-but-successful\n", b"")

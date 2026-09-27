@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/diff"
+	"gopkg.in/yaml.v3"
 )
 
 type liveReport struct {
@@ -41,7 +43,7 @@ func validateObservations(report liveReport, head string) error {
 	}
 	expected := make(map[string]bool)
 	for _, seed := range []string{"missing", "null", "empty", "unmanaged", "registered", "zero", "malformed"} {
-		for _, mode := range []string{"text", "json", "json-alias", "quiet", "extra"} {
+		for _, mode := range []string{"text", "json", "yaml", "json-quiet", "yaml-quiet", "json-alias", "quiet", "extra"} {
 			expected[seed+"/"+mode] = seed == "malformed"
 		}
 	}
@@ -71,7 +73,20 @@ func validateObservations(report liveReport, head string) error {
 			}
 		}
 		if !negative {
-			if err := diff.Compare(diff.Case{ID: observed.ID}, goResult, rustResult); err != nil {
+			if strings.HasSuffix(observed.ID, "/yaml") {
+				// yaml.v3 and serde_yaml_ng indent sequences and quote scalars differently;
+				// compare parsed values while preserving field and scalar-type parity.
+				var goValue, rustValue any
+				if err := yaml.Unmarshal(goResult.Stdout, &goValue); err != nil {
+					return fmt.Errorf("parse Go YAML %s: %w", observed.ID, err)
+				}
+				if err := yaml.Unmarshal(rustResult.Stdout, &rustValue); err != nil {
+					return fmt.Errorf("parse Rust YAML %s: %w", observed.ID, err)
+				}
+				if !reflect.DeepEqual(goValue, rustValue) {
+					return fmt.Errorf("YAML values differ: %s", observed.ID)
+				}
+			} else if err := diff.Compare(diff.Case{ID: observed.ID}, goResult, rustResult); err != nil {
 				return fmt.Errorf("report mismatch %s: %w", observed.ID, err)
 			}
 		}
