@@ -263,6 +263,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         run: check_daemon_status,
     },
     CheckDef {
+        id: "mcp.server.reachable",
+        tags: &["network"],
+        run: check_mcp_server,
+    },
+    CheckDef {
         id: "mcp.approval.tls",
         tags: &[],
         run: check_mcp_approval_tls,
@@ -1789,6 +1794,77 @@ fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
             format!("cert expires {expiry_str} ({days_left} days); {device_summary}"),
             false,
         )
+    }
+}
+
+fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let config_path = vault_dir.join("config.yaml");
+    let config = match Config::load(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            return DoctorResult::new(
+                "mcp.server.reachable",
+                "MCP server reachable",
+                Status::Warn,
+                format!("cannot load config: {error}"),
+                false,
+            );
+        }
+    };
+    let port = config
+        .mcp
+        .as_ref()
+        .map(|mcp| mcp.port)
+        .filter(|port| *port > 0)
+        .unwrap_or(8080);
+    let url = format!("http://127.0.0.1:{port}/health");
+    let request = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .and_then(|client| client.get(&url).send());
+    let response = match request {
+        Ok(response) => response,
+        Err(_) => {
+            return DoctorResult::new(
+                "mcp.server.reachable",
+                "MCP server reachable",
+                Status::Warn,
+                format!("MCP server not reachable at {url}"),
+                false,
+            )
+            .with_hint(format!(
+                "start the server with `symvault mcp --port {port}`"
+            ));
+        }
+    };
+    if response.status() != reqwest::StatusCode::OK {
+        return DoctorResult::new(
+            "mcp.server.reachable",
+            "MCP server reachable",
+            Status::Warn,
+            format!("MCP server returned HTTP {}", response.status().as_u16()),
+            false,
+        );
+    }
+    let token_present = fs::metadata(vault_dir.join("mcp-token")).is_ok();
+    let (message, hint) = if token_present {
+        (format!("server reachable at {url}, token present"), None)
+    } else {
+        (
+            format!("server reachable at {url}, no token file"),
+            Some("generate an MCP token with `symvault agent token new <name>`"),
+        )
+    };
+    let result = DoctorResult::new(
+        "mcp.server.reachable",
+        "MCP server reachable",
+        Status::Ok,
+        message,
+        false,
+    );
+    match hint {
+        Some(hint) => result.with_hint(hint),
+        None => result,
     }
 }
 

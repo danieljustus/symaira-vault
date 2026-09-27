@@ -129,7 +129,7 @@ ported in wave 2a quote no parser error, so they match on the corrupt fixture as
 do quote it and are therefore pinned for the missing and initialized fixtures only
 (`differential_doctor_mcp_config_checks`).
 
-Ported IDs (35 in the registry, 33 of them without network):
+Ported IDs (36 in the registry, 33 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
 `vault.identity.encrypted`, `vault.permissions`, `auth.method`, `session.cache`,
@@ -140,10 +140,15 @@ Ported IDs (35 in the registry, 33 of them without network):
 `vault.manifest.intact`, `auth.passphrase.rotation`, `tooling.autotype.backend`,
 `tooling.clipboard.backend`, `daemon.status`, `mcp.approval.tls`, `tooling.secureui`,
 `tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
-`security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`.
+`security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`,
+`mcp.server.reachable` (network).
 
-Still open (2): `mcp.tokens`, `crypto.scrypt.benchmark` (plus the network check
-`mcp.server.reachable`, which needs a controlled local HTTP fixture).
+Still open (2): `mcp.tokens`, `crypto.scrypt.benchmark`. The network-tagged
+`mcp.server.reachable` check now uses a controlled loopback HTTP fixture and is
+differentially covered for HTTP 200 (with and without a token file), HTTP 503,
+and an unreachable port. The Go implementation at oracle commit
+`fca3f89401833b5e14ec4ec74ef736b0f63bca74` is source-identical for
+`internal/health/doctor_mcp.go` (blob `81d0d6581bf3b1d81a5c9c4a18c96caaa3bcff8a`).
 
 ### Branch limitations of the ported checks (documented, not hidden)
 
@@ -187,8 +192,8 @@ dialect exception on a corrupt config as `auth.passphrase.rotation`. The withdra
 attempt had reported `ok` where Go reports `warn`; the ported version reproduces the
 oracle's status.
 
-`mcp.server.reachable` (network-tagged) needs a controlled local HTTP fixture to
-become pinnable.
+The `mcp.server.reachable` check now has a controlled loopback HTTP differential
+fixture; its internet connectivity and external-host branches are not exercised.
 
 `mcp.tokens` and `crypto.scrypt.benchmark` stay out unless a shape-only comparison is
 explicitly accepted as such.

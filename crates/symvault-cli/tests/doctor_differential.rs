@@ -2,8 +2,11 @@
 
 use std::{
     env, fs,
+    io::{Read, Write},
+    net::TcpListener,
     path::{Path, PathBuf},
     process::{Command, Output},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -747,6 +750,142 @@ fn differential_doctor_new_checks_no_network_filter() {
     assert_eq!(items_rust.len(), 1);
     assert_eq!(items_rust[0]["id"], "recipients.count");
     assert_eq!(items_go[0]["id"], "recipients.count");
+}
+
+fn start_mcp_health_server(
+    status: u16,
+    expected_requests: usize,
+) -> (i64, thread::JoinHandle<Vec<String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind local health fixture");
+    listener
+        .set_nonblocking(true)
+        .expect("make local fixture accept bounded");
+    let port = i64::from(listener.local_addr().expect("fixture address").port());
+    let server = thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests && std::time::Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request = [0_u8; 2048];
+                    let read = stream.read(&mut request).expect("read health request");
+                    let first_line = String::from_utf8_lossy(&request[..read])
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned();
+                    requests.push(first_line);
+                    let reason = match status {
+                        200 => "OK",
+                        503 => "Service Unavailable",
+                        _ => "Fixture Status",
+                    };
+                    let response = format!(
+                        "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write health response");
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => panic!("accept local health request: {error}"),
+            }
+        }
+        requests
+    });
+    (port, server)
+}
+
+fn run_mcp_server_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
+    Command::new(binary)
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "doctor",
+            "--only",
+            "mcp.server.reachable",
+            "--json",
+        ])
+        .env_clear()
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("SYMVAULT_VAULT", vault)
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .env("no_proxy", "127.0.0.1,localhost")
+        .output()
+        .expect("run local MCP server doctor check")
+}
+
+#[test]
+fn differential_doctor_mcp_server_reachability_local_http_cases() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    for (name, status, token_file) in [
+        ("reachable-no-token", Some(200), false),
+        ("reachable-with-token", Some(200), true),
+        ("http-error", Some(503), false),
+        ("unreachable", None, false),
+    ] {
+        let home = temporary_root(&format!("mcp-server-{name}-home"));
+        let vault = temporary_root(&format!("mcp-server-{name}-vault"));
+        let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
+        let (port, server) = match status {
+            Some(status) => {
+                let (port, server) = start_mcp_health_server(status, 2);
+                (port, Some(server))
+            }
+            None => {
+                let listener = TcpListener::bind("127.0.0.1:0").expect("reserve dead port");
+                let port = i64::from(listener.local_addr().unwrap().port());
+                drop(listener);
+                (port, None)
+            }
+        };
+        fs::write(vault.join("config.yaml"), format!("mcp:\n  port: {port}\n"))
+            .expect("configure local MCP server port");
+        if token_file {
+            fs::write(vault.join("mcp-token"), b"synthetic test token")
+                .expect("seed synthetic token-presence file");
+        }
+
+        let out_go = run_mcp_server_doctor(&go, &vault, &home);
+        let out_rust = run_mcp_server_doctor(&rust, &vault, &home);
+        assert_eq!(
+            out_go.status.code(),
+            Some(0),
+            "Go stderr: {:?}",
+            out_go.stderr
+        );
+        assert_eq!(
+            out_rust.status.code(),
+            Some(0),
+            "Rust stderr: {:?}",
+            out_rust.stderr
+        );
+        let go_result = first_json(&out_go.stdout, "Go MCP server doctor")["results"][0].clone();
+        let rust_result =
+            first_json(&out_rust.stdout, "Rust MCP server doctor")["results"][0].clone();
+        for field in ["id", "name", "status", "message", "hint", "fixable"] {
+            assert_eq!(
+                go_result.get(field),
+                rust_result.get(field),
+                "{name} diverged in {field}: Go={go_result}, Rust={rust_result}"
+            );
+        }
+        assert_eq!(go_result["id"], "mcp.server.reachable");
+        if let Some(server) = server {
+            let requests = server.join().expect("join local health fixture");
+            assert_eq!(requests, ["GET /health HTTP/1.1", "GET /health HTTP/1.1"]);
+        }
+    }
 }
 
 #[test]
