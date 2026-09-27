@@ -41,7 +41,11 @@ func main() {
 	if err != nil {
 		fatal("listen: %v", err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
+	address, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		fatal("listen returned unexpected address type %T", listener.Addr())
+	}
+	port := address.Port
 	writeJSON(filepath.Join(*vault, ".runtime-port"), map[string]any{"port": port, "bind": "0.0.0.0"})
 	writeJSON(filepath.Join(*vault, ".runtime-tls-cert"), map[string]string{"certificate": certFile})
 	if err := os.WriteFile(filepath.Join(*vault, ".ready"), nil, 0o600); err != nil {
