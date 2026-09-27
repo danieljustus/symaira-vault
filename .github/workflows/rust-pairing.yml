@@ -194,6 +194,29 @@ jobs:
           export SYMVAULT_GO_BINARY="$oracle_binary"
           cargo test -p symvault-cli --test auth_differential auth_rotate --locked
 
+      - name: Run startup-profile differential against pinned Go source
+        shell: bash
+        run: |
+          set -euo pipefail
+          oracle_commit=ecaf4d0c64bcd21138468080f93f7ea097d7803a
+          git merge-base --is-ancestor "$oracle_commit" HEAD
+          git diff --quiet "$oracle_commit" HEAD -- cmd/admin/startup_profile.go
+          temp_root="$RUNNER_TEMP"
+          executable_suffix=
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            temp_root="$(cygpath -u "$RUNNER_TEMP")"
+            executable_suffix=.exe
+          fi
+          oracle_binary="$temp_root/symvault-go-auth$executable_suffix"
+          test -f "$oracle_binary"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            native_binary="$(cygpath -w "$oracle_binary")"
+            export SYMVAULT_GO_BINARY="$native_binary"
+          else
+            export SYMVAULT_GO_BINARY="$oracle_binary"
+          fi
+          cargo test -p symvault-cli --test startup_profile_differential --locked
+
       - name: Run config profile differential against the pinned Go oracle
         shell: bash
         run: |

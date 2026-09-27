@@ -17,6 +17,7 @@ mod backup_commands;
 mod completion_commands;
 mod config;
 mod daemon_commands;
+mod deprecated_stubs;
 mod device;
 mod device_approval;
 mod doctor_commands;
@@ -40,6 +41,7 @@ mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
 mod share_commands;
+mod startup_profile_commands;
 mod sync_commands;
 mod template_commands;
 mod update_commands;
@@ -370,6 +372,22 @@ enum Command {
         #[arg(short = 'y', long)]
         yes: bool,
     },
+    /// Measure and report CLI startup time.
+    StartupProfile {
+        // allow_hyphen_values mirrors pflag, which accepts `--count -5`
+        // (clamped to one iteration by the command itself).
+        #[arg(short = 'n', long, default_value_t = 10, allow_hyphen_values = true)]
+        count: i64,
+        #[arg(long, default_value_t = 5, allow_hyphen_values = true)]
+        top: i64,
+        // OsString, not PathBuf: clap's PathBuf parser rejects an empty value,
+        // but Go treats `--trace ""` as "no trace" and runs the benchmark.
+        #[arg(long)]
+        trace: Option<OsString>,
+        // Go's cobra command accepts and ignores extra positionals.
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
+    },
     /// Start the MCP server for agent access.
     Mcp {
         #[command(subcommand)]
@@ -383,6 +401,18 @@ enum Command {
         /// Permit a locked vault (unsupported by the native stdio runtime).
         #[arg(long)]
         allow_locked: bool,
+    },
+    /// Deprecated: use `symvault mcp`.
+    ///
+    /// Hidden like the oracle's `serve` command (`cmd/mcp/serve.go`). Only the
+    /// deprecated `token` children are ported: the bare `serve` server and
+    /// `serve install|status|uninstall` belong to the unported
+    /// HTTP/service runtime, so `token` is this parent's only declared
+    /// subcommand and clap rejects the rest (see `deprecated_stubs`).
+    #[command(hide = true)]
+    Serve {
+        #[command(subcommand)]
+        action: ServeAction,
     },
     /// Deprecated: use `symvault agent install <agent> --config-only`.
     ///
@@ -444,7 +474,10 @@ enum Command {
         overwrite: bool,
         #[arg(long, default_value = "")]
         mapping: String,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
+        )]
         quarantine: bool,
     },
     /// Print the version of Symaira Vault.
@@ -531,6 +564,27 @@ enum McpAction {
     },
 }
 
+/// Subcommands the port implements under the deprecated `serve` parent.
+///
+/// The oracle's `serve` also owns `install`, `status`, `uninstall` and the
+/// bare server itself; those stay unported with the HTTP/service runtime, so
+/// they are deliberately absent here (see `deprecated_stubs`).
+#[derive(Debug, Subcommand)]
+enum ServeAction {
+    /// Deprecated: use `symvault agent token <action> <name>`.
+    ///
+    /// Deliberately a catch-all instead of clap subcommands, mirroring
+    /// `McpAction::Token`: the oracle shares one `newMcpTokenCmd()` between
+    /// the `mcp` and `serve` parents, so `serve token <unknown>` still runs
+    /// the group handler and the words after `token` are dispatched in
+    /// `deprecated_stubs::serve_token`.
+    #[command(hide = true)]
+    Token {
+        #[arg(value_name = "ARGS", num_args = 0..)]
+        args: Vec<String>,
+    },
+}
+
 #[derive(Debug, Subcommand)]
 enum PolicyCommand {
     Validate { file: PathBuf },
@@ -558,6 +612,17 @@ enum ShareCommand {
 
 #[derive(Debug, Subcommand)]
 enum AgentCommand {
+    /// Deprecated: use `symvault agent install <name>`.
+    ///
+    /// Hidden like the oracle's `newAgentSetupCmd` in `cmd/mcp/agent.go`; the
+    /// stub only prints the deprecation notice (see `deprecated_stubs`).
+    /// The oracle declares `ArbitraryArgs`, so any number of positional words
+    /// — including none — reaches the handler unchanged.
+    #[command(hide = true)]
+    Setup {
+        #[arg(value_name = "NAME", num_args = 0..)]
+        _args: Vec<String>,
+    },
     List,
     Doctor {
         name: String,
@@ -1024,6 +1089,9 @@ struct VersionArgs {
 const CLI_STACK_SIZE: usize = 16 * 1024 * 1024;
 
 fn main() -> ExitCode {
+    // Earliest observable point for child-marker timing, mirroring Go's
+    // SetStartTime call in main.
+    startup_profile_commands::mark_process_start();
     match std::thread::Builder::new()
         .name("symvault".to_string())
         .stack_size(CLI_STACK_SIZE)
@@ -1812,6 +1880,9 @@ fn run_cli() -> ExitCode {
             }
             finish_vault_result(result)
         }
+        Some(Command::Agent {
+            command: AgentCommand::Setup { .. },
+        }) => deprecated_stubs::agent_setup(),
         Some(Command::Audit {
             command: Some(AuditCommand::RotateKey),
             ..
@@ -1871,6 +1942,32 @@ fn run_cli() -> ExitCode {
             yes,
             cli.quiet,
         ),
+        Some(Command::StartupProfile {
+            count, top, trace, ..
+        }) => {
+            let format = if cli.json {
+                Some("json")
+            } else {
+                cli.output.as_deref()
+            };
+            if let Some(format) = format.filter(|format| *format != "text") {
+                // Go prints this twice (cobra, then ExecuteRoot) — see
+                // print_error_like_go.
+                print_error_like_go(&format!(
+                    "output format {format:?} is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)"
+                ));
+                ExitCode::from(9)
+            } else {
+                let trace = trace.as_deref().map(Path::new);
+                match startup_profile_commands::run(count, top, trace) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(error) => {
+                        print_error_like_go(&error);
+                        ExitCode::from(1)
+                    }
+                }
+            }
+        }
         Some(Command::Mcp {
             action,
             agent,
@@ -1910,6 +2007,9 @@ fn run_cli() -> ExitCode {
                 deprecated_stub_message(deprecated_token_message(args.first().map(String::as_str)))
             }
         },
+        Some(Command::Serve {
+            action: ServeAction::Token { args },
+        }) => deprecated_stubs::serve_token(&args),
         Some(Command::McpConfig { .. }) => deprecated_stub_message(DEPRECATED_MCP_CONFIG),
         Some(Command::McpTokenRotate { .. }) => {
             deprecated_stub_message(DEPRECATED_MCP_TOKEN_ROTATE)
@@ -4109,13 +4209,24 @@ fn run_import(
     quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
+    // Go resolves the format and flag conflicts before opening the vault.
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
+    if skip_existing && overwrite {
+        return finish_vault_result(Err(
+            "--skip-existing and --overwrite cannot be used together".into(),
+        ));
+    }
+    if quarantine && !prefix.is_empty() {
+        return finish_vault_result(Err(
+            "--quarantine and --prefix cannot be used together".into()
+        ));
+    }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        if quarantine && !prefix.is_empty() {
-            return Err("--quarantine and --prefix cannot be used together".into());
-        }
         let quarantine_id = if quarantine {
             Some(import_commands::generate_import_id()?)
         } else {
@@ -4359,9 +4470,14 @@ const DEPRECATED_MCP_TOKEN_ROTATE: &str =
 
 /// Maps the words after `mcp token` to the notice the oracle prints.
 ///
+/// `serve token` maps through here as well: the oracle builds both parents
+/// from one shared `newMcpTokenCmd()` (`cmd/mcp/serve.go`), so the notices
+/// are the same bytes on both paths.
+///
 /// Cobra has no `Args` restriction on the group or its subcommands, so an
-/// unknown word (`mcp token bogus`) falls through to the group handler and
-/// prints the group notice — verified against the pinned oracle.
+/// unknown word (`mcp token bogus`, `serve token bogus`) falls through to the
+/// group handler and prints the group notice — verified against the pinned
+/// oracle.
 fn deprecated_token_message(first: Option<&str>) -> &'static str {
     match first {
         Some("create") => DEPRECATED_MCP_TOKEN_CREATE,
