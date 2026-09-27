@@ -11,11 +11,13 @@ import (
 func validatorInput() liveReport {
 	report := liveReport{Head: "unit-test-head", Success: true, MutationRejected: true}
 	for _, seed := range []string{"missing", "null", "empty", "unmanaged", "registered", "zero", "malformed"} {
-		for _, mode := range []string{"text", "json", "json-alias", "quiet", "extra"} {
+		for _, mode := range []string{"text", "json", "yaml", "json-quiet", "yaml-quiet", "json-alias", "quiet", "extra"} {
 			result := diff.Result{FilesBefore: []diff.ManifestEntry{{Path: "home", Type: "directory"}}, Files: []diff.ManifestEntry{{Path: "home", Type: "directory"}}}
 			negative := seed == "malformed"
 			if negative {
 				result.ExitCode, result.Stderr = 1, []byte("error")
+			} else if mode == "yaml" {
+				result.Stdout = []byte("count: 0\ndevices: []\n")
 			}
 			report.Cases = append(report.Cases, liveCase{ID: seed + "/" + mode, Success: true, Negative: negative, Native: map[string]diff.Result{"go": result, "rust": result}})
 		}
@@ -41,9 +43,18 @@ func TestReportValidationRejectsFalsePass(t *testing.T) {
 			v.Stdout = []byte("wrong")
 			r.Cases[0].Native["rust"] = v
 		},
-		"mutation":         func(r *liveReport) { v := r.Cases[0].Native["rust"]; v.Files = nil; r.Cases[0].Native["rust"] = v },
-		"timeout":          func(r *liveReport) { v := r.Cases[0].Native["rust"]; v.TimedOut = true; r.Cases[0].Native["rust"] = v },
-		"negative-success": func(r *liveReport) { v := r.Cases[30].Native["rust"]; v.ExitCode = 0; r.Cases[30].Native["rust"] = v },
+		"mutation": func(r *liveReport) { v := r.Cases[0].Native["rust"]; v.Files = nil; r.Cases[0].Native["rust"] = v },
+		"timeout":  func(r *liveReport) { v := r.Cases[0].Native["rust"]; v.TimedOut = true; r.Cases[0].Native["rust"] = v },
+		"negative-success": func(r *liveReport) {
+			for i := range r.Cases {
+				if r.Cases[i].Negative {
+					v := r.Cases[i].Native["rust"]
+					v.ExitCode = 0
+					r.Cases[i].Native["rust"] = v
+					return
+				}
+			}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := validatorInput()

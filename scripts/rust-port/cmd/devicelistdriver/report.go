@@ -7,8 +7,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/diff"
 	"gopkg.in/yaml.v3"
+
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/diff"
 )
 
 type liveReport struct {
@@ -74,22 +75,32 @@ func validateObservations(report liveReport, head string) error {
 		}
 		if !negative {
 			if strings.HasSuffix(observed.ID, "/yaml") {
-				// yaml.v3 and serde_yaml_ng indent sequences and quote scalars differently;
-				// compare parsed values while preserving field and scalar-type parity.
-				var goValue, rustValue any
-				if err := yaml.Unmarshal(goResult.Stdout, &goValue); err != nil {
-					return fmt.Errorf("parse Go YAML %s: %w", observed.ID, err)
-				}
-				if err := yaml.Unmarshal(rustResult.Stdout, &rustValue); err != nil {
-					return fmt.Errorf("parse Rust YAML %s: %w", observed.ID, err)
-				}
-				if !reflect.DeepEqual(goValue, rustValue) {
-					return fmt.Errorf("YAML values differ: %s", observed.ID)
+				if err := compareYAML(observed.ID, goResult, rustResult); err != nil {
+					return err
 				}
 			} else if err := diff.Compare(diff.Case{ID: observed.ID}, goResult, rustResult); err != nil {
 				return fmt.Errorf("report mismatch %s: %w", observed.ID, err)
 			}
 		}
+	}
+	return nil
+}
+
+func compareYAML(id string, goResult, rustResult diff.Result) error {
+	// yaml.v3 and serde_yaml_ng indent sequences and quote scalars differently;
+	// compare parsed values while preserving field and scalar-type parity.
+	if len(strings.TrimSpace(string(goResult.Stdout))) == 0 || len(strings.TrimSpace(string(rustResult.Stdout))) == 0 {
+		return fmt.Errorf("empty YAML output: %s", id)
+	}
+	var goValue, rustValue any
+	if err := yaml.Unmarshal(goResult.Stdout, &goValue); err != nil {
+		return fmt.Errorf("parse Go YAML %s: %w", id, err)
+	}
+	if err := yaml.Unmarshal(rustResult.Stdout, &rustValue); err != nil {
+		return fmt.Errorf("parse Rust YAML %s: %w", id, err)
+	}
+	if !reflect.DeepEqual(goValue, rustValue) {
+		return fmt.Errorf("YAML values differ: %s", id)
 	}
 	return nil
 }
