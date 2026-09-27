@@ -4,7 +4,7 @@ use std::{
     env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use serde::{Deserialize, Serialize};
@@ -235,6 +235,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         id: "vault.search_index.persistence",
         tags: &[],
         run: check_search_index_persistence,
+    },
+    CheckDef {
+        id: "crypto.scrypt.benchmark",
+        tags: &["slow"],
+        run: check_scrypt_benchmark,
     },
     CheckDef {
         id: "crypto.kdf.modern",
@@ -1625,6 +1630,148 @@ fn check_update_available(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorRes
         "update check not available (dev build)",
         false,
     )
+}
+
+fn check_scrypt_benchmark(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "crypto.scrypt.benchmark";
+    const NAME: &str = "Scrypt KDF performance";
+    if let Ok(raw) = fs::read(vault_dir.join("identity.age"))
+        && raw
+            .windows(b"-> argon2id".len())
+            .any(|w| w == b"-> argon2id")
+    {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            "using argon2id KDF — scrypt work factor does not apply",
+            false,
+        );
+    }
+
+    let mut salt = [0u8; 16];
+    if let Err(err) = getrandom::fill(&mut salt) {
+        return DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            format!("scrypt benchmark failed: generate salt: {err}"),
+            false,
+        );
+    }
+    let mut recommended = 22;
+    let mut elapsed = Duration::ZERO;
+    for wf in 1..=22 {
+        let params = match scrypt::Params::new(wf, 1, 1) {
+            Ok(params) => params,
+            Err(err) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("scrypt benchmark failed: scrypt key at work factor {wf}: {err}"),
+                    false,
+                );
+            }
+        };
+        let start = Instant::now();
+        let mut output = [0u8; 32];
+        if let Err(err) = scrypt::scrypt(b"benchmark-password", &salt, &params, &mut output) {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("scrypt benchmark failed: scrypt key at work factor {wf}: {err}"),
+                false,
+            );
+        }
+        elapsed = start.elapsed();
+        if elapsed >= Duration::from_millis(250) {
+            recommended = wf;
+            break;
+        }
+    }
+    // Go repeats the maximum work factor when no iteration meets the target.
+    if recommended == 22 && elapsed < Duration::from_millis(250) {
+        let params = scrypt::Params::new(22, 1, 1).expect("valid fixed scrypt parameters");
+        let start = Instant::now();
+        let mut output = [0u8; 32];
+        if let Err(err) = scrypt::scrypt(b"benchmark-password", &salt, &params, &mut output) {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("scrypt benchmark failed: scrypt key at max work factor: {err}"),
+                false,
+            );
+        }
+        elapsed = start.elapsed();
+    }
+
+    let config_path = vault_dir.join("config.yaml");
+    let parsed = fs::read(&config_path)
+        .ok()
+        .and_then(|raw| serde_yaml_ng::from_slice::<serde_yaml_ng::Value>(&raw).ok());
+    let explicit = parsed
+        .as_ref()
+        .and_then(|doc| doc.get("vault"))
+        .and_then(|vault| vault.get("scrypt_work_factor"))
+        .and_then(serde_yaml_ng::Value::as_i64)
+        .is_some();
+    let current = load_config_for_check(&config_path)
+        .ok()
+        .and_then(|cfg| cfg.vault)
+        .map(|vault| vault.scrypt_work_factor)
+        .filter(|factor| *factor > 0)
+        .unwrap_or(18);
+    scrypt_benchmark_result(current, recommended.into(), elapsed, explicit)
+}
+
+fn scrypt_benchmark_result(
+    current: i64,
+    recommended: i64,
+    elapsed: Duration,
+    explicit: bool,
+) -> DoctorResult {
+    let ms = elapsed.as_secs_f64() * 1000.0;
+    let mut result = match recommended.cmp(&current) {
+        std::cmp::Ordering::Equal => DoctorResult::new(
+            "crypto.scrypt.benchmark",
+            "Scrypt KDF performance",
+            Status::Ok,
+            format!(
+                "config work factor {current} matches recommendation ({recommended}, {ms:.0}ms)"
+            ),
+            false,
+        ),
+        std::cmp::Ordering::Greater => DoctorResult::new(
+            "crypto.scrypt.benchmark",
+            "Scrypt KDF performance",
+            Status::Warn,
+            format!(
+                "{} work factor {current} is below this machine's recommended {recommended} ({ms:.0}ms to reach the 250ms target)",
+                if explicit {
+                    "explicitly configured"
+                } else {
+                    "default"
+                }
+            ),
+            false,
+        ),
+        std::cmp::Ordering::Less => DoctorResult::new(
+            "crypto.scrypt.benchmark",
+            "Scrypt KDF performance",
+            Status::Ok,
+            format!(
+                "config work factor {current} exceeds recommendation (benchmark: {recommended}, {ms:.0}ms)"
+            ),
+            false,
+        ),
+    };
+    if recommended > current {
+        result = result.with_hint(format!("set vault.scrypt_work_factor: {recommended} in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age"));
+    }
+    result
 }
 
 #[inline(always)]
@@ -3114,6 +3261,84 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scrypt_doctor_matches_go_branches() {
+        // Go oracle: internal/health/doctor_crypto.go and doctor_crypto_internal_test.go.
+        let elapsed = Duration::from_millis(42);
+        let cases = [
+            (
+                18,
+                12,
+                false,
+                Status::Ok,
+                "config work factor 18 exceeds recommendation (benchmark: 12, 42ms)",
+                None,
+            ),
+            (
+                18,
+                18,
+                false,
+                Status::Ok,
+                "config work factor 18 matches recommendation (18, 42ms)",
+                None,
+            ),
+            (
+                18,
+                20,
+                false,
+                Status::Warn,
+                "default work factor 18 is below this machine's recommended 20 (42ms to reach the 250ms target)",
+                Some(
+                    "set vault.scrypt_work_factor: 20 in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age",
+                ),
+            ),
+            (
+                18,
+                20,
+                true,
+                Status::Warn,
+                "explicitly configured work factor 18 is below this machine's recommended 20 (42ms to reach the 250ms target)",
+                Some(
+                    "set vault.scrypt_work_factor: 20 in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age",
+                ),
+            ),
+        ];
+        for (current, recommended, explicit, status, message, hint) in cases {
+            let result = scrypt_benchmark_result(current, recommended, elapsed, explicit);
+            assert_eq!(result.status, status);
+            assert_eq!(result.message, message);
+            assert_eq!(result.hint.as_deref(), hint);
+        }
+
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("identity.age"),
+            b"age-encryption.org/v1\n-> argon2id\n",
+        )
+        .unwrap();
+        let fast_path = check_scrypt_benchmark(tmp.path(), &DoctorOptions::default());
+        assert_eq!(fast_path.status, Status::Ok);
+        assert_eq!(
+            fast_path.message,
+            "using argon2id KDF — scrypt work factor does not apply"
+        );
+        assert!(ALL_CHECKS.iter().any(|check| {
+            check.id == "crypto.scrypt.benchmark" && check.tags.contains(&"slow")
+        }));
+        fs::write(
+            tmp.path().join("identity.age"),
+            b"age-encryption.org/v1\n-> scrypt\n",
+        )
+        .unwrap();
+        let legacy = check_scrypt_benchmark(tmp.path(), &DoctorOptions::default());
+        assert_eq!(legacy.id, "crypto.scrypt.benchmark");
+        assert!(
+            legacy.message.contains("recommendation") || legacy.message.contains("recommended"),
+            "{}",
+            legacy.message
+        );
+    }
+
+    #[test]
     fn parse_conflict_name_cases() {
         let cases = [
             (
@@ -3176,6 +3401,7 @@ mod tests {
                 "vault.stale_temp_files",
                 "vault.conflict_files",
                 "vault.search_index.persistence",
+                "crypto.scrypt.benchmark",
                 "crypto.kdf.modern",
                 "vault.manifest.intact",
                 "auth.passphrase.rotation",
@@ -3236,6 +3462,7 @@ mod tests {
                 "audit.log",
                 "audit.keyring.orphans",
                 "update.available",
+                "crypto.scrypt.benchmark",
                 "crypto.kdf.modern",
                 "auth.passphrase.rotation",
                 "tooling.autotype.backend",

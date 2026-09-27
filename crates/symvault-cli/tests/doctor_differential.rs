@@ -768,6 +768,74 @@ fn differential_doctor_new_checks_quick_filter() {
 }
 
 #[test]
+fn differential_doctor_scrypt_benchmark_shape() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home_go = temporary_root("scrypt-go-home");
+    let home_rust = temporary_root("scrypt-rust-home");
+    let vault_go = temporary_root("scrypt-go-vault");
+    let vault_rust = temporary_root("scrypt-rust-vault");
+    let _fix = TempFixture::new([
+        home_go.clone(),
+        home_rust.clone(),
+        vault_go.clone(),
+        vault_rust.clone(),
+    ]);
+
+    for (identity, exact) in [
+        (b"age-encryption.org/v1\n-> argon2id\n".as_slice(), true),
+        (b"age-encryption.org/v1\n-> scrypt\n".as_slice(), false),
+    ] {
+        fs::write(vault_go.join("identity.age"), identity).unwrap();
+        fs::write(vault_rust.join("identity.age"), identity).unwrap();
+        let observe = |binary: &Path, vault: &Path, home: &Path| {
+            let output = run(
+                binary,
+                &[
+                    "--vault",
+                    vault.to_str().unwrap(),
+                    "doctor",
+                    "--only",
+                    "crypto.scrypt.benchmark",
+                    "--json",
+                    "--no-network",
+                ],
+                vault,
+                home,
+            );
+            assert_eq!(output.status.code(), Some(0));
+            let json = first_json(&output.stdout, "scrypt doctor");
+            let results = json["results"].as_array().unwrap();
+            assert_eq!(results.len(), 1);
+            results[0].clone()
+        };
+        let go_result = observe(&go, &vault_go, &home_go);
+        let rust_result = observe(&rust, &vault_rust, &home_rust);
+        if exact {
+            assert_eq!(rust_result, go_result);
+        } else {
+            // Timings and work factors vary by implementation and host; assert
+            // the shared contract shape while pure branch tests pin the text.
+            for result in [go_result, rust_result] {
+                assert_eq!(result["id"], "crypto.scrypt.benchmark");
+                assert_eq!(result["name"], "Scrypt KDF performance");
+                assert!(matches!(result["status"].as_str(), Some("ok" | "warn")));
+                assert!(result["message"].as_str().unwrap().contains("work factor"));
+                if result["status"] == "warn" {
+                    assert!(
+                        result["hint"]
+                            .as_str()
+                            .unwrap()
+                            .contains("does not re-encrypt")
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn differential_doctor_new_checks_no_network_filter() {
     let Some((go, rust)) = oracle_binaries() else {
         return;
