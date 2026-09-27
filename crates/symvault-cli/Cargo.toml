@@ -17,6 +17,8 @@ clap.workspace = true
 flate2 = "=1.1.5"
 getrandom = "=0.3.3"
 tar = "=0.4.46"
+tempfile = "=3.27.0"
+zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
@@ -35,6 +37,3 @@ symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
-
-[dev-dependencies]
-tempfile = "=3.27.0"

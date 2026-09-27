@@ -3155,6 +3155,7 @@ dependencies = [
  "url",
  "yaml-edit",
  "zeroize",
+ "zip",
 ]
 
 [[package]]

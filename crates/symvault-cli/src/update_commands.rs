@@ -1,7 +1,7 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! `update check` for stable releases and non-release builds, plus stable and
-//! non-release `update apply --dry-run` previews. Applying stable releases
-//! still requires its download and cosign path.
+//! `update check` for stable releases and non-release builds, `update apply`
+//! signed download/install for direct-download builds, plus stable and
+//! non-release `update apply --dry-run` previews.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -21,6 +21,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+#[path = "update_apply.rs"]
+mod update_apply;
 
 /// Install-method string values as published by corekit's `InstallMethod`.
 pub(crate) mod method {
@@ -149,11 +152,7 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
         if !info.self_update_supported {
             return write_check_output(render_unsupported_apply(&info, want_json || output_json));
         }
-        let _ = writeln!(
-            std::io::stderr(),
-            "Error: update apply without --dry-run requires the verified release installer"
-        );
-        return ExitCode::from(1);
+        return apply_stable_update(&info, force, want_json || output_json);
     }
 
     let version = crate::VERSION.trim();
@@ -169,6 +168,7 @@ fn apply_dry_run(rest: &[OsString], output_format: &str, json_flag: bool) -> Exi
             release_url: String::new(),
             checkable: false,
             update_available: false,
+            release: None,
         })
     };
     let Ok(result) = result else {
@@ -195,6 +195,7 @@ struct CheckResult {
     release_url: String,
     checkable: bool,
     update_available: bool,
+    release: Option<CachedRelease>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -205,7 +206,7 @@ struct DiskCache {
     release: Option<CachedRelease>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct CachedRelease {
     #[serde(default, rename = "TagName", alias = "tag_name")]
     tag_name: String,
@@ -217,7 +218,7 @@ struct CachedRelease {
     assets: Vec<CachedAsset>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct CachedAsset {
     #[serde(default, rename = "Name", alias = "name")]
     name: String,
@@ -287,6 +288,7 @@ fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bo
             release_url: String::new(),
             checkable: false,
             update_available: false,
+            release: None,
         })
     };
     let Ok(result) = result else {
@@ -358,12 +360,13 @@ fn cached_check_bytes(
             current.to_string()
         },
         release_url: if update_available {
-            release.html_url
+            release.html_url.clone()
         } else {
             String::new()
         },
         checkable: true,
         update_available,
+        release: Some(release),
     })
 }
 
@@ -435,6 +438,7 @@ fn result_from_latest_release(
         },
         checkable: true,
         update_available,
+        release: Some(cached.clone()),
     };
     Ok((result, cached))
 }
@@ -705,6 +709,113 @@ fn render_unsupported_apply(info: &InstallInfo, want_json: bool) -> CheckOutput 
             info.guidance
         ),
     }
+}
+
+#[derive(Serialize)]
+struct ApplyResultJson<'a> {
+    method: &'a str,
+    old_version: &'a str,
+    new_version: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    backup_path: Option<&'a str>,
+    binary_path: String,
+    dry_run: bool,
+}
+
+fn apply_stable_update(info: &InstallInfo, force: bool, want_json: bool) -> ExitCode {
+    let version = crate::VERSION.trim();
+    let result = if let Some(current) = parse_stable_version(version) {
+        match cached_check(current, force, OffsetDateTime::now_utc()) {
+            Some(result) => Ok(result),
+            None => fetch_latest_check_at(current, version, LATEST_RELEASE_URL)
+                .map_err(|error| format!("check for updates: {error}")),
+        }
+    } else {
+        Ok(CheckResult {
+            current_version: version.to_owned(),
+            latest_version: version.to_owned(),
+            release_url: String::new(),
+            checkable: false,
+            update_available: false,
+            release: None,
+        })
+    };
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = writeln!(std::io::stderr(), "Error: apply update: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let binary_path = match std::env::current_exe() {
+        Ok(path) => path,
+        Err(error) => {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Error: apply update: resolve binary path: {error}"
+            );
+            return ExitCode::from(1);
+        }
+    };
+
+    if result.update_available {
+        let Some(release) = result.release.as_ref() else {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Error: apply update: cached release metadata is missing"
+            );
+            return ExitCode::from(1);
+        };
+        if let Err(error) = update_apply::apply(release, &binary_path) {
+            let _ = writeln!(std::io::stderr(), "Error: apply update: {error}");
+            return ExitCode::from(1);
+        }
+    }
+
+    let new_version = if result.update_available {
+        result.latest_version.as_str()
+    } else {
+        result.current_version.as_str()
+    };
+    if want_json {
+        let output = ApplyResultJson {
+            method: info.method,
+            old_version: &result.current_version,
+            new_version,
+            backup_path: None,
+            binary_path: binary_path.to_string_lossy().into_owned(),
+            dry_run: false,
+        };
+        let stdout = match serde_json::to_string_pretty(&output) {
+            Ok(value) => format!("{}\n", escape_go_json(&value)),
+            Err(_) => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "Error: encode JSON output: serialize failed"
+                );
+                return ExitCode::from(1);
+            }
+        };
+        let mut out = std::io::stdout().lock();
+        let _ = out.write_all(stdout.as_bytes());
+        return ExitCode::SUCCESS;
+    }
+    let mut stdout = std::io::stdout().lock();
+    if result.current_version == new_version {
+        let _ = writeln!(
+            stdout,
+            "Symaira Vault is already up to date ({new_version})."
+        );
+    } else {
+        let _ = writeln!(
+            stdout,
+            "Updated Symaira Vault: {} -> {new_version}",
+            result.current_version
+        );
+        let _ = writeln!(stdout, "Installation method: {}", info.method);
+        let _ = writeln!(stdout, "Binary: {}", binary_path.display());
+    }
+    ExitCode::SUCCESS
 }
 
 fn render_apply_dry_run(result: &CheckResult, want_json: bool) -> CheckOutput {

@@ -73,8 +73,11 @@ tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
 - A path counted as present is only a help/parser-surface result. `update check`
   and `update apply` are recognized by `update_commands::run`, but this does not
   imply full runtime parity: `apply --dry-run` previews release metadata,
-  unsupported installation methods now fail closed before network access, and
-  the direct-download path still lacks signed artifact installation and rollback.
+  unsupported installation methods fail closed before network access, and
+  direct-download apply verifies the signed checksum bytes, archive digest,
+  extracted executable, and post-install version before deleting its rollback
+  backup. The signed path requires the external `cosign` CLI at runtime and
+  has no live release-install differential test.
 
 ## Missing flags on probed paths
 
