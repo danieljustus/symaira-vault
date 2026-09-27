@@ -64,7 +64,7 @@ pub(crate) struct DeviceSession {
     pub name: String,
     pub public_key: String,
     pub created_at: String,
-    #[serde(default = "zero_time_string", deserialize_with = "deserialize_expiry")]
+    #[serde(default = "zero_time_string")]
     pub expires_at: String,
     pub revoked: bool,
 }
@@ -494,15 +494,6 @@ pub(crate) fn is_expired(expires_at: &str) -> bool {
     }
 }
 
-fn deserialize_expiry<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = String::deserialize(deserializer)?;
-    OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
-    Ok(value)
-}
-
 fn zero_time_string() -> String {
     "0001-01-01T00:00:00Z".to_owned()
 }
@@ -889,9 +880,10 @@ mod tests {
     }
 
     #[test]
-    fn malformed_expiry_is_rejected_during_store_deserialization() {
+    fn malformed_expiry_is_rejected_with_field_context_during_store_decode() {
         let input = br#"{"token":{"prefix":"TOKN","device_id":"device","public_key":"key","created_at":"2026-01-01T00:00:00Z","expires_at":"not-a-time","revoked":false}}"#;
-        assert!(serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(input).is_err());
+        let error = decode_sessions(input).unwrap_err();
+        assert!(error.contains("invalid expires_at timestamp"), "{error}");
     }
 
     #[test]
