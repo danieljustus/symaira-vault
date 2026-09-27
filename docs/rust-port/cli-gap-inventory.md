@@ -76,8 +76,11 @@ tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
   unsupported installation methods fail closed before network access, and
   direct-download apply verifies the signed checksum bytes, archive digest,
   extracted executable, and post-install version before deleting its rollback
-  backup. The signed path requires the external `cosign` CLI at runtime and
-  has no live release-install differential test.
+  backup. An ignored live smoke test passed against signed public release
+  `v0.22.1` on macOS arm64: Cosign/checksum verification, isolated installation,
+  `version`, and rollback after an injected validation failure. The smoke test
+  requires the external `cosign` CLI at runtime; a live Go/Rust differential
+  test remains unrun.
 
 ## Missing flags on probed paths
 

@@ -26,6 +26,14 @@ const MAX_EXTRACT_BYTES: u64 = 100 * 1024 * 1024;
 const MAX_COSIGN_BYTES: u64 = 1 << 20;
 
 pub(super) fn apply(release: &CachedRelease, binary_path: &Path) -> Result<(), String> {
+    apply_with_validator(release, binary_path, validate_installed)
+}
+
+fn apply_with_validator(
+    release: &CachedRelease,
+    binary_path: &Path,
+    validate: impl Fn(&Path) -> Result<(), String>,
+) -> Result<(), String> {
     if release.tag_name.trim().is_empty() {
         return Err("updateapply: release tag is empty".into());
     }
@@ -153,7 +161,7 @@ pub(super) fn apply(release: &CachedRelease, binary_path: &Path) -> Result<(), S
         })?;
     set_executable(&extracted)
         .map_err(|error| format!("updateapply: make downloaded asset executable: {error}"))?;
-    atomic_swap(&extracted, &target)?;
+    atomic_swap_with_validator(&extracted, &target, &validate)?;
     drop(extraction_dir);
     Ok(())
 }
@@ -553,7 +561,16 @@ fn set_executable(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 fn atomic_swap(new_path: &Path, target: &Path) -> Result<(), String> {
+    atomic_swap_with_validator(new_path, target, &validate_installed)
+}
+
+fn atomic_swap_with_validator(
+    new_path: &Path,
+    target: &Path,
+    validate: &impl Fn(&Path) -> Result<(), String>,
+) -> Result<(), String> {
     let mut backup_name = target.as_os_str().to_os_string();
     backup_name.push(".bak");
     let backup = PathBuf::from(backup_name);
@@ -575,7 +592,7 @@ fn atomic_swap(new_path: &Path, target: &Path) -> Result<(), String> {
         }
         return Err(format!("updateapply: install new binary: {error}"));
     }
-    if let Err(error) = validate_installed(target) {
+    if let Err(error) = validate(target) {
         if had_existing {
             if let Err(rollback) = restore_backup(&backup, target) {
                 return Err(format!(
@@ -670,6 +687,103 @@ mod tests {
         assert!(error.contains("validate installed binary"));
         assert_eq!(fs::read(&target).unwrap(), b"old");
         assert!(!PathBuf::from(format!("{}.bak", target.display())).exists());
+    }
+
+    #[test]
+    #[ignore = "requires public GitHub release access, cosign, and SYMAIRA_VAULT_SMOKE_BINARY"]
+    fn public_release_apply_smoke() {
+        use std::process::Command;
+
+        let source = std::env::var_os("SYMAIRA_VAULT_SMOKE_BINARY")
+            .map(PathBuf::from)
+            .expect("set SYMAIRA_VAULT_SMOKE_BINARY to the local Rust symvault binary");
+        let source = fs::canonicalize(source).expect("resolve local Rust binary");
+        assert!(source.is_file(), "smoke source must be a regular file");
+
+        let release = super::super::fetch_latest_release_at(
+            super::super::LATEST_RELEASE_URL,
+            env!("CARGO_PKG_VERSION"),
+        )
+        .expect("fetch public latest release metadata");
+        let (_, release) = super::super::result_from_latest_release(
+            super::super::StableVersion {
+                major: 0,
+                minor: 0,
+                patch: 0,
+            },
+            release,
+        )
+        .expect("latest release must be stable and valid");
+        let asset_name = select_asset(
+            &release.assets,
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+        )
+        .expect("public release must include a matching platform archive")
+        .name
+        .clone();
+
+        let dir = tempfile::tempdir().expect("create isolated install root");
+        let canonical_dir = fs::canonicalize(dir.path()).expect("resolve isolated install root");
+        let install_dir = dir.path().join("install");
+        fs::create_dir(&install_dir).expect("create isolated install directory");
+        let target = install_dir.join(if cfg!(windows) {
+            "symvault.exe"
+        } else {
+            "symvault"
+        });
+        fs::copy(&source, &target).expect("seed isolated install target");
+        set_executable(&target).expect("make isolated target executable");
+        assert!(
+            fs::canonicalize(&target)
+                .expect("resolve isolated target")
+                .starts_with(&canonical_dir),
+            "update target must stay inside the temporary directory"
+        );
+        let original = fs::read(&target).expect("read seeded binary");
+
+        apply(&release, &target).expect("verify and install the signed public release");
+        let installed = fs::read(&target).expect("read installed public release binary");
+        assert_ne!(
+            installed, original,
+            "release must replace the seeded binary"
+        );
+        let version = Command::new(&target)
+            .arg("version")
+            .output()
+            .expect("run isolated installed binary version");
+        assert!(
+            version.status.success(),
+            "installed version command failed: {}",
+            String::from_utf8_lossy(&version.stderr)
+        );
+        println!(
+            "verified public release {} asset {}; installed version output: {}{}",
+            release.tag_name,
+            asset_name,
+            String::from_utf8_lossy(&version.stdout),
+            String::from_utf8_lossy(&version.stderr)
+        );
+
+        let rollback_target = install_dir.join("symvault-rollback");
+        fs::copy(&source, &rollback_target).expect("seed rollback target");
+        let verified_release = install_dir.join("verified-release-copy");
+        fs::write(&verified_release, &installed).expect("copy verified release bytes");
+        set_executable(&verified_release).expect("make verified copy executable");
+        let error = atomic_swap_with_validator(&verified_release, &rollback_target, &|_| {
+            Err("injected validation failure".into())
+        })
+        .expect_err("injected validation failure must roll back");
+        assert!(error.contains("injected validation failure"), "{error}");
+        assert_eq!(
+            fs::read(&rollback_target).expect("read rolled back binary"),
+            original,
+            "rollback must restore the original binary bytes"
+        );
+        assert!(
+            !PathBuf::from(format!("{}.bak", rollback_target.display())).exists(),
+            "successful rollback must remove its backup"
+        );
     }
 
     #[test]
