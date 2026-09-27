@@ -65,14 +65,11 @@ fn write_pages(command: clap::Command, output_dir: &Path, date: &str) -> io::Res
     Ok(())
 }
 
-/// Render the page date the way cobra's `fillHeader` does: the current month
-/// and year, or the instant pinned by `SOURCE_DATE_EPOCH` for reproducible
-/// builds. The default case reads the clock in UTC, where the oracle reads it
-/// in the local zone, so the two can disagree only inside the first hours of a
-/// month in a zone ahead of UTC.
+/// Render the page date the way cobra's `fillHeader` does: local time, using
+/// the current instant or the instant pinned by `SOURCE_DATE_EPOCH`.
 fn man_date() -> Result<String, String> {
-    let moment = match std::env::var_os("SOURCE_DATE_EPOCH") {
-        Some(raw) => {
+    let utc_moment = match std::env::var_os("SOURCE_DATE_EPOCH") {
+        Some(raw) if !raw.is_empty() => {
             let raw = raw
                 .to_str()
                 .ok_or("invalid SOURCE_DATE_EPOCH: invalid digit found in string")?;
@@ -83,7 +80,11 @@ fn man_date() -> Result<String, String> {
                 .map_err(|error| format!("invalid SOURCE_DATE_EPOCH: {error}"))?
         }
         None => time::OffsetDateTime::now_utc(),
+        Some(_) => time::OffsetDateTime::now_utc(),
     };
+    let local_offset = time::UtcOffset::local_offset_at(utc_moment)
+        .map_err(|error| format!("cannot determine local timezone: {error}"))?;
+    let moment = utc_moment.to_offset(local_offset);
     Ok(format!(
         "{} {}",
         MONTHS[(u8::from(moment.month()) - 1) as usize],

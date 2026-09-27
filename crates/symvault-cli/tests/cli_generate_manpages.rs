@@ -122,16 +122,96 @@ fn generate_manpages_reports_directory_creation_errors() {
 }
 
 fn run(binary: &Path, root: &Path, args: &[&str]) -> Output {
+    run_with_env(binary, root, args, &[])
+}
+
+fn run_with_env(binary: &Path, root: &Path, args: &[&str], environment: &[(&str, &str)]) -> Output {
     let home = root.join("home");
     fs::create_dir_all(&home).expect("home directory");
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .args(args)
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
-        .current_dir(root)
-        .output()
-        .expect("run generate manpages")
+        .current_dir(root);
+    for (name, value) in environment {
+        command.env(name, value);
+    }
+    command.output().expect("run generate manpages")
+}
+
+fn go_oracle() -> Option<std::path::PathBuf> {
+    match env::var_os("SYMVAULT_GO_BINARY") {
+        Some(binary) => Some(binary.into()),
+        None if env::var_os("SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE").is_some() => {
+            panic!("SYMVAULT_GO_BINARY is required by the manpages port-contract gate")
+        }
+        None => {
+            eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+            None
+        }
+    }
+}
+
+fn page_date(root: &Path) -> Vec<String> {
+    let page = fs::read_to_string(root.join("man/symvault-generate-manpages.1"))
+        .expect("read generated manpage");
+    let tokens = th_tokens(&page);
+    assert!(tokens.len() >= 5, "truncated .TH header: {tokens:?}");
+    tokens[3..5].to_vec()
+}
+
+#[test]
+fn empty_source_date_epoch_matches_the_go_default() {
+    let Some(go_binary) = go_oracle() else {
+        return;
+    };
+    let go_root = TempDir::new().expect("go temp root");
+    let rust_root = TempDir::new().expect("rust temp root");
+    let args = ["generate", "manpages", "man"];
+    let environment = [("SOURCE_DATE_EPOCH", ""), ("TZ", "UTC")];
+    let go = run_with_env(&go_binary, go_root.path(), &args, &environment);
+    let rust = run_with_env(BINARY.as_ref(), rust_root.path(), &args, &environment);
+
+    assert_eq!(go.status.code(), Some(0), "Go stderr: {:?}", go.stderr);
+    assert_eq!(
+        rust.status.code(),
+        Some(0),
+        "Rust stderr: {:?}",
+        rust.stderr
+    );
+    assert!(go.stderr.is_empty(), "Go stderr: {:?}", go.stderr);
+    assert!(rust.stderr.is_empty(), "Rust stderr: {:?}", rust.stderr);
+    assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
+}
+
+#[cfg(unix)]
+#[test]
+fn source_date_epoch_uses_local_timezone_at_month_boundary() {
+    let Some(go_binary) = go_oracle() else {
+        return;
+    };
+    let go_root = TempDir::new().expect("go temp root");
+    let rust_root = TempDir::new().expect("rust temp root");
+    let args = ["generate", "manpages", "man"];
+    // 2026-09-30 12:00 UTC is already October 1 in Pacific/Kiritimati.
+    let environment = [
+        ("SOURCE_DATE_EPOCH", "1790769600"),
+        ("TZ", "Pacific/Kiritimati"),
+    ];
+    let go = run_with_env(&go_binary, go_root.path(), &args, &environment);
+    let rust = run_with_env(BINARY.as_ref(), rust_root.path(), &args, &environment);
+
+    assert_eq!(go.status.code(), Some(0), "Go stderr: {:?}", go.stderr);
+    assert_eq!(
+        rust.status.code(),
+        Some(0),
+        "Rust stderr: {:?}",
+        rust.stderr
+    );
+    assert_eq!(page_date(go_root.path()), vec!["Oct", "2026"]);
+    assert_eq!(page_date(rust_root.path()), page_date(go_root.path()));
 }
 
 /// Strips each run's own root prefix so the two report lines can be compared.
@@ -160,11 +240,10 @@ fn page_names(root: &Path) -> BTreeSet<String> {
 /// `assert_header_matches_oracle` even when no oracle binary is available.
 #[test]
 fn generate_manpages_matches_the_go_oracle() {
-    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
-        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+    let Some(go_binary) = go_oracle() else {
         return;
     };
-    let go_binary = Path::new(&go_binary);
+    let go_binary = go_binary.as_path();
 
     let go_root = TempDir::new().expect("go temp root");
     let rust_root = TempDir::new().expect("rust temp root");
