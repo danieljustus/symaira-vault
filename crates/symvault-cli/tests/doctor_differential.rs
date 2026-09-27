@@ -1093,6 +1093,32 @@ fn run_mcp_tokens_doctor(
         .expect("run MCP token doctor check in isolated environment")
 }
 
+fn run_mcp_approval_tls_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
+    Command::new(binary)
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "doctor",
+            "--only",
+            "mcp.approval.tls",
+            "--json",
+            "--no-network",
+        ])
+        .env_clear()
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("SYMVAULT_VAULT", vault)
+        .env("SYMVAULT_PASSPHRASE", "synthetic-doctor-fixture")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run approval TLS doctor check in isolated environment")
+}
+
 fn assert_migration_warning(output: &Output, id: &str) {
     let expected = format!(
         "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
@@ -1205,6 +1231,39 @@ fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
             fs::read(vault.join("mcp-token")).expect("legacy file unchanged"),
             b"synthetic-unused-legacy-token\n"
         );
+    }
+}
+
+#[test]
+fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-approval-tls-home");
+    let go_vault = temporary_root("mcp-approval-tls-go-vault");
+    let rust_vault = temporary_root("mcp-approval-tls-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+
+    let out_go = run_mcp_approval_tls_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_approval_tls_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    assert_eq!(doctor_result(&out_go), doctor_result(&out_rust));
+
+    let go_file = go_vault.join(".symvault/device-sessions.json");
+    let rust_file = rust_vault.join(".symvault/device-sessions.json");
+    assert_eq!(fs::read(&go_file).unwrap(), b"{}");
+    assert_eq!(fs::read(&go_file).unwrap(), fs::read(&rust_file).unwrap());
+    assert_eq!(private_mode(&go_file), 0o600);
+    assert_eq!(private_mode(&rust_file), 0o600);
+    assert_eq!(private_mode(go_file.parent().unwrap()), 0o700);
+    assert_eq!(private_mode(rust_file.parent().unwrap()), 0o700);
+    for vault in [&go_vault, &rust_vault] {
+        let names = fs::read_dir(vault.join(".symvault"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(names, [std::ffi::OsString::from("device-sessions.json")]);
     }
 }
 
@@ -1429,9 +1488,8 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
         }
         // `--only mcp.tokens` still runs every Go doctor check before filtering
         // output. Its unrelated `mcp.approval.tls` check creates
-        // `.symvault/device-sessions.json`; the Rust check currently only reads
-        // that path. Compare the token migration's observable side effects
-        // directly above rather than treating that separate check as token
+        // `.symvault/device-sessions.json`; the dedicated differential below
+        // pins that separate side effect rather than treating it as token
         // registry behavior.
         let go_registry = fs::read(go_vault.join("mcp-tokens.json")).unwrap();
         let rust_registry = fs::read(rust_vault.join("mcp-tokens.json")).unwrap();

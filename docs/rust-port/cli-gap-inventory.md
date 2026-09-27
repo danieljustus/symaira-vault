@@ -190,11 +190,13 @@ without changing its bytes or sibling legacy-token file, and tests both legacy-t
 migration and fresh-token initialization. Go and Rust results match; the generated
 registry bytes are compared after normalizing the random ID and creation time (and
 the random hash/prefix for fresh tokens), both registry files are mode `0600`, the
-migrated raw token is absent, and the token-specific paths match. The full vault
-file sets differ because Go runs all checks before applying `--only`; its separate
-`mcp.approval.tls` check creates `.symvault/device-sessions.json`. Rust publishes
-the final hashed registry atomically without writing a generated raw token to the
-temporary legacy-token path used by Go.
+migrated raw token is absent, and the token-specific paths match. Go runs all checks
+before applying `--only`, so `mcp.approval.tls` also initializes
+`.symvault/device-sessions.json`; Rust now does the same through root-relative
+no-follow file handling. A pinned-oracle differential checks the empty JSON bytes
+and Unix modes (`0700` directory, `0600` file). Rust publishes the final hashed
+registry atomically without writing a generated raw token to the temporary
+legacy-token path used by Go.
 
 `mcp.dynamic.engines` and `mcp.agents` were in that group too and are now **ported**:
 their missing-vault branch is byte-exact (`cannot load config: open <path>: no such

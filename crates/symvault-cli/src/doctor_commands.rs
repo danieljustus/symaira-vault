@@ -2053,12 +2053,12 @@ fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
 }
 
 fn approval_device_summary(vault_dir: &Path) -> String {
-    let sessions_path = vault_dir.join(".symvault").join("device-sessions.json");
-    if !sessions_path.is_file() {
-        return "0 approval device(s) active, 0 expired, 0 revoked".to_string();
-    }
-    let data = match fs::read(&sessions_path) {
-        Ok(d) => d,
+    let data = match symvault_store::load_or_create_private_file(
+        vault_dir,
+        Path::new(".symvault/device-sessions.json"),
+        b"{}",
+    ) {
+        Ok(data) => data,
         Err(err) => return format!("approval devices: cannot load ({err})"),
     };
     let sessions: std::collections::BTreeMap<String, serde_json::Value> =

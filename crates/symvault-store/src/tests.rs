@@ -2445,3 +2445,24 @@ fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes
     assert!(!temp.path().join(".search-index").exists());
     assert!(!second.load(&store, &identity).unwrap());
 }
+
+#[cfg(unix)]
+#[test]
+fn private_file_initialization_rejects_symlink_without_touching_target() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let sessions_dir = root.path().join(".symvault");
+    fs::create_dir(&sessions_dir).unwrap();
+    let target = outside.path().join("sessions.json");
+    fs::write(&target, b"preserve-me").unwrap();
+    std::os::unix::fs::symlink(&target, sessions_dir.join("device-sessions.json")).unwrap();
+
+    let result = load_or_create_private_file(
+        root.path(),
+        Path::new(".symvault/device-sessions.json"),
+        b"{}",
+    );
+
+    assert!(matches!(result, Err(StoreError::Symlink(_))));
+    assert_eq!(fs::read(target).unwrap(), b"preserve-me");
+}

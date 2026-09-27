@@ -3,8 +3,10 @@
 
 use std::{
     ffi::OsString,
-    fs, io,
+    fs,
+    io::{self, Write},
     path::{Component, Path},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use super::StoreError;
@@ -95,6 +97,97 @@ pub(super) fn open_lock(root: &fs::File, display: &Path) -> Result<fs::File, Sto
         source: source.into(),
     })?;
     Ok(fs::File::from(file))
+}
+
+/// Creates a private regular file below an already opened directory without
+/// following a final symlink. Existing regular files are left untouched.
+pub(super) fn create_private_file_if_missing(
+    parent: &fs::File,
+    name: &str,
+    display: &Path,
+    bytes: &[u8],
+) -> Result<(), StoreError> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    use rustix::fs::{AtFlags, FileType, Mode, OFlags, fsync, linkat, openat, statat, unlinkat};
+
+    let validate_existing = || {
+        let metadata =
+            statat(parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|source| StoreError::Read {
+                path: display.to_path_buf(),
+                source: source.into(),
+            })?;
+        match FileType::from_raw_mode(metadata.st_mode) {
+            FileType::RegularFile => Ok(()),
+            FileType::Symlink => Err(StoreError::Symlink(display.to_path_buf())),
+            _ => Err(StoreError::NotRegularFile(display.to_path_buf())),
+        }
+    };
+
+    for _ in 0..32 {
+        let temporary = format!(
+            ".{name}.tmp-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let mut file = match openat(
+            parent,
+            temporary.as_str(),
+            OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
+            Mode::from_raw_mode(0o600),
+        ) {
+            Ok(file) => fs::File::from(file),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(StoreError::Write {
+                    path: display.to_path_buf(),
+                    source: source.into(),
+                });
+            }
+        };
+        let result = (|| {
+            file.write_all(bytes)?;
+            fsync(&file).map_err(io::Error::from)?;
+            linkat(parent, temporary.as_str(), parent, name, AtFlags::empty())
+                .map_err(io::Error::from)?;
+            fsync(parent).map_err(io::Error::from)?;
+            Ok::<_, io::Error>(())
+        })();
+        drop(file);
+        let cleanup = unlinkat(parent, temporary.as_str(), AtFlags::empty())
+            .or_else(|error| {
+                if error.kind() == io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            })
+            .and_then(|()| fsync(parent));
+        if result.is_ok() {
+            cleanup.map_err(|source| StoreError::Write {
+                path: display.to_path_buf(),
+                source: source.into(),
+            })?;
+            return Ok(());
+        }
+        if let Err(cleanup_error) = cleanup {
+            return Err(StoreError::Write {
+                path: display.to_path_buf(),
+                source: cleanup_error.into(),
+            });
+        }
+        let error = result.unwrap_err();
+        if error.kind() == io::ErrorKind::AlreadyExists {
+            return validate_existing();
+        }
+        return Err(StoreError::Write {
+            path: display.to_path_buf(),
+            source: error.into(),
+        });
+    }
+    Err(StoreError::Write {
+        path: display.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::AlreadyExists, "temporary name exhausted"),
+    })
 }
 
 pub(super) fn walk_from(
