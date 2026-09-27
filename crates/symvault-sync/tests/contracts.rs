@@ -458,6 +458,75 @@ fn go_generated_import_export_and_intake_cases_match_rust() {
 }
 
 #[test]
+fn backup_exclude_git_matches_pinned_go_archive_members() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let expected = archive_case.expected["exclude_git_archive_members"]
+        .as_array()
+        .unwrap();
+    assert!(!expected.is_empty());
+    assert!(
+        expected
+            .iter()
+            .all(|entry| !entry["path"].as_str().unwrap().starts_with(".git"))
+    );
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::create_dir_all(source.join(".git/objects")).unwrap();
+    for (path, contents) in [
+        ("identity.age", &b"identity"[..]),
+        ("config.yaml", &b"vault_dir: fixture\n"[..]),
+        ("entries/item.age", &b"ciphertext"[..]),
+        (".git/config", &b"[core]\n"[..]),
+        (".git/objects/fixture", &b"git-object"[..]),
+    ] {
+        fs::write(source.join(path), contents).unwrap();
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for dir in [
+            source.join("entries"),
+            source.join(".git"),
+            source.join(".git/objects"),
+        ] {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for file in [
+            source.join("identity.age"),
+            source.join("config.yaml"),
+            source.join("entries/item.age"),
+            source.join(".git/config"),
+            source.join(".git/objects/fixture"),
+        ] {
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+
+    let archive_path = root.path().join("backup.tar.gz");
+    let actual = archive::backup(&source, &archive_path, true).unwrap();
+    assert_eq!(actual.len(), expected.len());
+    for expected in expected {
+        let path = expected["path"].as_str().unwrap();
+        let actual = actual.iter().find(|entry| entry.path == path).unwrap();
+        let expected_hash = expected["sha256"].as_str().unwrap();
+        assert_eq!(actual.directory, expected_hash.is_empty());
+        assert_eq!(actual.size, expected["size"].as_u64().unwrap());
+        if !actual.directory {
+            assert_eq!(actual.sha256, expected_hash, "{path}");
+        }
+        #[cfg(unix)]
+        assert_eq!(
+            actual.mode,
+            expected["mode"].as_u64().unwrap() as u32,
+            "{path}"
+        );
+    }
+}
+
+#[test]
 fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
     let fixture = sync_fixture();
 
