@@ -79,6 +79,59 @@ fn safe_restore_member(raw_name: &[u8], path: &Path) -> Result<PathBuf, ArchiveE
     }
     safe_relative(path)
 }
+
+fn reject_untrusted_symlink_ancestors(path: &Path) -> Result<(), ArchiveError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => {
+                normalized.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(name) => normalized.push(name),
+        }
+    }
+
+    let mut current = PathBuf::new();
+    for component in normalized.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => {
+                current.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                current.pop();
+            }
+            Component::Normal(name) => {
+                current.push(name);
+                match fs::symlink_metadata(&current) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::MetadataExt;
+                            if metadata.uid() != 0 {
+                                return Err(ArchiveError::UnsafePath(path.display().to_string()));
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn mode(meta: &fs::Metadata) -> u32 {
     #[cfg(unix)]
     {
@@ -236,6 +289,7 @@ pub fn restore(
     {
         return Err(ArchiveError::UnsafePath(dest.display().to_string()));
     }
+    reject_untrusted_symlink_ancestors(dest)?;
     crate::safeio::create_dir_all(dest).map_err(|error| io::Error::other(error.to_string()))?;
     if !dest.is_dir() {
         return Err(ArchiveError::NotDirectory(dest.to_path_buf()));

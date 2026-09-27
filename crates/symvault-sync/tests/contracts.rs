@@ -624,9 +624,10 @@ fn restore_rejects_noncanonical_member_paths_like_go() {
             .as_bool()
             .unwrap()
     );
-    let mut paths = vec![r"..\outside", "a//b", "a/./b"];
     #[cfg(unix)]
-    paths.push("C:drive-relative");
+    let paths = vec![r"..\outside", "a//b", "a/./b", "C:drive-relative"];
+    #[cfg(not(unix))]
+    let paths = vec![r"..\outside", "a//b", "a/./b"];
 
     for (index, name) in paths.into_iter().enumerate() {
         assert!(
@@ -816,6 +817,43 @@ fn restore_refuses_read_only_existing_files_like_go() {
 
     assert!(archive::restore(&archive_path, &destination, true).is_err());
     assert_eq!(fs::read(target).unwrap(), b"old identity");
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_rejects_untrusted_symlinked_destination_ancestors_like_go() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let go_rejected = archive_case.expected["restore_symlinked_parent_rejected"]
+        .as_bool()
+        .unwrap();
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let archive_path = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive_path, false).unwrap();
+
+    let outside = root.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    let redirect = root.path().join("redirect");
+    symlink(&outside, &redirect).unwrap();
+    let destination = redirect.join("restored");
+    let restored_outside = outside.join("restored");
+    let rust_result = archive::restore(&archive_path, &destination, true);
+
+    if go_rejected {
+        assert!(rust_result.is_err());
+        assert!(!restored_outside.exists());
+    } else {
+        assert!(rust_result.is_ok());
+        assert!(restored_outside.join("identity.age").exists());
+    }
 }
 
 #[cfg(unix)]
