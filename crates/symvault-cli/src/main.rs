@@ -457,7 +457,10 @@ enum Command {
         overwrite: bool,
         #[arg(long, default_value = "")]
         mapping: String,
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
+        )]
         quarantine: bool,
     },
     /// Print the version of Symaira Vault.
@@ -4160,13 +4163,24 @@ fn run_import(
     quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
+    // Go resolves the format and flag conflicts before opening the vault.
+    if let Err(error) = import_commands::resolve_format(format, source) {
+        return finish_vault_result(Err(error));
+    }
+    if skip_existing && overwrite {
+        return finish_vault_result(Err(
+            "--skip-existing and --overwrite cannot be used together".into(),
+        ));
+    }
+    if quarantine && !prefix.is_empty() {
+        return finish_vault_result(Err(
+            "--quarantine and --prefix cannot be used together".into()
+        ));
+    }
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        if quarantine && !prefix.is_empty() {
-            return Err("--quarantine and --prefix cannot be used together".into());
-        }
         let quarantine_id = if quarantine {
             Some(import_commands::generate_import_id()?)
         } else {
