@@ -720,6 +720,37 @@ fn restore_preserves_existing_file_mode_like_go() {
 
 #[cfg(unix)]
 #[test]
+fn restore_refuses_read_only_existing_files_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["readonly_file_write_denied"]
+            .as_bool()
+            .unwrap()
+    );
+
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"new identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let archive_path = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive_path, false).unwrap();
+
+    let destination = root.path().join("restored");
+    fs::create_dir_all(&destination).unwrap();
+    let target = destination.join("identity.age");
+    fs::write(&target, b"old identity").unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o400)).unwrap();
+
+    assert!(archive::restore(&archive_path, &destination, true).is_err());
+    assert_eq!(fs::read(target).unwrap(), b"old identity");
+}
+
+#[cfg(unix)]
+#[test]
 fn restore_does_not_follow_predictable_temporary_symlink() {
     use std::os::unix::fs::symlink;
     let root = tempdir().unwrap();

@@ -298,7 +298,13 @@ pub fn restore(
                 .map_err(|error| io::Error::other(error.to_string()))?;
         }
         let m = match fs::symlink_metadata(&target) {
-            Ok(metadata) if metadata.is_file() => mode(&metadata),
+            Ok(metadata) if metadata.is_file() => {
+                // Go opens existing restore targets for writing before
+                // truncating them. Preserve its permission failure instead
+                // of replacing a read-only file through the parent directory.
+                fs::OpenOptions::new().write(true).open(&target)?;
+                mode(&metadata)
+            }
             Ok(_) => entry.header().mode()? & 0o600,
             Err(error) if error.kind() == io::ErrorKind::NotFound => entry.header().mode()? & 0o600,
             Err(error) => return Err(error.into()),

@@ -79,7 +79,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/syncgen/main.go"
     ],
-    "generator_digest": "8206530feb226c612c17f7f97401d0bee351045821e98d7d7cdea3325bfcae5d"
+    "generator_digest": "efb265975a2d6b6eb112fa1c400e4d6edb1c38d3873e0ef93086bbcbd97fce7a"
   },
   "cases": [
     {
@@ -256,6 +256,7 @@
         "backslash_member_rejected": true,
         "existing_directory_mode_preserved": true,
         "existing_file_mode_preserved": true,
+        "readonly_file_write_denied": true,
         "restore_path_rejections": {
           "..\\outside": true,
           "C:drive-relative": true,
