@@ -1267,6 +1267,43 @@ fn differential_doctor_mcp_approval_tls_initializes_private_device_sessions() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn differential_doctor_mcp_approval_tls_reads_existing_store_without_parent_write_access() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-approval-tls-readonly-home");
+    let go_vault = temporary_root("mcp-approval-tls-readonly-go-vault");
+    let rust_vault = temporary_root("mcp-approval-tls-readonly-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    let go_dir = go_vault.join(".symvault");
+    let rust_dir = rust_vault.join(".symvault");
+    fs::create_dir(&go_dir).unwrap();
+    fs::create_dir(&rust_dir).unwrap();
+    let go_file = go_dir.join("device-sessions.json");
+    let rust_file = rust_dir.join("device-sessions.json");
+    for file in [&go_file, &rust_file] {
+        fs::write(file, b"{}\n").unwrap();
+        fs::set_permissions(file, fs::Permissions::from_mode(0o400)).unwrap();
+        fs::set_permissions(file.parent().unwrap(), fs::Permissions::from_mode(0o500)).unwrap();
+    }
+
+    let out_go = run_mcp_approval_tls_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_approval_tls_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    assert_eq!(doctor_result(&out_go), doctor_result(&out_rust));
+    for file in [&go_file, &rust_file] {
+        assert_eq!(fs::read(file).unwrap(), b"{}\n");
+        assert_eq!(private_mode(file), 0o400);
+        assert_eq!(fs::read_dir(file.parent().unwrap()).unwrap().count(), 1);
+        fs::set_permissions(file.parent().unwrap(), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+}
+
 #[test]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
     let Some((go, rust)) = oracle_binaries() else {

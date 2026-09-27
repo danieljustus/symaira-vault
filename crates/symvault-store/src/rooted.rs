@@ -110,18 +110,22 @@ pub(super) fn create_private_file_if_missing(
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     use rustix::fs::{AtFlags, FileType, Mode, OFlags, fsync, linkat, openat, statat, unlinkat};
 
-    let validate_existing = || {
-        let metadata =
-            statat(parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|source| StoreError::Read {
-                path: display.to_path_buf(),
-                source: source.into(),
-            })?;
-        match FileType::from_raw_mode(metadata.st_mode) {
-            FileType::RegularFile => Ok(()),
+    let validate_existing = || match statat(parent, name, AtFlags::SYMLINK_NOFOLLOW) {
+        Ok(metadata) => match FileType::from_raw_mode(metadata.st_mode) {
+            FileType::RegularFile => Ok(true),
             FileType::Symlink => Err(StoreError::Symlink(display.to_path_buf())),
             _ => Err(StoreError::NotRegularFile(display.to_path_buf())),
-        }
+        },
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(source) => Err(StoreError::Read {
+            path: display.to_path_buf(),
+            source: source.into(),
+        }),
     };
+
+    if validate_existing()? {
+        return Ok(());
+    }
 
     for _ in 0..32 {
         let temporary = format!(
@@ -177,7 +181,10 @@ pub(super) fn create_private_file_if_missing(
         }
         let error = result.unwrap_err();
         if error.kind() == io::ErrorKind::AlreadyExists {
-            return validate_existing();
+            if validate_existing()? {
+                return Ok(());
+            }
+            continue;
         }
         return Err(StoreError::Write {
             path: display.to_path_buf(),
