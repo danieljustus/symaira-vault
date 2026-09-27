@@ -767,6 +767,12 @@ fn start_mcp_health_server(
         while requests.len() < expected_requests && std::time::Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
+                    stream
+                        .set_nonblocking(false)
+                        .expect("make accepted fixture stream blocking");
+                    stream
+                        .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+                        .expect("bound local fixture read");
                     let mut request = [0_u8; 2048];
                     let read = stream.read(&mut request).expect("read health request");
                     let first_line = String::from_utf8_lossy(&request[..read])
@@ -1051,6 +1057,20 @@ fn compare_doctor_ids(go: &Path, rust: &Path, vault: &Path, home: &Path, ids: &s
             );
         }
     }
+}
+
+#[test]
+fn differential_doctor_auth_method_touchid_availability() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("touchid-home");
+    let vault = temporary_root("touchid-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
+    fs::write(vault.join("config.yaml"), "auth_method: touchid\n")
+        .expect("configure Touch ID auth method");
+
+    compare_doctor_ids(&go, &rust, &vault, &home, "auth.method");
 }
 
 /// Wave 2b: the two MCP config checks must match on a missing vault and on an

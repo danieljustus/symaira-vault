@@ -155,9 +155,6 @@ and an unreachable port. The Go implementation at oracle commit
 These branches are unreachable in the fixture matrix but exist in Go, so they are
 explicitly listed instead of being silently simplified:
 
-- `auth.method`: the `touchid` branch needs `session.BiometricAvailable()` from the
-  native platform slice; until then it always reports Go's degraded branch
-  (`warn`, "configured as Touch ID but biometric not available on this system").
 - `session.keyring`, `audit.keyring.orphans`: the non-test/non-CI branches need the
   OS keyring layer. Outside test/CI `session.keyring` reports Go's **fail** branch
   (the Rust session cache really has fallen back to memory), and
@@ -171,6 +168,14 @@ explicitly listed instead of being silently simplified:
   current Go *tree* source would warn in that case. The port follows the pinned
   binary (the contract), never reads the variable's value, and this divergence
   between oracle and tree is recorded here.
+
+`auth.method` now checks Touch ID availability on macOS through the existing
+`MacOsTouchId` platform adapter and retains Go's unavailable branch elsewhere.
+The differential test uses the host's non-prompting availability probe, so the
+active/inactive result follows the machine running the test. The Go oracle's
+`internal/session/touchid_darwin.go` matches current source at pinned commit
+`fca3f89401833b5e14ec4ec74ef736b0f63bca74` (blob
+`cbd27b9bfc4caefaa811f88e14376c0263f944b3`).
 
 The two open IDs were each implemented at some point, measured against the oracle and
 then **withdrawn again** because they cannot be byte-pinned — do not re-add them

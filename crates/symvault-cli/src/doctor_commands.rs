@@ -2269,10 +2269,16 @@ fn check_auth_method(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
     };
 
     let method = cfg.effective_auth_method();
+    if method == AuthMethod::Touchid && touch_id_available() {
+        return DoctorResult::new(
+            "auth.method",
+            "Auth method",
+            Status::Ok,
+            "passphrase + Touch ID active",
+            false,
+        );
+    }
     if method == AuthMethod::Touchid {
-        // ponytail: Go asks session.BiometricAvailable(), which arrives with the
-        // native platform slice. Until then report the degraded branch — never a
-        // false "Touch ID active".
         return DoctorResult::new(
             "auth.method",
             "Auth method",
@@ -2290,6 +2296,18 @@ fn check_auth_method(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
         format!("auth method: {}", method.as_str()),
         false,
     )
+}
+
+fn touch_id_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use symvault_core::platform::TouchId;
+        symvault_platform::MacOsTouchId.is_available()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 fn check_session_cache(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
