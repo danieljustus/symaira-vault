@@ -1,7 +1,7 @@
 //! Implementation of `symvault doctor` health checks and CLI rendering.
 
 use std::{
-    fs,
+    env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -9,9 +9,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, PrettyFormatter, Serializer};
-use symvault_core::config::{AuthMethod, Config};
+use symvault_core::config::{AuthMethod, Config, ConfigError, MULTIPLE_DOCUMENTS_MESSAGE};
 use symvault_core::policy::glob_match;
+use symvault_store::token_registry;
 use symvault_sync::GitRepository;
+use time::OffsetDateTime;
+use zeroize::Zeroizing;
 
 /// Status outcome of a health check.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -88,6 +91,7 @@ impl DoctorResult {
 pub struct DoctorOptions {
     pub no_network: bool,
     pub quick: bool,
+    pub quiet: bool,
     pub only: Vec<String>,
     pub exclude: Vec<String>,
 }
@@ -261,6 +265,16 @@ const ALL_CHECKS: &[CheckDef] = &[
         id: "daemon.status",
         tags: &[],
         run: check_daemon_status,
+    },
+    CheckDef {
+        id: "mcp.server.reachable",
+        tags: &["network"],
+        run: check_mcp_server,
+    },
+    CheckDef {
+        id: "mcp.tokens",
+        tags: &[],
+        run: check_mcp_tokens,
     },
     CheckDef {
         id: "mcp.approval.tls",
@@ -460,7 +474,7 @@ fn check_vault_config_parses(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorR
                 "vault.config.parses",
                 "Vault config parses",
                 Status::Fail,
-                format!("config.yaml parse error: {err}"),
+                format!("config.yaml parse error: {}", doctor_config_error(&err)),
                 false,
             )
             .with_hint(format!(
@@ -526,7 +540,7 @@ fn check_vault_config_validates(vault_dir: &Path, _opts: &DoctorOptions) -> Doct
                 "vault.config.validates",
                 "Vault config validates",
                 Status::Fail,
-                format!("failed to load config: {err}"),
+                format!("failed to load config: {}", doctor_config_error(&err)),
                 false,
             )
             .with_hint(format!("inspect {} for syntax errors", cfg_path.display())),
@@ -1248,7 +1262,7 @@ fn check_passphrase_rotation(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorR
                 "auth.passphrase.rotation",
                 "Passphrase rotation",
                 Status::Warn,
-                format!("cannot load config: {err}"),
+                format!("cannot load config: {}", doctor_config_error(&err)),
                 false,
             ),
             Ok(cfg) => {
@@ -1792,47 +1806,270 @@ fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
     }
 }
 
-fn approval_device_summary(vault_dir: &Path) -> String {
-    let sessions_path = vault_dir.join(".symvault").join("device-sessions.json");
-    if !sessions_path.is_file() {
-        return "0 approval device(s) active, 0 expired, 0 revoked".to_string();
-    }
-    let data = match fs::read(&sessions_path) {
-        Ok(d) => d,
-        Err(err) => return format!("approval devices: cannot load ({err})"),
+fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "mcp.tokens";
+    const NAME: &str = "MCP tokens";
+    let mut tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
+        Ok(tokens) => tokens,
+        Err(error) => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("cannot load MCP token registry: {error}"),
+                false,
+            );
+        }
     };
-    let sessions: std::collections::BTreeMap<String, serde_json::Value> =
-        match serde_json::from_slice(&data) {
-            Ok(s) => s,
-            Err(err) => return format!("approval devices: cannot load ({err})"),
+    tokens.retain(|token| !token.hash.is_empty());
+
+    if tokens.is_empty() {
+        let legacy_path = vault_dir.join("mcp-token");
+        let legacy = match fs::read(&legacy_path) {
+            Ok(bytes) => {
+                let bytes = Zeroizing::new(bytes);
+                let raw = std::str::from_utf8(&bytes).ok().map(str::trim);
+                raw.filter(|token| !token.is_empty())
+                    .map(|token| Zeroizing::new(token.to_owned()))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(_) if has_mcp_env_token() => {
+                // Go consumes the in-process environment value, but neither
+                // stores nor reports it. This doctor process exits after the
+                // check, so preserving it in the short-lived environment is
+                // not observable to the caller.
+                return no_mcp_tokens_result();
+            }
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: load legacy token: {error}"),
+                    false,
+                );
+            }
         };
 
+        if legacy.is_none() && has_mcp_env_token() {
+            // With an environment token and no file token, Go uses the
+            // environment value only for this process and leaves the registry
+            // empty. Do not copy that secret into vault state.
+            return no_mcp_tokens_result();
+        }
+
+        if legacy.is_some() && has_mcp_env_token() && !opts.quiet {
+            eprintln!(
+                "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at {}; using file token",
+                legacy_path.display()
+            );
+        }
+
+        let migration = if let Some(raw) = legacy.as_deref() {
+            token_registry::import_legacy(vault_dir, raw, OffsetDateTime::now_utc())
+        } else {
+            token_registry::create_legacy(vault_dir, OffsetDateTime::now_utc())
+        };
+        let migrated_id = match migration {
+            Ok(migrated_id) => migrated_id,
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: load legacy token: {error}"),
+                    false,
+                );
+            }
+        };
+        if let Some(id) = migrated_id {
+            if !opts.quiet {
+                eprintln!(
+                    "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+                );
+            }
+            if let Err(error) = remove_legacy_token_file(&legacy_path)
+                && !opts.quiet
+            {
+                eprintln!(
+                    "failed to remove legacy token file {} after migration: {error}",
+                    legacy_path.display()
+                );
+            }
+        }
+        tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
+            Ok(tokens) => tokens,
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: {error}"),
+                    false,
+                );
+            }
+        };
+        tokens.retain(|token| !token.hash.is_empty());
+    }
+
+    let now = OffsetDateTime::now_utc();
+    tokens.retain(|token| {
+        token.expires_at.as_deref().is_none_or(|expires_at| {
+            OffsetDateTime::parse(expires_at, &time::format_description::well_known::Rfc3339)
+                .is_ok_and(|expires_at| now <= expires_at)
+        })
+    });
+    if tokens.is_empty() {
+        return no_mcp_tokens_result();
+    }
+
+    let old = tokens
+        .iter()
+        .filter(|token| {
+            token.created_at.as_deref().is_none_or(|created_at| {
+                OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
+                    .is_ok_and(|created_at| now - created_at > time::Duration::days(90))
+            })
+        })
+        .count();
+    if old > 0 {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            format!("{} active, {old} older than 90d", tokens.len()),
+            false,
+        )
+        .with_hint("rotate old tokens per agent with `symvault agent token rotate <name>`")
+    } else {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            format!(
+                "{} active token(s), all within rotation policy",
+                tokens.len()
+            ),
+            false,
+        )
+    }
+}
+
+fn no_mcp_tokens_result() -> DoctorResult {
+    DoctorResult::new(
+        "mcp.tokens",
+        "MCP tokens",
+        Status::Ok,
+        "no MCP tokens configured",
+        false,
+    )
+}
+
+fn has_mcp_env_token() -> bool {
+    env::var_os("SYMVAULT_MCP_TOKEN").is_some_and(|token| !token.is_empty())
+}
+
+fn remove_legacy_token_file(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+        Ok(metadata) if metadata.file_type().is_file() => fs::remove_file(path),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a regular file",
+        )),
+    }
+}
+
+fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    let config_path = vault_dir.join("config.yaml");
+    let config = match Config::load(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            return DoctorResult::new(
+                "mcp.server.reachable",
+                "MCP server reachable",
+                Status::Warn,
+                format!("cannot load config: {error}"),
+                false,
+            );
+        }
+    };
+    let port = config
+        .mcp
+        .as_ref()
+        .map(|mcp| mcp.port)
+        .filter(|port| *port > 0)
+        .unwrap_or(8080);
+    let url = format!("http://127.0.0.1:{port}/health");
+    let request = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .and_then(|client| client.get(&url).send());
+    let response = match request {
+        Ok(response) => response,
+        Err(_) => {
+            return DoctorResult::new(
+                "mcp.server.reachable",
+                "MCP server reachable",
+                Status::Warn,
+                format!("MCP server not reachable at {url}"),
+                false,
+            )
+            .with_hint(format!(
+                "start the server with `symvault mcp --port {port}`"
+            ));
+        }
+    };
+    if response.status() != reqwest::StatusCode::OK {
+        return DoctorResult::new(
+            "mcp.server.reachable",
+            "MCP server reachable",
+            Status::Warn,
+            format!("MCP server returned HTTP {}", response.status().as_u16()),
+            false,
+        );
+    }
+    let token_present = fs::metadata(vault_dir.join("mcp-token")).is_ok();
+    let (message, hint) = if token_present {
+        (format!("server reachable at {url}, token present"), None)
+    } else {
+        (
+            format!("server reachable at {url}, no token file"),
+            Some("generate an MCP token with `symvault agent token new <name>`"),
+        )
+    };
+    let result = DoctorResult::new(
+        "mcp.server.reachable",
+        "MCP server reachable",
+        Status::Ok,
+        message,
+        false,
+    );
+    match hint {
+        Some(hint) => result.with_hint(hint),
+        None => result,
+    }
+}
+
+fn approval_device_summary(vault_dir: &Path) -> String {
+    #[cfg(not(unix))]
+    if let Err(err) = check_approval_store_directories(vault_dir) {
+        return format!("approval devices: cannot load ({err})");
+    }
+    let sessions = match crate::device_approval::load_for_doctor(vault_dir) {
+        Ok(sessions) => sessions,
+        Err(err) => return format!("approval devices: cannot load ({err})"),
+    };
     let mut active = 0usize;
     let mut expired = 0usize;
     let mut revoked = 0usize;
-    let now = time::OffsetDateTime::now_utc();
-
-    for session in sessions.values() {
-        if session
-            .get("revoked")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-        {
+    for session in sessions {
+        if session.revoked {
             revoked += 1;
             continue;
         }
-        let is_expired = if let Some(exp_str) = session.get("expires_at").and_then(|v| v.as_str()) {
-            if let Ok(exp_time) =
-                time::OffsetDateTime::parse(exp_str, &time::format_description::well_known::Rfc3339)
-            {
-                now > exp_time
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        if is_expired {
+        if crate::device_approval::is_expired(&session.expires_at) {
             expired += 1;
         } else {
             active += 1;
@@ -1840,6 +2077,30 @@ fn approval_device_summary(vault_dir: &Path) -> String {
     }
 
     format!("{active} approval device(s) active, {expired} expired, {revoked} revoked")
+}
+
+#[cfg(not(unix))]
+fn check_approval_store_directories(vault_dir: &Path) -> Result<(), String> {
+    for directory in [vault_dir, &vault_dir.join(".symvault")] {
+        match fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "refusing symlinked approval store directory {}",
+                    directory.display()
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(format!(
+                    "approval store path is not a directory: {}",
+                    directory.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
 }
 
 fn parse_cert_expiry(pem_bytes: &[u8]) -> Result<time::OffsetDateTime, String> {
@@ -2035,7 +2296,18 @@ fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
 fn load_config_for_check(cfg_path: &Path) -> Result<Config, String> {
     match fs::read(cfg_path) {
         Err(err) => Err(format_go_path_error("open", cfg_path, &err)),
-        Ok(bytes) => Config::load_from_bytes(&bytes).map_err(|err| err.to_string()),
+        Ok(bytes) => Config::load_from_bytes(&bytes).map_err(|err| doctor_config_error(&err)),
+    }
+}
+
+/// Go reports the stable multi-document rejection directly, without the
+/// generic `parse config:` wrapper used by the Rust loader. Preserve the
+/// loader's remaining diagnostics verbatim until their parser dialect has its
+/// own source-bound compatibility mapping.
+fn doctor_config_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::Parse(detail) if detail == MULTIPLE_DOCUMENTS_MESSAGE => detail.clone(),
+        _ => error.to_string(),
     }
 }
 
@@ -2193,10 +2465,16 @@ fn check_auth_method(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
     };
 
     let method = cfg.effective_auth_method();
+    if method == AuthMethod::Touchid && touch_id_available() {
+        return DoctorResult::new(
+            "auth.method",
+            "Auth method",
+            Status::Ok,
+            "passphrase + Touch ID active",
+            false,
+        );
+    }
     if method == AuthMethod::Touchid {
-        // ponytail: Go asks session.BiometricAvailable(), which arrives with the
-        // native platform slice. Until then report the degraded branch — never a
-        // false "Touch ID active".
         return DoctorResult::new(
             "auth.method",
             "Auth method",
@@ -2214,6 +2492,18 @@ fn check_auth_method(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
         format!("auth method: {}", method.as_str()),
         false,
     )
+}
+
+fn touch_id_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use symvault_core::platform::TouchId;
+        symvault_platform::MacOsTouchId.is_available()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 fn check_session_cache(_vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
@@ -2892,6 +3182,8 @@ mod tests {
                 "tooling.autotype.backend",
                 "tooling.clipboard.backend",
                 "daemon.status",
+                "mcp.server.reachable",
+                "mcp.tokens",
                 "mcp.approval.tls",
                 "mcp.dynamic.engines",
                 "mcp.agents",
@@ -2949,6 +3241,8 @@ mod tests {
                 "tooling.autotype.backend",
                 "tooling.clipboard.backend",
                 "daemon.status",
+                "mcp.server.reachable",
+                "mcp.tokens",
                 "mcp.approval.tls",
                 "mcp.dynamic.engines",
                 "mcp.agents",

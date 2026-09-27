@@ -69,6 +69,8 @@ pub(crate) struct TokenEntry {
     #[serde(default)]
     pub(crate) allowed_tools: Option<Vec<String>>,
     #[serde(default)]
+    pub(crate) created_at: Option<String>,
+    #[serde(default)]
     pub(crate) expires_at: Option<String>,
     #[serde(default)]
     pub(crate) last_used_at: Option<String>,
@@ -161,7 +163,7 @@ pub(crate) fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
         .map_err(|error| format!("load token registry: parse token registry: {error}"))?;
     let tokens: Vec<_> = registry.tokens.unwrap_or_default().into_values().collect();
     for token in &tokens {
-        for timestamp in [&token.expires_at, &token.last_used_at]
+        for timestamp in [&token.created_at, &token.expires_at, &token.last_used_at]
             .into_iter()
             .flatten()
         {

@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/exporter"
@@ -17,12 +19,14 @@ import (
 const pinnedOracleCommit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 
 type exportCase struct {
-	Name    string                 `json:"name"`
-	Entries []exporter.ExportEntry `json:"entries"`
-	Mapping map[string]string      `json:"mapping"`
-	JSON    string                 `json:"json"`
-	CSV     string                 `json:"csv"`
-	Notices string                 `json:"notices"`
+	Name         string                 `json:"name"`
+	Entries      []exporter.ExportEntry `json:"entries"`
+	Mapping      map[string]string      `json:"mapping"`
+	FloatFields  []string               `json:"float_fields,omitempty"`
+	JSON         string                 `json:"json"`
+	JSONOutcomes []string               `json:"json_outcomes,omitempty"`
+	CSV          string                 `json:"csv"`
+	Notices      string                 `json:"notices"`
 }
 
 func main() {
@@ -44,8 +48,11 @@ func main() {
 		{Name: "empty", Entries: []exporter.ExportEntry{}},
 		{Name: "escaping", Entries: []exporter.ExportEntry{{Path: " <&>\u2028", Data: map[string]any{"leading": "\u00a0space", "quote": "a\"b", "comma": "a,b", "newline": "a\r\nb", "sentinel": "\\.", "empty": "", "line": "\u2029"}}}},
 		{Name: "nested", Entries: []exporter.ExportEntry{{Path: "nested", Data: map[string]any{"array": []any{"a", nil, true, []any{"b"}}, "map": map[string]any{"z": []any{"x", "y"}, "a": map[string]any{"b": "c"}}, "nil": nil, "number": 42}}}},
+		{Name: "numeric-edges", Entries: []exporter.ExportEntry{{Path: "numeric", Data: map[string]any{"small_exponent": 1e-7, "decimal_boundary": 1e-6, "large_decimal": 1e20, "large_exponent": 1e21, "csv_decimal_low": 1e-4, "csv_exponent_low": 1e-5, "csv_decimal_high": 1e5, "csv_exponent_high": 1e6, "negative_zero": math.Copysign(0, -1), "integer": float64(9007199254740993), "numeric_string": "-0.0"}}}, FloatFields: []string{"small_exponent", "decimal_boundary", "large_decimal", "large_exponent", "csv_decimal_low", "csv_exponent_low", "csv_decimal_high", "csv_exponent_high", "negative_zero"}},
+		{Name: "decoded-large-integers", Entries: decodeEntries(`[ {"path":"large-integers","data":{"above_safe_integer":9007199254740993,"nested":[9007199254740993,{"unsigned":18446744073709551615,"signed":-9007199254740993}]}} ]`)},
 		{Name: "attachments", Entries: []exporter.ExportEntry{{Path: "with-files", Data: map[string]any{"file_b64_0": "c3ludGhldGlj", "chunk_count": 1, "chunk_size": 9, "name": "fixture"}}, {Path: "only-files", Data: map[string]any{"file_b64_1": "c3ludGhldGlj"}}}},
 		{Name: "mapping", Entries: []exporter.ExportEntry{{Path: "first", Data: map[string]any{"username": "fixture", "field": "value"}}, {Path: "second", Data: map[string]any{"extra": "optional"}}}, Mapping: map[string]string{"username": " name", "extra": "", "field": "renamed"}},
+		{Name: "mapping-collision", Entries: []exporter.ExportEntry{{Path: "collision", Data: map[string]any{"alpha": "first", "beta": "second"}}}, Mapping: map[string]string{"alpha": "same", "beta": "same"}},
 	}
 	for i := range cases {
 		c := &cases[i]
@@ -58,10 +65,32 @@ func main() {
 			must(stream.WriteEntry(entry))
 		}
 		must(stream.Close())
-		if !bytes.Equal(j.Bytes(), streamed.Bytes()) {
+		if c.Name != "mapping-collision" && !bytes.Equal(j.Bytes(), streamed.Bytes()) {
 			must(fmt.Errorf("go batch/stream export mismatch: %s", c.Name))
 		}
 		c.JSON = j.String()
+		if c.Name == "mapping-collision" {
+			outcomes := make(map[string]struct{})
+			for range 128 {
+				var batch, streamOutput bytes.Buffer
+				must((&exporter.JSONExporter{}).Export(&batch, c.Entries, c.Mapping))
+				outcomes[batch.String()] = struct{}{}
+				stream := exporter.NewJSONStream(&streamOutput, c.Mapping)
+				for _, entry := range c.Entries {
+					must(stream.WriteEntry(entry))
+				}
+				must(stream.Close())
+				outcomes[streamOutput.String()] = struct{}{}
+			}
+			for outcome := range outcomes {
+				c.JSONOutcomes = append(c.JSONOutcomes, outcome)
+			}
+			sort.Strings(c.JSONOutcomes)
+			if len(c.JSONOutcomes) != 2 {
+				must(fmt.Errorf("expected both Go mapping-collision winners, got %d", len(c.JSONOutcomes)))
+			}
+			c.JSON = ""
+		}
 		c.CSV = v.String()
 		c.Notices = n.String()
 	}
@@ -82,11 +111,22 @@ func main() {
 		if !bytes.Equal(actual, encoded) {
 			must(fmt.Errorf("export fixture stale"))
 		}
-		fmt.Println("PASS export oracle (5 cases)")
+		fmt.Printf("PASS export oracle (%d cases)\n", len(cases))
 		return
 	}
 	must(os.WriteFile(path, encoded, 0600))
 }
+
+// Vault entries store data as JSON. Loading that data into Go's map[string]any
+// converts every JSON number, including nested integers, to float64 before
+// export. Construct this case through encoding/json so the fixture records the
+// production loader's numeric semantics rather than Go's direct int semantics.
+func decodeEntries(raw string) []exporter.ExportEntry {
+	var entries []exporter.ExportEntry
+	must(json.Unmarshal([]byte(raw), &entries))
+	return entries
+}
+
 func must(err error) {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

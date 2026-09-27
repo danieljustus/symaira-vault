@@ -79,7 +79,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/syncgen/main.go"
     ],
-    "generator_digest": "546d29c249f2ed51474fffa60b1d0703ae67824e208968c68459cca1a0075b23"
+    "generator_digest": "e11de63e162123bcaf8d8d815c6fc7c00f8f9beb53ce00190c4e31eb70fec422"
   },
   "cases": [
     {
@@ -253,6 +253,46 @@
             "data": "aWRlbnRpdHk="
           }
         ],
+        "backslash_member_rejected": true,
+        "exclude_git_archive_members": [
+          {
+            "path": "config.yaml",
+            "mode": 384,
+            "size": 19,
+            "sha256": "db3fa9549a36b81aaec2a55f25b6eb1e36adac03081ae5d9f8926b359ca76595",
+            "data": "dmF1bHRfZGlyOiBmaXh0dXJlCg=="
+          },
+          {
+            "path": "entries",
+            "mode": 448,
+            "size": 0,
+            "sha256": ""
+          },
+          {
+            "path": "entries/item.age",
+            "mode": 384,
+            "size": 10,
+            "sha256": "305531dcc50ebca31cf1d5b31e9fc76ed51f66b3b6dd5a030c6539ae6532f979",
+            "data": "Y2lwaGVydGV4dA=="
+          },
+          {
+            "path": "identity.age",
+            "mode": 384,
+            "size": 8,
+            "sha256": "689f6a627384c7dcb2dcc1487e540223e77bdf9dcd0d8be8a326eda65b0ce9a4",
+            "data": "aWRlbnRpdHk="
+          }
+        ],
+        "existing_directory_mode_preserved": true,
+        "existing_file_mode_preserved": true,
+        "readonly_file_write_denied": true,
+        "restore_path_rejections": {
+          "..\\outside": true,
+          "C:drive-relative": true,
+          "a/./b": true,
+          "a//b": true
+        },
+        "restore_symlinked_parent_rejected": true,
         "restored_files": [
           {
             "path": "config.yaml",
@@ -275,7 +315,8 @@
             "sha256": "689f6a627384c7dcb2dcc1487e540223e77bdf9dcd0d8be8a326eda65b0ce9a4",
             "data": "aWRlbnRpdHk="
           }
-        ]
+        ],
+        "symlink_root_backup_empty": true
       }
     },
     {

@@ -1,0 +1,44 @@
+{
+  "oracle": {
+    "commit": "147e2771a43d2e223c0ff1fb598e077183b05776",
+    "binary": "go build with AppVersion=dev",
+    "go_version": "go1.27.1",
+    "captured": "2026-09-27",
+    "source_files": [
+      "cmd/admin/update.go",
+      "internal/update/checker.go",
+      "internal/cli/version.go"
+    ],
+    "source_digest": "c7bd94b10342b3a99f11b2744ecb073d2d2077a6f6155a2896eddeedf039c861"
+  },
+  "cases": [
+    {
+      "id": "apply-dry-run-dev-text",
+      "argv": ["update", "apply", "--dry-run"],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+    },
+    {
+      "id": "apply-dry-run-dev-json",
+      "argv": ["update", "apply", "--dry-run", "--json"],
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"\",\n  \"old_version\": \"dev\",\n  \"new_version\": \"dev\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "apply-dry-run-dev-global-json",
+      "argv": ["--output", "json", "update", "apply", "--dry-run"],
+      "exit": 0,
+      "stdout": "{\n  \"method\": \"\",\n  \"old_version\": \"dev\",\n  \"new_version\": \"dev\",\n  \"binary_path\": \"\",\n  \"dry_run\": true\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "apply-dry-run-dev-force",
+      "argv": ["update", "apply", "--dry-run", "--force"],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+    }
+  ]
+}

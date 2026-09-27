@@ -26,6 +26,7 @@ pub struct ImportOptions {
     pub skip_existing: bool,
     pub overwrite: bool,
     pub mapping: String,
+    pub quarantine_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,6 +102,9 @@ where
         return Err("--skip-existing and --overwrite cannot be used together".into());
     }
     let format = resolve_format(options.format.as_deref(), &options.source)?;
+    if options.quarantine_id.is_some() && !options.prefix.is_empty() {
+        return Err("--quarantine and --prefix cannot be used together".into());
+    }
     let mapping = crate::export_commands::parse_mapping(&options.mapping)?;
     let metadata =
         fs::metadata(&options.source).map_err(|error| format!("stat import source: {error}"))?;
@@ -137,8 +141,13 @@ where
 
     let mut imported = 0;
     let mut skipped = 0;
+    let prefix = options
+        .quarantine_id
+        .as_deref()
+        .map(|id| format!("quarantine/{id}"))
+        .unwrap_or_else(|| options.prefix.clone());
     for entry in entries {
-        let path = importer::apply_prefix(&options.prefix, &entry.path);
+        let path = importer::apply_prefix(&prefix, &entry.path);
         if path.is_empty() {
             skipped += 1;
             continue;
@@ -176,6 +185,22 @@ where
         imported,
         skipped,
     })
+}
+
+pub fn generate_import_id() -> Result<String, String> {
+    let date = time::OffsetDateTime::now_utc().date();
+    let mut random = [0_u8; 4];
+    getrandom::fill(&mut random).map_err(|error| format!("generate import ID: {error}"))?;
+    let suffix = random
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok(format!(
+        "import-{:04}{:02}{:02}-{suffix}",
+        date.year(),
+        u8::from(date.month()),
+        date.day()
+    ))
 }
 
 fn format_import_error(error: importer::ImportError) -> String {

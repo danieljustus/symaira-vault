@@ -99,7 +99,6 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
 #[command(
     name = "symvault",
     about = "Symaira Vault is a Go CLI password manager",
-    disable_help_subcommand = true,
     disable_version_flag = true
 )]
 struct Cli {
@@ -437,6 +436,8 @@ enum Command {
         overwrite: bool,
         #[arg(long, default_value = "")]
         mapping: String,
+        #[arg(long)]
+        quarantine: bool,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -463,8 +464,8 @@ enum Command {
     /// Check for Symaira Vault updates or show installation-method info.
     Update {
         /// Catch-all: cobra Find dispatches on the first non-flag word
-        /// (`info`); unknown words reach the runner for byte-exact errors.
-        #[arg(value_name = "COMMAND", num_args = 0..)]
+        /// (`info`); check flags are validated by the runner.
+        #[arg(value_name = "COMMAND", num_args = 0.., allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
     /// Manage vault authentication and session status.
@@ -1939,6 +1940,7 @@ fn run_cli() -> ExitCode {
             skip_existing,
             overwrite,
             mapping,
+            quarantine,
         }) => {
             // cobra Find: only the FIRST non-flag word can name a
             // subcommand, so `import file.csv review` is a parent call
@@ -1970,6 +1972,7 @@ fn run_cli() -> ExitCode {
                     skip_existing,
                     overwrite,
                     &mapping,
+                    quarantine,
                     cli.quiet,
                 )
             }
@@ -2063,9 +2066,12 @@ fn run_cli() -> ExitCode {
             dry_run,
             cli.quiet,
         ),
-        Some(Command::Update { args }) => {
-            update_commands::run(&args, cli.output.as_deref().unwrap_or("text"), cli.json)
-        }
+        Some(Command::Update { args }) => update_commands::run(
+            &args,
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -2326,13 +2332,14 @@ fn run_doctor(
     quick: bool,
     output_format: Option<&str>,
     json: bool,
-    _quiet: bool,
+    quiet: bool,
 ) -> ExitCode {
     let vault_dir =
         resolve_vault(explicit_vault, profile).unwrap_or_else(|_| PathResolver::new().data_dir);
     let opts = doctor_commands::DoctorOptions {
         no_network,
         quick,
+        quiet,
         only: only.unwrap_or_default(),
         exclude: exclude.unwrap_or_default(),
     };
@@ -4087,12 +4094,24 @@ fn run_import(
     skip_existing: bool,
     overwrite: bool,
     mapping: &str,
+    quarantine: bool,
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
+        if quarantine && !prefix.is_empty() {
+            return Err("--quarantine and --prefix cannot be used together".into());
+        }
+        let quarantine_id = if quarantine {
+            Some(import_commands::generate_import_id()?)
+        } else {
+            None
+        };
+        if !quiet && let Some(import_id) = quarantine_id.as_deref() {
+            println!("Quarantine import ID: {import_id}");
+        }
         let result = import_commands::run_import(
             &vault,
             &identity,
@@ -4104,6 +4123,7 @@ fn run_import(
                 skip_existing,
                 overwrite,
                 mapping: mapping.to_owned(),
+                quarantine_id,
             },
             write_commands::import_fields,
             write_commands::replace_fields,

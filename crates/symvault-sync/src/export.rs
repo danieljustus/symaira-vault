@@ -61,7 +61,7 @@ impl<'a, W: Write> JsonStream<'a, W> {
             .map(|(key, value)| (self.mapping.get(key).unwrap_or(key), value))
             .collect();
         let row = serde_json::json!({"data": data, "path": entry.path});
-        let rendered = serde_json::to_string_pretty(&row)?;
+        let rendered = go_json_numbers(&serde_json::to_string_pretty(&row)?);
         for (index, line) in rendered.lines().enumerate() {
             if index > 0 {
                 self.output.write_all(b"\n")?;
@@ -77,6 +77,48 @@ impl<'a, W: Write> JsonStream<'a, W> {
             .write_all(if self.started { b"\n]\n" } else { b"[]" })?;
         Ok(())
     }
+}
+
+fn go_json_numbers(rendered: &str) -> String {
+    let bytes = rendered.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let (mut index, mut in_string, mut escaped) = (0, false, false);
+    while index < bytes.len() {
+        if in_string {
+            let byte = bytes[index];
+            output.push(byte);
+            index += 1;
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+        } else if bytes[index] == b'"' {
+            output.push(bytes[index]);
+            index += 1;
+            in_string = true;
+        } else if bytes[index] == b'-' || bytes[index].is_ascii_digit() {
+            let start = index;
+            while bytes
+                .get(index)
+                .is_some_and(|byte| !matches!(*byte, b',' | b']' | b'}' | b' ' | b'\n' | b'\t'))
+            {
+                index += 1;
+            }
+            let token = std::str::from_utf8(&bytes[start..index]).expect("JSON number is ASCII");
+            // Go loads stored entry data into map[string]any, which decodes
+            // every JSON number as float64 before json.Marshal, including
+            // integer tokens nested in arrays and objects.
+            let value: f64 = token.parse().expect("serde_json emitted a valid number");
+            output.extend_from_slice(go_json_float(value).as_bytes());
+        } else {
+            output.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(output).expect("JSON output is UTF-8")
 }
 
 /// Writes the Go CSV export shape: path first, then sorted non-attachment
@@ -139,7 +181,9 @@ fn value_string(value: &Value) -> String {
         Value::String(value) => value.clone(),
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
+        // The Go loader decodes all stored JSON numbers to float64 before
+        // fmt.Sprintf("%v", value), even when the source token is an integer.
+        Value::Number(value) => go_float(value.as_f64().expect("finite JSON number")),
         Value::Array(values) => format!(
             "[{}]",
             values
@@ -156,6 +200,38 @@ fn value_string(value: &Value) -> String {
                 .collect::<Vec<_>>()
                 .join(" ")
         ),
+    }
+}
+
+fn go_float(value: f64) -> String {
+    go_float_with_exponent_range(value, -4, 6, true)
+}
+
+fn go_json_float(value: f64) -> String {
+    go_float_with_exponent_range(value, -6, 21, false)
+}
+
+fn go_float_with_exponent_range(
+    value: f64,
+    min_exponent: i32,
+    max_exponent: i32,
+    pad_exponent: bool,
+) -> String {
+    if value == 0.0 && value.is_sign_negative() {
+        return "-0".to_owned();
+    }
+    let scientific = format!("{value:e}");
+    let (mantissa, exponent) = scientific.split_once('e').expect("scientific float");
+    let exponent: i32 = exponent.parse().expect("float exponent");
+    if !(min_exponent..max_exponent).contains(&exponent) {
+        let sign = if exponent < 0 { "-" } else { "+" };
+        if pad_exponent {
+            format!("{mantissa}e{sign}{:02}", exponent.abs())
+        } else {
+            format!("{mantissa}e{sign}{}", exponent.abs())
+        }
+    } else {
+        value.to_string()
     }
 }
 

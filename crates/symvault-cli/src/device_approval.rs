@@ -27,8 +27,12 @@
 //!   containing one of those three characters.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::io::Read;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -47,6 +51,8 @@ const TOKEN_PREFIX_LEN: usize = 4;
 const VAULT_SUBDIR: &str = ".symvault";
 /// The store file inside that subdirectory.
 const STORE_FILE: &str = "device-sessions.json";
+#[cfg(unix)]
+static ROOTED_TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// One enrolled device session, as Go's `json.MarshalIndent` lays it out: field
 /// order and the `name,omitempty` tag are part of the on-disk contract.
@@ -58,6 +64,7 @@ pub(crate) struct DeviceSession {
     pub name: String,
     pub public_key: String,
     pub created_at: String,
+    #[serde(default = "zero_time_string", deserialize_with = "deserialize_expiry")]
     pub expires_at: String,
     pub revoked: bool,
 }
@@ -133,29 +140,7 @@ impl DeviceSessionStore {
         let Some(data) = safeio::read(path).map_err(|error| error.to_string())? else {
             return self.save();
         };
-        let raw: BTreeMap<String, Option<DeviceSession>> = serde_json::from_slice(&data)
-            .map_err(|error| format!("parse device sessions: {error}"))?;
-
-        // Migrate legacy entries keyed by the raw bearer token (from before
-        // tokens were hashed at rest) onto hash-keyed entries. A legacy key is
-        // the base32 session token itself, which never looks like a SHA-256 hex
-        // digest.
-        let mut migrated = false;
-        let mut sessions = BTreeMap::new();
-        for (key, session) in raw {
-            let Some(mut session) = session else {
-                continue;
-            };
-            if looks_like_sha256_hex(&key) {
-                sessions.insert(key, session);
-                continue;
-            }
-            if session.prefix.is_empty() {
-                session.prefix = token_prefix(&key);
-            }
-            sessions.insert(hash_token(&key), session);
-            migrated = true;
-        }
+        let (sessions, migrated) = decode_sessions(&data)?;
         self.sessions = sessions;
         if migrated { self.save() } else { Ok(()) }
     }
@@ -199,6 +184,279 @@ impl DeviceSessionStore {
     }
 }
 
+/// Loads the doctor's approval summary through a held `.symvault` directory
+/// descriptor. This prevents a parent swap from redirecting either reads or
+/// legacy-key migration writes after the directory has been acquired.
+#[cfg(unix)]
+pub(crate) fn load_for_doctor(vault_dir: &Path) -> Result<Vec<DeviceSession>, String> {
+    if vault_dir.as_os_str().is_empty() {
+        return Ok(Vec::new());
+    }
+    let path = vault_dir.join(VAULT_SUBDIR).join(STORE_FILE);
+    let parent = open_approval_store_directory(vault_dir, &path)?;
+    load_sessions_from_parent(&parent, &path)
+}
+
+#[cfg(unix)]
+fn load_sessions_from_parent(
+    parent: &std::fs::File,
+    path: &Path,
+) -> Result<Vec<DeviceSession>, String> {
+    let bytes = match read_at(parent, STORE_FILE, path)? {
+        Some(bytes) => bytes,
+        None => {
+            create_if_missing_at(parent, STORE_FILE, path, b"{}")?;
+            read_at(parent, STORE_FILE, path)?.ok_or_else(|| {
+                format!(
+                    "approval device store disappeared after create: {}",
+                    path.display()
+                )
+            })?
+        }
+    };
+    let (sessions, migrated) =
+        decode_sessions(&bytes).map_err(|error| format!("load device session store: {error}"))?;
+    if migrated {
+        let serialized = serde_json::to_vec_pretty(&sessions)
+            .map_err(|error| format!("marshal device sessions: {error}"))?;
+        write_atomic_at(parent, STORE_FILE, path, &serialized)?;
+    }
+    Ok(sessions.into_values().collect())
+}
+
+#[cfg(not(unix))]
+pub(crate) fn load_for_doctor(vault_dir: &Path) -> Result<Vec<DeviceSession>, String> {
+    let store = DeviceSessionStore::new(vault_dir)?;
+    Ok(store.list())
+}
+
+fn decode_sessions(data: &[u8]) -> Result<(BTreeMap<String, DeviceSession>, bool), String> {
+    let raw: BTreeMap<String, Option<DeviceSession>> =
+        serde_json::from_slice(data).map_err(|error| format!("parse device sessions: {error}"))?;
+    let mut migrated = false;
+    let mut sessions = BTreeMap::new();
+    for (key, session) in raw {
+        let Some(mut session) = session else {
+            continue;
+        };
+        if looks_like_sha256_hex(&key) {
+            sessions.insert(key, session);
+            continue;
+        }
+        if session.prefix.is_empty() {
+            session.prefix = token_prefix(&key);
+        }
+        sessions.insert(hash_token(&key), session);
+        migrated = true;
+    }
+    Ok((sessions, migrated))
+}
+
+#[cfg(unix)]
+fn open_approval_store_directory(
+    vault_dir: &Path,
+    display: &Path,
+) -> Result<std::fs::File, String> {
+    use rustix::fs::{Mode, OFlags, fsync, mkdirat, open, openat};
+
+    let root = open(
+        vault_dir,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|error| format!("open approval store root {}: {error}", vault_dir.display()))?;
+    let parent = match openat(
+        &root,
+        VAULT_SUBDIR,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(parent) => parent,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if let Err(error) = mkdirat(&root, VAULT_SUBDIR, Mode::from_raw_mode(0o700))
+                && error.kind() != io::ErrorKind::AlreadyExists
+            {
+                return Err(format!(
+                    "create approval store directory {}: {error}",
+                    display.display()
+                ));
+            }
+            fsync(&root).map_err(|error| {
+                format!("sync approval store root {}: {error}", vault_dir.display())
+            })?;
+            openat(
+                &root,
+                VAULT_SUBDIR,
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::empty(),
+            )
+            .map_err(|error| {
+                format!(
+                    "open approval store directory {}: {error}",
+                    display.display()
+                )
+            })?
+        }
+        Err(error) => {
+            return Err(format!(
+                "open approval store directory {}: {error}",
+                display.display()
+            ));
+        }
+    };
+    Ok(std::fs::File::from(parent))
+}
+
+#[cfg(unix)]
+fn read_at(parent: &std::fs::File, name: &str, display: &Path) -> Result<Option<Vec<u8>>, String> {
+    use rustix::fs::{FileType, Mode, OFlags, fstat, openat};
+    let descriptor = match openat(
+        parent,
+        name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(descriptor) => descriptor,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "read approval device store {}: {error}",
+                display.display()
+            ));
+        }
+    };
+    let metadata = fstat(&descriptor)
+        .map_err(|error| format!("stat approval device store {}: {error}", display.display()))?;
+    if !FileType::from_raw_mode(metadata.st_mode).is_file() {
+        return Err(format!(
+            "approval device store is not a regular file: {}",
+            display.display()
+        ));
+    }
+    let mut file = std::fs::File::from(descriptor);
+    let mut bytes = Vec::new();
+    Read::by_ref(&mut file)
+        .take(symvault_store::MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("read approval device store {}: {error}", display.display()))?;
+    if bytes.len() as u64 > symvault_store::MAX_FILE_BYTES {
+        return Err(format!(
+            "approval device store exceeds {} bytes: {}",
+            symvault_store::MAX_FILE_BYTES,
+            display.display()
+        ));
+    }
+    Ok(Some(bytes))
+}
+
+#[cfg(unix)]
+fn write_atomic_at(
+    parent: &std::fs::File,
+    name: &str,
+    display: &Path,
+    data: &[u8],
+) -> Result<(), String> {
+    use rustix::fs::{AtFlags, Mode, OFlags, fsync, openat, renameat, unlinkat};
+    let sequence = ROOTED_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temporary = format!(".{name}.{}.{}.tmp", std::process::id(), sequence);
+    let descriptor = openat(
+        parent,
+        temporary.as_str(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    )
+    .map_err(|error| {
+        format!(
+            "create approval device store temporary for {}: {error}",
+            display.display()
+        )
+    })?;
+    let mut file = std::fs::File::from(descriptor);
+    let result = (|| {
+        file.write_all(data).map_err(|error| {
+            format!("write approval device store {}: {error}", display.display())
+        })?;
+        file.sync_all().map_err(|error| {
+            format!("sync approval device store {}: {error}", display.display())
+        })?;
+        renameat(parent, temporary.as_str(), parent, name).map_err(|error| {
+            format!(
+                "publish approval device store {}: {error}",
+                display.display()
+            )
+        })?;
+        fsync(parent).map_err(|error| {
+            format!(
+                "sync approval store directory {}: {error}",
+                display.display()
+            )
+        })?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = unlinkat(parent, temporary.as_str(), AtFlags::empty());
+    }
+    result
+}
+
+#[cfg(unix)]
+fn create_if_missing_at(
+    parent: &std::fs::File,
+    name: &str,
+    display: &Path,
+    data: &[u8],
+) -> Result<bool, String> {
+    use rustix::fs::{AtFlags, Mode, OFlags, fsync, linkat, openat, unlinkat};
+    let sequence = ROOTED_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temporary = format!(".{name}.{}.{}.tmp", std::process::id(), sequence);
+    let descriptor = openat(
+        parent,
+        temporary.as_str(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    )
+    .map_err(|error| {
+        format!(
+            "create approval device store temporary for {}: {error}",
+            display.display()
+        )
+    })?;
+    let mut file = std::fs::File::from(descriptor);
+    let result = (|| {
+        file.write_all(data).map_err(|error| {
+            format!("write approval device store {}: {error}", display.display())
+        })?;
+        file.sync_all().map_err(|error| {
+            format!("sync approval device store {}: {error}", display.display())
+        })?;
+        match linkat(parent, temporary.as_str(), parent, name, AtFlags::empty()) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+            Err(error) => Err(format!(
+                "publish approval device store {}: {error}",
+                display.display()
+            )),
+        }
+    })();
+    let cleanup = unlinkat(parent, temporary.as_str(), AtFlags::empty()).map_err(|error| {
+        format!(
+            "remove approval device store temporary for {}: {error}",
+            display.display()
+        )
+    });
+    let created = result?;
+    cleanup?;
+    if created {
+        fsync(parent).map_err(|error| {
+            format!(
+                "sync approval store directory {}: {error}",
+                display.display()
+            )
+        })?;
+    }
+    Ok(created)
+}
+
 /// Go `pairing.hashToken`, which delegates to `internal/mcp/auth.SHA256Hex`.
 fn hash_token(raw_token: &str) -> String {
     sha256_hex(raw_token.as_bytes())
@@ -219,11 +477,24 @@ fn looks_like_sha256_hex(value: &str) -> bool {
 
 /// Go `time.Now().After(expiresAt)` for an RFC3339 timestamp read from the
 /// store.
-fn is_expired(expires_at: &str) -> bool {
+pub(crate) fn is_expired(expires_at: &str) -> bool {
     match OffsetDateTime::parse(expires_at, &Rfc3339) {
         Ok(expires) => OffsetDateTime::now_utc() > expires,
         Err(_) => false,
     }
+}
+
+fn deserialize_expiry<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
+    Ok(value)
+}
+
+fn zero_time_string() -> String {
+    "0001-01-01T00:00:00Z".to_owned()
 }
 
 /// Go's `time.Time.Format("2006-01-02 15:04")`: the stored wall clock as
@@ -355,6 +626,82 @@ pub(crate) fn enroll(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn doctor_migration_stays_on_acquired_parent_after_symlink_swap() {
+        use std::{fs, os::unix::fs::symlink};
+
+        let vault = tempfile::TempDir::new().expect("vault");
+        let external = tempfile::TempDir::new().expect("external target");
+        let original = vault.path().join(VAULT_SUBDIR);
+        fs::create_dir(&original).unwrap();
+        let raw_token = "SYNTHETIC-LEGACY-DEVICE-TOKEN";
+        let mut original_session = serde_json::Map::new();
+        original_session.insert(
+            raw_token.to_owned(),
+            serde_json::json!({
+                "prefix": "",
+                "device_id": "original-device",
+                "public_key": "synthetic-key",
+                "created_at": "2026-01-01T00:00:00Z",
+                "expires_at": "2999-01-01T00:00:00Z",
+                "revoked": false
+            }),
+        );
+        let original_bytes = serde_json::to_vec(&original_session).unwrap();
+        let external_bytes = br#"{"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb":{"prefix":"OUTS","device_id":"outside-device","public_key":"outside-key","created_at":"2026-01-01T00:00:00Z","expires_at":"2999-01-01T00:00:00Z","revoked":false}}"#;
+        fs::write(original.join(STORE_FILE), &original_bytes).unwrap();
+        fs::write(external.path().join(STORE_FILE), external_bytes).unwrap();
+
+        let display = original.join(STORE_FILE);
+        let parent = open_approval_store_directory(vault.path(), &display).unwrap();
+        let retained = vault.path().join(".symvault-retained");
+        fs::rename(&original, &retained).unwrap();
+        symlink(external.path(), &original).unwrap();
+
+        let sessions = load_sessions_from_parent(&parent, &display).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].device_id, "original-device");
+        let migrated = fs::read(retained.join(STORE_FILE)).unwrap();
+        assert!(
+            !migrated
+                .windows(raw_token.len())
+                .any(|window| window == raw_token.as_bytes())
+        );
+        assert!(
+            migrated
+                .windows(hash_token(raw_token).len())
+                .any(|window| window == hash_token(raw_token).as_bytes())
+        );
+        assert_eq!(
+            fs::read(external.path().join(STORE_FILE)).unwrap(),
+            external_bytes
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn doctor_create_if_missing_keeps_concurrent_session_file() {
+        let vault = tempfile::TempDir::new().expect("vault");
+        std::fs::create_dir(vault.path().join(VAULT_SUBDIR)).unwrap();
+        let display = store_file(vault.path());
+        let parent = open_approval_store_directory(vault.path(), &display).unwrap();
+        assert_eq!(read_at(&parent, STORE_FILE, &display).unwrap(), None);
+
+        // A concurrent store publishes a populated file after our missing read.
+        let winner = br#"{"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc":{"prefix":"WINR","device_id":"winner-device","public_key":"synthetic-key","created_at":"2026-01-01T00:00:00Z","expires_at":"2999-01-01T00:00:00Z","revoked":false}}"#;
+        write_atomic_at(&parent, STORE_FILE, &display, winner).unwrap();
+
+        assert!(!create_if_missing_at(&parent, STORE_FILE, &display, b"{}").unwrap());
+        let winner_bytes = read_at(&parent, STORE_FILE, &display)
+            .unwrap()
+            .expect("concurrent winner remains present");
+        let (sessions, migrated) = decode_sessions(&winner_bytes).unwrap();
+        assert!(!migrated);
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions.values().next().unwrap().device_id, "winner-device");
+    }
 
     fn store_file(vault: &Path) -> PathBuf {
         vault.join(VAULT_SUBDIR).join(STORE_FILE)
@@ -500,8 +847,14 @@ mod tests {
         );
         assert_eq!(display_minutes("nonsense"), "nonsense");
         assert!(is_expired("2000-01-01T00:00:00Z"));
+        assert!(is_expired(&zero_time_string()));
         assert!(!is_expired("2999-01-01T00:00:00Z"));
-        assert!(!is_expired("nonsense"));
+    }
+
+    #[test]
+    fn malformed_expiry_is_rejected_during_store_deserialization() {
+        let input = br#"{"token":{"prefix":"TOKN","device_id":"device","public_key":"key","created_at":"2026-01-01T00:00:00Z","expires_at":"not-a-time","revoked":false}}"#;
+        assert!(serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(input).is_err());
     }
 
     #[test]

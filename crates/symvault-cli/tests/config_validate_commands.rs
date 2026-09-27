@@ -197,12 +197,11 @@ fn config_validate_default_path_and_fix_flag() {
     assert_eq!(out.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&out.stdout).contains("Configuration is valid"));
 
-    // --fix is rejected as unsupported
+    // Go only starts interactive repair when stdin is a TTY. The test runner
+    // supplies non-terminal stdin, so `--fix` follows ordinary validation.
     let out_fix = run_cli(&home.0, &["config", "validate", "--fix"]);
-    assert_eq!(out_fix.status.code(), Some(6));
-    assert!(
-        String::from_utf8_lossy(&out_fix.stderr).contains("config validate --fix is not supported")
-    );
+    assert_eq!(out_fix.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out_fix.stdout).contains("Configuration is valid"));
 }
 
 #[test]

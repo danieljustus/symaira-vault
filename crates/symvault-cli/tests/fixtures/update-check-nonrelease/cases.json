@@ -1,0 +1,53 @@
+{
+  "oracle": {
+    "commit": "ff50daf11036417e75e37dca5522a8934bdedb06",
+    "binary": "go run .",
+    "captured": "2026-09-27",
+    "generated_on": "darwin",
+    "source_files": [
+      "cmd/admin/update.go",
+      "internal/update/checker.go",
+      "internal/cli/version.go"
+    ],
+    "source_digest": "c7bd94b10342b3a99f11b2744ecb073d2d2077a6f6155a2896eddeedf039c861",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "env": "throwaway HOME, SYMVAULT_* unset, Go AppVersion=dev"
+  },
+  "cases": [
+    {
+      "id": "check-dev-text",
+      "argv": ["update", "check"],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+    },
+    {
+      "id": "check-dev-json-flag",
+      "argv": ["update", "check", "--json"],
+      "exit": 0,
+      "stdout": "{\n  \"current_version\": \"dev\",\n  \"checkable\": false,\n  \"update_available\": false\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "check-dev-output-json",
+      "argv": ["--output", "json", "update", "check"],
+      "exit": 0,
+      "stdout": "{\n  \"current_version\": \"dev\",\n  \"checkable\": false,\n  \"update_available\": false\n}\n",
+      "stderr": ""
+    },
+    {
+      "id": "check-dev-quiet",
+      "argv": ["update", "check", "--quiet"],
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "id": "check-dev-force",
+      "argv": ["update", "check", "--force"],
+      "exit": 0,
+      "stdout": "",
+      "stderr": "Update checks are only available for stable release builds. Current version: dev\n"
+    }
+  ]
+}

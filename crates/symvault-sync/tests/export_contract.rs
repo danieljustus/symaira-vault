@@ -10,7 +10,11 @@ struct Case {
     name: String,
     entries: Vec<ExportEntry>,
     mapping: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    float_fields: Vec<String>,
     json: String,
+    #[serde(default)]
+    json_outcomes: Vec<String>,
     csv: String,
     notices: String,
 }
@@ -18,25 +22,52 @@ struct Case {
 fn export_matches_production_go_bytes_and_attachment_notices() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/sync/export.json")).unwrap();
-    assert_eq!(fixture.cases.len(), 5);
+    assert_eq!(fixture.cases.len(), 8);
     for case in fixture.cases {
+        let mut entries = case.entries;
+        for key in case.float_fields {
+            // encoding/json writes integral float64 values without a decimal
+            // marker; carry the source type from the generated Go case.
+            let number = if key == "negative_zero" {
+                -0.0
+            } else {
+                entries[0].data[&key].as_f64().expect("Go float fixture")
+            };
+            entries[0].data.insert(
+                key,
+                serde_json::Number::from_f64(number)
+                    .expect("finite Go float")
+                    .into(),
+            );
+        }
         let mapping = case.mapping.unwrap_or_default();
         let (mut json, mut csv, mut notices) = (Vec::new(), Vec::new(), Vec::new());
-        export::json_with_mapping(&mut json, &case.entries, &mapping).unwrap();
-        export::csv_with_mapping(&mut csv, &case.entries, &mapping, Some(&mut notices)).unwrap();
+        export::json_with_mapping(&mut json, &entries, &mapping).unwrap();
+        export::csv_with_mapping(&mut csv, &entries, &mapping, Some(&mut notices)).unwrap();
         let mut streamed = Vec::new();
         let mut stream = export::JsonStream::new(&mut streamed, &mapping);
-        for entry in &case.entries {
+        for entry in &entries {
             stream.write_entry(entry).unwrap();
         }
         stream.finish().unwrap();
-        assert_eq!(
-            streamed,
-            case.json.as_bytes(),
-            "{} streamed JSON",
-            case.name
-        );
-        assert_eq!(json, case.json.as_bytes(), "{} JSON", case.name);
+        if case.json_outcomes.is_empty() {
+            assert_eq!(
+                streamed,
+                case.json.as_bytes(),
+                "{} streamed JSON",
+                case.name
+            );
+            assert_eq!(json, case.json.as_bytes(), "{} JSON", case.name);
+        } else {
+            assert!(case.json.is_empty(), "{} has exact JSON bytes", case.name);
+            assert_eq!(streamed, json, "{} batch/stream JSON", case.name);
+            let actual = String::from_utf8(json).expect("Rust JSON is UTF-8");
+            assert!(
+                case.json_outcomes.contains(&actual),
+                "{} JSON was not a Go-observed collision outcome: {actual}",
+                case.name
+            );
+        }
         assert_eq!(csv, case.csv.as_bytes(), "{} CSV", case.name);
         assert_eq!(notices, case.notices.as_bytes(), "{} notices", case.name);
     }

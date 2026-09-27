@@ -126,6 +126,87 @@ pub fn create(
     Ok((record, raw_token))
 }
 
+/// Imports an existing legacy MCP token into the scoped registry when it is
+/// empty. Mirrors Go's `LoadTokenSystem` migration without ever persisting the
+/// raw token. Returns `false` when another registry entry already exists.
+pub fn import_legacy(
+    root: &Path,
+    raw_token: &str,
+    now: OffsetDateTime,
+) -> Result<Option<String>, StoreError> {
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    entries.retain(|_, entry| !entry.hash.is_empty());
+    if !entries.is_empty() {
+        return Ok(None);
+    }
+
+    let prefix = raw_token
+        .get(..4)
+        .ok_or_else(|| StoreError::Config("legacy MCP token is shorter than 4 bytes".into()))?;
+    let mut id_bytes = [0_u8; 4];
+    getrandom::fill(&mut id_bytes)
+        .map_err(|error| StoreError::Config(format!("migrate legacy token: {error}")))?;
+    let id = format!(
+        "tok-{:04}{:02}{:02}-{}",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        encode_hex(&id_bytes)
+    );
+    let record = TokenRecord {
+        id: id.clone(),
+        label: "legacy (auto-migrated, unscoped)".into(),
+        hash: sha256_hex(raw_token.as_bytes()),
+        prefix: prefix.into(),
+        allowed_tools: Some(vec!["*".into()]),
+        tool_registry_hash: String::new(),
+        agent_name: "legacy".into(),
+        created_at: go_rfc3339(now),
+        expires_at: None,
+        last_used_at: None,
+        revoked: false,
+        revoked_at: None,
+        refresh_token_hash: String::new(),
+        refresh_expires_at: None,
+    };
+    entries.insert(id.clone(), record);
+    write(&root_cap, &target, &entries)?;
+    Ok(Some(id))
+}
+
+/// Creates Go's fresh legacy-token registry entry without retaining the raw
+/// token. This is the final on-disk state of `LoadOrCreateToken` followed by
+/// legacy migration; atomic publication keeps the registry private and valid.
+pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<Option<String>, StoreError> {
+    use zeroize::Zeroize;
+
+    let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    entries.retain(|_, entry| !entry.hash.is_empty());
+    if !entries.is_empty() {
+        return Ok(None);
+    }
+
+    let request = NewToken {
+        label: "legacy (auto-migrated, unscoped)",
+        allowed_tools: vec!["*".to_owned()],
+        agent_name: "legacy",
+        ttl: None,
+        tool_registry_hash: "",
+    };
+    let (record, mut raw_token) = new_record(&request, now)?;
+    raw_token.zeroize();
+    let id = record.id.clone();
+    entries.insert(id.clone(), record);
+    write(&root_cap, &target, &entries)?;
+    Ok(Some(id))
+}
+
 /// Revokes one token owned by `agent_name`. Returns `false` when no such
 /// non-revoked token exists (unknown agent, unknown token ID, or a token
 /// already revoked) — the caller renders Go's exact "not found or already
@@ -386,7 +467,7 @@ fn go_rfc3339(value: OffsetDateTime) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, sync::mpsc, time::Duration};
 
     fn vault_dir() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
@@ -402,6 +483,45 @@ mod tests {
             ttl: Some(time::Duration::hours(24)),
             tool_registry_hash: "",
         }
+    }
+
+    fn assert_waits_for_write_lock(
+        operation: impl FnOnce(&Path) -> Result<Option<String>, StoreError> + Send + 'static,
+    ) {
+        let (_root, path) = vault_dir();
+        let root_cap = open_root(&path).expect("open isolated vault");
+        let held_lock = crate::open_root_write_lock(&root_cap, &path).expect("hold vault lock");
+        let worker_path = path.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            started_tx.send(()).expect("signal worker start");
+            done_tx
+                .send(operation(&worker_path).is_ok())
+                .expect("send operation result");
+        });
+
+        started_rx.recv().expect("worker started");
+        assert!(
+            done_rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "registry mutation must wait for the existing writer lock"
+        );
+        drop(held_lock);
+        assert!(
+            done_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("mutation completes after lock release")
+        );
+        assert!(path.join(TOKEN_REGISTRY_FILE).is_file());
+    }
+
+    #[test]
+    fn legacy_registry_mutations_wait_for_existing_writer() {
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        assert_waits_for_write_lock(move |path| {
+            import_legacy(path, "0123456789abcdef0123456789abcdef", now)
+        });
+        assert_waits_for_write_lock(move |path| create_legacy(path, now));
     }
 
     #[test]

@@ -1,4 +1,6 @@
 use base64::Engine;
+#[cfg(unix)]
+use flate2::read::GzDecoder;
 use flate2::{Compression, write::GzEncoder};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -458,6 +460,103 @@ fn go_generated_import_export_and_intake_cases_match_rust() {
 }
 
 #[test]
+fn backup_exclude_git_matches_pinned_go_archive_members() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let expected = archive_case.expected["exclude_git_archive_members"]
+        .as_array()
+        .unwrap();
+    assert!(!expected.is_empty());
+    assert!(
+        expected
+            .iter()
+            .all(|entry| !entry["path"].as_str().unwrap().starts_with(".git"))
+    );
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::create_dir_all(source.join(".git/objects")).unwrap();
+    for (path, contents) in [
+        ("identity.age", &b"identity"[..]),
+        ("config.yaml", &b"vault_dir: fixture\n"[..]),
+        ("entries/item.age", &b"ciphertext"[..]),
+        (".git/config", &b"[core]\n"[..]),
+        (".git/objects/fixture", &b"git-object"[..]),
+    ] {
+        fs::write(source.join(path), contents).unwrap();
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for dir in [
+            source.join("entries"),
+            source.join(".git"),
+            source.join(".git/objects"),
+        ] {
+            fs::set_permissions(dir, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        for file in [
+            source.join("identity.age"),
+            source.join("config.yaml"),
+            source.join("entries/item.age"),
+            source.join(".git/config"),
+            source.join(".git/objects/fixture"),
+        ] {
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+
+    let archive_path = root.path().join("backup.tar.gz");
+    let actual = archive::backup(&source, &archive_path, true).unwrap();
+    assert_eq!(actual.len(), expected.len());
+    for expected in expected {
+        let path = expected["path"].as_str().unwrap();
+        let actual = actual.iter().find(|entry| entry.path == path).unwrap();
+        let expected_hash = expected["sha256"].as_str().unwrap();
+        assert_eq!(actual.directory, expected_hash.is_empty());
+        assert_eq!(actual.size, expected["size"].as_u64().unwrap());
+        if !actual.directory {
+            assert_eq!(actual.sha256, expected_hash, "{path}");
+        }
+        #[cfg(unix)]
+        assert_eq!(
+            actual.mode,
+            expected["mode"].as_u64().unwrap() as u32,
+            "{path}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn backup_skips_symlinked_root_like_pinned_go() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert_eq!(archive_case.expected["symlink_root_backup_empty"], true);
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let link = root.path().join("vault-link");
+    symlink(&source, &link).unwrap();
+
+    let archive_path = root.path().join("backup.tar.gz");
+    let manifest = archive::backup(&link, &archive_path, false).unwrap();
+    assert!(manifest.is_empty());
+
+    let file = fs::File::open(&archive_path).unwrap();
+    let mut tar = tar::Archive::new(GzDecoder::new(file));
+    let mut members = tar.entries().unwrap();
+    assert!(members.next().is_none());
+}
+
+#[test]
 fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
     let fixture = sync_fixture();
 
@@ -539,6 +638,251 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
         assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
         assert_eq!(actual.size, expected["size"].as_u64().unwrap());
         assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
+    }
+}
+
+#[test]
+fn restore_rejects_noncanonical_member_paths_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let root = tempdir().unwrap();
+    let rejected = archive_case.expected["restore_path_rejections"]
+        .as_object()
+        .unwrap();
+    assert!(
+        archive_case.expected["backslash_member_rejected"]
+            .as_bool()
+            .unwrap()
+    );
+    #[cfg(unix)]
+    let paths = vec![r"..\outside", "a//b", "a/./b", "C:drive-relative"];
+    #[cfg(not(unix))]
+    let paths = vec![r"..\outside", "a//b", "a/./b"];
+
+    for (index, name) in paths.into_iter().enumerate() {
+        assert!(
+            rejected[name].as_bool().unwrap(),
+            "Go oracle did not reject {name}"
+        );
+        let archive_path = root.path().join(format!("unsafe-{index}.tar.gz"));
+        let destination = root.path().join(format!("restored-{index}"));
+        let encoder = GzEncoder::new(
+            fs::File::create(&archive_path).unwrap(),
+            Compression::default(),
+        );
+        let mut builder = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_gnu();
+        let name_bytes = name.as_bytes();
+        assert!(
+            name_bytes.len() < 100,
+            "test member name exceeds tar name field"
+        );
+        // Write the raw spelling directly: Header::set_path normalizes `.`
+        // components and would erase the behavior this regression protects.
+        header.as_mut_bytes()[..name_bytes.len()].copy_from_slice(name_bytes);
+        header.set_size(1);
+        header.set_mode(0o600);
+        header.set_cksum();
+        builder.append(&header, &b"x"[..]).unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
+
+        assert!(
+            archive::restore(&archive_path, &destination, false).is_err(),
+            "Rust accepted {name}"
+        );
+        assert_eq!(fs::read_dir(destination).unwrap().count(), 0, "{name}");
+    }
+}
+
+#[test]
+fn restore_preserves_existing_directory_mode_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["existing_directory_mode_preserved"]
+            .as_bool()
+            .unwrap()
+    );
+
+    let root = tempdir().unwrap();
+    let archive_path = root.path().join("directory-mode.tar.gz");
+    let destination = root.path().join("restored");
+    let existing = destination.join("probe");
+    fs::create_dir_all(&existing).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&existing, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    let encoder = GzEncoder::new(
+        fs::File::create(&archive_path).unwrap(),
+        Compression::default(),
+    );
+    let mut builder = tar::Builder::new(encoder);
+    let mut header = tar::Header::new_gnu();
+    header.set_size(0);
+    header.set_mode(0o500);
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_cksum();
+    builder.append_data(&mut header, "probe", &b""[..]).unwrap();
+    for (name, content) in [
+        ("identity.age", &b"identity"[..]),
+        ("config.yaml", &b"vault_dir: fixture\n"[..]),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o600);
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_cksum();
+        builder.append_data(&mut header, name, content).unwrap();
+    }
+    let mut header = tar::Header::new_gnu();
+    header.set_size(0);
+    header.set_mode(0o700);
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "entries", &b""[..])
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+
+    archive::restore(&archive_path, &destination, false).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(existing).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+}
+
+#[test]
+fn restore_preserves_existing_file_mode_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["existing_file_mode_preserved"]
+            .as_bool()
+            .unwrap()
+    );
+
+    let root = tempdir().unwrap();
+    let archive_path = root.path().join("file-mode.tar.gz");
+    let destination = root.path().join("restored");
+    fs::create_dir_all(&destination).unwrap();
+    let existing = destination.join("identity.age");
+    fs::write(&existing, b"old identity").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&existing, fs::Permissions::from_mode(0o640)).unwrap();
+    }
+
+    let encoder = GzEncoder::new(
+        fs::File::create(&archive_path).unwrap(),
+        Compression::default(),
+    );
+    let mut builder = tar::Builder::new(encoder);
+    for (name, content) in [
+        ("identity.age", &b"identity"[..]),
+        ("config.yaml", &b"vault_dir: fixture\n"[..]),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o600);
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_cksum();
+        builder.append_data(&mut header, name, content).unwrap();
+    }
+    let mut header = tar::Header::new_gnu();
+    header.set_size(0);
+    header.set_mode(0o700);
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "entries", &b""[..])
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+
+    archive::restore(&archive_path, &destination, true).unwrap();
+    assert_eq!(fs::read(&existing).unwrap(), b"identity");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(existing).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_refuses_read_only_existing_files_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["readonly_file_write_denied"]
+            .as_bool()
+            .unwrap()
+    );
+
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"new identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let archive_path = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive_path, false).unwrap();
+
+    let destination = root.path().join("restored");
+    fs::create_dir_all(&destination).unwrap();
+    let target = destination.join("identity.age");
+    fs::write(&target, b"old identity").unwrap();
+    fs::set_permissions(&target, fs::Permissions::from_mode(0o400)).unwrap();
+
+    assert!(archive::restore(&archive_path, &destination, true).is_err());
+    assert_eq!(fs::read(target).unwrap(), b"old identity");
+}
+
+#[cfg(unix)]
+#[test]
+fn restore_rejects_untrusted_symlinked_destination_ancestors_like_go() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let go_rejected = archive_case.expected["restore_symlinked_parent_rejected"]
+        .as_bool()
+        .unwrap();
+
+    let root = tempdir().unwrap();
+    let source = root.path().join("source");
+    fs::create_dir_all(source.join("entries")).unwrap();
+    fs::write(source.join("identity.age"), b"identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    let archive_path = root.path().join("backup.tar.gz");
+    archive::backup(&source, &archive_path, false).unwrap();
+
+    let outside = root.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    let redirect = root.path().join("redirect");
+    symlink(&outside, &redirect).unwrap();
+    let destination = redirect.join("restored");
+    let restored_outside = outside.join("restored");
+    let rust_result = archive::restore(&archive_path, &destination, true);
+
+    if go_rejected {
+        assert!(rust_result.is_err());
+        assert!(!restored_outside.exists());
+    } else {
+        assert!(rust_result.is_ok());
+        assert!(restored_outside.join("identity.age").exists());
     }
 }
 

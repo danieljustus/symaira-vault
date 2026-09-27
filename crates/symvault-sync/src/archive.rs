@@ -55,6 +55,83 @@ fn safe_relative(path: &Path) -> Result<PathBuf, ArchiveError> {
     }
     Ok(out)
 }
+
+fn safe_restore_member(raw_name: &[u8], path: &Path) -> Result<PathBuf, ArchiveError> {
+    if raw_name.is_empty()
+        || raw_name == b"."
+        || raw_name.contains(&b'\\')
+        || raw_name.starts_with(b"/")
+        || raw_name.get(1) == Some(&b':')
+    {
+        return Err(ArchiveError::UnsafePath(path.display().to_string()));
+    }
+
+    // Go's cleanBackupMemberName permits a single trailing slash for tar
+    // directories, but rejects every other spelling changed by path.Clean.
+    let clean_candidate = raw_name.strip_suffix(b"/").unwrap_or(raw_name);
+    if clean_candidate.is_empty()
+        || clean_candidate == b"."
+        || clean_candidate
+            .split(|byte| *byte == b'/')
+            .any(|part| part.is_empty() || part == b"." || part == b"..")
+    {
+        return Err(ArchiveError::UnsafePath(path.display().to_string()));
+    }
+    safe_relative(path)
+}
+
+fn reject_untrusted_symlink_ancestors(path: &Path) -> Result<(), ArchiveError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => {
+                normalized.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Normal(name) => normalized.push(name),
+        }
+    }
+
+    let mut current = PathBuf::new();
+    for component in normalized.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => {
+                current.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                current.pop();
+            }
+            Component::Normal(name) => {
+                current.push(name);
+                match fs::symlink_metadata(&current) {
+                    Ok(metadata) if metadata.file_type().is_symlink() => {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::MetadataExt;
+                            if metadata.uid() != 0 {
+                                return Err(ArchiveError::UnsafePath(path.display().to_string()));
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn mode(meta: &fs::Metadata) -> u32 {
     #[cfg(unix)]
     {
@@ -91,10 +168,19 @@ pub fn backup(
     exclude_git: bool,
 ) -> Result<Vec<ArchiveEntry>, ArchiveError> {
     let root = root.as_ref();
-    if !root.is_dir() {
+    let root_metadata = fs::symlink_metadata(root)?;
+    let symlink_root = root_metadata.file_type().is_symlink();
+    if !symlink_root && !root_metadata.is_dir() {
         return Err(ArchiveError::NotDirectory(root.to_path_buf()));
     }
-    let root = root.canonicalize()?;
+    // Go's filepath.Walk reports a symlink root as a symlink and CreateBackup
+    // skips it. Do not canonicalize this path: that would follow the link and
+    // archive the target's contents instead of producing an empty backup.
+    let root = if symlink_root {
+        root.to_path_buf()
+    } else {
+        root.canonicalize()?
+    };
     let output = output.as_ref();
     crate::safeio::refuse_unsafe_target(output)
         .map_err(|error| io::Error::other(error.to_string()))?;
@@ -114,7 +200,11 @@ pub fn backup(
     let encoder = GzEncoder::new(staged.as_file_mut(), Compression::default());
     let mut builder = Builder::new(encoder);
     let mut manifest = Vec::new();
-    let mut paths: Vec<_> = walkdir(&root)?.into_iter().collect();
+    let mut paths: Vec<_> = if symlink_root {
+        Vec::new()
+    } else {
+        walkdir(&root)?.into_iter().collect()
+    };
     paths.sort();
     for path in paths {
         if path == staged_path || path == output {
@@ -212,6 +302,7 @@ pub fn restore(
     {
         return Err(ArchiveError::UnsafePath(dest.display().to_string()));
     }
+    reject_untrusted_symlink_ancestors(dest)?;
     crate::safeio::create_dir_all(dest).map_err(|error| io::Error::other(error.to_string()))?;
     if !dest.is_dir() {
         return Err(ArchiveError::NotDirectory(dest.to_path_buf()));
@@ -227,7 +318,8 @@ pub fn restore(
         }
         let mut entry = item?;
         let raw = entry.path()?.into_owned();
-        let rel = safe_relative(&raw)?;
+        let raw_name = entry.path_bytes();
+        let rel = safe_restore_member(&raw_name, &raw)?;
         let target = dest.join(&rel);
         if !target.starts_with(dest) {
             return Err(ArchiveError::UnsafePath(raw.display().to_string()));
@@ -235,9 +327,17 @@ pub fn restore(
         ensure_no_symlink_components(dest, &rel)?;
         let kind = entry.header().entry_type();
         if kind == EntryType::Directory {
+            let already_exists = match fs::symlink_metadata(&target) {
+                Ok(metadata) if metadata.is_dir() => true,
+                Ok(_) => return Err(ArchiveError::NotDirectory(target)),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error.into()),
+            };
             crate::safeio::create_dir_all(&target)
                 .map_err(|error| io::Error::other(error.to_string()))?;
-            apply_mode(&target, entry.header().mode()? & 0o700)?;
+            if !already_exists {
+                apply_mode(&target, entry.header().mode()? & 0o700)?;
+            }
             result.push(ArchiveEntry {
                 path: rel
                     .to_string_lossy()
@@ -264,7 +364,18 @@ pub fn restore(
             crate::safeio::create_dir_all(parent)
                 .map_err(|error| io::Error::other(error.to_string()))?;
         }
-        let m = entry.header().mode()? & 0o600;
+        let m = match fs::symlink_metadata(&target) {
+            Ok(metadata) if metadata.is_file() => {
+                // Go opens existing restore targets for writing before
+                // truncating them. Preserve its permission failure instead
+                // of replacing a read-only file through the parent directory.
+                fs::OpenOptions::new().write(true).open(&target)?;
+                mode(&metadata)
+            }
+            Ok(_) => entry.header().mode()? & 0o600,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => entry.header().mode()? & 0o600,
+            Err(error) => return Err(error.into()),
+        };
         let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
         let (copied, hash) = copy_and_hash(&mut entry, &mut tmp)?;
         if copied != size {

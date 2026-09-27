@@ -1,0 +1,36 @@
+{
+  "oracle": {
+    "go_version": "go1.26.6",
+    "source_files": [
+      "internal/update/apply.go",
+      "go.mod"
+    ],
+    "source_digest": "fe5b6bed8c202ed624f3729bf14e0d88e451f9b35782697fdb7ae656f9801bef",
+    "corekit_pin": "v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "corekit_revision": "f3d3eb79b9b1",
+    "corekit_source_files": [
+      "updatecheck/updateapply/updateapply.go",
+      "updatecheck/extract/extract.go",
+      "updatecheck/cosign/cosign.go"
+    ],
+    "corekit_source_digest": "f17ed1f441ab19902dac8f63f7850f734bcac0c28ca51a5fc022698e2a23acbd",
+    "captured": "2026-09-27"
+  },
+  "cases": [
+    {
+      "id": "rename-failure-restores-current",
+      "go_test": "TestAtomicSwapRollsBackOnFailedRename",
+      "expected": "old binary restored; backup removed"
+    },
+    {
+      "id": "validation-failure-restores-current",
+      "go_test": "TestApplyRollsBackWhenBinaryValidationFails",
+      "expected": "old binary restored after validation failure"
+    },
+    {
+      "id": "tar-path-traversal-refused",
+      "go_test": "TestExtractTarGz_PathTraversal",
+      "expected": "reject archive traversal"
+    }
+  ]
+}

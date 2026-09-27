@@ -155,6 +155,29 @@ jobs:
           cargo test -p symvault-cli --test cli_differential --locked \
             init_list_get_match_go_cli_on_a_disposable_vault -- --exact
 
+      - name: Run import quarantine differential against pinned Go CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cli_oracle_commit="$(git rev-parse '3232e31f^{commit}')"
+          test "$cli_oracle_commit" = "3232e31fb91362b6e6202774f7e95f6d477305d2"
+
+          temp_root="$RUNNER_TEMP"
+          executable_suffix=
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            temp_root="$(cygpath -u "$RUNNER_TEMP")"
+            executable_suffix=.exe
+          fi
+          oracle_source="$temp_root/symvault-go-cli-3232e31f-source"
+          oracle_binary="$temp_root/symvault-go-cli-3232e31f$executable_suffix"
+
+          git worktree add --detach "$oracle_source" "$cli_oracle_commit"
+          test "$(git -C "$oracle_source" rev-parse HEAD)" = "$cli_oracle_commit"
+          GOWORK=off go -C "$oracle_source" build -o "$oracle_binary" .
+          export SYMVAULT_GO_BINARY="$oracle_binary"
+          cargo test -p symvault-cli --test cli_differential --locked \
+            import_quarantine_matches_pinned_go_cli_batch_contract -- --exact
+
       - name: Run auth root-trust differential against the current Go oracle
         shell: bash
         run: |

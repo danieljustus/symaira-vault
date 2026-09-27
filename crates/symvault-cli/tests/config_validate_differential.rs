@@ -78,12 +78,28 @@ fn config_validate_matches_go_contract() {
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("home");
 
+    // Source-pinned behavior: cmd/admin/config.go (blob
+    // 4e70122f448ba7ed9516932287ac641ab6d2dbf8) enters InteractiveFixConfig
+    // only when stdin is a TTY. Command::output supplies non-TTY stdin.
+
     // Case 1: Missing file
     let missing = home.0.join("missing.yaml");
     let missing_str = missing.to_str().unwrap();
     let res_go = run(&go, &home.0, &["config", "validate", missing_str]);
     let res_rust = run(&rust, &home.0, &["config", "validate", missing_str]);
     assert_same(&res_go, &res_rust, "config validate missing file");
+
+    let res_go = run(&go, &home.0, &["config", "validate", missing_str, "--fix"]);
+    let res_rust = run(
+        &rust,
+        &home.0,
+        &["config", "validate", missing_str, "--fix"],
+    );
+    assert_same(
+        &res_go,
+        &res_rust,
+        "config validate missing file non-TTY --fix",
+    );
 
     // Case 2: Missing file with --output json
     let res_go = run(
@@ -105,6 +121,10 @@ fn config_validate_matches_go_contract() {
     let res_go = run(&go, &home.0, &["config", "validate", valid_str]);
     let res_rust = run(&rust, &home.0, &["config", "validate", valid_str]);
     assert_same(&res_go, &res_rust, "config validate valid text");
+
+    let res_go = run(&go, &home.0, &["config", "validate", valid_str, "--fix"]);
+    let res_rust = run(&rust, &home.0, &["config", "validate", valid_str, "--fix"]);
+    assert_same(&res_go, &res_rust, "config validate valid non-TTY --fix");
 
     // Go rejects a parent-directory component before filepath.Clean can turn
     // this into the existing valid config, even if the intermediate directory

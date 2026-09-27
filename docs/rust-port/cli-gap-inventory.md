@@ -1,79 +1,71 @@
 # CLI surface gap (measured)
 
-Measured on **2026-09-20** against the Rust CLI built from `main` at `72c14890`
-and the pinned Go oracle command tree in `testdata/port/cli/command-tree.json`
-(`a518124f`, release `unreleased`), depth 3. The previous inventory in this file
-walked a different Rust revision by hand and is superseded below.
+Measured on **2026-09-27** against the Rust CLI built from candidate
+`9628016f` and the pinned Go command tree in
+`testdata/port/cli/command-tree.json` (oracle `3232e31f`, release
+`unreleased`), depth 3. This supersedes the 2026-09-20 report below: the rebuilt
+candidate has a different command surface.
 
-The report pins the probed artifact: `rust_binary_sha256` and
-`rust_binary_modified` name the exact file the numbers came from. The numbers
-below come from a binary with sha256 `9b332d8e10dd…`, modified
-`2026-09-20T15:11:21Z`.
+The probe pins the binary: SHA-256
+`7ce681026ae465dd52a7112471f89b795eddae77c93a1c43edfa03490838bb2f`, modified
+`2026-09-27T13:47:54Z`.
 
-**Rebuild before measuring.** An unrebuilt checkout holds an old
-`target/debug/symvault` and reports a smaller Rust surface — the stale binary
-still in this repository's target directory on 2026-09-20 (built 2026-09-16)
-listed **126** missing paths instead of 46. The hash in the report is what makes
-that visible instead of indistinguishable from a regression.
-
-Reproduce (no Go oracle binary required — the frozen tree is the oracle side):
+The source-tree `cligap` probe uses the pinned Go command-tree fixture; it does
+not need a Go oracle binary. Build the CLI after checking external build storage
+with `~/.local/bin/dev-external --status`, then run `cligap` against the binary
+produced by that build:
 
 ```sh
-cargo build -p symvault-cli
-go run ./scripts/rust-port/cmd/cligap
+~/.local/bin/dev-external cargo build --manifest-path crates/symvault-cli/Cargo.toml --locked
+GOTOOLCHAIN=go1.26.6 go run ./scripts/rust-port/cmd/cligap --binary <built-symvault-path>
 ```
 
-The tool writes `target/resume-evidence/cli-gap-inventory.json` and is
-deterministic: same tree, same binary, same report.
-
-**These are surface numbers only.** A reachable command is not a ported command.
-Behaviour, output bytes, exit codes, side effects and flag semantics stay with
-the behavioural rows (`CLI-005`..`CLI-007` and every non-CLI row); nothing here
-promotes a contract row.
+The report records the exact binary path, hash and modification time. These are
+surface probes only. Reachability and displayed flags do not prove behavior,
+output bytes, exit codes or side effects; the behavioral rows remain separate.
 
 ## Summary
 
 | | count |
 | --- | --- |
 | oracle command paths (depth ≤ 3) | 134 |
-| Rust command paths (walked from its own help) | 89 |
-| oracle paths **missing** in Rust | **46** |
-| oracle flags missing on reachable commands | **9** (on 3 commands) |
-| oracle aliases missing on reachable commands | **3** |
-| Rust paths not present in the pinned tree | 1 |
+| Rust command paths (walked from its own help) | 100 |
+| oracle paths rejected by the `--help` probe | **26** |
+| oracle flags missing from probed paths | **8** (on 2 paths) |
+| oracle aliases missing on reachable commands | **0** |
+| Rust paths not present in the pinned tree | 0 |
 
-## Missing command paths (46)
+## Paths rejected by the `--help` probe (26)
 
 | cluster | count | paths |
 | --- | --- | --- |
-| `agent` | 6 | `install`, `setup`, `skill`, `skill export`, `skill refresh`, `upgrade` |
-| `serve` | 8 | `serve`, `install`, `status`, `uninstall`, `token`, `token create`, `token list`, `token revoke` |
-| `approval` | 3 | `approval`, `decide`, `list` |
-| `device` | 3 | `approval-list`, `approval-pair`, `approval-revoke` |
-| `intake` | 3 | `intake`, `watch`, `watch disable` |
-| `migrate` | 3 | `pseudonymize`, `session`, `v4` |
-| `update` | 4 | `update`, `apply`, `check`, `info` |
-| `mcp` | 6 | `token`, `token create`, `token list`, `token revoke`, `mcp-config`, `mcp-token-rotate` |
+| `agent` | 1 | `setup` |
+| `approval` | 3 | `approval`, `approval decide`, `approval list` |
+| `broker` | 1 | `broker` |
+| `device` | 1 | `approval-pair` |
 | `dynamic` | 2 | `dynamic`, `dynamic generate` |
-| `import` | 2 | `review list`, `review promote` |
-| single | 6 | `broker`, `generate manpages`, `help`, `setup`, `startup-profile`, `ui` |
+| single | 1 | `help` |
+| `intake` | 3 | `intake`, `intake watch`, `intake watch disable` |
+| `serve` | 8 | `serve`, `serve install`, `serve status`, `serve uninstall`, `serve token`, `serve token create`, `serve token list`, `serve token revoke` |
+| single | 3 | `setup`, `startup-profile`, `ui` |
+| `update` | 3 | `update apply`, `update check`, `update info` |
 
-## Alias gaps (3)
+The `cligap` probe appends `--help` to every path. Rust accepts `symvault help`
+and nested `symvault help config validate`, but Clap rejects `help --help`.
+The catch-all `update` runner recognizes `apply`, `check` and `info`, but rejects
+their `--help` form. Those four entries are help-path gaps, not unreachable
+runtime commands. `cli_help_subcommand.rs` compares the generated help route
+semantically with Go; rendered text is not byte-identical.
 
-Cobra declares these aliases; the Rust parser rejects them. This was not
-reported by the previous inventory.
+## Alias gaps (0)
 
-| oracle node | missing alias |
-| --- | --- |
-| `symvault get` | `show` |
-| `symvault get` | `cat` |
-| `symvault list` | `ls` |
+The latest binary accepts all three aliases recorded by the pinned tree:
+`show` and `cat` for `get`, and `ls` for `list`. The 2026-09-20 alias-gap
+finding is resolved in the current candidate.
 
-## Rust-only path (1)
+## Rust-only paths (0)
 
-`symvault mcp serve` is reachable in Rust and absent from the pinned tree.
-The tree predates it; this is a re-pin decision, not a defect claim. `mcp
-install`, `status` and `uninstall` are present on both sides.
+The current help walk found no Rust-only path at depth 3.
 
 ## Deliberate non-claims
 
@@ -81,64 +73,57 @@ install`, `status` and `uninstall` are present on both sides.
   report argument errors with different exit codes and text, so the comparison
   would measure parser error style, not the contract.
 - Clap prints inherited global flags in every subcommand's options section while
-  the tree records only each node's own flags, so additional Rust entries are not
-  called divergences; only oracle flags **missing** in Rust are listed.
+  the tree records only each node's own flags, so additional Rust entries are
+  not called divergences; only oracle flags missing in Rust are listed.
 - Hidden commands stay invisible to both `--help` walks. They are not covered.
+- A path counted as present is only a help/parser-surface result. `update check`
+  and `update apply` are recognized by `update_commands::run`, but this does not
+  imply full runtime parity: `apply --dry-run` previews release metadata,
+  unsupported installation methods fail closed before network access, and
+  direct-download apply verifies the signed checksum bytes, archive digest,
+  extracted executable, and post-install version before deleting its rollback
+  backup. Ignored live smokes passed against signed public release `v0.22.1`
+  on macOS arm64. The Rust smoke verified Cosign/checksum handling, isolated
+  installation, `version`, and rollback after an injected validation failure.
+  A paired Go 1.26.6/Rust `0.0.1` run with `update apply --force --json`
+  produced matching normalized outcomes, installed identical bytes
+  (`85c6e54b867ec8c497395f1afccfd4e8f1bfe2bebd668d88dcf015049ec67248`), and
+  left only `symvault` in each isolated install directory. The paired smoke is
+  repeatable with `SYMAIRA_VAULT_GO_SMOKE_BINARY` and
+  `SYMAIRA_VAULT_RUST_SMOKE_BINARY`; both live tests require public GitHub access
+  and the external `cosign` CLI.
 
+## Missing flags on probed paths
 
-## Missing flags on commands that exist
-
-**Corrected 2026-09-18:** the first extraction scanned the whole `--help` text, so
-flags named only in prose or in a nested command's section were counted as gaps.
-Re-extracted from the local `Flags:`/`Options:` section only, comparing Go's flag
-definitions against Rust's:
-
-| Node | Really missing |
+| Path | Missing flags |
 | --- | --- |
-| `import` | `--quarantine` |
 | `mcp` | `--bind`, `--port`, `--tls-ca`, `--tls-cert`, `--tls-key` |
 | `run` | `--broker`, `--broker-passthrough`, `--broker-strict` |
 
-Everything else the first pass reported is already covered: `file`, `file use`,
-`share`, `share list`, `migrate`, `remote`, `set`, `template`, `get` and
-`migrate kdf` show no local-flag difference, and `share list --status` (which the
-first pass listed under `share`) exists in both. `migrate --dry-run` exists only
-in `import`; `migrate`'s flag section defines nothing but `--help`.
+`import --quarantine` is implemented. The `mcp` and `run` flags belong to
+unported HTTP/TLS and broker behavior. Update flags are recognized only where
+the corresponding checker/preview path consumes them; do not add
+accepted-and-ignored flag scaffolding.
 
-All three real gaps belong to feature slices that are not ported yet (broker,
-HTTP/TLS, quarantine rules), so they must be recorded as blocked rather than
-implemented as accepted-and-ignored flags.
-
-**Confirmed by the 2026-09-20 measurement:** exactly these nine flags (three on
-`import`, five on `mcp`, three on `run`) are missing on reachable commands — no
-more and no fewer. The correction above was right; it was made by hand, this one
-is reproducible.
-
-**Superseded:** the "missing top-level groups (10 of 45)" and "missing
-subcommands" tables that used to stand above this section came from a different
-walk of a different Rust revision and over-counted both directions: they listed
-`audit rotate-key`, `auth set`, `config validate`, `mcp install/status/uninstall`
-and `completion` as missing although those paths exist and are reachable now,
-and they omitted the alias gaps. Do not reinstate them; the measured summary at
-the top of this file replaces them.
-
-## `symvault doctor` check coverage (2026-09-19)
+## `symvault doctor` check coverage (2026-09-27)
 
 The command group exists in Rust, but only part of Go's check registry is ported.
 Measured with `--json --no-network` against the pinned Go oracle
 (`parent-doctor-matrix.py`, fixtures `empty`, `corrupt`, `env` and `initialized`):
-Go runs **35** checks, Rust **33**. For the 33 shared IDs the
+Go runs **35** non-network checks, Rust **34**. For the 34 shared IDs the
 name/status/message/hint/fixable fields are byte-identical on a missing vault, on a
 missing vault with the env-passphrase variables set, and on an oracle-initialized
-vault (**0 field deviations**). The remaining 2 IDs are **not implemented** and are
+vault (**0 field deviations**). The remaining ID is **not implemented** and is
 therefore *absent* from the output rather than reported as OK — a missing check may
 never look like a passing one.
 
-### Known deviation: config-loader error dialect (not yet parity)
+### Known deviation: config-loader syntax-error dialect (not yet parity)
 
-On a *corrupt* `config.yaml` three shared IDs diverge in the `message` field, all
-through the same root cause: Go renders go-yaml's error text (`yaml: line 1: …`)
-while the Rust loader renders its own (`parse config: … at line 3 column 1`).
+On parser-invalid `config.yaml` inputs, five shared IDs can diverge in the
+`message` field: Go renders go-yaml's syntax error while the Rust loader renders
+serde_yaml's detail and source location. A source-bound differential now covers
+the stable multiple-document rejection across all five IDs; that message matches
+Go exactly. Scanner-generated syntax errors remain open.
 The prefixed part (`config.yaml parse error: `, `failed to load config: `,
 `cannot load config: `) is identical, so only the parser dialect differs:
 
@@ -146,13 +131,13 @@ The prefixed part (`config.yaml parse error: `, `failed to load config: `,
   `mcp.dynamic.engines`, `mcp.agents` (all five share the one root cause)
 
 This is a **pre-existing** divergence of the Rust config loader shared by the whole
-CLI, not introduced by the doctor port, and it is **not** claimed as parity. The checks
-ported in wave 2a quote no parser error, so they match on the corrupt fixture as well
-(`differential_doctor_session_tooling_checks`); the two MCP config checks from wave 2b
-do quote it and are therefore pinned for the missing and initialized fixtures only
-(`differential_doctor_mcp_config_checks`).
+CLI, not introduced by the doctor port, and general parser-message parity is **not**
+claimed. The checks ported in wave 2a quote no parser error, so they match on the
+corrupt fixture as well (`differential_doctor_session_tooling_checks`); the two MCP
+config checks from wave 2b quote parser errors and are pinned for the missing and
+initialized fixtures only (`differential_doctor_mcp_config_checks`).
 
-Ported IDs (35 in the registry, 33 of them without network):
+Ported IDs (37 in the registry, 34 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
 `vault.identity.encrypted`, `vault.permissions`, `auth.method`, `session.cache`,
@@ -163,19 +148,21 @@ Ported IDs (35 in the registry, 33 of them without network):
 `vault.manifest.intact`, `auth.passphrase.rotation`, `tooling.autotype.backend`,
 `tooling.clipboard.backend`, `daemon.status`, `mcp.approval.tls`, `tooling.secureui`,
 `tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
-`security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`.
+`security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`,
+`mcp.server.reachable` (network), `mcp.tokens`.
 
-Still open (2): `mcp.tokens`, `crypto.scrypt.benchmark` (plus the network check
-`mcp.server.reachable`, which needs a controlled local HTTP fixture).
+Still open (1): `crypto.scrypt.benchmark`. The network-tagged
+`mcp.server.reachable` check now uses a controlled loopback HTTP fixture and is
+differentially covered for HTTP 200 (with and without a token file), HTTP 503,
+and an unreachable port. The Go implementation at oracle commit
+`fca3f89401833b5e14ec4ec74ef736b0f63bca74` is source-identical for
+`internal/health/doctor_mcp.go` (blob `81d0d6581bf3b1d81a5c9c4a18c96caaa3bcff8a`).
 
 ### Branch limitations of the ported checks (documented, not hidden)
 
 These branches are unreachable in the fixture matrix but exist in Go, so they are
 explicitly listed instead of being silently simplified:
 
-- `auth.method`: the `touchid` branch needs `session.BiometricAvailable()` from the
-  native platform slice; until then it always reports Go's degraded branch
-  (`warn`, "configured as Touch ID but biometric not available on this system").
 - `session.keyring`, `audit.keyring.orphans`: the non-test/non-CI branches need the
   OS keyring layer. Outside test/CI `session.keyring` reports Go's **fail** branch
   (the Rust session cache really has fallen back to memory), and
@@ -190,16 +177,36 @@ explicitly listed instead of being silently simplified:
   binary (the contract), never reads the variable's value, and this divergence
   between oracle and tree is recorded here.
 
-The two open IDs were each implemented at some point, measured against the oracle and
-then **withdrawn again** because they cannot be byte-pinned — do not re-add them
+`auth.method` now checks Touch ID availability on macOS through the existing
+`MacOsTouchId` platform adapter and retains Go's unavailable branch elsewhere.
+The differential test uses the host's non-prompting availability probe, so the
+active/inactive result follows the machine running the test. The Go oracle's
+`internal/session/touchid_darwin.go` matches current source at pinned commit
+`fca3f89401833b5e14ec4ec74ef736b0f63bca74` (blob
+`cbd27b9bfc4caefaa811f88e14376c0263f944b3`).
+
+The remaining open check was implemented at some point, measured against the oracle
+and then **withdrawn again** because it cannot be byte-pinned — do not re-add it
 without a new decision:
 
 - `crypto.scrypt.benchmark`: Go embeds a *measured* duration and its recommended work
   factor for this machine in the message (the argon2id branch *is* stable, the scrypt
   branch is not).
-- `mcp.tokens`: Go's message depends on token-registry side effects inside the
-  (synthetic) vault path and contains a non-deterministic temp-file name; on an
-  initialized vault it reports the *user's* token count.
+
+`mcp.tokens` is now ported. A disposable differential checks an existing registry
+without changing its bytes or sibling legacy-token file, and tests both legacy-token
+migration and fresh-token initialization. Go and Rust results match; the generated
+registry bytes are compared after normalizing the random ID and creation time (and
+the random hash/prefix for fresh tokens), both registry files are mode `0600`, the
+migrated raw token is absent, and the token-specific paths match. Go runs all checks
+before applying `--only`, so `mcp.approval.tls` also initializes
+`.symvault/device-sessions.json`; Rust now calls the shared device-session store,
+which initializes missing files and migrates legacy raw-token keys using the
+store's no-follow reads and atomic writes. Pinned-oracle differentials check empty
+JSON bytes and Unix modes (`0700` directory, `0600` file), legacy-key migration,
+zero-expiry counting, and read-only existing stores. Rust publishes the final
+hashed token registry atomically without writing a generated raw token to the
+temporary legacy-token path used by Go.
 
 `mcp.dynamic.engines` and `mcp.agents` were in that group too and are now **ported**:
 their missing-vault branch is byte-exact (`cannot load config: open <path>: no such
@@ -210,11 +217,11 @@ dialect exception on a corrupt config as `auth.passphrase.rotation`. The withdra
 attempt had reported `ok` where Go reports `warn`; the ported version reproduces the
 oracle's status.
 
-`mcp.server.reachable` (network-tagged) needs a controlled local HTTP fixture to
-become pinnable.
+The `mcp.server.reachable` check now has a controlled loopback HTTP differential
+fixture; its internet connectivity and external-host branches are not exercised.
 
-`mcp.tokens` and `crypto.scrypt.benchmark` stay out unless a shape-only comparison is
-explicitly accepted as such.
+`crypto.scrypt.benchmark` stays out unless a shape-only comparison is explicitly
+accepted as such.
 
 Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
 stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and

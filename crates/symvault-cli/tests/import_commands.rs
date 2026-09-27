@@ -80,6 +80,7 @@ fn csv_import_and_malformed_input_preserve_vault_state() {
         skip_existing: false,
         overwrite: false,
         mapping: String::new(),
+        quarantine_id: None,
     };
     let mut writes = Vec::new();
     let result = import_commands::run_import(
@@ -174,6 +175,7 @@ fn failed_overwrite_keeps_the_existing_entry() {
         skip_existing: false,
         overwrite: true,
         mapping: String::new(),
+        quarantine_id: None,
     };
     let error = import_commands::run_import(
         &root,
@@ -225,6 +227,7 @@ fn cxf_import_preserves_secret_metadata_and_write_version() {
             skip_existing: false,
             overwrite: false,
             mapping: String::new(),
+            quarantine_id: None,
         },
         write_commands::import_fields,
         write_commands::replace_fields,
@@ -247,5 +250,72 @@ fn cxf_import_preserves_secret_metadata_and_write_version() {
             .any(|entry| entry.secret_metadata.secret_type == "ssh_key")
     );
     assert!(entries.iter().all(|entry| entry.metadata.version >= 2));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn quarantine_import_uses_go_batch_id_shape_and_rejects_prefix() {
+    let root = temporary_root();
+    fs::create_dir_all(&root).expect("root");
+    let identity =
+        vault_commands::initialize(&root, &SecretBytes::new(b"correct horse battery staple"))
+            .expect("initialize");
+    let source = root.join("quarantine.csv");
+    fs::write(&source, b"title,password\nnew-entry,secret\n").expect("source");
+    let options = import_commands::ImportOptions {
+        source: source.clone(),
+        format: Some("csv".into()),
+        dry_run: false,
+        prefix: String::new(),
+        skip_existing: false,
+        overwrite: false,
+        mapping: String::new(),
+        quarantine_id: Some(import_commands::generate_import_id().expect("batch ID")),
+    };
+    let id = options.quarantine_id.as_deref().expect("batch ID");
+    let mut written_path = None;
+    import_commands::run_import(
+        &root,
+        &identity,
+        &options,
+        |_, _, path, _| {
+            written_path = Some(path.to_owned());
+            Ok(())
+        },
+        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _| panic!("unexpected secret metadata"),
+    )
+    .expect("quarantine import");
+    assert!(id.starts_with("import-"));
+    let date_and_random = id.strip_prefix("import-").expect("prefix");
+    assert_eq!(date_and_random.len(), 17);
+    assert!(
+        date_and_random[..8]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+    );
+    assert_eq!(date_and_random.as_bytes()[8], b'-');
+    assert!(
+        date_and_random[9..]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    );
+    let expected_path = format!("quarantine/{id}/new-entry");
+    assert_eq!(written_path.as_deref(), Some(expected_path.as_str()));
+
+    let conflicting = import_commands::ImportOptions {
+        prefix: "manual".into(),
+        ..options
+    };
+    let error = import_commands::run_import(
+        &root,
+        &identity,
+        &conflicting,
+        |_, _, _, _| panic!("conflict must be rejected before writes"),
+        |_, _, _, _| panic!("unexpected replacement"),
+        |_, _, _, _| panic!("unexpected secret metadata"),
+    )
+    .expect_err("quarantine and prefix conflict");
+    assert!(error.contains("--quarantine and --prefix cannot be used together"));
     let _ = fs::remove_dir_all(root);
 }

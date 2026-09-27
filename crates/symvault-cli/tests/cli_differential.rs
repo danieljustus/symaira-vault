@@ -858,21 +858,43 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         &rust_restore_root,
         &home,
     );
-    assert_success(&rust_restore, "Rust restore of Go backup");
-    let rust_get_restored = run(
-        &rust_binary,
-        &[
-            "--vault",
-            rust_restore_root.to_str().unwrap(),
-            "get",
-            "work/github.password",
-            "--print",
-        ],
-        &rust_restore_root,
-        &home,
-    );
-    assert_success(&rust_get_restored, "Rust get after Go backup restore");
-    assert_eq!(rust_get_restored.stdout, b"secret\n");
+    if cfg!(windows) {
+        // The pinned Go v0.22.1 writer used filepath.Rel verbatim in tar
+        // headers on Windows. Its own restore rejects those backslashes.
+        assert!(!rust_restore.status.success());
+        assert!(String::from_utf8_lossy(&rust_restore.stderr).contains("unsafe archive path"));
+        let go_reject_root = temporary_root("go-reject-legacy-backup");
+        let go_reject = run(
+            &go_binary,
+            &[
+                "--vault",
+                go_reject_root.to_str().unwrap(),
+                "restore",
+                archive.to_str().unwrap(),
+            ],
+            &go_reject_root,
+            &home,
+        );
+        assert!(!go_reject.status.success());
+        assert!(String::from_utf8_lossy(&go_reject.stderr).contains("unsafe path"));
+        fs::remove_dir_all(go_reject_root).expect("cleanup Go legacy restore vault");
+    } else {
+        assert_success(&rust_restore, "Rust restore of Go backup");
+        let rust_get_restored = run(
+            &rust_binary,
+            &[
+                "--vault",
+                rust_restore_root.to_str().unwrap(),
+                "get",
+                "work/github.password",
+                "--print",
+            ],
+            &rust_restore_root,
+            &home,
+        );
+        assert_success(&rust_get_restored, "Rust get after Go backup restore");
+        assert_eq!(rust_get_restored.stdout, b"secret\n");
+    }
 
     let rust_backup = run(
         &rust_binary,
@@ -937,6 +959,122 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     fs::remove_dir_all(rust_restore_root).expect("cleanup Rust restore vault");
     fs::remove_dir_all(go_restore_root).expect("cleanup Go restore vault");
     fs::remove_file(archive).expect("cleanup backup archive");
+}
+
+#[test]
+fn import_quarantine_matches_pinned_go_cli_batch_contract() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("quarantine-home");
+    let go_root = temporary_root("quarantine-go");
+    let rust_root = temporary_root("quarantine-rust");
+    fs::create_dir_all(&home).expect("home");
+    let _cleanup = TempFixture::new([home.clone(), go_root.clone(), rust_root.clone()]);
+    let source = home.join("import.csv");
+    fs::write(&source, b"title,password\nexample,secret\n").expect("source");
+    for root in [&go_root, &rust_root] {
+        let output = run(
+            &rust_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "init",
+                "--auth",
+                "passphrase",
+            ],
+            root,
+            &home,
+        );
+        assert_success(&output, "initialize quarantine differential vault");
+    }
+
+    let args = [
+        "import",
+        source.to_str().unwrap(),
+        "--format",
+        "csv",
+        "--quarantine",
+    ];
+    let go_import = run(&go_binary, &args, &go_root, &home);
+    let rust_import = run(&rust_binary, &args, &rust_root, &home);
+    assert_success(&go_import, "Go import --quarantine");
+    assert_success(&rust_import, "Rust import --quarantine");
+    let go_id = quarantine_id(&go_import.stdout);
+    let rust_id = quarantine_id(&rust_import.stdout);
+    for import_id in [&go_id, &rust_id] {
+        assert_eq!(import_id.len(), 24);
+        assert!(import_id.starts_with("import-"));
+        assert!(import_id[7..15].bytes().all(|byte| byte.is_ascii_digit()));
+        assert_eq!(import_id.as_bytes()[15], b'-');
+        assert!(import_id[16..].bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+    assert!(
+        String::from_utf8_lossy(&go_import.stdout)
+            .contains("Import summary: 1 imported, 0 skipped")
+    );
+    assert!(
+        String::from_utf8_lossy(&rust_import.stdout)
+            .contains("Import summary: 1 imported, 0 skipped")
+    );
+
+    let go_path = format!("quarantine/{go_id}/example.password");
+    let rust_path = format!("quarantine/{rust_id}/example.password");
+    for (binary, root, path, label) in [
+        (&go_binary, &go_root, go_path.as_str(), "Go"),
+        (&rust_binary, &rust_root, rust_path.as_str(), "Rust"),
+    ] {
+        let output = run(binary, &["get", path, "--print"], root, &home);
+        assert_success(&output, &format!("{label} read quarantined entry"));
+        assert_eq!(output.stdout, b"secret\n");
+    }
+
+    let go_conflict = run(
+        &go_binary,
+        &[
+            "import",
+            source.to_str().unwrap(),
+            "--format",
+            "csv",
+            "--quarantine",
+            "--prefix",
+            "manual",
+        ],
+        &go_root,
+        &home,
+    );
+    let rust_conflict = run(
+        &rust_binary,
+        &[
+            "import",
+            source.to_str().unwrap(),
+            "--format",
+            "csv",
+            "--quarantine",
+            "--prefix",
+            "manual",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert!(!go_conflict.status.success() && !rust_conflict.status.success());
+    for output in [&go_conflict, &rust_conflict] {
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("--quarantine and --prefix cannot be used together")
+        );
+    }
+}
+
+fn quarantine_id(stdout: &[u8]) -> String {
+    String::from_utf8_lossy(stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("Quarantine import ID: "))
+        .map(str::to_owned)
+        .unwrap_or_else(|| panic!("missing quarantine ID in {stdout:?}"))
 }
 
 #[test]
