@@ -1421,28 +1421,25 @@ pub(super) fn list(vault: &Path, format: &str, json: bool, quiet: bool) -> Resul
         .into_iter()
         .filter(|key| !keys.contains(key.as_str()))
         .collect();
-    if format == "yaml" && !json {
-        return Err("device list YAML output is not yet ported".to_owned());
-    }
+    let listing = Listing {
+        count: devices.devices().len(),
+        devices: devices
+            .devices()
+            .iter()
+            .map(|d| ListedDevice {
+                name: &d.name,
+                public_key: &d.public_key,
+                added_at: seconds(d.added_at),
+                last_seen: d.last_seen.map(seconds),
+            })
+            .collect(),
+        unmanaged_recipients: unmanaged,
+    };
     if quiet {
         return Ok(());
     }
     let mut out = Vec::new();
     if json || format == "json" {
-        let listing = Listing {
-            count: devices.devices().len(),
-            devices: devices
-                .devices()
-                .iter()
-                .map(|d| ListedDevice {
-                    name: &d.name,
-                    public_key: &d.public_key,
-                    added_at: seconds(d.added_at),
-                    last_seen: d.last_seen.map(seconds),
-                })
-                .collect(),
-            unmanaged_recipients: unmanaged,
-        };
         // Go's encoder disables HTML escaping but always escapes these separators.
         let encoded = serde_json::to_string(&listing)
             .map_err(|e| e.to_string())?
@@ -1450,10 +1447,45 @@ pub(super) fn list(vault: &Path, format: &str, json: bool, quiet: bool) -> Resul
             .replace('\u{2029}', "\\u2029");
         out.extend_from_slice(encoded.as_bytes());
         out.push(b'\n');
+    } else if format == "yaml" {
+        let encoded = serde_yaml_ng::to_string(&listing).map_err(|e| e.to_string())?;
+        let mut section = "";
+        for line in encoded.split_inclusive('\n') {
+            if let Some((field, value)) = line
+                .strip_prefix("  added_at: ")
+                .map(|value| ("added_at", value))
+                .or_else(|| {
+                    line.strip_prefix("  last_seen: ")
+                        .map(|value| ("last_seen", value))
+                })
+            {
+                let value = value.strip_suffix('\n').unwrap_or(value);
+                writeln!(out, "      {field}: \"{value}\"").map_err(|e| e.to_string())?;
+            } else if line.starts_with("- ")
+                && matches!(section, "devices" | "unmanaged_recipients")
+            {
+                out.extend_from_slice(b"    ");
+                out.extend_from_slice(line.as_bytes());
+            } else if !line.starts_with(' ') {
+                section = match line {
+                    "devices:\n" => "devices",
+                    "unmanaged_recipients:\n" => "unmanaged_recipients",
+                    _ => "",
+                };
+                out.extend_from_slice(line.as_bytes());
+            } else if matches!(section, "devices" | "unmanaged_recipients") {
+                // yaml.v3 indents map-owned sequences by four columns; serde_yaml_ng
+                // emits them without indentation and keeps item fields two columns in.
+                out.extend_from_slice(b"    ");
+                out.extend_from_slice(line.as_bytes());
+            } else {
+                out.extend_from_slice(line.as_bytes());
+            }
+        }
     } else {
         if devices.devices().is_empty() {
             out.extend_from_slice(b"No devices registered.\n");
-            if !unmanaged.is_empty() {
+            if !listing.unmanaged_recipients.is_empty() {
                 out.push(b'\n');
             }
         } else {
@@ -1472,9 +1504,9 @@ pub(super) fn list(vault: &Path, format: &str, json: bool, quiet: bool) -> Resul
                 .map_err(|e| e.to_string())?;
             }
         }
-        if !unmanaged.is_empty() {
+        if !listing.unmanaged_recipients.is_empty() {
             out.extend_from_slice(b"Unmanaged recipients in recipients.txt:\n");
-            for key in unmanaged {
+            for key in listing.unmanaged_recipients {
                 out.extend_from_slice(b"  ");
                 out.extend_from_slice(&short_key(&key));
                 out.push(b'\n');
