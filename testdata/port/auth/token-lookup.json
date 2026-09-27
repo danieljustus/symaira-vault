@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "go_version": "go1.26.6",
+    "source_file": "internal/mcp/auth/token.go",
+    "source_digest": "d67e8cd1e97145ee5af13e1fcb556a810aca2291968de67670e830d61bb4fffc",
+    "generator_file": "internal/mcp/auth/token_port_fixture_test.go",
+    "generator_hash": "b27d5fc46fee0b9b59a7ce5749a787343a18c412bffa01af4123cb3bf5b11264"
+  },
+  "now": "2026-09-23T12:00:00Z",
+  "registry": {
+    "version": 2,
+    "tokens": {
+      "tok-active": {
+        "id": "tok-active",
+        "hash": "a8ae6e6ee929abea3afcfc5258c8ccd6f85273e0d4626d26c7279f3250f77c8e",
+        "prefix": "0123",
+        "allowed_tools": [
+          "list_entries",
+          "get_entry"
+        ],
+        "created_at": "2026-09-23T11:00:00Z",
+        "expires_at": "2999-01-01T00:00:00Z",
+        "revoked": false
+      },
+      "tok-empty": {
+        "id": "tok-empty",
+        "hash": "f435f2420b50c70ec80865cf8e20b169874165fb8576b48633caf2a8176d2e4a",
+        "prefix": "4444",
+        "allowed_tools": [],
+        "created_at": "2026-09-23T11:00:00Z",
+        "revoked": false
+      },
+      "tok-expired": {
+        "id": "tok-expired",
+        "hash": "4f2e8d65483c641648cdb374ae9d8abd368d269e4ddffe092a8237b8162cddd6",
+        "prefix": "2222",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "created_at": "2026-09-23T11:00:00Z",
+        "expires_at": "2000-01-01T00:00:00Z",
+        "revoked": false
+      },
+      "tok-revoked": {
+        "id": "tok-revoked",
+        "hash": "3138bb9bc78df27c473ecfd1410f7bd45ebac1f59cf3ff9cfe4db77aab7aedd3",
+        "prefix": "1111",
+        "allowed_tools": [
+          "list_entries"
+        ],
+        "created_at": "2026-09-23T11:00:00Z",
+        "revoked": true
+      },
+      "tok-wildcard": {
+        "id": "tok-wildcard",
+        "hash": "aa23e893b52d03b02bf174650b65a913289dfaa6cce7ec7d48cae141325f7036",
+        "prefix": "abcd",
+        "allowed_tools": [
+          "*"
+        ],
+        "created_at": "2026-09-23T11:00:00Z",
+        "revoked": false
+      }
+    }
+  },
+  "lookups": [
+    {
+      "name": "active-hashed-lookup",
+      "bearer": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "found": true,
+      "token_id": "tok-active"
+    },
+    {
+      "name": "wildcard-token",
+      "bearer": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "found": true,
+      "token_id": "tok-wildcard"
+    },
+    {
+      "name": "empty-scope-token",
+      "bearer": "4444444444444444444444444444444444444444444444444444444444444444",
+      "found": true,
+      "token_id": "tok-empty"
+    },
+    {
+      "name": "revoked-denied",
+      "bearer": "1111111111111111111111111111111111111111111111111111111111111111",
+      "found": false
+    },
+    {
+      "name": "expired-denied",
+      "bearer": "2222222222222222222222222222222222222222222222222222222222222222",
+      "found": false
+    },
+    {
+      "name": "unknown-denied",
+      "bearer": "3333333333333333333333333333333333333333333333333333333333333333",
+      "found": false
+    }
+  ],
+  "scopes": [
+    {
+      "name": "exact-allowed",
+      "token_id": "tok-active",
+      "tool": "list_entries",
+      "allowed": true
+    },
+    {
+      "name": "exact-other-allowed",
+      "token_id": "tok-active",
+      "tool": "get_entry",
+      "allowed": true
+    },
+    {
+      "name": "exact-denied",
+      "token_id": "tok-active",
+      "tool": "delete_entry",
+      "allowed": false
+    },
+    {
+      "name": "wildcard-allowed",
+      "token_id": "tok-wildcard",
+      "tool": "get_entry",
+      "allowed": true
+    },
+    {
+      "name": "empty-scope-denied",
+      "token_id": "tok-empty",
+      "tool": "list_entries",
+      "allowed": false
+    },
+    {
+      "name": "empty-name-denied",
+      "token_id": "tok-active",
+      "tool": "",
+      "allowed": false
+    }
+  ]
+}
