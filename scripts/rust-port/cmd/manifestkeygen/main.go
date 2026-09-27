@@ -20,7 +20,7 @@ import (
 	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-const revision = "6b18a1b1ef069ed2f358debfcebca50fd5914a9d"
+const revision = "179efb6746861f0fa9066dcd2cb9aa55c802cd9d"
 const generator = "scripts/rust-port/cmd/manifestkeygen/main.go"
 const payload = "synthetic-manifest-value"
 
