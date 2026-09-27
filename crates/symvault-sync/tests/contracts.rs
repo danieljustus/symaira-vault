@@ -573,6 +573,70 @@ fn restore_rejects_backslash_member_names_like_go() {
     assert_eq!(fs::read_dir(destination).unwrap().count(), 0);
 }
 
+#[test]
+fn restore_preserves_existing_directory_mode_like_go() {
+    let fixture = sync_fixture();
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    assert!(
+        archive_case.expected["existing_directory_mode_preserved"]
+            .as_bool()
+            .unwrap()
+    );
+
+    let root = tempdir().unwrap();
+    let archive_path = root.path().join("directory-mode.tar.gz");
+    let destination = root.path().join("restored");
+    let existing = destination.join("probe");
+    fs::create_dir_all(&existing).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&existing, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    let encoder = GzEncoder::new(
+        fs::File::create(&archive_path).unwrap(),
+        Compression::default(),
+    );
+    let mut builder = tar::Builder::new(encoder);
+    let mut header = tar::Header::new_gnu();
+    header.set_size(0);
+    header.set_mode(0o500);
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_cksum();
+    builder.append_data(&mut header, "probe", &b""[..]).unwrap();
+    for (name, content) in [
+        ("identity.age", &b"identity"[..]),
+        ("config.yaml", &b"vault_dir: fixture\n"[..]),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(content.len() as u64);
+        header.set_mode(0o600);
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_cksum();
+        builder.append_data(&mut header, name, content).unwrap();
+    }
+    let mut header = tar::Header::new_gnu();
+    header.set_size(0);
+    header.set_mode(0o700);
+    header.set_entry_type(tar::EntryType::Directory);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "entries", &b""[..])
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+
+    archive::restore(&archive_path, &destination, false).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(existing).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn restore_does_not_follow_predictable_temporary_symlink() {

@@ -256,9 +256,17 @@ pub fn restore(
         ensure_no_symlink_components(dest, &rel)?;
         let kind = entry.header().entry_type();
         if kind == EntryType::Directory {
+            let already_exists = match fs::symlink_metadata(&target) {
+                Ok(metadata) if metadata.is_dir() => true,
+                Ok(_) => return Err(ArchiveError::NotDirectory(target)),
+                Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                Err(error) => return Err(error.into()),
+            };
             crate::safeio::create_dir_all(&target)
                 .map_err(|error| io::Error::other(error.to_string()))?;
-            apply_mode(&target, entry.header().mode()? & 0o700)?;
+            if !already_exists {
+                apply_mode(&target, entry.header().mode()? & 0o700)?;
+            }
             result.push(ArchiveEntry {
                 path: rel
                     .to_string_lossy()

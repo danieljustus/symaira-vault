@@ -79,7 +79,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/syncgen/main.go"
     ],
-    "generator_digest": "7929ecdd37e1471bb26ef77a555e2cc4bcfb16ca39a95cb78a40e6529caea201"
+    "generator_digest": "f0a0b938bc0f36b0d63ac7957ec55850b0cf97ff6b4d3c515646db0759cfd9ef"
   },
   "cases": [
     {
@@ -254,6 +254,7 @@
           }
         ],
         "backslash_member_rejected": true,
+        "existing_directory_mode_preserved": true,
         "restored_files": [
           {
             "path": "config.yaml",
