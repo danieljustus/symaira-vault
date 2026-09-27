@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,12 +18,13 @@ import (
 const pinnedOracleCommit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 
 type exportCase struct {
-	Name    string                 `json:"name"`
-	Entries []exporter.ExportEntry `json:"entries"`
-	Mapping map[string]string      `json:"mapping"`
-	JSON    string                 `json:"json"`
-	CSV     string                 `json:"csv"`
-	Notices string                 `json:"notices"`
+	Name        string                 `json:"name"`
+	Entries     []exporter.ExportEntry `json:"entries"`
+	Mapping     map[string]string      `json:"mapping"`
+	FloatFields []string               `json:"float_fields,omitempty"`
+	JSON        string                 `json:"json"`
+	CSV         string                 `json:"csv"`
+	Notices     string                 `json:"notices"`
 }
 
 func main() {
@@ -44,6 +46,7 @@ func main() {
 		{Name: "empty", Entries: []exporter.ExportEntry{}},
 		{Name: "escaping", Entries: []exporter.ExportEntry{{Path: " <&>\u2028", Data: map[string]any{"leading": "\u00a0space", "quote": "a\"b", "comma": "a,b", "newline": "a\r\nb", "sentinel": "\\.", "empty": "", "line": "\u2029"}}}},
 		{Name: "nested", Entries: []exporter.ExportEntry{{Path: "nested", Data: map[string]any{"array": []any{"a", nil, true, []any{"b"}}, "map": map[string]any{"z": []any{"x", "y"}, "a": map[string]any{"b": "c"}}, "nil": nil, "number": 42}}}},
+		{Name: "numeric-edges", Entries: []exporter.ExportEntry{{Path: "numeric", Data: map[string]any{"small_exponent": 1e-7, "decimal_boundary": 1e-6, "large_decimal": 1e20, "large_exponent": 1e21, "csv_decimal_low": 1e-4, "csv_exponent_low": 1e-5, "csv_decimal_high": 1e5, "csv_exponent_high": 1e6, "negative_zero": math.Copysign(0, -1), "integer": int64(9007199254740993), "numeric_string": "-0.0"}}}, FloatFields: []string{"small_exponent", "decimal_boundary", "large_decimal", "large_exponent", "csv_decimal_low", "csv_exponent_low", "csv_decimal_high", "csv_exponent_high", "negative_zero"}},
 		{Name: "attachments", Entries: []exporter.ExportEntry{{Path: "with-files", Data: map[string]any{"file_b64_0": "c3ludGhldGlj", "chunk_count": 1, "chunk_size": 9, "name": "fixture"}}, {Path: "only-files", Data: map[string]any{"file_b64_1": "c3ludGhldGlj"}}}},
 		{Name: "mapping", Entries: []exporter.ExportEntry{{Path: "first", Data: map[string]any{"username": "fixture", "field": "value"}}, {Path: "second", Data: map[string]any{"extra": "optional"}}}, Mapping: map[string]string{"username": " name", "extra": "", "field": "renamed"}},
 	}
@@ -82,7 +85,7 @@ func main() {
 		if !bytes.Equal(actual, encoded) {
 			must(fmt.Errorf("export fixture stale"))
 		}
-		fmt.Println("PASS export oracle (5 cases)")
+		fmt.Printf("PASS export oracle (%d cases)\n", len(cases))
 		return
 	}
 	must(os.WriteFile(path, encoded, 0600))

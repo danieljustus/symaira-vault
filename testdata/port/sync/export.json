@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "f66b591659363d8befc7698103f189250536f8e03c62ac7f65f752d2f1c33e02",
-  "generator_digest": "1f9cc5b370f775bf6da80d415ec6559dbbcfacb35df3cbc7283fca8284ce13c6",
+  "generator_digest": "e97238c840943906092976b6222515a3342752c19d5798a4a41a2ceb3a949599",
   "cases": [
     {
       "name": "empty",
@@ -70,6 +70,42 @@
       "mapping": null,
       "json": "[\n  {\n    \"data\": {\n      \"array\": [\n        \"a\",\n        null,\n        true,\n        [\n          \"b\"\n        ]\n      ],\n      \"map\": {\n        \"a\": {\n          \"b\": \"c\"\n        },\n        \"z\": [\n          \"x\",\n          \"y\"\n        ]\n      },\n      \"nil\": null,\n      \"number\": 42\n    },\n    \"path\": \"nested\"\n  }\n]\n",
       "csv": "path,array,map,nil,number\nnested,[a \u003cnil\u003e true [b]],map[a:map[b:c] z:[x y]],\u003cnil\u003e,42\n",
+      "notices": ""
+    },
+    {
+      "name": "numeric-edges",
+      "entries": [
+        {
+          "path": "numeric",
+          "data": {
+            "csv_decimal_high": 100000,
+            "csv_decimal_low": 0.0001,
+            "csv_exponent_high": 1000000,
+            "csv_exponent_low": 0.00001,
+            "decimal_boundary": 0.000001,
+            "integer": 9007199254740993,
+            "large_decimal": 100000000000000000000,
+            "large_exponent": 1e+21,
+            "negative_zero": -0,
+            "numeric_string": "-0.0",
+            "small_exponent": 1e-7
+          }
+        }
+      ],
+      "mapping": null,
+      "float_fields": [
+        "small_exponent",
+        "decimal_boundary",
+        "large_decimal",
+        "large_exponent",
+        "csv_decimal_low",
+        "csv_exponent_low",
+        "csv_decimal_high",
+        "csv_exponent_high",
+        "negative_zero"
+      ],
+      "json": "[\n  {\n    \"data\": {\n      \"csv_decimal_high\": 100000,\n      \"csv_decimal_low\": 0.0001,\n      \"csv_exponent_high\": 1000000,\n      \"csv_exponent_low\": 0.00001,\n      \"decimal_boundary\": 0.000001,\n      \"integer\": 9007199254740993,\n      \"large_decimal\": 100000000000000000000,\n      \"large_exponent\": 1e+21,\n      \"negative_zero\": -0,\n      \"numeric_string\": \"-0.0\",\n      \"small_exponent\": 1e-7\n    },\n    \"path\": \"numeric\"\n  }\n]\n",
+      "csv": "path,csv_decimal_high,csv_decimal_low,csv_exponent_high,csv_exponent_low,decimal_boundary,integer,large_decimal,large_exponent,negative_zero,numeric_string,small_exponent\nnumeric,100000,0.0001,1e+06,1e-05,1e-06,9007199254740993,1e+20,1e+21,-0,-0.0,1e-07\n",
       "notices": ""
     },
     {
