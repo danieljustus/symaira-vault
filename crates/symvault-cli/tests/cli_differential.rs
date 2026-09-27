@@ -858,21 +858,43 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         &rust_restore_root,
         &home,
     );
-    assert_success(&rust_restore, "Rust restore of Go backup");
-    let rust_get_restored = run(
-        &rust_binary,
-        &[
-            "--vault",
-            rust_restore_root.to_str().unwrap(),
-            "get",
-            "work/github.password",
-            "--print",
-        ],
-        &rust_restore_root,
-        &home,
-    );
-    assert_success(&rust_get_restored, "Rust get after Go backup restore");
-    assert_eq!(rust_get_restored.stdout, b"secret\n");
+    if cfg!(windows) {
+        // The pinned Go v0.22.1 writer used filepath.Rel verbatim in tar
+        // headers on Windows. Its own restore rejects those backslashes.
+        assert!(!rust_restore.status.success());
+        assert!(String::from_utf8_lossy(&rust_restore.stderr).contains("unsafe archive path"));
+        let go_reject_root = temporary_root("go-reject-legacy-backup");
+        let go_reject = run(
+            &go_binary,
+            &[
+                "--vault",
+                go_reject_root.to_str().unwrap(),
+                "restore",
+                archive.to_str().unwrap(),
+            ],
+            &go_reject_root,
+            &home,
+        );
+        assert!(!go_reject.status.success());
+        assert!(String::from_utf8_lossy(&go_reject.stderr).contains("unsafe path"));
+        fs::remove_dir_all(go_reject_root).expect("cleanup Go legacy restore vault");
+    } else {
+        assert_success(&rust_restore, "Rust restore of Go backup");
+        let rust_get_restored = run(
+            &rust_binary,
+            &[
+                "--vault",
+                rust_restore_root.to_str().unwrap(),
+                "get",
+                "work/github.password",
+                "--print",
+            ],
+            &rust_restore_root,
+            &home,
+        );
+        assert_success(&rust_get_restored, "Rust get after Go backup restore");
+        assert_eq!(rust_get_restored.stdout, b"secret\n");
+    }
 
     let rust_backup = run(
         &rust_binary,
