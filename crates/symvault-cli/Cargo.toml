@@ -37,3 +37,6 @@ symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "=1.1.4", features = ["fs"] }

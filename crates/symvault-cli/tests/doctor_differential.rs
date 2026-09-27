@@ -1436,7 +1436,7 @@ fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
         result_rust["message"]
             .as_str()
             .unwrap()
-            .contains("approval devices: cannot load (refusing symlinked approval store directory")
+            .contains("approval devices: cannot load (open approval store directory")
     );
     assert_eq!(fs::read(go_file).unwrap(), bytes);
     assert_eq!(fs::read(rust_file).unwrap(), bytes);

@@ -3137,6 +3137,7 @@ dependencies = [
  "getrandom 0.3.3",
  "reqwest",
  "rpassword",
+ "rustix",
  "serde",
  "serde_json",
  "serde_yaml_ng",

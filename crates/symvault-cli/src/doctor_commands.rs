@@ -2053,17 +2053,18 @@ fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
 }
 
 fn approval_device_summary(vault_dir: &Path) -> String {
+    #[cfg(not(unix))]
     if let Err(err) = check_approval_store_directories(vault_dir) {
         return format!("approval devices: cannot load ({err})");
     }
-    let store = match crate::device_approval::DeviceSessionStore::new(vault_dir) {
-        Ok(store) => store,
+    let sessions = match crate::device_approval::load_for_doctor(vault_dir) {
+        Ok(sessions) => sessions,
         Err(err) => return format!("approval devices: cannot load ({err})"),
     };
     let mut active = 0usize;
     let mut expired = 0usize;
     let mut revoked = 0usize;
-    for session in store.list() {
+    for session in sessions {
         if session.revoked {
             revoked += 1;
             continue;
@@ -2078,6 +2079,7 @@ fn approval_device_summary(vault_dir: &Path) -> String {
     format!("{active} approval device(s) active, {expired} expired, {revoked} revoked")
 }
 
+#[cfg(not(unix))]
 fn check_approval_store_directories(vault_dir: &Path) -> Result<(), String> {
     for directory in [vault_dir, &vault_dir.join(".symvault")] {
         match fs::symlink_metadata(directory) {
