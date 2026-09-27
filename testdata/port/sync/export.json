@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "f66b591659363d8befc7698103f189250536f8e03c62ac7f65f752d2f1c33e02",
-  "generator_digest": "e97238c840943906092976b6222515a3342752c19d5798a4a41a2ceb3a949599",
+  "generator_digest": "fcfb6c563ffd240a3d797958e6796436b2fb6762e52a84e06bad51cd54313ec7",
   "cases": [
     {
       "name": "empty",
@@ -156,6 +156,29 @@
       },
       "json": "[\n  {\n    \"data\": {\n      \" name\": \"fixture\",\n      \"renamed\": \"value\"\n    },\n    \"path\": \"first\"\n  },\n  {\n    \"data\": {\n      \"\": \"optional\"\n    },\n    \"path\": \"second\"\n  }\n]\n",
       "csv": "path,,renamed,\" name\"\nfirst,,value,fixture\nsecond,optional,,\n",
+      "notices": ""
+    },
+    {
+      "name": "mapping-collision",
+      "entries": [
+        {
+          "path": "collision",
+          "data": {
+            "alpha": "first",
+            "beta": "second"
+          }
+        }
+      ],
+      "mapping": {
+        "alpha": "same",
+        "beta": "same"
+      },
+      "json": "",
+      "json_outcomes": [
+        "[\n  {\n    \"data\": {\n      \"same\": \"first\"\n    },\n    \"path\": \"collision\"\n  }\n]\n",
+        "[\n  {\n    \"data\": {\n      \"same\": \"second\"\n    },\n    \"path\": \"collision\"\n  }\n]\n"
+      ],
+      "csv": "path,same,same\ncollision,first,second\n",
       "notices": ""
     }
   ]

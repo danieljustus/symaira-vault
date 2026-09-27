@@ -13,6 +13,8 @@ struct Case {
     #[serde(default)]
     float_fields: Vec<String>,
     json: String,
+    #[serde(default)]
+    json_outcomes: Vec<String>,
     csv: String,
     notices: String,
 }
@@ -20,7 +22,7 @@ struct Case {
 fn export_matches_production_go_bytes_and_attachment_notices() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/sync/export.json")).unwrap();
-    assert_eq!(fixture.cases.len(), 6);
+    assert_eq!(fixture.cases.len(), 7);
     for case in fixture.cases {
         let mut entries = case.entries;
         for key in case.float_fields {
@@ -48,13 +50,24 @@ fn export_matches_production_go_bytes_and_attachment_notices() {
             stream.write_entry(entry).unwrap();
         }
         stream.finish().unwrap();
-        assert_eq!(
-            streamed,
-            case.json.as_bytes(),
-            "{} streamed JSON",
-            case.name
-        );
-        assert_eq!(json, case.json.as_bytes(), "{} JSON", case.name);
+        if case.json_outcomes.is_empty() {
+            assert_eq!(
+                streamed,
+                case.json.as_bytes(),
+                "{} streamed JSON",
+                case.name
+            );
+            assert_eq!(json, case.json.as_bytes(), "{} JSON", case.name);
+        } else {
+            assert!(case.json.is_empty(), "{} has exact JSON bytes", case.name);
+            assert_eq!(streamed, json, "{} batch/stream JSON", case.name);
+            let actual = String::from_utf8(json).expect("Rust JSON is UTF-8");
+            assert!(
+                case.json_outcomes.contains(&actual),
+                "{} JSON was not a Go-observed collision outcome: {actual}",
+                case.name
+            );
+        }
         assert_eq!(csv, case.csv.as_bytes(), "{} CSV", case.name);
         assert_eq!(notices, case.notices.as_bytes(), "{} notices", case.name);
     }
