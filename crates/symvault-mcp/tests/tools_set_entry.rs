@@ -127,7 +127,7 @@ fn write_synthetic_vault() -> (
                 metadata: EntryMetadata {
                     created: "2026-01-01T00:00:00Z".into(),
                     updated: "2026-01-01T00:00:00Z".into(),
-                    version: 1,
+                    version: 0,
                     ..EntryMetadata::default()
                 },
                 ..Entry::default()
