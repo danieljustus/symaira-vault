@@ -1,7 +1,7 @@
 //! Implementation of `symvault doctor` health checks and CLI rendering.
 
 use std::{
-    fs,
+    env, fs,
     io::{self, Write},
     path::{Path, PathBuf},
     time::{Duration, SystemTime},
@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, PrettyFormatter, Serializer};
 use symvault_core::config::{AuthMethod, Config};
 use symvault_core::policy::glob_match;
+use symvault_store::token_registry;
 use symvault_sync::GitRepository;
+use time::OffsetDateTime;
+use zeroize::Zeroizing;
 
 /// Status outcome of a health check.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -266,6 +269,11 @@ const ALL_CHECKS: &[CheckDef] = &[
         id: "mcp.server.reachable",
         tags: &["network"],
         run: check_mcp_server,
+    },
+    CheckDef {
+        id: "mcp.tokens",
+        tags: &[],
+        run: check_mcp_tokens,
     },
     CheckDef {
         id: "mcp.approval.tls",
@@ -1794,6 +1802,152 @@ fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
             format!("cert expires {expiry_str} ({days_left} days); {device_summary}"),
             false,
         )
+    }
+}
+
+fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+    const ID: &str = "mcp.tokens";
+    const NAME: &str = "MCP tokens";
+    let mut tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
+        Ok(tokens) => tokens,
+        Err(error) => {
+            return DoctorResult::new(
+                ID,
+                NAME,
+                Status::Warn,
+                format!("cannot load MCP token registry: {error}"),
+                false,
+            );
+        }
+    };
+    tokens.retain(|token| !token.hash.is_empty());
+
+    if tokens.is_empty() {
+        let legacy_path = vault_dir.join("mcp-token");
+        let legacy = match fs::read(&legacy_path) {
+            Ok(bytes) => {
+                let bytes = Zeroizing::new(bytes);
+                let raw = std::str::from_utf8(&bytes).ok().map(str::trim);
+                raw.filter(|token| !token.is_empty())
+                    .map(|token| Zeroizing::new(token.to_owned()))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+            Err(_) if env::var_os("SYMVAULT_MCP_TOKEN").is_some() => {
+                // Go consumes the in-process environment value, but neither
+                // stores nor reports it. This doctor process exits after the
+                // check, so preserving it in the short-lived environment is
+                // not observable to the caller.
+                return no_mcp_tokens_result();
+            }
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: load legacy token: {error}"),
+                    false,
+                );
+            }
+        };
+
+        if legacy.is_none() && env::var_os("SYMVAULT_MCP_TOKEN").is_some() {
+            // With an environment token and no file token, Go uses the
+            // environment value only for this process and leaves the registry
+            // empty. Do not copy that secret into vault state.
+            return no_mcp_tokens_result();
+        }
+
+        let migration = if let Some(raw) = legacy.as_deref() {
+            token_registry::import_legacy(vault_dir, raw, OffsetDateTime::now_utc())
+        } else {
+            token_registry::create_legacy(vault_dir, OffsetDateTime::now_utc())
+        };
+        let migrated = match migration {
+            Ok(migrated) => migrated,
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: load legacy token: {error}"),
+                    false,
+                );
+            }
+        };
+        if migrated {
+            remove_legacy_token_file(&legacy_path);
+        }
+        tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
+            Ok(tokens) => tokens,
+            Err(error) => {
+                return DoctorResult::new(
+                    ID,
+                    NAME,
+                    Status::Warn,
+                    format!("cannot load MCP token registry: {error}"),
+                    false,
+                );
+            }
+        };
+        tokens.retain(|token| !token.hash.is_empty());
+    }
+
+    let now = OffsetDateTime::now_utc();
+    tokens.retain(|token| {
+        token.expires_at.as_deref().is_none_or(|expires_at| {
+            OffsetDateTime::parse(expires_at, &time::format_description::well_known::Rfc3339)
+                .is_ok_and(|expires_at| now <= expires_at)
+        })
+    });
+    if tokens.is_empty() {
+        return no_mcp_tokens_result();
+    }
+
+    let old = tokens
+        .iter()
+        .filter(|token| {
+            token.created_at.as_deref().is_none_or(|created_at| {
+                OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
+                    .is_ok_and(|created_at| now - created_at > time::Duration::days(90))
+            })
+        })
+        .count();
+    if old > 0 {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Warn,
+            format!("{} active, {old} older than 90d", tokens.len()),
+            false,
+        )
+        .with_hint("rotate old tokens per agent with `symvault agent token rotate <name>`")
+    } else {
+        DoctorResult::new(
+            ID,
+            NAME,
+            Status::Ok,
+            format!(
+                "{} active token(s), all within rotation policy",
+                tokens.len()
+            ),
+            false,
+        )
+    }
+}
+
+fn no_mcp_tokens_result() -> DoctorResult {
+    DoctorResult::new(
+        "mcp.tokens",
+        "MCP tokens",
+        Status::Ok,
+        "no MCP tokens configured",
+        false,
+    )
+}
+
+fn remove_legacy_token_file(path: &Path) {
+    if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_file()) {
+        let _ = fs::remove_file(path);
     }
 }
 

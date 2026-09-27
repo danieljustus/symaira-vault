@@ -99,12 +99,12 @@ unported HTTP/TLS and broker behavior. Update flags are recognized only where
 the corresponding checker/preview path consumes them; do not add
 accepted-and-ignored flag scaffolding.
 
-## `symvault doctor` check coverage (2026-09-19)
+## `symvault doctor` check coverage (2026-09-27)
 
 The command group exists in Rust, but only part of Go's check registry is ported.
 Measured with `--json --no-network` against the pinned Go oracle
 (`parent-doctor-matrix.py`, fixtures `empty`, `corrupt`, `env` and `initialized`):
-Go runs **35** checks, Rust **33**. For the 33 shared IDs the
+Go runs **35** non-network checks, Rust **34**. For the 34 shared IDs the
 name/status/message/hint/fixable fields are byte-identical on a missing vault, on a
 missing vault with the env-passphrase variables set, and on an oracle-initialized
 vault (**0 field deviations**). The remaining 2 IDs are **not implemented** and are
@@ -129,7 +129,7 @@ ported in wave 2a quote no parser error, so they match on the corrupt fixture as
 do quote it and are therefore pinned for the missing and initialized fixtures only
 (`differential_doctor_mcp_config_checks`).
 
-Ported IDs (36 in the registry, 33 of them without network):
+Ported IDs (37 in the registry, 34 of them without network):
 
 `vault.initialized`, `vault.config.parses`, `vault.config.validates`,
 `vault.identity.encrypted`, `vault.permissions`, `auth.method`, `session.cache`,
@@ -141,9 +141,9 @@ Ported IDs (36 in the registry, 33 of them without network):
 `tooling.clipboard.backend`, `daemon.status`, `mcp.approval.tls`, `tooling.secureui`,
 `tooling.precommit`, `session.keyring`, `password.strength`, `password.reuse`,
 `security.env_passphrase`, `mcp.dynamic.engines`, `mcp.agents`,
-`mcp.server.reachable` (network).
+`mcp.server.reachable` (network), `mcp.tokens`.
 
-Still open (2): `mcp.tokens`, `crypto.scrypt.benchmark`. The network-tagged
+Still open (1): `crypto.scrypt.benchmark`. The network-tagged
 `mcp.server.reachable` check now uses a controlled loopback HTTP fixture and is
 differentially covered for HTTP 200 (with and without a token file), HTTP 503,
 and an unreachable port. The Go implementation at oracle commit
@@ -177,16 +177,24 @@ active/inactive result follows the machine running the test. The Go oracle's
 `fca3f89401833b5e14ec4ec74ef736b0f63bca74` (blob
 `cbd27b9bfc4caefaa811f88e14376c0263f944b3`).
 
-The two open IDs were each implemented at some point, measured against the oracle and
-then **withdrawn again** because they cannot be byte-pinned — do not re-add them
+The remaining open check was implemented at some point, measured against the oracle
+and then **withdrawn again** because it cannot be byte-pinned — do not re-add it
 without a new decision:
 
 - `crypto.scrypt.benchmark`: Go embeds a *measured* duration and its recommended work
   factor for this machine in the message (the argon2id branch *is* stable, the scrypt
   branch is not).
-- `mcp.tokens`: Go's message depends on token-registry side effects inside the
-  (synthetic) vault path and contains a non-deterministic temp-file name; on an
-  initialized vault it reports the *user's* token count.
+
+`mcp.tokens` is now ported. A disposable differential checks an existing registry
+without changing its bytes or sibling legacy-token file, and tests both legacy-token
+migration and fresh-token initialization. Go and Rust results match; the generated
+registry bytes are compared after normalizing the random ID and creation time (and
+the random hash/prefix for fresh tokens), both registry files are mode `0600`, the
+migrated raw token is absent, and the token-specific paths match. The full vault
+file sets differ because Go runs all checks before applying `--only`; its separate
+`mcp.approval.tls` check creates `.symvault/device-sessions.json`. Rust publishes
+the final hashed registry atomically without writing a generated raw token to the
+temporary legacy-token path used by Go.
 
 `mcp.dynamic.engines` and `mcp.agents` were in that group too and are now **ported**:
 their missing-vault branch is byte-exact (`cannot load config: open <path>: no such
@@ -200,8 +208,8 @@ oracle's status.
 The `mcp.server.reachable` check now has a controlled loopback HTTP differential
 fixture; its internet connectivity and external-host branches are not exercised.
 
-`mcp.tokens` and `crypto.scrypt.benchmark` stay out unless a shape-only comparison is
-explicitly accepted as such.
+`crypto.scrypt.benchmark` stays out unless a shape-only comparison is explicitly
+accepted as such.
 
 Oracle behaviours the port must keep (verified 2026-09-19): text output goes to
 stderr and JSON to stdout; `--output json` is **rejected** with exit 9 and

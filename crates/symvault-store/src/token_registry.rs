@@ -126,6 +126,84 @@ pub fn create(
     Ok((record, raw_token))
 }
 
+/// Imports an existing legacy MCP token into the scoped registry when it is
+/// empty. Mirrors Go's `LoadTokenSystem` migration without ever persisting the
+/// raw token. Returns `false` when another registry entry already exists.
+pub fn import_legacy(
+    root: &Path,
+    raw_token: &str,
+    now: OffsetDateTime,
+) -> Result<bool, StoreError> {
+    let root_cap = open_root(root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    entries.retain(|_, entry| !entry.hash.is_empty());
+    if !entries.is_empty() {
+        return Ok(false);
+    }
+
+    let prefix = raw_token
+        .get(..4)
+        .ok_or_else(|| StoreError::Config("legacy MCP token is shorter than 4 bytes".into()))?;
+    let mut id_bytes = [0_u8; 4];
+    getrandom::fill(&mut id_bytes)
+        .map_err(|error| StoreError::Config(format!("migrate legacy token: {error}")))?;
+    let id = format!(
+        "tok-{:04}{:02}{:02}-{}",
+        now.year(),
+        u8::from(now.month()),
+        now.day(),
+        encode_hex(&id_bytes)
+    );
+    let record = TokenRecord {
+        id: id.clone(),
+        label: "legacy (auto-migrated, unscoped)".into(),
+        hash: sha256_hex(raw_token.as_bytes()),
+        prefix: prefix.into(),
+        allowed_tools: Some(vec!["*".into()]),
+        tool_registry_hash: String::new(),
+        agent_name: "legacy".into(),
+        created_at: go_rfc3339(now),
+        expires_at: None,
+        last_used_at: None,
+        revoked: false,
+        revoked_at: None,
+        refresh_token_hash: String::new(),
+        refresh_expires_at: None,
+    };
+    entries.insert(id, record);
+    write(&root_cap, &target, &entries)?;
+    Ok(true)
+}
+
+/// Creates Go's fresh legacy-token registry entry without retaining the raw
+/// token. This is the final on-disk state of `LoadOrCreateToken` followed by
+/// legacy migration; atomic publication keeps the registry private and valid.
+pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<bool, StoreError> {
+    use zeroize::Zeroize;
+
+    let root_cap = open_root(root)?;
+    let target = root.join(TOKEN_REGISTRY_FILE);
+    let mut entries = read(&target)?;
+    entries.retain(|_, entry| !entry.hash.is_empty());
+    if !entries.is_empty() {
+        return Ok(false);
+    }
+
+    let request = NewToken {
+        label: "legacy (auto-migrated, unscoped)",
+        allowed_tools: vec!["*".to_owned()],
+        agent_name: "legacy",
+        ttl: None,
+        tool_registry_hash: "",
+    };
+    let (record, mut raw_token) = new_record(&request, now)?;
+    raw_token.zeroize();
+    entries.insert(record.id.clone(), record);
+    write(&root_cap, &target, &entries)?;
+    Ok(true)
+}
+
 /// Revokes one token owned by `agent_name`. Returns `false` when no such
 /// non-revoked token exists (unknown agent, unknown token ID, or a token
 /// already revoked) — the caller renders Go's exact "not found or already

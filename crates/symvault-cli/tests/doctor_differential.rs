@@ -1059,6 +1059,266 @@ fn compare_doctor_ids(go: &Path, rust: &Path, vault: &Path, home: &Path, ids: &s
     }
 }
 
+fn run_mcp_tokens_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
+    Command::new(binary)
+        .args([
+            "--vault",
+            vault.to_str().unwrap(),
+            "doctor",
+            "--only",
+            "mcp.tokens",
+            "--json",
+            "--no-network",
+        ])
+        .env_clear()
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("SYMVAULT_VAULT", vault)
+        .env("CI", "1")
+        .env("NO_COLOR", "1")
+        .output()
+        .expect("run MCP token doctor check in isolated environment")
+}
+
+fn doctor_result(output: &Output) -> serde_json::Value {
+    first_json(&output.stdout, "MCP token doctor")["results"][0].clone()
+}
+
+fn private_mode(path: &Path) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path).expect("metadata").permissions().mode() & 0o777
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        0
+    }
+}
+
+fn set_fixture_mode(path: &Path, mode: u32) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("set fixture mode");
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+    }
+}
+
+fn write_private_fixture(path: &Path, bytes: &[u8]) {
+    fs::write(path, bytes).expect("write isolated token fixture");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .expect("restrict isolated token fixture permissions");
+    }
+}
+
+fn normalized_registry_bytes(bytes: &[u8], generated_hash: bool) -> Vec<u8> {
+    let mut value: serde_json::Value = serde_json::from_slice(bytes).expect("registry JSON");
+    let tokens = value["tokens"].as_object_mut().expect("tokens map");
+    assert_eq!(tokens.len(), 1, "one migrated legacy token");
+    let (key, mut token) = tokens
+        .iter_mut()
+        .next()
+        .map(|(key, token)| (key.clone(), token.take()))
+        .expect("token entry");
+    assert_eq!(token["id"], key, "registry key and token ID match");
+    token["id"] = serde_json::Value::String("<generated-id>".into());
+    token["created_at"] = serde_json::Value::String("<generated-time>".into());
+    if generated_hash {
+        token["hash"] = serde_json::Value::String("<generated-hash>".into());
+        token["prefix"] = serde_json::Value::String("<generated-prefix>".into());
+    }
+    let tokens = value["tokens"].as_object_mut().expect("tokens map");
+    tokens.clear();
+    tokens.insert("<generated-id>".into(), token);
+    serde_json::to_vec(&value).expect("normalized registry JSON")
+}
+
+#[test]
+fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-tokens-readonly-home");
+    let go_vault = temporary_root("mcp-tokens-readonly-go-vault");
+    let rust_vault = temporary_root("mcp-tokens-readonly-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    let registry = br#"{"version":2,"tokens":{"tok-fixture":{"id":"tok-fixture","label":"fixture","hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","prefix":"0123","allowed_tools":["*"],"agent_name":"fixture","created_at":"2026-09-26T00:00:00Z","revoked":false}}}
+"#;
+    for vault in [&go_vault, &rust_vault] {
+        write_private_fixture(&vault.join("mcp-tokens.json"), registry);
+        set_fixture_mode(&vault.join("mcp-tokens.json"), 0o644);
+        write_private_fixture(&vault.join("mcp-token"), b"synthetic-unused-legacy-token\n");
+    }
+
+    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let result_go = doctor_result(&out_go);
+    let result_rust = doctor_result(&out_rust);
+    for field in ["id", "name", "status", "message", "hint", "fixable"] {
+        assert_eq!(
+            result_go.get(field),
+            result_rust.get(field),
+            "field {field}"
+        );
+    }
+    for vault in [&go_vault, &rust_vault] {
+        let registry_path = vault.join("mcp-tokens.json");
+        assert_eq!(
+            fs::read(&registry_path).expect("registry unchanged"),
+            registry
+        );
+        assert_eq!(private_mode(&registry_path), 0o644);
+        assert_eq!(
+            fs::read(vault.join("mcp-token")).expect("legacy file unchanged"),
+            b"synthetic-unused-legacy-token\n"
+        );
+    }
+}
+
+#[test]
+fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-tokens-corrupt-home");
+    let go_vault = temporary_root("mcp-tokens-corrupt-go-vault");
+    let rust_vault = temporary_root("mcp-tokens-corrupt-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    for vault in [&go_vault, &rust_vault] {
+        write_private_fixture(&vault.join("mcp-tokens.json"), b"{broken registry\n");
+        write_private_fixture(
+            &vault.join("mcp-token"),
+            b"synthetic-preserved-legacy-token\n",
+        );
+    }
+
+    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let result_go = doctor_result(&out_go);
+    let result_rust = doctor_result(&out_rust);
+    for field in ["id", "name", "status", "fixable"] {
+        assert_eq!(
+            result_go.get(field),
+            result_rust.get(field),
+            "field {field}"
+        );
+    }
+    assert_eq!(result_go["status"], "warn");
+    for (vault, raw_error) in [(&go_vault, &result_go), (&rust_vault, &result_rust)] {
+        assert!(
+            raw_error["message"]
+                .as_str()
+                .expect("warning message")
+                .starts_with("cannot load MCP token registry: ")
+        );
+        let registry = vault.join("mcp-tokens.json");
+        assert_eq!(fs::read(&registry).unwrap(), b"{broken registry\n");
+        assert_eq!(private_mode(&registry), 0o600);
+        assert_eq!(
+            fs::read(vault.join("mcp-token")).unwrap(),
+            b"synthetic-preserved-legacy-token\n"
+        );
+        assert!(!vault.join("mcp-tokens.json.tmp").exists());
+    }
+}
+
+#[test]
+fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    for (case, legacy) in [
+        (
+            "existing-legacy",
+            Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+        ),
+        ("new-legacy", None),
+    ] {
+        let home = temporary_root(&format!("mcp-tokens-{case}-home"));
+        let go_vault = temporary_root(&format!("mcp-tokens-{case}-go-vault"));
+        let rust_vault = temporary_root(&format!("mcp-tokens-{case}-rust-vault"));
+        let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+        if let Some(raw) = legacy {
+            write_private_fixture(&go_vault.join("mcp-token"), format!("{raw}\n").as_bytes());
+            write_private_fixture(&rust_vault.join("mcp-token"), format!("{raw}\n").as_bytes());
+            set_fixture_mode(&go_vault.join("mcp-token"), 0o644);
+            set_fixture_mode(&rust_vault.join("mcp-token"), 0o644);
+        }
+
+        let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
+        let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+        assert_eq!(
+            out_go.status.code(),
+            Some(0),
+            "Go {case}: {:?}",
+            out_go.stderr
+        );
+        assert_eq!(
+            out_rust.status.code(),
+            Some(0),
+            "Rust {case}: {:?}",
+            out_rust.stderr
+        );
+        let result_go = doctor_result(&out_go);
+        let result_rust = doctor_result(&out_rust);
+        for field in ["id", "name", "status", "message", "hint", "fixable"] {
+            assert_eq!(
+                result_go.get(field),
+                result_rust.get(field),
+                "{case}: field {field}"
+            );
+        }
+
+        for vault in [&go_vault, &rust_vault] {
+            assert!(
+                !vault.join("mcp-token").exists(),
+                "{case}: legacy file removed"
+            );
+            let registry_path = vault.join("mcp-tokens.json");
+            let registry = fs::read(&registry_path).expect("migrated registry bytes");
+            assert!(registry.ends_with(b"\n"), "{case}: newline-terminated JSON");
+            assert_eq!(
+                private_mode(&registry_path),
+                0o600,
+                "{case}: private registry mode"
+            );
+            let _: serde_json::Value = serde_json::from_slice(&registry).expect("valid registry");
+        }
+        // `--only mcp.tokens` still runs every Go doctor check before filtering
+        // output. Its unrelated `mcp.approval.tls` check creates
+        // `.symvault/device-sessions.json`; the Rust check currently only reads
+        // that path. Compare the token migration's observable side effects
+        // directly above rather than treating that separate check as token
+        // registry behavior.
+        let go_registry = fs::read(go_vault.join("mcp-tokens.json")).unwrap();
+        let rust_registry = fs::read(rust_vault.join("mcp-tokens.json")).unwrap();
+        assert_eq!(
+            normalized_registry_bytes(&go_registry, legacy.is_none()),
+            normalized_registry_bytes(&rust_registry, legacy.is_none()),
+            "{case}: registry bytes match after replacing generated ID/time"
+        );
+        if let Some(raw) = legacy {
+            assert!(!String::from_utf8_lossy(&go_registry).contains(raw));
+            assert!(!String::from_utf8_lossy(&rust_registry).contains(raw));
+        }
+    }
+}
+
 #[test]
 fn differential_doctor_auth_method_touchid_availability() {
     let Some((go, rust)) = oracle_binaries() else {
