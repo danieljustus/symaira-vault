@@ -293,7 +293,12 @@ pub fn restore(
             crate::safeio::create_dir_all(parent)
                 .map_err(|error| io::Error::other(error.to_string()))?;
         }
-        let m = entry.header().mode()? & 0o600;
+        let m = match fs::symlink_metadata(&target) {
+            Ok(metadata) if metadata.is_file() => mode(&metadata),
+            Ok(_) => entry.header().mode()? & 0o600,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => entry.header().mode()? & 0o600,
+            Err(error) => return Err(error.into()),
+        };
         let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
         let (copied, hash) = copy_and_hash(&mut entry, &mut tmp)?;
         if copied != size {
