@@ -463,8 +463,8 @@ enum Command {
     /// Check for Symaira Vault updates or show installation-method info.
     Update {
         /// Catch-all: cobra Find dispatches on the first non-flag word
-        /// (`info`); unknown words reach the runner for byte-exact errors.
-        #[arg(value_name = "COMMAND", num_args = 0..)]
+        /// (`info`); check flags are validated by the runner.
+        #[arg(value_name = "COMMAND", num_args = 0.., allow_hyphen_values = true)]
         args: Vec<OsString>,
     },
     /// Manage vault authentication and session status.
@@ -2046,9 +2046,12 @@ fn run_cli() -> ExitCode {
             dry_run,
             cli.quiet,
         ),
-        Some(Command::Update { args }) => {
-            update_commands::run(&args, cli.output.as_deref().unwrap_or("text"), cli.json)
-        }
+        Some(Command::Update { args }) => update_commands::run(
+            &args,
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
+            cli.quiet,
+        ),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {

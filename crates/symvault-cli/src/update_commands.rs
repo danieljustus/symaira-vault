@@ -1,7 +1,7 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! and the root output-format gate. `update check` / `update apply` stay
-//! blocked on network/cosign and dispatch as unknown words until their
-//! runtime is ported.
+//! and the non-release-build path of `update check`. Stable release checks
+//! still require the Go corekit network/cache runtime; `update apply` also
+//! requires its download and cosign path.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -38,7 +38,12 @@ pub(crate) struct InstallInfo {
 }
 
 /// `symvault update` dispatch — cobra Find semantics over the first word.
-pub(crate) fn run(rest: &[OsString], output_format: &str, json_flag: bool) -> ExitCode {
+pub(crate) fn run(
+    rest: &[OsString],
+    output_format: &str,
+    json_flag: bool,
+    quiet: bool,
+) -> ExitCode {
     match rest.first() {
         // Cobra validates the parent's args before `PersistentPreRunE`, so
         // an unknown word reports the command error without the gate; a bare
@@ -51,18 +56,127 @@ pub(crate) fn run(rest: &[OsString], output_format: &str, json_flag: bool) -> Ex
         Some(word) => {
             let word = word.to_string_lossy();
             if word == "info" {
-                if let Some(extra) = rest.get(1) {
-                    return unknown_command(
-                        "symvault update info",
-                        &extra.to_string_lossy(),
-                        false,
-                    );
+                let mut info_json = json_flag || output_format == "json";
+                let mut index = 1;
+                while let Some(arg) = rest.get(index) {
+                    match arg.to_string_lossy().as_ref() {
+                        "--json" => info_json = true,
+                        "--output" => {
+                            let Some(format) = rest.get(index + 1) else {
+                                return unknown_command("symvault update info", "--output", false);
+                            };
+                            info_json = format == "json";
+                            index += 1;
+                        }
+                        value if value.starts_with("--output=") => {
+                            info_json = value.trim_start_matches("--output=") == "json";
+                        }
+                        extra => {
+                            return unknown_command("symvault update info", extra, false);
+                        }
+                    }
+                    index += 1;
                 }
-                return info(json_flag || output_format == "json");
+                return info(info_json);
+            }
+            if word == "check" {
+                return check(rest, output_format, json_flag, quiet);
             }
             unknown_command("symvault update", &word, true)
         }
     }
+}
+
+#[derive(Serialize)]
+struct CheckJson<'a> {
+    current_version: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    latest_version: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    release_url: Option<&'a str>,
+    checkable: bool,
+    update_available: bool,
+}
+
+/// Go's checker returns before creating its HTTP client when AppVersion is
+/// not a stable semver. This is the complete local/dev-build path and cannot
+/// consult the network or write the release cache.
+fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bool) -> ExitCode {
+    let mut want_json = json_flag || output_format == "json";
+    let mut quiet = root_quiet;
+    for arg in rest.iter().skip(1) {
+        match arg.to_string_lossy().as_ref() {
+            "--json" => want_json = true,
+            "--quiet" => quiet = true,
+            "--force" => {}
+            flag if flag.starts_with('-') => {
+                return unknown_command("symvault update check", flag, false);
+            }
+            extra => return unknown_command("symvault update check", extra, false),
+        }
+    }
+
+    let version = crate::VERSION.trim();
+    if is_stable_version(version) {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Error: update check for stable release builds requires the native release checker"
+        );
+        return ExitCode::from(1);
+    }
+
+    if want_json {
+        let output = CheckJson {
+            current_version: version,
+            latest_version: None,
+            release_url: None,
+            checkable: false,
+            update_available: false,
+        };
+        let Ok(mut text) = serde_json::to_string_pretty(&output) else {
+            let _ = writeln!(
+                std::io::stderr(),
+                "Error: encode JSON output: serialize failed"
+            );
+            return ExitCode::from(1);
+        };
+        text = text
+            .replace('&', "\\u0026")
+            .replace('<', "\\u003c")
+            .replace('>', "\\u003e")
+            .replace('\u{2028}', "\\u2028")
+            .replace('\u{2029}', "\\u2029");
+        let mut stdout = std::io::stdout().lock();
+        let _ = stdout.write_all(text.as_bytes());
+        let _ = stdout.write_all(b"\n");
+        return ExitCode::SUCCESS;
+    }
+
+    if !quiet {
+        let _ = writeln!(
+            std::io::stderr(),
+            "Update checks are only available for stable release builds. Current version: {version}"
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+fn is_stable_version(raw: &str) -> bool {
+    let value = raw.trim().strip_prefix('v').unwrap_or(raw.trim());
+    let mut parts = value.split('.');
+    let Some(major) = parts.next() else {
+        return false;
+    };
+    let Some(minor) = parts.next() else {
+        return false;
+    };
+    let Some(patch) = parts.next() else {
+        return false;
+    };
+    parts.next().is_none()
+        && [major, minor, patch]
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// Go `PersistentPreRunE`: a non-text output format must be supported by the
