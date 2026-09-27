@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -194,7 +194,7 @@ SESSION_ORACLE_RELEASE ?= unreleased
 # rather than sitting on the frozen v0.22.1 baseline. portgen used to read the
 # oracle back out of the fixture it was certifying, which made the claim
 # unfalsifiable; it now verifies cmd/ against this commit's blobs.
-CLI_ORACLE_COMMIT ?= 3232e31f
+CLI_ORACLE_COMMIT ?= 1605b180
 CLI_ORACLE_RELEASE ?= unreleased
 KEYRING_KEY_FIXTURE := testdata/port/session/keyring-keys.json
 # SESSION-002's portable half. The native keychain round-trip stays a
@@ -240,6 +240,7 @@ PORT_SESSION_FIXTURE := testdata/port/session/contract.json
 PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
 PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
+MANPAGES_GO_BINARY := target/port/symvault-manpages-go
 RUST_BINARY := $(CARGO_TARGET_DIR)/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
 
@@ -559,7 +560,14 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+# Build the Go oracle from this checked-out source revision so the page tree is
+# compared against the exact CLI tree under review, never an ambient binary.
+manpages-differential:
+	@mkdir -p "$(dir $(MANPAGES_GO_BINARY))"
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(MANPAGES_GO_BINARY)" .
+	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
+
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential manpages-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
