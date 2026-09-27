@@ -12,7 +12,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use symvault_crypto::Identity;
-use symvault_store::{AttachmentInfo, Entry, Store, StoreError};
+use symvault_store::{AttachmentInfo, Entry, StoreError};
 use symvault_sync::{GoTime, safeio};
 
 pub const DEFAULT_MAX_ATTACHMENT_SIZE: u64 = 1 << 20;
@@ -120,7 +120,8 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
     let encoded = STANDARD.encode(&content);
     let source = options.source.clone();
 
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let mut entry = match store.get(&options.path, identity) {
         Ok(entry) => entry,
         Err(StoreError::EntryNotFound(_)) => Entry::default(),
@@ -212,7 +213,8 @@ pub fn read_attachment(
     } else {
         explicit_field
     };
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let entry = store
         .get(&path, identity)
         .map_err(|error| format!("cannot read entry: {error}"))?;

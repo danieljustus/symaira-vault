@@ -18,7 +18,7 @@ use std::{
 use serde_json::Value;
 use symvault_core::redact::{PatternDetector, ScanOptions, Scanner, redact_known_values};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError};
+use symvault_store::{Entry, StoreError};
 
 /// Environment inherited by Go's `secrets.RunCommand` before caller-selected
 /// passthrough names and resolved secret mappings are applied.
@@ -140,7 +140,8 @@ pub(crate) fn resolve_secret_ref(
     identity: &Identity,
     reference: &str,
 ) -> Result<String, String> {
-    let store = Store::open(root, identity).map_err(|error| resolve_error(reference, error))?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| resolve_error(reference, error))?;
     let mut path = reference;
     let mut field = None;
 

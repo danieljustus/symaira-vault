@@ -116,7 +116,8 @@ pub fn set_secret_type(
     path: &str,
     secret_type: &str,
 ) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let mut entry = store
         .get(path, identity)
         .map_err(|error| format!("cannot read entry {path}: {error}"))?;
@@ -161,7 +162,8 @@ fn write_fields(
     for (key, value) in &data {
         validate(key, value)?;
     }
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let (mut entry, new) = if replace {
         (Entry::default(), true)
     } else {
@@ -214,7 +216,8 @@ fn write_fields(
 }
 
 pub fn delete(root: &Path, identity: &Identity, path: &str) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     store
         .delete_entry_with_identity(path, identity)
         .map_err(|error| error.to_string())?;

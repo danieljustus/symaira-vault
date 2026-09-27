@@ -12,7 +12,8 @@ pub fn generate(
     args: &[String],
     dry_run: bool,
 ) -> Result<String, String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     let mut refs = BTreeMap::new();
     if !prefix.is_empty() {
         for path in store.list(identity).map_err(|error| error.to_string())? {

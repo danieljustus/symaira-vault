@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, io::BufRead, path::Path};
 use serde_json::Value;
 use symvault_core::{password, totp};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, SecretMetadata, SecretType, Store, WriteRecord, infer_secret_type};
+use symvault_store::{Entry, SecretMetadata, SecretType, WriteRecord, infer_secret_type};
 use symvault_sync::GoTime;
 
 /// The explicit, noninteractive portion of Go's `add` command.
@@ -66,7 +66,8 @@ fn read_line<R: BufRead>(input: &mut R, flag: &str) -> Result<String, String> {
 /// Creates one new entry. Existing entries are rejected by path presence,
 /// including entries whose ciphertext is damaged and cannot be decrypted.
 pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(), String> {
-    let store = Store::open(root, identity).map_err(|error| error.to_string())?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
     if store
         .entry_exists(&options.path, identity)
         .map_err(|error| error.to_string())?

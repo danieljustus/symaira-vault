@@ -25,6 +25,7 @@ mod file_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
@@ -57,7 +58,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use symaira_core_version::new as new_version;
 #[cfg(target_os = "macos")]
 use symvault_core::platform::TouchId;
@@ -86,7 +87,6 @@ use symvault_platform::FallbackKeyring;
     target_os = "netbsd"
 ))]
 use symvault_platform::OsKeyring;
-use symvault_store::Store;
 use symvault_sync::{CommitOptions, GitError, GitRepository, GoTime};
 use zeroize::Zeroizing;
 
@@ -250,6 +250,8 @@ enum Command {
         reveal: bool,
         #[arg(long)]
         quiet: bool,
+        #[command(subcommand)]
+        subcommand: Option<GenerateCommand>,
     },
     /// Check vault health and configuration
     Doctor {
@@ -473,11 +475,25 @@ enum Command {
     },
 }
 
+#[derive(Debug, Subcommand)]
+enum GenerateCommand {
+    /// Generate manual pages.
+    Manpages {
+        #[arg(value_name = "DIRECTORY")]
+        directory: PathBuf,
+    },
+}
+
 /// The Go CLI exposes `mcp` as both a server and a service-installer command
 /// group; `serve` is accepted there as an alias for the bare `mcp` form.
 #[derive(Debug, Subcommand)]
 enum McpAction {
     /// Run the MCP server over the selected transport.
+    ///
+    /// Hidden to match the oracle: Go's `serve` command is `Hidden: true` and
+    /// its `mcp` group only lists `install`, `status` and `uninstall`, so
+    /// `generate manpages` must not emit a `symvault-mcp-serve.1` page.
+    #[command(hide = true)]
     Serve {
         /// Agent profile used by the stdio server.
         #[arg(long)]
@@ -1132,11 +1148,16 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Generate {
+            subcommand: Some(GenerateCommand::Manpages { directory }),
+            ..
+        }) => run_generate_manpages(&directory),
+        Some(Command::Generate {
             length,
             symbols,
             store,
             reveal,
             quiet,
+            subcommand: None,
         }) => run_generate(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
@@ -2709,6 +2730,9 @@ fn run_auth_rotate_passphrase(
                 }
             };
 
+        device::open_unlocked_vault(&vault, &identity)
+            .map_err(|error| format!("current passphrase is incorrect: {error}"))?;
+
         let new_passphrase =
             session_input::read_passphrase("New passphrase (minimum 12 characters): ")
                 .map_err(|error| format!("cannot read new passphrase: {error}"))?;
@@ -3331,7 +3355,8 @@ fn run_generate(
                 serde_json::Value::String(password.to_string()),
             )]),
         )?;
-        let store = Store::open(&vault, &identity).map_err(|error| error.to_string())?;
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
+            .map_err(|error| error.to_string())?;
         let file = store
             .configured_entry_path(store_path, &identity)
             .map_err(|error| error.to_string())?;
@@ -3356,6 +3381,19 @@ fn run_generate(
             },
             reveal,
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_generate_manpages(directory: &Path) -> ExitCode {
+    let result = (|| {
+        let output_dir = manpage_commands::generate(Cli::command(), directory)?;
+        writeln!(
+            io::stdout().lock(),
+            "Generated manpages in {}",
+            output_dir.display()
+        )
+        .map_err(|error| format!("write manpage result: {error}"))
     })();
     finish_vault_result(result)
 }
@@ -3648,7 +3686,7 @@ fn run_migrate_pseudonymize(
         }
 
         let identity = device::unlock_vault(&vault)?;
-        let store = symvault_store::Store::open(&vault, &identity)
+        let store = symvault_store::Store::open_with_legacy_migration(&vault, &identity)
             .map_err(|error| format!("open vault: {error}"))?;
         let summary = store
             .migrate_pseudonymize(&identity)
@@ -4153,6 +4191,8 @@ fn run_unlock(
         let secret = SecretBytes::new(passphrase.as_bytes());
         let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
+        device::open_unlocked_vault(&vault, &decrypted_identity)
+            .map_err(|error| format!("open vault: {error}"))?;
         let configured_ttl = if config.session_timeout.is_zero() {
             std::time::Duration::from_secs(15 * 60)
         } else {

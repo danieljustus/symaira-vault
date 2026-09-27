@@ -13,7 +13,6 @@ use std::{
 };
 
 use symvault_crypto::Identity;
-use symvault_store::Store;
 use symvault_sync::export::{self, ExportEntry};
 
 use symvault_store::audit::{self, LogEntry, RotationConfig};
@@ -157,7 +156,8 @@ where
     }
 
     let identity = unlock().map_err(|error| format!("unlock vault: {error}"))?;
-    let store = Store::open(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
+    let store = symvault_store::Store::open_with_legacy_migration(vault, &identity)
+        .map_err(|error| format!("open vault: {error}"))?;
     let paths = store
         .list(&identity)
         .map_err(|error| format!("list entries: {error}"))?;
