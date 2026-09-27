@@ -543,34 +543,55 @@ fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
 }
 
 #[test]
-fn restore_rejects_backslash_member_names_like_go() {
+fn restore_rejects_noncanonical_member_paths_like_go() {
     let fixture = sync_fixture();
     let archive_case = sync_case(&fixture, "IO-002-archive");
+    let root = tempdir().unwrap();
+    let rejected = archive_case.expected["restore_path_rejections"]
+        .as_object()
+        .unwrap();
     assert!(
         archive_case.expected["backslash_member_rejected"]
             .as_bool()
             .unwrap()
     );
+    let mut paths = vec![r"..\outside", "a//b", "a/./b"];
+    #[cfg(unix)]
+    paths.push("C:drive-relative");
 
-    let root = tempdir().unwrap();
-    let archive_path = root.path().join("unsafe.tar.gz");
-    let destination = root.path().join("restored");
-    let encoder = GzEncoder::new(
-        fs::File::create(&archive_path).unwrap(),
-        Compression::default(),
-    );
-    let mut builder = tar::Builder::new(encoder);
-    let mut header = tar::Header::new_gnu();
-    header.set_size(1);
-    header.set_mode(0o600);
-    header.set_cksum();
-    builder
-        .append_data(&mut header, r"..\outside", &b"x"[..])
-        .unwrap();
-    builder.into_inner().unwrap().finish().unwrap();
+    for (index, name) in paths.into_iter().enumerate() {
+        assert!(
+            rejected[name].as_bool().unwrap(),
+            "Go oracle did not reject {name}"
+        );
+        let archive_path = root.path().join(format!("unsafe-{index}.tar.gz"));
+        let destination = root.path().join(format!("restored-{index}"));
+        let encoder = GzEncoder::new(
+            fs::File::create(&archive_path).unwrap(),
+            Compression::default(),
+        );
+        let mut builder = tar::Builder::new(encoder);
+        let mut header = tar::Header::new_gnu();
+        let name_bytes = name.as_bytes();
+        assert!(
+            name_bytes.len() < 100,
+            "test member name exceeds tar name field"
+        );
+        // Write the raw spelling directly: Header::set_path normalizes `.`
+        // components and would erase the behavior this regression protects.
+        header.as_mut_bytes()[..name_bytes.len()].copy_from_slice(name_bytes);
+        header.set_size(1);
+        header.set_mode(0o600);
+        header.set_cksum();
+        builder.append(&header, &b"x"[..]).unwrap();
+        builder.into_inner().unwrap().finish().unwrap();
 
-    assert!(archive::restore(&archive_path, &destination, false).is_err());
-    assert_eq!(fs::read_dir(destination).unwrap().count(), 0);
+        assert!(
+            archive::restore(&archive_path, &destination, false).is_err(),
+            "Rust accepted {name}"
+        );
+        assert_eq!(fs::read_dir(destination).unwrap().count(), 0, "{name}");
+    }
 }
 
 #[test]

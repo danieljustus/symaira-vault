@@ -56,22 +56,25 @@ fn safe_relative(path: &Path) -> Result<PathBuf, ArchiveError> {
     Ok(out)
 }
 
-fn safe_restore_member(path: &Path) -> Result<PathBuf, ArchiveError> {
-    #[cfg(unix)]
-    let has_backslash = {
-        use std::os::unix::ffi::OsStrExt;
-        path.as_os_str().as_bytes().contains(&b'\\')
-    };
-    #[cfg(windows)]
-    let has_backslash = {
-        use std::os::windows::ffi::OsStrExt;
-        path.as_os_str()
-            .encode_wide()
-            .any(|unit| unit == b'\\' as u16)
-    };
-    #[cfg(not(any(unix, windows)))]
-    let has_backslash = path.to_string_lossy().contains('\\');
-    if has_backslash {
+fn safe_restore_member(raw_name: &[u8], path: &Path) -> Result<PathBuf, ArchiveError> {
+    if raw_name.is_empty()
+        || raw_name == b"."
+        || raw_name.contains(&b'\\')
+        || raw_name.starts_with(b"/")
+        || raw_name.get(1) == Some(&b':')
+    {
+        return Err(ArchiveError::UnsafePath(path.display().to_string()));
+    }
+
+    // Go's cleanBackupMemberName permits a single trailing slash for tar
+    // directories, but rejects every other spelling changed by path.Clean.
+    let clean_candidate = raw_name.strip_suffix(b"/").unwrap_or(raw_name);
+    if clean_candidate.is_empty()
+        || clean_candidate == b"."
+        || clean_candidate
+            .split(|byte| *byte == b'/')
+            .any(|part| part.is_empty() || part == b"." || part == b"..")
+    {
         return Err(ArchiveError::UnsafePath(path.display().to_string()));
     }
     safe_relative(path)
@@ -248,7 +251,8 @@ pub fn restore(
         }
         let mut entry = item?;
         let raw = entry.path()?.into_owned();
-        let rel = safe_restore_member(&raw)?;
+        let raw_name = entry.path_bytes();
+        let rel = safe_restore_member(&raw_name, &raw)?;
         let target = dest.join(&rel);
         if !target.starts_with(dest) {
             return Err(ArchiveError::UnsafePath(raw.display().to_string()));
