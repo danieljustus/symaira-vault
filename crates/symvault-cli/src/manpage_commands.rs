@@ -50,7 +50,8 @@ pub fn generate(command: clap::Command, requested_dir: &Path) -> Result<PathBuf,
 fn write_pages(command: clap::Command, output_dir: &Path, date: &str) -> io::Result<()> {
     for subcommand in command
         .get_subcommands()
-        .filter(|subcommand| !subcommand.is_hide_set())
+        // Cobra adds `completion` after the Go manpage generator walks its tree.
+        .filter(|subcommand| !subcommand.is_hide_set() && subcommand.get_name() != "completion")
         .cloned()
     {
         write_pages(subcommand, output_dir, date)?;
