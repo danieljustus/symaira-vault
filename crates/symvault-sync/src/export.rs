@@ -108,12 +108,11 @@ fn go_json_numbers(rendered: &str) -> String {
                 index += 1;
             }
             let token = std::str::from_utf8(&bytes[start..index]).expect("JSON number is ASCII");
-            if token.contains(['.', 'e', 'E']) {
-                let value: f64 = token.parse().expect("serde_json emitted a valid number");
-                output.extend_from_slice(go_json_float(value).as_bytes());
-            } else {
-                output.extend_from_slice(&bytes[start..index]);
-            }
+            // Go loads stored entry data into map[string]any, which decodes
+            // every JSON number as float64 before json.Marshal, including
+            // integer tokens nested in arrays and objects.
+            let value: f64 = token.parse().expect("serde_json emitted a valid number");
+            output.extend_from_slice(go_json_float(value).as_bytes());
         } else {
             output.push(bytes[index]);
             index += 1;
@@ -182,10 +181,9 @@ fn value_string(value: &Value) -> String {
         Value::String(value) => value.clone(),
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
-        Value::Number(value) if value.is_f64() => {
-            go_float(value.as_f64().expect("finite JSON number"))
-        }
-        Value::Number(value) => value.to_string(),
+        // The Go loader decodes all stored JSON numbers to float64 before
+        // fmt.Sprintf("%v", value), even when the source token is an integer.
+        Value::Number(value) => go_float(value.as_f64().expect("finite JSON number")),
         Value::Array(values) => format!(
             "[{}]",
             values

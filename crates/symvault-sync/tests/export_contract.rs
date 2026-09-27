@@ -22,7 +22,7 @@ struct Case {
 fn export_matches_production_go_bytes_and_attachment_notices() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/sync/export.json")).unwrap();
-    assert_eq!(fixture.cases.len(), 7);
+    assert_eq!(fixture.cases.len(), 8);
     for case in fixture.cases {
         let mut entries = case.entries;
         for key in case.float_fields {

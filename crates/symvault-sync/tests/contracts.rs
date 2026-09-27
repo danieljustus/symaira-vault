@@ -1,5 +1,7 @@
 use base64::Engine;
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+#[cfg(unix)]
+use flate2::read::GzDecoder;
+use flate2::{Compression, write::GzEncoder};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
