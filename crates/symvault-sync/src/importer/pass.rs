@@ -187,10 +187,7 @@ fn to_slash(path: &str) -> String {
 mod tests {
     use super::*;
     #[cfg(unix)]
-    use std::{
-        io::Write,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::io::Write;
 
     #[test]
     fn parser_matches_pass_metadata_and_line_rules() {
@@ -227,12 +224,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn adapter_runs_isolated_fake_gpg_process() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root =
-            env::temp_dir().join(format!("symvault-pass-test-{}-{nonce}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
         fs::create_dir_all(root.join("nested")).unwrap();
         fs::create_dir_all(root.join("nested/deeper")).unwrap();
         fs::write(root.join("nested/example.gpg"), b"ciphertext").unwrap();
@@ -253,7 +246,7 @@ mod tests {
         )
         .unwrap();
 
-        let entries = import_pass_with_gpg(&root, &gpg).unwrap();
+        let entries = import_pass_with_gpg(root, &gpg).unwrap();
         assert_eq!(entries.len(), 3);
         assert!(entries.iter().any(|entry| entry.path == "nested/example"));
         assert!(
@@ -269,8 +262,7 @@ mod tests {
         );
 
         fs::write(root.join("nested/failure.gpg"), b"ciphertext").unwrap();
-        let error = import_pass_with_gpg(&root, &gpg).unwrap_err();
+        let error = import_pass_with_gpg(root, &gpg).unwrap_err();
         assert!(error.to_string().contains("decrypt failed"));
-        let _ = fs::remove_dir_all(root);
     }
 }

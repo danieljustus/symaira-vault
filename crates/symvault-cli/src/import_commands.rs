@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use symvault_crypto::Identity;
-use symvault_store::{Store, StoreError};
+use symvault_store::StoreError;
 use symvault_sync::importer::{self, Format};
 
 const MAX_IMPORT_BYTES: u64 = 100 * 1024 * 1024;
@@ -132,7 +132,8 @@ where
 
     // Parsing errors happen before Store::open and before any callback. This
     // preserves an existing vault when an input is malformed.
-    let store = Store::open(root, identity).map_err(|error| format!("open vault: {error}"))?;
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| format!("open vault: {error}"))?;
 
     let mut imported = 0;
     let mut skipped = 0;

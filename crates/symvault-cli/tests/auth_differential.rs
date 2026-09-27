@@ -42,7 +42,7 @@ fn run(binary: &Path, vault: &Path, home: &Path, args: &[&str], input: Option<&[
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env("NO_COLOR", "1");
-    if args.first() == Some(&"init")
+    if matches!(args.first(), Some(&"init" | &"add"))
         && let Some(data) = input
     {
         let pass = String::from_utf8_lossy(data)
@@ -326,6 +326,461 @@ fn auth_rotate_passphrase_matches_go_contract() {
         Some(input),
     );
     assert_same(&res_go, &res_rust, "auth rotate-passphrase success");
+}
+
+#[test]
+fn auth_rotate_legacy_migration_matches_go_on_normal_root() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("legacy-normal");
+    let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
+    let input = b"original-passphrase-123\nnew-passphrase-1234\nnew-passphrase-1234\n";
+
+    let result_go = run(
+        &go,
+        &go_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    assert_eq!(
+        result_go.status.code(),
+        Some(0),
+        "Go rotation: {:?}",
+        result_go.stderr
+    );
+    assert_eq!(result_rust.status.code(), result_go.status.code());
+    assert_eq!(result_rust.stdout, result_go.stdout);
+    assert_eq!(result_rust.stderr, result_go.stderr);
+    for vault in [&go_vault, &rust_vault] {
+        assert!(!vault.join("legacy.age").exists());
+        assert!(vault.join(".symvault-migrated").is_file());
+        assert!(fs::read_dir(vault.join("entries")).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "age")
+        }));
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn find_legacy_migration_matches_go_root_trust_boundary() {
+    use std::os::unix::fs::symlink;
+
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let input = b"original-passphrase-123\n";
+
+    let normal_home = TempDir::new("find-legacy-normal");
+    let (go_vault, rust_vault) = legacy_vault_pair(&go, &normal_home.0);
+    let result_go = run(
+        &go,
+        &go_vault,
+        &normal_home.0,
+        &["find", "legacy-secret"],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &normal_home.0,
+        &["find", "legacy-secret"],
+        Some(input),
+    );
+    assert_eq!(
+        result_go.status.code(),
+        Some(0),
+        "Go find: {:?}",
+        result_go.stderr
+    );
+    assert_eq!(
+        result_rust.status.code(),
+        Some(0),
+        "Rust find: {:?}",
+        result_rust.stderr
+    );
+    assert_eq!(result_go.stdout, result_rust.stdout);
+    for vault in [&go_vault, &rust_vault] {
+        assert!(vault.join(".symvault-migrated").is_file());
+        assert!(vault.join("entries/legacy.age").is_file());
+        assert!(!vault.join("legacy.age").exists());
+    }
+
+    let symlink_home = TempDir::new("find-legacy-user-symlink");
+    let (go_real, rust_real) = legacy_vault_pair(&go, &symlink_home.0);
+    let alias = symlink_home.0.join("user-owned-alias");
+    symlink(&symlink_home.0, &alias).expect("create user-owned ancestor symlink");
+    let go_vault = alias.join("go-vault");
+    let rust_vault = alias.join("rust-vault");
+    let before_go = tree_snapshot(&go_real);
+    let before_rust = tree_snapshot(&rust_real);
+    let result_go = run(
+        &go,
+        &go_vault,
+        &symlink_home.0,
+        &["find", "legacy-secret"],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &symlink_home.0,
+        &["find", "legacy-secret"],
+        Some(input),
+    );
+    assert_ne!(
+        result_go.status.code(),
+        Some(0),
+        "Go accepted user-owned symlink"
+    );
+    assert_ne!(
+        result_rust.status.code(),
+        Some(0),
+        "Rust accepted user-owned symlink"
+    );
+    assert!(result_go.stdout.is_empty());
+    assert_eq!(result_rust.stdout, result_go.stdout);
+    for result in [&result_go, &result_rust] {
+        let error = String::from_utf8_lossy(&result.stderr).to_lowercase();
+        assert!(
+            error.contains("symlink")
+                || error.contains("symbolic link")
+                || error.contains("too many levels"),
+            "{error}"
+        );
+    }
+    assert_eq!(
+        tree_snapshot(&go_real),
+        before_go,
+        "Go changed rejected vault"
+    );
+    assert_eq!(
+        tree_snapshot(&rust_real),
+        before_rust,
+        "Rust changed rejected vault"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn device_accept_matches_go_open_error_order_for_symlinked_entries_root() {
+    use std::os::unix::fs::symlink;
+
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("device-accept-symlink-entries");
+    let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
+    let outside = home.0.join("outside-entries");
+    fs::create_dir(&outside).unwrap();
+    for vault in [&go_vault, &rust_vault] {
+        fs::remove_dir_all(vault.join("entries")).unwrap();
+        symlink(&outside, vault.join("entries")).unwrap();
+    }
+    let before_go = fs::read(go_vault.join("legacy.age")).unwrap();
+    let before_rust = fs::read(rust_vault.join("legacy.age")).unwrap();
+    let token = "0123456789ABCDEF0123456789ABCDEF";
+    let input = b"original-passphrase-123\n";
+    let result_go = run(
+        &go,
+        &go_vault,
+        &home.0,
+        &["device", "accept", token],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &home.0,
+        &["device", "accept", token],
+        Some(input),
+    );
+    assert_eq!(result_go.status.code(), result_rust.status.code());
+    assert_ne!(result_go.status.code(), Some(0));
+    for result in [&result_go, &result_rust] {
+        let error = String::from_utf8_lossy(&result.stderr).to_lowercase();
+        assert!(
+            error.contains("symlink")
+                || error.contains("symbolic link")
+                || error.contains("too many levels"),
+            "{error}"
+        );
+    }
+    assert_eq!(fs::read(go_vault.join("legacy.age")).unwrap(), before_go);
+    assert_eq!(
+        fs::read(rust_vault.join("legacy.age")).unwrap(),
+        before_rust
+    );
+    for vault in [&go_vault, &rust_vault] {
+        assert!(
+            fs::symlink_metadata(vault.join("entries"))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert!(!vault.join(".symvault-migrated").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn device_accept_matches_go_open_error_order_for_non_directory_entries_root() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("device-accept-file-entries");
+    let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
+    for vault in [&go_vault, &rust_vault] {
+        fs::remove_dir_all(vault.join("entries")).unwrap();
+        fs::write(vault.join("entries"), b"not a directory").unwrap();
+    }
+    let before_go = fs::read(go_vault.join("legacy.age")).unwrap();
+    let before_rust = fs::read(rust_vault.join("legacy.age")).unwrap();
+    let token = "0123456789ABCDEF0123456789ABCDEF";
+    let input = b"original-passphrase-123\n";
+    let result_go = run(
+        &go,
+        &go_vault,
+        &home.0,
+        &["device", "accept", token],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &home.0,
+        &["device", "accept", token],
+        Some(input),
+    );
+    assert_eq!(result_go.status.code(), result_rust.status.code());
+    assert_ne!(result_go.status.code(), Some(0));
+    for result in [&result_go, &result_rust] {
+        let error = String::from_utf8_lossy(&result.stderr).to_lowercase();
+        assert!(error.contains("not a directory"), "{error}");
+    }
+    assert_eq!(fs::read(go_vault.join("legacy.age")).unwrap(), before_go);
+    assert_eq!(
+        fs::read(rust_vault.join("legacy.age")).unwrap(),
+        before_rust
+    );
+    for vault in [&go_vault, &rust_vault] {
+        assert!(vault.join("entries").is_file());
+        assert!(!vault.join(".symvault-migrated").exists());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn auth_rotate_rejects_user_owned_ancestor_symlink_before_new_passphrase_validation() {
+    use std::os::unix::fs::symlink;
+
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("legacy-user-symlink");
+    let (go_vault, rust_vault) = legacy_vault_pair(&go, &home.0);
+    let alias = home.0.join("user-owned-alias");
+    symlink(&home.0, &alias).expect("create user-owned ancestor symlink");
+    let alias_go_vault = alias.join("go-vault");
+    let alias_rust_vault = alias.join("rust-vault");
+    let before_go = tree_snapshot(&go_vault);
+    let input = b"original-passphrase-123\nshort\n";
+
+    let result_go = run(
+        &go,
+        &alias_go_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    assert_eq!(
+        tree_snapshot(&go_vault),
+        before_go,
+        "Go changed rejected vault"
+    );
+    let before_rust = tree_snapshot(&rust_vault);
+    let result_rust = run(
+        &rust,
+        &alias_rust_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    assert_eq!(
+        tree_snapshot(&rust_vault),
+        before_rust,
+        "Rust changed rejected vault"
+    );
+
+    for result in [&result_go, &result_rust] {
+        assert_eq!(result.status.code(), Some(1));
+        assert!(result.stdout.is_empty());
+        let error = String::from_utf8_lossy(&result.stderr).to_lowercase();
+        assert!(error.contains("current passphrase is incorrect"), "{error}");
+        assert!(
+            error.contains("symlink")
+                || error.contains("symbolic link")
+                || error.contains("too many levels"),
+            "{error}"
+        );
+        assert!(
+            !error.contains("passphrase must be at least 12 characters"),
+            "{error}"
+        );
+    }
+    assert_eq!(result_go.stdout, result_rust.stdout);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
+    use std::os::unix::fs::MetadataExt;
+
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let home = TempDir::new("legacy-trusted-alias");
+    let (go_real, rust_real) = legacy_vault_pair(&go, &home.0);
+    let go_vault = macos_var_alias(&go_real).expect("/var alias for Go fixture");
+    let rust_vault = macos_var_alias(&rust_real).expect("/var alias for Rust fixture");
+    assert!(
+        go_vault
+            .ancestors()
+            .filter_map(|path| fs::symlink_metadata(path).ok())
+            .any(|metadata| metadata.file_type().is_symlink() && metadata.uid() == 0),
+        "fixture must traverse a root-owned system alias"
+    );
+    let input = b"original-passphrase-123\nnew-passphrase-1234\nnew-passphrase-1234\n";
+    let result_go = run(
+        &go,
+        &go_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    let result_rust = run(
+        &rust,
+        &rust_vault,
+        &home.0,
+        &["auth", "rotate-passphrase", "-y"],
+        Some(input),
+    );
+    assert_eq!(
+        result_go.status.code(),
+        Some(0),
+        "Go rotation: {:?}",
+        result_go.stderr
+    );
+    assert_eq!(result_rust.status.code(), result_go.status.code());
+    assert_eq!(result_rust.stdout, result_go.stdout);
+    assert_eq!(result_rust.stderr, result_go.stderr);
+    for vault in [&go_real, &rust_real] {
+        assert!(vault.join(".symvault-migrated").is_file());
+        assert!(fs::read_dir(vault.join("entries")).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|extension| extension == "age")
+        }));
+    }
+}
+
+fn legacy_vault_pair(go: &Path, home: &Path) -> (PathBuf, PathBuf) {
+    let seed = home.join("seed-vault");
+    let init = run(
+        go,
+        &seed,
+        home,
+        &["init"],
+        Some(b"original-passphrase-123\noriginal-passphrase-123\n"),
+    );
+    assert_eq!(
+        init.status.code(),
+        Some(0),
+        "Go vault initialization: {:?}",
+        init.stderr
+    );
+    let add = run(
+        go,
+        &seed,
+        home,
+        &["add", "legacy", "--value", "legacy-secret"],
+        Some(b"original-passphrase-123\n"),
+    );
+    assert_eq!(
+        add.status.code(),
+        Some(0),
+        "Go entry creation: {:?}",
+        add.stderr
+    );
+    fs::rename(seed.join("entries/legacy.age"), seed.join("legacy.age")).unwrap();
+    fs::remove_file(seed.join(".symvault-migrated")).unwrap();
+    let go_vault = home.join("go-vault");
+    let rust_vault = home.join("rust-vault");
+    copy_dir_all(&seed, &go_vault);
+    copy_dir_all(&seed, &rust_vault);
+    (go_vault, rust_vault)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_var_alias(path: &Path) -> Option<PathBuf> {
+    let canonical = fs::canonicalize(path).ok()?;
+    Some(Path::new("/var").join(canonical.strip_prefix("/private/var").ok()?))
+}
+
+#[cfg(unix)]
+fn tree_snapshot(root: &Path) -> Vec<(PathBuf, bool, Vec<u8>)> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut result = Vec::new();
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(&directory).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let relative = path.strip_prefix(root).unwrap().to_path_buf();
+            let metadata = entry.file_type().unwrap();
+            if metadata.is_dir() {
+                result.push((relative, false, Vec::new()));
+                pending.push(path);
+            } else if metadata.is_file() {
+                result.push((relative, true, fs::read(path).unwrap()));
+            } else {
+                panic!("unexpected fixture item: {}", path.display());
+            }
+        }
+    }
+    result.sort_by(|left, right| left.0.cmp(&right.0));
+    result
 }
 
 fn copy_dir_all(src: &Path, dst: &Path) {
