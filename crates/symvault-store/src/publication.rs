@@ -170,12 +170,14 @@ fn replace_using_names_with_ops_and_policy(
             // while replacing it. This rejects special targets observed now,
             // but does not claim protection against a hostile final-name swap.
             (ops.validate_target)(parent, target)?;
+            // Go closes the synced temporary file before rename; Windows needs
+            // that handle released before it can replace the destination.
+            drop(file);
             (ops.publish)(parent, target, &temporary)
                 .map_err(|error| write_error(target, error))?;
             published = true;
             (ops.sync_parent)(parent).map_err(|error| write_error(target, error))
         })();
-        drop(file);
         let cleanup = (ops.cleanup_temp)(parent, target, &temporary)
             .and_then(|()| (ops.sync_parent)(parent))
             .map_err(|error| write_error(target, error));
@@ -218,7 +220,9 @@ fn publish(parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> 
 
 #[cfg(windows)]
 fn publish(_parent: &fs::File, target: &Path, temporary: &str) -> io::Result<()> {
-    rename_with_retry(target, temporary, fs::rename)
+    rename_with_retry(target, temporary, |source, destination| {
+        fs::rename(source, destination)
+    })
 }
 
 #[cfg(not(any(unix, windows)))]
