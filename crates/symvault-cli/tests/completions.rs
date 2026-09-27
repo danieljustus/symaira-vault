@@ -91,3 +91,26 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
         }
     }
 }
+
+#[test]
+fn bare_completion_and_no_descriptions_follow_go_command_behavior() {
+    let binary = env!("CARGO_BIN_EXE_symvault");
+    let bare = Command::new(binary).arg("completion").output().unwrap();
+    assert!(bare.status.success());
+    assert!(bare.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&bare.stdout).contains("Usage:"));
+
+    let full = Command::new(binary)
+        .args(["completion", "fish"])
+        .output()
+        .unwrap();
+    let plain = Command::new(binary)
+        .args(["completion", "fish", "--no-descriptions"])
+        .output()
+        .unwrap();
+    assert!(plain.status.success());
+    assert!(plain.stderr.is_empty());
+    assert!(!plain.stdout.is_empty());
+    assert!(full.stdout.len() > plain.stdout.len());
+    assert!(!String::from_utf8_lossy(&plain.stdout).contains("Add a new password entry"));
+}

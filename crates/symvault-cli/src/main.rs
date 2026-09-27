@@ -128,7 +128,9 @@ enum Command {
     /// Generate a shell completion script.
     Completion {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
-        shell: String,
+        shell: Option<String>,
+        #[arg(long)]
+        no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
     Run {
@@ -1051,9 +1053,10 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
-        Some(Command::Completion { shell }) => {
-            completion_commands::generate(&shell, Cli::command())
-        }
+        Some(Command::Completion {
+            shell,
+            no_descriptions,
+        }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
         Some(Command::Init { vault_dir, auth }) => {
             run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
         }

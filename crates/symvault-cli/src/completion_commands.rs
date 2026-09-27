@@ -3,7 +3,24 @@ use std::process::ExitCode;
 
 use clap_complete::{Shell, generate as generate_script};
 
-pub fn generate(shell: &str, mut command: clap::Command) -> ExitCode {
+pub fn generate(
+    shell: Option<&str>,
+    no_descriptions: bool,
+    mut command: clap::Command,
+) -> ExitCode {
+    let Some(shell) = shell else {
+        let mut stdout = io::stdout().lock();
+        return match command.find_subcommand_mut("completion") {
+            Some(completion) => {
+                if completion.write_long_help(&mut stdout).is_ok() && writeln!(stdout).is_ok() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            None => ExitCode::FAILURE,
+        };
+    };
     let shell = match shell {
         "bash" => Shell::Bash,
         "zsh" => Shell::Zsh,
@@ -15,6 +32,9 @@ pub fn generate(shell: &str, mut command: clap::Command) -> ExitCode {
         }
     };
 
+    if no_descriptions {
+        command = strip_descriptions(command);
+    }
     let mut script = Vec::new();
     generate_script(shell, &mut command, "symvault", &mut script);
     let mut stdout = io::stdout().lock();
@@ -23,4 +43,12 @@ pub fn generate(shell: &str, mut command: clap::Command) -> ExitCode {
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
+}
+
+fn strip_descriptions(command: clap::Command) -> clap::Command {
+    command
+        .about(None)
+        .long_about(None)
+        .mut_args(|arg| arg.help(None).long_help(None))
+        .mut_subcommands(strip_descriptions)
 }
