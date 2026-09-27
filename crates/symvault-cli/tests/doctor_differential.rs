@@ -629,10 +629,8 @@ fn differential_doctor_new_checks_corrupt_config() {
 
     fs::write(vault.join("config.yaml"), b"invalid: yaml: [\n").unwrap();
 
-    // Only the checks that Rust actually registers can be compared; the config
-    // load-failure text of `mcp.agents`/`mcp.dynamic.engines` is a known open
-    // divergence (go-yaml wording vs the Rust config loader) and those checks are
-    // deliberately absent from the Rust registry.
+    // Avoid selecting checks that quote the parser error: go-yaml and the Rust
+    // YAML parser intentionally retain different syntax-error dialects.
     let only_filter = "password.*";
     let args = [
         "--vault",
@@ -671,6 +669,60 @@ fn differential_doctor_new_checks_corrupt_config() {
             assert_eq!(g["message"], r["message"]);
         }
     }
+}
+
+#[test]
+fn differential_doctor_multi_document_config_errors_match_go() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("multi-document-config-home");
+    let vault = temporary_root("multi-document-config-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), vault.clone()]);
+    let config = b"vaultDir: first\n---\nvaultDir: second\n";
+    fs::write(vault.join("config.yaml"), config).unwrap();
+
+    let args = [
+        "--vault",
+        vault.to_str().unwrap(),
+        "doctor",
+        "--only",
+        "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+        "--json",
+        "--no-network",
+    ];
+    let out_go = run(&go, &args, &vault, &home);
+    let out_rust = run(&rust, &args, &vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let json_go = first_json(&out_go.stdout, "Go multi-document config doctor");
+    let json_rust = first_json(&out_rust.stdout, "Rust multi-document config doctor");
+    let go_results = json_go["results"].as_array().unwrap();
+    let rust_results = json_rust["results"].as_array().unwrap();
+
+    for id in [
+        "vault.config.parses",
+        "vault.config.validates",
+        "auth.passphrase.rotation",
+        "mcp.dynamic.engines",
+        "mcp.agents",
+    ] {
+        let go_result = go_results.iter().find(|result| result["id"] == id).unwrap();
+        let rust_result = rust_results
+            .iter()
+            .find(|result| result["id"] == id)
+            .unwrap();
+        for field in ["name", "status", "message", "hint", "fixable"] {
+            assert_eq!(go_result[field], rust_result[field], "{id} {field}");
+        }
+        assert!(
+            go_result["message"]
+                .as_str()
+                .unwrap()
+                .contains("config contains more than one YAML document")
+        );
+    }
+    assert_eq!(fs::read(vault.join("config.yaml")).unwrap(), config);
 }
 
 #[test]

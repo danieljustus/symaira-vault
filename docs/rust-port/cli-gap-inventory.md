@@ -111,11 +111,13 @@ vault (**0 field deviations**). The remaining ID is **not implemented** and is
 therefore *absent* from the output rather than reported as OK — a missing check may
 never look like a passing one.
 
-### Known deviation: config-loader error dialect (not yet parity)
+### Known deviation: config-loader syntax-error dialect (not yet parity)
 
-On a *corrupt* `config.yaml` three shared IDs diverge in the `message` field, all
-through the same root cause: Go renders go-yaml's error text (`yaml: line 1: …`)
-while the Rust loader renders its own (`parse config: … at line 3 column 1`).
+On parser-invalid `config.yaml` inputs, five shared IDs can diverge in the
+`message` field: Go renders go-yaml's syntax error while the Rust loader renders
+serde_yaml's detail and source location. A source-bound differential now covers
+the stable multiple-document rejection across all five IDs; that message matches
+Go exactly. Scanner-generated syntax errors remain open.
 The prefixed part (`config.yaml parse error: `, `failed to load config: `,
 `cannot load config: `) is identical, so only the parser dialect differs:
 
@@ -123,11 +125,11 @@ The prefixed part (`config.yaml parse error: `, `failed to load config: `,
   `mcp.dynamic.engines`, `mcp.agents` (all five share the one root cause)
 
 This is a **pre-existing** divergence of the Rust config loader shared by the whole
-CLI, not introduced by the doctor port, and it is **not** claimed as parity. The checks
-ported in wave 2a quote no parser error, so they match on the corrupt fixture as well
-(`differential_doctor_session_tooling_checks`); the two MCP config checks from wave 2b
-do quote it and are therefore pinned for the missing and initialized fixtures only
-(`differential_doctor_mcp_config_checks`).
+CLI, not introduced by the doctor port, and general parser-message parity is **not**
+claimed. The checks ported in wave 2a quote no parser error, so they match on the
+corrupt fixture as well (`differential_doctor_session_tooling_checks`); the two MCP
+config checks from wave 2b quote parser errors and are pinned for the missing and
+initialized fixtures only (`differential_doctor_mcp_config_checks`).
 
 Ported IDs (37 in the registry, 34 of them without network):
 

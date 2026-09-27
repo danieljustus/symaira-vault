@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, PrettyFormatter, Serializer};
-use symvault_core::config::{AuthMethod, Config};
+use symvault_core::config::{AuthMethod, Config, ConfigError, MULTIPLE_DOCUMENTS_MESSAGE};
 use symvault_core::policy::glob_match;
 use symvault_store::token_registry;
 use symvault_sync::GitRepository;
@@ -474,7 +474,7 @@ fn check_vault_config_parses(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorR
                 "vault.config.parses",
                 "Vault config parses",
                 Status::Fail,
-                format!("config.yaml parse error: {err}"),
+                format!("config.yaml parse error: {}", doctor_config_error(&err)),
                 false,
             )
             .with_hint(format!(
@@ -540,7 +540,7 @@ fn check_vault_config_validates(vault_dir: &Path, _opts: &DoctorOptions) -> Doct
                 "vault.config.validates",
                 "Vault config validates",
                 Status::Fail,
-                format!("failed to load config: {err}"),
+                format!("failed to load config: {}", doctor_config_error(&err)),
                 false,
             )
             .with_hint(format!("inspect {} for syntax errors", cfg_path.display())),
@@ -1262,7 +1262,7 @@ fn check_passphrase_rotation(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorR
                 "auth.passphrase.rotation",
                 "Passphrase rotation",
                 Status::Warn,
-                format!("cannot load config: {err}"),
+                format!("cannot load config: {}", doctor_config_error(&err)),
                 false,
             ),
             Ok(cfg) => {
@@ -2296,7 +2296,18 @@ fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
 fn load_config_for_check(cfg_path: &Path) -> Result<Config, String> {
     match fs::read(cfg_path) {
         Err(err) => Err(format_go_path_error("open", cfg_path, &err)),
-        Ok(bytes) => Config::load_from_bytes(&bytes).map_err(|err| err.to_string()),
+        Ok(bytes) => Config::load_from_bytes(&bytes).map_err(|err| doctor_config_error(&err)),
+    }
+}
+
+/// Go reports the stable multi-document rejection directly, without the
+/// generic `parse config:` wrapper used by the Rust loader. Preserve the
+/// loader's remaining diagnostics verbatim until their parser dialect has its
+/// own source-bound compatibility mapping.
+fn doctor_config_error(error: &ConfigError) -> String {
+    match error {
+        ConfigError::Parse(detail) if detail == MULTIPLE_DOCUMENTS_MESSAGE => detail.clone(),
+        _ => error.to_string(),
     }
 }
 
