@@ -163,9 +163,6 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 			}
 			child := filepath.Join(relative, d.Name())
 			path := filepath.Join(root, child)
-			if d.Type()&os.ModeSymlink != 0 {
-				continue
-			}
 			if d.IsDir() {
 				if err := visit(path, d); err != nil {
 					if errors.Is(err, filepath.SkipDir) {

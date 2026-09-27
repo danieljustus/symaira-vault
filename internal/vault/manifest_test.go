@@ -380,6 +380,14 @@ func TestVerifyManifestIntegrity_OKMissingTamperedUnknown(t *testing.T) {
 	if err := os.WriteFile(unknownPath, []byte("sneaked-in"), 0o600); err != nil {
 		t.Fatalf("write unknown: %v", err)
 	}
+	unknownLink := filepath.Join(vaultDir, entriesDirName, "unknown-link.age")
+	linkTarget := filepath.Join(vaultDir, "outside.age")
+	if err := os.WriteFile(linkTarget, []byte("outside"), 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	if err := os.Symlink(linkTarget, unknownLink); err != nil {
+		t.Fatalf("create unknown symlink: %v", err)
+	}
 
 	// Remove alpha's file so it is reported missing.
 	alphaPath := entryFilePath(vaultDir, "alpha")
@@ -400,7 +408,7 @@ func TestVerifyManifestIntegrity_OKMissingTamperedUnknown(t *testing.T) {
 	if len(result.Tampered) != 1 || result.Tampered[0] != "beta" {
 		t.Errorf("Tampered = %v, want [beta]", result.Tampered)
 	}
-	if len(result.Unknown) != 1 || result.Unknown[0] != "unknown.age" {
-		t.Errorf("Unknown = %v, want [unknown.age]", result.Unknown)
+	if len(result.Unknown) != 2 || result.Unknown[0] != "unknown-link.age" || result.Unknown[1] != "unknown.age" {
+		t.Errorf("Unknown = %v, want [unknown-link.age unknown.age]", result.Unknown)
 	}
 }
