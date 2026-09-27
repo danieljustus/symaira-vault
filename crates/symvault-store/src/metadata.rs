@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(fixture.schema_version, 1);
         assert_eq!(
             fixture.oracle.commit,
-            "6b18a1b1ef069ed2f358debfcebca50fd5914a9d"
+            "1605b180010782eb636e8af9b65e064741837065"
         );
         assert_eq!(fixture.oracle.source_files.len(), 4);
         assert_eq!(fixture.oracle.source_digest.len(), 64);

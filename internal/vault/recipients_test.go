@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"filippo.io/age"
@@ -282,6 +283,80 @@ func TestRecipientsManager_AddRecipient_AppendToFileWithNewline(t *testing.T) {
 
 	if len(recipients) != 2 {
 		t.Errorf("got %d recipients, want 2", len(recipients))
+	}
+}
+
+func TestRecipientsManager_AddRecipient_InsertsMissingSeparator(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial string
+		want    string
+	}{
+		{
+			name:    "existing recipient without newline",
+			initial: testRecipient,
+			want:    testRecipient + "\n" + testRecipient2 + "\n",
+		},
+		{
+			name:    "comment without newline",
+			initial: "# vault recipients",
+			want:    "# vault recipients\n" + testRecipient2 + "\n",
+		},
+		{
+			name:    "malformed line without newline",
+			initial: "not-a-recipient",
+			want:    "not-a-recipient\n" + testRecipient2 + "\n",
+		},
+		{
+			name:    "existing empty file",
+			initial: "",
+			want:    testRecipient2 + "\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			rm := NewRecipientsManager(tmpDir)
+			if err := os.WriteFile(rm.RecipientsFilePath(), []byte(tt.initial), 0o600); err != nil {
+				t.Fatalf("create recipients file: %v", err)
+			}
+			if err := rm.AddRecipient(testRecipient2); err != nil {
+				t.Fatalf("AddRecipient() failed: %v", err)
+			}
+			got, err := os.ReadFile(rm.RecipientsFilePath())
+			if err != nil {
+				t.Fatalf("read recipients file: %v", err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("recipients file = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRecipientsManager_AddRecipient_RejectsSymlink(t *testing.T) {
+	vaultDir := t.TempDir()
+	targetPath := filepath.Join(t.TempDir(), "outside-recipients.txt")
+	if err := os.WriteFile(targetPath, []byte(testRecipient+"\n"), 0o600); err != nil {
+		t.Fatalf("write target file: %v", err)
+	}
+	linkPath := filepath.Join(vaultDir, "recipients.txt")
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink creation unavailable: %v", err)
+		}
+		t.Fatalf("create recipients symlink: %v", err)
+	}
+	if err := NewRecipientsManager(vaultDir).AddRecipient(testRecipient2); err == nil {
+		t.Fatal("AddRecipient() followed a symlink")
+	}
+	got, err := os.ReadFile(targetPath)
+	if err != nil {
+		t.Fatalf("read target file: %v", err)
+	}
+	if string(got) != testRecipient+"\n" {
+		t.Errorf("symlink target = %q, want unchanged recipients", got)
 	}
 }
 

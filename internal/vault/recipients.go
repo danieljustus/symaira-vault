@@ -183,27 +183,38 @@ func (rm *RecipientsManager) AddRecipient(recipientStr string) error {
 			return &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ELOOP}
 		}
 	}
-	flags := os.O_APPEND | os.O_WRONLY | os.O_CREATE
+	flags := os.O_APPEND | os.O_RDWR | os.O_CREATE
 	file, err := os.OpenFile(path, flags, 0o600) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
 	if err != nil {
 		return fmt.Errorf("open recipients file for writing: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 
-	// Add newline if file is not empty and doesn't end with newline
-	if len(existing) > 0 {
-		stat, err := file.Stat()
-		if err != nil {
-			return fmt.Errorf("stat recipients file: %w", err)
+	// Validate the opened descriptor, not only the path checked above. A
+	// readable append descriptor lets this same file handle verify the final
+	// byte; comparing it with Lstat also rejects a symlink swapped in at open.
+	stat, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat recipients file: %w", err)
+	}
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("verify recipients file: %w", err)
+	}
+	if !stat.Mode().IsRegular() || pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() || !os.SameFile(stat, pathInfo) {
+		return &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ELOOP}
+	}
+
+	// Separate every non-empty file's next record, including comment-only or
+	// malformed files. Empty files still start directly with the recipient.
+	if stat.Size() > 0 {
+		last := make([]byte, 1)
+		if _, err := file.ReadAt(last, stat.Size()-1); err != nil {
+			return fmt.Errorf("read recipients file ending: %w", err)
 		}
-		if stat.Size() > 0 {
-			// Check if file ends with newline
-			buf := make([]byte, 1)
-			_, err := file.ReadAt(buf, stat.Size()-1)
-			if err == nil && buf[0] != '\n' {
-				if _, err := file.WriteString("\n"); err != nil {
-					return fmt.Errorf("write newline: %w", err)
-				}
+		if last[0] != '\n' {
+			if _, err := file.WriteString("\n"); err != nil {
+				return fmt.Errorf("write newline: %w", err)
 			}
 		}
 	}

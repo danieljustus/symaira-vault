@@ -9,7 +9,7 @@ import (
 	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-const testCommit = "6b18a1b1ef069ed2f358debfcebca50fd5914a9d"
+const testCommit = "1605b180010782eb636e8af9b65e064741837065"
 
 func TestMakeFixtureRejectsArbitraryOracleCommit(t *testing.T) {
 	root, err := repoRoot()

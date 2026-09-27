@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "6b18a1b1",
-    "commit_sha": "6b18a1b1ef069ed2f358debfcebca50fd5914a9d",
+    "commit": "1605b180",
+    "commit_sha": "1605b180010782eb636e8af9b65e064741837065",
     "release": "unreleased",
     "source_files": [
       "cmd/admin/audit.go",
@@ -94,7 +94,7 @@
       "cmd/ui.go"
     ],
     "source_digest": "90680d0095499756ed684b97c08ad7595f3e17591a049811476261dad279a87a",
-    "generator_digest": "364aebb48d8fc980f159535b7bcd72b48ecf8c79b108d4ddf81722527c21fa90"
+    "generator_digest": "3cb41b8fc133c09a5d1d9abdaaf1a7d8e3b79c4c111e6669f4eb8fc8097b373b"
   },
   "groups": [
     {
