@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -128,7 +129,7 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 	if err != nil {
 		return err
 	}
-	defer rootCap.Close()
+	defer func() { _ = rootCap.Close() }()
 
 	visited := 0
 	var walk func(relative string, depth int) error
@@ -137,7 +138,7 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 		if err != nil {
 			return err
 		}
-		defer directory.Close()
+		defer func() { _ = directory.Close() }()
 		info, err := directory.Stat()
 		if err != nil {
 			return err
@@ -148,7 +149,7 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 		// ReadDir(n) bounds a single directory's temporary allocation too;
 		// requesting all children first would bypass the item budget.
 		entries, err := directory.ReadDir(maxVaultEntryCount - visited + 1)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 		for _, d := range entries {
@@ -167,7 +168,7 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 			}
 			if d.IsDir() {
 				if err := visit(path, d); err != nil {
-					if err == filepath.SkipDir {
+					if errors.Is(err, filepath.SkipDir) {
 						continue
 					}
 					return err

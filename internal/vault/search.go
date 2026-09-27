@@ -294,23 +294,7 @@ func listPseudonymized(vaultDir, prefix string, identity *age.X25519Identity, co
 	return listPseudonymizedWithIdentity(vaultDir, prefix, identity, configuredWorkers)
 }
 
-func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
-	if identity == nil {
-		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
-	}
-
-	// Check cache for full-vault listings (prefix == "").
-	if prefix == "" {
-		if paths := listCacheFor(vaultDir).cachedPseudonymizedList(vaultDir, identity); paths != nil {
-			recordDuration("list_pseudonymized_cached", 0)
-			return paths, nil
-		}
-	}
-
-	start := time.Now()
-
-	// First pass: walk filesystem to collect all .age file paths.
-	// This is fast O(n) and does not involve decryption.
+func pseudonymizedEntryFiles(vaultDir string) ([]string, error) {
 	var filePaths []string
 	visited := 0
 	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
@@ -343,6 +327,30 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return filePaths, nil
+}
+
+func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
+	if identity == nil {
+		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
+	}
+
+	// Check cache for full-vault listings (prefix == "").
+	if prefix == "" {
+		if paths := listCacheFor(vaultDir).cachedPseudonymizedList(vaultDir, identity); paths != nil {
+			recordDuration("list_pseudonymized_cached", 0)
+			return paths, nil
+		}
+	}
+
+	start := time.Now()
+
+	// First pass: walk filesystem to collect all .age file paths.
+	// This is fast O(n) and does not involve decryption.
+	filePaths, err := pseudonymizedEntryFiles(vaultDir)
+	if err != nil {
 		return nil, err
 	}
 

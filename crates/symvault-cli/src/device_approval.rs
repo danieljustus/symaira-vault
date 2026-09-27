@@ -238,8 +238,9 @@ fn decode_sessions(data: &[u8]) -> Result<(BTreeMap<String, DeviceSession>, bool
             ("created_at", session.created_at.as_str()),
             ("expires_at", session.expires_at.as_str()),
         ] {
-            GoTime::parse_rfc3339(stamp)
-                .map_err(|_| format!("parse device sessions: invalid {field} timestamp {stamp:?}"))?;
+            GoTime::parse_rfc3339(stamp).map_err(|_| {
+                format!("parse device sessions: invalid {field} timestamp {stamp:?}")
+            })?;
         }
     }
     let mut migrated = false;

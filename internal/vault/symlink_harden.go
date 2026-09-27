@@ -61,7 +61,7 @@ func readEntryFileBounded(path string) ([]byte, error) {
 		return nil, &os.PathError{Op: "open", Path: path, Err: err}
 	}
 	file := os.NewFile(uintptr(fd), path)
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, &os.PathError{Op: "fstat", Path: path, Err: err}
@@ -77,15 +77,15 @@ func readEntryRootedBounded(vaultDir, relative string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
-	if err := rejectEntryRootSymlinks(root, relative); err != nil {
-		return nil, err
+	defer func() { _ = root.Close() }()
+	if rejectErr := rejectEntryRootSymlinks(root, relative); rejectErr != nil {
+		return nil, rejectErr
 	}
 	file, err := root.OpenFile(relative, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, &os.PathError{Op: "open", Path: filepath.Join(vaultDir, relative), Err: err}
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return readEntryStreamBounded(file, filepath.Join(vaultDir, relative))
 }
 

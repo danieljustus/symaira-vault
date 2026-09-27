@@ -1175,11 +1175,12 @@ fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
 
 #[cfg(unix)]
 fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, StoreError> {
-    let fresh_entries = match rooted::walk_from(
+    let fresh_entries = match rooted::walk_from_with_limits(
         root_cap,
         Path::new(ENTRIES_DIR),
         &root.join(ENTRIES_DIR),
-        None,
+        Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+        Some(MAX_VAULT_ENTRY_COUNT),
     ) {
         Ok(entries) => entries,
         Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
@@ -1187,7 +1188,12 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
         }
         Err(error) => return Err(error),
     };
-    let legacy_entries = rooted::walk_with_max_depth(root_cap, root, Some(64))?;
+    let legacy_entries = rooted::walk_with_limits(
+        root_cap,
+        root,
+        Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
+        Some(MAX_VAULT_ENTRY_COUNT),
+    )?;
     let fresh = fresh_entries.iter().any(|item| {
         item.regular
             && item.relative.starts_with(Path::new(ENTRIES_DIR))

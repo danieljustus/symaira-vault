@@ -323,8 +323,8 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 				if items > maxEntryArrayItems {
 					return fmt.Errorf("entry array exceeds %d items", maxEntryArrayItems)
 				}
-				if err := validateEntryJSONValue(decoder, depth+1, fields); err != nil {
-					return err
+				if validateErr := validateEntryJSONValue(decoder, depth+1, fields); validateErr != nil {
+					return validateErr
 				}
 			}
 			_, err = decoder.Token()
@@ -345,8 +345,8 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 				if *fields > maxEntryFields {
 					return fmt.Errorf("entry has too many nested fields (limit %d)", maxEntryFields)
 				}
-				if err := validateEntryJSONValue(decoder, depth+1, fields); err != nil {
-					return err
+				if validateErr := validateEntryJSONValue(decoder, depth+1, fields); validateErr != nil {
+					return validateErr
 				}
 			}
 			_, err = decoder.Token()
@@ -465,8 +465,8 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	if len(plaintext) > maxEntryPlaintextBytesV1 {
 		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
 	}
-	if err := validateEntryPlaintext(plaintext); err != nil {
-		return nil, err
+	if validationErr := validateEntryPlaintext(plaintext); validationErr != nil {
+		return nil, validationErr
 	}
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
