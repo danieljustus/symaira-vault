@@ -2053,6 +2053,9 @@ fn check_mcp_server(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
 }
 
 fn approval_device_summary(vault_dir: &Path) -> String {
+    if let Err(err) = check_approval_store_directories(vault_dir) {
+        return format!("approval devices: cannot load ({err})");
+    }
     let store = match crate::device_approval::DeviceSessionStore::new(vault_dir) {
         Ok(store) => store,
         Err(err) => return format!("approval devices: cannot load ({err})"),
@@ -2073,6 +2076,29 @@ fn approval_device_summary(vault_dir: &Path) -> String {
     }
 
     format!("{active} approval device(s) active, {expired} expired, {revoked} revoked")
+}
+
+fn check_approval_store_directories(vault_dir: &Path) -> Result<(), String> {
+    for directory in [vault_dir, &vault_dir.join(".symvault")] {
+        match fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "refusing symlinked approval store directory {}",
+                    directory.display()
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(format!(
+                    "approval store path is not a directory: {}",
+                    directory.display()
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
 }
 
 fn parse_cert_expiry(pem_bytes: &[u8]) -> Result<time::OffsetDateTime, String> {

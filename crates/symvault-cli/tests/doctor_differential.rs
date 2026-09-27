@@ -1380,6 +1380,119 @@ fn differential_doctor_mcp_approval_tls_migrates_legacy_keys_and_counts_zero_exp
     assert_eq!(private_mode(&rust_path), 0o600);
 }
 
+#[cfg(unix)]
+#[test]
+fn doctor_mcp_approval_tls_refuses_symlinked_store_parent() {
+    use std::os::unix::fs::symlink;
+
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-approval-tls-symlink-home");
+    let go_vault = temporary_root("mcp-approval-tls-symlink-go-vault");
+    let rust_vault = temporary_root("mcp-approval-tls-symlink-rust-vault");
+    let go_target = temporary_root("mcp-approval-tls-symlink-go-target");
+    let rust_target = temporary_root("mcp-approval-tls-symlink-rust-target");
+    let _fixture = TempFixture::new(vec![
+        home.clone(),
+        go_vault.clone(),
+        rust_vault.clone(),
+        go_target.clone(),
+        rust_target.clone(),
+    ]);
+    let mut input = serde_json::Map::new();
+    input.insert(
+        "a".repeat(64),
+        serde_json::json!({
+            "prefix": "TOKN",
+            "device_id": "synthetic-device",
+            "public_key": "synthetic-public-key",
+            "created_at": "2026-01-02T03:04:05Z",
+            "expires_at": "2999-01-02T03:04:05Z",
+            "revoked": false
+        }),
+    );
+    let bytes = serde_json::to_vec(&input).unwrap();
+    let go_file = go_target.join("device-sessions.json");
+    let rust_file = rust_target.join("device-sessions.json");
+    write_private_fixture(&go_file, &bytes);
+    write_private_fixture(&rust_file, &bytes);
+    symlink(&go_target, go_vault.join(".symvault")).unwrap();
+    symlink(&rust_target, rust_vault.join(".symvault")).unwrap();
+
+    let out_go = run_mcp_approval_tls_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_approval_tls_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let result_go = doctor_result(&out_go);
+    let result_rust = doctor_result(&out_rust);
+    assert!(
+        result_go["message"]
+            .as_str()
+            .unwrap()
+            .contains("1 approval device(s) active, 0 expired, 0 revoked")
+    );
+    assert!(
+        result_rust["message"]
+            .as_str()
+            .unwrap()
+            .contains("approval devices: cannot load (refusing symlinked approval store directory")
+    );
+    assert_eq!(fs::read(go_file).unwrap(), bytes);
+    assert_eq!(fs::read(rust_file).unwrap(), bytes);
+}
+
+#[test]
+fn differential_doctor_mcp_approval_tls_rejects_malformed_expiry_like_go() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-approval-tls-malformed-expiry-home");
+    let go_vault = temporary_root("mcp-approval-tls-malformed-expiry-go-vault");
+    let rust_vault = temporary_root("mcp-approval-tls-malformed-expiry-rust-vault");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    let mut input = serde_json::Map::new();
+    input.insert(
+        "f".repeat(64),
+        serde_json::json!({
+            "prefix": "TOKN",
+            "device_id": "synthetic-device",
+            "public_key": "synthetic-public-key",
+            "created_at": "2026-01-02T03:04:05Z",
+            "expires_at": "not-a-time",
+            "revoked": false
+        }),
+    );
+    let bytes = serde_json::to_vec(&input).unwrap();
+    for vault in [&go_vault, &rust_vault] {
+        fs::create_dir(vault.join(".symvault")).unwrap();
+        write_private_fixture(&vault.join(".symvault/device-sessions.json"), &bytes);
+    }
+
+    let out_go = run_mcp_approval_tls_doctor(&go, &go_vault, &home);
+    let out_rust = run_mcp_approval_tls_doctor(&rust, &rust_vault, &home);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    let result_go = doctor_result(&out_go);
+    let result_rust = doctor_result(&out_rust);
+    assert_eq!(result_go["status"], result_rust["status"]);
+    assert_eq!(result_go["status"], "ok");
+    for result in [&result_go, &result_rust] {
+        assert!(
+            result["message"]
+                .as_str()
+                .unwrap()
+                .contains("approval devices: cannot load (")
+        );
+    }
+    for vault in [&go_vault, &rust_vault] {
+        assert_eq!(
+            fs::read(vault.join(".symvault/device-sessions.json")).unwrap(),
+            bytes
+        );
+    }
+}
+
 #[test]
 fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_legacy() {
     let Some((go, rust)) = oracle_binaries() else {

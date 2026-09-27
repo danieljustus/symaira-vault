@@ -58,7 +58,7 @@ pub(crate) struct DeviceSession {
     pub name: String,
     pub public_key: String,
     pub created_at: String,
-    #[serde(default = "zero_time_string")]
+    #[serde(default = "zero_time_string", deserialize_with = "deserialize_expiry")]
     pub expires_at: String,
     pub revoked: bool,
 }
@@ -221,13 +221,19 @@ fn looks_like_sha256_hex(value: &str) -> bool {
 /// Go `time.Now().After(expiresAt)` for an RFC3339 timestamp read from the
 /// store.
 pub(crate) fn is_expired(expires_at: &str) -> bool {
-    if expires_at.is_empty() {
-        return true;
-    }
     match OffsetDateTime::parse(expires_at, &Rfc3339) {
         Ok(expires) => OffsetDateTime::now_utc() > expires,
         Err(_) => false,
     }
+}
+
+fn deserialize_expiry<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
+    Ok(value)
 }
 
 fn zero_time_string() -> String {
@@ -509,9 +515,15 @@ mod tests {
         assert_eq!(display_minutes("nonsense"), "nonsense");
         assert!(is_expired("2000-01-01T00:00:00Z"));
         assert!(is_expired(&zero_time_string()));
-        assert!(is_expired(""));
         assert!(!is_expired("2999-01-01T00:00:00Z"));
-        assert!(!is_expired("nonsense"));
+    }
+
+    #[test]
+    fn malformed_expiry_is_rejected_during_store_deserialization() {
+        let input = br#"{"token":{"prefix":"TOKN","device_id":"device","public_key":"key","created_at":"2026-01-01T00:00:00Z","expires_at":"not-a-time","revoked":false}}"#;
+        let error = serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(input)
+            .expect_err("Go time.Time rejects malformed expires_at");
+        assert!(error.to_string().contains("not-a-time"));
     }
 
     #[test]
