@@ -264,6 +264,9 @@ func runDifferential(binary string, value fixture) error {
 	if err := json.Unmarshal(value.Cases[1].Entry, &expected); err != nil {
 		return err
 	}
+	// The Rust first-write path now applies the same classification inference
+	// as Go WriteEntry before persisting the fixture entry.
+	expected.Classification = vaultpkg.InferClassification(&expected)
 	if !reflect.DeepEqual(project(goRead), project(&expected)) {
 		return fmt.Errorf("Rust→Go reopen projection mismatch")
 	}
