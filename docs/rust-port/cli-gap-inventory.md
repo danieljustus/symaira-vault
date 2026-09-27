@@ -1,14 +1,14 @@
 # CLI surface gap (measured)
 
 Measured on **2026-09-27** against the Rust CLI built from candidate
-`8ec623b6` and the pinned Go command tree in
+`9628016f` and the pinned Go command tree in
 `testdata/port/cli/command-tree.json` (oracle `3232e31f`, release
 `unreleased`), depth 3. This supersedes the 2026-09-20 report below: the rebuilt
 candidate has a different command surface.
 
 The probe pins the binary: SHA-256
-`bc3c6e73183b001714b843ab0fc1daba80b198dbdb23886fc6a2721abcca5412`, modified
-`2026-09-27T08:03:49Z`.
+`7ce681026ae465dd52a7112471f89b795eddae77c93a1c43edfa03490838bb2f`, modified
+`2026-09-27T13:47:54Z`.
 
 The source-tree `cligap` probe uses the pinned Go command-tree fixture; it does
 not need a Go oracle binary. Build the CLI after checking external build storage
@@ -30,12 +30,12 @@ output bytes, exit codes or side effects; the behavioral rows remain separate.
 | --- | --- |
 | oracle command paths (depth ≤ 3) | 134 |
 | Rust command paths (walked from its own help) | 100 |
-| oracle paths **missing** in Rust | **24** |
-| oracle flags missing from probed paths | **11** (on 4 paths) |
+| oracle paths rejected by the `--help` probe | **26** |
+| oracle flags missing from probed paths | **8** (on 2 paths) |
 | oracle aliases missing on reachable commands | **0** |
-| Rust paths not present in the pinned tree | 1 |
+| Rust paths not present in the pinned tree | 0 |
 
-## Missing command paths (24)
+## Paths rejected by the `--help` probe (26)
 
 | cluster | count | paths |
 | --- | --- | --- |
@@ -44,16 +44,18 @@ output bytes, exit codes or side effects; the behavioral rows remain separate.
 | `broker` | 1 | `broker` |
 | `device` | 1 | `approval-pair` |
 | `dynamic` | 2 | `dynamic`, `dynamic generate` |
-| single | 2 | `generate manpages`, `help` |
+| single | 1 | `help` |
 | `intake` | 3 | `intake`, `intake watch`, `intake watch disable` |
 | `serve` | 8 | `serve`, `serve install`, `serve status`, `serve uninstall`, `serve token`, `serve token create`, `serve token list`, `serve token revoke` |
 | single | 3 | `setup`, `startup-profile`, `ui` |
+| `update` | 3 | `update apply`, `update check`, `update info` |
 
-The measurement above predates the current candidate. The Rust CLI now exposes
-the top-level `help` route through Clap's generated help subcommand, including
-`symvault help config validate`; its success and usage path are checked against
-the Go command in `cli_help_subcommand.rs`. This is route-level evidence only:
-help text formatting remains part of CLI-004 and is not claimed byte-identical.
+The `cligap` probe appends `--help` to every path. Rust accepts `symvault help`
+and nested `symvault help config validate`, but Clap rejects `help --help`.
+The catch-all `update` runner recognizes `apply`, `check` and `info`, but rejects
+their `--help` form. Those four entries are help-path gaps, not unreachable
+runtime commands. `cli_help_subcommand.rs` compares the generated help route
+semantically with Go; rendered text is not byte-identical.
 
 ## Alias gaps (0)
 
@@ -61,11 +63,9 @@ The latest binary accepts all three aliases recorded by the pinned tree:
 `show` and `cat` for `get`, and `ls` for `list`. The 2026-09-20 alias-gap
 finding is resolved in the current candidate.
 
-## Rust-only path (1)
+## Rust-only paths (0)
 
-`symvault mcp serve` is reachable in Rust and absent from the pinned tree. The
-tree predates it; this is a re-pin decision, not a defect claim. `mcp install`,
-`status` and `uninstall` are present on both sides.
+The current help walk found no Rust-only path at depth 3.
 
 ## Deliberate non-claims
 
