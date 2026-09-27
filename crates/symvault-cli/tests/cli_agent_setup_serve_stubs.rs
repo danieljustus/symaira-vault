@@ -2,7 +2,7 @@
 //! `symvault serve token [create|list|revoke]`.
 //!
 //! Expected values were captured from the Go oracle built from this slice's
-//! base (`f34780ac`, release `unreleased`, no Go file changes in this slice)
+//! current main base (`ecaf4d0c`, release `unreleased`, no Go file changes in this slice)
 //! and are reproduced here byte for byte. Re-capture with:
 //!
 //! ```sh

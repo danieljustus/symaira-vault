@@ -2,9 +2,9 @@
 
 ## Zwischenstand 2026-09-24, Teil 17 — Slice `agent setup` + `serve token*` gebaut
 
-- **Basis/Worktree:** Branch `feat/rust-port-deprecated-stubs2` @ `a4b4e92f`
-  (Worktree `symaira-vault-wt-mig-stubs2`), Implementierung `67135aee`
-  (Koordinator-Cherry-Pick aus dem Subagent-Worktree, unabhängig nachverifiziert).
+- **Basis/Worktree:** Branch `feat/rust-port-deprecated-stubs2` auf `main`
+  `ecaf4d0c` rebasiert (Worktree `symaira-vault-wt-mig-stubs2`);
+  Implementierung und Tests unabhängig nachverifiziert.
 - **Slice:** die fünf verbliebenen Deprecated-Stub-Pfade — `agent setup <name>`
   (`cmd/mcp/agent.go`, `newAgentSetupCmd`) sowie `serve token`,
   `serve token create|list|revoke`. Der Oracle baut `mcp` **und** `serve` aus
@@ -15,8 +15,8 @@
   `Command::Serve` hidden + `ServeAction::Token` als Wort-Catch-all wie
   `McpAction::Token`); Wiederverwendung von `deprecated_stub_message` (vier
   Stderr-Zeilen, Exit 2, `--quiet`-ignorierend) und `deprecated_token_message`.
-- **Oracle-Capture:** Go-Oracle in `target/port/symvault-go` bei `f34780ac`
-  gebaut (sha256 `ad9fb1e2f697…`), isoliertes HOME; alle fünf Pfade plus
+- **Oracle-Capture:** Go-Oracle aus dem unveränderten Go-Baum von `main`
+  `ecaf4d0c` gebaut (SHA-256 `6b3dd176cdb80ce2af706d4bbce2cd870b12774aa06d6a7f9218d8d3ec49c7a5`), isoliertes HOME; alle fünf Pfade plus
   Varianten (ohne Args, Extra-Args, unbekanntes Wort, `--quiet`) liefern die
   vier Stderr-Zeilen, leeres Stdout, Exit 2. Differenzial Go↔Rust:
   **26/26 Fälle byte-identisch** (Exit, Stdout, Stderr).
@@ -37,12 +37,11 @@
   „Netzwerk-Downloads"-Blocker; der gepinnte Oracle zeigt dort nur noch den
   Deprecated-Stub (kein Netzwerk, kein Vault-Zugang) — der Pfad war fälschlich
   als blocked geführt.
-- **Gates am Stand `67135aee`:** `cargo fmt --all --check` ✅,
+- **Gates nach Rebase auf `ecaf4d0c`:** `cargo fmt --all --check` ✅,
   `cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings` ✅,
   `cargo test -p symvault-cli --locked` ✅ (u. a. fünf neue Kontrakt-Tests:
   Byte-Parität, `--quiet`-Ignoranz, `serve token` ≡ `mcp token`, Hidden-in-
-  Help, Negativ-Kontrolle). Kein Push, kein PR, keine Go-Änderung, kein
-  Tag/Cutover.
+  Help, Negativ-Kontrolle). Keine Go-Änderung, kein Tag/Cutover.
 
 ## Zwischenstand 2026-09-22, Teil 16 — Slice `update info` gemergt (28 → 24)
 
