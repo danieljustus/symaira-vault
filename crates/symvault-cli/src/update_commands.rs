@@ -1,7 +1,7 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! and the non-release-build path of `update check`. Stable release checks
-//! still require the Go corekit network/cache runtime; `update apply` also
-//! requires its download and cosign path.
+//! and `update check` for non-release builds or fresh persistent-cache hits.
+//! Stable cache misses still require the Go corekit network runtime; `update
+//! apply` also requires its download and cosign path.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -12,11 +12,14 @@
 //! `tests/cli_update_info.rs` replays every case against this code.
 
 use std::ffi::OsString;
+use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// Install-method string values as published by corekit's `InstallMethod`.
 pub(crate) mod method {
@@ -98,17 +101,52 @@ struct CheckJson<'a> {
     update_available: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CheckResult {
+    current_version: String,
+    latest_version: String,
+    release_url: String,
+    checkable: bool,
+    update_available: bool,
+}
+
+#[derive(Deserialize)]
+struct DiskCache {
+    #[serde(alias = "Timestamp")]
+    timestamp: String,
+    #[serde(alias = "Release")]
+    release: Option<CachedRelease>,
+}
+
+#[derive(Deserialize)]
+struct CachedRelease {
+    #[serde(default, rename = "TagName", alias = "tag_name")]
+    tag_name: String,
+    #[serde(default, rename = "HTMLURL", alias = "html_url")]
+    html_url: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct StableVersion {
+    major: i64,
+    minor: i64,
+    patch: i64,
+}
+
+const DEFAULT_UPDATE_CACHE_TTL_SECONDS: i64 = 24 * 60 * 60;
+
 /// Go's checker returns before creating its HTTP client when AppVersion is
 /// not a stable semver. This is the complete local/dev-build path and cannot
 /// consult the network or write the release cache.
 fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bool) -> ExitCode {
     let mut want_json = json_flag || output_format == "json";
     let mut quiet = root_quiet;
+    let mut force = false;
     for arg in rest.iter().skip(1) {
         match arg.to_string_lossy().as_ref() {
             "--json" => want_json = true,
             "--quiet" => quiet = true,
-            "--force" => {}
+            "--force" => force = true,
             flag if flag.starts_with('-') => {
                 return unknown_command("symvault update check", flag, false);
             }
@@ -117,66 +155,376 @@ fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bo
     }
 
     let version = crate::VERSION.trim();
-    if is_stable_version(version) {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Error: update check for stable release builds requires the native release checker"
-        );
-        return ExitCode::from(1);
-    }
-
-    if want_json {
-        let output = CheckJson {
-            current_version: version,
-            latest_version: None,
-            release_url: None,
+    let result = if let Some(current) = parse_stable_version(version) {
+        match cached_check(current, force, OffsetDateTime::now_utc()) {
+            Some(result) => Ok(result),
+            None => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "Error: check for updates: native stable update checking requires a usable cache entry; network checking is not implemented"
+                );
+                Err(())
+            }
+        }
+    } else {
+        Ok(CheckResult {
+            current_version: version.to_string(),
+            latest_version: String::new(),
+            release_url: String::new(),
             checkable: false,
             update_available: false,
-        };
-        let Ok(mut text) = serde_json::to_string_pretty(&output) else {
-            let _ = writeln!(
-                std::io::stderr(),
-                "Error: encode JSON output: serialize failed"
-            );
-            return ExitCode::from(1);
-        };
-        text = text
-            .replace('&', "\\u0026")
-            .replace('<', "\\u003c")
-            .replace('>', "\\u003e")
-            .replace('\u{2028}', "\\u2028")
-            .replace('\u{2029}', "\\u2029");
-        let mut stdout = std::io::stdout().lock();
-        let _ = stdout.write_all(text.as_bytes());
-        let _ = stdout.write_all(b"\n");
-        return ExitCode::SUCCESS;
-    }
-
-    if !quiet {
-        let _ = writeln!(
-            std::io::stderr(),
-            "Update checks are only available for stable release builds. Current version: {version}"
-        );
-    }
-    ExitCode::SUCCESS
+        })
+    };
+    let Ok(result) = result else {
+        return ExitCode::from(1);
+    };
+    write_check_output(render_check(&result, want_json, quiet))
 }
 
-fn is_stable_version(raw: &str) -> bool {
+fn parse_stable_version(raw: &str) -> Option<StableVersion> {
     let value = raw.trim().strip_prefix('v').unwrap_or(raw.trim());
     let mut parts = value.split('.');
-    let Some(major) = parts.next() else {
-        return false;
+    if value.contains(['-', '+']) {
+        return None;
+    }
+    let (major, minor, patch) = (parts.next()?, parts.next()?, parts.next()?);
+    if parts.next().is_some() {
+        return None;
+    }
+    let parse = |part: &str| {
+        if part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        part.parse::<i64>().ok().filter(|value| *value >= 0)
     };
-    let Some(minor) = parts.next() else {
-        return false;
+    Some(StableVersion {
+        major: parse(major)?,
+        minor: parse(minor)?,
+        patch: parse(patch)?,
+    })
+}
+
+fn cached_check(current: StableVersion, force: bool, now: OffsetDateTime) -> Option<CheckResult> {
+    if force {
+        return None;
+    }
+    let cache_path = default_cache_path();
+    let raw = fs::read(cache_path).ok()?;
+    cached_check_bytes(&raw, current, now, update_cache_ttl())
+}
+
+fn cached_check_bytes(
+    raw: &[u8],
+    current: StableVersion,
+    now: OffsetDateTime,
+    ttl: time::Duration,
+) -> Option<CheckResult> {
+    let disk: DiskCache = serde_json::from_slice(raw).ok()?;
+    let timestamp = OffsetDateTime::parse(&disk.timestamp, &Rfc3339).ok()?;
+    if is_zero_timestamp(timestamp) {
+        return None;
+    }
+    if now - timestamp >= ttl {
+        return None;
+    }
+    let release = disk.release?;
+    let latest = parse_stable_version(&release.tag_name)?;
+    let update_available =
+        compare_versions(current, latest).is_lt() && !(current.major == 0 && latest.major > 0);
+    Some(CheckResult {
+        current_version: current.to_string(),
+        latest_version: if update_available {
+            release
+                .tag_name
+                .strip_prefix('v')
+                .unwrap_or(&release.tag_name)
+                .to_string()
+        } else {
+            current.to_string()
+        },
+        release_url: if update_available {
+            release.html_url
+        } else {
+            String::new()
+        },
+        checkable: true,
+        update_available,
+    })
+}
+
+fn is_zero_timestamp(value: OffsetDateTime) -> bool {
+    value.year() == 1
+        && value.month() == time::Month::January
+        && value.day() == 1
+        && value.hour() == 0
+        && value.minute() == 0
+        && value.second() == 0
+        && value.nanosecond() == 0
+}
+
+fn compare_versions(left: StableVersion, right: StableVersion) -> std::cmp::Ordering {
+    (left.major, left.minor, left.patch).cmp(&(right.major, right.minor, right.patch))
+}
+
+impl StableVersion {
+    fn to_string(self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+fn default_cache_path() -> PathBuf {
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+        .unwrap_or_else(|| PathBuf::from(".cache"));
+    let hash = Sha256::digest(b"danieljustus\0symaira-vault");
+    let filename = format!("{hash:x}.json");
+    base.join("symaira").join("updatecheck").join(filename)
+}
+
+fn update_cache_ttl() -> time::Duration {
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    update_cache_ttl_at(home.as_deref())
+}
+
+fn update_cache_ttl_at(home: Option<&Path>) -> time::Duration {
+    let Some(home) = home else {
+        return time::Duration::seconds(DEFAULT_UPDATE_CACHE_TTL_SECONDS);
     };
-    let Some(patch) = parts.next() else {
-        return false;
+    let config_path = home.join(".symvault/config.yaml");
+    let ttl = symvault_core::config::Config::load(config_path)
+        .ok()
+        .and_then(|config| config.update.map(|update| update.cache_ttl))
+        .filter(|ttl| *ttl > std::time::Duration::ZERO);
+    ttl.map_or(
+        time::Duration::seconds(DEFAULT_UPDATE_CACHE_TTL_SECONDS),
+        |ttl| {
+            time::Duration::seconds(ttl.as_secs() as i64)
+                + time::Duration::nanoseconds(ttl.subsec_nanos() as i64)
+        },
+    )
+}
+
+struct CheckOutput {
+    exit_code: ExitCode,
+    stdout: String,
+    stderr: String,
+}
+
+fn render_check(result: &CheckResult, want_json: bool, quiet: bool) -> CheckOutput {
+    if want_json {
+        let output = CheckJson {
+            current_version: &result.current_version,
+            latest_version: (!result.latest_version.is_empty()).then_some(&result.latest_version),
+            release_url: (!result.release_url.is_empty()).then_some(&result.release_url),
+            checkable: result.checkable,
+            update_available: result.update_available,
+        };
+        let Ok(mut text) = serde_json::to_string_pretty(&output) else {
+            return CheckOutput {
+                exit_code: ExitCode::from(1),
+                stdout: String::new(),
+                stderr: "Error: encode JSON output: serialize failed\n".into(),
+            };
+        };
+        text = escape_go_json(&text);
+        text.push('\n');
+        return CheckOutput {
+            exit_code: update_available_exit(result.update_available),
+            stdout: text,
+            stderr: if result.update_available {
+                "Error: update available\n".into()
+            } else {
+                String::new()
+            },
+        };
+    }
+
+    if quiet {
+        return CheckOutput {
+            exit_code: update_available_exit(result.update_available),
+            stdout: String::new(),
+            stderr: if result.update_available {
+                "Error: update available\n".into()
+            } else {
+                String::new()
+            },
+        };
+    }
+    if !result.checkable {
+        return CheckOutput {
+            exit_code: ExitCode::SUCCESS,
+            stdout: String::new(),
+            stderr: format!(
+                "Update checks are only available for stable release builds. Current version: {}",
+                result.current_version
+            ) + "\n",
+        };
+    }
+    if result.update_available {
+        let mut stderr = format!(
+            "Update available: {} -> {}",
+            result.current_version, result.latest_version
+        );
+        if !result.release_url.is_empty() {
+            stderr.push_str(&format!("\nDownload: {}", result.release_url));
+        }
+        stderr.push_str("\nError: update available\n");
+        return CheckOutput {
+            exit_code: update_available_exit(true),
+            stdout: String::new(),
+            stderr,
+        };
+    }
+    let stderr = if result.current_version == result.latest_version {
+        format!(
+            "Symaira Vault is up to date ({}).\n",
+            result.current_version
+        )
+    } else {
+        format!(
+            "No newer stable release found. Current version: {}. Latest published stable release: {}.\n",
+            result.current_version, result.latest_version
+        )
     };
-    parts.next().is_none()
-        && [major, minor, patch]
-            .iter()
-            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+    CheckOutput {
+        exit_code: ExitCode::SUCCESS,
+        stdout: String::new(),
+        stderr,
+    }
+}
+
+fn update_available_exit(available: bool) -> ExitCode {
+    if available {
+        ExitCode::from(10)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn write_check_output(output: CheckOutput) -> ExitCode {
+    let mut stdout = std::io::stdout().lock();
+    let _ = stdout.write_all(output.stdout.as_bytes());
+    let mut stderr = std::io::stderr().lock();
+    let _ = stderr.write_all(output.stderr.as_bytes());
+    output.exit_code
+}
+
+fn escape_go_json(text: &str) -> String {
+    text.replace('&', "\\u0026")
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
+}
+
+#[cfg(test)]
+mod check_tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Oracle {
+        source_files: Vec<String>,
+        source_digest: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Case {
+        id: String,
+        version: String,
+        cache: String,
+        json: bool,
+        quiet: bool,
+        exit: u8,
+        stdout: String,
+        stderr: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixture {
+        oracle: Oracle,
+        cases: Vec<Case>,
+    }
+
+    fn fixture() -> Fixture {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/update-check-cache/cases.json");
+        let raw = fs::read_to_string(path).expect("read update-check cache fixture");
+        serde_json::from_str(&raw.replace("\r\n", "\n")).expect("parse cache fixture")
+    }
+
+    #[test]
+    fn stable_cache_cases_match_go_oracle() {
+        let fixture = fixture();
+        let now = OffsetDateTime::parse("2026-09-27T12:00:00Z", &Rfc3339).unwrap();
+        let ttl = time::Duration::hours(24);
+        for case in fixture.cases {
+            let current = parse_stable_version(&case.version)
+                .unwrap_or_else(|| panic!("{}: invalid fixture version", case.id));
+            let result = cached_check_bytes(case.cache.as_bytes(), current, now, ttl)
+                .unwrap_or_else(|| panic!("{}: cache should be fresh and usable", case.id));
+            let got = render_check(&result, case.json, case.quiet);
+            assert_eq!(
+                got.exit_code,
+                ExitCode::from(case.exit),
+                "{}: exit",
+                case.id
+            );
+            assert_eq!(got.stdout, case.stdout, "{}: stdout", case.id);
+            assert_eq!(got.stderr, case.stderr, "{}: stderr", case.id);
+        }
+    }
+
+    #[test]
+    fn cache_fixture_is_bound_to_go_source() {
+        let fixture = fixture();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut hasher = Sha256::new();
+        for name in &fixture.oracle.source_files {
+            let data = fs::read(repo_root.join(name))
+                .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
+            hasher.update(name.as_bytes());
+            hasher.update([0]);
+            hasher.update(&data);
+            hasher.update([0]);
+        }
+        assert_eq!(
+            format!("{:x}", hasher.finalize()),
+            fixture.oracle.source_digest,
+            "pinned Go source changed; recapture the stable update-check fixture"
+        );
+    }
+
+    #[test]
+    fn stale_cache_and_force_require_the_network_path() {
+        let case = fixture().cases.into_iter().next().unwrap();
+        let current = parse_stable_version(&case.version).unwrap();
+        let expired_at = OffsetDateTime::parse("2100-01-01T00:00:00Z", &Rfc3339).unwrap();
+        assert!(
+            cached_check_bytes(
+                case.cache.as_bytes(),
+                current,
+                expired_at,
+                time::Duration::hours(24)
+            )
+            .is_none()
+        );
+        assert!(cached_check(current, true, OffsetDateTime::now_utc()).is_none());
+    }
+
+    #[test]
+    fn update_cache_ttl_uses_legacy_vault_config_override() {
+        let home = tempfile::tempdir().unwrap();
+        let config_dir = home.path().join(".symvault");
+        fs::create_dir_all(&config_dir).unwrap();
+        fs::write(config_dir.join("config.yaml"), "update:\n  cache_ttl: 1h\n").unwrap();
+        assert_eq!(
+            update_cache_ttl_at(Some(home.path())),
+            time::Duration::hours(1)
+        );
+        assert_eq!(update_cache_ttl_at(None), time::Duration::hours(24));
+    }
 }
 
 /// Go `PersistentPreRunE`: a non-text output format must be supported by the
