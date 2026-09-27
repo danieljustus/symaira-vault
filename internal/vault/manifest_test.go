@@ -408,6 +408,7 @@ func TestVerifyManifestIntegrity_OKMissingTamperedUnknown(t *testing.T) {
 	if len(result.Tampered) != 1 || result.Tampered[0] != "beta" {
 		t.Errorf("Tampered = %v, want [beta]", result.Tampered)
 	}
+	sort.Strings(result.Unknown) // Directory enumeration order is not a contract.
 	if len(result.Unknown) != 2 || result.Unknown[0] != "unknown-link.age" || result.Unknown[1] != "unknown.age" {
 		t.Errorf("Unknown = %v, want [unknown-link.age unknown.age]", result.Unknown)
 	}
