@@ -19,6 +19,7 @@ getrandom = "=0.3.3"
 tar = "=0.4.46"
 serde.workspace = true
 serde_json.workspace = true
+reqwest.workspace = true
 sha2 = "=0.10.9"
 serde_yaml_ng = "=0.10.0"
 yaml-edit = { version = "=0.3.1", default-features = false }

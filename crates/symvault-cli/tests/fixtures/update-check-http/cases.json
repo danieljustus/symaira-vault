@@ -1,0 +1,49 @@
+{
+  "oracle": {
+    "source_files": [
+      "cmd/admin/update.go",
+      "internal/update/checker.go",
+      "internal/update/checker_test.go",
+      "go.mod",
+      "go.sum"
+    ],
+    "source_digest": "990f693cf5f56e020ff92168e0740393ca242c8d74fd960eb2e50beaebf253c2",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "go_tests": [
+      "TestCheckerReportsAvailableUpdate",
+      "TestCheckerReportsUpToDate",
+      "TestCheckerFiltersHistoricalVersions",
+      "TestCheckerForceBypassesCache",
+      "TestCheckerRejectsDraftRelease",
+      "TestCheckerRejectsPrereleaseRelease",
+      "TestCheckerReturnsHTTPError",
+      "TestCheckerReturnsDecodeError"
+    ]
+  },
+  "cases": [
+    {
+      "id": "newer-release",
+      "current": "1.0.0",
+      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\",\"body\":\"Release notes\"}",
+      "latest": "1.2.0",
+      "release_url": "https://example.com/v1.2.0",
+      "update_available": true
+    },
+    {
+      "id": "same-version",
+      "current": "1.2.0",
+      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\"}",
+      "latest": "1.2.0",
+      "release_url": "",
+      "update_available": false
+    },
+    {
+      "id": "historical-line-is-filtered",
+      "current": "0.4.0",
+      "response": "{\"tag_name\":\"v4.0.0\",\"html_url\":\"https://example.com/v4.0.0\"}",
+      "latest": "0.4.0",
+      "release_url": "",
+      "update_available": false
+    }
+  ]
+}

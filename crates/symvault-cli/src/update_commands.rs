@@ -1,7 +1,6 @@
 //! `symvault update` — bare help, `update info` installation-method report,
-//! and `update check` for non-release builds or fresh persistent-cache hits.
-//! Stable cache misses still require the Go corekit network runtime; `update
-//! apply` also requires its download and cosign path.
+//! and `update check` for stable releases and non-release builds. `update
+//! apply` still requires its download and cosign path.
 //!
 //! Go references: `cmd/admin/update.go` (`newUpdateCmd`,
 //! `newUpdateInfoCmd`), the output-format gate in `internal/cli/cli.go`
@@ -13,9 +12,10 @@
 
 use std::ffi::OsString;
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -110,20 +110,50 @@ struct CheckResult {
     update_available: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct DiskCache {
-    #[serde(alias = "Timestamp")]
+    #[serde(rename = "timestamp", alias = "Timestamp")]
     timestamp: String,
-    #[serde(alias = "Release")]
+    #[serde(rename = "release", alias = "Release")]
     release: Option<CachedRelease>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CachedRelease {
     #[serde(default, rename = "TagName", alias = "tag_name")]
     tag_name: String,
     #[serde(default, rename = "HTMLURL", alias = "html_url")]
     html_url: String,
+    #[serde(default, rename = "Body", alias = "body")]
+    body: String,
+    #[serde(default, rename = "Assets", alias = "assets")]
+    assets: Vec<CachedAsset>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CachedAsset {
+    #[serde(default, rename = "Name", alias = "name")]
+    name: String,
+    #[serde(default, rename = "BrowserDownloadURL", alias = "browser_download_url")]
+    browser_download_url: String,
+    #[serde(default, rename = "Size", alias = "size")]
+    size: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct LatestRelease {
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    tag_name: String,
+    #[serde(default)]
+    html_url: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    assets: Vec<CachedAsset>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -134,6 +164,9 @@ struct StableVersion {
 }
 
 const DEFAULT_UPDATE_CACHE_TTL_SECONDS: i64 = 24 * 60 * 60;
+const LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/danieljustus/symaira-vault/releases/latest";
+const MAX_RELEASE_RESPONSE_BYTES: u64 = 1 << 20;
 
 /// Go's checker returns before creating its HTTP client when AppVersion is
 /// not a stable semver. This is the complete local/dev-build path and cannot
@@ -158,13 +191,7 @@ fn check(rest: &[OsString], output_format: &str, json_flag: bool, root_quiet: bo
     let result = if let Some(current) = parse_stable_version(version) {
         match cached_check(current, force, OffsetDateTime::now_utc()) {
             Some(result) => Ok(result),
-            None => {
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "Error: check for updates: native stable update checking requires a usable cache entry; network checking is not implemented"
-                );
-                Err(())
-            }
+            None => fetch_latest_check(current, version),
         }
     } else {
         Ok(CheckResult {
@@ -209,7 +236,8 @@ fn cached_check(current: StableVersion, force: bool, now: OffsetDateTime) -> Opt
         return None;
     }
     let cache_path = default_cache_path();
-    let raw = fs::read(cache_path).ok()?;
+    let raw =
+        symvault_sync::safeio::read_bounded(&cache_path, MAX_RELEASE_RESPONSE_BYTES).ok()??;
     cached_check_bytes(&raw, current, now, update_cache_ttl())
 }
 
@@ -252,6 +280,240 @@ fn cached_check_bytes(
     })
 }
 
+fn fetch_latest_check(current: StableVersion, version: &str) -> Result<CheckResult, ()> {
+    let result = fetch_latest_check_at(current, version, LATEST_RELEASE_URL);
+    match result {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            let _ = writeln!(std::io::stderr(), "Error: check for updates: {error}");
+            Err(())
+        }
+    }
+}
+
+fn fetch_latest_check_at(
+    current: StableVersion,
+    version: &str,
+    url: &str,
+) -> Result<CheckResult, String> {
+    let release = fetch_latest_release_at(url, version)?;
+    let (result, cached) = result_from_latest_release(current, release)?;
+    let cache = DiskCache {
+        timestamp: OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .map_err(|error| format!("format release cache timestamp: {error}"))?,
+        release: Some(cached),
+    };
+    persist_release_cache(&cache);
+    Ok(result)
+}
+
+fn result_from_latest_release(
+    current: StableVersion,
+    release: LatestRelease,
+) -> Result<(CheckResult, CachedRelease), String> {
+    if release.draft {
+        return Err("latest release response returned a draft release".to_owned());
+    }
+    if release.prerelease {
+        return Err("latest release response returned a prerelease".to_owned());
+    }
+    let tag_name = release.tag_name.trim().to_owned();
+    if tag_name.is_empty() {
+        return Err("latest release response did not include a tag name".to_owned());
+    }
+    let latest = parse_stable_version(&tag_name).ok_or_else(|| {
+        format!("latest release tag {tag_name:?} is not a stable semantic version")
+    })?;
+    let html_url = release.html_url.trim().to_owned();
+    let cached = CachedRelease {
+        tag_name,
+        html_url: html_url.clone(),
+        body: release.body,
+        assets: release.assets,
+    };
+    let update_available =
+        compare_versions(current, latest).is_lt() && !(current.major == 0 && latest.major > 0);
+    let result = CheckResult {
+        current_version: current.to_string(),
+        latest_version: if update_available {
+            latest.to_string()
+        } else {
+            current.to_string()
+        },
+        release_url: if update_available {
+            html_url
+        } else {
+            String::new()
+        },
+        checkable: true,
+        update_available,
+    };
+    Ok((result, cached))
+}
+
+fn fetch_latest_release_at(url: &str, version: &str) -> Result<LatestRelease, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .tls_backend_rustls()
+        .tls_version_min(reqwest::tls::Version::TLS_1_3)
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 {
+                return attempt.error("stopped after 10 redirects");
+            }
+            if attempt.url().scheme() == "https"
+                && github_host(attempt.url().host_str().unwrap_or_default())
+            {
+                attempt.follow()
+            } else {
+                attempt.error("refusing unsafe update-check redirect")
+            }
+        }))
+        .build()
+        .map_err(|error| format!("create update-check HTTP client: {error}"))?;
+    let mut response = client
+        .get(url)
+        .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("symaira-updatecheck/{}", version.trim()),
+        )
+        .send()
+        .map_err(|error| {
+            if error.is_redirect() {
+                "request latest release: refusing unsafe update-check redirect".to_owned()
+            } else if error.is_timeout() {
+                "request latest release: request timed out".to_owned()
+            } else if tls_certificate_error(&error) {
+                format!("update check failed: TLS certificate verification error - {error}")
+            } else {
+                format!("request latest release: {error}")
+            }
+        })?;
+    if response.status() != reqwest::StatusCode::OK {
+        if response.status() == reqwest::StatusCode::FORBIDDEN
+            && response
+                .headers()
+                .get("x-ratelimit-remaining")
+                .is_some_and(|value| value == "0")
+        {
+            return Err("GitHub API rate limit exceeded".to_owned());
+        }
+        return Err(format!(
+            "GitHub API returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+    let mut body = Vec::new();
+    response
+        .by_ref()
+        .take(MAX_RELEASE_RESPONSE_BYTES)
+        .read_to_end(&mut body)
+        .map_err(|error| format!("decode latest release response: {error}"))?;
+    // Go decodes one value through an io.LimitReader; preserve that behavior
+    // by ignoring any bytes after the first JSON object while never reading
+    // more than the configured bound.
+    let mut decoder = serde_json::Deserializer::from_slice(&body);
+    LatestRelease::deserialize(&mut decoder)
+        .map_err(|error| format!("decode latest release response: {error}"))
+}
+
+fn github_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    host == "github.com"
+        || host == "api.github.com"
+        || host.ends_with(".github.com")
+        || host.ends_with(".githubusercontent.com")
+}
+
+fn tls_certificate_error(error: &reqwest::Error) -> bool {
+    let mut source: Option<&(dyn std::error::Error + 'static)> = Some(error);
+    while let Some(error) = source {
+        let message = error.to_string().to_ascii_lowercase();
+        if message.contains("certificate") || message.contains("cert error") {
+            return true;
+        }
+        source = error.source();
+    }
+    false
+}
+
+fn persist_release_cache(cache: &DiskCache) {
+    let path = default_cache_path();
+    persist_release_cache_at(&path, cache);
+}
+
+fn persist_release_cache_at(path: &Path, cache: &DiskCache) {
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if create_cache_directories(parent).is_err() {
+        return;
+    }
+    let Ok(encoded) = serde_json::to_string(cache) else {
+        return;
+    };
+    let bytes = escape_go_json(&encoded).into_bytes();
+    let _ = symvault_sync::safeio::write_atomic(path, &bytes);
+}
+
+/// Mirrors corekit `fsutil.SafeMkdirAll`: reject non-root symlinks and create
+/// missing cache ancestors as private directories before the atomic cache write.
+fn create_cache_directories(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+        use std::path::Component;
+        let absolute = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        let mut components = Vec::new();
+        for component in absolute.components() {
+            match component {
+                Component::Normal(name) => components.push(name.to_os_string()),
+                Component::ParentDir => {
+                    components.pop();
+                }
+                _ => {}
+            }
+        }
+        let mut current = PathBuf::from("/");
+        for component in components {
+            current.push(component);
+            match fs::symlink_metadata(&current) {
+                Ok(metadata) if metadata.file_type().is_symlink() => {
+                    if metadata.uid() == 0 {
+                        current = fs::canonicalize(&current)?;
+                        continue;
+                    }
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "refusing untrusted symlink in update cache path",
+                    ));
+                }
+                Ok(metadata) if !metadata.is_dir() => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotADirectory,
+                        "update cache path component is not a directory",
+                    ));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    fs::DirBuilder::new().mode(0o700).create(&current)?;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        symvault_sync::safeio::create_dir_all(path).map_err(std::io::Error::other)?;
+    }
+    Ok(())
+}
+
 fn is_zero_timestamp(value: OffsetDateTime) -> bool {
     value.year() == 1
         && value.month() == time::Month::January
@@ -266,9 +528,9 @@ fn compare_versions(left: StableVersion, right: StableVersion) -> std::cmp::Orde
     (left.major, left.minor, left.patch).cmp(&(right.major, right.minor, right.patch))
 }
 
-impl StableVersion {
-    fn to_string(self) -> String {
-        format!("{}.{}.{}", self.major, self.minor, self.patch)
+impl std::fmt::Display for StableVersion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}.{}.{}", self.major, self.minor, self.patch)
     }
 }
 
@@ -524,6 +786,278 @@ mod check_tests {
             time::Duration::hours(1)
         );
         assert_eq!(update_cache_ttl_at(None), time::Duration::hours(24));
+    }
+}
+
+#[cfg(test)]
+mod http_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
+
+    #[derive(Deserialize)]
+    struct Oracle {
+        source_files: Vec<String>,
+        source_digest: String,
+        corekit_pin: String,
+    }
+
+    #[derive(Deserialize)]
+    struct Case {
+        id: String,
+        current: String,
+        response: String,
+        latest: String,
+        release_url: String,
+        update_available: bool,
+    }
+
+    #[derive(Deserialize)]
+    struct Fixture {
+        oracle: Oracle,
+        cases: Vec<Case>,
+    }
+
+    fn fixture() -> Fixture {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/update-check-http/cases.json");
+        serde_json::from_slice(&fs::read(path).expect("read update HTTP fixture"))
+            .expect("parse update HTTP fixture")
+    }
+
+    fn serve_once(
+        status: &str,
+        headers: &str,
+        body: &[u8],
+    ) -> (String, thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind local HTTP oracle");
+        let address = listener.local_addr().expect("local HTTP address");
+        let status = status.to_owned();
+        let headers = headers.to_owned();
+        let body = body.to_vec();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept update request");
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).expect("read request header");
+                request.push(byte[0]);
+            }
+            let request = String::from_utf8_lossy(&request).into_owned();
+            write!(
+                stream,
+                "HTTP/1.1 {status}\r\n{headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .expect("write response headers");
+            // A bounded client closes an oversized response after the limit;
+            // the resulting server-side broken pipe is expected in that case.
+            let _ = stream.write_all(&body);
+            request
+        });
+        (format!("http://{address}/releases/latest"), server)
+    }
+
+    #[test]
+    fn release_http_fixture_matches_pinned_go_checker() {
+        let fixture = fixture();
+        assert_eq!(
+            fixture.oracle.corekit_pin,
+            "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1"
+        );
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut hasher = Sha256::new();
+        for name in &fixture.oracle.source_files {
+            let data = fs::read(repo_root.join(name))
+                .unwrap_or_else(|error| panic!("read pinned Go source {name}: {error}"));
+            hasher.update(name.as_bytes());
+            hasher.update([0]);
+            hasher.update(data);
+            hasher.update([0]);
+        }
+        assert_eq!(
+            format!("{:x}", hasher.finalize()),
+            fixture.oracle.source_digest,
+            "pinned Go source changed; recapture update HTTP fixture"
+        );
+
+        for case in fixture.cases {
+            let (url, server) = serve_once(
+                "200 OK",
+                "Content-Type: application/json\r\n",
+                case.response.as_bytes(),
+            );
+            let release = fetch_latest_release_at(&url, "v1.0.0")
+                .unwrap_or_else(|error| panic!("{}: fetch release: {error}", case.id));
+            let request = server.join().expect("update HTTP fixture server");
+            assert!(request.starts_with("GET /releases/latest HTTP/1.1\r\n"));
+            assert!(
+                request
+                    .to_ascii_lowercase()
+                    .contains("accept: application/vnd.github+json")
+            );
+            assert!(request.contains("symaira-updatecheck/v1.0.0"));
+            let current = parse_stable_version(&case.current)
+                .unwrap_or_else(|| panic!("{}: invalid current version", case.id));
+            let (result, cached) = result_from_latest_release(current, release)
+                .unwrap_or_else(|error| panic!("{}: interpret release: {error}", case.id));
+            assert_eq!(result.latest_version, case.latest, "{}: latest", case.id);
+            assert_eq!(result.release_url, case.release_url, "{}: url", case.id);
+            assert_eq!(
+                result.update_available, case.update_available,
+                "{}: available",
+                case.id
+            );
+            if case.id == "newer-release" {
+                assert_eq!(cached.body, "Release notes");
+            }
+        }
+    }
+
+    #[test]
+    fn release_http_rejects_non_github_redirects() {
+        let (url, server) = serve_once(
+            "302 Found",
+            "Location: https://updates.attacker.invalid/latest\r\n",
+            b"",
+        );
+        let error = fetch_latest_release_at(&url, "1.0.0").expect_err("redirect must fail");
+        let request = server.join().expect("redirect server");
+        assert!(request.starts_with("GET /releases/latest HTTP/1.1\r\n"));
+        assert!(error.contains("refusing unsafe update-check redirect"));
+
+        let (url, server) = serve_once(
+            "302 Found",
+            "Location: http://api.github.com/releases/latest\r\n",
+            b"",
+        );
+        let error =
+            fetch_latest_release_at(&url, "1.0.0").expect_err("TLS downgrade redirect must fail");
+        server.join().expect("downgrade redirect server");
+        assert!(error.contains("refusing unsafe update-check redirect"));
+    }
+
+    #[test]
+    fn release_http_honors_status_and_reads_only_a_bounded_body_prefix() {
+        let (url, server) = serve_once("403 Forbidden", "X-RateLimit-Remaining: 0\r\n", b"{}");
+        assert_eq!(
+            fetch_latest_release_at(&url, "1.0.0").unwrap_err(),
+            "GitHub API rate limit exceeded"
+        );
+        server.join().expect("rate-limit server");
+
+        let mut huge = br#"{"tag_name":"v1.2.0","html_url":"https://example.com/v1.2.0"}"#.to_vec();
+        huge.resize(MAX_RELEASE_RESPONSE_BYTES as usize + 1, b' ');
+        let (url, server) = serve_once("200 OK", "", &huge);
+        let release = fetch_latest_release_at(&url, "1.0.0").expect("decode bounded prefix");
+        server.join().expect("oversize server");
+        assert_eq!(release.tag_name, "v1.2.0");
+    }
+
+    #[test]
+    fn release_cache_persistence_matches_go_schema_and_private_mode() {
+        let directory = tempfile::tempdir().expect("temp cache root");
+        let cache_path = directory.path().join("symaira/updatecheck/release.json");
+        let cache = DiskCache {
+            timestamp: "2026-09-27T12:00:00Z".into(),
+            release: Some(CachedRelease {
+                tag_name: "v1.2.0".into(),
+                html_url: "https://example.com/v1.2.0".into(),
+                body: "notes<&>".into(),
+                assets: vec![CachedAsset {
+                    name: "symvault".into(),
+                    browser_download_url: "https://example.com/symvault".into(),
+                    size: 123,
+                }],
+            }),
+        };
+        persist_release_cache_at(&cache_path, &cache);
+        let bytes = symvault_sync::safeio::read(&cache_path)
+            .expect("safe cache read")
+            .expect("cache file exists");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("cache JSON");
+        assert_eq!(value["timestamp"], "2026-09-27T12:00:00Z");
+        assert_eq!(value["release"]["TagName"], "v1.2.0");
+        assert_eq!(value["release"]["HTMLURL"], "https://example.com/v1.2.0");
+        assert_eq!(
+            value["release"]["Assets"][0]["BrowserDownloadURL"],
+            "https://example.com/symvault"
+        );
+        assert!(String::from_utf8_lossy(&bytes).contains("notes\\u003c\\u0026\\u003e"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                fs::metadata(&cache_path)
+                    .expect("cache metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+            assert_eq!(
+                fs::metadata(cache_path.parent().unwrap())
+                    .expect("cache directory metadata")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn update_cache_directory_creation_rejects_user_symlink_ancestors() {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir().expect("temp directory");
+        let outside = directory.path().join("outside");
+        fs::create_dir(&outside).expect("outside directory");
+        let link = directory.path().join("link");
+        symlink(&outside, &link).expect("untrusted symlink");
+        let error = create_cache_directories(&link.join("cache"))
+            .expect_err("refuse user-owned symlink ancestor");
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(!outside.join("cache").exists());
+    }
+
+    #[test]
+    fn release_http_rejects_draft_prerelease_and_invalid_tags() {
+        for (response, expected) in [
+            (r#"{"draft":true,"tag_name":"v1.2.0"}"#, "draft release"),
+            (r#"{"prerelease":true,"tag_name":"v1.2.0"}"#, "prerelease"),
+            (r#"{"tag_name":"latest"}"#, "not a stable semantic version"),
+        ] {
+            let (url, server) = serve_once("200 OK", "", response.as_bytes());
+            let release = fetch_latest_release_at(&url, "1.0.0").expect("decode release");
+            server.join().expect("release validation server");
+            let current = parse_stable_version("1.0.0").unwrap();
+            let error = result_from_latest_release(current, release).unwrap_err();
+            assert!(
+                error.contains(expected),
+                "{error:?} did not contain {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn redirect_host_filter_matches_corekit_github_allowlist() {
+        for host in [
+            "github.com",
+            "api.github.com",
+            "objects.githubusercontent.com",
+            "sub.github.com",
+        ] {
+            assert!(github_host(host), "expected {host} to be allowed");
+        }
+        for host in [
+            "github.com.attacker.invalid",
+            "example.com",
+            "githubusercontent.com",
+        ] {
+            assert!(!github_host(host), "expected {host} to be denied");
+        }
     }
 }
 
