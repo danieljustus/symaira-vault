@@ -99,7 +99,6 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
 #[command(
     name = "symvault",
     about = "Symaira Vault is a Go CLI password manager",
-    disable_help_subcommand = true,
     disable_version_flag = true
 )]
 struct Cli {

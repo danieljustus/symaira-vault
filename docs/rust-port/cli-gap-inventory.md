@@ -49,6 +49,12 @@ output bytes, exit codes or side effects; the behavioral rows remain separate.
 | `serve` | 8 | `serve`, `serve install`, `serve status`, `serve uninstall`, `serve token`, `serve token create`, `serve token list`, `serve token revoke` |
 | single | 3 | `setup`, `startup-profile`, `ui` |
 
+The measurement above predates the current candidate. The Rust CLI now exposes
+the top-level `help` route through Clap's generated help subcommand, including
+`symvault help config validate`; its success and usage path are checked against
+the Go command in `cli_help_subcommand.rs`. This is route-level evidence only:
+help text formatting remains part of CLI-004 and is not claimed byte-identical.
+
 ## Alias gaps (0)
 
 The latest binary accepts all three aliases recorded by the pinned tree:
