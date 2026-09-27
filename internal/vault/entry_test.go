@@ -1,13 +1,19 @@
 package vault
 
 import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
@@ -35,6 +41,191 @@ func TestEntryJSONSerialization(t *testing.T) {
 
 	if !reflect.DeepEqual(got, entry) {
 		t.Fatalf("roundtrip mismatch:\n got: %#v\nwant: %#v", got, entry)
+	}
+}
+
+func TestEntryReadBudgetV1PlaintextExactLimitAndOverflow(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	for _, tc := range []struct {
+		plaintext string
+		wantError bool
+	}{{"12345", false}, {"123456", true}} {
+		ciphertext, err := vaultcrypto.Encrypt([]byte(tc.plaintext), identity.Recipient())
+		if err != nil {
+			t.Fatalf("encrypt: %v", err)
+		}
+		got, err := decryptEntryBounded(ciphertext, identity, 5)
+		if tc.wantError {
+			if !errors.Is(err, errEntryReadLimit) {
+				t.Fatalf("decryptEntryBounded(%q) error = %v, want size limit", tc.plaintext, err)
+			}
+			continue
+		}
+		if err != nil || string(got) != tc.plaintext {
+			t.Fatalf("decryptEntryBounded(%q) = %q, %v", tc.plaintext, got, err)
+		}
+	}
+}
+
+func TestEntryReadBudgetV1MaximumPlaintextFitsCiphertextBudget(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	plaintext := bytes.Repeat([]byte{'x'}, maxEntryPlaintextBytesV1)
+	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if len(ciphertext) > maxEntryCiphertextBytesV1 {
+		t.Fatalf("Age ciphertext = %d bytes, budget = %d", len(ciphertext), maxEntryCiphertextBytesV1)
+	}
+	got, err := decryptEntryBounded(ciphertext, identity, maxEntryPlaintextBytesV1)
+	if err != nil || !bytes.Equal(got, plaintext) {
+		t.Fatalf("decrypt maximum V1 plaintext: got %d bytes, err %v", len(got), err)
+	}
+}
+
+func TestEntryReadBudgetV1CiphertextExactLimitAndOverflow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "entry.age")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(path, maxEntryCiphertextBytesV1); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readEntryFileBounded(path)
+	if err != nil || len(got) != maxEntryCiphertextBytesV1 {
+		t.Fatalf("exact ciphertext limit read = %d bytes, %v", len(got), err)
+	}
+	if err := os.Truncate(path, maxEntryCiphertextBytesV1+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readEntryFileBounded(path); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("ciphertext limit + 1 error = %v, want size limit", err)
+	}
+}
+
+func TestEntryReadBudgetBoundsEveryFileReadSurface(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	vaultDir := t.TempDir()
+	filePath := filepath.Join(vaultDir, "oversized.age")
+	if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(filePath, maxEntryCiphertextBytesV1+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readEntryFileBounded(filePath); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("ReadEntryFile oversized ciphertext error = %v, want limit", err)
+	}
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(filePath, filepath.Join(vaultDir, "entries", "oversized.age")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetEntryMetadata(vaultDir, "oversized", identity); !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("GetEntryMetadata oversized ciphertext error = %v, want limit", err)
+	}
+}
+
+func TestEntryReadRejectsParentSymlinkEscape(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	outside := t.TempDir()
+	if err := WriteEntry(outside, "leak", &Entry{Data: map[string]any{"secret": "outside"}}, identity); err != nil {
+		t.Fatal(err)
+	}
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(vaultDir, "entries", "linked")
+	if err := os.Symlink(filepath.Join(outside, "entries"), link); err != nil {
+		t.Skipf("directory symlinks unavailable: %v", err)
+	}
+	if _, err := ReadEntry(vaultDir, "linked/leak", identity); err == nil {
+		t.Fatal("ReadEntry followed parent symlink outside the vault")
+	}
+	if _, err := GetEntryMetadata(vaultDir, "linked/leak", identity); err == nil {
+		t.Fatal("GetEntryMetadata followed parent symlink outside the vault")
+	}
+	if _, err := ReadEntryFile(vaultDir, filepath.Join(link, "leak.age"), identity); err == nil {
+		t.Fatal("ReadEntryFile followed parent symlink outside the vault")
+	}
+}
+
+func TestEntryJSONShapeBudgetIsSharedWithRust(t *testing.T) {
+	if err := validateEntryData(map[string]any{"array": make([]any, maxEntryArrayItems)}); err != nil {
+		t.Fatalf("exact array limit rejected: %v", err)
+	}
+	if err := validateEntryData(map[string]any{"array": make([]any, maxEntryArrayItems+1)}); err == nil {
+		t.Fatal("array above Rust limit accepted")
+	}
+	value := any("leaf")
+	for range maxEntryDepth {
+		value = map[string]any{"nested": value}
+	}
+	if err := validateEntryData(map[string]any{"root": value}); err == nil {
+		t.Fatal("value deeper than Rust limit accepted")
+	}
+}
+
+func TestEntryJSONShapeBudgetMatchesCaseInsensitiveGoFieldNames(t *testing.T) {
+	oversized := strings.Repeat("x", maxEntryValueBytes+1)
+	caseVariant := []byte(`{"DATA":{"oversized":"` + oversized + `"}}`)
+	if err := validateEntryPlaintext(caseVariant); err == nil {
+		t.Fatal("case-insensitive Data field bypassed the string limit")
+	}
+	plaintext := []byte(`{"data":{"oversized":"` + oversized + `"},"DATA":{}}`)
+	var merged Entry
+	if err := json.Unmarshal(plaintext, &merged); err != nil {
+		t.Fatalf("decode duplicate map fields: %v", err)
+	}
+	if merged.Data["oversized"] != oversized {
+		t.Fatal("Go did not merge the case-insensitive duplicate Data map")
+	}
+	if err := validateEntryPlaintext(plaintext); err == nil {
+		t.Fatal("case-insensitive duplicate Data members were accepted")
+	}
+}
+
+func TestEntryPathDepthBudget(t *testing.T) {
+	path64 := strings.TrimSuffix(strings.Repeat("d/", maxVaultEntryPathDepth-1), "/") + "/entry"
+	if err := validateEntryPath(t.TempDir(), path64); err != nil {
+		t.Fatalf("path at exact depth limit rejected: %v", err)
+	}
+	path65 := "d/" + path64
+	if err := validateEntryPath(t.TempDir(), path65); err == nil {
+		t.Fatal("path above the Rust traversal depth limit accepted")
+	}
+}
+
+func TestWriteEntryRejectsPayloadAboveReadBudget(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	data := make(map[string]any, 17)
+	value := strings.Repeat("x", maxEntryValueBytes)
+	for i := 0; i < 17; i++ {
+		data[fmt.Sprintf("field-%02d", i)] = value
+	}
+	err := WriteEntry(vaultDir, "too-large", &Entry{Data: data}, identity)
+	if !errors.Is(err, errEntryReadLimit) {
+		t.Fatalf("WriteEntry oversized payload error = %v, want read-budget error", err)
+	}
+	if _, statErr := os.Stat(entryFilePath(vaultDir, "too-large")); !os.IsNotExist(statErr) {
+		t.Fatalf("oversized entry was published; stat error = %v", statErr)
+	}
+}
+
+func TestWriteEntryRejectsSerializedValueAboveReadBudget(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	// []byte becomes a base64 JSON string after the typed precheck.
+	data := map[string]any{"bytes": bytes.Repeat([]byte{'x'}, 786433)}
+	err := WriteEntry(vaultDir, "too-large-value", &Entry{Data: data}, identity)
+	if err == nil {
+		t.Fatal("WriteEntry published an entry its own reader cannot decode")
+	}
+	if _, statErr := os.Stat(entryFilePath(vaultDir, "too-large-value")); !os.IsNotExist(statErr) {
+		t.Fatalf("unreadable entry was published; stat error = %v", statErr)
 	}
 }
 

@@ -151,7 +151,6 @@
 package vault
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -295,6 +294,44 @@ func listPseudonymized(vaultDir, prefix string, identity *age.X25519Identity, co
 	return listPseudonymizedWithIdentity(vaultDir, prefix, identity, configuredWorkers)
 }
 
+func pseudonymizedEntryFiles(vaultDir string) ([]string, error) {
+	var filePaths []string
+	visited := 0
+	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if filepath.Clean(filePath) != filepath.Clean(entriesDir(vaultDir)) {
+			visited++
+		}
+		if visited > maxVaultEntryCount {
+			return errEntryEnumerationLimit
+		}
+		rel, relErr := filepath.Rel(entriesDir(vaultDir), filePath)
+		if relErr != nil {
+			return relErr
+		}
+		if pathDepth(rel) > maxVaultEntryPathDepth {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(filePath) != ".age" { //nolint:goconst // file extension literal
+			return nil
+		}
+		filePaths = append(filePaths, filePath)
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	return filePaths, nil
+}
+
 func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
@@ -312,21 +349,8 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 
 	// First pass: walk filesystem to collect all .age file paths.
 	// This is fast O(n) and does not involve decryption.
-	var filePaths []string
-	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if filepath.Ext(filePath) != ".age" { //nolint:goconst // file extension literal
-			return nil
-		}
-		filePaths = append(filePaths, filePath)
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
+	filePaths, err := pseudonymizedEntryFiles(vaultDir)
+	if err != nil {
 		return nil, err
 	}
 
@@ -356,23 +380,21 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		go func() {
 			defer wg.Done()
 			for fp := range fileChan {
-				// #nosec G304 -- fp comes from filepath.WalkDir of the vault entries directory
-				raw, readErr := os.ReadFile(fp)
+				raw, readErr := readVaultEntryBounded(vaultDir, fp)
 				if readErr != nil {
 					continue
 				}
 
-				plaintext, decryptErr := vaultcrypto.Decrypt(raw, identity)
+				plaintext, decryptErr := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
 				if decryptErr != nil {
 					continue
 				}
 
-				var entry Entry
-				if jsonErr := json.Unmarshal(plaintext, &entry); jsonErr != nil {
-					vaultcrypto.Wipe(plaintext)
+				entry, jsonErr := decodeEntryBounded(plaintext)
+				vaultcrypto.Wipe(plaintext)
+				if jsonErr != nil {
 					continue
 				}
-				vaultcrypto.Wipe(plaintext)
 
 				entryPath := entry.Path
 				if entryPath == "" {
@@ -552,10 +574,7 @@ func listViaManifest(vaultDir string, identity *age.X25519Identity) []string {
 }
 
 func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool) error {
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
+	return walkVaultEntriesBounded(root, func(path string, d os.DirEntry) error {
 		if d.IsDir() {
 			if legacy && path != root && (d.Name() == entriesDirName || d.Name() == ".git") {
 				return filepath.SkipDir

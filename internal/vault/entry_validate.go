@@ -19,6 +19,9 @@ func validateEntryPath(vaultDir, path string) error {
 	if err := validateRawEntryPath(path); err != nil {
 		return err
 	}
+	if pathDepth(strings.ReplaceAll(path, "\\", "/")) > maxVaultEntryPathDepth {
+		return fmt.Errorf("entry path %q exceeds maximum depth %d", path, maxVaultEntryPathDepth)
+	}
 	filePath := entryFilePath(vaultDir, path)
 	cleanPath := filepath.Clean(filePath)
 	entriesDirClean := filepath.Clean(entriesDir(vaultDir))
@@ -41,6 +44,14 @@ func validateRawEntryPath(path string) error {
 		}
 	}
 	return nil
+}
+
+func pathDepth(path string) int {
+	clean := filepath.ToSlash(filepath.Clean(path))
+	if clean == "." || clean == "" {
+		return 0
+	}
+	return len(strings.Split(clean, "/"))
 }
 
 func validateLegacyEntryPath(vaultDir, path string) error {

@@ -64,7 +64,7 @@ pub(crate) struct DeviceSession {
     pub name: String,
     pub public_key: String,
     pub created_at: String,
-    #[serde(default = "zero_time_string", deserialize_with = "deserialize_expiry")]
+    #[serde(default = "zero_time_string")]
     pub expires_at: String,
     pub revoked: bool,
 }
@@ -165,6 +165,9 @@ impl DeviceSessionStore {
         else {
             return false;
         };
+        if validate_session_timestamps(on_disk.values().filter_map(Option::as_ref)).is_err() {
+            return false;
+        }
         let mut changed = false;
         for (key, disk_session) in on_disk {
             let Some(disk_session) = disk_session else {
@@ -233,6 +236,8 @@ pub(crate) fn load_for_doctor(vault_dir: &Path) -> Result<Vec<DeviceSession>, St
 fn decode_sessions(data: &[u8]) -> Result<(BTreeMap<String, DeviceSession>, bool), String> {
     let raw: BTreeMap<String, Option<DeviceSession>> =
         serde_json::from_slice(data).map_err(|error| format!("parse device sessions: {error}"))?;
+    validate_session_timestamps(raw.values().filter_map(Option::as_ref))
+        .map_err(|error| format!("parse device sessions: {error}"))?;
     let mut migrated = false;
     let mut sessions = BTreeMap::new();
     for (key, session) in raw {
@@ -250,6 +255,21 @@ fn decode_sessions(data: &[u8]) -> Result<(BTreeMap<String, DeviceSession>, bool
         migrated = true;
     }
     Ok((sessions, migrated))
+}
+
+fn validate_session_timestamps<'a>(
+    sessions: impl IntoIterator<Item = &'a DeviceSession>,
+) -> Result<(), String> {
+    for session in sessions {
+        for (field, stamp) in [
+            ("created_at", session.created_at.as_str()),
+            ("expires_at", session.expires_at.as_str()),
+        ] {
+            GoTime::parse_rfc3339(stamp)
+                .map_err(|_| format!("invalid {field} timestamp {stamp:?}"))?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -484,15 +504,6 @@ pub(crate) fn is_expired(expires_at: &str) -> bool {
     }
 }
 
-fn deserialize_expiry<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = String::deserialize(deserializer)?;
-    OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
-    Ok(value)
-}
-
 fn zero_time_string() -> String {
     "0001-01-01T00:00:00Z".to_owned()
 }
@@ -509,8 +520,26 @@ fn display_minutes(stamp: &str) -> String {
     }
 }
 
+/// Validate the list input before `DeviceSessionStore::new` can migrate legacy
+/// keys and rewrite the file. Revoke keeps its existing load semantics.
+fn validate_list_timestamps(vault: &Path) -> Result<(), String> {
+    let path = vault.join(VAULT_SUBDIR).join(STORE_FILE);
+    let Ok(Some(data)) = safeio::read(&path) else {
+        return Ok(());
+    };
+    let Ok(sessions) = serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(&data)
+    else {
+        return Ok(());
+    };
+    validate_session_timestamps(sessions.values().filter_map(Option::as_ref)).map_err(|error| {
+        format!("load approval device store: load device session store: {error}")
+    })?;
+    Ok(())
+}
+
 /// `device approval-list`.
 pub(crate) fn list(vault: &Path, quiet: bool) -> Result<(), String> {
+    validate_list_timestamps(vault)?;
     let store = DeviceSessionStore::new(vault)
         .map_err(|error| format!("load approval device store: {error}"))?;
     let sessions = store.list();
@@ -822,6 +851,30 @@ mod tests {
     }
 
     #[test]
+    fn merge_ignores_all_disk_revocations_when_any_timestamp_is_invalid() {
+        let vault = tempfile::TempDir::new().expect("vault");
+        let key = "e".repeat(64);
+        let mut stale = DeviceSessionStore::new(vault.path()).expect("store");
+        stale.sessions.insert(
+            key.clone(),
+            session("dev-abc123", "2999-01-01T00:00:00Z", false),
+        );
+        stale.save().expect("save valid baseline");
+
+        let invalid = format!(
+            r#"{{"{key}":{{"prefix":"ABCD","device_id":"dev-abc123","public_key":"key","created_at":"2026-01-01T00:00:00Z","expires_at":"2999-01-01T00:00:60Z","revoked":true}}}}"#
+        );
+        std::fs::write(store_file(vault.path()), &invalid).expect("write invalid external state");
+
+        assert!(!stale.merge_revocations_from_disk());
+        assert!(!stale.sessions[&key].revoked);
+        assert_eq!(
+            std::fs::read_to_string(store_file(vault.path())).expect("read external state"),
+            invalid
+        );
+    }
+
+    #[test]
     fn load_migrates_legacy_raw_token_keys() {
         let vault = tempfile::TempDir::new().expect("vault");
         let raw_token = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
@@ -852,9 +905,10 @@ mod tests {
     }
 
     #[test]
-    fn malformed_expiry_is_rejected_during_store_deserialization() {
+    fn malformed_expiry_is_rejected_with_field_context_during_store_decode() {
         let input = br#"{"token":{"prefix":"TOKN","device_id":"device","public_key":"key","created_at":"2026-01-01T00:00:00Z","expires_at":"not-a-time","revoked":false}}"#;
-        assert!(serde_json::from_slice::<BTreeMap<String, Option<DeviceSession>>>(input).is_err());
+        let error = decode_sessions(input).unwrap_err();
+        assert!(error.contains("invalid expires_at timestamp"), "{error}");
     }
 
     #[test]
