@@ -202,8 +202,13 @@ fn load_sessions_from_parent(
     let bytes = match read_at(parent, STORE_FILE, path)? {
         Some(bytes) => bytes,
         None => {
-            write_atomic_at(parent, STORE_FILE, path, b"{}")?;
-            b"{}".to_vec()
+            create_if_missing_at(parent, STORE_FILE, path, b"{}")?;
+            read_at(parent, STORE_FILE, path)?.ok_or_else(|| {
+                format!(
+                    "approval device store disappeared after create: {}",
+                    path.display()
+                )
+            })?
         }
     };
     let (sessions, migrated) =
@@ -389,6 +394,64 @@ fn write_atomic_at(
         let _ = unlinkat(parent, temporary.as_str(), AtFlags::empty());
     }
     result
+}
+
+#[cfg(unix)]
+fn create_if_missing_at(
+    parent: &std::fs::File,
+    name: &str,
+    display: &Path,
+    data: &[u8],
+) -> Result<bool, String> {
+    use rustix::fs::{AtFlags, Mode, OFlags, fsync, linkat, openat, unlinkat};
+    let sequence = ROOTED_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let temporary = format!(".{name}.{}.{}.tmp", std::process::id(), sequence);
+    let descriptor = openat(
+        parent,
+        temporary.as_str(),
+        OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::from_raw_mode(0o600),
+    )
+    .map_err(|error| {
+        format!(
+            "create approval device store temporary for {}: {error}",
+            display.display()
+        )
+    })?;
+    let mut file = std::fs::File::from(descriptor);
+    let result = (|| {
+        file.write_all(data).map_err(|error| {
+            format!("write approval device store {}: {error}", display.display())
+        })?;
+        file.sync_all().map_err(|error| {
+            format!("sync approval device store {}: {error}", display.display())
+        })?;
+        match linkat(parent, temporary.as_str(), parent, name, AtFlags::empty()) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => Ok(false),
+            Err(error) => Err(format!(
+                "publish approval device store {}: {error}",
+                display.display()
+            )),
+        }
+    })();
+    let cleanup = unlinkat(parent, temporary.as_str(), AtFlags::empty()).map_err(|error| {
+        format!(
+            "remove approval device store temporary for {}: {error}",
+            display.display()
+        )
+    });
+    let created = result?;
+    cleanup?;
+    if created {
+        fsync(parent).map_err(|error| {
+            format!(
+                "sync approval store directory {}: {error}",
+                display.display()
+            )
+        })?;
+    }
+    Ok(created)
 }
 
 /// Go `pairing.hashToken`, which delegates to `internal/mcp/auth.SHA256Hex`.
@@ -612,6 +675,29 @@ mod tests {
             fs::read(external.path().join(STORE_FILE)).unwrap(),
             external_bytes
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn doctor_create_if_missing_keeps_concurrent_session_file() {
+        let vault = tempfile::TempDir::new().expect("vault");
+        std::fs::create_dir(vault.path().join(VAULT_SUBDIR)).unwrap();
+        let display = store_file(vault.path());
+        let parent = open_approval_store_directory(vault.path(), &display).unwrap();
+        assert_eq!(read_at(&parent, STORE_FILE, &display).unwrap(), None);
+
+        // A concurrent store publishes a populated file after our missing read.
+        let winner = br#"{"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc":{"prefix":"WINR","device_id":"winner-device","public_key":"synthetic-key","created_at":"2026-01-01T00:00:00Z","expires_at":"2999-01-01T00:00:00Z","revoked":false}}"#;
+        write_atomic_at(&parent, STORE_FILE, &display, winner).unwrap();
+
+        assert!(!create_if_missing_at(&parent, STORE_FILE, &display, b"{}").unwrap());
+        let winner_bytes = read_at(&parent, STORE_FILE, &display)
+            .unwrap()
+            .expect("concurrent winner remains present");
+        let (sessions, migrated) = decode_sessions(&winner_bytes).unwrap();
+        assert!(!migrated);
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions.values().next().unwrap().device_id, "winner-device");
     }
 
     fn store_file(vault: &Path) -> PathBuf {
