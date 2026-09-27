@@ -107,7 +107,7 @@ Measured with `--json --no-network` against the pinned Go oracle
 Go runs **35** non-network checks, Rust **34**. For the 34 shared IDs the
 name/status/message/hint/fixable fields are byte-identical on a missing vault, on a
 missing vault with the env-passphrase variables set, and on an oracle-initialized
-vault (**0 field deviations**). The remaining 2 IDs are **not implemented** and are
+vault (**0 field deviations**). The remaining ID is **not implemented** and is
 therefore *absent* from the output rather than reported as OK — a missing check may
 never look like a passing one.
 

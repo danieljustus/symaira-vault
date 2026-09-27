@@ -2312,13 +2312,14 @@ fn run_doctor(
     quick: bool,
     output_format: Option<&str>,
     json: bool,
-    _quiet: bool,
+    quiet: bool,
 ) -> ExitCode {
     let vault_dir =
         resolve_vault(explicit_vault, profile).unwrap_or_else(|_| PathResolver::new().data_dir);
     let opts = doctor_commands::DoctorOptions {
         no_network,
         quick,
+        quiet,
         only: only.unwrap_or_default(),
         exclude: exclude.unwrap_or_default(),
     };

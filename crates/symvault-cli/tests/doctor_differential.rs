@@ -1059,8 +1059,14 @@ fn compare_doctor_ids(go: &Path, rust: &Path, vault: &Path, home: &Path, ids: &s
     }
 }
 
-fn run_mcp_tokens_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
-    Command::new(binary)
+fn run_mcp_tokens_doctor(
+    binary: &Path,
+    vault: &Path,
+    home: &Path,
+    env_token: Option<&str>,
+) -> Output {
+    let mut command = Command::new(binary);
+    command
         .args([
             "--vault",
             vault.to_str().unwrap(),
@@ -1078,9 +1084,23 @@ fn run_mcp_tokens_doctor(binary: &Path, vault: &Path, home: &Path) -> Output {
         .env("XDG_CACHE_HOME", home.join("cache"))
         .env("SYMVAULT_VAULT", vault)
         .env("CI", "1")
-        .env("NO_COLOR", "1")
+        .env("NO_COLOR", "1");
+    if let Some(token) = env_token {
+        command.env("SYMVAULT_MCP_TOKEN", token);
+    }
+    command
         .output()
         .expect("run MCP token doctor check in isolated environment")
+}
+
+fn assert_migration_warning(output: &Output, id: &str) {
+    let expected = format!(
+        "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(&expected),
+        "migration warning with generated ID {id} was not emitted"
+    );
 }
 
 fn doctor_result(output: &Output) -> serde_json::Value {
@@ -1161,8 +1181,8 @@ fn differential_doctor_mcp_tokens_existing_registry_is_read_only() {
         write_private_fixture(&vault.join("mcp-token"), b"synthetic-unused-legacy-token\n");
     }
 
-    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
-    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home, None);
+    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home, None);
     assert_eq!(out_go.status.code(), Some(0));
     assert_eq!(out_rust.status.code(), Some(0));
     let result_go = doctor_result(&out_go);
@@ -1205,8 +1225,8 @@ fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_leg
         );
     }
 
-    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
-    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home, None);
+    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home, None);
     assert_eq!(out_go.status.code(), Some(0));
     assert_eq!(out_rust.status.code(), Some(0));
     let result_go = doctor_result(&out_go);
@@ -1238,16 +1258,124 @@ fn differential_doctor_mcp_tokens_rejects_corrupt_registry_without_migrating_leg
 }
 
 #[test]
+fn differential_doctor_mcp_tokens_empty_environment_value_creates_registry() {
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    for (case, env_token, migrated) in [
+        ("empty", "", true),
+        ("nonempty", "synthetic-environment-token", false),
+    ] {
+        let home = temporary_root(&format!("mcp-tokens-env-{case}-home"));
+        let go_vault = temporary_root(&format!("mcp-tokens-env-{case}-go-vault"));
+        let rust_vault = temporary_root(&format!("mcp-tokens-env-{case}-rust-vault"));
+        let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+
+        let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home, Some(env_token));
+        let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home, Some(env_token));
+        assert_eq!(out_go.status.code(), Some(0));
+        assert_eq!(out_rust.status.code(), Some(0));
+        let result_go = doctor_result(&out_go);
+        let result_rust = doctor_result(&out_rust);
+        for field in ["id", "name", "status", "message", "hint", "fixable"] {
+            assert_eq!(
+                result_go.get(field),
+                result_rust.get(field),
+                "{case}: field {field}"
+            );
+        }
+        if migrated {
+            for (vault, output) in [(&go_vault, &out_go), (&rust_vault, &out_rust)] {
+                let bytes = fs::read(vault.join("mcp-tokens.json")).expect("empty env migrates");
+                assert_eq!(private_mode(&vault.join("mcp-tokens.json")), 0o600);
+                if !env_token.is_empty() {
+                    assert!(!String::from_utf8_lossy(&bytes).contains(env_token));
+                }
+                let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let id = json["tokens"].as_object().unwrap().values().next().unwrap()["id"]
+                    .as_str()
+                    .unwrap();
+                assert_migration_warning(output, id);
+                assert!(!vault.join("mcp-token").exists());
+            }
+        } else {
+            for vault in [&go_vault, &rust_vault] {
+                assert!(!vault.join("mcp-tokens.json").exists());
+                assert!(!vault.join("mcp-token").exists());
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn differential_doctor_mcp_tokens_surfaces_legacy_symlink_removal_failure() {
+    use std::os::unix::fs::symlink;
+
+    let Some((go, rust)) = oracle_binaries() else {
+        return;
+    };
+    let home = temporary_root("mcp-tokens-symlink-home");
+    let go_vault = temporary_root("mcp-tokens-symlink-go-vault");
+    let rust_vault = temporary_root("mcp-tokens-symlink-rust-vault");
+    let go_target = home.join("go-legacy-token");
+    let rust_target = home.join("rust-legacy-token");
+    let _fixture = TempFixture::new(vec![home.clone(), go_vault.clone(), rust_vault.clone()]);
+    write_private_fixture(&go_target, b"synthetic-symlink-token-go\n");
+    write_private_fixture(&rust_target, b"synthetic-symlink-token-rust\n");
+    symlink(&go_target, go_vault.join("mcp-token")).unwrap();
+    symlink(&rust_target, rust_vault.join("mcp-token")).unwrap();
+
+    let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home, None);
+    let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home, None);
+    assert_eq!(out_go.status.code(), Some(0));
+    assert_eq!(out_rust.status.code(), Some(0));
+    assert_eq!(
+        doctor_result(&out_go)["status"],
+        doctor_result(&out_rust)["status"]
+    );
+    for (vault, target, output) in [
+        (&go_vault, &go_target, &out_go),
+        (&rust_vault, &rust_target, &out_rust),
+    ] {
+        let link = vault.join("mcp-token");
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read(&link).unwrap(), fs::read(target).unwrap());
+        let registry = fs::read(vault.join("mcp-tokens.json")).unwrap();
+        assert_eq!(private_mode(&vault.join("mcp-tokens.json")), 0o600);
+        let json: serde_json::Value = serde_json::from_slice(&registry).unwrap();
+        let id = json["tokens"].as_object().unwrap().values().next().unwrap()["id"]
+            .as_str()
+            .unwrap();
+        assert_migration_warning(output, id);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.lines().any(|line| {
+                line.starts_with("failed to remove legacy token file ")
+                    && line.contains(" after migration:")
+            }),
+            "failed legacy-token cleanup must be reported: {stderr:?}"
+        );
+    }
+}
+
+#[test]
 fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
     let Some((go, rust)) = oracle_binaries() else {
         return;
     };
-    for (case, legacy) in [
+    for (case, legacy, env_token) in [
         (
             "existing-legacy",
             Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
+            Some("synthetic-environment-token"),
         ),
-        ("new-legacy", None),
+        ("new-legacy", None, None),
     ] {
         let home = temporary_root(&format!("mcp-tokens-{case}-home"));
         let go_vault = temporary_root(&format!("mcp-tokens-{case}-go-vault"));
@@ -1260,8 +1388,8 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
             set_fixture_mode(&rust_vault.join("mcp-token"), 0o644);
         }
 
-        let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home);
-        let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home);
+        let out_go = run_mcp_tokens_doctor(&go, &go_vault, &home, env_token);
+        let out_rust = run_mcp_tokens_doctor(&rust, &rust_vault, &home, env_token);
         assert_eq!(
             out_go.status.code(),
             Some(0),
@@ -1307,6 +1435,41 @@ fn differential_doctor_mcp_tokens_migrates_isolated_legacy_and_empty_cases() {
         // registry behavior.
         let go_registry = fs::read(go_vault.join("mcp-tokens.json")).unwrap();
         let rust_registry = fs::read(rust_vault.join("mcp-tokens.json")).unwrap();
+        let go_id = serde_json::from_slice::<serde_json::Value>(&go_registry).unwrap()["tokens"]
+            .as_object()
+            .unwrap()
+            .values()
+            .next()
+            .unwrap()["id"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let rust_id =
+            serde_json::from_slice::<serde_json::Value>(&rust_registry).unwrap()["tokens"]
+                .as_object()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap()["id"]
+                .as_str()
+                .unwrap()
+                .to_owned();
+        assert_migration_warning(&out_go, &go_id);
+        assert_migration_warning(&out_rust, &rust_id);
+        if env_token.is_some() && legacy.is_some() {
+            for output in [&out_go, &out_rust] {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                assert!(
+                    stderr.lines().any(|line| {
+                        line.starts_with(
+                            "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at ",
+                        ) && line.ends_with("; using file token")
+                    }),
+                    "file-token precedence warning missing for {case}: {:?}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+        }
         assert_eq!(
             normalized_registry_bytes(&go_registry, legacy.is_none()),
             normalized_registry_bytes(&rust_registry, legacy.is_none()),

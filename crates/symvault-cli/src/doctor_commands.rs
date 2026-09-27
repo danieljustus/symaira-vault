@@ -91,6 +91,7 @@ impl DoctorResult {
 pub struct DoctorOptions {
     pub no_network: bool,
     pub quick: bool,
+    pub quiet: bool,
     pub only: Vec<String>,
     pub exclude: Vec<String>,
 }
@@ -1805,7 +1806,7 @@ fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
     }
 }
 
-fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
+fn check_mcp_tokens(vault_dir: &Path, opts: &DoctorOptions) -> DoctorResult {
     const ID: &str = "mcp.tokens";
     const NAME: &str = "MCP tokens";
     let mut tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
@@ -1832,7 +1833,7 @@ fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
                     .map(|token| Zeroizing::new(token.to_owned()))
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-            Err(_) if env::var_os("SYMVAULT_MCP_TOKEN").is_some() => {
+            Err(_) if has_mcp_env_token() => {
                 // Go consumes the in-process environment value, but neither
                 // stores nor reports it. This doctor process exits after the
                 // check, so preserving it in the short-lived environment is
@@ -1850,11 +1851,18 @@ fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
             }
         };
 
-        if legacy.is_none() && env::var_os("SYMVAULT_MCP_TOKEN").is_some() {
+        if legacy.is_none() && has_mcp_env_token() {
             // With an environment token and no file token, Go uses the
             // environment value only for this process and leaves the registry
             // empty. Do not copy that secret into vault state.
             return no_mcp_tokens_result();
+        }
+
+        if legacy.is_some() && has_mcp_env_token() && !opts.quiet {
+            eprintln!(
+                "Warning: SYMVAULT_MCP_TOKEN is set but file token exists at {}; using file token",
+                legacy_path.display()
+            );
         }
 
         let migration = if let Some(raw) = legacy.as_deref() {
@@ -1862,8 +1870,8 @@ fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
         } else {
             token_registry::create_legacy(vault_dir, OffsetDateTime::now_utc())
         };
-        let migrated = match migration {
-            Ok(migrated) => migrated,
+        let migrated_id = match migration {
+            Ok(migrated_id) => migrated_id,
             Err(error) => {
                 return DoctorResult::new(
                     ID,
@@ -1874,8 +1882,20 @@ fn check_mcp_tokens(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {
                 );
             }
         };
-        if migrated {
-            remove_legacy_token_file(&legacy_path);
+        if let Some(id) = migrated_id {
+            if !opts.quiet {
+                eprintln!(
+                    "WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id={id}).\n         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n         Then revoke the legacy token: symvault agent token revoke legacy {id}"
+                );
+            }
+            if let Err(error) = remove_legacy_token_file(&legacy_path)
+                && !opts.quiet
+            {
+                eprintln!(
+                    "failed to remove legacy token file {} after migration: {error}",
+                    legacy_path.display()
+                );
+            }
         }
         tokens = match crate::agent_list_commands::load_tokens(vault_dir) {
             Ok(tokens) => tokens,
@@ -1945,9 +1965,19 @@ fn no_mcp_tokens_result() -> DoctorResult {
     )
 }
 
-fn remove_legacy_token_file(path: &Path) {
-    if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_file()) {
-        let _ = fs::remove_file(path);
+fn has_mcp_env_token() -> bool {
+    env::var_os("SYMVAULT_MCP_TOKEN").is_some_and(|token| !token.is_empty())
+}
+
+fn remove_legacy_token_file(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+        Ok(metadata) if metadata.file_type().is_file() => fs::remove_file(path),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "not a regular file",
+        )),
     }
 }
 

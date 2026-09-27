@@ -133,13 +133,14 @@ pub fn import_legacy(
     root: &Path,
     raw_token: &str,
     now: OffsetDateTime,
-) -> Result<bool, StoreError> {
+) -> Result<Option<String>, StoreError> {
     let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
     let mut entries = read(&target)?;
     entries.retain(|_, entry| !entry.hash.is_empty());
     if !entries.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let prefix = raw_token
@@ -171,23 +172,24 @@ pub fn import_legacy(
         refresh_token_hash: String::new(),
         refresh_expires_at: None,
     };
-    entries.insert(id, record);
+    entries.insert(id.clone(), record);
     write(&root_cap, &target, &entries)?;
-    Ok(true)
+    Ok(Some(id))
 }
 
 /// Creates Go's fresh legacy-token registry entry without retaining the raw
 /// token. This is the final on-disk state of `LoadOrCreateToken` followed by
 /// legacy migration; atomic publication keeps the registry private and valid.
-pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<bool, StoreError> {
+pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<Option<String>, StoreError> {
     use zeroize::Zeroize;
 
     let root_cap = open_root(root)?;
+    let _lock = crate::open_root_write_lock(&root_cap, root)?;
     let target = root.join(TOKEN_REGISTRY_FILE);
     let mut entries = read(&target)?;
     entries.retain(|_, entry| !entry.hash.is_empty());
     if !entries.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
     let request = NewToken {
@@ -199,9 +201,10 @@ pub fn create_legacy(root: &Path, now: OffsetDateTime) -> Result<bool, StoreErro
     };
     let (record, mut raw_token) = new_record(&request, now)?;
     raw_token.zeroize();
-    entries.insert(record.id.clone(), record);
+    let id = record.id.clone();
+    entries.insert(id.clone(), record);
     write(&root_cap, &target, &entries)?;
-    Ok(true)
+    Ok(Some(id))
 }
 
 /// Revokes one token owned by `agent_name`. Returns `false` when no such
@@ -464,7 +467,7 @@ fn go_rfc3339(value: OffsetDateTime) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::{fs, sync::mpsc, time::Duration};
 
     fn vault_dir() -> (tempfile::TempDir, std::path::PathBuf) {
         let root = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
@@ -480,6 +483,45 @@ mod tests {
             ttl: Some(time::Duration::hours(24)),
             tool_registry_hash: "",
         }
+    }
+
+    fn assert_waits_for_write_lock(
+        operation: impl FnOnce(&Path) -> Result<Option<String>, StoreError> + Send + 'static,
+    ) {
+        let (_root, path) = vault_dir();
+        let root_cap = open_root(&path).expect("open isolated vault");
+        let held_lock = crate::open_root_write_lock(&root_cap, &path).expect("hold vault lock");
+        let worker_path = path.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            started_tx.send(()).expect("signal worker start");
+            done_tx
+                .send(operation(&worker_path).is_ok())
+                .expect("send operation result");
+        });
+
+        started_rx.recv().expect("worker started");
+        assert!(
+            done_rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "registry mutation must wait for the existing writer lock"
+        );
+        drop(held_lock);
+        assert!(
+            done_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("mutation completes after lock release")
+        );
+        assert!(path.join(TOKEN_REGISTRY_FILE).is_file());
+    }
+
+    #[test]
+    fn legacy_registry_mutations_wait_for_existing_writer() {
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        assert_waits_for_write_lock(move |path| {
+            import_legacy(path, "0123456789abcdef0123456789abcdef", now)
+        });
+        assert_waits_for_write_lock(move |path| create_legacy(path, now));
     }
 
     #[test]
