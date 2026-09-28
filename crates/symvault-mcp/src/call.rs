@@ -4,6 +4,7 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use symvault_core::secret_ref::SecretHandle;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// A result returned by an MCP tool handler.
@@ -37,6 +38,53 @@ impl ToolCallResult {
             ..Self::default()
         }
     }
+}
+
+fn format_go_general_float(value: f64) -> String {
+    let scientific = format!("{value:e}");
+    let Some((mantissa, exponent)) = scientific.split_once('e') else {
+        return value.to_string();
+    };
+    let exponent = exponent.parse::<i32>().unwrap_or(0);
+    if !(-4..6).contains(&exponent) {
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        return format!(
+            "{mantissa}e{}{abs:02}",
+            if exponent >= 0 { "+" } else { "-" },
+            abs = exponent.unsigned_abs()
+        );
+    }
+
+    let negative = mantissa.starts_with('-');
+    let digits = mantissa
+        .trim_start_matches('-')
+        .chars()
+        .filter(|ch| *ch != '.')
+        .collect::<String>();
+    let point = exponent + 1;
+    let mut fixed = if point <= 0 {
+        format!("0.{}{digits}", "0".repeat((-point) as usize))
+    } else if point as usize >= digits.len() {
+        format!("{digits}{}", "0".repeat(point as usize - digits.len()))
+    } else {
+        format!(
+            "{}.{}",
+            &digits[..point as usize],
+            &digits[point as usize..]
+        )
+    };
+    if fixed.contains('.') {
+        while fixed.ends_with('0') {
+            fixed.pop();
+        }
+        if fixed.ends_with('.') {
+            fixed.pop();
+        }
+    }
+    if negative {
+        fixed.insert(0, '-');
+    }
+    fixed
 }
 
 /// Injected runtime boundary for `tools/call`.
@@ -292,6 +340,81 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
 }
 
 impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    pub(crate) fn secret_unseal(&self, handle: &SecretHandle) -> Result<ToolCallResult, String> {
+        let Some(field) = handle.field.as_deref() else {
+            return Ok(ToolCallResult::error(
+                "secret_unseal requires a field handle",
+            ));
+        };
+        let path = handle.path.as_str();
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let entry_path = handle
+            .field
+            .as_deref()
+            .map_or_else(|| path.to_owned(), |field| format!("{path}/{field}"));
+        let max = self.config.max_secrets_in_session;
+        let mut reserved = false;
+        if max > 0 {
+            let mut used = self.secrets_accessed.load(Ordering::Acquire);
+            loop {
+                if used >= max {
+                    return Ok(ToolCallResult::error(format!(
+                        "max secrets per session exceeded ({used}/{max})"
+                    )));
+                }
+                match self.secrets_accessed.compare_exchange_weak(
+                    used,
+                    used.saturating_add(1),
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                ) {
+                    Ok(_) => {
+                        reserved = true;
+                        break;
+                    }
+                    Err(current) => used = current,
+                }
+            }
+        }
+
+        let entry = match self.store.get(path) {
+            Ok(Some(entry)) => entry,
+            Ok(None) | Err(_) => {
+                if reserved {
+                    self.secrets_accessed.fetch_sub(1, Ordering::AcqRel);
+                }
+                return Ok(ToolCallResult::error(format!("entry not found: {path}")));
+            }
+        };
+        let result = match entry.fields.get(field) {
+            None => ToolCallResult::error(format!("field {field:?} not found in entry {path}")),
+            Some(Value::String(value)) => ToolCallResult::text(value),
+            Some(Value::Bool(value)) => ToolCallResult::text(value.to_string()),
+            Some(Value::Null) => ToolCallResult::text(""),
+            Some(Value::Number(value)) => ToolCallResult::text(
+                value
+                    .as_f64()
+                    .map(format_go_general_float)
+                    .unwrap_or_else(|| value.to_string()),
+            ),
+            Some(_) => ToolCallResult::error(format!(
+                "field {field:?} in entry {path} is not a scalar string — use a leaf field handle (e.g. {entry_path}/<subfield>)"
+            )),
+        };
+        if result.is_error {
+            if reserved {
+                self.secrets_accessed.fetch_sub(1, Ordering::AcqRel);
+            }
+        } else if !reserved {
+            self.secrets_accessed.fetch_add(1, Ordering::AcqRel);
+        }
+        Ok(result)
+    }
+
     fn get_auth_status(&self) -> Result<ToolCallResult, String> {
         #[derive(Serialize)]
         struct CacheStatus<'a> {
@@ -1496,7 +1619,7 @@ fn is_redacted_field(field: &str, patterns: &[String]) -> bool {
     })
 }
 
-fn normalize_scope_path(path: &str) -> String {
+pub(crate) fn normalize_scope_path(path: &str) -> String {
     let mut components = Vec::new();
     let normalized = path.trim().replace('\\', "/");
     for component in normalized.split('/') {
