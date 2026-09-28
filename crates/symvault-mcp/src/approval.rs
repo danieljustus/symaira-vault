@@ -3,7 +3,12 @@
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::{collections::BTreeMap, net::IpAddr, sync::Mutex, time::Duration};
+use std::{
+    collections::BTreeMap,
+    net::IpAddr,
+    sync::{Condvar, Mutex},
+    time::Duration,
+};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const DEFAULT_TTL: Duration = Duration::from_secs(5 * 60);
@@ -42,7 +47,10 @@ pub struct ApprovalOutcome {
 }
 
 #[derive(Default)]
-pub struct ApprovalQueue(Mutex<BTreeMap<String, ApprovalEntry>>);
+pub struct ApprovalQueue {
+    entries: Mutex<BTreeMap<String, ApprovalEntry>>,
+    changed: Condvar,
+}
 
 impl ApprovalQueue {
     pub fn enqueue(
@@ -72,7 +80,7 @@ impl ApprovalQueue {
             decided_at: "0001-01-01T00:00:00Z".into(),
             decided_by: None,
         };
-        self.0
+        self.entries
             .lock()
             .map_err(|_| "approval queue lock poisoned".to_owned())?
             .insert(id.clone(), entry);
@@ -81,7 +89,7 @@ impl ApprovalQueue {
 
     pub fn pending(&self) -> Result<Vec<ApprovalEntry>, String> {
         let mut entries = self
-            .0
+            .entries
             .lock()
             .map_err(|_| "approval queue lock poisoned".to_owned())?;
         expire(&mut entries);
@@ -99,9 +107,14 @@ impl ApprovalQueue {
         Ok(pending)
     }
 
-    fn decide(&self, id: &str, status: &str) -> Result<ApprovalOutcome, (u16, String)> {
+    fn decide(
+        &self,
+        id: &str,
+        status: &str,
+        decided_by: &str,
+    ) -> Result<ApprovalOutcome, (u16, String)> {
         let mut entries = self
-            .0
+            .entries
             .lock()
             .map_err(|_| (500, "approval queue lock poisoned".into()))?;
         expire(&mut entries);
@@ -118,13 +131,69 @@ impl ApprovalQueue {
             .map_err(|_| (500, "format approval decision time".into()))?;
         entry.status = status.to_owned();
         entry.decided_at = decided_at.clone();
-        entry.decided_by = Some("local-cli".into());
+        entry.decided_by = Some(decided_by.to_owned());
+        self.changed.notify_all();
         Ok(ApprovalOutcome {
             id: id.to_owned(),
             status: status.to_owned(),
             decided_at,
-            decided_by: Some("local-cli".into()),
+            decided_by: Some(decided_by.to_owned()),
         })
+    }
+
+    pub fn approve(&self, id: &str, decided_by: &str) -> Result<ApprovalOutcome, String> {
+        self.decide(id, "approved", decided_by)
+            .map_err(|(_, message)| message)
+    }
+
+    pub fn deny(&self, id: &str, decided_by: &str) -> Result<ApprovalOutcome, String> {
+        self.decide(id, "denied", decided_by)
+            .map_err(|(_, message)| message)
+    }
+
+    pub fn wait(&self, id: &str) -> Result<ApprovalOutcome, String> {
+        let mut entries = self
+            .entries
+            .lock()
+            .map_err(|_| "approval queue lock poisoned".to_owned())?;
+        loop {
+            expire(&mut entries);
+            let Some(entry) = entries.get(id) else {
+                return Err("approval request not found".to_owned());
+            };
+            if entry.status != "pending" {
+                return Ok(ApprovalOutcome {
+                    id: entry.id.clone(),
+                    status: entry.status.clone(),
+                    decided_at: entry.decided_at.clone(),
+                    decided_by: entry.decided_by.clone(),
+                });
+            }
+            let expires = OffsetDateTime::parse(&entry.request.expires_at, &Rfc3339)
+                .map_err(|_| "parse approval request expiry".to_owned())?;
+            let remaining = (expires - OffsetDateTime::now_utc())
+                .try_into()
+                .unwrap_or(Duration::ZERO);
+            if remaining.is_zero() {
+                continue;
+            }
+            let (next, _) = self
+                .changed
+                .wait_timeout(entries, remaining)
+                .map_err(|_| "approval queue lock poisoned".to_owned())?;
+            entries = next;
+        }
+    }
+
+    pub fn request_and_wait(
+        &self,
+        agent_name: impl Into<String>,
+        path: impl Into<String>,
+        write: bool,
+        reason: impl Into<String>,
+    ) -> Result<ApprovalOutcome, String> {
+        let id = self.enqueue(agent_name, path, write, reason)?;
+        self.wait(&id)
     }
 }
 
@@ -176,7 +245,7 @@ pub(crate) fn handle_local_request(
         if id.is_empty() {
             (404, error_json("approval request not found"))
         } else {
-            match queue.decide(id, decision) {
+            match queue.decide(id, decision, "local-cli") {
                 Ok(outcome) => (200, json_line(&OutcomeResponse { outcome })),
                 Err((status, message)) => (status, error_json(&message)),
             }
