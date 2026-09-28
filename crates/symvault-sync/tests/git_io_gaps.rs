@@ -364,7 +364,9 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     let port = listener.local_addr().unwrap().port();
     let status = status.to_owned();
     let handle = thread::spawn(move || {
-        let deadline = Instant::now() + Duration::from_secs(3);
+        // Windows runners can take several seconds to spawn the Git processes
+        // that reach this listener; the loop still exits on the first request.
+        let deadline = Instant::now() + Duration::from_secs(30);
         listener.set_nonblocking(true).expect("set nonblocking");
         while Instant::now() < deadline {
             let Ok((mut stream, _)) = listener.accept() else {
