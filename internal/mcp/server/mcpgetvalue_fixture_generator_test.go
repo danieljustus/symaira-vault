@@ -205,12 +205,12 @@ func TestGenerateMCPGetValueFixture(t *testing.T) {
 
 	sourceHash := mcpCallSourceHash(t, mcpGetValueSourceFiles)
 	if pinned := mcpGetValueGitSourceHash(t, mcpGetValueSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go get_entry_value sources differ from 179efb67: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go get_entry_value sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGetValueFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGetValueOracle{
-			Commit: "179efb67", CommitSHA: "179efb6746861f0fa9066dcd2cb9aa55c802cd9d",
+			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
 			SourceFiles: mcpGetValueSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGetValueGeneratorHash(t),
 		},
@@ -298,7 +298,7 @@ func mcpGetValueGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "179efb67:"+name)
+		cmd := exec.Command("git", "show", "2b703647:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

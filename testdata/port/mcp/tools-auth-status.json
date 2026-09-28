@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f894",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "2b703647",
+    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -17,8 +17,8 @@
       "internal/session/biometric.go",
       "internal/session/oskeyring.go"
     ],
-    "source_hash": "30f8c524c7ee29c07915a5d9945582304f0967043a417ba25c2306b3342a46dd",
-    "generator_hash": "d0f869adeaacbdf5b77016e5cd981170934c099a79b056f66c3c72458144df5e"
+    "source_hash": "63fcc17d6c64eea63722d4aa31faf45ef366da36ce42ece563ac3c6c81fbfd6c",
+    "generator_hash": "0526f2731b62ac9470d2c6a4e1593d1abd3bdae96714711e41fa1e5861001a67"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-auth-status-fixture",

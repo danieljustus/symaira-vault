@@ -354,6 +354,7 @@ func RegisterTools() {
 		InputSchema: objectSchema([]string{"command"}, map[string]schemaProperty{
 			"command":     {Type: "array", Description: "\"Command and arguments as an array (e.g. [\"curl\", \"https://api.example.com\"])"},
 			"env":         {Type: "object", Description: "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})"},
+			"files":       {Type: "object", Description: "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_<name> paths."},
 			"working_dir": {Type: "string", Description: "Working directory for the command"},
 			"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 		}),

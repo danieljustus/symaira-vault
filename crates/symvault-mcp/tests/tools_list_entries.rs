@@ -133,15 +133,15 @@ fn list_entries_matches_source_bound_go_fixture() {
         "../../../testdata/port/mcp/tools-list-entries.json"
     ))
     .expect("valid Go list_entries fixture");
-    assert_eq!(fixture.oracle.commit, "179efb67");
+    assert_eq!(fixture.oracle.commit, "2b703647");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "179efb6746861f0fa9066dcd2cb9aa55c802cd9d"
+        "2b703647a821d7236aa8a66032852ab3ee606701"
     );
     assert_eq!(fixture.oracle.source_files.len(), 12);
     assert_eq!(
         fixture.oracle.source_hash,
-        "f1c32aad80612ee40825559953a025c7ca91ffbfa23625a3fa9b894a3b443f60"
+        "1312d99028c7d15e7dfd1016081e2c7abd550947f5db7a25bf82ea960139de0e"
     );
 
     for case in fixture.cases {

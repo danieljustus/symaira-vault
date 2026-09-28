@@ -140,12 +140,12 @@ func TestGenerateMCPAuthStatusFixture(t *testing.T) {
 	root := mcpAuthStatusRepoRoot(t)
 	sourceHash := mcpAuthStatusSourceHash(t, mcpAuthStatusSourceFiles)
 	if got, want := sourceHash, mcpAuthStatusGitSourceHash(t, mcpAuthStatusSourceFiles); got != want {
-		t.Fatalf("Go auth-status sources differ from fca3f894: got %s, want %s", got, want)
+		t.Fatalf("Go auth-status sources differ from 2b703647: got %s, want %s", got, want)
 	}
 	fixture := mcpAuthStatusFixture{
 		SchemaVersion: 1,
 		Oracle: mcpAuthStatusOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
 			SourceFiles: mcpAuthStatusSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpAuthStatusGeneratorHash(t),
 		},
@@ -202,7 +202,7 @@ func mcpAuthStatusGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpAuthStatusRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "fca3f894:"+name)
+		cmd := exec.Command("git", "show", "2b703647:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

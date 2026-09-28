@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f894",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "2b703647",
+    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
     "source_files": [
       "internal/mcp/server/hooks_builtin.go",
       "internal/mcp/server/protocol.go",
@@ -12,8 +12,8 @@
       "internal/mcp/mcptypes.go",
       "internal/mcp/transport/transport.go"
     ],
-    "source_hash": "62c20a71f3e84537473e8fc505eeefe8bf340c9b9454d961d577aa8f0b427331",
-    "generator_hash": "400723f368276e623d8e29e11714f7232fdc052877d30dde2338d747c989917d"
+    "source_hash": "980cf18d199f740f08637e53393ccfe66e5e5e9455ef8c7d891ff1fed2f32604",
+    "generator_hash": "79b824cdd6126df870ed85cf8d586382f2cfbf9d04f0c96ad5854f2000a30a1e"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-rate-limit-fixture",

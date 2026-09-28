@@ -395,6 +395,7 @@ fn run_file_command(
     let result = crate::run_commands::run_process(crate::run_commands::ProcessOptions {
         command,
         environment: &environment,
+        files: &std::collections::BTreeMap::new(),
         extra_environment: &extra_environment,
         passthrough: &[],
         working_directory: None,

@@ -11,6 +11,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -63,17 +64,26 @@ impl CommandExecutor for McpCommandExecutor {
         &self,
         command: &[String],
         environment: &BTreeMap<String, String>,
+        files: &BTreeMap<String, Vec<u8>>,
+        additional_redactions: &[Vec<u8>],
         working_directory: Option<&Path>,
         timeout: Duration,
     ) -> Result<CommandExecution, String> {
-        let redactions = environment
+        let mut redactions = environment
             .values()
             .filter(|value| !value.is_empty())
             .map(|value| value.as_bytes().to_vec())
             .collect::<Vec<_>>();
+        redactions.extend(
+            additional_redactions
+                .iter()
+                .filter(|value| !value.is_empty())
+                .cloned(),
+        );
         let result = run_process(ProcessOptions {
             command,
             environment,
+            files,
             extra_environment: &[],
             passthrough: &[],
             working_directory,
@@ -99,6 +109,9 @@ impl CommandExecutor for McpCommandExecutor {
 pub(crate) struct ProcessOptions<'a> {
     pub(crate) command: &'a [String],
     pub(crate) environment: &'a BTreeMap<String, String>,
+    /// Secret file bytes materialized into private, short-lived files and
+    /// exposed to the child as `SYMVAULT_FILE_<name>` paths.
+    pub(crate) files: &'a BTreeMap<String, Vec<u8>>,
     /// Additional native environment assignments, used when a value is not
     /// guaranteed to be valid UTF-8 (for example a materialized file path).
     pub(crate) extra_environment: &'a [(OsString, OsString)],
@@ -324,6 +337,7 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     if options.command.is_empty() {
         return Err("command must contain at least one element".to_owned());
     }
+    let mut materialized_files = materialize_secret_files(options.files)?;
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
@@ -358,6 +372,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     for (name, value) in options.extra_environment {
         child_command.env(name, value);
     }
+    for (name, value) in &materialized_files.environment {
+        child_command.env(name, value);
+    }
     #[cfg(windows)]
     if !has_system_root_assignment(
         options.environment,
@@ -376,19 +393,35 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     }
     child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = child_command
-        .spawn()
-        .map_err(|error| format!("failed to run command: {error}"))?;
+    let mut child = match child_command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return Err(cleanup_after_command_error(
+                &mut materialized_files,
+                format!("failed to run command: {error}"),
+            ));
+        }
+    };
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
-            return terminate_after_spawn_failure(&mut child, "failed to capture command stdout");
+            let error = terminate_after_spawn_failure::<ProcessResult>(
+                &mut child,
+                "failed to capture command stdout",
+            )
+            .expect_err("spawn failure helper always returns an error");
+            return Err(cleanup_after_command_error(&mut materialized_files, error));
         }
     };
     let stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            return terminate_after_spawn_failure(&mut child, "failed to capture command stderr");
+            let error = terminate_after_spawn_failure::<ProcessResult>(
+                &mut child,
+                "failed to capture command stderr",
+            )
+            .expect_err("spawn failure helper always returns an error");
+            return Err(cleanup_after_command_error(&mut materialized_files, error));
         }
     };
     let stdout_reader = thread::spawn(|| read_process_output(stdout));
@@ -405,16 +438,25 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
                 {
                     timed_out = true;
                     terminate_process_tree(&mut child);
-                    break child
-                        .wait()
-                        .map_err(|error| format!("wait for timed out command: {error}"))?;
+                    match child.wait() {
+                        Ok(status) => break status,
+                        Err(error) => {
+                            return Err(cleanup_after_command_error(
+                                &mut materialized_files,
+                                format!("wait for timed out command: {error}"),
+                            ));
+                        }
+                    }
                 }
                 thread::sleep(Duration::from_millis(5));
             }
             Err(error) => {
                 terminate_process_tree(&mut child);
                 let _ = child.wait();
-                return Err(format!("wait for command: {error}"));
+                return Err(cleanup_after_command_error(
+                    &mut materialized_files,
+                    format!("wait for command: {error}"),
+                ));
             }
         }
     };
@@ -426,6 +468,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         // wait for an unrelated descendant.
         drop(stdout_reader);
         drop(stderr_reader);
+        if let Err(error) = materialized_files.cleanup() {
+            return Err(cleanup_error_message(error));
+        }
         return Ok(ProcessResult {
             stdout: String::new(),
             stderr: String::new(),
@@ -444,6 +489,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         join_process_readers(stdout_reader, stderr_reader);
     let stdout = redact_process_output(&stdout, options.redactions, options.generic_redaction);
     let stderr = redact_process_output(&stderr, options.redactions, options.generic_redaction);
+    if let Err(error) = materialized_files.cleanup() {
+        return Err(cleanup_error_message(error));
+    }
     Ok(ProcessResult {
         stdout,
         stderr,
@@ -454,6 +502,175 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         stderr_truncated,
         rejected_env_vars,
     })
+}
+
+static SECRET_FILE_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct MaterializedSecretFile {
+    path: PathBuf,
+    handle: Option<fs::File>,
+    length: u64,
+}
+
+struct MaterializedSecretFiles {
+    directory: Option<PathBuf>,
+    files: Vec<MaterializedSecretFile>,
+    environment: Vec<(OsString, OsString)>,
+}
+
+impl Drop for MaterializedSecretFiles {
+    fn drop(&mut self) {
+        let _ = self.cleanup();
+    }
+}
+
+impl MaterializedSecretFiles {
+    fn cleanup(&mut self) -> std::io::Result<()> {
+        let mut cleanup_error = None;
+        for file in &mut self.files {
+            let zeros = [0u8; 8192];
+            if let Some(mut handle) = file.handle.take() {
+                let zero_result = (|| {
+                    std::io::Seek::seek(&mut handle, std::io::SeekFrom::Start(0))?;
+                    let mut remaining = file.length;
+                    while remaining > 0 {
+                        let count = remaining.min(zeros.len() as u64) as usize;
+                        std::io::Write::write_all(&mut handle, &zeros[..count])?;
+                        remaining -= count as u64;
+                    }
+                    handle.sync_all()
+                })();
+                match zero_result {
+                    Ok(()) => drop(handle),
+                    Err(error) => {
+                        cleanup_error.get_or_insert(error);
+                        // Keep the writer for Drop's best-effort retry. The
+                        // command result already fails closed on this cleanup
+                        // error, and a transient sharing error may clear on a
+                        // second attempt.
+                        file.handle = Some(handle);
+                    }
+                }
+            }
+            if let Err(error) = fs::remove_file(&file.path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                cleanup_error.get_or_insert(error);
+            }
+        }
+        if let Some(directory) = self.directory.as_ref() {
+            // Never recurse into child-controlled contents. An unexpected
+            // replacement remains on disk instead of deleting outside data.
+            match fs::remove_dir(directory) {
+                Ok(()) => self.directory = None,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    self.directory = None;
+                }
+                Err(error) => {
+                    cleanup_error.get_or_insert(error);
+                }
+            }
+        }
+        cleanup_error.map_or(Ok(()), Err)
+    }
+}
+
+fn materialize_secret_files(
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<MaterializedSecretFiles, String> {
+    let mut materialized = MaterializedSecretFiles {
+        directory: None,
+        files: Vec::with_capacity(files.len()),
+        environment: Vec::with_capacity(files.len()),
+    };
+    if files.is_empty() {
+        return Ok(materialized);
+    }
+
+    let mut directory = None;
+    for _ in 0..64 {
+        let sequence = SECRET_FILE_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let candidate =
+            std::env::temp_dir().join(format!("symvault-file-{}-{sequence}", std::process::id()));
+        match create_secret_file_directory(&candidate) {
+            Ok(()) => {
+                directory = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("create ephemeral file directory: {error}")),
+        }
+    }
+    let directory = directory.ok_or_else(|| {
+        "create ephemeral file directory: temporary name space exhausted".to_owned()
+    })?;
+    materialized.directory = Some(directory.clone());
+
+    for (name, content) in files {
+        if !is_safe_secret_file_name(name) {
+            return Err(format!(
+                "invalid file name {name:?}: must match [A-Za-z0-9_]+"
+            ));
+        }
+        let path = directory.join(name);
+        let handle = create_secret_file(&path)
+            .map_err(|error| format!("materialize file {name:?}: {error}"))?;
+        materialized.files.push(MaterializedSecretFile {
+            path: path.clone(),
+            handle: Some(handle),
+            length: content.len() as u64,
+        });
+        let file = materialized
+            .files
+            .last_mut()
+            .and_then(|file| file.handle.as_mut())
+            .expect("newly materialized file has an open handle");
+        std::io::Write::write_all(file, content)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("materialize file {name:?}: {error}"))?;
+        materialized.environment.push((
+            OsString::from(format!("SYMVAULT_FILE_{name}")),
+            path.as_os_str().to_os_string(),
+        ));
+    }
+    Ok(materialized)
+}
+
+fn is_safe_secret_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+#[cfg(unix)]
+fn create_secret_file_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt as _;
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_secret_file_directory(path: &Path) -> std::io::Result<()> {
+    fs::create_dir(path)
+}
+
+#[cfg(unix)]
+fn create_secret_file(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+}
+
+#[cfg(not(unix))]
+fn create_secret_file(path: &Path) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
 }
 
 fn terminate_process_tree(child: &mut std::process::Child) {
@@ -491,6 +708,21 @@ fn terminate_after_spawn_failure<T>(
     terminate_process_tree(child);
     let _ = child.wait();
     Err(message.to_owned())
+}
+
+fn cleanup_after_command_error(
+    materialized: &mut MaterializedSecretFiles,
+    message: String,
+) -> String {
+    if materialized.cleanup().is_err() {
+        format!("{message}; failed to securely clean temporary secret files")
+    } else {
+        message
+    }
+}
+
+fn cleanup_error_message(_error: std::io::Error) -> String {
+    "failed to securely clean temporary secret files".to_owned()
 }
 
 fn is_sensitive_env_name(name: &str) -> bool {
@@ -954,13 +1186,163 @@ mod tests {
         ];
         let environment = BTreeMap::from([("TOKEN".to_owned(), "synthetic-secret".to_owned())]);
         let result = executor
-            .run(&command, &environment, None, Duration::from_secs(2))
+            .run(
+                &command,
+                &environment,
+                &BTreeMap::new(),
+                &[],
+                None,
+                Duration::from_secs(2),
+            )
             .expect("fake child process");
 
         assert_eq!(result.exit_code, 0);
         assert!(!result.timed_out);
         assert_eq!(result.stdout, "***");
         assert!(!result.stdout.contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn materialized_secret_file_cleanup_closes_handles_before_unlink() {
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let materialized = materialize_secret_files(&files).expect("materialize secret file");
+        let path = PathBuf::from(
+            materialized
+                .environment
+                .iter()
+                .find(|(name, _)| name == "SYMVAULT_FILE_PIN")
+                .expect("file environment assignment")
+                .1
+                .clone(),
+        );
+        let directory = path.parent().expect("private file directory").to_path_buf();
+        assert!(path.exists());
+        assert!(directory.exists());
+
+        drop(materialized);
+
+        assert!(!path.exists(), "secret file remains after cleanup");
+        assert!(
+            !directory.exists(),
+            "private directory remains after cleanup"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cleanup_zeroes_materialized_file_while_another_process_handle_is_open() {
+        use std::io::Read as _;
+
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let mut materialized = materialize_secret_files(&files).expect("materialize secret file");
+        let path = PathBuf::from(
+            materialized
+                .environment
+                .iter()
+                .find(|(name, _)| name == "SYMVAULT_FILE_PIN")
+                .expect("file environment assignment")
+                .1
+                .clone(),
+        );
+        let mut held_reader = fs::File::open(&path).expect("child-compatible read handle");
+
+        // Windows may defer unlink while a child keeps a handle open. Cleanup
+        // must still overwrite the content and report incomplete unlinking.
+        let cleanup = materialized.cleanup();
+        let mut observed = Vec::new();
+        held_reader
+            .read_to_end(&mut observed)
+            .expect("read through the still-open child handle");
+        assert_eq!(observed, vec![0; b"synthetic-file-pin".len()]);
+
+        drop(held_reader);
+        if cleanup.is_err() {
+            materialized
+                .cleanup()
+                .expect("retry cleanup after the child handle closes");
+        }
+        assert!(!path.exists(), "materialized secret file remains");
+        assert!(
+            !path.parent().expect("private directory").exists(),
+            "private directory remains"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mcp_command_executor_materializes_private_files_and_cleans_them_after_success() {
+        let marker = tempfile::tempdir().expect("marker directory");
+        let environment = BTreeMap::from([(
+            "MARKER".to_owned(),
+            marker
+                .path()
+                .join("file-path")
+                .to_string_lossy()
+                .into_owned(),
+        )]);
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            r#"printf '%s\n' "$(ls -ld "$(dirname "$SYMVAULT_FILE_PIN")" | cut -c1-10)" "$(ls -l "$SYMVAULT_FILE_PIN" | cut -c1-10)" "$(cat "$SYMVAULT_FILE_PIN")" "$SYMVAULT_FILE_PIN""#.to_owned(),
+        ];
+        let result = McpCommandExecutor::new()
+            .run(
+                &command,
+                &environment,
+                &files,
+                &[b"synthetic-file-pin".to_vec()],
+                None,
+                Duration::from_secs(2),
+            )
+            .expect("child should read its temporary secret file");
+
+        assert_eq!(result.exit_code, 0, "{}", result.stderr);
+        let lines = result.stdout.lines().collect::<Vec<_>>();
+        assert_eq!(lines[0], "drwx------");
+        assert_eq!(lines[1], "-rw-------");
+        assert_eq!(lines[2], "***");
+        let path = PathBuf::from(lines[3]);
+        assert!(!path.exists(), "secret file remains after child exit");
+        assert!(
+            !path.parent().expect("private temp directory").exists(),
+            "private directory remains after child exit"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mcp_command_executor_cleans_materialized_files_after_timeout() {
+        let marker = tempfile::tempdir().expect("marker directory");
+        let marker_path = marker.path().join("file-path");
+        let environment = BTreeMap::from([(
+            "MARKER".to_owned(),
+            marker_path.to_string_lossy().into_owned(),
+        )]);
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "printf '%s' \"$SYMVAULT_FILE_PIN\" > \"$MARKER\"; sleep 10".to_owned(),
+        ];
+        let result = McpCommandExecutor::new()
+            .run(
+                &command,
+                &environment,
+                &files,
+                &[b"synthetic-file-pin".to_vec()],
+                None,
+                Duration::from_millis(500),
+            )
+            .expect("timed out command returns its result");
+
+        assert!(result.timed_out);
+        let path = PathBuf::from(fs::read_to_string(marker_path).expect("child wrote path"));
+        assert!(!path.exists(), "secret file remains after timeout");
+        assert!(
+            !path.parent().expect("private temp directory").exists(),
+            "private directory remains after timeout"
+        );
     }
 
     #[test]
@@ -1005,6 +1387,7 @@ mod tests {
         let result = run_process(ProcessOptions {
             command: &command,
             environment: &empty,
+            files: &BTreeMap::new(),
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,
@@ -1035,6 +1418,7 @@ mod tests {
         let result = run_process(ProcessOptions {
             command: &command,
             environment: &environment,
+            files: &BTreeMap::new(),
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,

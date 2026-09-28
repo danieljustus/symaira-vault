@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f894",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "2b703647",
+    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -17,8 +17,8 @@
       "internal/template/funcs.go",
       "internal/template/resolver.go"
     ],
-    "source_hash": "7367c3c558d958eba95438796e029031229db78b8fc336e6e18869f8abd0943a",
-    "generator_hash": "bbecbadab40fe28f3dcd55214afd8a5e199bf807e03c692522de1d265dc727e7"
+    "source_hash": "f92aa76f14725f1fd9c51451daadd05d1ce487ef93385c412c9fdd8adfae2534",
+    "generator_hash": "c56ec3f0c5878b8d490268c36e63ffcf4f1640f957850e6d1e7f30f047ce73f1"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-generate-template-fixture",

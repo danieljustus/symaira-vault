@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f894",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "2b703647",
+    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -13,8 +13,8 @@
       "internal/mcp/mcptypes.go",
       "internal/audit/audit.go"
     ],
-    "source_hash": "32f6d997452d68a801b95fa418269671a2726ac245e58340a9097f14df492b18",
-    "generator_hash": "7fbb5f41f2404e0f8115ccf76d4be52fe8bab172bd41a263e78e464e8f62807b"
+    "source_hash": "ef3fdf4620753063087d4ebf2eddaa5111bb7545f23b13f1e84a0449a877bed9",
+    "generator_hash": "4a2b4b2c7d51e585d46bebfdedf92aad178557f85ecd665cfbbd3cba28ea154d"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-audit-self-fixture",

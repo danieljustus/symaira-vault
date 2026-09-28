@@ -151,7 +151,7 @@ fn fixture() -> Fixture {
     .expect("valid source-bound Go secret_unseal fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "cd741531bb5302d3ffe723490eef464da74f2f55"
+        "2b703647a821d7236aa8a66032852ab3ee606701"
     );
     assert!(!fixture.oracle.source_files.is_empty());
     assert_eq!(fixture.oracle.source_hash.len(), 64);
