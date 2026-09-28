@@ -1,0 +1,41 @@
+Launch the interactive setup wizard to initialize or re-configure your vault.
+
+The wizard guides you through:
+  • Vault directory and passphrase
+  • Authentication method (Touch ID or passphrase)
+  • Sync strategy (local or git remote)
+  • Multi-device setup hints
+  • Additional recipients for shared access
+  • AI agent (MCP) configuration
+  • Backup recommendations
+  • Profile name
+
+For non-interactive environments (CI, scripts), use 'symvault init' instead.
+
+Usage:
+  symvault setup [flags]
+
+Examples:
+  # Run the wizard (resumes from saved state if available)
+  symvault setup
+
+  # Restart from scratch
+  symvault setup --no-resume
+
+  # Keep partial vault artifacts on error for debugging
+  symvault setup --keep-on-error
+
+Flags:
+  -h, --help            help for setup
+      --keep-on-error   do not rollback vault init artifacts when subsequent steps fail
+      --no-resume       disable setup resume after abort
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")
