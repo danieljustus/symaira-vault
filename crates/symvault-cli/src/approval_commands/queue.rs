@@ -145,8 +145,7 @@ fn approval_api_request<T: DeserializeOwned>(
     method: &str,
     path: &str,
 ) -> Result<T, String> {
-    // reqwest and ureq bring distinct rustls feature sets into this binary;
-    // select the provider explicitly before rustls needs its process default.
+    // Select the TLS provider explicitly before the HTTP client needs it.
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let (port, bind) = runtime_server(vault)?;
