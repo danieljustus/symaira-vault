@@ -5,6 +5,9 @@
 //! vault and unlocked identity. HTTP selects its configured agent per request;
 //! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
+#[path = "mcp_tls_cert.rs"]
+mod mcp_tls_cert;
+
 #[cfg(unix)]
 use std::io::{BufRead, Write};
 #[cfg(unix)]
@@ -56,6 +59,24 @@ pub fn run(
     if !stdio {
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
+        let generated = if !config
+            .mcp
+            .as_ref()
+            .is_some_and(|mcp| mcp.allow_insecure_bind)
+            && (tls_cert.is_empty() || tls_key.is_empty())
+        {
+            Some(mcp_tls_cert::ensure_tls_cert(root)?)
+        } else {
+            None
+        };
+        let (tls_cert, tls_key) = match generated.as_ref() {
+            Some((cert, key)) => (
+                cert.to_str()
+                    .ok_or("MCP TLS certificate path is not UTF-8")?,
+                key.to_str().ok_or("MCP TLS key path is not UTF-8")?,
+            ),
+            None => (tls_cert, tls_key),
+        };
         validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)?;
         let tls = if tls_cert.is_empty() {
             None
