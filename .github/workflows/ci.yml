@@ -314,6 +314,12 @@ jobs:
           # `git show`; a shallow checkout does not contain it.
           fetch-depth: 0
 
+      - name: Set up Go for embedded production-handler tests
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
 
