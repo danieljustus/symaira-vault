@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -88,7 +89,7 @@ func main() {
 
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
-	defer os.RemoveAll(vaultDir)
+	defer func() { _ = os.RemoveAll(vaultDir) }()
 	const token = "http001-fixture-token"
 	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
 	cfg := config.Default()
@@ -107,9 +108,9 @@ func main() {
 	defer func() {
 		cancel()
 		select {
-		case err := <-done:
-			if err != nil && err != http.ErrServerClosed {
-				fmt.Fprintln(os.Stderr, err)
+		case serverErr := <-done:
+			if serverErr != nil && !errors.Is(serverErr, http.ErrServerClosed) {
+				fmt.Fprintln(os.Stderr, serverErr)
 				os.Exit(1)
 			}
 		case <-time.After(3 * time.Second):
