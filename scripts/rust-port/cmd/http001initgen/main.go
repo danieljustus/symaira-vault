@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -19,7 +20,6 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -91,8 +91,8 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
-	token, err := auth.LoadOrCreateToken(filepath.Join(vaultDir, "mcp-token"))
-	check(err)
+	token := rand.Text()
+	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
 	cfg := config.Default()
 	cfg.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	vault := &vaultpkg.Vault{Dir: vaultDir, Config: cfg}
