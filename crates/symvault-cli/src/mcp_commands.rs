@@ -106,12 +106,33 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        let server_working_dir = std::env::current_dir()
+            .map_err(|error| format!("inspect server working directory: {error}"))?;
+        let (approval_client_cert, approval_client_key) =
+            configured_approval_tls_identity(root, mtls_enabled)?;
+        let mut runtime_metadata = RuntimeMetadataGuard::new(root);
+        runtime_metadata.publish(RuntimeMetadata {
+            bind: address.to_string(),
+            port: listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port(),
+            certificate: tls_cert.to_owned(),
+            client_ca: tls_ca.to_owned(),
+            client_auth_required: mtls_enabled,
+            approval_client_certificate: approval_client_cert,
+            approval_client_key,
+            server_working_dir,
+        })?;
+        let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
+        let enroll_secret = ensure_enroll_secret(root)?;
         let expected_recipient = symvault_crypto::recipient_string(&identity);
         let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
         let oauth_agent_name = oauth_agent(&config).to_owned();
         let runtime_status = (touch_id_available, backend, persistent, message);
+        let approval_queue_for_agent = approval_queue.clone();
         let handler_for_agent = move |agent: &str| {
             let identity = identity_from_secret(&identity_text)?;
             let profile = config
@@ -127,6 +148,7 @@ pub fn run(
                 "http",
                 &auth_method,
                 &runtime_status,
+                Some(approval_queue_for_agent.clone()),
             )
         };
         let registry_path = root.join("mcp-tokens.json");
@@ -146,7 +168,7 @@ pub fn run(
             })
         };
         let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_and_oauth(
+            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -154,14 +176,16 @@ pub fn run(
                 consent,
                 verify_passphrase,
                 tls,
+                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
             ),
-            None => symvault_mcp::http::serve_loopback_with_oauth(
+            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval(
                 listener,
                 registry_path,
                 handler_for_agent,
                 oauth_agent_name,
                 consent,
                 verify_passphrase,
+                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
             ),
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))
@@ -182,12 +206,170 @@ pub fn run(
             "stdio",
             config.effective_auth_method().as_str(),
             &(touch_id_available, backend, persistent, message),
+            None,
         )?;
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
     }
+}
+
+struct RuntimeMetadataGuard {
+    port_path: PathBuf,
+    port_record: Option<Vec<u8>>,
+    tls_path: PathBuf,
+    tls_record: Option<Vec<u8>>,
+}
+
+struct RuntimeMetadata {
+    bind: String,
+    port: u16,
+    certificate: String,
+    client_ca: String,
+    client_auth_required: bool,
+    approval_client_certificate: String,
+    approval_client_key: String,
+    server_working_dir: PathBuf,
+}
+
+impl RuntimeMetadataGuard {
+    fn new(root: &Path) -> Self {
+        Self {
+            port_path: root.join(".runtime-port"),
+            port_record: None,
+            tls_path: root.join(".runtime-tls-cert"),
+            tls_record: None,
+        }
+    }
+
+    fn publish(&mut self, metadata: RuntimeMetadata) -> Result<(), String> {
+        let port_record = serde_json::to_vec(
+            &serde_json::json!({ "port": metadata.port, "bind": metadata.bind }),
+        )
+        .map_err(|error| format!("encode MCP runtime port: {error}"))?;
+        symvault_sync::safeio::write_atomic(&self.port_path, &port_record)
+            .map_err(|error| format!("write MCP runtime port: {error}"))?;
+        self.port_record = Some(port_record);
+        if metadata.certificate.is_empty() {
+            // A prior TLS server may have exited without running Drop. Match
+            // the Go startup contract: a cleartext listener has no TLS record.
+            let _ = fs::remove_file(&self.tls_path);
+        } else {
+            let certificate =
+                effective_absolute_path(&metadata.server_working_dir, &metadata.certificate);
+            let client_ca_file =
+                effective_absolute_path(&metadata.server_working_dir, &metadata.client_ca);
+            let client_certificate = effective_absolute_path(
+                &metadata.server_working_dir,
+                &metadata.approval_client_certificate,
+            );
+            let client_key = effective_absolute_path(
+                &metadata.server_working_dir,
+                &metadata.approval_client_key,
+            );
+            let tls_record = serde_json::to_vec(&serde_json::json!({
+                "certificate": certificate,
+                "client_ca_file": client_ca_file,
+                "client_auth_required": metadata.client_auth_required,
+                "client_certificate": client_certificate,
+                "client_key": client_key,
+            }))
+            .map_err(|error| format!("encode MCP runtime TLS metadata: {error}"))?;
+            symvault_sync::safeio::write_atomic(&self.tls_path, &tls_record)
+                .map_err(|error| format!("write MCP runtime TLS metadata: {error}"))?;
+            self.tls_record = Some(tls_record);
+        }
+        Ok(())
+    }
+}
+
+fn effective_absolute_path(server_working_dir: &Path, value: &str) -> String {
+    if value.is_empty() {
+        return String::new();
+    }
+    let value = Path::new(value);
+    let path = if value.is_absolute() {
+        value.to_path_buf()
+    } else {
+        server_working_dir.join(value)
+    };
+    fs::canonicalize(&path)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned()
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ApprovalTlsConfig {
+    mcp: Option<ApprovalTlsClientConfig>,
+}
+
+#[derive(serde::Deserialize, Default)]
+struct ApprovalTlsClientConfig {
+    #[serde(default)]
+    approval_tls_cert_file: String,
+    #[serde(default)]
+    approval_tls_key_file: String,
+}
+
+fn configured_approval_tls_identity(
+    root: &Path,
+    mtls_enabled: bool,
+) -> Result<(String, String), String> {
+    if !mtls_enabled {
+        return Ok((String::new(), String::new()));
+    }
+    let config_path = root.join("config.yaml");
+    let data = symvault_sync::safeio::read_bounded(&config_path, 1024 * 1024)
+        .map_err(|error| format!("read approval client TLS config: {error}"))?
+        .ok_or_else(|| "read approval client TLS config: config.yaml not found".to_owned())?;
+    let config: ApprovalTlsConfig = serde_yaml_ng::from_slice(&data)
+        .map_err(|error| format!("parse approval client TLS config: {error}"))?;
+    let mcp = config.mcp.unwrap_or_default();
+    Ok((
+        mcp.approval_tls_cert_file.trim().to_owned(),
+        mcp.approval_tls_key_file.trim().to_owned(),
+    ))
+}
+
+impl Drop for RuntimeMetadataGuard {
+    fn drop(&mut self) {
+        remove_if_unchanged(&self.port_path, self.port_record.as_deref());
+        remove_if_unchanged(&self.tls_path, self.tls_record.as_deref());
+    }
+}
+
+fn remove_if_unchanged(path: &Path, expected: Option<&[u8]>) {
+    let Some(expected) = expected else {
+        return;
+    };
+    if symvault_sync::safeio::read_bounded(path, 4096)
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some(expected)
+    {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn ensure_enroll_secret(root: &Path) -> Result<Vec<u8>, String> {
+    let path = root.join("mcp-server.enroll-secret");
+    if let Some(secret) = symvault_sync::safeio::read_bounded(&path, 4096)
+        .map_err(|error| format!("read approval ownership secret: {error}"))?
+    {
+        if secret.len() != 32 {
+            return Err("approval ownership secret: invalid secret length".to_owned());
+        }
+        return Ok(secret);
+    }
+    let mut secret = vec![0; 32];
+    getrandom::fill(&mut secret)
+        .map_err(|error| format!("generate approval ownership secret: {error}"))?;
+    symvault_sync::safeio::write_atomic(&path, &secret)
+        .map_err(|error| format!("write approval ownership secret: {error}"))?;
+    Ok(secret)
 }
 
 fn effective_tls<'a>(
@@ -348,6 +530,7 @@ fn build_handler(
     transport: &str,
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
+    approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
         agent_name,
@@ -368,10 +551,13 @@ fn build_handler(
     settings.cache_backend.clone_from(&runtime_status.1);
     settings.cache_persistent = runtime_status.2;
     settings.cache_message.clone_from(&runtime_status.3);
-    let runtime =
+    let mut runtime =
         StoreReadOnlyRuntime::open_with_audit(root, identity, settings, policy, Some(audit))
             .map_err(|error| format!("create MCP runtime: {error}"))?
             .with_grant_signing_key(signing_key);
+    if let Some(queue) = approval_queue {
+        runtime = runtime.with_approval_queue(queue);
+    }
     let mut handler =
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
     handler.set_tool_list_config(tool_list_config(profile));
@@ -569,6 +755,119 @@ mod tests {
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn runtime_metadata_is_private_and_only_its_own_records_are_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let tls = root.path().join(".runtime-tls-cert");
+        let server_cwd = root.path().join("server-cwd");
+        fs::create_dir(&server_cwd).unwrap();
+        fs::write(
+            root.path().join("config.yaml"),
+            "mcp:\n  approval_tls_cert_file: certs/approval-client.pem\n  approval_tls_key_file: certs/approval-client.key\n",
+        )
+        .unwrap();
+        let (approval_cert, approval_key) =
+            configured_approval_tls_identity(root.path(), true).unwrap();
+        {
+            let mut metadata = RuntimeMetadataGuard::new(root.path());
+            metadata
+                .publish(RuntimeMetadata {
+                    bind: "127.0.0.1".into(),
+                    port: 9443,
+                    certificate: "certs/server.pem".into(),
+                    client_ca: "certs/ca.pem".into(),
+                    client_auth_required: true,
+                    approval_client_certificate: approval_cert.clone(),
+                    approval_client_key: approval_key.clone(),
+                    server_working_dir: server_cwd.clone(),
+                })
+                .unwrap();
+            let record: serde_json::Value =
+                serde_json::from_slice(&fs::read(&port).unwrap()).unwrap();
+            assert_eq!(record["port"], 9443);
+            assert_eq!(record["bind"], "127.0.0.1");
+            assert!(tls.is_file());
+            let tls_record: serde_json::Value =
+                serde_json::from_slice(&fs::read(&tls).unwrap()).unwrap();
+            for (field, relative) in [
+                ("certificate", "certs/server.pem"),
+                ("client_ca_file", "certs/ca.pem"),
+                ("client_certificate", "certs/approval-client.pem"),
+                ("client_key", "certs/approval-client.key"),
+            ] {
+                assert_eq!(
+                    tls_record[field],
+                    server_cwd.join(relative).to_string_lossy().as_ref()
+                );
+                assert!(Path::new(tls_record[field].as_str().unwrap()).is_absolute());
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    fs::metadata(&port).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+                assert_eq!(
+                    fs::metadata(&tls).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+            }
+        }
+        assert!(!port.exists());
+        assert!(!tls.exists());
+
+        fs::write(&tls, b"stale tls metadata").unwrap();
+        let mut metadata = RuntimeMetadataGuard::new(root.path());
+        metadata
+            .publish(RuntimeMetadata {
+                bind: "127.0.0.1".into(),
+                port: 9445,
+                certificate: String::new(),
+                client_ca: String::new(),
+                client_auth_required: false,
+                approval_client_certificate: String::new(),
+                approval_client_key: String::new(),
+                server_working_dir: server_cwd.clone(),
+            })
+            .unwrap();
+        assert!(!tls.exists());
+        drop(metadata);
+        assert!(!port.exists());
+
+        let mut metadata = RuntimeMetadataGuard::new(root.path());
+        metadata
+            .publish(RuntimeMetadata {
+                bind: "127.0.0.1".into(),
+                port: 9444,
+                certificate: "/tmp/server.pem".into(),
+                client_ca: String::new(),
+                client_auth_required: false,
+                approval_client_certificate: String::new(),
+                approval_client_key: String::new(),
+                server_working_dir: server_cwd,
+            })
+            .unwrap();
+        fs::write(&port, b"owned by another server").unwrap();
+        drop(metadata);
+        assert_eq!(fs::read(&port).unwrap(), b"owned by another server");
+        assert!(!tls.exists());
+    }
+
+    #[test]
+    fn existing_enroll_secret_must_match_cli_proof_size() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("mcp-server.enroll-secret");
+        fs::write(&path, [0xA5; 31]).unwrap();
+        assert_eq!(
+            ensure_enroll_secret(root.path()).unwrap_err(),
+            "approval ownership secret: invalid secret length"
+        );
+        fs::write(&path, [0xA5; 32]).unwrap();
+        assert_eq!(ensure_enroll_secret(root.path()).unwrap().len(), 32);
     }
 
     #[test]

@@ -26,3 +26,6 @@ testdata/port/** text eol=lf
 # against the bytes the renderer produces, so a Windows CRLF checkout would
 # make every comparison fail there.
 crates/symvault-cli/tests/fixtures/** text eol=lf
+# These embedded Cobra help pages are byte-for-byte golden output and are also
+# parsed by the CLI, so keep their checkout bytes stable on Windows.
+crates/symvault-cli/src/help-*.txt text eol=lf

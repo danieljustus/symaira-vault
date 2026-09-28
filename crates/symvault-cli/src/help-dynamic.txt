@@ -1,0 +1,33 @@
+Generate dynamic secrets with time-limited leases for various backends.
+
+Supported engines:
+  postgres  - Create temporary PostgreSQL users with GRANT role
+  aws-sts   - Generate temporary AWS STS credentials via AssumeRole
+
+Usage:
+  symvault dynamic [command]
+
+Examples:
+  # Generate temporary PostgreSQL credentials valid for 1h
+  symvault dynamic generate postgres --role analyst --ttl 1h
+
+  # Short-lived AWS STS session
+  symvault dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m
+
+Available Commands:
+  generate    Generate a dynamic secret
+
+Flags:
+  -h, --help   help for dynamic
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")
+
+Use "symvault dynamic [command] --help" for more information about a command.

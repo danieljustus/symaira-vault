@@ -2,6 +2,7 @@
 //! The socket listener stays with the caller; this module owns `/mcp` request
 //! checks and response framing for bounded HTTP/1.x connections.
 
+use crate::approval::{ApprovalQueue, handle_local_request};
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
 };
@@ -180,12 +181,40 @@ pub enum OAuthConsentDecision {
     Browser,
 }
 
+#[derive(Clone)]
+pub struct LocalApprovalApi {
+    queue: Arc<ApprovalQueue>,
+    secret: Vec<u8>,
+    active_mcp_requests: Arc<AtomicUsize>,
+}
+
+impl LocalApprovalApi {
+    pub fn new(queue: Arc<ApprovalQueue>, secret: Vec<u8>) -> Self {
+        Self {
+            queue,
+            secret,
+            active_mcp_requests: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn try_acquire_mcp_request(&self) -> Option<ActiveMcpRequest> {
+        self.active_mcp_requests
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                (count < MAX_HTTP_MCP_REQUESTS).then_some(count + 1)
+            })
+            .ok()
+            .map(|_| ActiveMcpRequest(Arc::clone(&self.active_mcp_requests)))
+    }
+}
+
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
 // ponytail: eight workers bound thread/socket use; revisit if real concurrent demand exceeds this.
 const MAX_HTTP_CONNECTIONS: usize = 8;
+// Keep two workers available for the local approval API while MCP calls run.
+const MAX_HTTP_MCP_REQUESTS: usize = MAX_HTTP_CONNECTIONS - 2;
 
 #[derive(Clone, Copy)]
 struct HttpTimeouts {
@@ -232,6 +261,7 @@ where
         handler_for_agent,
         None,
         None,
+        None,
     )
 }
 
@@ -270,6 +300,7 @@ where
             Box::new(verify_passphrase),
         )),
         None,
+        None,
     )
 }
 
@@ -305,6 +336,81 @@ where
             Box::new(verify_passphrase),
         )),
         Some(tls),
+        None,
+    )
+}
+
+/// Serves the local approval CLI API beside MCP and OAuth over loopback TLS.
+/// The queue is shared with the caller's agent runtimes; `secret` is the
+/// vault-directory ownership key used for the Go-compatible HMAC proof.
+pub fn serve_loopback_with_oauth_and_approval<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    local_approval_api: LocalApprovalApi,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+            Box::new(verify_passphrase),
+        )),
+        None,
+        Some(Arc::new(local_approval_api)),
+    )
+}
+
+/// Serves MCP, OAuth, and the local approval CLI API over TLS.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_tls_oauth_and_approval<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Arc<ServerConfig>,
+    local_approval_api: LocalApprovalApi,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+            Box::new(verify_passphrase),
+        )),
+        Some(tls),
+        Some(Arc::new(local_approval_api)),
     )
 }
 
@@ -314,6 +420,7 @@ fn serve_loopback_inner<F>(
     handler_for_agent: F,
     oauth: Option<crate::oauth::OAuthState>,
     tls: Option<Arc<ServerConfig>>,
+    local_approval: Option<Arc<LocalApprovalApi>>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
@@ -344,6 +451,7 @@ where
             let oauth = oauth.clone();
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
+            let local_approval = local_approval.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
                 let _active = ActiveHttpConnection(active_for_thread);
                 let _ = serve_connection_shared(
@@ -351,6 +459,7 @@ where
                     &registry_path,
                     &state,
                     oauth.as_deref(),
+                    local_approval.as_deref(),
                     HttpTimeouts::default(),
                 );
             }) {
@@ -392,6 +501,7 @@ fn serve_connection_shared<F>(
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
     oauth_state: Option<&crate::oauth::OAuthState>,
+    local_approval: Option<&LocalApprovalApi>,
     timeouts: HttpTimeouts,
 ) -> Result<(), std::io::Error>
 where
@@ -443,13 +553,28 @@ where
                 return Ok(keep_alive);
             }
         }
-        serve_one_authenticated(reader, request, keep_alive, registry_path, state)
+        serve_one_authenticated(
+            reader,
+            request,
+            keep_alive,
+            registry_path,
+            state,
+            local_approval,
+        )
     })
 }
 
 struct ActiveHttpConnection(Arc<AtomicUsize>);
 
 impl Drop for ActiveHttpConnection {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+struct ActiveMcpRequest(Arc<AtomicUsize>);
+
+impl Drop for ActiveMcpRequest {
     fn drop(&mut self) {
         self.0.fetch_sub(1, Ordering::AcqRel);
     }
@@ -547,6 +672,7 @@ fn serve_one_authenticated<F>(
     keep_alive: bool,
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
+    local_approval: Option<&LocalApprovalApi>,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -554,6 +680,39 @@ where
     let stream = reader.get_mut();
     let secure = stream.is_tls();
     let response_version = request.http_version.as_str();
+    if let Some(local_approval) = local_approval
+        && let Some(approval_response) = handle_local_request(
+            &local_approval.queue,
+            &local_approval.secret,
+            stream.peer_addr()?.ip(),
+            &request.method,
+            &request.path,
+            &request.enroll_timestamp,
+            &request.enroll_proof,
+        )
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: approval_response.status,
+                headers: vec![("Content-Type", approval_response.content_type)],
+                body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
+    let _mcp_request = match local_approval {
+        Some(local_approval) => match local_approval.try_acquire_mcp_request() {
+            Some(request) => Some(request),
+            None => {
+                write_request_error(stream, 503, "server busy", response_version, false)?;
+                return Ok(false);
+            }
+        },
+        None => None,
+    };
     if !allowed_origin_for_transport(&request.origin, &request.host, secure) {
         write_json_error_for_request(
             stream,
@@ -684,6 +843,8 @@ struct WireRequest {
     content_type: String,
     accept: String,
     protocol_version: String,
+    enroll_timestamp: String,
+    enroll_proof: String,
     connection: String,
     body: String,
 }
@@ -791,6 +952,8 @@ fn read_wire_request(
         content_type: get("content-type"),
         accept: get("accept"),
         protocol_version: get("mcp-protocol-version"),
+        enroll_timestamp: get("x-enroll-timestamp"),
+        enroll_proof: get("x-enroll-proof"),
         connection: get("connection"),
         body,
     }))
@@ -1020,6 +1183,7 @@ fn write_http_response(
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
+        401 => "Unauthorized",
         201 => "Created",
         202 => "Accepted",
         400 => "Bad Request",
@@ -1027,6 +1191,7 @@ fn write_http_response(
         404 => "Not Found",
         405 => "Method Not Allowed",
         406 => "Not Acceptable",
+        409 => "Conflict",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
         429 => "Too Many Requests",
@@ -1383,6 +1548,455 @@ mod tests {
         })
     }
 
+    #[test]
+    fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+        let go_local = include_str!("../../../internal/approval/local.go");
+        assert!(go_local.contains("/api/v1/local/approvals"));
+        assert!(go_local.contains("/api/v1/local/approvals/"));
+
+        let queue = Arc::new(ApprovalQueue::default());
+        let id = queue
+            .enqueue("agent", "notes/file", true, "write")
+            .expect("enqueue approval");
+        let secret = b"go-contract-secret".to_vec();
+        let timestamp = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .expect("format proof timestamp");
+        let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("HMAC key");
+        mac.update(timestamp.as_bytes());
+        let proof = mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let local_approval = LocalApprovalApi::new(queue, secret);
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = test_state();
+                serve_connection_shared(
+                    stream,
+                    Path::new("missing-token-registry.json"),
+                    &state,
+                    None,
+                    Some(&local_approval),
+                    HttpTimeouts::default(),
+                )
+                .expect("serve local approval API");
+            }
+        });
+        let mut stream = TcpStream::connect(address).expect("connect unauthorized client");
+        write!(
+            stream,
+            "GET /api/v1/local/approvals HTTP/1.1\r\nHost: {address}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("send unauthenticated request");
+        let unauthorized = read_http_response(&mut BufReader::new(stream));
+        assert_eq!(raw_status(&unauthorized), 401, "{unauthorized}");
+
+        let mut stream = TcpStream::connect(address).expect("connect authorized client");
+        write!(
+            stream,
+            "GET /api/v1/local/approvals HTTP/1.1\r\nHost: {address}\r\nX-Enroll-Timestamp: {timestamp}\r\nX-Enroll-Proof: {proof}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("send request");
+        let response = read_http_response(&mut BufReader::new(stream));
+        server.join().expect("server thread");
+        assert_eq!(raw_status(&response), 200, "{response}");
+        let listed: serde_json::Value =
+            serde_json::from_str(raw_body(&response)).expect("approval list JSON");
+        assert_eq!(listed["requests"][0]["id"], id);
+        assert_eq!(listed["requests"][0]["status"], "pending");
+    }
+
+    #[test]
+    fn waiting_mcp_approval_does_not_block_local_decision_on_same_server() {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+        struct WaitingApprovalRuntime(Arc<ApprovalQueue>);
+
+        impl crate::ToolCallRuntime for WaitingApprovalRuntime {
+            fn authorize(
+                &self,
+                _name: &str,
+                _arguments: &serde_json::Value,
+            ) -> Result<(), crate::ToolCallResult> {
+                Ok(())
+            }
+
+            fn call(
+                &self,
+                _name: &str,
+                _arguments: &serde_json::Value,
+            ) -> Result<crate::ToolCallResult, String> {
+                let outcome = self.0.request_and_wait(
+                    "http-test",
+                    "notes/file",
+                    true,
+                    "MCP HTTP concurrency test",
+                )?;
+                Ok(crate::ToolCallResult::text(outcome.status))
+            }
+        }
+
+        fn signed_request(
+            address: std::net::SocketAddr,
+            secret: &[u8],
+            method: &str,
+            path: &str,
+        ) -> String {
+            let timestamp = OffsetDateTime::now_utc()
+                .format(&Rfc3339)
+                .expect("format proof timestamp");
+            let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
+            mac.update(timestamp.as_bytes());
+            let proof = mac
+                .finalize()
+                .into_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            format!(
+                "{method} {path} HTTP/1.1\r\nHost: {address}\r\nX-Enroll-Timestamp: {timestamp}\r\nX-Enroll-Proof: {proof}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+        }
+
+        let queue = Arc::new(ApprovalQueue::default());
+        let secret = b"same-server-approval-proof".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let registry_dir = tempfile::tempdir().expect("token registry directory");
+        let registry_path = registry(registry_dir.path());
+        let handler_queue = Arc::clone(&queue);
+        let local_approval = LocalApprovalApi::new(Arc::clone(&queue), secret.clone());
+
+        // This is the production accept loop. Each connection is dispatched to
+        // its own worker, so a pending tools/call can coexist with the local API.
+        let _server = thread::spawn(move || {
+            serve_loopback_inner(
+                listener,
+                &registry_path,
+                move |_| {
+                    Ok(ProtocolHandler::with_tool_call_runtime(
+                        "symaira",
+                        "1.0.0",
+                        Arc::new(WaitingApprovalRuntime(Arc::clone(&handler_queue))),
+                    ))
+                },
+                None,
+                None,
+                Some(Arc::new(local_approval)),
+            )
+            .expect("serve production loopback accept loop");
+        });
+
+        let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"http-test","version":"1"}}}"#;
+        let initialize_request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{initialize}",
+            initialize.len()
+        );
+        let mut stream = TcpStream::connect(address).expect("connect initialize request");
+        stream
+            .write_all(initialize_request.as_bytes())
+            .expect("send initialize request");
+        let initialized = read_http_response(&mut BufReader::new(stream));
+        assert_eq!(raw_status(&initialized), 200, "{initialized}");
+
+        let call = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"set_entry_field","arguments":{"path":"notes/file","field":"title","value":"updated"}}}"#;
+        let call_request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{call}",
+            call.len()
+        );
+        let mut pending_call = TcpStream::connect(address).expect("connect MCP call");
+        pending_call
+            .write_all(call_request.as_bytes())
+            .expect("send MCP call");
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let pending = loop {
+            let requests = queue.pending().expect("list pending approvals");
+            if let Some(request) = requests.into_iter().next() {
+                break request;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "MCP tools/call did not reach approval queue"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+
+        let list_request = signed_request(address, &secret, "GET", "/api/v1/local/approvals");
+        let mut local_list = TcpStream::connect(address).expect("connect local approval list");
+        local_list
+            .write_all(list_request.as_bytes())
+            .expect("send local approval list");
+        let listed = read_http_response(&mut BufReader::new(local_list));
+        assert_eq!(raw_status(&listed), 200, "{listed}");
+        let listed: serde_json::Value =
+            serde_json::from_str(raw_body(&listed)).expect("approval list JSON");
+        assert_eq!(listed["requests"][0]["id"], pending.id);
+        assert_eq!(listed["requests"][0]["status"], "pending");
+
+        let approve_path = format!("/api/v1/local/approvals/{}/approve", pending.id);
+        let approve_request = signed_request(address, &secret, "POST", &approve_path);
+        let mut local_decision =
+            TcpStream::connect(address).expect("connect local approval decision");
+        local_decision
+            .write_all(approve_request.as_bytes())
+            .expect("send local approval decision");
+        let decided = read_http_response(&mut BufReader::new(local_decision));
+        assert_eq!(raw_status(&decided), 200, "{decided}");
+
+        pending_call
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .expect("set MCP response timeout");
+        let response = read_http_response(&mut BufReader::new(pending_call));
+        assert_eq!(raw_status(&response), 200, "{response}");
+        let response: serde_json::Value =
+            serde_json::from_str(raw_body(&response)).expect("MCP response JSON");
+        assert_eq!(response["result"]["content"][0]["text"], "approved");
+    }
+
+    #[test]
+    fn mcp_request_admission_reserves_two_workers_for_local_approval() {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+        struct WaitingApprovalRuntime(Arc<ApprovalQueue>);
+
+        impl crate::ToolCallRuntime for WaitingApprovalRuntime {
+            fn authorize(
+                &self,
+                _name: &str,
+                _arguments: &serde_json::Value,
+            ) -> Result<(), crate::ToolCallResult> {
+                Ok(())
+            }
+
+            fn call(
+                &self,
+                _name: &str,
+                _arguments: &serde_json::Value,
+            ) -> Result<crate::ToolCallResult, String> {
+                let outcome = self.0.request_and_wait(
+                    "default",
+                    "notes/file",
+                    true,
+                    "MCP HTTP saturation test",
+                )?;
+                Ok(crate::ToolCallResult::text(outcome.status))
+            }
+        }
+
+        fn signed_request(
+            address: std::net::SocketAddr,
+            secret: &[u8],
+            method: &str,
+            path: &str,
+        ) -> String {
+            let timestamp = OffsetDateTime::now_utc()
+                .format(&Rfc3339)
+                .expect("format proof timestamp");
+            let mut mac = Hmac::<Sha256>::new_from_slice(secret).expect("HMAC key");
+            mac.update(timestamp.as_bytes());
+            let proof = mac
+                .finalize()
+                .into_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            format!(
+                "{method} {path} HTTP/1.1\r\nHost: {address}\r\nX-Enroll-Timestamp: {timestamp}\r\nX-Enroll-Proof: {proof}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            )
+        }
+
+        fn mcp_request(address: std::net::SocketAddr, id: usize, bearer: &str) -> String {
+            let call = format!(
+                r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/call","params":{{"name":"set_entry_field","arguments":{{"path":"notes/file","field":"title","value":"updated-{id}"}}}}}}"#
+            );
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {bearer}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{call}",
+                call.len()
+            )
+        }
+
+        let queue = Arc::new(ApprovalQueue::default());
+        let secret = b"approval-saturation-proof".to_vec();
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let registry_dir = tempfile::tempdir().expect("token registry directory");
+        let bearer_tokens = (0..MAX_HTTP_MCP_REQUESTS)
+            .map(|index| format!("http-approval-worker-{index}"))
+            .collect::<Vec<_>>();
+        let tokens = bearer_tokens
+            .iter()
+            .enumerate()
+            .map(|(index, bearer)| {
+                (
+                    format!("token-{index}"),
+                    serde_json::json!({
+                        "id": format!("token-{index}"),
+                        "hash": symvault_store::sha256_hex(bearer.as_bytes()),
+                        "prefix": "http",
+                        "allowed_tools": ["*"],
+                        "agent_name": "default",
+                        "created_at": "2026-01-01T00:00:00Z"
+                    }),
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let registry_path = registry_dir.path().join("mcp-tokens.json");
+        fs::write(
+            &registry_path,
+            serde_json::to_vec(&serde_json::json!({"version": 2, "tokens": tokens}))
+                .expect("serialize worker token registry"),
+        )
+        .expect("write worker token registry");
+        let handler_queue = Arc::clone(&queue);
+        let local_approval = Arc::new(LocalApprovalApi::new(Arc::clone(&queue), secret.clone()));
+        let admission_counter = Arc::clone(&local_approval.active_mcp_requests);
+
+        let _server = thread::spawn(move || {
+            serve_loopback_inner(
+                listener,
+                &registry_path,
+                move |_| {
+                    Ok(ProtocolHandler::with_tool_call_runtime(
+                        "symaira",
+                        "1.0.0",
+                        Arc::new(WaitingApprovalRuntime(Arc::clone(&handler_queue))),
+                    ))
+                },
+                None,
+                None,
+                Some(local_approval),
+            )
+            .expect("serve production loopback accept loop");
+        });
+
+        for bearer in &bearer_tokens {
+            let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"http-test","version":"1"}}}"#;
+            let initialize_request = format!(
+                "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {bearer}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{initialize}",
+                initialize.len()
+            );
+            let mut stream = TcpStream::connect(address).expect("connect initialize request");
+            stream
+                .write_all(initialize_request.as_bytes())
+                .expect("send initialize request");
+            let initialized = read_http_response(&mut BufReader::new(stream));
+            assert_eq!(raw_status(&initialized), 200, "{initialized}");
+        }
+
+        let mut calls = Vec::new();
+        for (id, bearer) in (2..(2 + MAX_HTTP_MCP_REQUESTS)).zip(bearer_tokens.iter().cloned()) {
+            let wire = mcp_request(address, id, &bearer);
+            calls.push(thread::spawn(move || {
+                let mut stream = TcpStream::connect(address).expect("connect MCP prompt call");
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(10)))
+                    .expect("set MCP response timeout");
+                stream
+                    .write_all(wire.as_bytes())
+                    .expect("send MCP prompt call");
+                read_http_response(&mut BufReader::new(stream))
+            }));
+        }
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while admission_counter.load(Ordering::Acquire) < MAX_HTTP_MCP_REQUESTS {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "MCP prompt calls did not occupy the reserved admission limit"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while queue.pending().expect("list pending approvals").len() < MAX_HTTP_MCP_REQUESTS {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "prompt calls did not fill the pending queue"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        for id in (2 + MAX_HTTP_MCP_REQUESTS)..(2 + MAX_HTTP_MCP_REQUESTS + 2) {
+            let wire = mcp_request(address, id, &bearer_tokens[0]);
+            let mut stream = TcpStream::connect(address).expect("connect excess MCP call");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("set excess MCP response timeout");
+            stream
+                .write_all(wire.as_bytes())
+                .expect("send excess MCP call");
+            let response = read_http_response(&mut BufReader::new(stream));
+            assert_eq!(raw_status(&response), 503, "excess call should fail closed");
+            assert!(raw_body(&response).contains("server busy"), "{response}");
+        }
+
+        let list_request = signed_request(address, &secret, "GET", "/api/v1/local/approvals");
+        let mut local_list = TcpStream::connect(address).expect("connect local approval list");
+        local_list
+            .set_read_timeout(Some(Duration::from_secs(3)))
+            .expect("set local list timeout");
+        local_list
+            .write_all(list_request.as_bytes())
+            .expect("send local approval list");
+        let listed = read_http_response(&mut BufReader::new(local_list));
+        assert_eq!(
+            raw_status(&listed),
+            200,
+            "reserved local list slot: {listed}"
+        );
+
+        let mut decided = 0;
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while decided < calls.len() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "only {decided} of {} prompt calls were released",
+                calls.len()
+            );
+            let pending = queue.pending().expect("list pending approvals");
+            if let Some(request) = pending.first() {
+                let approve_path = format!("/api/v1/local/approvals/{}/approve", request.id);
+                let wire = signed_request(address, &secret, "POST", &approve_path);
+                let mut local_decision =
+                    TcpStream::connect(address).expect("connect local approval decision");
+                local_decision
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .expect("set local decision timeout");
+                local_decision
+                    .write_all(wire.as_bytes())
+                    .expect("send local approval decision");
+                let response = read_http_response(&mut BufReader::new(local_decision));
+                assert_eq!(raw_status(&response), 200, "local decision: {response}");
+                decided += 1;
+            } else {
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+
+        for call in calls {
+            let response = call.join().expect("join released MCP prompt call");
+            assert_eq!(raw_status(&response), 200, "{response}");
+            let response: serde_json::Value =
+                serde_json::from_str(raw_body(&response)).expect("MCP response JSON");
+            assert_eq!(response["result"]["content"][0]["text"], "approved");
+        }
+    }
+
     fn registry(dir: &Path) -> std::path::PathBuf {
         let hash = symvault_store::sha256_hex(BEARER.as_bytes());
         let bytes = serde_json::to_vec(&serde_json::json!({
@@ -1416,6 +2030,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &state,
+                None,
                 None,
                 HttpTimeouts::default(),
             )
@@ -1454,6 +2069,7 @@ mod tests {
                 &registry_path,
                 &state,
                 Some(&oauth_state),
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve OAuth HTTP connection");
@@ -1559,6 +2175,7 @@ mod tests {
                 &registry_path,
                 &state,
                 Some(&oauth),
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve TLS requests");
@@ -1839,6 +2456,7 @@ mod tests {
                     &server_registry,
                     &state,
                     Some(&oauth_state),
+                    None,
                     HttpTimeouts::default(),
                 )
                 .expect("serve headless OAuth request");
@@ -1943,6 +2561,7 @@ mod tests {
                         &registry_path,
                         &state,
                         Some(&oauth_state),
+                        None,
                         HttpTimeouts::default(),
                     )
                     .expect("serve concurrent request");
@@ -2061,6 +2680,7 @@ mod tests {
                 &registry_path,
                 &state,
                 None,
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve connection sequence");
@@ -2104,6 +2724,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &state,
+                None,
                 None,
                 HttpTimeouts {
                     initial_read: Duration::from_secs(1),
@@ -2161,8 +2782,15 @@ mod tests {
         let idle_registry = registry_path.clone();
         let idle_state = Arc::clone(&state);
         let idle = thread::spawn(move || {
-            serve_connection_shared(idle_server, &idle_registry, &idle_state, None, timeouts)
-                .expect("serve idle client")
+            serve_connection_shared(
+                idle_server,
+                &idle_registry,
+                &idle_state,
+                None,
+                None,
+                timeouts,
+            )
+            .expect("serve idle client")
         });
 
         let mut client = TcpStream::connect(address).expect("connect active client");
@@ -2177,6 +2805,7 @@ mod tests {
                 active_server,
                 &active_registry,
                 &active_state,
+                None,
                 None,
                 timeouts,
             )
@@ -2451,6 +3080,7 @@ mod tests {
                 &registry_path,
                 &state,
                 None,
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve keep-alive connection");
@@ -2658,6 +3288,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &server_state,
+                None,
                 None,
                 HttpTimeouts::default(),
             )

@@ -1,9 +1,15 @@
 use serde::Deserialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::fs;
+use std::{
+    collections::BTreeMap,
+    fs,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 use symvault_core::policy::{Action, Conditions, Engine, Policy, Rule};
 use symvault_crypto::{generate_identity, recipient_string};
+use symvault_mcp::approval::ApprovalQueue;
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, StoreReadOnlyRuntime, ToolCallRuntime,
     read_only_tool_names, run_stream,
@@ -61,6 +67,57 @@ fn set_entry_policy_uses_set_action_before_storage() {
         error
             .text
             .contains("policy denied tool \"set_entry_field\"")
+    );
+}
+
+#[test]
+fn prompt_write_waits_on_the_live_queue_before_mutating_store() {
+    let (root, identity, verifier) = write_synthetic_vault();
+    let queue = Arc::new(ApprovalQueue::default());
+    let mut config = runtime_config("set_prompt_queue");
+    config.approval_mode = "prompt".into();
+    config.can_write = true;
+    let runtime = Arc::new(
+        StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+            .expect("open prompt runtime")
+            .with_approval_queue(Arc::clone(&queue)),
+    );
+    let arguments = serde_json::json!({
+        "path": "github",
+        "field": "username",
+        "value": "approved-user"
+    });
+    runtime
+        .authorize("set_entry_field", &arguments)
+        .expect("authorize prompt write");
+    let caller = Arc::clone(&runtime);
+    let call = thread::spawn(move || caller.call("set_entry_field", &arguments));
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let pending = loop {
+        let requests = queue.pending().expect("list pending approvals");
+        if let Some(request) = requests.into_iter().next() {
+            break request;
+        }
+        assert!(Instant::now() < deadline, "write did not enqueue approval");
+        thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(pending.request.agent_name, "fixture");
+    assert_eq!(pending.request.path, "github");
+    assert!(pending.request.write);
+    assert_eq!(pending.request.reason, "agent write requires approval");
+
+    queue
+        .approve(&pending.id, "local-cli")
+        .expect("approve queued write");
+    let result = call.join().expect("join MCP write").expect("write call");
+    assert!(!result.is_error, "approved write failed: {}", result.text);
+
+    let store = Store::open(root.path(), &verifier).expect("reopen approved vault");
+    let entry = store.get("github", &verifier).expect("read approved entry");
+    assert_eq!(
+        entry.data.get("username"),
+        Some(&Value::String("approved-user".into()))
     );
 }
 

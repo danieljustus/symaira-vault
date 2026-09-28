@@ -1,7 +1,9 @@
+use crate::approval::ApprovalQueue;
 use serde::Serialize;
 use serde::de::{self, Deserialize, MapAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use symvault_core::secret_ref::SecretHandle;
@@ -248,6 +250,7 @@ pub struct ReadOnlyRuntime<S> {
     store: S,
     config: ReadOnlyRuntimeConfig,
     secrets_accessed: AtomicI64,
+    approval_queue: Option<Arc<ApprovalQueue>>,
 }
 
 impl<S> ReadOnlyRuntime<S> {
@@ -257,6 +260,34 @@ impl<S> ReadOnlyRuntime<S> {
             store,
             config,
             secrets_accessed,
+            approval_queue: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_approval_queue(mut self, queue: Arc<ApprovalQueue>) -> Self {
+        self.approval_queue = Some(queue);
+        self
+    }
+
+    fn request_write_approval(&self, tool: &str, path: &str) -> Result<(), String> {
+        let Some(queue) = &self.approval_queue else {
+            return Err(format!(
+                "{tool} requires approval but no TTY or GUI dialog available"
+            ));
+        };
+        let outcome = queue
+            .request_and_wait(
+                self.config.agent_name.clone(),
+                path,
+                true,
+                "agent write requires approval",
+            )
+            .map_err(|error| format!("{tool} approval queue unavailable: {error}"))?;
+        match outcome.status.as_str() {
+            "approved" => Ok(()),
+            "denied" => Err(format!("{tool} denied by approval device")),
+            _ => Err(format!("{tool} approval request expired")),
         }
     }
 }
@@ -604,9 +635,9 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 ));
             }
             "prompt" => {
-                return Ok(ToolCallResult::error(
-                    "set_entry_field requires approval but no TTY or GUI dialog available",
-                ));
+                if let Err(error) = self.request_write_approval("set_entry_field", path) {
+                    return Ok(ToolCallResult::error(error));
+                }
             }
             _ => {}
         }
@@ -726,9 +757,9 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 ));
             }
             "prompt" => {
-                return Ok(ToolCallResult::error(
-                    "delete_entry requires approval but no TTY or GUI dialog available",
-                ));
+                if let Err(error) = self.request_write_approval("delete_entry", path) {
+                    return Ok(ToolCallResult::error(error));
+                }
             }
             _ => {}
         }
