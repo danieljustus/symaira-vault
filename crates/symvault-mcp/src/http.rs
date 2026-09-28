@@ -140,6 +140,10 @@ pub fn load_tls_server_config(
     }
     let key = PrivateKeyDer::from_pem_file(key_path.as_ref())
         .map_err(|error| format!("read TLS private key: {error}"))?;
+    let crypto_provider = Arc::new(rustls::crypto::ring::default_provider());
+    let builder = rustls::ServerConfig::builder_with_provider(Arc::clone(&crypto_provider))
+        .with_safe_default_protocol_versions()
+        .map_err(|error| format!("configure TLS protocol versions: {error}"))?;
     let builder = if let Some(path) = client_ca_path {
         let certificates = CertificateDer::pem_file_iter(path)
             .map_err(|error| format!("read TLS client CA: {error}"))?
@@ -154,13 +158,13 @@ pub fn load_tls_server_config(
                 .add(certificate)
                 .map_err(|error| format!("add TLS client CA: {error}"))?;
         }
-        rustls::ServerConfig::builder().with_client_cert_verifier(
-            WebPkiClientVerifier::builder(Arc::new(roots))
+        builder.with_client_cert_verifier(
+            WebPkiClientVerifier::builder_with_provider(Arc::new(roots), crypto_provider)
                 .build()
                 .map_err(|error| format!("configure TLS client authentication: {error}"))?,
         )
     } else {
-        rustls::ServerConfig::builder().with_no_client_auth()
+        builder.with_no_client_auth()
     };
     builder
         .with_single_cert(certificates, key)
@@ -1502,9 +1506,13 @@ mod tests {
             roots.add(certificate).expect("trust test certificate");
         }
         let client_config = Arc::new(
-            rustls::ClientConfig::builder()
-                .with_root_certificates(roots)
-                .with_no_client_auth(),
+            rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .expect("ring supports safe protocol versions")
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
         );
 
         let directory = tempfile::tempdir().expect("temporary vault");
@@ -1732,7 +1740,12 @@ mod tests {
             {
                 roots.add(certificate).unwrap();
             }
-            let builder = rustls::ClientConfig::builder().with_root_certificates(roots);
+            let builder = rustls::ClientConfig::builder_with_provider(Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots);
             let client = if authorized {
                 let certificates = CertificateDer::pem_file_iter(fixtures.join("tls-client.pem"))
                     .unwrap()
