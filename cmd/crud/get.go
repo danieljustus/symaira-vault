@@ -201,6 +201,8 @@ func newGetCmd() *cobra.Command {
 					if cli.OutputFormat != "text" {
 						if GetPrint {
 							emitExposureAudit(vs.VaultDir(), v.Identity, path, field)
+						} else if isSensitiveField(field) {
+							strValue = maskedValue
 						}
 						if printErr := cli.PrintResult(strValue); printErr != nil {
 							return printErr
@@ -278,6 +280,11 @@ func newGetCmd() *cobra.Command {
 						Modified: entry.Metadata.Updated.Format("2006-01-02 15:04"),
 						Fields:   entry.Data,
 					}
+					if GetPrint {
+						emitExposureAudit(vs.VaultDir(), v.Identity, path, "")
+					} else {
+						output.Fields = maskSensitiveFields(entry.Data)
+					}
 					if secret, algorithm, digits, period, hasTOTP := vaultpkg.ExtractTOTP(entry.Data); hasTOTP {
 						totpCode, err := vaultcrypto.GenerateTOTP(secret, algorithm, digits, period)
 						if err == nil {
@@ -346,6 +353,21 @@ func newGetCmd() *cobra.Command {
 	getCmd.Flags().BoolVar(&GetMetadata, "metadata", false, "Print JSON metadata (length and sha256_12) of the value only")
 	getCmd.GroupID = cli.GroupIDEssentials
 	return getCmd
+}
+
+const maskedValue = "***"
+
+// maskSensitiveFields returns a copy of data with sensitive field values
+// replaced by maskedValue; structured output reveals them only with --print.
+func maskSensitiveFields(data map[string]any) map[string]any {
+	masked := make(map[string]any, len(data))
+	for k, val := range data {
+		if isSensitiveField(k) {
+			val = maskedValue
+		}
+		masked[k] = val
+	}
+	return masked
 }
 
 func emitExposureAudit(vaultDir string, identity *age.X25519Identity, path, field string) {

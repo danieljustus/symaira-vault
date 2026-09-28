@@ -206,8 +206,16 @@ func TestScriptingGet_JSONOutput(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("json get exit code = %d, want 0\nstderr: %s", exitCode, stderr)
 	}
+	if strings.Contains(stdout, "sk-123") || !strings.Contains(stdout, "***") {
+		t.Errorf("json stdout must mask sensitive field without --print: %s", stdout)
+	}
+
+	stdout, stderr, exitCode = runBinResult(t, binPath, env, "--vault", vaultDir, "get", "api.key", "--output", "json", "--print")
+	if exitCode != 0 {
+		t.Fatalf("json get --print exit code = %d, want 0\nstderr: %s", exitCode, stderr)
+	}
 	if !strings.Contains(stdout, "sk-123") {
-		t.Errorf("json stdout missing secret: %s", stdout)
+		t.Errorf("json stdout with --print missing secret: %s", stdout)
 	}
 }
 

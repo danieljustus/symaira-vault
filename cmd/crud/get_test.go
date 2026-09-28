@@ -71,6 +71,30 @@ func TestGetCommand_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestGetCommand_JSONMasksSensitiveFields(t *testing.T) {
+	setupTestVault(t)
+	addTestEntry(t, "github", map[string]any{"username": "octocat", "password": "s3cret", "api_token": "t0k", "otp_secret": "JBSWY3DP"})
+
+	setJSONOutput(t)
+	for _, arg := range []string{"github", "github.password"} {
+		cmd := newGetCmd()
+		cmd.SetArgs([]string{arg})
+		out := captureStdout(t, func() {
+			if err := cmd.Execute(); err != nil {
+				t.Fatalf("Execute(%s) error = %v", arg, err)
+			}
+		})
+		for _, secret := range []string{"s3cret", "t0k", "JBSWY3DP"} {
+			if strings.Contains(out, secret) {
+				t.Errorf("get %s JSON leaked %q: %s", arg, secret, out)
+			}
+		}
+		if !strings.Contains(out, "***") {
+			t.Errorf("get %s JSON = %q, want *** mask", arg, out)
+		}
+	}
+}
+
 func TestGetCommand_JSONFlag(t *testing.T) {
 	setupTestVault(t)
 	addTestEntry(t, "github", map[string]any{"username": "octocat", "password": "s3cret"})

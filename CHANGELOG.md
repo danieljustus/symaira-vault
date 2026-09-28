@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed (breaking)
+- `symvault get --output json` now masks sensitive fields (`password`,
+  `token`, `secret`, `key`, `passwd`, `pwd`) as `***` unless `--print` is
+  given, in both the Go and Rust CLI (#1106).
 - The config loader now rejects a session duration the operator set to a
   non-positive value (`sessionTimeout` or `sessionMaxLifetime` set to `0s` or a
   negative duration) and a config file carrying more than one YAML document.
