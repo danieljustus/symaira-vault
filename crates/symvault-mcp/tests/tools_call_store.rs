@@ -376,9 +376,7 @@ fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
                 path: "github".into(),
                 data,
                 metadata: EntryMetadata {
-                    created: "<fixture-time>".into(),
-                    updated: "<fixture-time>".into(),
-                    version: 1,
+                    created: "2024-01-01T00:00:00Z".into(),
                     ..EntryMetadata::default()
                 },
                 secret_metadata: SecretMetadata::default(),
@@ -532,10 +530,18 @@ fn normalize(value: &mut Value, actual_root: &str) -> usize {
             .iter_mut()
             .map(|item| normalize(item, actual_root))
             .sum(),
-        Value::Object(map) => map
-            .values_mut()
-            .map(|item| normalize(item, actual_root))
-            .sum(),
+        Value::Object(map) => {
+            let count = map
+                .values_mut()
+                .map(|item| normalize(item, actual_root))
+                .sum();
+            for key in ["created", "updated"] {
+                if let Some(Value::String(value)) = map.get_mut(key) {
+                    *value = "<fixture-time>".into();
+                }
+            }
+            count
+        }
         _ => 0,
     }
 }

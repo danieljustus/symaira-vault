@@ -716,7 +716,19 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
     };
 
     store.write_new_entry("written", &entry, &identity).unwrap();
-    assert_eq!(store.get("written", &identity).unwrap(), entry);
+    let written = store.get("written", &identity).unwrap();
+    assert_eq!(written.data, entry.data);
+    assert_eq!(written.metadata.version, 1);
+    assert_eq!(written.metadata.created, written.metadata.updated);
+    assert_ne!(written.metadata.created, "0001-01-01T00:00:00Z");
+    assert_eq!(written.classification, 2);
+    assert!(
+        store
+            .load_manifest(&identity)
+            .unwrap()
+            .entries
+            .contains_key("written")
+    );
     assert!(root.join("entries/written.age").is_file());
     #[cfg(unix)]
     {
@@ -888,10 +900,10 @@ fn fresh_layout_write_uses_all_configured_recipients_and_preserves_dots() {
         .write_new_entry("service.v1", &entry, &identity)
         .unwrap();
     let ciphertext = fs::read(root.join("entries/service.v1.age")).unwrap();
-    assert_eq!(
-        symvault_crypto::decrypt(&ciphertext, &other).unwrap(),
-        serde_json::to_vec(&entry).unwrap()
-    );
+    let decrypted: Entry =
+        serde_json::from_slice(&symvault_crypto::decrypt(&ciphertext, &other).unwrap()).unwrap();
+    assert_eq!(decrypted.data, entry.data);
+    assert_eq!(decrypted.metadata.version, 1);
 }
 
 #[test]

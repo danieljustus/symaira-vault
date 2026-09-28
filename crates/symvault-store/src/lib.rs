@@ -771,12 +771,11 @@ impl Store {
         Err(StoreError::EntryNotFound(path.to_owned()))
     }
 
-    /// Writes a new encrypted entry to the current `entries/` layout.
+    /// Writes a new encrypted entry to the current `entries/` layout using
+    /// Go-compatible metadata and best-effort manifest bookkeeping.
     ///
-    /// This first write slice intentionally refuses replacement, path
-    /// pseudonymization, and implicit directory creation. Those operations
-    /// remain separate STORE-003 work so this method cannot silently claim
-    /// parity for unimplemented atomic-update semantics.
+    /// This first-write slice refuses replacement; atomic-update semantics
+    /// remain separate STORE-003 work.
     pub fn write_new_entry(
         &self,
         path: &str,
@@ -805,10 +804,14 @@ impl Store {
                 ENTRY_EXTENSION
             ))
         };
-        let mut stored = entry.clone();
-        if self.config.pseudonymize_paths {
-            stored.path = path.to_owned();
-        }
+        let now = utc_now_string(&self.root)?;
+        let mut stored =
+            metadata::prepare_entry(entry, &now, path, self.config.pseudonymize_paths, None)
+                .map_err(|detail| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail,
+                })?;
+        stored.classification = infer_classification(&stored);
         validate_entry_values(&stored)?;
         let plaintext =
             Zeroizing::new(
@@ -857,7 +860,9 @@ impl Store {
                 "entry replacement is not part of the new-entry slice".into(),
             ));
         }
-        atomic_create(&target, &ciphertext, &parent_cap)
+        atomic_create(&target, &ciphertext, &parent_cap)?;
+        let _ = self.update_manifest_entry(path, &ciphertext, identity);
+        Ok(())
     }
 
     /// Returns only the metadata portion of an entry after decryption.
