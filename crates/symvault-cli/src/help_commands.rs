@@ -100,7 +100,7 @@ pub fn write<W: Write>(mut root: clap::Command, path: &[String], output: &mut W)
     let mut selected = &mut root;
     for topic in path {
         let Some(command) = selected.find_subcommand_mut(topic) else {
-            return write_unknown_topic(path, output);
+            return write_unknown_topic(path, &mut io::stderr().lock());
         };
         selected = command;
     }
