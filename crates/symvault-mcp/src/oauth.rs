@@ -901,6 +901,7 @@ mod tests {
         };
         assert_eq!(page.status, 200);
         let html = String::from_utf8(page.body).unwrap();
+        assert!(html.contains("Agent: default"));
         let flow_id = html
             .split("name=\"flow_id\" value=\"")
             .nth(1)
