@@ -155,6 +155,11 @@ enum Command {
         #[command(subcommand)]
         command: ShareCommand,
     },
+    /// Inspect and decide requests in the running local approval queue.
+    Approval {
+        #[command(subcommand)]
+        command: ApprovalCommand,
+    },
     /// Inspect declarative policies.
     Policy {
         #[command(subcommand)]
@@ -608,6 +613,20 @@ enum ShareCommand {
         to: String,
         #[arg(long, default_value = "")]
         path: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ApprovalCommand {
+    /// List pending approval requests.
+    List,
+    /// Approve or deny a pending request.
+    Decide {
+        request_id: String,
+        #[arg(long)]
+        approve: bool,
+        #[arg(long)]
+        deny: bool,
     },
 }
 
@@ -1497,6 +1516,39 @@ fn run_cli() -> ExitCode {
                     &path,
                     &mut io::stdout().lock(),
                 )
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
+        Some(Command::Approval { command }) => {
+            let result = (|| {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&root)?;
+                let format = if cli.json {
+                    "json"
+                } else {
+                    cli.output.as_deref().unwrap_or("text")
+                };
+                match command {
+                    ApprovalCommand::List => {
+                        approval_commands::list(&root, format, cli.json, cli.quiet)
+                    }
+                    ApprovalCommand::Decide {
+                        request_id,
+                        approve,
+                        deny,
+                    } => approval_commands::decide(
+                        &root,
+                        &request_id,
+                        approve,
+                        deny,
+                        format,
+                        cli.json,
+                        cli.quiet,
+                    ),
+                }
             })();
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
