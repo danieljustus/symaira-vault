@@ -592,12 +592,10 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            for byte in b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n" {
-                if stream.write_all(&[*byte]).is_err() {
-                    break;
-                }
-                thread::sleep(Duration::from_millis(30));
-            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nx")
+                .unwrap();
+            thread::sleep(Duration::from_millis(400));
         });
         let template = ApiTemplate {
             base_url: format!("http://{address}"),
