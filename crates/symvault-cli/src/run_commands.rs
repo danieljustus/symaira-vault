@@ -477,7 +477,7 @@ static SECRET_FILE_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 struct MaterializedSecretFile {
     path: PathBuf,
-    handle: fs::File,
+    handle: Option<fs::File>,
     length: u64,
 }
 
@@ -491,16 +491,19 @@ impl Drop for MaterializedSecretFiles {
     fn drop(&mut self) {
         for file in &mut self.files {
             let zeros = [0u8; 8192];
-            let _ = std::io::Seek::seek(&mut file.handle, std::io::SeekFrom::Start(0));
-            let mut remaining = file.length;
-            while remaining > 0 {
-                let count = remaining.min(zeros.len() as u64) as usize;
-                if std::io::Write::write_all(&mut file.handle, &zeros[..count]).is_err() {
-                    break;
+            if let Some(mut handle) = file.handle.take() {
+                let _ = std::io::Seek::seek(&mut handle, std::io::SeekFrom::Start(0));
+                let mut remaining = file.length;
+                while remaining > 0 {
+                    let count = remaining.min(zeros.len() as u64) as usize;
+                    if std::io::Write::write_all(&mut handle, &zeros[..count]).is_err() {
+                        break;
+                    }
+                    remaining -= count as u64;
                 }
-                remaining -= count as u64;
+                let _ = handle.sync_all();
+                drop(handle);
             }
-            let _ = file.handle.sync_all();
             let _ = fs::remove_file(&file.path);
         }
         if let Some(directory) = self.directory.take() {
@@ -564,7 +567,7 @@ fn materialize_secret_files(
         ));
         materialized.files.push(MaterializedSecretFile {
             path,
-            handle,
+            handle: Some(handle),
             length: content.len() as u64,
         });
     }
@@ -1120,6 +1123,32 @@ mod tests {
         assert!(!result.timed_out);
         assert_eq!(result.stdout, "***");
         assert!(!result.stdout.contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn materialized_secret_file_cleanup_closes_handles_before_unlink() {
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let materialized = materialize_secret_files(&files).expect("materialize secret file");
+        let path = PathBuf::from(
+            materialized
+                .environment
+                .iter()
+                .find(|(name, _)| name == "SYMVAULT_FILE_PIN")
+                .expect("file environment assignment")
+                .1
+                .clone(),
+        );
+        let directory = path.parent().expect("private file directory").to_path_buf();
+        assert!(path.exists());
+        assert!(directory.exists());
+
+        drop(materialized);
+
+        assert!(!path.exists(), "secret file remains after cleanup");
+        assert!(
+            !directory.exists(),
+            "private directory remains after cleanup"
+        );
     }
 
     #[cfg(unix)]
