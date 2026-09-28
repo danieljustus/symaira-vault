@@ -153,7 +153,7 @@ fn oauth_consent(
         );
         let _ = io::stderr().flush();
         let timeout = Duration::from_secs(60);
-        return read_tty_approval(timeout);
+        read_tty_approval(timeout)
     }
     #[cfg(not(unix))]
     {

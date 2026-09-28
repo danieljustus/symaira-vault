@@ -11,6 +11,8 @@ const ACCESS_TOKEN_TTL: Duration = Duration::hours(24);
 const REFRESH_TOKEN_TTL: Duration = Duration::hours(720);
 const MAX_BROWSER_CONSENTS: usize = 256;
 
+type ConsentFn = dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync;
+
 #[derive(Deserialize)]
 struct RegistrationRequest {
     #[serde(default)]
@@ -29,7 +31,7 @@ pub(super) struct OAuthState {
     agent_name: String,
     codes: Mutex<HashMap<String, PendingCode>>,
     browser_requests: Mutex<HashMap<String, BrowserRequest>>,
-    consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+    consent: Box<ConsentFn>,
     verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
 }
 
@@ -51,7 +53,7 @@ impl OAuthState {
     pub(super) fn new(
         root: PathBuf,
         agent_name: String,
-        consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+        consent: Box<ConsentFn>,
         verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Self {
         Self {
@@ -67,6 +69,7 @@ impl OAuthState {
 
 /// Handles the Go-backed DCR, authorization-code, PKCE, token, refresh, and
 /// authorization-server discovery routes. The caller supplies human consent.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn handle(
     state: &OAuthState,
     method: &str,
@@ -423,7 +426,7 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                 Ok((record, access, refresh)) => {
                     OAuthResponse::Http(token_response(&record, access, refresh, now))
                 }
-                Err(_) => OAuthResponse::Http(json_error(
+                Err(_) => OAuthResponse::Http(json_response(
                     400,
                     serde_json::json!({
                         "error": "invalid_grant",
@@ -764,7 +767,7 @@ mod tests {
     #[test]
     fn consent_pkce_access_and_refresh_are_connected_and_single_use() {
         let directory = tempfile::tempdir().unwrap();
-        let mut state = OAuthState::new(
+        let state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
@@ -775,7 +778,7 @@ mod tests {
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=st-1&code_challenge={CHALLENGE}&code_challenge_method=S256"
         );
         let OAuthResponse::Redirect(location) =
-            authorize(&mut state, &authorization, OffsetDateTime::now_utc())
+            authorize(&state, &authorization, OffsetDateTime::now_utc())
         else {
             panic!("approved request must redirect");
         };
@@ -787,7 +790,7 @@ mod tests {
         let token_request =
             format!("grant_type=authorization_code&code={code}&code_verifier={VERIFIER}");
         let (status, token_body) =
-            response_body(token(&mut state, &token_request, OffsetDateTime::now_utc()));
+            response_body(token(&state, &token_request, OffsetDateTime::now_utc()));
         assert_eq!(status, 200);
         let access = token_body["access_token"].as_str().unwrap();
         let refresh = token_body["refresh_token"].as_str().unwrap();
@@ -797,37 +800,29 @@ mod tests {
         assert!(!registry.contains(refresh));
         let registry: serde_json::Value = serde_json::from_str(&registry).unwrap();
         let access_hash = symvault_store::sha256_hex(access.as_bytes());
-        assert_eq!(
-            registry["tokens"][access_hash.as_str()]["agent_name"],
-            "default"
-        );
-        assert_eq!(
-            registry["tokens"][access_hash.as_str()]["allowed_tools"],
-            serde_json::json!(["*"])
-        );
+        let access_record = registry["tokens"]
+            .as_object()
+            .unwrap()
+            .values()
+            .find(|record| record["hash"] == access_hash)
+            .expect("OAuth access token persisted by its Go token ID");
+        assert_eq!(access_record["agent_name"], "default");
+        assert_eq!(access_record["allowed_tools"], serde_json::json!(["*"]));
 
         assert_eq!(
-            response_body(token(&mut state, &token_request, OffsetDateTime::now_utc(),)).0,
+            response_body(token(&state, &token_request, OffsetDateTime::now_utc(),)).0,
             400,
             "authorization codes are single use"
         );
 
         let refresh_request = format!("grant_type=refresh_token&refresh_token={refresh}");
-        let (status, rotated) = response_body(token(
-            &mut state,
-            &refresh_request,
-            OffsetDateTime::now_utc(),
-        ));
+        let (status, rotated) =
+            response_body(token(&state, &refresh_request, OffsetDateTime::now_utc()));
         assert_eq!(status, 200);
         assert_ne!(rotated["access_token"].as_str(), Some(access));
         assert_ne!(rotated["refresh_token"].as_str(), Some(refresh));
         assert_eq!(
-            response_body(token(
-                &mut state,
-                &refresh_request,
-                OffsetDateTime::now_utc(),
-            ))
-            .0,
+            response_body(token(&state, &refresh_request, OffsetDateTime::now_utc(),)).0,
             400,
             "refresh tokens are single use"
         );
@@ -836,7 +831,7 @@ mod tests {
     #[test]
     fn consent_denial_and_failed_pkce_never_mint_tokens() {
         let directory = tempfile::tempdir().unwrap();
-        let mut denied = OAuthState::new(
+        let denied = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Denied),
@@ -848,7 +843,7 @@ mod tests {
         );
         assert_eq!(
             response_body(authorize(
-                &mut denied,
+                &denied,
                 &authorization,
                 OffsetDateTime::now_utc(),
             ))
@@ -857,14 +852,14 @@ mod tests {
         );
         assert!(denied.codes.lock().unwrap().is_empty());
 
-        let mut approved = OAuthState::new(
+        let approved = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
             Box::new(|_| false),
         );
         let OAuthResponse::Redirect(location) =
-            authorize(&mut approved, &authorization, OffsetDateTime::now_utc())
+            authorize(&approved, &authorization, OffsetDateTime::now_utc())
         else {
             panic!("approved request must redirect");
         };
@@ -874,7 +869,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             response_body(token(
-                &mut approved,
+                &approved,
                 &format!("grant_type=authorization_code&code={code}&code_verifier=wrong"),
                 OffsetDateTime::now_utc(),
             ))
@@ -953,7 +948,7 @@ mod tests {
     #[test]
     fn authorization_rejects_unimplemented_scope_requests() {
         let directory = tempfile::tempdir().unwrap();
-        let mut state = OAuthState::new(
+        let state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
@@ -964,12 +959,7 @@ mod tests {
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&code_challenge={CHALLENGE}&code_challenge_method=S256&scope=read"
         );
         assert_eq!(
-            response_body(authorize(
-                &mut state,
-                &authorization,
-                OffsetDateTime::now_utc(),
-            ))
-            .0,
+            response_body(authorize(&state, &authorization, OffsetDateTime::now_utc(),)).0,
             400
         );
         assert!(state.codes.lock().unwrap().is_empty());
