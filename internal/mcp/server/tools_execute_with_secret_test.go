@@ -14,6 +14,7 @@ import (
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestHandleExecuteWithSecret_BasicRun(t *testing.T) {
@@ -256,6 +257,28 @@ func TestHandleExecuteWithSecret_ScopeCheck(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "outside allowed scope") {
 		t.Fatalf("error = %v, want 'outside allowed scope'", err)
+	}
+}
+
+func TestHandleExecuteWithSecret_ScopeChecksDottedBareEntryFallback(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "allowed/foo", map[string]any{"other": "inside"})
+	if err := vault.WriteEntry(vaultDir, "allowed/foo.bar", &vault.Entry{Data: map[string]any{"token": "outside"}}, identity); err != nil {
+		t.Fatalf("write dotted entry: %v", err)
+	}
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"allowed/foo"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	_, err := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"command":     []any{"echo", "should-not-run"},
+		"secret_refs": []any{"op://vault/allowed/foo/bar"},
+	}})
+	if err == nil || !strings.Contains(err.Error(), `secret ref path "allowed/foo.bar" outside allowed scope`) {
+		t.Fatalf("handleExecuteWithSecret() error = %v, want scope denial on resolved bare entry", err)
 	}
 }
 

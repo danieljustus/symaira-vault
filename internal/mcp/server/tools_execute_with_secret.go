@@ -103,7 +103,14 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 				resolverRef = entryPath + "." + field
 			}
 
-			value, resolveErr := secrets.ResolveSecretRef(s.vault, resolverRef)
+			resolvedPath := s.resolveMCPSecretRefTarget(resolverRef)
+			if !s.checkScope(resolvedPath) {
+				s.logAudit(ctx, "execute_with_secret", ref, false)
+				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
+				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
+			}
+
+			value, resolveErr := s.resolveMCPSecretRefAtPath(resolverRef, resolvedPath)
 			if resolveErr != nil {
 				s.logAudit(ctx, "execute_with_secret", ref, false)
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil

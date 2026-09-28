@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	secrets "github.com/danieljustus/symaira-vault/internal/secrets"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -68,14 +71,14 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 			}
-			resolvedPath, _ := secrets.ResolveSecretRefTarget(s.vault, ref)
+			resolvedPath := s.resolveMCPSecretRefTarget(ref)
 			if !s.checkScope(resolvedPath) {
 				s.logAudit(ctx, "run_command", resolvedPath, false)
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
 			}
 
-			value, resolveErr := secrets.ResolveSecretRefAtPath(s.vault, ref, resolvedPath)
+			value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath)
 			if resolveErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 			}
@@ -212,14 +215,14 @@ func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (reso
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 		}
-		resolvedPath, _ := secrets.ResolveSecretRefTarget(s.vault, ref)
+		resolvedPath := s.resolveMCPSecretRefTarget(ref)
 		if !s.checkScope(resolvedPath) {
 			s.logAudit(ctx, "run_command", resolvedPath, false)
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
 		}
 
-		value, resolveErr := secrets.ResolveSecretRefAtPath(s.vault, ref, resolvedPath)
+		value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath)
 		if resolveErr != nil {
 			return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 		}
@@ -251,6 +254,66 @@ func extractPathFromRef(ref string) string {
 		return ref[:idx]
 	}
 	return ref
+}
+
+// resolveMCPSecretRefTarget identifies the entry path selected by the vault's
+// path.field-or-dotted-entry convention. Callers must scope-check the candidate
+// path before this probes it, then scope-check the returned path before reading
+// a fallback bare entry.
+func (s *Server) resolveMCPSecretRefTarget(ref string) string {
+	if idx := strings.LastIndex(ref, "."); idx > 0 {
+		candidatePath := ref[:idx]
+		candidateField := ref[idx+1:]
+		entry, readErr := vaultpkg.ReadEntry(s.vault.Dir, candidatePath, s.vault.Identity)
+		if readErr == nil {
+			if _, ok := entry.Data[candidateField]; ok {
+				return candidatePath
+			}
+		}
+	}
+	return ref
+}
+
+// resolveMCPSecretRefAtPath re-evaluates the reference after its resolved path
+// has passed the caller's scope check. A changed interpretation fails closed,
+// and the fallback entry is not read until its exact path is verified.
+func (s *Server) resolveMCPSecretRefAtPath(ref, expectedPath string) (string, error) {
+	path := ref
+	field := ""
+	var entry *vaultpkg.Entry
+	if idx := strings.LastIndex(ref, "."); idx > 0 {
+		candidatePath := ref[:idx]
+		candidateField := ref[idx+1:]
+		candidate, readErr := vaultpkg.ReadEntry(s.vault.Dir, candidatePath, s.vault.Identity)
+		if readErr == nil {
+			if _, ok := candidate.Data[candidateField]; ok {
+				path = candidatePath
+				field = candidateField
+				entry = candidate
+			}
+		}
+	}
+	if path != expectedPath {
+		return "", fmt.Errorf("secret ref target changed during resolution")
+	}
+	if entry == nil {
+		var err error
+		entry, err = vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", fmt.Errorf("secret ref not found: %s", path)
+			}
+			return "", fmt.Errorf("cannot resolve secret ref %s: %w", ref, err)
+		}
+	}
+	if field != "" {
+		value, ok := entry.Data[field]
+		if !ok {
+			return "", fmt.Errorf("field not found in secret ref %s.%s", path, field)
+		}
+		return fmt.Sprintf("%v", value), nil
+	}
+	return fmt.Sprintf("%v", entry.Data), nil
 }
 
 // parseFileSpec parses one "files" map entry for run_command. It accepts

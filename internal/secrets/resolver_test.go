@@ -120,25 +120,6 @@ func TestResolveSecretRef_NestedField(t *testing.T) {
 	}
 }
 
-func TestResolveSecretRefTargetDistinguishesDottedEntryFallback(t *testing.T) {
-	vault := newTestVault(t)
-	writeTestEntry(t, vault, "allowed/foo", map[string]any{"other": "inside"})
-	writeTestEntry(t, vault, "allowed/foo.bar", map[string]any{"token": "outside"})
-
-	path, field := ResolveSecretRefTarget(vault, "allowed/foo.bar")
-	if path != "allowed/foo.bar" || field != "" {
-		t.Fatalf("ResolveSecretRefTarget() = (%q, %q), want bare dotted entry", path, field)
-	}
-
-	path, field = ResolveSecretRefTarget(vault, "allowed/foo.other")
-	if path != "allowed/foo" || field != "other" {
-		t.Fatalf("ResolveSecretRefTarget() = (%q, %q), want path.field target", path, field)
-	}
-	if _, err := ResolveSecretRefAtPath(vault, "allowed/foo.bar", "allowed/foo"); err == nil {
-		t.Fatal("ResolveSecretRefAtPath() accepted a changed interpretation")
-	}
-}
-
 func TestResolveSecretRef_ErrorKind(t *testing.T) {
 	vault := newTestVault(t)
 	writeTestEntry(t, vault, "github", map[string]any{"password": "s3cret"})
