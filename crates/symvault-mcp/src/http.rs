@@ -771,6 +771,162 @@ mod tests {
             .clone()
     }
 
+    #[test]
+    fn source_bound_notification_returns_202_and_keeps_session_initialized() {
+        let mut handler = ProtocolHandler::new("symaira", "1.0.0");
+        for name in [
+            "initialize",
+            "authenticated_initialized_notification_accepted",
+            "authenticated_prompts_list_after_initialized_notification",
+        ] {
+            let case = go_http_case(name);
+            let request = &case["request"];
+            let response = handle_request(
+                HttpRequest {
+                    method: request["method"].as_str().expect("fixture method"),
+                    path: request["path"].as_str().expect("fixture path"),
+                    content_type: request["content_type"]
+                        .as_str()
+                        .expect("fixture content type"),
+                    accept: request["accept"].as_str().expect("fixture Accept"),
+                    protocol_version: request["protocol_version"]
+                        .as_str()
+                        .expect("fixture protocol version"),
+                    body: request["body"].as_str().expect("fixture body"),
+                },
+                &mut handler,
+            )
+            .expect("handle fixture request");
+            assert_eq!(
+                response.status,
+                case["response"]["status"].as_u64().expect("fixture status") as u16,
+                "{name} status"
+            );
+            assert_eq!(
+                String::from_utf8(response.body).expect("UTF-8 response"),
+                case["response"]["body"]
+                    .as_str()
+                    .expect("fixture response body"),
+                "{name} body"
+            );
+        }
+    }
+
+    #[test]
+    fn source_bound_authenticated_sse_get_matches_go_method_rejection() {
+        let go = go_http_case("authenticated_sse_get_rejected_with_allow_post");
+        assert_eq!(go["response"]["status"], 405);
+        assert_eq!(go["response"]["headers"]["Allow"], "POST");
+        let response = round_trip_wire(&format!(
+            "GET /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: 0\r\n\r\n"
+        ));
+        assert_eq!(
+            raw_status(&response),
+            go["response"]["status"].as_u64().expect("Go status") as u16
+        );
+        assert!(response.contains("Allow: POST\r\n"), "{response}");
+        assert!(
+            response.contains("Content-Type: application/json\r\n"),
+            "{response}"
+        );
+        assert_eq!(
+            raw_body(&response),
+            go["response"]["body"].as_str().expect("Go response body")
+        );
+    }
+
+    #[test]
+    fn source_bound_post_sse_negotiation_matches_go_json_or_406_paths() {
+        let wire_request = |case: &serde_json::Value| {
+            let request = &case["request"];
+            let body = request["body"].as_str().expect("fixture request body");
+            format!(
+                "{} {} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: {}\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: {}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                request["method"].as_str().expect("fixture method"),
+                request["path"].as_str().expect("fixture path"),
+                request["origin"].as_str().expect("fixture origin"),
+                request["agent"].as_str().expect("fixture agent"),
+                request["content_type"]
+                    .as_str()
+                    .expect("fixture content type"),
+                request["accept"].as_str().expect("fixture Accept"),
+                request["protocol_version"]
+                    .as_str()
+                    .expect("fixture protocol version"),
+                body.len(),
+                body,
+            )
+        };
+
+        let initialized = go_http_case("initialize");
+        assert_eq!(
+            initialized["request"]["accept"],
+            "text/event-stream, application/json"
+        );
+        assert_eq!(initialized["response"]["status"], 200);
+        assert_eq!(
+            initialized["response"]["headers"]["Content-Type"],
+            "application/json"
+        );
+        let rust_initialized = round_trip_wire(&wire_request(&initialized));
+        assert_eq!(raw_status(&rust_initialized), 200);
+        assert!(rust_initialized.contains("Content-Type: application/json\r\n"));
+        assert_eq!(
+            raw_body(&rust_initialized),
+            initialized["response"]["body"]
+                .as_str()
+                .expect("Go initialize body")
+        );
+
+        for name in [
+            "authenticated_sse_only_prompts_list_rejected",
+            "authenticated_sse_only_health_tool_rejected",
+        ] {
+            let go = go_http_case(name);
+            assert_eq!(go["request"]["accept"], "text/event-stream");
+            assert_eq!(go["response"]["status"], 406);
+            assert_eq!(
+                go["response"]["headers"]["Content-Type"],
+                "application/json"
+            );
+            let rust = round_trip_wire(&wire_request(&go));
+            assert_eq!(raw_status(&rust), 406, "{name} status");
+            assert!(
+                rust.contains("Content-Type: application/json\r\n"),
+                "{rust}"
+            );
+            assert_eq!(
+                raw_body(&rust),
+                go["response"]["body"]
+                    .as_str()
+                    .expect("Go negotiation body"),
+                "{name} body"
+            );
+            assert!(!rust.contains("Content-Type: text/event-stream\r\n"));
+        }
+    }
+
+    #[test]
+    fn source_bound_go_keep_alive_reuse_is_a_rust_close_per_request_difference() {
+        let go_initial = go_http_case("initialize");
+        let go_continuation = go_http_case("authenticated_prompts_list_after_initialize");
+        assert!(
+            !go_initial["response"]["connection_reused"]
+                .as_bool()
+                .unwrap_or(false)
+        );
+        assert!(
+            go_continuation["response"]["connection_reused"]
+                .as_bool()
+                .unwrap()
+        );
+
+        // The Rust listener intentionally bounds each connection to one request
+        // and sends Connection: close, while the Go HTTP server reuses keep-alive.
+        let rust = round_trip(true, "http://127.0.0.1");
+        assert!(rust.contains("Connection: close\r\n"), "{rust}");
+    }
+
     fn raw_status(response: &str) -> u16 {
         response
             .split_whitespace()

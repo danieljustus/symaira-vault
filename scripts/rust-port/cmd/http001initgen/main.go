@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"path/filepath"
 	"sort"
@@ -85,10 +86,11 @@ type request struct {
 }
 
 type response struct {
-	Status       int               `json:"status"`
-	Headers      map[string]string `json:"headers"`
-	AbsentHeader []string          `json:"absent_headers"`
-	Body         string            `json:"body"`
+	Status           int               `json:"status"`
+	Headers          map[string]string `json:"headers"`
+	AbsentHeader     []string          `json:"absent_headers"`
+	Body             string            `json:"body"`
+	ConnectionReused bool              `json:"connection_reused,omitempty"`
 }
 
 func main() {
@@ -153,12 +155,32 @@ func main() {
 		{
 			Name:            "initialize",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream, application/json", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixture","version":"1"}}}`},
 		},
 		{
 			Name:            "authenticated_prompts_list_after_initialize",
 			GoAuthenticated: true,
 			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":2,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "authenticated_sse_only_prompts_list_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":22,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "authenticated_initialized_notification_accepted",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","method":"notifications/initialized"}`},
+		},
+		{
+			Name:            "authenticated_prompts_list_after_initialized_notification",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: `{"jsonrpc":"2.0","id":21,"method":"prompts/list"}`},
+		},
+		{
+			Name:            "authenticated_sse_get_rejected_with_allow_post",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodGet, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", Authenticated: true, Body: ""},
 		},
 		{
 			Name:            "authenticated_unsupported_protocol_version",
@@ -178,7 +200,12 @@ func main() {
 		{
 			Name:            "authenticated_allowed_health_tool",
 			GoAuthenticated: true,
-			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "application/json, text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream, application/json", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
+		},
+		{
+			Name:            "authenticated_sse_only_health_tool_rejected",
+			GoAuthenticated: true,
+			Request:         request{Method: http.MethodPost, Path: "/mcp", Origin: "http://127.0.0.1", ContentType: "application/json", Accept: "text/event-stream", ProtocolVersion: "2025-11-25", Agent: "default", TokenName: "health", TokenAgent: "default", AllowedTools: []string{"health"}, Authenticated: true, Body: `{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"health","arguments":{}}}`},
 		},
 		{
 			Name:            "token_agent_mismatch_rejected",
@@ -317,12 +344,17 @@ func doRequest(client *http.Client, addr, token string, scopedTokens map[string]
 	if req.HeaderRepeat > 0 {
 		httpReq.Header.Set("X-Rust-Port-Fixture", strings.Repeat("x", req.HeaderRepeat))
 	}
+	connectionReused := false
+	trace := &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) {
+		connectionReused = info.Reused
+	}}
+	httpReq = httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
 	httpResp, err := client.Do(httpReq)
 	check(err)
-	return captureResponse(httpResp)
+	return captureResponse(httpResp, connectionReused)
 }
 
-func captureResponse(httpResp *http.Response) response {
+func captureResponse(httpResp *http.Response, connectionReused bool) response {
 	responseBody, err := io.ReadAll(httpResp.Body)
 	_ = httpResp.Body.Close()
 	check(err)
@@ -330,12 +362,15 @@ func captureResponse(httpResp *http.Response) response {
 	if value := httpResp.Header.Get("Content-Type"); value != "" {
 		headers["Content-Type"] = value
 	}
+	if value := httpResp.Header.Get("Allow"); value != "" {
+		headers["Allow"] = value
+	}
 	absent := []string{}
 	if httpResp.Header.Get("MCP-Protocol-Version") == "" {
 		absent = append(absent, "MCP-Protocol-Version")
 	}
 	sort.Strings(absent)
-	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody)}
+	return response{Status: httpResp.StatusCode, Headers: headers, AbsentHeader: absent, Body: string(responseBody), ConnectionReused: connectionReused}
 }
 
 func usesRawRequest(req request) bool {
@@ -384,7 +419,7 @@ func doRawRequest(addr, token string, scopedTokens map[string]string, req reques
 	check(err)
 	httpResp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: req.Method})
 	check(err)
-	return captureResponse(httpResp)
+	return captureResponse(httpResp, false)
 }
 
 func check(err error) {
