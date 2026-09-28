@@ -3,6 +3,7 @@ use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
     ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, normalize_scope_path,
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
@@ -24,6 +25,18 @@ use symvault_store::{
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
+
+#[derive(Default)]
+struct ResolvedRunFiles {
+    content: BTreeMap<String, Vec<u8>>,
+    redactions: Vec<Vec<u8>>,
+    audit: Vec<String>,
+}
+
+enum RunFilesError {
+    Tool(String),
+    Denied(String),
+}
 
 /// Human-approval seam for the MCP share lifecycle.
 ///
@@ -506,12 +519,6 @@ impl StoreReadOnlyRuntime {
         let Some(executor) = &self.command_executor else {
             return Err("run_command has no configured command executor".into());
         };
-        if arguments.get("files").is_some_and(|value| !value.is_null()) {
-            self.append_audit("run_command", "<unsupported:files>", false);
-            return Ok(ToolCallResult::error(
-                "argument \"files\" is not supported by this Rust runtime yet",
-            ));
-        }
         if arguments
             .get("working_dir")
             .is_some_and(|value| !value.is_null() && !value.is_string())
@@ -668,6 +675,11 @@ impl StoreReadOnlyRuntime {
             };
             environment.insert(name.clone(), value);
         }
+        let files = match self.resolve_run_command_files(arguments.get("files")) {
+            Ok(files) => files,
+            Err(RunFilesError::Tool(message)) => return Ok(ToolCallResult::error(message)),
+            Err(RunFilesError::Denied(message)) => return Err(message),
+        };
         let mode = if self.approval_mode.is_empty() && self.require_approval {
             "prompt"
         } else {
@@ -686,6 +698,8 @@ impl StoreReadOnlyRuntime {
         let execution = match executor.run(
             &command,
             &environment,
+            &files.content,
+            &files.redactions,
             working_directory,
             Duration::from_secs(timeout_seconds),
         ) {
@@ -695,7 +709,12 @@ impl StoreReadOnlyRuntime {
                 return Ok(ToolCallResult::error(error));
             }
         };
-        self.append_audit("run_command", "<command>", !execution.timed_out);
+        let audit_path = if files.audit.is_empty() {
+            "<command>".to_owned()
+        } else {
+            format!("<command>, files=[{}]", files.audit.join(", "))
+        };
+        self.append_audit("run_command", &audit_path, !execution.timed_out);
         let stdout = crate::render::embed_as_data("command_output", &execution.stdout)
             .map_err(|error| format!("embed command output: {error}"))?;
         let stderr = crate::render::embed_as_data("command_output", &execution.stderr)
@@ -715,6 +734,90 @@ impl StoreReadOnlyRuntime {
             }))
             .map_err(|error| error.to_string())?,
         ))
+    }
+
+    fn resolve_run_command_files(
+        &self,
+        raw: Option<&Value>,
+    ) -> Result<ResolvedRunFiles, RunFilesError> {
+        let mut files = ResolvedRunFiles::default();
+        let Some(raw) = raw.filter(|value| !value.is_null()) else {
+            return Ok(files);
+        };
+        let Some(file_map) = raw.as_object() else {
+            self.append_audit("run_command", "<invalid>", false);
+            return Err(RunFilesError::Tool(
+                "argument \"files\" must be an object".into(),
+            ));
+        };
+
+        let mut audit = Vec::with_capacity(file_map.len());
+        for (name, spec) in file_map {
+            let (reference, encoding) = parse_run_file_spec(spec)
+                .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
+            let candidate_path = extract_path_from_secret_ref(&reference);
+            self.authorize_run_secret_path(&candidate_path)?;
+            let path = self
+                .inner
+                .resolve_secret_ref_path(&reference)
+                .map_err(|error| {
+                    RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
+                })?;
+            self.authorize_run_secret_path(&path)?;
+            let source = self
+                .inner
+                .resolve_secret_ref_at_path(&reference, &path)
+                .map_err(|error| {
+                    RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
+                })?;
+            let content = if encoding == "base64" {
+                BASE64_STANDARD.decode(source.as_bytes()).map_err(|_| {
+                    RunFilesError::Tool(format!(
+                        "files.{name}: cannot base64-decode resolved value"
+                    ))
+                })?
+            } else {
+                source.as_bytes().to_vec()
+            };
+            if !source.is_empty() {
+                files.redactions.push(source.as_bytes().to_vec());
+            }
+            if !content.is_empty() && content != source.as_bytes() {
+                files.redactions.push(content.clone());
+            }
+            files.content.insert(name.clone(), content);
+            audit.push(format!("{name}:{reference}"));
+        }
+        audit.sort();
+        files.audit = audit;
+        Ok(files)
+    }
+
+    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
+        if !self.inner.scope_allows(path) {
+            self.append_audit("scope_denied", path, false);
+            return Err(RunFilesError::Denied(format!(
+                "access denied: secret ref path {path:?} outside allowed scope"
+            )));
+        }
+        if let Some(policy) = &self.policy {
+            let result = policy.evaluate(EvalContext {
+                agent_id: self.agent_name.clone(),
+                path: path.to_owned(),
+                action_type: "run".into(),
+                tool_name: "run_command".into(),
+                ..EvalContext::default()
+            });
+            if !result.matched || result.action != Action::Allow {
+                self.append_audit("policy_denied", path, false);
+                return Err(RunFilesError::Denied(if !result.matched {
+                    "policy: no matching rule (default deny)".into()
+                } else {
+                    format!("policy denied by rule {:?}", result.rule_name)
+                }));
+            }
+        }
+        Ok(())
     }
 
     /// Supplies the caller-owned key without copying it into public runtime config.
@@ -1741,6 +1844,33 @@ fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
     Ok(number as u64)
 }
 
+fn parse_run_file_spec(raw: &Value) -> Result<(String, &str), String> {
+    match raw {
+        Value::String(reference) => Ok((reference.clone(), "")),
+        Value::Object(spec) => {
+            let reference = spec
+                .get("ref")
+                .and_then(Value::as_str)
+                .filter(|reference| !reference.is_empty())
+                .ok_or_else(|| "missing required \"ref\" string".to_owned())?;
+            let encoding = match spec.get("encoding") {
+                None | Some(Value::Null) => "",
+                Some(Value::String(encoding)) => encoding.as_str(),
+                Some(_) => return Err("\"encoding\" must be a string".into()),
+            };
+            if !encoding.is_empty() && encoding != "base64" {
+                return Err(format!(
+                    "unsupported encoding {encoding:?} (supported: base64)"
+                ));
+            }
+            Ok((reference.to_owned(), encoding))
+        }
+        _ => {
+            Err("must be a string secret reference or {\"ref\":...,\"encoding\":...} object".into())
+        }
+    }
+}
+
 fn extract_path_from_secret_ref(reference: &str) -> String {
     reference.rfind('.').filter(|index| *index > 0).map_or_else(
         || reference.to_owned(),
@@ -1790,7 +1920,7 @@ pub fn unavailable_tool(
 mod tests {
     use super::{
         MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
-        parse_command_timeout, render_list_shares,
+        parse_command_timeout, parse_run_file_spec, render_list_shares,
     };
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
     use serde_json::json;
@@ -1861,6 +1991,8 @@ mod tests {
             &self,
             command: &[String],
             environment: &BTreeMap<String, String>,
+            files: &BTreeMap<String, Vec<u8>>,
+            additional_redactions: &[Vec<u8>],
             working_directory: Option<&Path>,
             timeout: Duration,
         ) -> Result<CommandExecution, String> {
@@ -1870,6 +2002,8 @@ mod tests {
                 &BTreeMap::from([("TOKEN".into(), "synthetic-secret".into())])
             );
             assert_eq!(working_directory, None);
+            assert!(files.is_empty());
+            assert!(additional_redactions.is_empty());
             assert_eq!(timeout, Duration::from_secs(30));
             Ok(CommandExecution {
                 stdout: "ok\n".into(),
@@ -1877,6 +2011,37 @@ mod tests {
                 exit_code: 0,
                 timed_out: false,
                 duration: Duration::from_millis(7),
+            })
+        }
+    }
+
+    struct FileCommandExecutor {
+        expected_files: BTreeMap<String, Vec<u8>>,
+        expected_redactions: Vec<Vec<u8>>,
+    }
+
+    impl CommandExecutor for FileCommandExecutor {
+        fn run(
+            &self,
+            command: &[String],
+            environment: &BTreeMap<String, String>,
+            files: &BTreeMap<String, Vec<u8>>,
+            additional_redactions: &[Vec<u8>],
+            working_directory: Option<&Path>,
+            timeout: Duration,
+        ) -> Result<CommandExecution, String> {
+            assert_eq!(command, ["sh", "-c", "echo ok"]);
+            assert!(environment.is_empty());
+            assert_eq!(files, &self.expected_files);
+            assert_eq!(additional_redactions, self.expected_redactions);
+            assert_eq!(working_directory, None);
+            assert_eq!(timeout, Duration::from_secs(30));
+            Ok(CommandExecution {
+                stdout: "ok\n".into(),
+                stderr: String::new(),
+                exit_code: 0,
+                timed_out: false,
+                duration: Duration::from_millis(1),
             })
         }
     }
@@ -1925,6 +2090,80 @@ mod tests {
         assert_eq!(output["exit_code"], 0);
         assert!(output["stdout"].as_str().unwrap().contains("ok"));
         assert_eq!(output["duration_ms"], 7);
+    }
+
+    #[test]
+    fn run_command_resolves_and_decodes_file_refs_before_real_executor_boundary() {
+        use base64::Engine as _;
+
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        let binary = vec![0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x10];
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&binary);
+        Store::open(directory.path(), &identity)
+            .expect("open store")
+            .write_new_entry(
+                "service",
+                &Entry {
+                    path: "service".into(),
+                    data: BTreeMap::from([
+                        ("pin".into(), json!("synthetic-file-pin")),
+                        ("certificate".into(), json!(encoded)),
+                    ]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source entry");
+        let expected_files = BTreeMap::from([
+            ("CERT".into(), binary.clone()),
+            ("PIN".into(), b"synthetic-file-pin".to_vec()),
+        ]);
+        let expected_redactions = vec![
+            encoded.as_bytes().to_vec(),
+            binary,
+            b"synthetic-file-pin".to_vec(),
+        ];
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["*".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FileCommandExecutor {
+            expected_files,
+            expected_redactions,
+        }));
+        let arguments = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "files": {
+                "PIN": "service.pin",
+                "CERT": {"ref": "service.certificate", "encoding": "base64"}
+            }
+        });
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("authorized");
+        let result = runtime.call("run_command", &arguments).expect("dispatch");
+        assert!(!result.is_error);
+        assert!(result.text.contains("\"exit_code\":0"));
     }
 
     #[test]
@@ -1995,7 +2234,74 @@ mod tests {
     }
 
     #[test]
-    fn run_command_rejects_unsupported_files_and_non_string_working_dir() {
+    fn run_command_files_scope_checks_dotted_bare_entry_fallback() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(directory.path(), &identity).expect("open store");
+        store
+            .write_new_entry(
+                "allowed/foo",
+                &Entry {
+                    path: "allowed/foo".into(),
+                    data: BTreeMap::from([("other".into(), json!("inside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write candidate entry");
+        store
+            .write_new_entry(
+                "allowed/foo.bar",
+                &Entry {
+                    path: "allowed/foo.bar".into(),
+                    data: BTreeMap::from([("token".into(), json!("outside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write dotted bare entry");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["allowed/foo".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+        let arguments = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "files": {"TOKEN": "allowed/foo.bar"}
+        });
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("base authorization");
+        let error = runtime
+            .call("run_command", &arguments)
+            .expect_err("resolved bare entry is outside configured scope");
+        assert_eq!(
+            error,
+            "access denied: secret ref path \"allowed/foo.bar\" outside allowed scope"
+        );
+    }
+
+    #[test]
+    fn run_command_rejects_invalid_files_and_non_string_working_dir() {
         let directory = tempdir().expect("temporary vault directory");
         fs::create_dir(directory.path().join("entries")).expect("entries directory");
         fs::write(
@@ -2023,8 +2329,8 @@ mod tests {
 
         for (arguments, expected) in [
             (
-                json!({"command":["sh", "-c", "echo ok"], "files":{}}),
-                "argument \"files\" is not supported by this Rust runtime yet",
+                json!({"command":["sh", "-c", "echo ok"], "files":"not an object"}),
+                "argument \"files\" must be an object",
             ),
             (
                 json!({"command":["sh", "-c", "echo ok"], "working_dir":true}),
@@ -2061,6 +2367,32 @@ mod tests {
             "TOKEN".to_owned(),
         ];
         assert_eq!(denied_env_names(names.iter()), ["PATH", "PYTHONPATH"]);
+    }
+
+    #[test]
+    fn run_file_specs_match_go_string_and_base64_forms() {
+        assert_eq!(
+            parse_run_file_spec(&json!("service.pin")).unwrap(),
+            ("service.pin".into(), "")
+        );
+        assert_eq!(
+            parse_run_file_spec(&json!({"ref":"service.cert","encoding":"base64"})).unwrap(),
+            ("service.cert".into(), "base64")
+        );
+        assert_eq!(
+            parse_run_file_spec(&json!({"encoding":"base64"})).unwrap_err(),
+            "missing required \"ref\" string"
+        );
+        assert!(
+            parse_run_file_spec(&json!({"ref":"service.cert","encoding":1}))
+                .unwrap_err()
+                .contains("encoding\" must be a string")
+        );
+        assert!(
+            parse_run_file_spec(&json!({"ref":"service.cert","encoding":"rot13"}))
+                .unwrap_err()
+                .contains("unsupported encoding")
+        );
     }
 
     #[test]

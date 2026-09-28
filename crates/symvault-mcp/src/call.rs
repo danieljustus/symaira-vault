@@ -124,6 +124,8 @@ pub trait CommandExecutor: Send + Sync {
         &self,
         command: &[String],
         environment: &BTreeMap<String, String>,
+        files: &BTreeMap<String, Vec<u8>>,
+        additional_redactions: &[Vec<u8>],
         working_directory: Option<&Path>,
         timeout: Duration,
     ) -> Result<CommandExecution, String>;

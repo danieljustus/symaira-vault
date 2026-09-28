@@ -1509,6 +1509,7 @@ fn run_cli() -> ExitCode {
                 let result = run_commands::run_process(run_commands::ProcessOptions {
                     command: &command,
                     environment: &environment.values,
+                    files: &std::collections::BTreeMap::new(),
                     extra_environment: &[],
                     generic_redaction: true,
                     passthrough: &passthrough,

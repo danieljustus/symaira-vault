@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f894",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "2b703647",
+    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
     "source_files": [
       "internal/mcp/server/tool_registry.go",
       "internal/mcp/server/leanmode.go",
@@ -12,8 +12,8 @@
       "internal/mcp/server/tools_totp.go",
       "internal/mcp/server/server_authorize.go"
     ],
-    "source_hash": "84035cd3f669596d81313612c00f29fc45432ea22a6cb61b0c59ddc3f811a14c",
-    "generator_hash": "fe09b62cf609b880e250c5856c39cb555cbf7b942ca831b42d7c53e349fbc612"
+    "source_hash": "3d42b1c303d0f45e7098ddf5a24e5b70471ca4ea11ddc6cc98437982e199f014",
+    "generator_hash": "6f234d9f22d2f72aacc9ac583456c6cd3d71292f5fde352f46e90631f6321646"
   },
   "catalog": [
     {
@@ -438,6 +438,10 @@
           },
           "env": {
             "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
+            "type": "object"
+          },
+          "files": {
+            "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
             "type": "object"
           },
           "timeout": {
@@ -1305,6 +1309,10 @@
               },
               "env": {
                 "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
+                "type": "object"
+              },
+              "files": {
+                "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
                 "type": "object"
               },
               "timeout": {
@@ -3472,6 +3480,10 @@
                 "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
                 "type": "object"
               },
+              "files": {
+                "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
+                "type": "object"
+              },
               "timeout": {
                 "description": "Timeout in seconds (default: 30)",
                 "type": "number"
@@ -4429,6 +4441,10 @@
                 "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
                 "type": "object"
               },
+              "files": {
+                "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
+                "type": "object"
+              },
               "timeout": {
                 "description": "Timeout in seconds (default: 30)",
                 "type": "number"
@@ -5200,6 +5216,10 @@
                 "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
                 "type": "object"
               },
+              "files": {
+                "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
+                "type": "object"
+              },
               "timeout": {
                 "description": "Timeout in seconds (default: 30)",
                 "type": "number"
@@ -5948,6 +5968,10 @@
               },
               "env": {
                 "description": "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})",
+                "type": "object"
+              },
+              "files": {
+                "description": "Map of safe file names to secret references or {ref, encoding: base64} objects. Files are materialized ephemerally and exposed as SYMVAULT_FILE_\u003cname\u003e paths.",
                 "type": "object"
               },
               "timeout": {

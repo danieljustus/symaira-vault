@@ -11,6 +11,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -63,17 +64,26 @@ impl CommandExecutor for McpCommandExecutor {
         &self,
         command: &[String],
         environment: &BTreeMap<String, String>,
+        files: &BTreeMap<String, Vec<u8>>,
+        additional_redactions: &[Vec<u8>],
         working_directory: Option<&Path>,
         timeout: Duration,
     ) -> Result<CommandExecution, String> {
-        let redactions = environment
+        let mut redactions = environment
             .values()
             .filter(|value| !value.is_empty())
             .map(|value| value.as_bytes().to_vec())
             .collect::<Vec<_>>();
+        redactions.extend(
+            additional_redactions
+                .iter()
+                .filter(|value| !value.is_empty())
+                .cloned(),
+        );
         let result = run_process(ProcessOptions {
             command,
             environment,
+            files,
             extra_environment: &[],
             passthrough: &[],
             working_directory,
@@ -99,6 +109,9 @@ impl CommandExecutor for McpCommandExecutor {
 pub(crate) struct ProcessOptions<'a> {
     pub(crate) command: &'a [String],
     pub(crate) environment: &'a BTreeMap<String, String>,
+    /// Secret file bytes materialized into private, short-lived files and
+    /// exposed to the child as `SYMVAULT_FILE_<name>` paths.
+    pub(crate) files: &'a BTreeMap<String, Vec<u8>>,
     /// Additional native environment assignments, used when a value is not
     /// guaranteed to be valid UTF-8 (for example a materialized file path).
     pub(crate) extra_environment: &'a [(OsString, OsString)],
@@ -324,6 +337,7 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     if options.command.is_empty() {
         return Err("command must contain at least one element".to_owned());
     }
+    let materialized_files = materialize_secret_files(options.files)?;
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
@@ -356,6 +370,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         child_command.env(name, value);
     }
     for (name, value) in options.extra_environment {
+        child_command.env(name, value);
+    }
+    for (name, value) in &materialized_files.environment {
         child_command.env(name, value);
     }
     #[cfg(windows)]
@@ -454,6 +471,141 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         stderr_truncated,
         rejected_env_vars,
     })
+}
+
+static SECRET_FILE_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+struct MaterializedSecretFile {
+    path: PathBuf,
+    handle: fs::File,
+    length: u64,
+}
+
+struct MaterializedSecretFiles {
+    directory: Option<PathBuf>,
+    files: Vec<MaterializedSecretFile>,
+    environment: Vec<(OsString, OsString)>,
+}
+
+impl Drop for MaterializedSecretFiles {
+    fn drop(&mut self) {
+        for file in &mut self.files {
+            let zeros = [0u8; 8192];
+            let _ = std::io::Seek::seek(&mut file.handle, std::io::SeekFrom::Start(0));
+            let mut remaining = file.length;
+            while remaining > 0 {
+                let count = remaining.min(zeros.len() as u64) as usize;
+                if std::io::Write::write_all(&mut file.handle, &zeros[..count]).is_err() {
+                    break;
+                }
+                remaining -= count as u64;
+            }
+            let _ = file.handle.sync_all();
+            let _ = fs::remove_file(&file.path);
+        }
+        if let Some(directory) = self.directory.take() {
+            // Never recurse into child-controlled contents. An unexpected
+            // replacement remains on disk instead of deleting outside data.
+            let _ = fs::remove_dir(directory);
+        }
+    }
+}
+
+fn materialize_secret_files(
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<MaterializedSecretFiles, String> {
+    let mut materialized = MaterializedSecretFiles {
+        directory: None,
+        files: Vec::with_capacity(files.len()),
+        environment: Vec::with_capacity(files.len()),
+    };
+    if files.is_empty() {
+        return Ok(materialized);
+    }
+
+    let mut directory = None;
+    for _ in 0..64 {
+        let sequence = SECRET_FILE_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let candidate =
+            std::env::temp_dir().join(format!("symvault-file-{}-{sequence}", std::process::id()));
+        match create_secret_file_directory(&candidate) {
+            Ok(()) => {
+                directory = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("create ephemeral file directory: {error}")),
+        }
+    }
+    let directory = directory.ok_or_else(|| {
+        "create ephemeral file directory: temporary name space exhausted".to_owned()
+    })?;
+    materialized.directory = Some(directory.clone());
+
+    for (name, content) in files {
+        if !is_safe_secret_file_name(name) {
+            return Err(format!(
+                "invalid file name {name:?}: must match [A-Za-z0-9_]+"
+            ));
+        }
+        let path = directory.join(name);
+        let mut handle = create_secret_file(&path)
+            .map_err(|error| format!("materialize file {name:?}: {error}"))?;
+        if let Err(error) =
+            std::io::Write::write_all(&mut handle, content).and_then(|()| handle.sync_all())
+        {
+            drop(handle);
+            let _ = fs::remove_file(&path);
+            return Err(format!("materialize file {name:?}: {error}"));
+        }
+        materialized.environment.push((
+            OsString::from(format!("SYMVAULT_FILE_{name}")),
+            path.as_os_str().to_os_string(),
+        ));
+        materialized.files.push(MaterializedSecretFile {
+            path,
+            handle,
+            length: content.len() as u64,
+        });
+    }
+    Ok(materialized)
+}
+
+fn is_safe_secret_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+#[cfg(unix)]
+fn create_secret_file_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt as _;
+    let mut builder = fs::DirBuilder::new();
+    builder.mode(0o700).create(path)
+}
+
+#[cfg(not(unix))]
+fn create_secret_file_directory(path: &Path) -> std::io::Result<()> {
+    fs::create_dir(path)
+}
+
+#[cfg(unix)]
+fn create_secret_file(path: &Path) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+}
+
+#[cfg(not(unix))]
+fn create_secret_file(path: &Path) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
 }
 
 fn terminate_process_tree(child: &mut std::process::Child) {
@@ -954,13 +1106,97 @@ mod tests {
         ];
         let environment = BTreeMap::from([("TOKEN".to_owned(), "synthetic-secret".to_owned())]);
         let result = executor
-            .run(&command, &environment, None, Duration::from_secs(2))
+            .run(
+                &command,
+                &environment,
+                &BTreeMap::new(),
+                &[],
+                None,
+                Duration::from_secs(2),
+            )
             .expect("fake child process");
 
         assert_eq!(result.exit_code, 0);
         assert!(!result.timed_out);
         assert_eq!(result.stdout, "***");
         assert!(!result.stdout.contains("synthetic-secret"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mcp_command_executor_materializes_private_files_and_cleans_them_after_success() {
+        let marker = tempfile::tempdir().expect("marker directory");
+        let environment = BTreeMap::from([(
+            "MARKER".to_owned(),
+            marker
+                .path()
+                .join("file-path")
+                .to_string_lossy()
+                .into_owned(),
+        )]);
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            r#"printf '%s\n' "$(ls -ld "$(dirname "$SYMVAULT_FILE_PIN")" | cut -c1-10)" "$(ls -l "$SYMVAULT_FILE_PIN" | cut -c1-10)" "$(cat "$SYMVAULT_FILE_PIN")" "$SYMVAULT_FILE_PIN""#.to_owned(),
+        ];
+        let result = McpCommandExecutor::new()
+            .run(
+                &command,
+                &environment,
+                &files,
+                &[b"synthetic-file-pin".to_vec()],
+                None,
+                Duration::from_secs(2),
+            )
+            .expect("child should read its temporary secret file");
+
+        assert_eq!(result.exit_code, 0, "{}", result.stderr);
+        let lines = result.stdout.lines().collect::<Vec<_>>();
+        assert_eq!(lines[0], "drwx------");
+        assert_eq!(lines[1], "-rw-------");
+        assert_eq!(lines[2], "***");
+        let path = PathBuf::from(lines[3]);
+        assert!(!path.exists(), "secret file remains after child exit");
+        assert!(
+            !path.parent().expect("private temp directory").exists(),
+            "private directory remains after child exit"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mcp_command_executor_cleans_materialized_files_after_timeout() {
+        let marker = tempfile::tempdir().expect("marker directory");
+        let marker_path = marker.path().join("file-path");
+        let environment = BTreeMap::from([(
+            "MARKER".to_owned(),
+            marker_path.to_string_lossy().into_owned(),
+        )]);
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "printf '%s' \"$SYMVAULT_FILE_PIN\" > \"$MARKER\"; sleep 10".to_owned(),
+        ];
+        let result = McpCommandExecutor::new()
+            .run(
+                &command,
+                &environment,
+                &files,
+                &[b"synthetic-file-pin".to_vec()],
+                None,
+                Duration::from_millis(500),
+            )
+            .expect("timed out command returns its result");
+
+        assert!(result.timed_out);
+        let path = PathBuf::from(fs::read_to_string(marker_path).expect("child wrote path"));
+        assert!(!path.exists(), "secret file remains after timeout");
+        assert!(
+            !path.parent().expect("private temp directory").exists(),
+            "private directory remains after timeout"
+        );
     }
 
     #[test]
@@ -1005,6 +1241,7 @@ mod tests {
         let result = run_process(ProcessOptions {
             command: &command,
             environment: &empty,
+            files: &BTreeMap::new(),
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,
@@ -1035,6 +1272,7 @@ mod tests {
         let result = run_process(ProcessOptions {
             command: &command,
             environment: &environment,
+            files: &BTreeMap::new(),
             extra_environment: &[],
             passthrough: &[],
             working_directory: None,
