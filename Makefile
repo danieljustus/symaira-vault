@@ -434,7 +434,7 @@ mcp-http-init-differential: mcp-http-init-fixtures-check
 # HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
 .PHONY: mcp-oauth-contract
 mcp-oauth-contract:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRegisterBoundsPersistentClientStore|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
 	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
 
