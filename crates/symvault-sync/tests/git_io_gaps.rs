@@ -4,16 +4,10 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs,
+    io::{Read, Write},
+    net::TcpListener,
     path::{Path, PathBuf},
     process::{Command, Output},
-};
-// Only the POSIX-gated git-IO cases spawn a fixture server or a `#!/bin/sh` helper.
-#[cfg(unix)]
-use std::io::Write;
-#[cfg(unix)]
-use std::{
-    io::Read,
-    net::TcpListener,
     thread,
     time::{Duration, Instant},
 };
@@ -81,8 +75,7 @@ fn assert_pull_projection(result: &symvault_sync::git::PullResult, expected: &Va
     );
 }
 
-// Only the POSIX-gated git-IO cases use these helpers; Windows has no `#!/bin/sh`
-// and no credential helper that lets the fixture's 401 surface.
+// The POSIX-gated git-IO cases use this helper; Windows has no `#!/bin/sh`.
 #[cfg(unix)]
 fn assert_push_projection(result: &symvault_sync::git::PushResult, expected: &Value) {
     assert_eq!(result.success, expected_bool(expected, "success"));
@@ -366,7 +359,6 @@ fn pull_aborts_merge_state_created_by_this_invocation() {
     assert!(unresolved.is_empty(), "pull left unresolved index state");
 }
 
-#[cfg(unix)]
 fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind auth server");
     let port = listener.local_addr().unwrap().port();
@@ -392,11 +384,6 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
     (port, handle)
 }
 
-// Windows git goes through the Git Credential Manager, which intercepts the
-// unauthenticated request and reports a network error instead of letting the
-// fixture's 401 surface as an authentication failure. The Go oracle's
-// classification is only reachable with a POSIX git, as for the shim tests below.
-#[cfg(unix)]
 #[test]
 fn pull_projects_auth_failure_from_a_real_http_remote() {
     let contract = git_io_case("GIT-002-go-auth");
@@ -404,6 +391,9 @@ fn pull_projects_auth_failure_from_a_real_http_remote() {
     let (port, server) = auth_server("401 Unauthorized");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
+    // An empty repository-local helper resets inherited Git Credential Manager
+    // helpers on Windows, letting the loopback 401 reach this contract.
+    git(repo.root(), &["config", "credential.helper", ""]);
     let result = repo.pull("origin");
     server.join().expect("auth server");
     let error = result.error.as_ref().expect("auth error").to_string();
