@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "08c162e5",
-    "commit_sha": "08c162e5090b6450889e2840b4caaf1b4c963cef",
+    "commit": "cd741531",
+    "commit_sha": "cd741531bb5302d3ffe723490eef464da74f2f55",
     "source_files": [
       "internal/mcp/auth/auth.go",
       "internal/mcp/auth/token.go",

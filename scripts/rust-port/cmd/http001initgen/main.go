@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -107,8 +106,6 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
-	const token = "http001-fixture-token"
-	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
 	registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
 	check(registry.Load())
 	tokens := map[string]string{}
@@ -117,6 +114,7 @@ func main() {
 		agent string
 		tools []string
 	}{
+		{name: "default", agent: "default", tools: []string{"*"}},
 		{name: "health", agent: "default", tools: []string{"health"}},
 		{name: "limited", agent: "default", tools: []string{"list_entries"}},
 	} {
@@ -124,6 +122,7 @@ func main() {
 		check(createErr)
 		tokens[scoped.name] = raw
 	}
+	token := tokens["default"]
 	cfg := config.Default()
 	cfg.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	vault := &vaultpkg.Vault{Dir: vaultDir, Config: cfg}

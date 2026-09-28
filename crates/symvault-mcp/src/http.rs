@@ -40,7 +40,6 @@ const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
-const MAX_HTTP_REQUESTS_PER_CONNECTION: usize = 16;
 // ponytail: eight workers bound thread/socket use; revisit if real concurrent demand exceeds this.
 const MAX_HTTP_CONNECTIONS: usize = 8;
 
@@ -110,10 +109,10 @@ where
                 continue;
             }
             let state = Arc::clone(&state);
-            let active = Arc::clone(&active);
+            let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
-                let _active = ActiveHttpConnection(active);
+                let _active = ActiveHttpConnection(active_for_thread);
                 let _ = serve_connection_shared(
                     stream,
                     &registry_path,
@@ -173,6 +172,7 @@ impl Drop for ActiveHttpConnection {
     }
 }
 
+#[cfg(test)]
 fn serve_connection_authenticated<F>(
     stream: TcpStream,
     registry_path: &Path,
@@ -226,14 +226,15 @@ where
             match read_wire_request(&mut reader, first_byte_timeout, timeouts.request_read) {
                 Ok(Some(request)) => request,
                 Ok(None) => return Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
-                    let (status, message) = if error.to_string().contains("too large") {
-                        let message = if error.to_string().contains("request body") {
-                            "request body too large"
-                        } else {
-                            "request too large"
-                        };
-                        (413, message)
+                Err(read_error) if read_error.kind() == std::io::ErrorKind::InvalidData => {
+                    if read_error.to_string().contains("request body too large") {
+                        let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
+                            .map_err(std::io::Error::other)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        return Ok(());
+                    }
+                    let (status, message) = if read_error.to_string().contains("too large") {
+                        (413, "request too large")
                     } else {
                         (400, "bad request")
                     };
@@ -823,7 +824,7 @@ pub fn handle_request(
         );
     }
     if request.body.len() > 1_048_576 {
-        return error(413, None, error_code::PARSE_ERROR, "request body too large");
+        return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
     }
 
     let version = request.protocol_version.trim();
@@ -1151,8 +1152,11 @@ mod tests {
         let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
         assert!(source.contains("IdleTimeout:       120 * time.Second"));
         assert!(source.contains("serveErr = server.Serve(listener)"));
+        fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
+            Ok(ProtocolHandler::new("symaira", "1.0.0"))
+        }
         let state = Arc::new(Mutex::new(HttpServerState {
-            handler_for_agent: |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+            handler_for_agent: test_handler,
             handlers: HashMap::new(),
             sessions: HashMap::new(),
         }));
