@@ -162,6 +162,28 @@ pub trait ReadOnlyStore: Send + Sync {
         Err(format!("secret ref resolution is unavailable: {reference}"))
     }
 
+    /// Resolve a reference only if its current interpretation still selects
+    /// the path previously scope-checked by the caller.
+    fn resolve_secret_ref_at_path(
+        &self,
+        reference: &str,
+        _expected_path: &str,
+    ) -> Result<String, String> {
+        Err(format!(
+            "scoped secret ref resolution is unavailable: {reference}"
+        ))
+    }
+
+    /// Resolve the entry path selected by a command secret reference without
+    /// returning its value. Callers must scope-check this path before resolving
+    /// the reference itself, whose bare-entry fallback can differ from the
+    /// path.field candidate.
+    fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String> {
+        Err(format!(
+            "secret ref path resolution is unavailable: {reference}"
+        ))
+    }
+
     /// Delete one entry when the injected store supports writes. Read-only
     /// test stores retain the default fail-closed implementation.
     fn delete_entry(&self, _path: &str) -> Result<(), String> {
@@ -323,11 +345,23 @@ impl<S> ReadOnlyRuntime<S> {
         }
     }
 
-    pub(crate) fn resolve_secret_ref(&self, reference: &str) -> Result<String, String>
+    pub(crate) fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String>
     where
         S: ReadOnlyStore,
     {
-        self.store.resolve_secret_ref(reference)
+        self.store.resolve_secret_ref_path(reference)
+    }
+
+    pub(crate) fn resolve_secret_ref_at_path(
+        &self,
+        reference: &str,
+        expected_path: &str,
+    ) -> Result<String, String>
+    where
+        S: ReadOnlyStore,
+    {
+        self.store
+            .resolve_secret_ref_at_path(reference, expected_path)
     }
 }
 

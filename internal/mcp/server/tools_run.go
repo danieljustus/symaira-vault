@@ -68,8 +68,14 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 			}
+			resolvedPath, _ := secrets.ResolveSecretRefTarget(s.vault, ref)
+			if !s.checkScope(resolvedPath) {
+				s.logAudit(ctx, "run_command", resolvedPath, false)
+				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
+				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
+			}
 
-			value, resolveErr := secrets.ResolveSecretRef(s.vault, ref)
+			value, resolveErr := secrets.ResolveSecretRefAtPath(s.vault, ref, resolvedPath)
 			if resolveErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 			}
@@ -91,6 +97,13 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	if filesToolErr != nil {
 		return filesToolErr, nil
+	}
+
+	if rawWorkingDir, exists := req.Arguments["working_dir"]; exists && rawWorkingDir != nil {
+		if _, ok := rawWorkingDir.(string); !ok {
+			s.logAudit(ctx, "run_command", "<invalid:working_dir>", false)
+			return mcp.NewToolResultError("argument \"working_dir\" must be a string"), nil
+		}
 	}
 
 	if s.requiresApproval() {
@@ -199,8 +212,14 @@ func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (reso
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 		}
+		resolvedPath, _ := secrets.ResolveSecretRefTarget(s.vault, ref)
+		if !s.checkScope(resolvedPath) {
+			s.logAudit(ctx, "run_command", resolvedPath, false)
+			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
+			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
+		}
 
-		value, resolveErr := secrets.ResolveSecretRef(s.vault, ref)
+		value, resolveErr := secrets.ResolveSecretRefAtPath(s.vault, ref, resolvedPath)
 		if resolveErr != nil {
 			return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 		}

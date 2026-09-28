@@ -26,28 +26,44 @@ type HandleResolver interface {
 // returns a specific field value. The path.field syntax is only used if the
 // candidate path and field actually exist in the vault.
 func ResolveSecretRef(vault *vaultpkg.Vault, ref string) (string, error) {
+	path, _ := ResolveSecretRefTarget(vault, ref)
+	return ResolveSecretRefAtPath(vault, ref, path)
+}
+
+// ResolveSecretRefAtPath resolves ref only if its interpretation still selects
+// expectedPath. This lets scoped callers verify the actual target before they
+// read a dotted bare-entry fallback, while failing closed if the candidate
+// changes between the scope check and value resolution.
+func ResolveSecretRefAtPath(vault *vaultpkg.Vault, ref, expectedPath string) (string, error) {
 	path := ref
 	field := ""
-
+	var candidateEntry *vaultpkg.Entry
 	if idx := strings.LastIndex(ref, "."); idx > 0 {
 		candidatePath := ref[:idx]
 		candidateField := ref[idx+1:]
-
 		entry, readErr := vaultpkg.ReadEntry(vault.Dir, candidatePath, vault.Identity)
 		if readErr == nil {
 			if _, ok := entry.Data[candidateField]; ok {
 				path = candidatePath
 				field = candidateField
+				candidateEntry = entry
 			}
 		}
 	}
+	if path != expectedPath {
+		return "", fmt.Errorf("secret ref target changed during resolution")
+	}
 
-	entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", fmt.Errorf("secret ref not found: %s", path)
+	entry := candidateEntry
+	if entry == nil {
+		var err error
+		entry, err = vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return "", fmt.Errorf("secret ref not found: %s", path)
+			}
+			return "", fmt.Errorf("cannot resolve secret ref %s: %w", ref, err)
 		}
-		return "", fmt.Errorf("cannot resolve secret ref %s: %w", ref, err)
 	}
 
 	if field != "" {
@@ -59,4 +75,24 @@ func ResolveSecretRef(vault *vaultpkg.Vault, ref string) (string, error) {
 	}
 
 	return fmt.Sprintf("%v", entry.Data), nil
+}
+
+// ResolveSecretRefTarget identifies the entry path ResolveSecretRef will read.
+// Callers enforcing path scopes must check this result before resolving the
+// reference, since a dotted bare entry may fall back from path.field to ref.
+// Candidate lookup is limited to the path.field candidate; the fallback entry
+// is not read here.
+func ResolveSecretRefTarget(vault *vaultpkg.Vault, ref string) (path, field string) {
+	path = ref
+	if idx := strings.LastIndex(ref, "."); idx > 0 {
+		candidatePath := ref[:idx]
+		candidateField := ref[idx+1:]
+		entry, readErr := vaultpkg.ReadEntry(vault.Dir, candidatePath, vault.Identity)
+		if readErr == nil {
+			if _, ok := entry.Data[candidateField]; ok {
+				return candidatePath, candidateField
+			}
+		}
+	}
+	return path, ""
 }

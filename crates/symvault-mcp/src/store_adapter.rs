@@ -154,23 +154,51 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
     }
 
     fn resolve_secret_ref(&self, reference: &str) -> Result<String, String> {
+        let path = self.resolve_secret_ref_path(reference)?;
+        self.resolve_secret_ref_at_path(reference, &path)
+    }
+
+    fn resolve_secret_ref_at_path(
+        &self,
+        reference: &str,
+        expected_path: &str,
+    ) -> Result<String, String> {
         if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
             let candidate_path = &reference[..index];
             let candidate_field = &reference[index + 1..];
             if let Ok(entry) = self.store.get(candidate_path, &self.identity)
                 && let Some(value) = entry.data.get(candidate_field)
             {
+                if candidate_path != expected_path {
+                    return Err("secret ref target changed during resolution".into());
+                }
                 if candidate_field.is_empty() {
                     return Ok(format_go_secret_map(&entry.data));
                 }
                 return Ok(format_go_secret_value(value));
             }
         }
+        if reference != expected_path {
+            return Err("secret ref target changed during resolution".into());
+        }
         let entry = self
             .store
             .get(reference, &self.identity)
             .map_err(store_error)?;
         Ok(format_go_secret_map(&entry.data))
+    }
+
+    fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String> {
+        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+            let candidate_path = &reference[..index];
+            let candidate_field = &reference[index + 1..];
+            if let Ok(entry) = self.store.get(candidate_path, &self.identity)
+                && entry.data.contains_key(candidate_field)
+            {
+                return Ok(candidate_path.to_owned());
+            }
+        }
+        Ok(reference.to_owned())
     }
 
     fn delete_entry(&self, path: &str) -> Result<(), String> {
@@ -483,6 +511,21 @@ impl StoreReadOnlyRuntime {
         let Some(executor) = &self.command_executor else {
             return Err("run_command has no configured command executor".into());
         };
+        if arguments.get("files").is_some_and(|value| !value.is_null()) {
+            self.append_audit("run_command", "<unsupported:files>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"files\" is not supported by this Rust runtime yet",
+            ));
+        }
+        if arguments
+            .get("working_dir")
+            .is_some_and(|value| !value.is_null() && !value.is_string())
+        {
+            self.append_audit("run_command", "<invalid:working_dir>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"working_dir\" must be a string",
+            ));
+        }
         let Some(command_value) = arguments.get("command") else {
             self.append_audit("run_command", "<invalid>", false);
             return Ok(ToolCallResult::error(
@@ -555,8 +598,38 @@ impl StoreReadOnlyRuntime {
                 denied.join(", ")
             )));
         }
-        for reference in env_refs.values() {
-            let path = extract_path_from_secret_ref(reference);
+        let mut resolved_paths = BTreeMap::new();
+        for (name, reference) in &env_refs {
+            let candidate_path = extract_path_from_secret_ref(reference);
+            if !self.inner.scope_allows(&candidate_path) {
+                self.append_audit("scope_denied", &candidate_path, false);
+                return Err(format!(
+                    "access denied: secret ref path {candidate_path:?} outside allowed scope"
+                ));
+            }
+            if let Some(policy) = &self.policy {
+                let result = policy.evaluate(EvalContext {
+                    agent_id: self.agent_name.clone(),
+                    path: candidate_path.clone(),
+                    action_type: "run".into(),
+                    tool_name: "run_command".into(),
+                    ..EvalContext::default()
+                });
+                if !result.matched || result.action != Action::Allow {
+                    self.append_audit("policy_denied", &candidate_path, false);
+                    return Err(if !result.matched {
+                        "policy: no matching rule (default deny)".into()
+                    } else {
+                        format!("policy denied by rule {:?}", result.rule_name)
+                    });
+                }
+            }
+            let path = self
+                .inner
+                .resolve_secret_ref_path(reference)
+                .map_err(|error| {
+                    format!("cannot resolve secret ref path {reference:?}: {error}")
+                })?;
             if !self.inner.scope_allows(&path) {
                 self.append_audit("scope_denied", &path, false);
                 return Err(format!(
@@ -580,10 +653,17 @@ impl StoreReadOnlyRuntime {
                     });
                 }
             }
+            resolved_paths.insert(name.clone(), path);
         }
         let mut environment = BTreeMap::new();
         for (name, reference) in &env_refs {
-            let value = match self.inner.resolve_secret_ref(reference) {
+            let expected_path = resolved_paths
+                .get(name)
+                .expect("every validated command secret has a resolved path");
+            let value = match self
+                .inner
+                .resolve_secret_ref_at_path(reference, expected_path)
+            {
                 Ok(value) => value,
                 Err(error) => {
                     return Ok(ToolCallResult::error(format!(
@@ -1850,6 +1930,121 @@ mod tests {
         assert_eq!(output["exit_code"], 0);
         assert!(output["stdout"].as_str().unwrap().contains("ok"));
         assert_eq!(output["duration_ms"], 7);
+    }
+
+    #[test]
+    fn run_command_scope_checks_dotted_bare_entry_fallback() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(directory.path(), &identity).expect("open store");
+        store
+            .write_new_entry(
+                "allowed/foo",
+                &Entry {
+                    path: "allowed/foo".into(),
+                    data: BTreeMap::from([("other".into(), json!("inside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write candidate entry");
+        store
+            .write_new_entry(
+                "allowed/foo.bar",
+                &Entry {
+                    path: "allowed/foo.bar".into(),
+                    data: BTreeMap::from([("token".into(), json!("outside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write dotted bare entry");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["allowed/foo".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+        let arguments = json!({
+            "command":["sh", "-c", "echo ok"],
+            "env":{"TOKEN":"allowed/foo.bar"}
+        });
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("base authorization");
+        let error = runtime
+            .call("run_command", &arguments)
+            .expect_err("resolved bare entry is outside the configured scope");
+        assert_eq!(
+            error,
+            "access denied: secret ref path \"allowed/foo.bar\" outside allowed scope"
+        );
+    }
+
+    #[test]
+    fn run_command_rejects_unsupported_files_and_non_string_working_dir() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            symvault_crypto::generate_identity(),
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["*".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+
+        for (arguments, expected) in [
+            (
+                json!({"command":["sh", "-c", "echo ok"], "files":{}}),
+                "argument \"files\" is not supported by this Rust runtime yet",
+            ),
+            (
+                json!({"command":["sh", "-c", "echo ok"], "working_dir":true}),
+                "argument \"working_dir\" must be a string",
+            ),
+        ] {
+            runtime
+                .authorize("run_command", &arguments)
+                .expect("base authorization");
+            let result = runtime
+                .call("run_command", &arguments)
+                .expect("invalid argument is a tool result error");
+            assert!(result.is_error);
+            assert_eq!(result.text, expected);
+        }
     }
 
     #[test]
