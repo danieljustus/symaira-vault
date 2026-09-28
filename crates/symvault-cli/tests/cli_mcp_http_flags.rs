@@ -30,40 +30,16 @@ fn mcp_http_flags_match_go_surface_and_default_loopback() {
 }
 
 #[test]
-fn mcp_http_requires_tls_for_remote_bind_and_complete_tls_identity() {
+fn mcp_http_rejects_wildcard_bind() {
     let binary = env!("CARGO_BIN_EXE_symvault");
-    for (args, expected) in [
-        (
-            &["mcp", "--bind", "192.0.2.1"][..],
-            "native MCP HTTP non-loopback binds require --tls-cert and --tls-key",
-        ),
-        (
-            &["mcp", "--tls-cert", "cert.pem"][..],
-            "native MCP HTTP requires both --tls-cert and --tls-key",
-        ),
-        (
-            &["mcp", "--tls-ca", "ca.pem"][..],
-            "native MCP HTTP --tls-ca requires --tls-cert and --tls-key",
-        ),
-        (
-            &[
-                "mcp",
-                "--bind",
-                "0.0.0.0",
-                "--tls-cert",
-                "cert.pem",
-                "--tls-key",
-                "key.pem",
-            ][..],
-            "native MCP HTTP wildcard binds are unavailable; choose a concrete IP",
-        ),
-    ] {
-        let output = Command::new(binary)
-            .args(args)
-            .output()
-            .expect("run fail-closed MCP option");
-        assert!(!output.status.success());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains(expected), "unexpected error: {stderr}");
-    }
+    let output = Command::new(binary)
+        .args(["mcp", "--bind", "0.0.0.0"])
+        .output()
+        .expect("run fail-closed MCP option");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("native MCP HTTP wildcard binds are unavailable; choose a concrete IP"),
+        "unexpected error: {stderr}"
+    );
 }

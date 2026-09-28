@@ -1691,6 +1691,82 @@ mod tests {
     }
 
     #[test]
+    fn mtls_listener_requires_valid_client_certificate() {
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        for authorized in [false, true] {
+            let tls = load_tls_server_config(
+                fixtures.join("tls-server.pem"),
+                fixtures.join("tls-server.key"),
+                Some(&fixtures.join("tls-client-ca.pem")),
+            )
+            .expect("load mTLS identity");
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+            let address = listener.local_addr().unwrap();
+            let server = thread::spawn(move || {
+                let (socket, _) = listener.accept().expect("accept test client");
+                socket
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let mut stream = StreamOwned::new(ServerConnection::new(tls).unwrap(), socket);
+                let mut byte = [0];
+                if authorized {
+                    stream
+                        .read_exact(&mut byte)
+                        .expect("authorized TLS handshake");
+                    assert_eq!(byte, [b'G']);
+                    stream
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                        .unwrap();
+                } else {
+                    assert!(
+                        stream.read(&mut byte).is_err(),
+                        "anonymous client reached HTTP"
+                    );
+                }
+            });
+            let mut roots = RootCertStore::empty();
+            for certificate in CertificateDer::pem_file_iter(fixtures.join("tls-ca.pem"))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap()
+            {
+                roots.add(certificate).unwrap();
+            }
+            let builder = rustls::ClientConfig::builder().with_root_certificates(roots);
+            let client = if authorized {
+                let certificates = CertificateDer::pem_file_iter(fixtures.join("tls-client.pem"))
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                let key = PrivateKeyDer::from_pem_file(fixtures.join("tls-client.key")).unwrap();
+                builder.with_client_auth_cert(certificates, key).unwrap()
+            } else {
+                builder.with_no_client_auth()
+            };
+            let name = "vault.example.test".to_owned().try_into().unwrap();
+            let connection = rustls::ClientConnection::new(Arc::new(client), name).unwrap();
+            let socket = TcpStream::connect(address).unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut stream = StreamOwned::new(connection, socket);
+            stream
+                .write_all(b"GET /mcp HTTP/1.1\r\nHost: vault.example.test\r\n\r\n")
+                .unwrap();
+            let mut response = [0; 1];
+            if authorized {
+                stream
+                    .read_exact(&mut response)
+                    .expect("authorized response");
+                assert_eq!(response, [b'H']);
+            } else {
+                assert!(stream.read(&mut response).is_err());
+            }
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
     fn authorization_server_discovery_is_reachable_through_oauth_listener() {
         let response = round_trip_oauth_wire(
             "GET /.well-known/oauth-authorization-server HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",

@@ -181,6 +181,11 @@ pub struct McpConfig {
     pub approval_timeout: Duration,
     pub rate_limit: i64,
     pub metrics_auth_required: bool,
+    pub tls_cert_file: String,
+    pub tls_key_file: String,
+    pub tls_client_ca_file: String,
+    pub mtls_enabled: bool,
+    pub allow_insecure_bind: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -218,6 +223,11 @@ impl Default for McpConfig {
             approval_timeout: Duration::from_secs(30),
             rate_limit: 60,
             metrics_auth_required: true,
+            tls_cert_file: String::new(),
+            tls_key_file: String::new(),
+            tls_client_ca_file: String::new(),
+            mtls_enabled: false,
+            allow_insecure_bind: false,
         }
     }
 }
@@ -1667,6 +1677,23 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
     if let Some(v) = map.get(key("metrics_auth_required")) {
         out.metrics_auth_required = boolean(v, "metrics_auth_required")?;
     }
+    for (key_name, target) in [
+        ("tls_cert_file", &mut out.tls_cert_file),
+        ("tls_key_file", &mut out.tls_key_file),
+        ("tls_client_ca_file", &mut out.tls_client_ca_file),
+    ] {
+        if let Some(v) = map.get(key(key_name)) {
+            *target = string(v, key_name)?;
+        }
+    }
+    for (key_name, target) in [
+        ("mtls_enabled", &mut out.mtls_enabled),
+        ("allow_insecure_bind", &mut out.allow_insecure_bind),
+    ] {
+        if let Some(v) = map.get(key(key_name)) {
+            *target = boolean(v, key_name)?;
+        }
+    }
     Ok(out)
 }
 fn parse_update(value: &serde_yaml_ng::Value) -> Result<UpdateConfig, ConfigError> {
@@ -2039,6 +2066,21 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
         "    metrics_auth_required: {}\n",
         v.metrics_auth_required
     ));
+    for (key_name, value) in [
+        ("tls_cert_file", &v.tls_cert_file),
+        ("tls_key_file", &v.tls_key_file),
+        ("tls_client_ca_file", &v.tls_client_ca_file),
+    ] {
+        if !value.is_empty() {
+            out.push_str(&format!("    {key_name}: {}\n", yaml_scalar(value)?));
+        }
+    }
+    if v.mtls_enabled {
+        out.push_str("    mtls_enabled: true\n");
+    }
+    if v.allow_insecure_bind {
+        out.push_str("    allow_insecure_bind: true\n");
+    }
     Ok(())
 }
 fn write_update(out: &mut String, v: &UpdateConfig) -> Result<(), ConfigError> {
@@ -2176,6 +2218,22 @@ mod tests {
     #[test]
     fn rejects_explicit_empty_mcp_bind() {
         assert!(Config::load_from_bytes(b"mcp:\n  bind: \"\"\n").is_err());
+    }
+    #[test]
+    fn mcp_tls_settings_survive_config_roundtrip() {
+        let yaml = b"mcp:\n  tls_cert_file: cert.pem\n  tls_key_file: key.pem\n  tls_client_ca_file: ca.pem\n  mtls_enabled: true\n  allow_insecure_bind: false\n";
+        let config = Config::load_from_bytes(yaml).unwrap();
+        let mcp = config.mcp.as_ref().unwrap();
+        assert_eq!(mcp.tls_cert_file, "cert.pem");
+        assert_eq!(mcp.tls_key_file, "key.pem");
+        assert_eq!(mcp.tls_client_ca_file, "ca.pem");
+        assert!(mcp.mtls_enabled);
+        assert_eq!(
+            Config::load_from_bytes(&config.to_yaml_bytes().unwrap())
+                .unwrap()
+                .mcp,
+            config.mcp
+        );
     }
     #[test]
     fn default_writer_matches_go_fixture_shape() {

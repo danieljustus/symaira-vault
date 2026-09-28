@@ -4050,13 +4050,6 @@ fn run_mcp(
     _quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        let tls_enabled = !tls_cert.is_empty() && !tls_key.is_empty();
-        if !stdio && tls_cert.is_empty() != tls_key.is_empty() {
-            return Err("native MCP HTTP requires both --tls-cert and --tls-key".to_owned());
-        }
-        if !stdio && !tls_ca.is_empty() && !tls_enabled {
-            return Err("native MCP HTTP --tls-ca requires --tls-cert and --tls-key".to_owned());
-        }
         if !stdio {
             let bind_ip = if bind == "localhost" {
                 "127.0.0.1"
@@ -4069,12 +4062,6 @@ fn run_mcp(
             if bind_ip.is_unspecified() {
                 return Err(
                     "native MCP HTTP wildcard binds are unavailable; choose a concrete IP"
-                        .to_owned(),
-                );
-            }
-            if !bind_ip.is_loopback() && !tls_enabled {
-                return Err(
-                    "native MCP HTTP non-loopback binds require --tls-cert and --tls-key"
                         .to_owned(),
                 );
             }

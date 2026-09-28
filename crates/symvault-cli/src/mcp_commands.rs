@@ -20,7 +20,7 @@ use std::{
 };
 
 use symvault_core::{
-    config::{AgentProfile, Config},
+    config::{AgentProfile, Config, McpConfig},
     policy::{Engine, Policy},
     session::Keyring,
 };
@@ -54,12 +54,9 @@ pub fn run(
         .map_err(|error| format!("load vault config: {error}"))?;
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
-        if tls_cert.is_empty() != tls_key.is_empty() {
-            return Err("MCP HTTP requires both --tls-cert and --tls-key".to_owned());
-        }
-        if !tls_ca.is_empty() && tls_cert.is_empty() {
-            return Err("MCP HTTP --tls-ca requires --tls-cert and --tls-key".to_owned());
-        }
+        let (tls_cert, tls_key, tls_ca, mtls_enabled) =
+            effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
+        validate_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca, mtls_enabled)?;
         let tls = if tls_cert.is_empty() {
             None
         } else {
@@ -67,7 +64,7 @@ pub fn run(
                 symvault_mcp::http::load_tls_server_config(
                     tls_cert,
                     tls_key,
-                    (!tls_ca.is_empty()).then(|| Path::new(tls_ca)),
+                    mtls_enabled.then(|| Path::new(tls_ca)),
                 )
                 .map_err(|error| format!("MCP HTTP TLS: {error}"))?,
             )
@@ -170,6 +167,60 @@ pub fn run(
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
     }
+}
+
+fn effective_tls<'a>(
+    config: Option<&'a McpConfig>,
+    cert_flag: &'a str,
+    key_flag: &'a str,
+    ca_flag: &'a str,
+) -> (&'a str, &'a str, &'a str, bool) {
+    let cert = if cert_flag.is_empty() {
+        config.map_or("", |mcp| mcp.tls_cert_file.trim())
+    } else {
+        cert_flag
+    };
+    let key = if key_flag.is_empty() {
+        config.map_or("", |mcp| mcp.tls_key_file.trim())
+    } else {
+        key_flag
+    };
+    let ca = if ca_flag.is_empty() {
+        config.map_or("", |mcp| mcp.tls_client_ca_file.trim())
+    } else {
+        ca_flag
+    };
+    let mtls = !ca_flag.is_empty() || config.is_some_and(|mcp| mcp.mtls_enabled);
+    (cert, key, ca, mtls)
+}
+
+fn validate_tls(
+    config: Option<&McpConfig>,
+    cert: &str,
+    key: &str,
+    ca: &str,
+    mtls: bool,
+) -> Result<(), String> {
+    if cert.is_empty() != key.is_empty() {
+        return Err("MCP HTTP requires both TLS certificate and key".to_owned());
+    }
+    if mtls && ca.is_empty() {
+        return Err("MCP HTTP mTLS requires a client CA".to_owned());
+    }
+    if mtls && cert.is_empty() {
+        return Err("MCP HTTP mTLS requires a TLS certificate and key".to_owned());
+    }
+    let allow_insecure = config.is_some_and(|mcp| mcp.allow_insecure_bind);
+    if mtls && allow_insecure {
+        return Err("MCP HTTP mTLS conflicts with allow_insecure_bind".to_owned());
+    }
+    if cert.is_empty() && !allow_insecure {
+        return Err(
+            "MCP HTTP requires TLS certificate and key unless MCP.allow_insecure_bind=true"
+                .to_owned(),
+        );
+    }
+    Ok(())
 }
 
 fn oauth_agent(config: &Config) -> &str {
@@ -401,6 +452,44 @@ fn load_policy_engine(root: &Path) -> Result<Option<Engine>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn configured_tls_and_cli_overrides_keep_mtls_requirement() {
+        let configured = McpConfig {
+            tls_cert_file: "configured-cert.pem".into(),
+            tls_key_file: "configured-key.pem".into(),
+            tls_client_ca_file: "configured-ca.pem".into(),
+            mtls_enabled: true,
+            ..McpConfig::default()
+        };
+        assert_eq!(
+            effective_tls(Some(&configured), "", "", ""),
+            (
+                "configured-cert.pem",
+                "configured-key.pem",
+                "configured-ca.pem",
+                true
+            )
+        );
+        assert_eq!(
+            effective_tls(Some(&configured), "cli-cert.pem", "", "cli-ca.pem"),
+            ("cli-cert.pem", "configured-key.pem", "cli-ca.pem", true)
+        );
+        assert_eq!(
+            effective_tls(None, "cli-cert.pem", "cli-key.pem", "cli-ca.pem"),
+            ("cli-cert.pem", "cli-key.pem", "cli-ca.pem", true)
+        );
+    }
+
+    #[test]
+    fn plaintext_requires_explicit_insecure_opt_in() {
+        assert!(validate_tls(None, "", "", "", false).is_err());
+        let mut config = McpConfig::default();
+        assert!(validate_tls(Some(&config), "", "", "", false).is_err());
+        config.allow_insecure_bind = true;
+        assert!(validate_tls(Some(&config), "", "", "", false).is_ok());
+        assert!(validate_tls(Some(&config), "", "", "ca.pem", true).is_err());
+    }
 
     #[test]
     fn oauth_keeps_a_configured_dedicated_agent() {
