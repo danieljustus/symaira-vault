@@ -149,11 +149,14 @@ func TestResolveRunCommandFiles_ScopeChecksDottedBareEntryFallback(t *testing.T)
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
-	_, _, _, toolErr, err := srv.resolveRunCommandFiles(context.Background(), map[string]any{
+	resolved, known, fileAudit, toolErr, err := srv.resolveRunCommandFiles(context.Background(), map[string]any{
 		"TOKEN": "allowed/foo.bar",
 	})
 	if toolErr != nil {
 		t.Fatalf("resolveRunCommandFiles() tool error = %v, want scope denial", toolErr)
+	}
+	if resolved != nil || known != nil || fileAudit != nil {
+		t.Fatalf("resolveRunCommandFiles() returned data on scope denial: resolved=%v known=%v audit=%v", resolved, known, fileAudit)
 	}
 	if err == nil || !strings.Contains(err.Error(), `secret ref path "allowed/foo.bar" outside allowed scope`) {
 		t.Fatalf("resolveRunCommandFiles() error = %v, want scope denial on resolved bare entry", err)
