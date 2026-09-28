@@ -222,20 +222,31 @@ fn validate_tls(
     ca: &str,
     mtls: bool,
 ) -> Result<(), String> {
+    let allow_insecure = config.is_some_and(|mcp| mcp.allow_insecure_bind);
+    let tls_enabled = !cert.trim().is_empty() && !key.trim().is_empty();
+    // Keep the source order from Go's validateTLSSettings so a mixed-invalid
+    // configuration reports the same fail-closed reason on both runtimes.
+    if mtls && allow_insecure {
+        return Err(
+            "refusing MCP.allow_insecure_bind=true with MCP.mtls_enabled=true: mTLS requires TLS"
+                .to_owned(),
+        );
+    }
+    if mtls && !tls_enabled {
+        return Err(
+            "refusing MCP.mtls_enabled=true without a server TLS certificate and key".to_owned(),
+        );
+    }
+    if mtls && ca.trim().is_empty() {
+        return Err(
+            "refusing MCP.mtls_enabled=true without MCP.tls_client_ca_file; client verification must remain enabled"
+                .to_owned(),
+        );
+    }
     if cert.is_empty() != key.is_empty() {
         return Err("MCP HTTP requires both TLS certificate and key".to_owned());
     }
-    if mtls && ca.is_empty() {
-        return Err("MCP HTTP mTLS requires a client CA".to_owned());
-    }
-    if mtls && cert.is_empty() {
-        return Err("MCP HTTP mTLS requires a TLS certificate and key".to_owned());
-    }
-    let allow_insecure = config.is_some_and(|mcp| mcp.allow_insecure_bind);
-    if mtls && allow_insecure {
-        return Err("MCP HTTP mTLS conflicts with allow_insecure_bind".to_owned());
-    }
-    if cert.is_empty() && !allow_insecure {
+    if !tls_enabled && !allow_insecure {
         return Err(
             "MCP HTTP requires TLS certificate and key unless MCP.allow_insecure_bind=true"
                 .to_owned(),
@@ -510,6 +521,23 @@ mod tests {
         config.allow_insecure_bind = true;
         assert!(validate_tls(Some(&config), "", "", "", false).is_ok());
         assert!(validate_tls(Some(&config), "", "", "ca.pem", true).is_err());
+    }
+
+    #[test]
+    fn mtls_validation_matches_go_order_and_fails_closed() {
+        let error = validate_tls(None, "", "", "", true).unwrap_err();
+        assert!(error.contains("without a server TLS certificate and key"));
+
+        let insecure = McpConfig {
+            allow_insecure_bind: true,
+            ..McpConfig::default()
+        };
+        let error = validate_tls(Some(&insecure), "", "", "", true).unwrap_err();
+        assert!(error.contains("mTLS requires TLS"));
+
+        let error = validate_tls(None, "cert.pem", "key.pem", " \t", true).unwrap_err();
+        assert!(error.contains("client verification must remain enabled"));
+        assert!(validate_tls(None, "cert.pem", "key.pem", "ca.pem", true).is_ok());
     }
 
     #[test]
