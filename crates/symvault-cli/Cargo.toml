@@ -17,7 +17,10 @@ clap.workspace = true
 clap_mangen = "=0.2.33"
 clap_complete = "=4.6.9"
 flate2 = "=1.1.5"
+getifaddrs = "=0.4.1"
 getrandom = "=0.3.3"
+hmac = "=0.12.1"
+qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
@@ -33,6 +36,7 @@ scrypt = "=0.12.0"
 symaira-core-version.workspace = true
 symvault-core.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
+terminal_size = "=0.4.4"
 time = { version = "=0.3.47", features = ["local-offset", "parsing"] }
 symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
