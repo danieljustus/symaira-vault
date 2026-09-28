@@ -592,10 +592,19 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+            }
             stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nx")
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nx")
                 .unwrap();
             thread::sleep(Duration::from_millis(400));
+            let _ = stream.write_all(b"xxxxxxx");
         });
         let template = ApiTemplate {
             base_url: format!("http://{address}"),
@@ -615,12 +624,16 @@ mod tests {
             Duration::from_millis(150),
         )
         .unwrap_err();
+        let elapsed = started.elapsed();
         assert!(matches!(
             error.as_str(),
             "upstream request timed out" | "upstream request failed"
         ));
-        assert!(started.elapsed() >= Duration::from_millis(100));
-        assert!(started.elapsed() < Duration::from_millis(500));
+        assert!(
+            elapsed >= Duration::from_millis(100),
+            "{error}: {elapsed:?}"
+        );
+        assert!(elapsed < Duration::from_millis(500), "{error}: {elapsed:?}");
         server.join().unwrap();
     }
 }
