@@ -205,7 +205,6 @@ where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
     serve_connection_with_timeouts(stream, timeouts, |reader, request, keep_alive| {
-<<<<<<< HEAD
         let request_path = request
             .path
             .split_once('?')
@@ -248,44 +247,7 @@ where
                 return Ok(keep_alive);
             }
         }
-        let mut state = state
-            .lock()
-            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
-        let HttpServerState {
-            handler_for_agent,
-            handlers,
-            sessions,
-        } = &mut *state;
-        serve_one_authenticated(
-            reader,
-            request,
-            keep_alive,
-            registry_path,
-            handler_for_agent,
-            handlers,
-            sessions,
-        )
-||||||| parent of e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
-        let mut state = state
-            .lock()
-            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
-        let HttpServerState {
-            handler_for_agent,
-            handlers,
-            sessions,
-        } = &mut *state;
-        serve_one_authenticated(
-            reader,
-            request,
-            keep_alive,
-            registry_path,
-            handler_for_agent,
-            handlers,
-            sessions,
-        )
-=======
         serve_one_authenticated(reader, request, keep_alive, registry_path, state)
->>>>>>> e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
     })
 }
 
@@ -743,12 +705,7 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
     Ok(registry)
 }
 
-<<<<<<< HEAD
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
-||||||| parent of e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
-fn allowed_origin(origin: &str, request_host: &str) -> bool {
-=======
-fn allowed_origin(origin: &str, request_host: &str) -> bool {
     let request_host = host_without_port(request_host);
     if !loopback_host(request_host) {
         return false;
@@ -756,7 +713,6 @@ fn allowed_origin(origin: &str, request_host: &str) -> bool {
     if origin.trim().is_empty() {
         return true;
     }
->>>>>>> e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };
@@ -1182,8 +1138,14 @@ mod tests {
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
             let state = test_state();
-            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
-                .expect("serve connection");
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &state,
+                None,
+                HttpTimeouts::default(),
+            )
+            .expect("serve connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream.write_all(request.as_bytes()).expect("write request");
@@ -1526,8 +1488,14 @@ mod tests {
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
             let state = test_state();
-            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
-                .expect("serve connection sequence");
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &state,
+                None,
+                HttpTimeouts::default(),
+            )
+            .expect("serve connection sequence");
         });
         let stream = TcpStream::connect(address).expect("connect");
         let mut reader = BufReader::new(stream);
@@ -1568,6 +1536,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &state,
+                None,
                 HttpTimeouts {
                     initial_read: Duration::from_secs(1),
                     request_read: Duration::from_secs(1),
@@ -1909,8 +1878,14 @@ mod tests {
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
             let state = test_state();
-            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
-                .expect("serve keep-alive connection");
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &state,
+                None,
+                HttpTimeouts::default(),
+            )
+            .expect("serve keep-alive connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream
@@ -2115,6 +2090,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &server_state,
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve request");

@@ -100,7 +100,7 @@ pub(super) fn handle(
     ) {
         return None;
     }
-    if !origin.is_empty() && !super::http::allowed_origin(origin, host) {
+    if !super::http::allowed_origin(origin, host) {
         return Some(OAuthResponse::Http(origin_error()));
     }
     match (path, method) {
