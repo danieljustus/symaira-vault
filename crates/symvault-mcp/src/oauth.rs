@@ -79,6 +79,7 @@ pub(super) fn handle(
     host: &str,
     body: &str,
     local: std::net::SocketAddr,
+    secure: bool,
 ) -> Option<OAuthResponse> {
     let (path, query) = path_and_query
         .split_once('?')
@@ -86,7 +87,7 @@ pub(super) fn handle(
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
         return Some(if method == "GET" {
-            OAuthResponse::Http(discovery_response(local))
+            OAuthResponse::Http(discovery_response(local, secure))
         } else {
             OAuthResponse::Http(error(405, "invalid_request"))
         });
@@ -100,7 +101,7 @@ pub(super) fn handle(
     ) {
         return None;
     }
-    if !super::http::allowed_origin(origin, host) {
+    if !super::http::allowed_origin_for_transport(origin, host, secure) {
         return Some(OAuthResponse::Http(origin_error()));
     }
     match (path, method) {
@@ -560,8 +561,9 @@ fn valid_client_id(value: &str) -> bool {
     value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn discovery_response(local: std::net::SocketAddr) -> HttpResponse {
-    let issuer = format!("http://{local}");
+fn discovery_response(local: std::net::SocketAddr, secure: bool) -> HttpResponse {
+    let scheme = if secure { "https" } else { "http" };
+    let issuer = format!("{scheme}://{local}");
     json_response(
         200,
         serde_json::json!({

@@ -30,16 +30,32 @@ fn mcp_http_flags_match_go_surface_and_default_loopback() {
 }
 
 #[test]
-fn mcp_http_rejects_remote_bind_and_unported_tls_before_vault_access() {
+fn mcp_http_requires_tls_for_remote_bind_and_complete_tls_identity() {
     let binary = env!("CARGO_BIN_EXE_symvault");
     for (args, expected) in [
         (
-            &["mcp", "--bind", "0.0.0.0"][..],
-            "native MCP HTTP is loopback-only until TLS is ported",
+            &["mcp", "--bind", "192.0.2.1"][..],
+            "native MCP HTTP non-loopback binds require --tls-cert and --tls-key",
         ),
         (
             &["mcp", "--tls-cert", "cert.pem"][..],
-            "native MCP HTTP TLS/mTLS is not supported yet",
+            "native MCP HTTP requires both --tls-cert and --tls-key",
+        ),
+        (
+            &["mcp", "--tls-ca", "ca.pem"][..],
+            "native MCP HTTP --tls-ca requires --tls-cert and --tls-key",
+        ),
+        (
+            &[
+                "mcp",
+                "--bind",
+                "0.0.0.0",
+                "--tls-cert",
+                "cert.pem",
+                "--tls-key",
+                "key.pem",
+            ][..],
+            "native MCP HTTP wildcard binds are unavailable; choose a concrete IP",
         ),
     ] {
         let output = Command::new(binary)
