@@ -274,20 +274,37 @@ fn load_runtime_tls(vault: &Path) -> Result<RuntimeTls, String> {
         && let Ok(record) = serde_json::from_slice::<RuntimeTls>(&data)
         && !record.certificate.trim().is_empty()
     {
-        return Ok(record);
+        if !record.client_auth_required
+            || (!record.client_certificate.trim().is_empty()
+                && !record.client_key.trim().is_empty())
+        {
+            return Ok(record);
+        }
+        let config = load_tls_config(vault)?;
+        let mcp = config.mcp.unwrap_or_default();
+        return Ok(RuntimeTls {
+            client_certificate: if record.client_certificate.trim().is_empty() {
+                mcp.approval_tls_cert_file.trim().to_owned()
+            } else {
+                record.client_certificate
+            },
+            client_key: if record.client_key.trim().is_empty() {
+                mcp.approval_tls_key_file.trim().to_owned()
+            } else {
+                record.client_key
+            },
+            client_ca_file: if record.client_ca_file.trim().is_empty() {
+                mcp.tls_client_ca_file.trim().to_owned()
+            } else {
+                record.client_ca_file
+            },
+            ..record
+        });
     }
 
     // Go falls back to config.yaml when the runtime snapshot is absent or
     // malformed. The identity verifier rejects incomplete mTLS credentials.
-    let config_path = vault.join("config.yaml");
-    let config_data = symvault_sync::safeio::read_bounded(&config_path, 1024 * 1024)
-        .map_err(|_| "could not find valid running server TLS metadata or config.yaml".to_owned())?
-        .ok_or_else(|| {
-            "could not find valid running server TLS metadata or config.yaml".to_owned()
-        })?;
-    let config: ConfigTlsFallback = serde_yaml_ng::from_slice(&config_data).map_err(|_| {
-        "could not find valid running server TLS metadata or config.yaml".to_owned()
-    })?;
+    let config = load_tls_config(vault)?;
     let mcp = config.mcp.unwrap_or_default();
     let certificate = match mcp.tls_cert_file.trim() {
         "" => vault.join("mcp-server.crt").to_string_lossy().into_owned(),
@@ -300,6 +317,19 @@ fn load_runtime_tls(vault: &Path) -> Result<RuntimeTls, String> {
         client_certificate: mcp.approval_tls_cert_file.trim().to_owned(),
         client_key: mcp.approval_tls_key_file.trim().to_owned(),
     })
+}
+
+fn load_tls_config(vault: &Path) -> Result<ConfigTlsFallback, String> {
+    let config_path = vault.join("config.yaml");
+    let config_data = symvault_sync::safeio::read_bounded(&config_path, 1024 * 1024)
+        .map_err(|_| "could not find valid running server TLS metadata or config.yaml".to_owned())?
+        .ok_or_else(|| {
+            "could not find valid running server TLS metadata or config.yaml".to_owned()
+        })?;
+    let config: ConfigTlsFallback = serde_yaml_ng::from_slice(&config_data).map_err(|_| {
+        "could not find valid running server TLS metadata or config.yaml".to_owned()
+    })?;
+    Ok(config)
 }
 
 fn parse_certificate_chain(
@@ -488,4 +518,56 @@ fn render_decision(
         result.outcome.id, result.outcome.status
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RUNTIME_TLS, load_approval_client_identity, load_runtime_tls};
+    use rustls::pki_types::{CertificateDer, pem::PemObject};
+    use std::{fs, path::Path};
+
+    #[test]
+    fn published_mtls_record_resolves_dedicated_identity_from_config() {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let vault = tempfile::tempdir().expect("vault tempdir");
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../symvault-mcp/tests/fixtures");
+        let server_certificate = fixtures.join("tls-server.pem");
+        let client_ca = fixtures.join("tls-client-ca.pem");
+        let client_certificate = fixtures.join("tls-client.pem");
+        let client_key = fixtures.join("tls-client.key");
+        fs::write(
+            vault.path().join(RUNTIME_TLS),
+            serde_json::to_vec(&serde_json::json!({
+                "certificate": server_certificate,
+                "client_ca_file": client_ca,
+                "client_auth_required": true
+            }))
+            .expect("runtime TLS record"),
+        )
+        .expect("write runtime TLS record");
+        fs::write(
+            vault.path().join("config.yaml"),
+            format!(
+                "mcp:\n  approval_tls_cert_file: {}\n  approval_tls_key_file: {}\n",
+                client_certificate.display(),
+                client_key.display(),
+            ),
+        )
+        .expect("write TLS identity config");
+
+        let runtime_tls = load_runtime_tls(vault.path()).expect("resolve runtime TLS");
+        assert!(runtime_tls.client_auth_required);
+        assert_eq!(
+            runtime_tls.client_certificate,
+            client_certificate.to_string_lossy()
+        );
+        assert_eq!(runtime_tls.client_key, client_key.to_string_lossy());
+        let server_der = CertificateDer::pem_file_iter(&server_certificate)
+            .expect("parse server certificate")
+            .next()
+            .expect("server certificate present")
+            .expect("server certificate DER");
+        load_approval_client_identity(&server_der, &runtime_tls)
+            .expect("load dedicated approval client identity");
+    }
 }

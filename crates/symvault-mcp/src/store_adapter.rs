@@ -1,3 +1,4 @@
+use crate::approval::ApprovalQueue;
 use crate::call::{
     ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
     ToolCallResult, ToolCallRuntime, normalize_scope_path,
@@ -394,6 +395,14 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_approval_seam(mut self, seam: Arc<dyn ApprovalSeam>) -> Self {
         self.approval = seam;
+        self
+    }
+
+    /// Connects prompt-mode write authorization to the live local approval
+    /// queue exposed by the HTTP server. Callers without that API stay closed.
+    #[must_use]
+    pub fn with_approval_queue(mut self, queue: Arc<ApprovalQueue>) -> Self {
+        self.inner = self.inner.with_approval_queue(queue);
         self
     }
 

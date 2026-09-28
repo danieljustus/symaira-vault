@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 getrandom = "=0.3.3"
+hmac = "=0.12.1"
+sha2 = "=0.10.9"
 serde.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 serde_json = { workspace = true, features = ["raw_value"] }
