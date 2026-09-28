@@ -2,6 +2,7 @@
 //! The socket listener stays with the caller; this module owns `/mcp` request
 //! checks and response framing for bounded HTTP/1.x connections.
 
+use crate::approval::{ApprovalQueue, handle_local_request};
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
 };
@@ -180,6 +181,18 @@ pub enum OAuthConsentDecision {
     Browser,
 }
 
+#[derive(Clone)]
+pub struct LocalApprovalApi {
+    queue: Arc<ApprovalQueue>,
+    secret: Vec<u8>,
+}
+
+impl LocalApprovalApi {
+    pub fn new(queue: Arc<ApprovalQueue>, secret: Vec<u8>) -> Self {
+        Self { queue, secret }
+    }
+}
+
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
@@ -232,6 +245,7 @@ where
         handler_for_agent,
         None,
         None,
+        None,
     )
 }
 
@@ -270,6 +284,7 @@ where
             Box::new(verify_passphrase),
         )),
         None,
+        None,
     )
 }
 
@@ -305,6 +320,81 @@ where
             Box::new(verify_passphrase),
         )),
         Some(tls),
+        None,
+    )
+}
+
+/// Serves the local approval CLI API beside MCP and OAuth over loopback TLS.
+/// The queue is shared with the caller's agent runtimes; `secret` is the
+/// vault-directory ownership key used for the Go-compatible HMAC proof.
+pub fn serve_loopback_with_oauth_and_approval<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    local_approval_api: LocalApprovalApi,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+            Box::new(verify_passphrase),
+        )),
+        None,
+        Some(Arc::new(local_approval_api)),
+    )
+}
+
+/// Serves MCP, OAuth, and the local approval CLI API over TLS.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_tls_oauth_and_approval<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Arc<ServerConfig>,
+    local_approval_api: LocalApprovalApi,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(crate::oauth::OAuthState::new(
+            root,
+            oauth_agent_name.into(),
+            Box::new(consent),
+            Box::new(verify_passphrase),
+        )),
+        Some(tls),
+        Some(Arc::new(local_approval_api)),
     )
 }
 
@@ -314,6 +404,7 @@ fn serve_loopback_inner<F>(
     handler_for_agent: F,
     oauth: Option<crate::oauth::OAuthState>,
     tls: Option<Arc<ServerConfig>>,
+    local_approval: Option<Arc<LocalApprovalApi>>,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
@@ -344,6 +435,7 @@ where
             let oauth = oauth.clone();
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
+            let local_approval = local_approval.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
                 let _active = ActiveHttpConnection(active_for_thread);
                 let _ = serve_connection_shared(
@@ -351,6 +443,7 @@ where
                     &registry_path,
                     &state,
                     oauth.as_deref(),
+                    local_approval.as_deref(),
                     HttpTimeouts::default(),
                 );
             }) {
@@ -392,6 +485,7 @@ fn serve_connection_shared<F>(
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
     oauth_state: Option<&crate::oauth::OAuthState>,
+    local_approval: Option<&LocalApprovalApi>,
     timeouts: HttpTimeouts,
 ) -> Result<(), std::io::Error>
 where
@@ -443,7 +537,14 @@ where
                 return Ok(keep_alive);
             }
         }
-        serve_one_authenticated(reader, request, keep_alive, registry_path, state)
+        serve_one_authenticated(
+            reader,
+            request,
+            keep_alive,
+            registry_path,
+            state,
+            local_approval,
+        )
     })
 }
 
@@ -547,6 +648,7 @@ fn serve_one_authenticated<F>(
     keep_alive: bool,
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
+    local_approval: Option<&LocalApprovalApi>,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -554,6 +656,29 @@ where
     let stream = reader.get_mut();
     let secure = stream.is_tls();
     let response_version = request.http_version.as_str();
+    if let Some(local_approval) = local_approval
+        && let Some(approval_response) = handle_local_request(
+            &local_approval.queue,
+            &local_approval.secret,
+            stream.peer_addr()?.ip(),
+            &request.method,
+            &request.path,
+            &request.enroll_timestamp,
+            &request.enroll_proof,
+        )
+    {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: approval_response.status,
+                headers: vec![("Content-Type", approval_response.content_type)],
+                body: approval_response.body,
+            },
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
     if !allowed_origin_for_transport(&request.origin, &request.host, secure) {
         write_json_error_for_request(
             stream,
@@ -684,6 +809,8 @@ struct WireRequest {
     content_type: String,
     accept: String,
     protocol_version: String,
+    enroll_timestamp: String,
+    enroll_proof: String,
     connection: String,
     body: String,
 }
@@ -791,6 +918,8 @@ fn read_wire_request(
         content_type: get("content-type"),
         accept: get("accept"),
         protocol_version: get("mcp-protocol-version"),
+        enroll_timestamp: get("x-enroll-timestamp"),
+        enroll_proof: get("x-enroll-proof"),
         connection: get("connection"),
         body,
     }))
@@ -1020,6 +1149,7 @@ fn write_http_response(
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
+        401 => "Unauthorized",
         201 => "Created",
         202 => "Accepted",
         400 => "Bad Request",
@@ -1027,6 +1157,7 @@ fn write_http_response(
         404 => "Not Found",
         405 => "Method Not Allowed",
         406 => "Not Acceptable",
+        409 => "Conflict",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
         429 => "Too Many Requests",
@@ -1383,6 +1514,75 @@ mod tests {
         })
     }
 
+    #[test]
+    fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+        let go_local = include_str!("../../../internal/approval/local.go");
+        assert!(go_local.contains("/api/v1/local/approvals"));
+        assert!(go_local.contains("/api/v1/local/approvals/"));
+
+        let queue = Arc::new(ApprovalQueue::default());
+        let id = queue
+            .enqueue("agent", "notes/file", true, "write")
+            .expect("enqueue approval");
+        let secret = b"go-contract-secret".to_vec();
+        let timestamp = OffsetDateTime::now_utc()
+            .format(&Rfc3339)
+            .expect("format proof timestamp");
+        let mut mac = Hmac::<Sha256>::new_from_slice(&secret).expect("HMAC key");
+        mac.update(timestamp.as_bytes());
+        let proof = mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let local_approval = LocalApprovalApi { queue, secret };
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().expect("accept");
+                let state = test_state();
+                serve_connection_shared(
+                    stream,
+                    Path::new("missing-token-registry.json"),
+                    &state,
+                    None,
+                    Some(&local_approval),
+                    HttpTimeouts::default(),
+                )
+                .expect("serve local approval API");
+            }
+        });
+        let mut stream = TcpStream::connect(address).expect("connect unauthorized client");
+        write!(
+            stream,
+            "GET /api/v1/local/approvals HTTP/1.1\r\nHost: {address}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("send unauthenticated request");
+        let unauthorized = read_http_response(&mut BufReader::new(stream));
+        assert_eq!(raw_status(&unauthorized), 401, "{unauthorized}");
+
+        let mut stream = TcpStream::connect(address).expect("connect authorized client");
+        write!(
+            stream,
+            "GET /api/v1/local/approvals HTTP/1.1\r\nHost: {address}\r\nX-Enroll-Timestamp: {timestamp}\r\nX-Enroll-Proof: {proof}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        )
+        .expect("send request");
+        let response = read_http_response(&mut BufReader::new(stream));
+        server.join().expect("server thread");
+        assert_eq!(raw_status(&response), 200, "{response}");
+        let listed: serde_json::Value =
+            serde_json::from_str(raw_body(&response)).expect("approval list JSON");
+        assert_eq!(listed["requests"][0]["id"], id);
+        assert_eq!(listed["requests"][0]["status"], "pending");
+    }
+
     fn registry(dir: &Path) -> std::path::PathBuf {
         let hash = symvault_store::sha256_hex(BEARER.as_bytes());
         let bytes = serde_json::to_vec(&serde_json::json!({
@@ -1416,6 +1616,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &state,
+                None,
                 None,
                 HttpTimeouts::default(),
             )
@@ -1454,6 +1655,7 @@ mod tests {
                 &registry_path,
                 &state,
                 Some(&oauth_state),
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve OAuth HTTP connection");
@@ -1559,6 +1761,7 @@ mod tests {
                 &registry_path,
                 &state,
                 Some(&oauth),
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve TLS requests");
@@ -1839,6 +2042,7 @@ mod tests {
                     &server_registry,
                     &state,
                     Some(&oauth_state),
+                    None,
                     HttpTimeouts::default(),
                 )
                 .expect("serve headless OAuth request");
@@ -1943,6 +2147,7 @@ mod tests {
                         &registry_path,
                         &state,
                         Some(&oauth_state),
+                        None,
                         HttpTimeouts::default(),
                     )
                     .expect("serve concurrent request");
@@ -2061,6 +2266,7 @@ mod tests {
                 &registry_path,
                 &state,
                 None,
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve connection sequence");
@@ -2104,6 +2310,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &state,
+                None,
                 None,
                 HttpTimeouts {
                     initial_read: Duration::from_secs(1),
@@ -2161,8 +2368,15 @@ mod tests {
         let idle_registry = registry_path.clone();
         let idle_state = Arc::clone(&state);
         let idle = thread::spawn(move || {
-            serve_connection_shared(idle_server, &idle_registry, &idle_state, None, timeouts)
-                .expect("serve idle client")
+            serve_connection_shared(
+                idle_server,
+                &idle_registry,
+                &idle_state,
+                None,
+                None,
+                timeouts,
+            )
+            .expect("serve idle client")
         });
 
         let mut client = TcpStream::connect(address).expect("connect active client");
@@ -2177,6 +2391,7 @@ mod tests {
                 active_server,
                 &active_registry,
                 &active_state,
+                None,
                 None,
                 timeouts,
             )
@@ -2451,6 +2666,7 @@ mod tests {
                 &registry_path,
                 &state,
                 None,
+                None,
                 HttpTimeouts::default(),
             )
             .expect("serve keep-alive connection");
@@ -2658,6 +2874,7 @@ mod tests {
                 stream,
                 &registry_path,
                 &server_state,
+                None,
                 None,
                 HttpTimeouts::default(),
             )

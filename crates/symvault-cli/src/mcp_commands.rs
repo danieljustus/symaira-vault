@@ -106,6 +106,19 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        let mut runtime_metadata = RuntimeMetadataGuard::new(root);
+        runtime_metadata.publish(
+            address.to_string(),
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port(),
+            tls_cert,
+            tls_ca,
+            mtls_enabled,
+        )?;
+        let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
+        let enroll_secret = ensure_enroll_secret(root)?;
         let expected_recipient = symvault_crypto::recipient_string(&identity);
         let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);
@@ -146,7 +159,7 @@ pub fn run(
             })
         };
         let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_and_oauth(
+            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -154,14 +167,16 @@ pub fn run(
                 consent,
                 verify_passphrase,
                 tls,
+                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
             ),
-            None => symvault_mcp::http::serve_loopback_with_oauth(
+            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval(
                 listener,
                 registry_path,
                 handler_for_agent,
                 oauth_agent_name,
                 consent,
                 verify_passphrase,
+                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
             ),
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))
@@ -188,6 +203,103 @@ pub fn run(
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
     }
+}
+
+struct RuntimeMetadataGuard {
+    port_path: PathBuf,
+    port_record: Option<Vec<u8>>,
+    tls_path: PathBuf,
+    tls_record: Option<Vec<u8>>,
+}
+
+impl RuntimeMetadataGuard {
+    fn new(root: &Path) -> Self {
+        Self {
+            port_path: root.join(".runtime-port"),
+            port_record: None,
+            tls_path: root.join(".runtime-tls-cert"),
+            tls_record: None,
+        }
+    }
+
+    fn publish(
+        &mut self,
+        bind: String,
+        port: u16,
+        certificate: &str,
+        client_ca: &str,
+        client_auth_required: bool,
+    ) -> Result<(), String> {
+        let port_record = serde_json::to_vec(&serde_json::json!({ "port": port, "bind": bind }))
+            .map_err(|error| format!("encode MCP runtime port: {error}"))?;
+        symvault_sync::safeio::write_atomic(&self.port_path, &port_record)
+            .map_err(|error| format!("write MCP runtime port: {error}"))?;
+        self.port_record = Some(port_record);
+        if certificate.is_empty() {
+            // A prior TLS server may have exited without running Drop. Match
+            // the Go startup contract: a cleartext listener has no TLS record.
+            let _ = fs::remove_file(&self.tls_path);
+        } else {
+            let certificate = fs::canonicalize(certificate)
+                .unwrap_or_else(|_| PathBuf::from(certificate))
+                .to_string_lossy()
+                .into_owned();
+            let client_ca_file = if client_ca.is_empty() {
+                String::new()
+            } else {
+                fs::canonicalize(client_ca)
+                    .unwrap_or_else(|_| PathBuf::from(client_ca))
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            let tls_record = serde_json::to_vec(&serde_json::json!({
+                "certificate": certificate,
+                "client_ca_file": client_ca_file,
+                "client_auth_required": client_auth_required,
+            }))
+            .map_err(|error| format!("encode MCP runtime TLS metadata: {error}"))?;
+            symvault_sync::safeio::write_atomic(&self.tls_path, &tls_record)
+                .map_err(|error| format!("write MCP runtime TLS metadata: {error}"))?;
+            self.tls_record = Some(tls_record);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for RuntimeMetadataGuard {
+    fn drop(&mut self) {
+        remove_if_unchanged(&self.port_path, self.port_record.as_deref());
+        remove_if_unchanged(&self.tls_path, self.tls_record.as_deref());
+    }
+}
+
+fn remove_if_unchanged(path: &Path, expected: Option<&[u8]>) {
+    let Some(expected) = expected else {
+        return;
+    };
+    if symvault_sync::safeio::read_bounded(path, 4096)
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some(expected)
+    {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn ensure_enroll_secret(root: &Path) -> Result<Vec<u8>, String> {
+    let path = root.join("mcp-server.enroll-secret");
+    if let Some(secret) = symvault_sync::safeio::read_bounded(&path, 4096)
+        .map_err(|error| format!("read approval ownership secret: {error}"))?
+    {
+        return Ok(secret);
+    }
+    let mut secret = vec![0; 32];
+    getrandom::fill(&mut secret)
+        .map_err(|error| format!("generate approval ownership secret: {error}"))?;
+    symvault_sync::safeio::write_atomic(&path, &secret)
+        .map_err(|error| format!("write approval ownership secret: {error}"))?;
+    Ok(secret)
 }
 
 fn effective_tls<'a>(
@@ -569,6 +681,56 @@ mod tests {
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn runtime_metadata_is_private_and_only_its_own_records_are_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let tls = root.path().join(".runtime-tls-cert");
+        {
+            let mut metadata = RuntimeMetadataGuard::new(root.path());
+            metadata
+                .publish("127.0.0.1".into(), 9443, "/tmp/server.pem", "", false)
+                .unwrap();
+            let record: serde_json::Value =
+                serde_json::from_slice(&fs::read(&port).unwrap()).unwrap();
+            assert_eq!(record["port"], 9443);
+            assert_eq!(record["bind"], "127.0.0.1");
+            assert!(tls.is_file());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    fs::metadata(&port).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+                assert_eq!(
+                    fs::metadata(&tls).unwrap().permissions().mode() & 0o777,
+                    0o600
+                );
+            }
+        }
+        assert!(!port.exists());
+        assert!(!tls.exists());
+
+        fs::write(&tls, b"stale tls metadata").unwrap();
+        let mut metadata = RuntimeMetadataGuard::new(root.path());
+        metadata
+            .publish("127.0.0.1".into(), 9445, "", "", false)
+            .unwrap();
+        assert!(!tls.exists());
+        drop(metadata);
+        assert!(!port.exists());
+
+        let mut metadata = RuntimeMetadataGuard::new(root.path());
+        metadata
+            .publish("127.0.0.1".into(), 9444, "/tmp/server.pem", "", false)
+            .unwrap();
+        fs::write(&port, b"owned by another server").unwrap();
+        drop(metadata);
+        assert_eq!(fs::read(&port).unwrap(), b"owned by another server");
+        assert!(!tls.exists());
     }
 
     #[test]
