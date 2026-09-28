@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -90,8 +91,8 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
-	const token = "http001-fixture-token"
-	check(os.WriteFile(filepath.Join(vaultDir, "mcp-token"), []byte(token), 0o600))
+	token, err := auth.LoadOrCreateToken(filepath.Join(vaultDir, "mcp-token"))
+	check(err)
 	cfg := config.Default()
 	cfg.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	vault := &vaultpkg.Vault{Dir: vaultDir, Config: cfg}
@@ -159,7 +160,7 @@ func main() {
 		}
 		return
 	}
-	check(os.WriteFile(path, encoded, 0o644))
+	check(os.WriteFile(path, encoded, 0o600))
 }
 
 func doRequest(client *http.Client, addr, token string, req request) response {
