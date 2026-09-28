@@ -27,8 +27,8 @@ pub mod render;
 pub mod store_adapter;
 mod tools;
 pub use call::{
-    ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
-    ToolCallResult, ToolCallRuntime,
+    CommandExecution, CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig,
+    ReadOnlyStore, ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime,
 };
 pub use store_adapter::{
     SharedAuditLogger, StoreReadOnlyAdapter, StoreReadOnlyRuntime, read_only_tool_names,

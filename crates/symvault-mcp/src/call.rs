@@ -4,8 +4,9 @@ use serde::de::{self, Deserialize, MapAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::path::Path;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use symvault_core::secret_ref::SecretHandle;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -105,6 +106,29 @@ pub trait ToolCallRuntime: Send + Sync {
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String>;
 }
 
+/// Result of executing an already authorized MCP command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandExecution {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub timed_out: bool,
+    pub duration: Duration,
+}
+
+/// Application-owned boundary for resolving refs and running a child process.
+/// The MCP crate owns authorization; the CLI owns vault identity and process
+/// execution. Implementations must not expose resolved values in errors.
+pub trait CommandExecutor: Send + Sync {
+    fn run(
+        &self,
+        command: &[String],
+        environment: &BTreeMap<String, String>,
+        working_directory: Option<&Path>,
+        timeout: Duration,
+    ) -> Result<CommandExecution, String>;
+}
+
 /// A decrypted entry projection needed by the read-only MCP tools.
 ///
 /// The projection contains metadata and field *types* but is deliberately
@@ -131,6 +155,12 @@ pub struct ReadOnlyEntry {
 pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
+
+    /// Resolve a command environment reference without exposing it through a
+    /// normal MCP response. The default keeps fixture/read-only stores closed.
+    fn resolve_secret_ref(&self, reference: &str) -> Result<String, String> {
+        Err(format!("secret ref resolution is unavailable: {reference}"))
+    }
 
     /// Delete one entry when the injected store supports writes. Read-only
     /// test stores retain the default fail-closed implementation.
@@ -179,6 +209,7 @@ pub struct ReadOnlyRuntimeConfig {
     pub now_unix: Option<i64>,
     pub can_write: bool,
     pub can_run_commands: bool,
+    pub allowed_executables: Vec<String>,
     pub can_use_clipboard: bool,
     pub can_use_autotype: bool,
     pub redact_fields: Option<Vec<String>>,
@@ -218,6 +249,7 @@ impl Default for ReadOnlyRuntimeConfig {
             now_unix: None,
             can_write: false,
             can_run_commands: false,
+            allowed_executables: Vec::new(),
             can_use_clipboard: false,
             can_use_autotype: false,
             redact_fields: None,
@@ -290,6 +322,13 @@ impl<S> ReadOnlyRuntime<S> {
             _ => Err(format!("{tool} approval request expired")),
         }
     }
+
+    pub(crate) fn resolve_secret_ref(&self, reference: &str) -> Result<String, String>
+    where
+        S: ReadOnlyStore,
+    {
+        self.store.resolve_secret_ref(reference)
+    }
 }
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
@@ -308,6 +347,17 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
         if self.config.tier == "standard" && deletes {
             return Err(ToolCallResult::error(format!(
                 "Tool \"{name}\" requires tier \"admin\""
+            )));
+        }
+        if name == "run_command" && !self.config.can_run_commands {
+            let agent = if self.config.agent_name.is_empty() || self.config.agent_name == "default"
+            {
+                "<name>"
+            } else {
+                &self.config.agent_name
+            };
+            return Err(ToolCallResult::error(format!(
+                "command execution not permitted for this agent: set \"canRunCommands: true\" in its profile (symvault config set agents.{agent}.canRunCommands true), or add \"run_command\" to allowed_tools if tier-based scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, or request_credential instead"
             )));
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
@@ -363,6 +413,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
+            "run_command" => Err("run_command has no configured command executor".into()),
             "search" => self.search_openai(arguments),
             "fetch" => self.fetch_openai(arguments),
             _ => Err(format!("read-only runtime has no handler for {name}")),
