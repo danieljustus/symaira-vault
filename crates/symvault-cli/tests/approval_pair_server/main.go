@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
@@ -58,7 +59,11 @@ func main() {
 		func(host string) bool { ip := net.ParseIP(host); return ip != nil && ip.IsLoopback() },
 		secret,
 	))
-	server := &http.Server{Handler: mux, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}}
+	server := &http.Server{
+		Handler:           mux,
+		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+		ReadHeaderTimeout: 2 * time.Second,
+	}
 	if err := server.ServeTLS(listener, certFile, keyFile); err != nil && err != http.ErrServerClosed {
 		fatal("serve TLS: %v", err)
 	}
