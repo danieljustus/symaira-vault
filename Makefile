@@ -427,6 +427,7 @@ mcp-http-init-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
+	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
 
 mcp-stdio-fixtures-check:

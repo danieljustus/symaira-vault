@@ -36,6 +36,10 @@ struct Case {
 struct Request {
     method: String,
     path: String,
+    #[serde(default)]
+    host: String,
+    #[serde(default)]
+    origin: String,
     content_type: String,
     accept: String,
     protocol_version: String,
@@ -46,6 +50,10 @@ struct Request {
     token_agent: String,
     #[serde(default)]
     allowed_tools: Vec<String>,
+    #[serde(default)]
+    body_repeat: usize,
+    #[serde(default)]
+    header_repeat: usize,
     body: String,
 }
 
@@ -112,18 +120,34 @@ fn go_authenticated_http_session_matches_rust_adapter() {
         if !case.go_authenticated {
             continue;
         }
+        let body = if case.request.body_repeat > 0 {
+            "x".repeat(case.request.body_repeat)
+        } else {
+            case.request.body.clone()
+        };
+        let host = if case.request.host.is_empty() {
+            addr.to_string()
+        } else {
+            case.request.host.clone()
+        };
         let mut stream = TcpStream::connect(addr).expect("connect to Rust loopback adapter");
         write!(
             stream,
-            "{} {} HTTP/1.1\r\nHost: {addr}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nX-Symaira-Agent: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "{} {} HTTP/1.1\r\nHost: {host}\r\nOrigin: {}\r\nContent-Type: {}\r\nAccept: {}\r\nMCP-Protocol-Version: {}\r\nX-Symaira-Agent: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
             case.request.method,
             case.request.path,
+            case.request.origin,
             case.request.content_type,
             case.request.accept,
             case.request.protocol_version,
             case.request.agent,
-            case.request.body.len(),
-            case.request.body,
+            if case.request.header_repeat > 0 {
+                format!("X-Rust-Port-Fixture: {}\r\n", "x".repeat(case.request.header_repeat))
+            } else {
+                String::new()
+            },
+            body.len(),
+            body,
         )
         .expect("send initialize HTTP request");
         let (status, headers, body) = read_response(stream);

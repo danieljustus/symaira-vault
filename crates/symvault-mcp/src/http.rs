@@ -575,24 +575,111 @@ fn error(
 }
 
 fn is_json_content_type(value: &str) -> bool {
-    value
-        .split(';')
-        .next()
-        .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("application/json"))
+    parse_mime_media_type(value).is_some_and(|media_type| media_type == "application/json")
 }
 
 fn accepts_response(value: &str) -> bool {
     let mut json = false;
     let mut event_stream = false;
     for part in value.split(',') {
-        let media_type = part.split(';').next().unwrap_or_default().trim();
-        match media_type.to_ascii_lowercase().as_str() {
-            "*/*" | "application/*" | "application/json" => json = true,
-            "text/event-stream" => event_stream = true,
+        match parse_mime_media_type(part).as_deref() {
+            Some("*/*" | "application/*" | "application/json") => json = true,
+            Some("text/event-stream") => event_stream = true,
             _ => {}
         }
     }
     json && event_stream
+}
+
+fn parse_mime_media_type(value: &str) -> Option<String> {
+    let parts = split_mime_parts(value, ';')?;
+    let media = parts.first()?.trim();
+    let (top, sub) = media.split_once('/')?;
+    if media.matches('/').count() != 1 || !is_mime_token(top) || !is_mime_token(sub) {
+        return None;
+    }
+    let mut parameters = std::collections::HashSet::new();
+    for parameter in parts.iter().skip(1) {
+        let (name, value) = parameter.split_once('=')?;
+        let name = name.trim();
+        let value = value.trim();
+        if !is_mime_token(name) || !parameters.insert(name.to_ascii_lowercase()) {
+            return None;
+        }
+        if value.starts_with('"') {
+            let bytes = value.as_bytes();
+            if bytes.len() < 2 || bytes.last() != Some(&b'"') {
+                return None;
+            }
+            let mut escaped = false;
+            for byte in &bytes[1..bytes.len() - 1] {
+                if escaped {
+                    if *byte < 0x20 || *byte == 0x7f {
+                        return None;
+                    }
+                    escaped = false;
+                } else if *byte == b'\\' {
+                    escaped = true;
+                } else if *byte == b'"' || *byte < 0x20 || *byte == 0x7f {
+                    return None;
+                }
+            }
+            if escaped {
+                return None;
+            }
+        } else if !is_mime_token(value) {
+            return None;
+        }
+    }
+    Some(media.to_ascii_lowercase())
+}
+
+fn split_mime_parts(value: &str, separator: char) -> Option<Vec<&str>> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in value.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if quoted && character == '\\' {
+            escaped = true;
+        } else if character == '"' {
+            quoted = !quoted;
+        } else if character == separator && !quoted {
+            parts.push(&value[start..index]);
+            start = index + character.len_utf8();
+        }
+    }
+    if quoted || escaped {
+        return None;
+    }
+    parts.push(&value[start..]);
+    Some(parts)
+}
+
+fn is_mime_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
 }
 
 #[cfg(test)]
@@ -670,6 +757,35 @@ mod tests {
         round_trip_wire(&request)
     }
 
+    fn go_http_case(name: &str) -> serde_json::Value {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/http-initialize.json"
+        ))
+        .expect("parse Go HTTP oracle fixture");
+        fixture["cases"]
+            .as_array()
+            .expect("fixture cases")
+            .iter()
+            .find(|case| case["name"] == name)
+            .unwrap_or_else(|| panic!("missing Go HTTP case {name}"))
+            .clone()
+    }
+
+    fn raw_status(response: &str) -> u16 {
+        response
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse().ok())
+            .expect("HTTP response status")
+    }
+
+    fn raw_body(response: &str) -> &str {
+        response
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .expect("HTTP response body")
+    }
+
     #[test]
     fn authenticated_loopback_listener_dispatches_initialize() {
         let response = round_trip(true, "http://127.0.0.1");
@@ -734,6 +850,60 @@ mod tests {
             "{response}"
         );
         assert!(response.contains("invalid Origin header"), "{response}");
+    }
+
+    #[test]
+    fn raw_loopback_origin_rejections_match_source_bound_go_cases() {
+        for (case_name, origin) in [
+            ("foreign_origin_rejected", "https://attacker.example"),
+            ("malformed_origin_rejected", "http://%"),
+        ] {
+            let case = go_http_case(case_name);
+            let response = round_trip_wire(&format!(
+                "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: {origin}\r\nContent-Length: 0\r\n\r\n"
+            ));
+            assert_eq!(
+                raw_status(&response),
+                case["response"]["status"].as_u64().unwrap() as u16
+            );
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(raw_body(&response)).unwrap(),
+                serde_json::from_str::<serde_json::Value>(
+                    case["response"]["body"].as_str().unwrap()
+                )
+                .unwrap(),
+                "{case_name} body"
+            );
+        }
+    }
+
+    #[test]
+    fn raw_loopback_rejects_spoofed_host_even_when_go_same_host_origin_reaches_auth() {
+        let case = go_http_case("matching_host_and_origin_reaches_authentication");
+        assert_eq!(case["response"]["status"], 401);
+        let response = round_trip_wire(
+            "POST /mcp HTTP/1.1\r\nHost: attacker.example\r\nOrigin: https://attacker.example\r\nContent-Length: 0\r\n\r\n",
+        );
+        assert_eq!(
+            raw_status(&response),
+            403,
+            "Rust should reject non-loopback host"
+        );
+        assert!(raw_body(&response).contains("invalid Origin header"));
+    }
+
+    #[test]
+    fn raw_loopback_caps_headers_at_the_documented_rust_limit() {
+        let case = go_http_case("oversized_header_reaches_mcp_handler");
+        assert_eq!(case["response"]["status"], 200);
+        assert_eq!(case["request"]["header_repeat"], 17 * 1024);
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nX-Rust-Port-Fixture: {}\r\nContent-Length: 0\r\n\r\n",
+            "x".repeat(17 * 1024)
+        );
+        let response = round_trip_wire(&request);
+        assert_eq!(raw_status(&response), 413);
+        assert_eq!(raw_body(&response), "request too large\n");
     }
 
     #[test]
