@@ -393,19 +393,35 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     }
     child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
 
-    let mut child = child_command
-        .spawn()
-        .map_err(|error| format!("failed to run command: {error}"))?;
+    let mut child = match child_command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return Err(cleanup_after_command_error(
+                &mut materialized_files,
+                format!("failed to run command: {error}"),
+            ));
+        }
+    };
     let stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
-            return terminate_after_spawn_failure(&mut child, "failed to capture command stdout");
+            let error = terminate_after_spawn_failure::<ProcessResult>(
+                &mut child,
+                "failed to capture command stdout",
+            )
+            .expect_err("spawn failure helper always returns an error");
+            return Err(cleanup_after_command_error(&mut materialized_files, error));
         }
     };
     let stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            return terminate_after_spawn_failure(&mut child, "failed to capture command stderr");
+            let error = terminate_after_spawn_failure::<ProcessResult>(
+                &mut child,
+                "failed to capture command stderr",
+            )
+            .expect_err("spawn failure helper always returns an error");
+            return Err(cleanup_after_command_error(&mut materialized_files, error));
         }
     };
     let stdout_reader = thread::spawn(|| read_process_output(stdout));
@@ -422,16 +438,25 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
                 {
                     timed_out = true;
                     terminate_process_tree(&mut child);
-                    break child
-                        .wait()
-                        .map_err(|error| format!("wait for timed out command: {error}"))?;
+                    match child.wait() {
+                        Ok(status) => break status,
+                        Err(error) => {
+                            return Err(cleanup_after_command_error(
+                                &mut materialized_files,
+                                format!("wait for timed out command: {error}"),
+                            ));
+                        }
+                    }
                 }
                 thread::sleep(Duration::from_millis(5));
             }
             Err(error) => {
                 terminate_process_tree(&mut child);
                 let _ = child.wait();
-                return Err(format!("wait for command: {error}"));
+                return Err(cleanup_after_command_error(
+                    &mut materialized_files,
+                    format!("wait for command: {error}"),
+                ));
             }
         }
     };
@@ -443,9 +468,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         // wait for an unrelated descendant.
         drop(stdout_reader);
         drop(stderr_reader);
-        materialized_files
-            .cleanup()
-            .map_err(|_| "failed to securely clean temporary secret files".to_owned())?;
+        if let Err(error) = materialized_files.cleanup() {
+            return Err(cleanup_error_message(error));
+        }
         return Ok(ProcessResult {
             stdout: String::new(),
             stderr: String::new(),
@@ -464,9 +489,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         join_process_readers(stdout_reader, stderr_reader);
     let stdout = redact_process_output(&stdout, options.redactions, options.generic_redaction);
     let stderr = redact_process_output(&stderr, options.redactions, options.generic_redaction);
-    materialized_files
-        .cleanup()
-        .map_err(|_| "failed to securely clean temporary secret files".to_owned())?;
+    if let Err(error) = materialized_files.cleanup() {
+        return Err(cleanup_error_message(error));
+    }
     Ok(ProcessResult {
         stdout,
         stderr,
@@ -683,6 +708,21 @@ fn terminate_after_spawn_failure<T>(
     terminate_process_tree(child);
     let _ = child.wait();
     Err(message.to_owned())
+}
+
+fn cleanup_after_command_error(
+    materialized: &mut MaterializedSecretFiles,
+    message: String,
+) -> String {
+    if materialized.cleanup().is_err() {
+        format!("{message}; failed to securely clean temporary secret files")
+    } else {
+        message
+    }
+}
+
+fn cleanup_error_message(_error: std::io::Error) -> String {
+    "failed to securely clean temporary secret files".to_owned()
 }
 
 fn is_sensitive_env_name(name: &str) -> bool {
