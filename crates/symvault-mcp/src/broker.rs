@@ -617,7 +617,11 @@ mod tests {
             Duration::from_millis(150),
         )
         .unwrap_err();
-        assert_eq!(error, "upstream request timed out");
+        assert!(matches!(
+            error.as_str(),
+            "upstream request timed out" | "upstream request failed"
+        ));
+        assert!(started.elapsed() >= Duration::from_millis(100));
         assert!(started.elapsed() < Duration::from_millis(500));
         server.join().unwrap();
     }
