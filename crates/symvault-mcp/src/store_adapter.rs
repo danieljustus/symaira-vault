@@ -1,11 +1,11 @@
 use crate::approval::ApprovalQueue;
 use crate::call::{
-    ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
-    ToolCallResult, ToolCallRuntime, normalize_scope_path,
+    CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
+    ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, normalize_scope_path,
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -153,6 +153,49 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
         }
     }
 
+    fn resolve_secret_ref_at_path(
+        &self,
+        reference: &str,
+        expected_path: &str,
+    ) -> Result<String, String> {
+        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+            let candidate_path = &reference[..index];
+            let candidate_field = &reference[index + 1..];
+            if let Ok(entry) = self.store.get(candidate_path, &self.identity)
+                && let Some(value) = entry.data.get(candidate_field)
+            {
+                if candidate_path != expected_path {
+                    return Err("secret ref target changed during resolution".into());
+                }
+                if candidate_field.is_empty() {
+                    return Ok(format_go_secret_map(&entry.data));
+                }
+                return Ok(format_go_secret_value(value));
+            }
+        }
+        if reference != expected_path {
+            return Err("secret ref target changed during resolution".into());
+        }
+        let entry = self
+            .store
+            .get(reference, &self.identity)
+            .map_err(store_error)?;
+        Ok(format_go_secret_map(&entry.data))
+    }
+
+    fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String> {
+        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+            let candidate_path = &reference[..index];
+            let candidate_field = &reference[index + 1..];
+            if let Ok(entry) = self.store.get(candidate_path, &self.identity)
+                && entry.data.contains_key(candidate_field)
+            {
+                return Ok(candidate_path.to_owned());
+            }
+        }
+        Ok(reference.to_owned())
+    }
+
     fn delete_entry(&self, path: &str) -> Result<(), String> {
         self.store
             .delete_entry_with_identity(path, &self.identity)
@@ -269,6 +312,8 @@ pub struct StoreReadOnlyRuntime {
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
     require_approval: bool,
+    command_executor: Option<Arc<dyn CommandExecutor>>,
+    allowed_executables: Vec<String>,
 }
 
 impl StoreReadOnlyRuntime {
@@ -302,6 +347,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let allowed_executables = config.allowed_executables.clone();
         let now_unix = config.now_unix;
         let unavailable_tools = config
             .unavailable_tools
@@ -328,6 +374,8 @@ impl StoreReadOnlyRuntime {
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            command_executor: None,
+            allowed_executables,
         })
     }
 
@@ -360,6 +408,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let allowed_executables = config.allowed_executables.clone();
         let share_root = adapter.root().to_path_buf();
         let now_unix = config.now_unix;
         let unavailable_tools = config
@@ -387,6 +436,8 @@ impl StoreReadOnlyRuntime {
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            command_executor: None,
+            allowed_executables,
         })
     }
 
@@ -451,9 +502,231 @@ impl StoreReadOnlyRuntime {
         }
     }
 
+    fn run_command(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let Some(executor) = &self.command_executor else {
+            return Err("run_command has no configured command executor".into());
+        };
+        if arguments.get("files").is_some_and(|value| !value.is_null()) {
+            self.append_audit("run_command", "<unsupported:files>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"files\" is not supported by this Rust runtime yet",
+            ));
+        }
+        if arguments
+            .get("working_dir")
+            .is_some_and(|value| !value.is_null() && !value.is_string())
+        {
+            self.append_audit("run_command", "<invalid:working_dir>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"working_dir\" must be a string",
+            ));
+        }
+        let Some(command_value) = arguments.get("command") else {
+            self.append_audit("run_command", "<invalid>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"command\"",
+            ));
+        };
+        let Some(command_values) = command_value.as_array() else {
+            self.append_audit("run_command", "<invalid>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"command\" must be an array",
+            ));
+        };
+        if command_values.is_empty() {
+            self.append_audit("run_command", "<invalid>", false);
+            return Ok(ToolCallResult::error("command array must not be empty"));
+        }
+        let mut command = Vec::with_capacity(command_values.len());
+        for (index, value) in command_values.iter().enumerate() {
+            let Some(value) = value.as_str() else {
+                self.append_audit("run_command", "<invalid>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "command[{index}] must be a string"
+                )));
+            };
+            command.push(value.to_owned());
+        }
+        if !self.allowed_executables.is_empty() {
+            let executable = Path::new(&command[0])
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            if !self
+                .allowed_executables
+                .iter()
+                .any(|allowed| allowed == &executable)
+            {
+                return Err(format!(
+                    "command execution denied: executable {executable:?} not in agent allowlist"
+                ));
+            }
+        }
+        let timeout_seconds = match parse_command_timeout(arguments.get("timeout")) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                self.append_audit("run_command", "<invalid:timeout>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let env_value = arguments.get("env").filter(|value| !value.is_null());
+        let mut env_refs = BTreeMap::new();
+        if let Some(value) = env_value {
+            let Some(env) = value.as_object() else {
+                self.append_audit("run_command", "<invalid>", false);
+                return Ok(ToolCallResult::error("argument \"env\" must be an object"));
+            };
+            for (name, reference) in env {
+                let Some(reference) = reference.as_str() else {
+                    return Ok(ToolCallResult::error(format!(
+                        "env.{name} value must be a string secret reference"
+                    )));
+                };
+                env_refs.insert(name.clone(), reference.to_owned());
+            }
+        }
+        let denied = denied_env_names(env_refs.keys());
+        if !denied.is_empty() {
+            self.append_audit("run_command", "<validation-denied-env>", false);
+            return Ok(ToolCallResult::error(format!(
+                "env contains denied keys: {}",
+                denied.join(", ")
+            )));
+        }
+        let mut resolved_paths = BTreeMap::new();
+        for (name, reference) in &env_refs {
+            let candidate_path = extract_path_from_secret_ref(reference);
+            if !self.inner.scope_allows(&candidate_path) {
+                self.append_audit("scope_denied", &candidate_path, false);
+                return Err(format!(
+                    "access denied: secret ref path {candidate_path:?} outside allowed scope"
+                ));
+            }
+            if let Some(policy) = &self.policy {
+                let result = policy.evaluate(EvalContext {
+                    agent_id: self.agent_name.clone(),
+                    path: candidate_path.clone(),
+                    action_type: "run".into(),
+                    tool_name: "run_command".into(),
+                    ..EvalContext::default()
+                });
+                if !result.matched || result.action != Action::Allow {
+                    self.append_audit("policy_denied", &candidate_path, false);
+                    return Err(if !result.matched {
+                        "policy: no matching rule (default deny)".into()
+                    } else {
+                        format!("policy denied by rule {:?}", result.rule_name)
+                    });
+                }
+            }
+            let path = self
+                .inner
+                .resolve_secret_ref_path(reference)
+                .map_err(|error| {
+                    format!("cannot resolve secret ref path {reference:?}: {error}")
+                })?;
+            if !self.inner.scope_allows(&path) {
+                self.append_audit("scope_denied", &path, false);
+                return Err(format!(
+                    "access denied: secret ref path {path:?} outside allowed scope"
+                ));
+            }
+            if let Some(policy) = &self.policy {
+                let result = policy.evaluate(EvalContext {
+                    agent_id: self.agent_name.clone(),
+                    path: path.clone(),
+                    action_type: "run".into(),
+                    tool_name: "run_command".into(),
+                    ..EvalContext::default()
+                });
+                if !result.matched || result.action != Action::Allow {
+                    self.append_audit("policy_denied", &path, false);
+                    return Err(if !result.matched {
+                        "policy: no matching rule (default deny)".into()
+                    } else {
+                        format!("policy denied by rule {:?}", result.rule_name)
+                    });
+                }
+            }
+            resolved_paths.insert(name.clone(), path);
+        }
+        let mut environment = BTreeMap::new();
+        for (name, reference) in &env_refs {
+            let expected_path = resolved_paths
+                .get(name)
+                .expect("every validated command secret has a resolved path");
+            let value = match self
+                .inner
+                .resolve_secret_ref_at_path(reference, expected_path)
+            {
+                Ok(value) => value,
+                Err(error) => {
+                    return Ok(ToolCallResult::error(format!(
+                        "cannot resolve secret ref {reference:?}: {error}"
+                    )));
+                }
+            };
+            environment.insert(name.clone(), value);
+        }
+        let mode = if self.approval_mode.is_empty() && self.require_approval {
+            "prompt"
+        } else {
+            self.approval_mode.as_str()
+        };
+        if matches!(mode, "deny" | "prompt") {
+            self.append_audit("approval_denied", "run_command", false);
+            return Err("run_command denied: approval required but cannot be granted".into());
+        }
+        let working_directory = arguments
+            .get("working_dir")
+            .and_then(Value::as_str)
+            .filter(|directory| !directory.is_empty())
+            .map(Path::new);
+        // Never place argument strings or secret refs in audit logs.
+        let execution = match executor.run(
+            &command,
+            &environment,
+            working_directory,
+            Duration::from_secs(timeout_seconds),
+        ) {
+            Ok(execution) => execution,
+            Err(error) => {
+                self.append_audit("run_command", "<execution-failed>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        self.append_audit("run_command", "<command>", !execution.timed_out);
+        let stdout = crate::render::embed_as_data("command_output", &execution.stdout)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        let stderr = crate::render::embed_as_data("command_output", &execution.stderr)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        if execution.timed_out {
+            return Ok(ToolCallResult::error(format!(
+                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                execution.exit_code
+            )));
+        }
+        Ok(ToolCallResult::text(
+            symvault_gojson::to_string(&json!({
+                "exit_code": execution.exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "duration_ms": execution.duration.as_millis().min(i64::MAX as u128) as i64,
+            }))
+            .map_err(|error| error.to_string())?,
+        ))
+    }
+
     /// Supplies the caller-owned key without copying it into public runtime config.
     pub fn with_grant_signing_key(mut self, key: SecretBytes) -> Self {
         self.grant_signing_key = Some(key);
+        self
+    }
+
+    /// Injects the CLI-owned secret resolver and child-process runner.
+    #[must_use]
+    pub fn with_command_executor(mut self, executor: Arc<dyn CommandExecutor>) -> Self {
+        self.command_executor = Some(executor);
         self
     }
 
@@ -1209,6 +1482,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.revoke_share(arguments)
         } else if name == "secret_unseal" {
             self.secret_unseal(arguments)
+        } else if name == "run_command" {
+            self.run_command(arguments)
         } else {
             self.inner.call(name, arguments)
         };
@@ -1328,6 +1603,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("share_list", "", ok);
             }
+            "run_command" => {}
             _ => {}
         }
         result
@@ -1371,6 +1647,39 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
+fn format_go_secret_map(values: &BTreeMap<String, Value>) -> String {
+    let values = values
+        .iter()
+        .map(|(key, value)| format!("{key}:{}", format_go_secret_value(value)))
+        .collect::<Vec<_>>();
+    format!("map[{}]", values.join(" "))
+}
+
+fn format_go_secret_value(value: &Value) -> String {
+    match value {
+        Value::Null => "<nil>".into(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(format_go_secret_value)
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        Value::Object(values) => format!(
+            "map[{}]",
+            values
+                .iter()
+                .map(|(key, value)| format!("{key}:{}", format_go_secret_value(value)))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+    }
+}
+
 /// The connected handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
@@ -1395,6 +1704,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry_value",
         "get_entry_metadata",
         "secret_unseal",
+        "run_command",
         "symaira_delete",
         "list_shares",
         "approve_share",
@@ -1404,6 +1714,64 @@ pub fn read_only_tool_names() -> Vec<String> {
     .into_iter()
     .map(str::to_owned)
     .collect()
+}
+
+fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
+    let Some(value) = value else {
+        return Ok(30);
+    };
+    let number = match value {
+        Value::Number(number) => number
+            .as_f64()
+            .ok_or_else(|| "argument \"timeout\" must be numeric".to_owned())?,
+        Value::String(string) => string
+            .parse::<f64>()
+            .map_err(|_| "argument \"timeout\" must be numeric".to_owned())?,
+        _ => return Err("argument \"timeout\" must be numeric".into()),
+    };
+    if !number.is_finite() {
+        return Err("argument \"timeout\" must be a finite number".into());
+    }
+    if number.fract() != 0.0 {
+        return Err("argument \"timeout\" must be a whole number of seconds".into());
+    }
+    if !(1.0..=300.0).contains(&number) {
+        return Err("argument \"timeout\" must be between 1 and 300 seconds".into());
+    }
+    Ok(number as u64)
+}
+
+fn extract_path_from_secret_ref(reference: &str) -> String {
+    reference.rfind('.').filter(|index| *index > 0).map_or_else(
+        || reference.to_owned(),
+        |index| reference[..index].to_owned(),
+    )
+}
+
+fn denied_env_names<'a>(names: impl Iterator<Item = &'a String>) -> Vec<String> {
+    const DENIED: &[&str] = &[
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "NODE_OPTIONS",
+        "PYTHONSTARTUP",
+        "PYTHONPATH",
+        "BASH_ENV",
+        "ENV",
+        "RUBYOPT",
+        "PERL5OPT",
+        "PERL5LIB",
+        "PATH",
+    ];
+    let mut denied = names
+        .filter(|name| DENIED.contains(&name.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    denied.sort();
+    denied
 }
 
 pub fn unavailable_tool(
@@ -1420,11 +1788,15 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, render_list_shares};
+    use super::{
+        MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
+        parse_command_timeout, render_list_shares,
+    };
+    use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
     use serde_json::json;
-    use std::fs;
     use std::time::{Duration, Instant};
-    use symvault_store::sharing::ShareStore;
+    use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
+    use symvault_store::{Entry, Store, sharing::ShareStore};
     use tempfile::tempdir;
 
     #[test]
@@ -1480,5 +1852,270 @@ mod tests {
         let invalid_json: serde_json::Value =
             serde_json::from_str(&invalid.text).expect("invalid-filter JSON result");
         assert_eq!(invalid_json.as_array().expect("array").len(), 2);
+    }
+
+    struct FakeCommandExecutor;
+
+    impl CommandExecutor for FakeCommandExecutor {
+        fn run(
+            &self,
+            command: &[String],
+            environment: &BTreeMap<String, String>,
+            working_directory: Option<&Path>,
+            timeout: Duration,
+        ) -> Result<CommandExecution, String> {
+            assert_eq!(command, ["sh", "-c", "echo ok"]);
+            assert_eq!(
+                environment,
+                &BTreeMap::from([("TOKEN".into(), "synthetic-secret".into())])
+            );
+            assert_eq!(working_directory, None);
+            assert_eq!(timeout, Duration::from_secs(30));
+            Ok(CommandExecution {
+                stdout: "ok\n".into(),
+                stderr: String::new(),
+                exit_code: 0,
+                timed_out: false,
+                duration: Duration::from_millis(7),
+            })
+        }
+    }
+
+    #[test]
+    fn run_command_is_dispatched_through_the_store_runtime_contract() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(directory.path(), &identity)
+            .expect("open temporary vault")
+            .write_new_entry(
+                "service",
+                &Entry {
+                    path: "service".into(),
+                    data: BTreeMap::from([("token".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source-shaped secret entry");
+        let config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["run_command".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["sh".into()],
+            allowed_paths: vec!["*".into()],
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime = StoreReadOnlyRuntime::open(directory.path(), identity, config, None, None)
+            .expect("runtime")
+            .with_command_executor(Arc::new(FakeCommandExecutor));
+        let arguments = json!({"command":["sh", "-c", "echo ok"], "env":{"TOKEN":"service.token"}});
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("authorized");
+        let result = runtime.call("run_command", &arguments).expect("dispatch");
+        let output: serde_json::Value = serde_json::from_str(&result.text).expect("JSON result");
+        assert_eq!(output["exit_code"], 0);
+        assert!(output["stdout"].as_str().unwrap().contains("ok"));
+        assert_eq!(output["duration_ms"], 7);
+    }
+
+    #[test]
+    fn run_command_scope_checks_dotted_bare_entry_fallback() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(directory.path(), &identity).expect("open store");
+        store
+            .write_new_entry(
+                "allowed/foo",
+                &Entry {
+                    path: "allowed/foo".into(),
+                    data: BTreeMap::from([("other".into(), json!("inside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write candidate entry");
+        store
+            .write_new_entry(
+                "allowed/foo.bar",
+                &Entry {
+                    path: "allowed/foo.bar".into(),
+                    data: BTreeMap::from([("token".into(), json!("outside"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write dotted bare entry");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["allowed/foo".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+        let arguments = json!({
+            "command":["sh", "-c", "echo ok"],
+            "env":{"TOKEN":"allowed/foo.bar"}
+        });
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("base authorization");
+        let error = runtime
+            .call("run_command", &arguments)
+            .expect_err("resolved bare entry is outside the configured scope");
+        assert_eq!(
+            error,
+            "access denied: secret ref path \"allowed/foo.bar\" outside allowed scope"
+        );
+    }
+
+    #[test]
+    fn run_command_rejects_unsupported_files_and_non_string_working_dir() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            symvault_crypto::generate_identity(),
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["*".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+
+        for (arguments, expected) in [
+            (
+                json!({"command":["sh", "-c", "echo ok"], "files":{}}),
+                "argument \"files\" is not supported by this Rust runtime yet",
+            ),
+            (
+                json!({"command":["sh", "-c", "echo ok"], "working_dir":true}),
+                "argument \"working_dir\" must be a string",
+            ),
+        ] {
+            runtime
+                .authorize("run_command", &arguments)
+                .expect("base authorization");
+            let result = runtime
+                .call("run_command", &arguments)
+                .expect("invalid argument is a tool result error");
+            assert!(result.is_error);
+            assert_eq!(result.text, expected);
+        }
+    }
+
+    #[test]
+    fn command_timeout_and_denied_environment_match_go_policy_bounds() {
+        assert_eq!(parse_command_timeout(None).unwrap(), 30);
+        assert_eq!(parse_command_timeout(Some(&json!(1))).unwrap(), 1);
+        assert_eq!(parse_command_timeout(Some(&json!("300"))).unwrap(), 300);
+        assert_eq!(
+            parse_command_timeout(Some(&json!(1.5))).unwrap_err(),
+            "argument \"timeout\" must be a whole number of seconds"
+        );
+        assert_eq!(
+            parse_command_timeout(Some(&json!(301))).unwrap_err(),
+            "argument \"timeout\" must be between 1 and 300 seconds"
+        );
+        let names = [
+            "PATH".to_owned(),
+            "PYTHONPATH".to_owned(),
+            "TOKEN".to_owned(),
+        ];
+        assert_eq!(denied_env_names(names.iter()), ["PATH", "PYTHONPATH"]);
+    }
+
+    #[test]
+    fn run_command_evaluates_run_policy_for_secret_ref_path_before_resolution() {
+        use symvault_core::policy::{Action, Conditions, Engine, Policy, Rule};
+
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            symvault_crypto::generate_identity(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "agent".into(),
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Some(Engine::new([Policy {
+                version: "1".into(),
+                description: "command denial fixture".into(),
+                rules: vec![Rule {
+                    name: "deny command use".into(),
+                    priority: 1,
+                    conditions: Conditions {
+                        agent_id: "agent".into(),
+                        path: "service".into(),
+                        action: "run".into(),
+                        ..Conditions::default()
+                    },
+                    action: Action::Deny,
+                }],
+            }])),
+            None,
+        )
+        .expect("runtime")
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+        let arguments = json!({
+            "command":["sh", "-c", "echo ok"],
+            "env":{"TOKEN":"service.token"}
+        });
+
+        runtime
+            .authorize("run_command", &arguments)
+            .expect("base authorization");
+        let error = runtime
+            .call("run_command", &arguments)
+            .expect_err("run policy denies before resolving the missing entry");
+        assert_eq!(error, "policy denied by rule \"deny command use\"");
     }
 }

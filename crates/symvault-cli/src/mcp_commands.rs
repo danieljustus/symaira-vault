@@ -22,6 +22,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::run_commands::McpCommandExecutor;
 use symvault_core::{
     config::{AgentProfile, Config, McpConfig},
     policy::{Engine, Policy},
@@ -551,10 +552,12 @@ fn build_handler(
     settings.cache_backend.clone_from(&runtime_status.1);
     settings.cache_persistent = runtime_status.2;
     settings.cache_message.clone_from(&runtime_status.3);
+    let command_executor = Arc::new(McpCommandExecutor::new());
     let mut runtime =
         StoreReadOnlyRuntime::open_with_audit(root, identity, settings, policy, Some(audit))
             .map_err(|error| format!("create MCP runtime: {error}"))?
-            .with_grant_signing_key(signing_key);
+            .with_grant_signing_key(signing_key)
+            .with_command_executor(command_executor);
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
@@ -608,6 +611,7 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         auto_unseal: profile.auto_unseal,
         expose_payment_values: profile.expose_payment_values,
         can_run_commands: profile.can_run_commands,
+        allowed_executables: profile.allowed_executables.clone(),
         can_use_clipboard: profile.can_use_clipboard,
         can_use_autotype: profile.can_use_autotype,
         redact_fields: (!profile.redact_fields.is_empty()).then(|| profile.redact_fields.clone()),
@@ -742,6 +746,7 @@ mod tests {
             tier: Some("standard".into()),
             allowed_paths: vec!["work/*".into()],
             allowed_tools: vec!["health".into()],
+            allowed_executables: vec!["git".into()],
             can_read_values: true,
             auto_unseal: true,
             expose_payment_values: true,
@@ -750,6 +755,7 @@ mod tests {
         let config = runtime_config(Path::new("/fixture"), &profile, "agent");
         assert_eq!(config.allowed_paths, ["work/*"]);
         assert_eq!(config.available_tools, ["health"]);
+        assert_eq!(config.allowed_executables, ["git"]);
         assert_eq!(config.tier, "standard");
         assert!(config.can_read_values);
         assert!(config.auto_unseal);

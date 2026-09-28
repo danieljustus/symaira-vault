@@ -18,6 +18,7 @@ use std::{
 use serde_json::Value;
 use symvault_core::redact::{PatternDetector, ScanOptions, Scanner, redact_known_values};
 use symvault_crypto::Identity;
+use symvault_mcp::{CommandExecution, CommandExecutor};
 use symvault_store::{Entry, StoreError};
 
 /// Environment inherited by Go's `secrets.RunCommand` before caller-selected
@@ -46,6 +47,50 @@ pub(crate) const RUN_ENV_WHITELIST: &[&str] = &[
 ];
 
 const MAX_PROCESS_OUTPUT: usize = 100 * 1024;
+
+/// Production MCP adapter: delegates child lifecycle/capture/redaction to the
+/// shared runner after the MCP-owned store boundary resolves explicit refs.
+pub(crate) struct McpCommandExecutor;
+
+impl McpCommandExecutor {
+    pub(crate) fn new() -> Self {
+        Self
+    }
+}
+
+impl CommandExecutor for McpCommandExecutor {
+    fn run(
+        &self,
+        command: &[String],
+        environment: &BTreeMap<String, String>,
+        working_directory: Option<&Path>,
+        timeout: Duration,
+    ) -> Result<CommandExecution, String> {
+        let redactions = environment
+            .values()
+            .filter(|value| !value.is_empty())
+            .map(|value| value.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let result = run_process(ProcessOptions {
+            command,
+            environment,
+            extra_environment: &[],
+            passthrough: &[],
+            working_directory,
+            timeout: Some(timeout),
+            redactions: &redactions,
+            generic_redaction: true,
+            whitelist: RUN_ENV_WHITELIST,
+        })?;
+        Ok(CommandExecution {
+            stdout: result.stdout,
+            stderr: result.stderr,
+            exit_code: result.exit_code,
+            timed_out: result.timed_out,
+            duration: result.duration,
+        })
+    }
+}
 
 /// Inputs shared by `run` and `file use` after each command has performed its
 /// own policy and vault work. `whitelist` is deliberately supplied by the
@@ -896,6 +941,26 @@ mod tests {
             redact_process_output(b"plain-secret and encoded-secret", &redactions, false),
             "*** and ***"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mcp_command_executor_injects_and_redacts_the_resolved_environment() {
+        let executor = McpCommandExecutor::new();
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "printf '%s' \"$TOKEN\"".to_owned(),
+        ];
+        let environment = BTreeMap::from([("TOKEN".to_owned(), "synthetic-secret".to_owned())]);
+        let result = executor
+            .run(&command, &environment, None, Duration::from_secs(2))
+            .expect("fake child process");
+
+        assert_eq!(result.exit_code, 0);
+        assert!(!result.timed_out);
+        assert_eq!(result.stdout, "***");
+        assert!(!result.stdout.contains("synthetic-secret"));
     }
 
     #[test]

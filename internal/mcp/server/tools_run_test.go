@@ -116,6 +116,72 @@ func TestHandleRunCommand_SecretEnvInjection(t *testing.T) {
 	}
 }
 
+func TestHandleRunCommand_ScopeChecksDottedBareEntryFallback(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "allowed/foo", map[string]any{"other": "inside"})
+	if err := vault.WriteEntry(vaultDir, "allowed/foo.bar", &vault.Entry{Data: map[string]any{"token": "outside"}}, identity); err != nil {
+		t.Fatalf("write dotted entry: %v", err)
+	}
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"allowed/foo"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	_, err := srv.handleRunCommand(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"command": []any{"echo", "should-not-run"},
+		"env":     map[string]any{"TOKEN": "allowed/foo.bar"},
+	}})
+	if err == nil || !strings.Contains(err.Error(), `secret ref path "allowed/foo.bar" outside allowed scope`) {
+		t.Fatalf("handleRunCommand() error = %v, want scope denial on resolved bare entry", err)
+	}
+}
+
+func TestResolveRunCommandFiles_ScopeChecksDottedBareEntryFallback(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "allowed/foo", map[string]any{"other": "inside"})
+	if err := vault.WriteEntry(vaultDir, "allowed/foo.bar", &vault.Entry{Data: map[string]any{"token": "outside"}}, identity); err != nil {
+		t.Fatalf("write dotted entry: %v", err)
+	}
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"allowed/foo"},
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	resolved, known, fileAudit, toolErr, err := srv.resolveRunCommandFiles(context.Background(), map[string]any{
+		"TOKEN": "allowed/foo.bar",
+	})
+	if toolErr != nil {
+		t.Fatalf("resolveRunCommandFiles() tool error = %v, want scope denial", toolErr)
+	}
+	if resolved != nil || known != nil || fileAudit != nil {
+		t.Fatalf("resolveRunCommandFiles() returned data on scope denial: resolved=%v known=%v audit=%v", resolved, known, fileAudit)
+	}
+	if err == nil || !strings.Contains(err.Error(), `secret ref path "allowed/foo.bar" outside allowed scope`) {
+		t.Fatalf("resolveRunCommandFiles() error = %v, want scope denial on resolved bare entry", err)
+	}
+}
+
+func TestHandleRunCommand_RejectsNonStringWorkingDir(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio")
+	result, err := srv.handleRunCommand(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"command":     []any{"echo", "unused"},
+		"working_dir": true,
+	}})
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v, want tool result error", err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Text, `argument "working_dir" must be a string`) {
+		t.Fatalf("handleRunCommand() result = %#v, want working_dir type error", result)
+	}
+}
+
 func TestHandleRunCommand_MasksSecretEnvInStdoutAndStderr(t *testing.T) {
 	const secret = "synthetic-run-command-success-secret"
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
