@@ -45,9 +45,21 @@ fn get_and_list_help_and_extra_argument_errors_match_go() {
         &["help", "list"][..],
         &["get", "entry", "extra"][..],
         &["list", "prefix", "extra"][..],
+        &["get", "--", "--help"][..],
+        &["list", "--", "--help"][..],
     ] {
         let go = run(&go_binary, args, home.path());
         let rust = run(&rust_binary, args, home.path());
+        if args.contains(&"--") {
+            // Both reach the vault operation rather than rendering help. The
+            // existing uninitialized-vault error taxonomy differs separately.
+            assert_ne!(go.status.code(), Some(0));
+            assert_ne!(rust.status.code(), Some(0));
+            assert!(go.stdout.is_empty());
+            assert!(rust.stdout.is_empty());
+            assert!(rust.stderr.starts_with(b"Error: vault not initialized"));
+            continue;
+        }
         assert_same(&go, &rust, args);
     }
 }

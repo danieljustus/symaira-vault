@@ -25,18 +25,21 @@ pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
             "get" | "show" | "cat" => {
                 return args[index + 1..]
                     .iter()
+                    .take_while(|arg| *arg != "--")
                     .any(|arg| arg == "--help" || arg == "-h")
                     .then_some("get");
             }
             "list" | "ls" => {
                 return args[index + 1..]
                     .iter()
+                    .take_while(|arg| *arg != "--")
                     .any(|arg| arg == "--help" || arg == "-h")
                     .then_some("list");
             }
             "dynamic" => {
                 return args[index + 1..]
                     .iter()
+                    .take_while(|arg| *arg != "--")
                     .any(|arg| arg == "--help" || arg == "-h")
                     .then_some(
                         if args.get(index + 1).is_some_and(|arg| arg == "generate") {
@@ -49,6 +52,7 @@ pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
             "setup" => {
                 return args[index + 1..]
                     .iter()
+                    .take_while(|arg| *arg != "--")
                     .any(|arg| arg == "--help" || arg == "-h")
                     .then_some("setup");
             }
@@ -78,34 +82,38 @@ pub fn write<W: Write>(mut root: clap::Command, path: &[String], output: &mut W)
         return output.write_all(ROOT_HELP.as_bytes());
     }
     let topic = path.iter().map(String::as_str).collect::<Vec<_>>();
-    let frozen = match topic.as_slice() {
-        ["dynamic"] => Some(DYNAMIC_HELP),
-        ["dynamic", "generate"] => Some(DYNAMIC_GENERATE_HELP),
-        ["setup"] => Some(SETUP_HELP),
-        _ => None,
-    };
-    if let Some(help) = frozen {
-        return output.write_all(help.as_bytes());
-    }
-
-    if path.len() == 1 {
-        match path[0].as_str() {
-            "get" | "show" | "cat" => return write_nested("get", output),
-            "list" | "ls" => return write_nested("list", output),
-            _ => {}
+    for length in (1..=topic.len()).rev() {
+        if let Some(help) = frozen_help(&topic[..length]) {
+            return output.write_all(help.as_bytes());
         }
     }
 
     root.build();
     let mut selected = &mut root;
-    for topic in path {
-        let Some(command) = selected.find_subcommand_mut(topic) else {
-            return write_unknown_topic(path, &mut io::stderr().lock());
-        };
-        selected = command;
+    let mut matched = Vec::new();
+    for part in path {
+        if selected.find_subcommand(part).is_none() {
+            if matched.is_empty() {
+                return write_unknown_topic(path, &mut io::stderr().lock());
+            }
+            return selected.write_long_help(output);
+        }
+        matched.push(part.as_str());
+        selected = selected.find_subcommand_mut(part).expect("checked child");
     }
 
     selected.write_long_help(output)
+}
+
+fn frozen_help(path: &[&str]) -> Option<&'static str> {
+    match path {
+        ["get" | "show" | "cat"] => Some(GET_HELP),
+        ["list" | "ls"] => Some(LIST_HELP),
+        ["dynamic"] => Some(DYNAMIC_HELP),
+        ["dynamic", "generate"] => Some(DYNAMIC_GENERATE_HELP),
+        ["setup"] => Some(SETUP_HELP),
+        _ => None,
+    }
 }
 
 fn write_unknown_topic<W: Write>(path: &[String], output: &mut W) -> io::Result<()> {

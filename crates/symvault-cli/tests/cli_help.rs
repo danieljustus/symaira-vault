@@ -68,6 +68,11 @@ fn help_matches_checked_out_go_command_tree() {
         &["help"][..],
         &["--quiet", "help"][..],
         &["help", "missing-topic"][..],
+        &["help", "dynamic", "missing"][..],
+        &["help", "dynamic", "generate", "missing"][..],
+        &["help", "setup", "missing"][..],
+        &["help", "get", "missing"][..],
+        &["help", "list", "missing"][..],
     ] {
         let go = Command::new(&go_binary)
             .args(args)
