@@ -292,6 +292,9 @@ fn ensure_enroll_secret(root: &Path) -> Result<Vec<u8>, String> {
     if let Some(secret) = symvault_sync::safeio::read_bounded(&path, 4096)
         .map_err(|error| format!("read approval ownership secret: {error}"))?
     {
+        if secret.len() != 32 {
+            return Err("approval ownership secret: invalid secret length".to_owned());
+        }
         return Ok(secret);
     }
     let mut secret = vec![0; 32];
@@ -731,6 +734,19 @@ mod tests {
         drop(metadata);
         assert_eq!(fs::read(&port).unwrap(), b"owned by another server");
         assert!(!tls.exists());
+    }
+
+    #[test]
+    fn existing_enroll_secret_must_match_cli_proof_size() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("mcp-server.enroll-secret");
+        fs::write(&path, [0xA5; 31]).unwrap();
+        assert_eq!(
+            ensure_enroll_secret(root.path()).unwrap_err(),
+            "approval ownership secret: invalid secret length"
+        );
+        fs::write(&path, [0xA5; 32]).unwrap();
+        assert_eq!(ensure_enroll_secret(root.path()).unwrap().len(), 32);
     }
 
     #[test]
