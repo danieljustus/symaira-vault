@@ -1,4 +1,4 @@
-//! MCP stdio assembly for the CLI-owned vault and session boundary.
+//! MCP transport assembly for the CLI-owned vault and session boundary.
 //!
 //! `main.rs` owns argument parsing and process exit codes. This module owns
 //! only the explicit construction of the MCP runtime from an already resolved
@@ -7,6 +7,7 @@
 use std::{
     fs,
     io::{self, BufReader},
+    net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -22,16 +23,20 @@ use symvault_mcp::{
     ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
 
-/// Starts the bounded native MCP stdio server for an already unlocked vault.
+/// Starts the bounded native MCP server for an already unlocked vault.
 ///
 /// The caller supplies the identity and keyring obtained through the
 /// CLI/session boundary. This function never reads a platform keychain,
 /// prompts for credentials, or discovers a vault from the environment.
+#[allow(clippy::too_many_arguments)] // These inputs are owned by the CLI boundary.
 pub fn run(
     vault: impl AsRef<Path>,
     agent: &str,
     identity: Identity,
     keyring: &dyn Keyring,
+    stdio: bool,
+    bind: &str,
+    port: u16,
     status: impl FnOnce() -> (bool, String, bool, String),
 ) -> Result<(), String> {
     let root = vault.as_ref();
@@ -73,10 +78,28 @@ pub fn run(
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
     handler.set_tool_list_config(tool_list_config(profile));
 
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
-        .map_err(|error| format!("MCP stdio: {error}"))
+    if !stdio {
+        let address = if bind == "localhost" {
+            "127.0.0.1"
+                .parse::<std::net::IpAddr>()
+                .expect("literal loopback IP")
+        } else {
+            bind.parse::<std::net::IpAddr>()
+                .map_err(|_| "MCP HTTP bind address must be a loopback IP".to_owned())?
+        };
+        if !address.is_loopback() {
+            return Err("MCP HTTP listener must bind to loopback".to_owned());
+        }
+        let listener = TcpListener::bind((address, port))
+            .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        symvault_mcp::http::serve_loopback(listener, root.join("mcp-tokens.json"), &mut handler)
+            .map_err(|error| format!("MCP HTTP: {error}"))
+    } else {
+        let stdin = io::stdin();
+        let stdout = io::stdout();
+        run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
+            .map_err(|error| format!("MCP stdio: {error}"))
+    }
 }
 
 fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {

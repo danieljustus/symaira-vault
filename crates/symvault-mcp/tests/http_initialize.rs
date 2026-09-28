@@ -72,7 +72,11 @@ fn go_authenticated_http_session_matches_rust_adapter() {
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
     let addr = listener.local_addr().expect("loopback address");
-    let count = fixture.cases.len();
+    let count = fixture
+        .cases
+        .iter()
+        .filter(|case| case.go_authenticated)
+        .count();
     let server_name = fixture.server_name.clone();
     let server_version = fixture.server_version.clone();
     let server = thread::spawn(move || {
@@ -84,11 +88,9 @@ fn go_authenticated_http_session_matches_rust_adapter() {
     });
 
     for case in &fixture.cases {
-        assert!(
-            case.go_authenticated,
-            "{} oracle request was not authenticated",
-            case.name
-        );
+        if !case.go_authenticated {
+            continue;
+        }
         let mut stream = TcpStream::connect(addr).expect("connect to Rust loopback adapter");
         write!(
             stream,

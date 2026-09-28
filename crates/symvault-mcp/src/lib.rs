@@ -399,6 +399,7 @@ pub struct ProtocolHandler {
     tool_list_config: ToolListConfig,
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
+    token_allowed_tools: Option<Vec<String>>,
 }
 
 impl ProtocolHandler {
@@ -409,6 +410,7 @@ impl ProtocolHandler {
             tool_list_config: ToolListConfig::default(),
             tool_call_runtime: None,
             initialized: false,
+            token_allowed_tools: None,
         }
     }
 
@@ -425,6 +427,7 @@ impl ProtocolHandler {
             tool_list_config,
             tool_call_runtime: None,
             initialized: false,
+            token_allowed_tools: None,
         }
     }
 
@@ -442,6 +445,7 @@ impl ProtocolHandler {
             tool_list_config: ToolListConfig::default(),
             tool_call_runtime: Some(runtime),
             initialized: false,
+            token_allowed_tools: None,
         }
     }
 
@@ -497,6 +501,26 @@ impl ProtocolHandler {
 
     pub fn set_tool_call_runtime(&mut self, runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>) {
         self.tool_call_runtime = runtime;
+    }
+
+    /// Applies the authenticated HTTP token scope to tools/call. `None` keeps
+    /// stdio and explicitly legacy callers unrestricted; an empty slice denies
+    /// every tool, matching an empty Go token scope.
+    pub fn set_token_scope(&mut self, allowed_tools: &[String]) {
+        self.token_allowed_tools = Some(allowed_tools.to_vec());
+    }
+
+    /// Creates a fresh protocol session with the same configured runtime and
+    /// tool catalog. HTTP transport state is isolated by authenticated token.
+    pub fn new_session(&self) -> Self {
+        Self {
+            server_name: self.server_name.clone(),
+            server_version: self.server_version.clone(),
+            tool_list_config: self.tool_list_config.clone(),
+            tool_call_runtime: self.tool_call_runtime.clone(),
+            initialized: false,
+            token_allowed_tools: self.token_allowed_tools.clone(),
+        }
     }
 
     /// Whether `initialize` has been handled on this connection.
@@ -686,6 +710,16 @@ impl ProtocolHandler {
                 ),
                 None,
             ));
+        }
+        if let Some(allowed) = self.token_allowed_tools.as_deref()
+            && !tools::is_tool_allowed_by_token(allowed, &name).map_err(Error::Catalog)?
+        {
+            return Message::response(
+                msg.id.clone(),
+                call::payload(ToolCallResult::error(format!(
+                    "Tool {name:?} requires tier \"token_scope\""
+                ))),
+            );
         }
         let known = tools::contains_tool(&name).map_err(Error::Catalog)?;
         if !known {
