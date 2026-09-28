@@ -191,7 +191,7 @@ where
 struct HttpServerState<F> {
     handler_for_agent: F,
     handlers: HashMap<String, ProtocolHandler>,
-    sessions: HashMap<String, ProtocolHandler>,
+    sessions: HashMap<String, Arc<Mutex<ProtocolHandler>>>,
 }
 
 fn serve_connection_shared<F>(
@@ -205,6 +205,7 @@ where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
 {
     serve_connection_with_timeouts(stream, timeouts, |reader, request, keep_alive| {
+<<<<<<< HEAD
         let request_path = request
             .path
             .split_once('?')
@@ -264,6 +265,27 @@ where
             handlers,
             sessions,
         )
+||||||| parent of e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
+        let mut state = state
+            .lock()
+            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
+        let HttpServerState {
+            handler_for_agent,
+            handlers,
+            sessions,
+        } = &mut *state;
+        serve_one_authenticated(
+            reader,
+            request,
+            keep_alive,
+            registry_path,
+            handler_for_agent,
+            handlers,
+            sessions,
+        )
+=======
+        serve_one_authenticated(reader, request, keep_alive, registry_path, state)
+>>>>>>> e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
     })
 }
 
@@ -273,34 +295,6 @@ impl Drop for ActiveHttpConnection {
     fn drop(&mut self) {
         self.0.fetch_sub(1, Ordering::AcqRel);
     }
-}
-
-#[cfg(test)]
-fn serve_connection_authenticated<F>(
-    stream: TcpStream,
-    registry_path: &Path,
-    handler_for_agent: &mut F,
-    handlers: &mut HashMap<String, ProtocolHandler>,
-    sessions: &mut HashMap<String, ProtocolHandler>,
-) -> Result<(), std::io::Error>
-where
-    F: FnMut(&str) -> Result<ProtocolHandler, String>,
-{
-    serve_connection_with_timeouts(
-        stream,
-        HttpTimeouts::default(),
-        |reader, request, keep_alive| {
-            serve_one_authenticated(
-                reader,
-                request,
-                keep_alive,
-                registry_path,
-                handler_for_agent,
-                handlers,
-                sessions,
-            )
-        },
-    )
 }
 
 fn serve_connection_with_timeouts<F>(
@@ -393,9 +387,7 @@ fn serve_one_authenticated<F>(
     request: WireRequest,
     keep_alive: bool,
     registry_path: &Path,
-    handler_for_agent: &mut F,
-    handlers: &mut HashMap<String, ProtocolHandler>,
-    sessions: &mut HashMap<String, ProtocolHandler>,
+    state: &Mutex<HttpServerState<F>>,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -443,57 +435,80 @@ where
         )?;
         return Ok(keep_alive);
     }
-    if !handlers.contains_key(&request.agent) {
-        match handler_for_agent(&request.agent) {
-            Ok(handler) if handlers.len() < MAX_HTTP_SESSIONS => {
-                handlers.insert(request.agent.clone(), handler);
-            }
-            Ok(_) => {
-                write_request_error(
-                    stream,
-                    503,
-                    "too many MCP agent handlers",
-                    response_version,
-                    keep_alive,
-                )?;
-                return Ok(keep_alive);
-            }
-            Err(error) => {
-                write_json_error_for_request(stream, 403, &error, response_version, keep_alive)?;
-                return Ok(keep_alive);
+    let handler = {
+        let mut state = state
+            .lock()
+            .map_err(|_| std::io::Error::other("MCP HTTP state poisoned"))?;
+        let HttpServerState {
+            handler_for_agent,
+            handlers,
+            sessions,
+        } = &mut *state;
+        if !handlers.contains_key(&request.agent) {
+            match handler_for_agent(&request.agent) {
+                Ok(handler) if handlers.len() < MAX_HTTP_SESSIONS => {
+                    handlers.insert(request.agent.clone(), handler);
+                }
+                Ok(_) => {
+                    write_request_error(
+                        stream,
+                        503,
+                        "too many MCP agent handlers",
+                        response_version,
+                        keep_alive,
+                    )?;
+                    return Ok(keep_alive);
+                }
+                Err(error) => {
+                    write_json_error_for_request(
+                        stream,
+                        403,
+                        &error,
+                        response_version,
+                        keep_alive,
+                    )?;
+                    return Ok(keep_alive);
+                }
             }
         }
-    }
-    let session_key = format!("{}:{}", token.id, request.agent);
-    if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
-        write_request_error(
-            stream,
-            503,
-            "too many MCP sessions",
-            response_version,
-            keep_alive,
-        )?;
-        return Ok(keep_alive);
-    }
-    let handler = sessions.entry(session_key).or_insert_with(|| {
-        handlers
-            .get(&request.agent)
-            .expect("agent handler inserted")
-            .new_session()
-    });
-    handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
-    let response = handle_request(
-        HttpRequest {
-            method: &request.method,
-            path: &request.path,
-            content_type: &request.content_type,
-            accept: &request.accept,
-            protocol_version: &request.protocol_version,
-            body: &request.body,
-        },
-        handler,
-    )
-    .map_err(|error| std::io::Error::other(error.to_string()))?;
+        let session_key = format!("{}:{}", token.id, request.agent);
+        if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
+            write_request_error(
+                stream,
+                503,
+                "too many MCP sessions",
+                response_version,
+                keep_alive,
+            )?;
+            return Ok(keep_alive);
+        }
+        Arc::clone(sessions.entry(session_key).or_insert_with(|| {
+            Arc::new(Mutex::new(
+                handlers
+                    .get(&request.agent)
+                    .expect("agent handler inserted")
+                    .new_session(),
+            ))
+        }))
+    };
+    let response = {
+        let mut handler = handler
+            .lock()
+            .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
+        handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+        handle_request(
+            HttpRequest {
+                method: &request.method,
+                path: &request.path,
+                content_type: &request.content_type,
+                accept: &request.accept,
+                protocol_version: &request.protocol_version,
+                body: &request.body,
+            },
+            &mut handler,
+        )
+        .map_err(|error| std::io::Error::other(error.to_string()))?
+    };
     write_http_response(stream, response, response_version, keep_alive)?;
     Ok(keep_alive)
 }
@@ -728,7 +743,20 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
     Ok(registry)
 }
 
+<<<<<<< HEAD
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
+||||||| parent of e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
+fn allowed_origin(origin: &str, request_host: &str) -> bool {
+=======
+fn allowed_origin(origin: &str, request_host: &str) -> bool {
+    let request_host = host_without_port(request_host);
+    if !loopback_host(request_host) {
+        return false;
+    }
+    if origin.trim().is_empty() {
+        return true;
+    }
+>>>>>>> e2749223 (fix: preserve independent MCP HTTP sessions and empty Origin parity)
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };
@@ -740,8 +768,7 @@ pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
         return false;
     }
     let origin_host = host_without_port(authority);
-    let request_host = host_without_port(request_host);
-    loopback_host(origin_host) && loopback_host(request_host)
+    loopback_host(origin_host)
 }
 
 fn host_without_port(authority: &str) -> &str {
@@ -1112,6 +1139,20 @@ mod tests {
     const BEARER: &str = "http001-rust-loopback-token";
     const BODY: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"http-test","version":"1"}}}"#;
 
+    type TestState = Mutex<HttpServerState<fn(&str) -> Result<ProtocolHandler, String>>>;
+
+    fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
+        Ok(ProtocolHandler::new("symaira", "1.0.0"))
+    }
+
+    fn test_state() -> TestState {
+        Mutex::new(HttpServerState {
+            handler_for_agent: test_handler,
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        })
+    }
+
     fn registry(dir: &Path) -> std::path::PathBuf {
         let hash = symvault_store::sha256_hex(BEARER.as_bytes());
         let bytes = serde_json::to_vec(&serde_json::json!({
@@ -1140,16 +1181,9 @@ mod tests {
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
-            let mut handlers = HashMap::new();
-            let mut sessions = HashMap::new();
-            serve_connection_authenticated(
-                stream,
-                &registry_path,
-                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
-                &mut handlers,
-                &mut sessions,
-            )
-            .expect("serve connection");
+            let state = test_state();
+            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
+                .expect("serve connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream.write_all(request.as_bytes()).expect("write request");
@@ -1491,16 +1525,9 @@ mod tests {
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
-            let mut handlers = HashMap::new();
-            let mut sessions = HashMap::new();
-            serve_connection_authenticated(
-                stream,
-                &registry_path,
-                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
-                &mut handlers,
-                &mut sessions,
-            )
-            .expect("serve connection sequence");
+            let state = test_state();
+            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
+                .expect("serve connection sequence");
         });
         let stream = TcpStream::connect(address).expect("connect");
         let mut reader = BufReader::new(stream);
@@ -1536,26 +1563,16 @@ mod tests {
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
-            let mut handlers = HashMap::new();
-            let mut sessions = HashMap::new();
-            serve_connection_with_timeouts(
+            let state = test_state();
+            serve_connection_shared(
                 stream,
+                &registry_path,
+                &state,
                 HttpTimeouts {
                     initial_read: Duration::from_secs(1),
                     request_read: Duration::from_secs(1),
                     keep_alive_idle: Duration::from_millis(100),
                     write: Duration::from_secs(1),
-                },
-                |reader, request, keep_alive| {
-                    serve_one_authenticated(
-                        reader,
-                        request,
-                        keep_alive,
-                        &registry_path,
-                        &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
-                        &mut handlers,
-                        &mut sessions,
-                    )
                 },
             )
             .expect("serve connection with short test idle timeout");
@@ -1891,16 +1908,9 @@ mod tests {
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().expect("accept");
-            let mut handlers = HashMap::new();
-            let mut sessions = HashMap::new();
-            serve_connection_authenticated(
-                stream,
-                &registry_path,
-                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
-                &mut handlers,
-                &mut sessions,
-            )
-            .expect("serve keep-alive connection");
+            let state = test_state();
+            serve_connection_shared(stream, &registry_path, &state, HttpTimeouts::default())
+                .expect("serve keep-alive connection");
         });
         let mut stream = TcpStream::connect(address).expect("connect");
         stream
@@ -2073,6 +2083,66 @@ mod tests {
         let response = round_trip(true, "http://127.0.0.1");
         assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
         assert!(response.contains("\"protocolVersion\":\"2025-11-25\""));
+    }
+
+    #[test]
+    fn authenticated_loopback_listener_accepts_missing_origin() {
+        let response = round_trip(true, "");
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    }
+
+    #[test]
+    fn blocked_session_does_not_hold_the_global_http_state() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let registry_path = registry(dir.path());
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let address = listener.local_addr().expect("listener address");
+        let session = Arc::new(Mutex::new(ProtocolHandler::new("symaira", "1.0.0")));
+        let held_session = session.lock().expect("hold one MCP session");
+        let (selected_tx, selected_rx) = std::sync::mpsc::channel();
+        let state = Arc::new(Mutex::new(HttpServerState {
+            handler_for_agent: move |_: &str| {
+                selected_tx.send(()).expect("signal handler selection");
+                Ok(ProtocolHandler::new("symaira", "1.0.0"))
+            },
+            handlers: HashMap::new(),
+            sessions: HashMap::from([("tok-test:default".into(), Arc::clone(&session))]),
+        }));
+        let server_state = Arc::clone(&state);
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept request");
+            serve_connection_shared(
+                stream,
+                &registry_path,
+                &server_state,
+                HttpTimeouts::default(),
+            )
+            .expect("serve request");
+        });
+        let mut client = TcpStream::connect(address).expect("connect");
+        write!(
+            client,
+            "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{BODY}",
+            BODY.len()
+        )
+        .expect("send request");
+        selected_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("agent handler selected");
+        let state_released = (0..100).any(|_| {
+            if state.try_lock().is_ok() {
+                true
+            } else {
+                thread::sleep(Duration::from_millis(10));
+                false
+            }
+        });
+        drop(held_session);
+        let mut response = String::new();
+        client.read_to_string(&mut response).expect("read response");
+        server.join().expect("join server");
+        assert!(state_released, "blocked session held the global HTTP state");
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
     }
 
     #[test]

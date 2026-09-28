@@ -313,7 +313,7 @@ func main() {
 		}
 		return
 	}
-	check(os.WriteFile(*outputPath, encoded, 0o644))
+	check(os.WriteFile(*outputPath, encoded, 0o600))
 }
 
 func doRequest(client *http.Client, addr, token string, scopedTokens map[string]string, req request) response {
