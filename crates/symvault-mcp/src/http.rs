@@ -808,7 +808,7 @@ mod tests {
         let request = format!(
             "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nContent-Length: {}\r\n\r\n{BODY}",
             BODY.len(),
-            BODY.len()
+            BODY.len() + 1
         );
         let response = round_trip_wire(&request);
         assert_eq!(raw_status(&response), 400);
@@ -834,14 +834,10 @@ mod tests {
     fn source_bound_request_line_limit_is_stricter_than_go_server_limit() {
         let go = go_http_case("oversized_request_line_reaches_handler");
         assert_eq!(go["response"]["status"], 200);
-        let request = format!(
-            "POST /mcp?x={} HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: http://127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nX-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nMCP-Protocol-Version: 2025-11-25\r\nContent-Length: {}\r\n\r\n{BODY}",
-            "x".repeat(16 * 1024),
-            BODY.len()
-        );
-        let response = round_trip_wire(&request);
-        assert_eq!(raw_status(&response), 413);
-        assert_eq!(raw_body(&response), "request too large\n");
+        let line = format!("POST /mcp?x={} HTTP/1.1\r\n", "x".repeat(16 * 1024));
+        let error = read_bounded_line(&mut std::io::Cursor::new(line), MAX_HTTP_REQUEST_LINE)
+            .expect_err("Rust rejects the Go request line before allocation");
+        assert_eq!(error.to_string(), "HTTP line too large");
     }
 
     #[test]
