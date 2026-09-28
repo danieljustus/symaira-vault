@@ -11,6 +11,7 @@ mod agent_token_commands;
 mod agent_uninstall_commands;
 mod agent_upgrade_commands;
 mod agent_whoami_commands;
+mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
@@ -1018,6 +1019,12 @@ enum DeviceCommand {
     ApprovalList {
         #[arg(value_name = "ARG", num_args = 0..)]
         _extra: Vec<OsString>,
+    },
+    /// Pair a phone as an approval device for agent credential requests.
+    ApprovalPair {
+        /// LAN address the phone should connect to (auto-detected when omitted).
+        #[arg(long)]
+        host: Option<String>,
     },
     /// Revoke an approval device's ability to approve/deny requests.
     ApprovalRevoke {
@@ -2258,6 +2265,10 @@ fn run_cli() -> ExitCode {
                     }
                 }
                 DeviceCommand::ApprovalList { .. } => device_approval::list(vault, cli.quiet),
+                DeviceCommand::ApprovalPair { host } => (|| {
+                    require_initialized(vault)?;
+                    approval_commands::pair(vault, host.as_deref(), cli.quiet)
+                })(),
                 DeviceCommand::ApprovalRevoke { yes, args } => {
                     if args.len() != 1 {
                         Err(format!("accepts 1 arg(s), received {}", args.len()))
