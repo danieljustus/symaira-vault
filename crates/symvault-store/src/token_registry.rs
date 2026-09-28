@@ -26,6 +26,7 @@ use crate::{StoreError, read_open_regular_with_metadata, sha256_hex};
 pub const TOKEN_REGISTRY_FILE: &str = "mcp-tokens.json";
 const TOKEN_REGISTRY_VERSION: i64 = 2;
 pub const OAUTH_CLIENTS_FILE: &str = "mcp-oauth-clients.json";
+const MAX_OAUTH_CLIENTS_BYTES: usize = 1024 * 1024;
 
 /// One on-disk token registry entry, matching Go's `TokenData` JSON layout
 /// field-for-field so unrelated entries (including fields this command
@@ -246,6 +247,12 @@ fn write_oauth_clients(
     let mut bytes = serde_json::to_vec_pretty(file)
         .map_err(|error| StoreError::Config(format!("marshal OAuth client store: {error}")))?;
     bytes.push(b'\n');
+    if bytes.len() > MAX_OAUTH_CLIENTS_BYTES {
+        return Err(StoreError::Limit {
+            path: target.to_path_buf(),
+            limit: MAX_OAUTH_CLIENTS_BYTES as u64,
+        });
+    }
     crate::publication::replace(target, &bytes, root_cap)
         .map_err(|error| StoreError::Config(format!("write OAuth client store: {error}")))
 }

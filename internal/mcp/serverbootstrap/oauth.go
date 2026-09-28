@@ -28,6 +28,7 @@ import (
 const (
 	oauthClientsFileVersion = 1
 	oauthClientsFileName    = "mcp-oauth-clients.json"
+	maxOAuthClientsBytes    = 1 << 20
 )
 
 // consentPageHTML is the browser-based consent page shown when the server
@@ -316,9 +317,20 @@ func (s *oauthClientStore) Save() error {
 	return nil
 }
 
-func (s *oauthClientStore) put(c *registeredClient) {
+func (s *oauthClientStore) put(c *registeredClient) bool {
 	s.mu.Lock()
+	previous, existed := s.clients[c.ClientID]
 	s.clients[c.ClientID] = c
+	data, err := json.MarshalIndent(oauthClientStoreFile{Version: oauthClientsFileVersion, Clients: s.clients}, "", "  ")
+	if err != nil || len(data)+1 > maxOAuthClientsBytes {
+		if existed {
+			s.clients[c.ClientID] = previous
+		} else {
+			delete(s.clients, c.ClientID)
+		}
+		s.mu.Unlock()
+		return false
+	}
 	s.mu.Unlock()
 
 	// Best-effort persistence: log error but never fail the registration.
@@ -327,6 +339,7 @@ func (s *oauthClientStore) put(c *registeredClient) {
 			cliout.Warnf("failed to persist OAuth client store: %v", err)
 		}
 	}
+	return true
 }
 
 func (s *oauthClientStore) get(clientID string) (*registeredClient, bool) {
@@ -460,11 +473,14 @@ func handleOAuthRegister(clientStore *oauthClientStore) http.HandlerFunc {
 		}
 		clientID := hex.EncodeToString(b)
 
-		clientStore.put(&registeredClient{
+		if !clientStore.put(&registeredClient{
 			ClientID:     clientID,
 			RedirectURIs: req.RedirectURIs,
 			CreatedAt:    time.Now(),
-		})
+		}) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "server_error"})
+			return
+		}
 
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"client_id":                  clientID,

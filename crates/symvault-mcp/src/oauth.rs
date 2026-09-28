@@ -125,6 +125,9 @@ fn register(
     };
     let client = match token_registry::register_oauth_client(&state.root, redirects, now) {
         Ok(client) => client,
+        Err(symvault_store::StoreError::Limit { .. }) => {
+            return OAuthResponse::Http(error(429, "server_error"));
+        }
         Err(_) => return OAuthResponse::Http(error(500, "server_error")),
     };
     let body = serde_json::json!({
@@ -1019,5 +1022,48 @@ mod tests {
             validate_registration("text/plain", r#"{"redirect_uris":["http://localhost/cb"]}"#),
             Err("invalid_client_metadata")
         );
+    }
+
+    #[test]
+    fn repeated_registration_stops_before_client_store_exceeds_one_mib() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = OAuthState::new(
+            directory.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
+        );
+        let body =
+            serde_json::json!({"redirect_uris": [format!("symvault:{}", "a".repeat(32_768))]})
+                .to_string();
+        let path = directory.path().join(token_registry::OAUTH_CLIENTS_FILE);
+        let mut denied = false;
+        for _ in 0..40 {
+            let (status, _) = response_body(super::register(
+                &state,
+                "application/json",
+                &body,
+                OffsetDateTime::now_utc(),
+            ));
+            if status == 429 {
+                denied = true;
+                break;
+            }
+            assert_eq!(status, 201);
+        }
+        assert!(denied, "registration must reach the store limit");
+        let before = fs::read(&path).unwrap();
+        assert!(before.len() <= 1024 * 1024);
+        assert_eq!(
+            response_body(super::register(
+                &state,
+                "application/json",
+                &body,
+                OffsetDateTime::now_utc()
+            ))
+            .0,
+            429
+        );
+        assert_eq!(fs::read(path).unwrap(), before);
     }
 }

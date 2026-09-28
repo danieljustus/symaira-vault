@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -410,4 +411,51 @@ func TestOAuthRefreshToken_MissingRefreshToken(t *testing.T) {
 func sha256HexRaw(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
+}
+
+func TestOAuthRegisterBoundsPersistentClientStore(t *testing.T) {
+	store, err := loadOAuthClientStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := handleOAuthRegister(store)
+	body := `{"redirect_uris":["symvault:` + strings.Repeat("a", 32_768) + `"]}`
+	request := func() int {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
+	denied := false
+	for i := 0; i < 40; i++ {
+		status := request()
+		if status == http.StatusTooManyRequests {
+			denied = true
+			break
+		}
+		if status != http.StatusCreated {
+			t.Fatalf("registration %d: status %d", i, status)
+		}
+	}
+	if !denied {
+		t.Fatal("registration did not reach client-store limit")
+	}
+	before, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) > maxOAuthClientsBytes {
+		t.Fatalf("client store grew to %d bytes", len(before))
+	}
+	if status := request(); status != http.StatusTooManyRequests {
+		t.Fatalf("registration after limit: status %d", status)
+	}
+	after, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("rejected registration changed client store")
+	}
 }

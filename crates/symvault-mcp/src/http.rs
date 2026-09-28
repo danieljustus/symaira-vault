@@ -1029,6 +1029,7 @@ fn write_http_response(
         406 => "Not Acceptable",
         413 => "Payload Too Large",
         415 => "Unsupported Media Type",
+        429 => "Too Many Requests",
         _ => "Internal Server Error",
     };
     write!(stream, "{version} {} {reason}\r\n", response.status)?;
