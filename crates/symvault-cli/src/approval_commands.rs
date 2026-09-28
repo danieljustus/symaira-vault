@@ -334,6 +334,11 @@ fn terminal_width() -> usize {
         .unwrap_or(80)
 }
 
+// Device pairing and the local approval queue share the CLI command module
+// boundary, but keep their protocol helpers isolated from each other.
+mod queue;
+pub(crate) use queue::{decide, list};
+
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
