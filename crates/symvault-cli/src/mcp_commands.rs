@@ -6,12 +6,14 @@
 //! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
 #[cfg(unix)]
+use std::io::{BufRead, Write};
+#[cfg(unix)]
 use std::sync::OnceLock;
 #[cfg(unix)]
 use std::time::Duration;
 use std::{
     fs,
-    io::{self, BufRead, BufReader, IsTerminal, Write},
+    io::{self, BufReader, IsTerminal},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -90,7 +92,7 @@ pub fn run(
         let encrypted_identity = fs::read(root.join("identity.age")).ok();
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
-        let oauth_agent_name = config.default_agent.clone();
+        let oauth_agent_name = oauth_agent(&config).to_owned();
         let runtime_status = (touch_id_available, backend, persistent, message);
         let handler_for_agent = move |agent: &str| {
             let identity = identity_from_secret(&identity_text)?;
@@ -167,6 +169,14 @@ pub fn run(
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
+    }
+}
+
+fn oauth_agent(config: &Config) -> &str {
+    if config.agents.contains_key("oauth") {
+        "oauth"
+    } else {
+        &config.default_agent
     }
 }
 
@@ -391,6 +401,16 @@ fn load_policy_engine(root: &Path) -> Result<Option<Engine>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oauth_keeps_a_configured_dedicated_agent() {
+        let mut config = Config::default();
+        assert_eq!(oauth_agent(&config), config.default_agent);
+        config
+            .agents
+            .insert("oauth".into(), AgentProfile::default());
+        assert_eq!(oauth_agent(&config), "oauth");
+    }
 
     #[test]
     fn runtime_config_keeps_profile_scope_and_explicit_tool_registry() {
