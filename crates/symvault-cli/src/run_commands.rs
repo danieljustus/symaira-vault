@@ -337,7 +337,7 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     if options.command.is_empty() {
         return Err("command must contain at least one element".to_owned());
     }
-    let materialized_files = materialize_secret_files(options.files)?;
+    let mut materialized_files = materialize_secret_files(options.files)?;
 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
@@ -443,6 +443,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         // wait for an unrelated descendant.
         drop(stdout_reader);
         drop(stderr_reader);
+        materialized_files
+            .cleanup()
+            .map_err(|_| "failed to securely clean temporary secret files".to_owned())?;
         return Ok(ProcessResult {
             stdout: String::new(),
             stderr: String::new(),
@@ -461,6 +464,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         join_process_readers(stdout_reader, stderr_reader);
     let stdout = redact_process_output(&stdout, options.redactions, options.generic_redaction);
     let stderr = redact_process_output(&stderr, options.redactions, options.generic_redaction);
+    materialized_files
+        .cleanup()
+        .map_err(|_| "failed to securely clean temporary secret files".to_owned())?;
     Ok(ProcessResult {
         stdout,
         stderr,
@@ -489,28 +495,58 @@ struct MaterializedSecretFiles {
 
 impl Drop for MaterializedSecretFiles {
     fn drop(&mut self) {
+        let _ = self.cleanup();
+    }
+}
+
+impl MaterializedSecretFiles {
+    fn cleanup(&mut self) -> std::io::Result<()> {
+        let mut cleanup_error = None;
         for file in &mut self.files {
             let zeros = [0u8; 8192];
             if let Some(mut handle) = file.handle.take() {
-                let _ = std::io::Seek::seek(&mut handle, std::io::SeekFrom::Start(0));
-                let mut remaining = file.length;
-                while remaining > 0 {
-                    let count = remaining.min(zeros.len() as u64) as usize;
-                    if std::io::Write::write_all(&mut handle, &zeros[..count]).is_err() {
-                        break;
+                let zero_result = (|| {
+                    std::io::Seek::seek(&mut handle, std::io::SeekFrom::Start(0))?;
+                    let mut remaining = file.length;
+                    while remaining > 0 {
+                        let count = remaining.min(zeros.len() as u64) as usize;
+                        std::io::Write::write_all(&mut handle, &zeros[..count])?;
+                        remaining -= count as u64;
                     }
-                    remaining -= count as u64;
+                    handle.sync_all()
+                })();
+                match zero_result {
+                    Ok(()) => drop(handle),
+                    Err(error) => {
+                        cleanup_error.get_or_insert(error);
+                        // Keep the writer for Drop's best-effort retry. The
+                        // command result already fails closed on this cleanup
+                        // error, and a transient sharing error may clear on a
+                        // second attempt.
+                        file.handle = Some(handle);
+                    }
                 }
-                let _ = handle.sync_all();
-                drop(handle);
             }
-            let _ = fs::remove_file(&file.path);
+            if let Err(error) = fs::remove_file(&file.path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                cleanup_error.get_or_insert(error);
+            }
         }
-        if let Some(directory) = self.directory.take() {
+        if let Some(directory) = self.directory.as_ref() {
             // Never recurse into child-controlled contents. An unexpected
             // replacement remains on disk instead of deleting outside data.
-            let _ = fs::remove_dir(directory);
+            match fs::remove_dir(directory) {
+                Ok(()) => self.directory = None,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    self.directory = None;
+                }
+                Err(error) => {
+                    cleanup_error.get_or_insert(error);
+                }
+            }
         }
+        cleanup_error.map_or(Ok(()), Err)
     }
 }
 
@@ -552,24 +588,25 @@ fn materialize_secret_files(
             ));
         }
         let path = directory.join(name);
-        let mut handle = create_secret_file(&path)
+        let handle = create_secret_file(&path)
             .map_err(|error| format!("materialize file {name:?}: {error}"))?;
-        if let Err(error) =
-            std::io::Write::write_all(&mut handle, content).and_then(|()| handle.sync_all())
-        {
-            drop(handle);
-            let _ = fs::remove_file(&path);
-            return Err(format!("materialize file {name:?}: {error}"));
-        }
+        materialized.files.push(MaterializedSecretFile {
+            path: path.clone(),
+            handle: Some(handle),
+            length: content.len() as u64,
+        });
+        let file = materialized
+            .files
+            .last_mut()
+            .and_then(|file| file.handle.as_mut())
+            .expect("newly materialized file has an open handle");
+        std::io::Write::write_all(file, content)
+            .and_then(|()| file.sync_all())
+            .map_err(|error| format!("materialize file {name:?}: {error}"))?;
         materialized.environment.push((
             OsString::from(format!("SYMVAULT_FILE_{name}")),
             path.as_os_str().to_os_string(),
         ));
-        materialized.files.push(MaterializedSecretFile {
-            path,
-            handle: Some(handle),
-            length: content.len() as u64,
-        });
     }
     Ok(materialized)
 }
@@ -1148,6 +1185,46 @@ mod tests {
         assert!(
             !directory.exists(),
             "private directory remains after cleanup"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cleanup_zeroes_materialized_file_while_another_process_handle_is_open() {
+        use std::io::Read as _;
+
+        let files = BTreeMap::from([("PIN".to_owned(), b"synthetic-file-pin".to_vec())]);
+        let mut materialized = materialize_secret_files(&files).expect("materialize secret file");
+        let path = PathBuf::from(
+            materialized
+                .environment
+                .iter()
+                .find(|(name, _)| name == "SYMVAULT_FILE_PIN")
+                .expect("file environment assignment")
+                .1
+                .clone(),
+        );
+        let mut held_reader = fs::File::open(&path).expect("child-compatible read handle");
+
+        // Windows may defer unlink while a child keeps a handle open. Cleanup
+        // must still overwrite the content and report incomplete unlinking.
+        let cleanup = materialized.cleanup();
+        let mut observed = Vec::new();
+        held_reader
+            .read_to_end(&mut observed)
+            .expect("read through the still-open child handle");
+        assert_eq!(observed, vec![0; b"synthetic-file-pin".len()]);
+
+        drop(held_reader);
+        if cleanup.is_err() {
+            materialized
+                .cleanup()
+                .expect("retry cleanup after the child handle closes");
+        }
+        assert!(!path.exists(), "materialized secret file remains");
+        assert!(
+            !path.parent().expect("private directory").exists(),
+            "private directory remains"
         );
     }
 
