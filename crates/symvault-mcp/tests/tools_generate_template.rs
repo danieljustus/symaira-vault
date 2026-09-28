@@ -119,10 +119,10 @@ fn generate_template_matches_source_bound_go_dry_run_fixture() {
     ))
     .expect("valid Go generate-template fixture");
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "fca3f894");
+    assert_eq!(fixture.oracle.commit, "2b703647");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+        "2b703647a821d7236aa8a66032852ab3ee606701"
     );
     assert_eq!(fixture.oracle.source_files.len(), 12);
     assert_eq!(fixture.oracle.source_hash.len(), 64);

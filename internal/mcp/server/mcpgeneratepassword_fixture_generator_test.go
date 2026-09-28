@@ -124,12 +124,12 @@ func TestGenerateMCPGeneratePasswordFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpGeneratePasswordSourceFiles)
 	pinned := mcpGeneratePasswordGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go generate_password sources differ from fca3f894: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go generate_password sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGeneratePasswordFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGeneratePasswordOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
 			SourceFiles: mcpGeneratePasswordSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGeneratePasswordGeneratorHash(t),
 		},
@@ -161,7 +161,7 @@ func mcpGeneratePasswordGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpGeneratePasswordSourceFiles {
-		cmd := exec.Command("git", "show", "fca3f894:"+name)
+		cmd := exec.Command("git", "show", "2b703647:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

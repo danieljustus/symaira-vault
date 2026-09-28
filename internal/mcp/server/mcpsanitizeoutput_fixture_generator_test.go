@@ -109,12 +109,12 @@ func TestGenerateMCPSanitizeOutputFixture(t *testing.T) {
 	root := mcpSanitizeOutputRepoRoot(t)
 	sourceHash := mcpSanitizeOutputSourceHash(t, mcpSanitizeOutputSourceFiles)
 	if pinned := mcpSanitizeOutputGitSourceHash(t, mcpSanitizeOutputSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go sanitize-output sources differ from fca3f894: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go sanitize-output sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpSanitizeOutputFixture{
 		SchemaVersion: 1,
 		Oracle: mcpSanitizeOutputOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
 			SourceFiles: mcpSanitizeOutputSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpSanitizeOutputGeneratorHash(t),
 		},
@@ -163,7 +163,7 @@ func mcpSanitizeOutputGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpSanitizeOutputRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "fca3f894:"+name)
+		cmd := exec.Command("git", "show", "2b703647:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

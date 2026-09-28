@@ -22,7 +22,7 @@ import (
 
 // Source-bound secret_unseal protocol oracle. All secret strings in this file
 // and its fixture are synthetic test markers, never developer vault contents.
-const mcpSecretUnsealCommit = "cd741531bb5302d3ffe723490eef464da74f2f55"
+const mcpSecretUnsealCommit = "2b703647a821d7236aa8a66032852ab3ee606701"
 
 var mcpSecretUnsealSources = []string{
 	"internal/mcp/server/protocol.go",
@@ -156,7 +156,7 @@ func TestGenerateMCPSecretUnsealFixture(t *testing.T) {
 	fixture := mcpSecretUnsealFixture{
 		SchemaVersion: 1,
 		Oracle: mcpCallOracle{
-			Commit: "cd741531", CommitSHA: mcpSecretUnsealCommit, SourceFiles: mcpSecretUnsealSources,
+			Commit: "2b703647", CommitSHA: mcpSecretUnsealCommit, SourceFiles: mcpSecretUnsealSources,
 			SourceHash: sourceHash, GeneratorHash: mcpSecretUnsealGeneratorHash(t),
 		},
 		ServerName: serverName, ServerVersion: serverVersion, Cases: fixtureCases,

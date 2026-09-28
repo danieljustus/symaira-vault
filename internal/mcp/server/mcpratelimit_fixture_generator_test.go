@@ -52,7 +52,7 @@ var mcpRateLimitSourceFiles = []string{
 	"internal/mcp/transport/transport.go",
 }
 
-const mcpRateLimitPinnedSourceHash = "62c20a71f3e84537473e8fc505eeefe8bf340c9b9454d961d577aa8f0b427331"
+const mcpRateLimitPinnedSourceHash = "980cf18d199f740f08637e53393ccfe66e5e5e9455ef8c7d891ff1fed2f32604"
 
 func TestGenerateMCPRateLimitFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_RATE_LIMIT_FIXTURE") == "1"
@@ -155,12 +155,12 @@ func TestGenerateMCPRateLimitFixture(t *testing.T) {
 		t.Fatalf("Go MCP rate-limit sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpRateLimitPinnedSourceHash)
 	}
 	if pinned := mcpRateLimitGitSourceHash(t, mcpRateLimitSourceFiles); pinned != sourceHash {
-		t.Fatalf("working Go MCP rate-limit sources differ from fca3f894: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("working Go MCP rate-limit sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpRateLimitFixture{
 		SchemaVersion: 1,
 		Oracle: mcpRateLimitOracle{
-			Commit: "fca3f894", CommitSHA: "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
 			SourceFiles: mcpRateLimitSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpRateLimitGeneratorHash(t),
 		},
@@ -208,7 +208,7 @@ func mcpRateLimitGitSourceHash(t *testing.T, files []string) string {
 	t.Helper()
 	h := sha256.New()
 	for _, name := range files {
-		data, err := exec.Command("git", "show", "fca3f894:"+name).Output()
+		data, err := exec.Command("git", "show", "2b703647:"+name).Output()
 		if err != nil {
 			t.Fatalf("read pinned source %s: %v", name, err)
 		}
