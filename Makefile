@@ -216,6 +216,7 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
+PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json

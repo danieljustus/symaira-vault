@@ -34,6 +34,7 @@ pub struct HttpResponse {
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
+const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
 
 #[derive(Deserialize)]
 struct TokenRegistry {
@@ -42,14 +43,17 @@ struct TokenRegistry {
 }
 
 /// Serves authenticated HTTP requests on a loopback-only listener. The caller
-/// owns the protocol handler and must supply an already configured runtime.
+/// supplies a runtime factory so each authenticated agent gets its own handler.
 /// Encrypted Go registries are rejected until the caller can supply their age
 /// identity; a missing or unreadable token registry never opens the endpoint.
-pub fn serve_loopback(
+pub fn serve_loopback<F>(
     listener: TcpListener,
     registry_path: impl AsRef<Path>,
-    handler: &mut ProtocolHandler,
-) -> Result<(), std::io::Error> {
+    mut handler_for_agent: F,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
     if !listener.local_addr()?.ip().is_loopback() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
@@ -57,18 +61,29 @@ pub fn serve_loopback(
         ));
     }
     load_token_registry(registry_path.as_ref())?;
+    let mut handlers = HashMap::new();
     let mut sessions = HashMap::new();
     for incoming in listener.incoming() {
         let mut stream = incoming?;
         let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
         let _ = stream.set_write_timeout(Some(Duration::from_secs(10)));
-        let result =
-            serve_one_authenticated(&mut stream, registry_path.as_ref(), handler, &mut sessions);
+        let result = serve_one_authenticated(
+            &mut stream,
+            registry_path.as_ref(),
+            &mut handler_for_agent,
+            &mut handlers,
+            &mut sessions,
+        );
         if let Err(error) = result
             && error.kind() == std::io::ErrorKind::InvalidData
         {
             let (status, message) = if error.to_string().contains("too large") {
-                (413, "request body too large")
+                let message = if error.to_string().contains("request body") {
+                    "request body too large"
+                } else {
+                    "request too large"
+                };
+                (413, message)
             } else {
                 (400, "bad request")
             };
@@ -78,12 +93,16 @@ pub fn serve_loopback(
     Ok(())
 }
 
-fn serve_one_authenticated(
+fn serve_one_authenticated<F>(
     stream: &mut TcpStream,
     registry_path: &Path,
-    handler_template: &ProtocolHandler,
+    handler_for_agent: &mut F,
+    handlers: &mut HashMap<String, ProtocolHandler>,
     sessions: &mut HashMap<String, ProtocolHandler>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
     let peer = stream.peer_addr()?;
     let local = stream.local_addr()?;
     if !peer.ip().is_loopback() || !local.ip().is_loopback() {
@@ -113,13 +132,25 @@ fn serve_one_authenticated(
     if request.agent.is_empty() {
         return write_plain_error(stream, 403, "forbidden: missing X-Symaira-Agent header");
     }
+    if !handlers.contains_key(&request.agent) {
+        match handler_for_agent(&request.agent) {
+            Ok(handler) if handlers.len() < MAX_HTTP_SESSIONS => {
+                handlers.insert(request.agent.clone(), handler);
+            }
+            Ok(_) => return write_http_error(stream, 503, "too many MCP agent handlers"),
+            Err(error) => return write_json_error(stream, 403, &error),
+        }
+    }
     let session_key = format!("{}:{}", token.id, request.agent);
     if !sessions.contains_key(&session_key) && sessions.len() >= MAX_HTTP_SESSIONS {
         return write_http_error(stream, 503, "too many MCP sessions");
     }
-    let handler = sessions
-        .entry(session_key)
-        .or_insert_with(|| handler_template.new_session());
+    let handler = sessions.entry(session_key).or_insert_with(|| {
+        handlers
+            .get(&request.agent)
+            .expect("agent handler inserted")
+            .new_session()
+    });
     handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
     let response = handle_request(
         HttpRequest {
@@ -151,53 +182,77 @@ struct WireRequest {
 
 fn read_wire_request(stream: &mut TcpStream) -> Result<Option<WireRequest>, std::io::Error> {
     let mut reader = BufReader::new(stream);
-    let mut first = String::new();
-    if reader.read_line(&mut first)? == 0 {
+    let Some(first) = read_bounded_line(&mut reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
+    };
+    let request_line = parse_crlf_line(&first)?;
+    let mut parts = request_line.split(' ');
+    let method = parts.next().unwrap_or_default();
+    let path = parts.next().unwrap_or_default();
+    let version = parts.next().unwrap_or_default();
+    if method.is_empty()
+        || path.is_empty()
+        || version != "HTTP/1.1"
+        || parts.next().is_some()
+        || !method.bytes().all(is_http_token)
+        || !path.starts_with('/')
+        || path.bytes().any(|byte| byte <= 0x20 || byte == 0x7f)
+    {
+        return Err(invalid_http("invalid HTTP/1.1 request line"));
     }
-    let mut parts = first.split_whitespace();
-    let method = parts.next().unwrap_or_default().to_owned();
-    let path = parts.next().unwrap_or_default().to_owned();
+    let method = method.to_owned();
+    let path = path.to_owned();
     let mut headers = BTreeMap::new();
     let mut header_bytes = first.len();
     loop {
-        let mut line = String::new();
-        let count = reader.read_line(&mut line)?;
-        if count == 0 {
+        let Some(line) = read_bounded_line(&mut reader, MAX_HTTP_HEADERS)? else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "incomplete HTTP headers",
             ));
-        }
-        header_bytes += count;
+        };
+        header_bytes = header_bytes.saturating_add(line.len());
         if header_bytes > MAX_HTTP_HEADERS {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "HTTP headers too large",
-            ));
+            return Err(invalid_http("HTTP headers too large"));
         }
-        if line == "\r\n" {
+        if line == b"\r\n" {
             break;
         }
-        if let Some((name, value)) = line.split_once(':') {
-            headers.insert(name.trim().to_ascii_lowercase(), value.trim().to_owned());
+        let line = parse_crlf_line(&line)?;
+        let Some((name, value)) = line.split_once(':') else {
+            return Err(invalid_http("malformed HTTP header"));
+        };
+        if name.is_empty() || !name.bytes().all(is_http_token) {
+            return Err(invalid_http("invalid HTTP header name"));
+        }
+        if value
+            .bytes()
+            .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+        {
+            return Err(invalid_http("invalid HTTP header value"));
+        }
+        let name = name.to_ascii_lowercase();
+        if headers
+            .insert(name, value.trim_matches([' ', '\t']).to_owned())
+            .is_some()
+        {
+            return Err(invalid_http("duplicate HTTP header"));
         }
     }
-    let length = headers
-        .get("content-length")
-        .and_then(|value| value.parse::<usize>().ok())
-        .unwrap_or(0);
-    if headers.contains_key("transfer-encoding") {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "transfer encoding is unsupported",
-        ));
+    if headers.get("host").is_none_or(String::is_empty) {
+        return Err(invalid_http("missing Host header"));
     }
+    if headers.contains_key("transfer-encoding") {
+        return Err(invalid_http("transfer encoding is unsupported"));
+    }
+    let length = match headers.get("content-length") {
+        Some(value) => value
+            .parse::<usize>()
+            .map_err(|_| invalid_http("invalid Content-Length"))?,
+        None => 0,
+    };
     if length > MAX_HTTP_BODY {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "request body too large",
-        ));
+        return Err(invalid_http("request body too large"));
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body)?;
@@ -217,6 +272,71 @@ fn read_wire_request(stream: &mut TcpStream) -> Result<Option<WireRequest>, std:
         protocol_version: get("mcp-protocol-version"),
         body,
     }))
+}
+
+fn read_bounded_line<R: BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> Result<Option<Vec<u8>>, std::io::Error> {
+    let mut line = Vec::new();
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return if line.is_empty() {
+                Ok(None)
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "incomplete HTTP line",
+                ))
+            };
+        }
+        let count = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |index| index + 1);
+        if line.len().saturating_add(count) > max_bytes {
+            return Err(invalid_http("HTTP line too large"));
+        }
+        let complete = available[count - 1] == b'\n';
+        line.extend_from_slice(&available[..count]);
+        reader.consume(count);
+        if complete {
+            return Ok(Some(line));
+        }
+    }
+}
+
+fn parse_crlf_line(bytes: &[u8]) -> Result<&str, std::io::Error> {
+    let Some(line) = bytes.strip_suffix(b"\r\n") else {
+        return Err(invalid_http("HTTP lines must end in CRLF"));
+    };
+    std::str::from_utf8(line).map_err(|_| invalid_http("HTTP headers must be UTF-8"))
+}
+
+fn is_http_token(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'!' | b'#'
+                | b'$'
+                | b'%'
+                | b'&'
+                | b'\''
+                | b'*'
+                | b'+'
+                | b'-'
+                | b'.'
+                | b'^'
+                | b'_'
+                | b'`'
+                | b'|'
+                | b'~'
+        )
+}
+
+fn invalid_http(message: &str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, message)
 }
 
 fn lookup_token(
@@ -494,33 +614,60 @@ mod tests {
         path
     }
 
-    fn round_trip(auth: bool, origin: &str) -> String {
+    fn round_trip_wire(request: &str) -> String {
         let dir = tempfile::tempdir().expect("temp dir");
         let registry_path = registry(dir.path());
         let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
         let address = listener.local_addr().expect("listener address");
         let server = thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept");
-            let handler = ProtocolHandler::new("symaira", "1.0.0");
-            serve_one_authenticated(&mut stream, &registry_path, &handler, &mut HashMap::new())
-                .expect("serve request");
+            let mut handlers = HashMap::new();
+            let mut sessions = HashMap::new();
+            let result = serve_one_authenticated(
+                &mut stream,
+                &registry_path,
+                &mut |_| Ok(ProtocolHandler::new("symaira", "1.0.0")),
+                &mut handlers,
+                &mut sessions,
+            );
+            match result {
+                Err(error) if error.kind() == std::io::ErrorKind::InvalidData => {
+                    let (status, message) = if error.to_string().contains("too large") {
+                        let message = if error.to_string().contains("request body") {
+                            "request body too large"
+                        } else {
+                            "request too large"
+                        };
+                        (413, message)
+                    } else {
+                        (400, "bad request")
+                    };
+                    write_http_error(&mut stream, status, message).expect("write parse error");
+                }
+                Err(error) => panic!("serve request: {error}"),
+                Ok(()) => {}
+            }
         });
         let mut stream = TcpStream::connect(address).expect("connect");
+        stream.write_all(request.as_bytes()).expect("write request");
+        let mut response = String::new();
+        stream.read_to_string(&mut response).expect("read response");
+        server.join().expect("server thread");
+        response
+    }
+
+    fn round_trip(auth: bool, origin: &str) -> String {
+        let address = "127.0.0.1";
         let auth = if auth {
             format!("Authorization: Bearer {BEARER}\r\n")
         } else {
             String::new()
         };
-        write!(
-            stream,
+        let request = format!(
             "POST /mcp HTTP/1.1\r\nHost: {address}\r\nOrigin: {origin}\r\n{auth}X-Symaira-Agent: default\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{BODY}",
             BODY.len()
-        )
-        .expect("write request");
-        let mut response = String::new();
-        stream.read_to_string(&mut response).expect("read response");
-        server.join().expect("server thread");
-        response
+        );
+        round_trip_wire(&request)
     }
 
     #[test]
@@ -587,5 +734,61 @@ mod tests {
             "{response}"
         );
         assert!(response.contains("invalid Origin header"), "{response}");
+    }
+
+    #[test]
+    fn loopback_parser_rejects_duplicate_authorization_with_http_error() {
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {BEARER}\r\nAuthorization: Bearer {BEARER}\r\n\r\n"
+        );
+        let response = round_trip_wire(&request);
+        assert!(
+            response.starts_with("HTTP/1.1 400 Bad Request\r\n"),
+            "{response}"
+        );
+        assert!(
+            response.contains("X-Content-Type-Options: nosniff\r\n"),
+            "{response}"
+        );
+        assert!(response.ends_with("\r\n\r\nbad request\n"), "{response}");
+    }
+
+    #[test]
+    fn loopback_parser_rejects_duplicate_content_length_with_http_error() {
+        let request = format!(
+            "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: {}\r\nContent-Length: {}\r\n\r\n{BODY}",
+            BODY.len(),
+            BODY.len()
+        );
+        let response = round_trip_wire(&request);
+        assert!(
+            response.starts_with("HTTP/1.1 400 Bad Request\r\n"),
+            "{response}"
+        );
+        assert!(response.ends_with("\r\n\r\nbad request\n"), "{response}");
+    }
+
+    #[test]
+    fn loopback_parser_rejects_non_http11_before_authentication() {
+        let response = round_trip_wire("POST /mcp HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+        assert!(
+            response.starts_with("HTTP/1.1 400 Bad Request\r\n"),
+            "{response}"
+        );
+        assert!(response.ends_with("\r\n\r\nbad request\n"), "{response}");
+    }
+
+    #[test]
+    fn loopback_parser_bounds_request_line_before_allocation() {
+        let request = format!("POST /{} HTTP/1.1\r\n", "x".repeat(MAX_HTTP_REQUEST_LINE));
+        let response = round_trip_wire(&request);
+        assert!(
+            response.starts_with("HTTP/1.1 413 Payload Too Large\r\n"),
+            "{response}"
+        );
+        assert!(
+            response.ends_with("\r\n\r\nrequest too large\n"),
+            "{response}"
+        );
     }
 }
