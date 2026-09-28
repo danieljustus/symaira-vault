@@ -7,7 +7,7 @@
 
 use std::{
     fs,
-    io::{self, BufReader},
+    io::{self, BufRead, BufReader, IsTerminal, Write},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -60,8 +60,9 @@ pub fn run(
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
+        let oauth_agent_name = config.default_agent.clone();
         let runtime_status = (touch_id_available, backend, persistent, message);
-        symvault_mcp::http::serve_loopback(listener, root.join("mcp-tokens.json"), move |agent| {
+        let handler_for_agent = move |agent: &str| {
             let identity = identity_from_secret(&identity_text)?;
             let profile = config
                 .agents
@@ -77,8 +78,23 @@ pub fn run(
                 &auth_method,
                 &runtime_status,
             )
-        })
-        .map_err(|error| format!("MCP HTTP: {error}"))
+        };
+        let registry_path = root.join("mcp-tokens.json");
+        let consent_agent_name = oauth_agent_name.clone();
+        let result = if io::stdin().is_terminal() {
+            symvault_mcp::http::serve_loopback_with_oauth(
+                listener,
+                registry_path,
+                handler_for_agent,
+                oauth_agent_name,
+                move |client_id, redirect_uri| {
+                    oauth_consent(client_id, redirect_uri, &consent_agent_name)
+                },
+            )
+        } else {
+            symvault_mcp::http::serve_loopback(listener, registry_path, handler_for_agent)
+        };
+        result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         let agent_name = agent
             .filter(|name| !name.is_empty())
@@ -102,6 +118,22 @@ pub fn run(
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
             .map_err(|error| format!("MCP stdio: {error}"))
     }
+}
+
+fn oauth_consent(client_id: &str, redirect_uri: &str, agent_name: &str) -> bool {
+    if !io::stdin().is_terminal() {
+        return false;
+    }
+    let _ = write!(
+        io::stderr(),
+        "OAuth client {client_id:?} requests full tool access for agent {agent_name:?} at {redirect_uri}. Approve? [y/N] "
+    );
+    let _ = io::stderr().flush();
+    let mut answer = String::new();
+    if io::stdin().lock().read_line(&mut answer).is_err() {
+        return false;
+    }
+    matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
 }
 
 fn identity_from_secret(secret: &SecretBytes) -> Result<Identity, String> {
