@@ -560,6 +560,7 @@ func TestVault_GetAllRecipientsForEncryption_NilIdentity(t *testing.T) {
 
 func TestWriteEntryWithRecipients(t *testing.T) {
 	tmpDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates)
 
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
@@ -609,6 +610,7 @@ func TestWriteEntryWithRecipients_NilIdentity(t *testing.T) {
 
 func TestMergeEntryWithRecipients(t *testing.T) {
 	tmpDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates)
 
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {
@@ -644,6 +646,7 @@ func TestMergeEntryWithRecipients(t *testing.T) {
 
 func TestMergeEntryWithRecipients_NilData(t *testing.T) {
 	tmpDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates)
 
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {

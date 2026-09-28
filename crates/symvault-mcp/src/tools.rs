@@ -102,6 +102,23 @@ pub(crate) fn contains_tool(name: &str) -> Result<bool, String> {
     Ok(catalog()?.iter().any(|definition| definition.name == name))
 }
 
+pub(crate) fn is_tool_allowed_by_token(allowed: &[String], name: &str) -> Result<bool, String> {
+    if allowed.iter().any(|entry| entry == "*") || allowed.iter().any(|entry| entry == name) {
+        return Ok(true);
+    }
+    let Some(definition) = catalog()?.iter().find(|definition| definition.name == name) else {
+        return Ok(false);
+    };
+    let canonical = definition.alias_for.as_deref().unwrap_or(name);
+    if allowed.iter().any(|entry| entry == canonical) {
+        return Ok(true);
+    }
+    Ok(catalog()?.iter().any(|candidate| {
+        candidate.alias_for.as_deref() == Some(canonical)
+            && allowed.iter().any(|entry| entry == &candidate.name)
+    }))
+}
+
 /// Return catalog discovery results using the same static registry view as Go.
 /// Search intentionally includes tools that are unavailable in the current
 /// runtime: callers need their risk and CLI alternative to choose a fallback.

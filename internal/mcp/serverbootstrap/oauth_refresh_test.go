@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -275,6 +276,68 @@ func TestOAuthRegisterRejectsExternalRedirectURI(t *testing.T) {
 	}
 }
 
+func TestOAuthRegisterValidationCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		status      int
+		wantError   string
+	}{
+		{"malformed metadata", "application/json", `not json`, http.StatusBadRequest, "invalid_client_metadata"},
+		{"missing redirects", "application/json", `{}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"empty redirects", "application/json", `{"redirect_uris":[]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"external redirect", "application/json", `{"redirect_uris":["https://example.com/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"userinfo redirect", "application/json", `{"redirect_uris":["http://user@localhost/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"custom scheme userinfo", "application/json", `{"redirect_uris":["symvault://user@vault/callback"]}`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"first JSON value only", "application/json", `{"redirect_uris":["http://user@localhost/callback"]} trailing`, http.StatusBadRequest, "invalid_redirect_uri"},
+		{"wrong content type", "text/plain", `{"redirect_uris":["http://localhost/callback"]}`, http.StatusBadRequest, "invalid_client_metadata"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newOAuthClientStore()
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", tc.contentType)
+			handleOAuthRegister(store).ServeHTTP(recorder, req)
+			if recorder.Code != tc.status {
+				t.Fatalf("status = %d, want %d; body=%s", recorder.Code, tc.status, recorder.Body.String())
+			}
+			var response map[string]any
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if response["error"] != tc.wantError {
+				t.Fatalf("error = %v, want %q", response["error"], tc.wantError)
+			}
+		})
+	}
+}
+
+func TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo(t *testing.T) {
+	store := newOAuthClientStore()
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(`{"redirect_uris":["symvault:callback"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	handleOAuthRegister(store).ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusCreated, recorder.Body.String())
+	}
+	var response struct {
+		ClientID     string   `json:"client_id"`
+		RedirectURIs []string `json:"redirect_uris"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode registration response: %v", err)
+	}
+	if len(response.ClientID) != 32 || len(response.RedirectURIs) != 1 || response.RedirectURIs[0] != "symvault:callback" {
+		t.Fatalf("unexpected registration: %+v", response)
+	}
+	if _, ok := store.get(response.ClientID); !ok {
+		t.Fatal("accepted registration was not stored")
+	}
+}
+
 func TestOAuthRefreshToken_WellKnownIncludesRefresh(t *testing.T) {
 	handler := handleOAuthAuthorizationServer("127.0.0.1", 9999)
 
@@ -348,4 +411,51 @@ func TestOAuthRefreshToken_MissingRefreshToken(t *testing.T) {
 func sha256HexRaw(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
+}
+
+func TestOAuthRegisterBoundsPersistentClientStore(t *testing.T) {
+	store, err := loadOAuthClientStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := handleOAuthRegister(store)
+	body := `{"redirect_uris":["symvault:` + strings.Repeat("a", 32_768) + `"]}`
+	request := func() int {
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(recorder, req)
+		return recorder.Code
+	}
+	denied := false
+	for i := 0; i < 40; i++ {
+		status := request()
+		if status == http.StatusTooManyRequests {
+			denied = true
+			break
+		}
+		if status != http.StatusCreated {
+			t.Fatalf("registration %d: status %d", i, status)
+		}
+	}
+	if !denied {
+		t.Fatal("registration did not reach client-store limit")
+	}
+	before, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before) > maxOAuthClientsBytes {
+		t.Fatalf("client store grew to %d bytes", len(before))
+	}
+	if status := request(); status != http.StatusTooManyRequests {
+		t.Fatalf("registration after limit: status %d", status)
+	}
+	after, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("rejected registration changed client store")
+	}
 }

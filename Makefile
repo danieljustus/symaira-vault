@@ -216,6 +216,7 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
+PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
@@ -421,6 +422,22 @@ mcp-init-fixtures-check:
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
+.PHONY: mcp-http-init-fixtures-check mcp-http-init-differential
+mcp-http-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check
+
+mcp-http-init-differential: mcp-http-init-fixtures-check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
+	$(CARGO) test -p symvault-mcp --lib http::tests --locked
+	$(CARGO) test -p symvault-mcp --test http_initialize --locked
+
+# HTTP-003 paired production-handler and Rust adapter lifecycle contracts.
+.PHONY: mcp-oauth-contract
+mcp-oauth-contract:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestOAuthRefreshToken_FullFlow|TestOAuthRefreshToken_ExpiredRefreshDenied|TestOAuthRefreshToken_RegisterResponseIncludesRefresh|TestOAuthRegisterValidationCases|TestOAuthRegisterAcceptsCustomSchemeWithoutUserinfo|TestOAuthRegisterBoundsPersistentClientStore|TestOAuthRefreshToken_WellKnownIncludesRefresh|TestOAuthRefreshToken_UnsupportedGrantType|TestOAuthRefreshToken_MissingRefreshToken)$$' -count=1
+	$(CARGO) test -p symvault-mcp --lib oauth::tests --locked
+	$(CARGO) test -p symvault-mcp --lib http::tests::authorization_server_discovery_is_reachable_through_oauth_listener --locked
+
 mcp-stdio-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
 		--check --output $(PORT_MCP_STDIO_FIXTURE)
@@ -578,7 +595,8 @@ manpages-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -buildvcs=true -o "$(MANPAGES_GO_BINARY)" .
 	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_MANPAGES_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_generate_manpages --locked
 
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential manpages-differential token-lookup-fixtures-check
+port-contract: mcp-oauth-contract
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential manpages-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -883,10 +901,10 @@ export-differential:
 .PHONY: mcp-call-fixtures-check mcp-call-differential
 mcp-call-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpcallgen -check
-	SYMAIRA_CHECK_MCP_RATE_LIMIT_FIXTURE=1 SYMAIRA_CHECK_MCP_SEARCH_FETCH_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TEMPLATE_FIXTURE=1 SYMAIRA_CHECK_MCP_SYMAIRA_SEARCH_FIXTURE=1 SYMAIRA_CHECK_MCP_SANITIZE_OUTPUT_FIXTURE=1 SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus|AuditSelf|SanitizeOutput|SymairaSearch|GenerateTemplate|SearchFetch|RateLimit)Fixture$$' -count=1
+	SYMAIRA_CHECK_MCP_RATE_LIMIT_FIXTURE=1 SYMAIRA_CHECK_MCP_SEARCH_FETCH_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TEMPLATE_FIXTURE=1 SYMAIRA_CHECK_MCP_SYMAIRA_SEARCH_FIXTURE=1 SYMAIRA_CHECK_MCP_SANITIZE_OUTPUT_FIXTURE=1 SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 SYMAIRA_CHECK_MCP_SECRET_UNSEAL_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus|AuditSelf|SanitizeOutput|SymairaSearch|GenerateTemplate|SearchFetch|RateLimit|SecretUnseal)Fixture$$' -count=1
 
 mcp-call-differential: mcp-call-fixtures-check
-	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --locked
+	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked
 
 .PHONY: export-cli-fixtures-check
 export-cli-fixtures-check:

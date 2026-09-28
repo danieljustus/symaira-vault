@@ -398,13 +398,28 @@ enum Command {
     Mcp {
         #[command(subcommand)]
         action: Option<McpAction>,
-        /// Agent profile used by the stdio server.
+        /// Agent profile used by this server (required in both transports).
         #[arg(long)]
         agent: Option<String>,
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Permit a locked vault (unsupported by the native stdio runtime).
+        /// Bind address for HTTP mode (remote binds require TLS).
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+        /// Server port.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// PEM TLS certificate file path.
+        #[arg(long, default_value = "")]
+        tls_cert: String,
+        /// PEM TLS private key file path.
+        #[arg(long, default_value = "")]
+        tls_key: String,
+        /// PEM client CA file path; enables mandatory mTLS.
+        #[arg(long, default_value = "")]
+        tls_ca: String,
+        /// Permit a locked vault (unsupported by the native runtime).
         #[arg(long)]
         allow_locked: bool,
     },
@@ -542,13 +557,28 @@ enum McpAction {
     /// `generate manpages` must not emit a `symvault-mcp-serve.1` page.
     #[command(hide = true)]
     Serve {
-        /// Agent profile used by the stdio server.
+        /// Agent profile used by this server (required in both transports).
         #[arg(long)]
         agent: Option<String>,
         /// Run the MCP protocol over stdin/stdout.
         #[arg(long)]
         stdio: bool,
-        /// Permit a locked vault (unsupported by the native stdio runtime).
+        /// Bind address for HTTP mode (remote binds require TLS).
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
+        /// Server port.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// PEM TLS certificate file path.
+        #[arg(long, default_value = "")]
+        tls_cert: String,
+        /// PEM TLS private key file path.
+        #[arg(long, default_value = "")]
+        tls_key: String,
+        /// PEM client CA file path; enables mandatory mTLS.
+        #[arg(long, default_value = "")]
+        tls_ca: String,
+        /// Permit a locked vault (unsupported by the native runtime).
         #[arg(long)]
         allow_locked: bool,
     },
@@ -2031,6 +2061,11 @@ fn run_cli() -> ExitCode {
             action,
             agent,
             stdio,
+            bind,
+            port,
+            tls_cert,
+            tls_key,
+            tls_ca,
             allow_locked,
         }) => match action {
             Some(McpAction::Install) => {
@@ -2045,12 +2080,22 @@ fn run_cli() -> ExitCode {
             Some(McpAction::Serve {
                 agent,
                 stdio,
+                bind,
+                port,
+                tls_cert,
+                tls_key,
+                tls_ca,
                 allow_locked,
             }) => run_mcp(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
                 agent.as_deref(),
                 stdio,
+                bind.as_str(),
+                port,
+                tls_cert.as_str(),
+                tls_key.as_str(),
+                tls_ca.as_str(),
                 allow_locked,
                 cli.quiet,
             ),
@@ -2059,6 +2104,11 @@ fn run_cli() -> ExitCode {
                 cli._profile.as_deref(),
                 agent.as_deref(),
                 stdio,
+                bind.as_str(),
+                port,
+                tls_cert.as_str(),
+                tls_key.as_str(),
+                tls_ca.as_str(),
                 allow_locked,
                 cli.quiet,
             ),
@@ -4048,24 +4098,47 @@ fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpServic
     finish_vault_result(result)
 }
 
+#[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
 fn run_mcp(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
     agent: Option<&str>,
     stdio: bool,
+    bind: &str,
+    port: u16,
+    tls_cert: &str,
+    tls_key: &str,
+    tls_ca: &str,
     allow_locked: bool,
     _quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         if !stdio {
-            return Err("native MCP currently supports only --stdio".to_owned());
+            let bind_ip = if bind == "localhost" {
+                "127.0.0.1"
+                    .parse::<std::net::IpAddr>()
+                    .expect("literal loopback IP")
+            } else {
+                bind.parse::<std::net::IpAddr>()
+                    .map_err(|_| "native MCP HTTP --bind must be an IP address".to_owned())?
+            };
+            if bind_ip.is_unspecified() {
+                return Err(
+                    "native MCP HTTP wildcard binds are unavailable; choose a concrete IP"
+                        .to_owned(),
+                );
+            }
+        }
+        if allow_locked && !stdio {
+            return Err("--allow-locked is only supported in --stdio mode".to_owned());
         }
         if allow_locked {
             return Err("--allow-locked is not supported by the native MCP runtime".to_owned());
         }
-        let agent = agent
-            .filter(|name| !name.is_empty())
-            .ok_or_else(|| "--agent is required in --stdio mode".to_owned())?;
+        let agent = agent.filter(|name| !name.is_empty());
+        if stdio && agent.is_none() {
+            return Err("--agent is required for the native MCP stdio server".to_owned());
+        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
@@ -4074,15 +4147,27 @@ fn run_mcp(
             .keyring
             .as_deref()
             .ok_or_else(|| "MCP audit keyring unavailable".to_owned())?;
-        mcp_commands::run(&vault, agent, identity, keyring, || {
-            let cache = runtime.cache_status();
-            (
-                touch_id_available(),
-                cache.backend,
-                cache.persistent,
-                cache.message,
-            )
-        })
+        mcp_commands::run(
+            &vault,
+            agent,
+            identity,
+            keyring,
+            stdio,
+            bind,
+            port,
+            tls_cert,
+            tls_key,
+            tls_ca,
+            || {
+                let cache = runtime.cache_status();
+                (
+                    touch_id_available(),
+                    cache.backend,
+                    cache.persistent,
+                    cache.message,
+                )
+            },
+        )
     })();
     finish_vault_result(result)
 }
