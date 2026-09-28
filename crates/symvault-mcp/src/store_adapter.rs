@@ -153,11 +153,6 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
         }
     }
 
-    fn resolve_secret_ref(&self, reference: &str) -> Result<String, String> {
-        let path = self.resolve_secret_ref_path(reference)?;
-        self.resolve_secret_ref_at_path(reference, &path)
-    }
-
     fn resolve_secret_ref_at_path(
         &self,
         reference: &str,

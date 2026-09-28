@@ -156,21 +156,15 @@ pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
 
-    /// Resolve a command environment reference without exposing it through a
-    /// normal MCP response. The default keeps fixture/read-only stores closed.
-    fn resolve_secret_ref(&self, reference: &str) -> Result<String, String> {
-        Err(format!("secret ref resolution is unavailable: {reference}"))
-    }
-
     /// Resolve a reference only if its current interpretation still selects
     /// the path previously scope-checked by the caller.
     fn resolve_secret_ref_at_path(
         &self,
         reference: &str,
-        _expected_path: &str,
+        expected_path: &str,
     ) -> Result<String, String> {
         Err(format!(
-            "scoped secret ref resolution is unavailable: {reference}"
+            "scoped secret ref resolution is unavailable: {reference} at {expected_path}"
         ))
     }
 
