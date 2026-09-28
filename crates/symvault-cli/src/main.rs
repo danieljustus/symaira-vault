@@ -3405,6 +3405,11 @@ fn run_get(
         }
         let result = result?;
         let format = if json { "json" } else { output };
+        let result = if format != "text" && !format.is_empty() && !print {
+            mask_sensitive(result)
+        } else {
+            result
+        };
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|error| error.to_string())?
@@ -3419,6 +3424,32 @@ fn run_get(
         )
     })();
     finish_vault_result(result)
+}
+
+/// Replaces sensitive field values with `***` so structured output reveals
+/// them only on an explicit `--print` (issue #1106).
+fn mask_sensitive(result: vault_commands::GetResult) -> vault_commands::GetResult {
+    let masked = || serde_json::Value::String("***".to_owned());
+    match result {
+        vault_commands::GetResult::Field { path, field, .. }
+            if write_commands::sensitive_field(&field) =>
+        {
+            vault_commands::GetResult::Field {
+                path,
+                field,
+                value: masked(),
+            }
+        }
+        vault_commands::GetResult::Entry { path, mut entry } => {
+            for (name, value) in entry.data.iter_mut() {
+                if write_commands::sensitive_field(name) {
+                    *value = masked();
+                }
+            }
+            vault_commands::GetResult::Entry { path, entry }
+        }
+        other => other,
+    }
 }
 
 fn run_find(
@@ -4974,5 +5005,44 @@ mod expand_vault_path_tests {
             expand_vault_path(Path::new("a/../b")).unwrap(),
             PathBuf::from("b")
         );
+    }
+}
+
+#[cfg(test)]
+mod mask_sensitive_tests {
+    use super::*;
+
+    #[test]
+    fn structured_get_masks_sensitive_fields() {
+        let entry = symvault_store::Entry {
+            data: BTreeMap::from([
+                ("username".to_owned(), serde_json::json!("alice")),
+                ("password".to_owned(), serde_json::json!("s3cret")),
+                ("api_token".to_owned(), serde_json::json!("t0k")),
+            ]),
+            ..Default::default()
+        };
+        let vault_commands::GetResult::Entry { entry, .. } =
+            mask_sensitive(vault_commands::GetResult::Entry {
+                path: "p".to_owned(),
+                entry: Box::new(entry),
+            })
+        else {
+            panic!("entry expected")
+        };
+        assert_eq!(entry.data["username"], "alice");
+        assert_eq!(entry.data["password"], "***");
+        assert_eq!(entry.data["api_token"], "***");
+
+        let vault_commands::GetResult::Field { value, .. } =
+            mask_sensitive(vault_commands::GetResult::Field {
+                path: "p".to_owned(),
+                field: "password".to_owned(),
+                value: serde_json::json!("s3cret"),
+            })
+        else {
+            panic!("field expected")
+        };
+        assert_eq!(value, "***");
     }
 }

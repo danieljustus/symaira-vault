@@ -52,6 +52,12 @@ Full exit code reference: [cli-exit-codes.md](cli-exit-codes.md).
 
 ### JSON output (`--output json`)
 
+`symvault get --output json` masks sensitive fields as `"***"` — any field
+whose name contains `password`, `token`, `secret`, `key`, `passwd` or `pwd`
+(case-insensitive), both in the whole-entry `Fields` object and for a single
+field. Add `--print` to return the raw values; that read is recorded in the
+audit log.
+
 The `--output json` flag is supported on the following commands:
 - `symvault admin config get`
 - `symvault delete`

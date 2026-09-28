@@ -531,6 +531,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "work/github",
             "--output",
             "json",
+            "--print",
         ],
         &rust_root,
         &home,
@@ -544,6 +545,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "work/github",
             "--output",
             "json",
+            "--print",
         ],
         &rust_root,
         &home,
@@ -554,6 +556,24 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         serde_json::from_slice::<serde_json::Value>(&rust_json.stdout).expect("Rust JSON"),
         serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
     );
+    // The frozen Go v0.22.1 oracle prints secrets in JSON; #1106 masks them
+    // unless --print is given, so the unmasked read is checked Rust-only.
+    let rust_masked = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_masked, "Rust get masked JSON");
+    let masked: serde_json::Value = serde_json::from_slice(&rust_masked.stdout).expect("JSON");
+    assert_eq!(masked["Fields"]["password"], "***");
 
     let rust_set = run(
         &rust_binary,
@@ -578,6 +598,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "work/github",
             "--output",
             "json",
+            "--print",
         ],
         &rust_root,
         &home,
@@ -591,6 +612,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "work/github",
             "--output",
             "json",
+            "--print",
         ],
         &rust_root,
         &home,
@@ -676,6 +698,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "Imported",
             "--output",
             "json",
+            "--print",
         ],
         &rust_root,
         &home,
@@ -2446,7 +2469,7 @@ fn set_totp_flags_parity_matches_go() {
     assert_success(&go_set, "Go set with TOTP");
     assert_success(&rust_set, "Rust set with TOTP");
 
-    let get_json_args = ["get", "work/totp-entry", "--output", "json"];
+    let get_json_args = ["get", "work/totp-entry", "--output", "json", "--print"];
     let go_json = run(&go_binary, &get_json_args, &go_root, &go_home);
     let rust_json = run(&rust_binary, &get_json_args, &rust_root, &rust_home);
     assert_success(&go_json, "Go get TOTP entry JSON");
