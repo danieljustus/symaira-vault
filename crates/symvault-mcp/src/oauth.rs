@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 
 use serde::Deserialize;
 use symvault_store::token_registry::{self, NewToken};
@@ -9,6 +9,7 @@ use crate::http::HttpResponse;
 const AUTH_CODE_TTL: Duration = Duration::minutes(5);
 const ACCESS_TOKEN_TTL: Duration = Duration::hours(24);
 const REFRESH_TOKEN_TTL: Duration = Duration::hours(720);
+const MAX_BROWSER_CONSENTS: usize = 256;
 
 #[derive(Deserialize)]
 struct RegistrationRequest {
@@ -26,8 +27,19 @@ struct PendingCode {
 pub(super) struct OAuthState {
     root: PathBuf,
     agent_name: String,
-    codes: HashMap<String, PendingCode>,
-    consent: Box<dyn FnMut(&str, &str) -> bool + Send>,
+    codes: Mutex<HashMap<String, PendingCode>>,
+    browser_requests: Mutex<HashMap<String, BrowserRequest>>,
+    consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+    verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
+}
+
+#[derive(Clone)]
+struct BrowserRequest {
+    client_id: String,
+    redirect_uri: String,
+    state: String,
+    code_challenge: String,
+    expires_at: OffsetDateTime,
 }
 
 pub(super) enum OAuthResponse {
@@ -39,13 +51,16 @@ impl OAuthState {
     pub(super) fn new(
         root: PathBuf,
         agent_name: String,
-        consent: Box<dyn FnMut(&str, &str) -> bool + Send>,
+        consent: Box<dyn Fn(&str, &str) -> crate::http::OAuthConsentDecision + Send + Sync>,
+        verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
     ) -> Self {
         Self {
             root,
             agent_name,
-            codes: HashMap::new(),
+            codes: Mutex::new(HashMap::new()),
+            browser_requests: Mutex::new(HashMap::new()),
             consent,
+            verify_passphrase,
         }
     }
 }
@@ -53,7 +68,7 @@ impl OAuthState {
 /// Handles the Go-backed DCR, authorization-code, PKCE, token, refresh, and
 /// authorization-server discovery routes. The caller supplies human consent.
 pub(super) fn handle(
-    state: &mut OAuthState,
+    state: &OAuthState,
     method: &str,
     path_and_query: &str,
     content_type: &str,
@@ -75,7 +90,10 @@ pub(super) fn handle(
     }
     if !matches!(
         path,
-        "/oauth/register" | "/mcp/oauth/authorize" | "/mcp/oauth/token"
+        "/oauth/register"
+            | "/mcp/oauth/authorize"
+            | "/mcp/oauth/authorize/confirm"
+            | "/mcp/oauth/token"
     ) {
         return None;
     }
@@ -85,6 +103,7 @@ pub(super) fn handle(
     match (path, method) {
         ("/oauth/register", "POST") => Some(register(state, content_type, body, now)),
         ("/mcp/oauth/authorize", "GET") => Some(authorize(state, query, now)),
+        ("/mcp/oauth/authorize/confirm", "POST") => Some(confirm(state, content_type, body, now)),
         ("/mcp/oauth/token", "POST") => Some(token(state, body, now)),
         _ => Some(OAuthResponse::Http(error(405, "invalid_request"))),
     }
@@ -116,7 +135,7 @@ fn register(
     OAuthResponse::Http(json_response(201, body))
 }
 
-fn authorize(state: &mut OAuthState, query: &str, now: OffsetDateTime) -> OAuthResponse {
+fn authorize(state: &OAuthState, query: &str, now: OffsetDateTime) -> OAuthResponse {
     let Some(parameters) = parse_form(query) else {
         return OAuthResponse::Http(error(400, "invalid_request"));
     };
@@ -150,15 +169,43 @@ fn authorize(state: &mut OAuthState, query: &str, now: OffsetDateTime) -> OAuthR
     if !is_allowed_redirect_uri(redirect_uri, &client.redirect_uris) {
         return OAuthResponse::Http(error(400, "invalid_redirect_uri"));
     }
-    if !(state.consent)(client_id, redirect_uri) {
-        return OAuthResponse::Http(error(403, "access_denied"));
+    let decision = (state.consent)(client_id, redirect_uri);
+    match decision {
+        crate::http::OAuthConsentDecision::Denied => {
+            return OAuthResponse::Http(error(403, "access_denied"));
+        }
+        crate::http::OAuthConsentDecision::Browser => {
+            return start_browser_consent(
+                state,
+                client_id,
+                redirect_uri,
+                state_value,
+                challenge,
+                now,
+            );
+        }
+        crate::http::OAuthConsentDecision::Approved => {}
     }
+    issue_code(state, client_id, redirect_uri, state_value, challenge, now)
+}
+
+fn issue_code(
+    state: &OAuthState,
+    client_id: &str,
+    redirect_uri: &str,
+    state_value: &str,
+    challenge: &str,
+    now: OffsetDateTime,
+) -> OAuthResponse {
     let mut random = [0_u8; 16];
     if getrandom::fill(&mut random).is_err() {
         return OAuthResponse::Http(error(500, "server_error"));
     }
     let code = encode_hex(&random);
-    state.codes.insert(
+    let Ok(mut codes) = state.codes.lock() else {
+        return OAuthResponse::Http(error(500, "server_error"));
+    };
+    codes.insert(
         code.clone(),
         PendingCode {
             client_id: client_id.to_owned(),
@@ -169,7 +216,158 @@ fn authorize(state: &mut OAuthState, query: &str, now: OffsetDateTime) -> OAuthR
     OAuthResponse::Redirect(redirect_uri_with_code(redirect_uri, &code, state_value))
 }
 
-fn token(state: &mut OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
+fn start_browser_consent(
+    state: &OAuthState,
+    client_id: &str,
+    redirect_uri: &str,
+    state_value: &str,
+    challenge: &str,
+    now: OffsetDateTime,
+) -> OAuthResponse {
+    let mut random = [0_u8; 32];
+    if getrandom::fill(&mut random).is_err() {
+        return OAuthResponse::Http(error(500, "server_error"));
+    }
+    let flow_id = encode_hex(&random);
+    let request = BrowserRequest {
+        client_id: client_id.to_owned(),
+        redirect_uri: redirect_uri.to_owned(),
+        state: state_value.to_owned(),
+        code_challenge: challenge.to_owned(),
+        expires_at: now + AUTH_CODE_TTL,
+    };
+    let Ok(mut requests) = state.browser_requests.lock() else {
+        return OAuthResponse::Http(error(500, "server_error"));
+    };
+    requests.retain(|_, request| request.expires_at >= now);
+    if requests.len() >= MAX_BROWSER_CONSENTS {
+        return OAuthResponse::Http(error(503, "server_error"));
+    }
+    requests.insert(flow_id.clone(), request);
+    OAuthResponse::Http(html_response(
+        200,
+        &consent_page(&flow_id, client_id, redirect_uri, &state.agent_name, ""),
+    ))
+}
+
+fn confirm(
+    state: &OAuthState,
+    content_type: &str,
+    body: &str,
+    now: OffsetDateTime,
+) -> OAuthResponse {
+    if !content_type.split(';').next().is_some_and(|value| {
+        value
+            .trim()
+            .eq_ignore_ascii_case("application/x-www-form-urlencoded")
+    }) {
+        return OAuthResponse::Http(error(400, "invalid_request"));
+    }
+    let Some(parameters) = parse_form(body) else {
+        return OAuthResponse::Http(error(400, "invalid_request"));
+    };
+    let flow_id = parameters.get("flow_id").map_or("", String::as_str);
+    let passphrase = parameters.get("passphrase").map_or("", String::as_str);
+    let decision = parameters.get("decision").map(String::as_str);
+    if decision.is_some_and(|decision| !matches!(decision, "approve" | "deny")) {
+        return OAuthResponse::Http(error(400, "invalid_request"));
+    }
+    let denied = decision == Some("deny");
+    let Some(request) = state
+        .browser_requests
+        .lock()
+        .ok()
+        .and_then(|requests| requests.get(flow_id).cloned())
+        .filter(|request| request.expires_at >= now)
+    else {
+        return OAuthResponse::Http(error(400, "invalid_request"));
+    };
+    let client = match token_registry::get_oauth_client(&state.root, &request.client_id, now) {
+        Ok(Some(client)) if client.client_id == request.client_id => client,
+        _ => return OAuthResponse::Http(error(400, "invalid_client")),
+    };
+    if !is_allowed_redirect_uri(&request.redirect_uri, &client.redirect_uris) {
+        return OAuthResponse::Http(error(400, "invalid_redirect_uri"));
+    }
+    if denied {
+        let Ok(mut requests) = state.browser_requests.lock() else {
+            return OAuthResponse::Http(error(500, "server_error"));
+        };
+        if requests.remove(flow_id).is_none() {
+            return OAuthResponse::Http(error(400, "invalid_request"));
+        }
+        return OAuthResponse::Redirect(redirect_uri_with_error(
+            &request.redirect_uri,
+            "access_denied",
+            &request.state,
+        ));
+    }
+    if !(state.verify_passphrase)(passphrase) {
+        return OAuthResponse::Http(html_response(
+            200,
+            &consent_page(
+                flow_id,
+                &request.client_id,
+                &request.redirect_uri,
+                &state.agent_name,
+                "Incorrect passphrase.",
+            ),
+        ));
+    }
+    let Ok(mut requests) = state.browser_requests.lock() else {
+        return OAuthResponse::Http(error(500, "server_error"));
+    };
+    if requests.remove(flow_id).is_none() {
+        return OAuthResponse::Http(error(400, "invalid_request"));
+    }
+    issue_code(
+        state,
+        &request.client_id,
+        &request.redirect_uri,
+        &request.state,
+        &request.code_challenge,
+        now,
+    )
+}
+
+fn consent_page(
+    flow_id: &str,
+    client_id: &str,
+    redirect_uri: &str,
+    agent_name: &str,
+    error_text: &str,
+) -> String {
+    format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Symaira Vault consent</title></head><body><main><h1>Authorize MCP client</h1><p>Client: {}</p><p>Redirect URI: {}</p><p>Agent: {}</p><p>This client requests full access to this agent's tools.</p><p>{}</p><form method=\"POST\" action=\"/mcp/oauth/authorize/confirm\"><input type=\"hidden\" name=\"flow_id\" value=\"{}\"><label>Vault passphrase <input type=\"password\" name=\"passphrase\" autocomplete=\"current-password\" required></label><button type=\"submit\" name=\"decision\" value=\"approve\">Approve</button><button type=\"submit\" name=\"decision\" value=\"deny\" formnovalidate>Deny</button></form></main></body></html>",
+        html_escape(client_id),
+        html_escape(redirect_uri),
+        html_escape(agent_name),
+        html_escape(error_text),
+        html_escape(flow_id)
+    )
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn html_response(status: u16, body: &str) -> HttpResponse {
+    HttpResponse {
+        status,
+        headers: vec![
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("Cache-Control", "no-store"),
+        ],
+        body: body.as_bytes().to_vec(),
+    }
+}
+
+fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
     let Some(parameters) = parse_form(body) else {
         return OAuthResponse::Http(error(400, "invalid_request"));
     };
@@ -179,7 +377,10 @@ fn token(state: &mut OAuthState, body: &str, now: OffsetDateTime) -> OAuthRespon
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             };
             // Like Go's code store, take before verifier checks: every attempt is single-use.
-            let Some(pending) = state.codes.remove(code) else {
+            let Ok(mut codes) = state.codes.lock() else {
+                return OAuthResponse::Http(error(500, "server_error"));
+            };
+            let Some(pending) = codes.remove(code) else {
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             };
             if now > pending.expires_at
@@ -459,6 +660,22 @@ fn hex_value(byte: u8) -> Option<u8> {
 }
 
 fn redirect_uri_with_code(uri: &str, code: &str, state: &str) -> String {
+    let mut parameters = vec![("code", code)];
+    if !state.is_empty() {
+        parameters.push(("state", state));
+    }
+    redirect_uri_with_parameters(uri, &parameters)
+}
+
+fn redirect_uri_with_error(uri: &str, error_name: &str, state: &str) -> String {
+    let mut parameters = vec![("error", error_name)];
+    if !state.is_empty() {
+        parameters.push(("state", state));
+    }
+    redirect_uri_with_parameters(uri, &parameters)
+}
+
+fn redirect_uri_with_parameters(uri: &str, parameters: &[(&str, &str)]) -> String {
     let (without_fragment, fragment) = uri
         .split_once('#')
         .map_or((uri, None), |(uri, fragment)| (uri, Some(fragment)));
@@ -467,10 +684,12 @@ fn redirect_uri_with_code(uri: &str, code: &str, state: &str) -> String {
     } else {
         '?'
     };
-    let mut redirected = format!("{without_fragment}{separator}code={}", form_encode(code));
-    if !state.is_empty() {
-        redirected.push_str("&state=");
-        redirected.push_str(&form_encode(state));
+    let mut redirected = without_fragment.to_owned();
+    for (index, (name, value)) in parameters.iter().enumerate() {
+        redirected.push(if index == 0 { separator } else { '&' });
+        redirected.push_str(name);
+        redirected.push('=');
+        redirected.push_str(&form_encode(value));
     }
     if let Some(fragment) = fragment {
         redirected.push('#');
@@ -548,7 +767,8 @@ mod tests {
         let mut state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
-            Box::new(|_, _| true),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
         );
         let client_id = register(&state);
         let authorization = format!(
@@ -619,7 +839,8 @@ mod tests {
         let mut denied = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
-            Box::new(|_, _| false),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Denied),
+            Box::new(|_| false),
         );
         let client_id = register(&denied);
         let authorization = format!(
@@ -634,12 +855,13 @@ mod tests {
             .0,
             403
         );
-        assert!(denied.codes.is_empty());
+        assert!(denied.codes.lock().unwrap().is_empty());
 
         let mut approved = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
-            Box::new(|_, _| true),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
         );
         let OAuthResponse::Redirect(location) =
             authorize(&mut approved, &authorization, OffsetDateTime::now_utc())
@@ -665,12 +887,59 @@ mod tests {
     }
 
     #[test]
+    fn browser_consent_requires_the_vault_passphrase_before_issuing_a_code() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = OAuthState::new(
+            directory.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Browser),
+            Box::new(|passphrase| passphrase == "approved-passphrase"),
+        );
+        let client_id = register(&state);
+        let authorization = format!(
+            "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=browser-state&code_challenge={CHALLENGE}&code_challenge_method=S256"
+        );
+        let OAuthResponse::Http(page) =
+            authorize(&state, &authorization, OffsetDateTime::now_utc())
+        else {
+            panic!("daemon authorization should render a consent page");
+        };
+        assert_eq!(page.status, 200);
+        let html = String::from_utf8(page.body).unwrap();
+        let flow_id = html
+            .split("name=\"flow_id\" value=\"")
+            .nth(1)
+            .unwrap()
+            .split('"')
+            .next()
+            .unwrap();
+        let wrong = confirm(
+            &state,
+            "application/x-www-form-urlencoded",
+            &format!("flow_id={flow_id}&passphrase=wrong"),
+            OffsetDateTime::now_utc(),
+        );
+        assert!(matches!(wrong, OAuthResponse::Http(response) if response.status == 200));
+        let approved = confirm(
+            &state,
+            "application/x-www-form-urlencoded",
+            &format!("flow_id={flow_id}&passphrase=approved-passphrase"),
+            OffsetDateTime::now_utc(),
+        );
+        assert!(
+            matches!(approved, OAuthResponse::Redirect(location) if location.contains("state=browser-state") && location.contains("code="))
+        );
+        assert!(!html.contains("approved-passphrase"));
+    }
+
+    #[test]
     fn registration_rejects_custom_scheme_userinfo_like_go() {
         let directory = tempfile::tempdir().unwrap();
         let state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
-            Box::new(|_, _| true),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
         );
         let response = super::register(
             &state,
@@ -687,7 +956,8 @@ mod tests {
         let mut state = OAuthState::new(
             directory.path().to_path_buf(),
             "default".into(),
-            Box::new(|_, _| true),
+            Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+            Box::new(|_| false),
         );
         let client_id = register(&state);
         let authorization = format!(
@@ -702,7 +972,7 @@ mod tests {
             .0,
             400
         );
-        assert!(state.codes.is_empty());
+        assert!(state.codes.lock().unwrap().is_empty());
     }
 
     #[test]
