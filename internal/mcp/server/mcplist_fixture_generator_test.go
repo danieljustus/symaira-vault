@@ -109,8 +109,8 @@ func TestGenerateMCPListFixture(t *testing.T) {
 	if sourceHash != mcpListPinnedSourceHash {
 		t.Fatalf("Go MCP list sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpListPinnedSourceHash)
 	}
-		if pinnedHash := mcpListGitSourceHash(t, mcpListSourceFiles); pinnedHash != sourceHash {
-			t.Fatalf("working Go MCP list sources differ from 2b703647: got %s, want %s", sourceHash, pinnedHash)
+	if pinnedHash := mcpListGitSourceHash(t, mcpListSourceFiles); pinnedHash != sourceHash {
+		t.Fatalf("working Go MCP list sources differ from 2b703647: got %s, want %s", sourceHash, pinnedHash)
 	}
 	generatorHash := mcpListGeneratorHash(t)
 	fixture := mcpListFixture{
