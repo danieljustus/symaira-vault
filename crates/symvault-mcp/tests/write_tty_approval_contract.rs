@@ -134,14 +134,15 @@ fn set_and_delete_tty_approval_replay_go_handlers_and_mutation_order() {
     );
     assert_eq!(
         fixture.oracle.generator_hash,
-        "d5ccdb2d55ea38078bc8231ad7bf1580bc53b0f0710d2d29491ee863456f2af6"
+        "cdc1abdb75d04992e5fe49869cd2daf25741ecc0a046ab84b799094fafc55c8e"
     );
     assert_eq!(fixture.oracle.source_files.len(), 16);
     assert_eq!(fixture.oracle.generator_files.len(), 4);
     assert_eq!(
         fixture.normalizations,
         [
-            "terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages"
+            "terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages",
+            "terminal Directory/Git/Project context rows are omitted; they describe the checkout rather than approval behavior"
         ]
     );
 

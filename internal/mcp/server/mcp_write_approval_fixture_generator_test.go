@@ -129,8 +129,11 @@ func TestGenerateMCPWriteApprovalFixture(t *testing.T) {
 	}
 
 	fixture := writeApprovalFixture{
-		SchemaVersion:  1,
-		Normalizations: []string{"terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages"},
+		SchemaVersion: 1,
+		Normalizations: []string{
+			"terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages",
+			"terminal Directory/Git/Project context rows are omitted; they describe the checkout rather than approval behavior",
+		},
 		Oracle: writeApprovalFixtureOracle{
 			Commit: commitSHA[:8], CommitSHA: commitSHA, SourceFiles: writeApprovalSourceFiles,
 			SourceHash: sourceHash, GeneratorFiles: writeApprovalGeneratorFiles,
@@ -313,7 +316,9 @@ func runWriteApprovalFixtureCase(t *testing.T, tc writeApprovalFixtureCase, answ
 		if err != nil {
 			t.Fatalf("read fake TTY prompt: %v", err)
 		}
-		tc.PromptText = string(prompt)
+		// Checkout context is not part of this approval-seam contract. Keep
+		// operation, details, risk, counters, answers and all other bytes.
+		tc.PromptText = regexp.MustCompile(`(?m)^║ (Directory|Git|Project):[^\n]*\n`).ReplaceAllString(string(prompt), "")
 		if len(prompt) > 0 {
 			for _, summary := range tc.SummaryDetails {
 				if !strings.Contains(string(prompt), summary) {
