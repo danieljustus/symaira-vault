@@ -33,7 +33,7 @@ pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
 const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
 
-/// Load one custom API template at request time so on-disk endpoint, method,
+/// Load one API template at request time so on-disk endpoint, method,
 /// or credential-reference revocations take effect without restarting MCP.
 pub fn load_api_template_definition(
     vault_root: &Path,
@@ -43,14 +43,29 @@ pub fn load_api_template_definition(
         return Err(format!("invalid template name: {name:?}"));
     }
     let root = fs::canonicalize(vault_root).map_err(|error| format!("read vault root: {error}"))?;
-    let directory = fs::canonicalize(root.join("templates"))
-        .map_err(|error| format!("read template directory: {error}"))?;
+    let directory = match fs::canonicalize(root.join("templates")) {
+        Ok(directory) => directory,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return match fs::symlink_metadata(root.join("templates")) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    load_builtin_api_template(name)
+                }
+                _ => Err("template directory is unavailable".into()),
+            };
+        }
+        Err(error) => return Err(format!("read template directory: {error}")),
+    };
     if !directory.starts_with(&root) {
         return Err("template directory escapes the vault root".into());
     }
     let path = directory.join(format!("{name}.yaml"));
-    let metadata =
-        fs::symlink_metadata(&path).map_err(|error| format!("read template: {error}"))?;
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return load_builtin_api_template(name);
+        }
+        Err(error) => return Err(format!("read template: {error}")),
+    };
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err("template must be a regular file".into());
     }
@@ -75,6 +90,31 @@ pub fn load_api_template_definition(
         return Err("template exceeds the 65536-byte limit".into());
     }
     serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse template: {error}"))
+}
+
+fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
+    // Share the authoritative Go assets; custom files always take precedence.
+    let yaml = match name {
+        "anthropic" => include_str!("../../../internal/mcp/apitemplates/builtin/anthropic.yaml"),
+        "cloudflare" => include_str!("../../../internal/mcp/apitemplates/builtin/cloudflare.yaml"),
+        "gemini" => include_str!("../../../internal/mcp/apitemplates/builtin/gemini.yaml"),
+        "github" => include_str!("../../../internal/mcp/apitemplates/builtin/github.yaml"),
+        "gitlab" => include_str!("../../../internal/mcp/apitemplates/builtin/gitlab.yaml"),
+        "linear" => include_str!("../../../internal/mcp/apitemplates/builtin/linear.yaml"),
+        "notion" => include_str!("../../../internal/mcp/apitemplates/builtin/notion.yaml"),
+        "npm" => include_str!("../../../internal/mcp/apitemplates/builtin/npm.yaml"),
+        "openai" => include_str!("../../../internal/mcp/apitemplates/builtin/openai.yaml"),
+        "openrouter" => include_str!("../../../internal/mcp/apitemplates/builtin/openrouter.yaml"),
+        "perplexity" => include_str!("../../../internal/mcp/apitemplates/builtin/perplexity.yaml"),
+        "resend" => include_str!("../../../internal/mcp/apitemplates/builtin/resend.yaml"),
+        "sentry" => include_str!("../../../internal/mcp/apitemplates/builtin/sentry.yaml"),
+        "slack" => include_str!("../../../internal/mcp/apitemplates/builtin/slack.yaml"),
+        "stripe" => include_str!("../../../internal/mcp/apitemplates/builtin/stripe.yaml"),
+        "telegram" => include_str!("../../../internal/mcp/apitemplates/builtin/telegram.yaml"),
+        "vercel" => include_str!("../../../internal/mcp/apitemplates/builtin/vercel.yaml"),
+        _ => return Err(format!("template {name:?} not found")),
+    };
+    serde_yaml_ng::from_str(yaml).map_err(|error| format!("parse template: {error}"))
 }
 
 #[derive(Default)]
