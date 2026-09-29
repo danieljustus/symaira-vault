@@ -1,5 +1,27 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated Unix stdio clipboard signals — 2026-09-29
+
+Candidate `b92054f8dc6fa83f99aeaf7c37821e89cd00803d` shares one synchronized
+process signal state between hidden input and the active clipboard timer.
+Actual Go and Rust child processes prove SIGINT/SIGTERM clear the clipboard
+and cancel concurrent hidden input; SIGHUP clears the active timer. A later
+idle signal regains its OS default. The CLI installs this router only for
+stdio, including piped input without a terminal. HTTP shutdown is separate.
+
+Complete native Darwin/arm64 and Linux/arm64 gates pass:91 core,177 MCP,
+36 CLI and60/53 platform tests, source-bound Go differentials, strict Clippy/
+formatting and the17-action PTY gate (five restoration checks/two idle signals).
+Four Darwin/one Linux host opt-ins remain ignored; two ordinary PTY helpers
+are separately exercised by the acceptance gate. Focused process contracts
+also passed ten repeated runs each before integration verification.
+
+`clipboard-signals-receipt-b92054f8.json` in both build roots binds the exact
+candidate, Cargo paths, Go fixtures and log hashes. HTTP signal fan-out and
+graceful shutdown, host clipboard/autotype, Windows TTY and remaining native
+targets stay open. No real clipboard or credential provider was exercised.
+
+
 ## Integrated MCP clipboard dispatch — 2026-09-29
 
 Candidate `d5bacb7925232c2e08213be0b8564798f5576486` connects
