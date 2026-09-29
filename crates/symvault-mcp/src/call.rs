@@ -306,6 +306,30 @@ pub struct ReadOnlyRuntime<S> {
     approval_queue: Option<Arc<ApprovalQueue>>,
 }
 
+/// One approval-mode policy is shared by the plain runtime and the owning
+/// store adapter that adds the platform prompt/audit boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WriteApprovalDecision {
+    Allow,
+    Deny,
+    Prompt,
+}
+
+pub(crate) type WriteApprovalCallback<'a> =
+    dyn FnMut(&str, &str, Option<&str>, &str) -> Result<(), String> + 'a;
+
+pub(crate) fn write_approval_decision(mode: &str) -> WriteApprovalDecision {
+    match mode {
+        "none" | "auto" => WriteApprovalDecision::Allow,
+        "deny" => WriteApprovalDecision::Deny,
+        "prompt" => WriteApprovalDecision::Prompt,
+        // Go's profile loader validates modes before creating the runtime.
+        // Rust's public runtime config can be constructed directly, so reject
+        // unknown modes instead of silently bypassing approval.
+        _ => WriteApprovalDecision::Deny,
+    }
+}
+
 impl<S> ReadOnlyRuntime<S> {
     pub fn new(store: S, config: ReadOnlyRuntimeConfig) -> Self {
         let secrets_accessed = AtomicI64::new(config.secrets_used.max(0));
@@ -435,14 +459,14 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "symaira_search" => self.search_tools(arguments),
             "generate_template" => self.generate_template(arguments),
             "generate_totp" => self.generate_totp(arguments),
-            "set_entry_field" => self.set_entry_field(arguments),
+            "set_entry_field" => self.set_entry_field(arguments, None),
             // `symaira_delete` is Go's deprecated alias for the same handler
             // (Go dispatches both names in server_dispatch.go). Go's tier map
             // only blocks the canonical name, so the alias slips past a
             // read-only/standard restriction there; this port keeps the alias
             // subject to the same rules and names the invoked tool in the error,
             // which is the stricter side and recorded as a deliberate deviation.
-            "delete_entry" | "symaira_delete" => self.delete_entry(arguments),
+            "delete_entry" | "symaira_delete" => self.delete_entry(arguments, None),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -458,6 +482,26 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
 }
 
 impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    /// Dispatch a write through the owning store runtime's approval path.
+    /// The handler still owns argument validation and scope ordering; only the
+    /// approval decision is supplied by the wrapper that owns the platform
+    /// prompt and audit logger.
+    pub(crate) fn call_with_write_approval<F>(
+        &self,
+        name: &str,
+        arguments: &Value,
+        approval: &mut F,
+    ) -> Result<ToolCallResult, String>
+    where
+        F: FnMut(&str, &str, Option<&str>, &str) -> Result<(), String>,
+    {
+        match name {
+            "set_entry_field" => self.set_entry_field(arguments, Some(approval)),
+            "delete_entry" | "symaira_delete" => self.delete_entry(arguments, Some(approval)),
+            _ => self.call(name, arguments),
+        }
+    }
+
     pub(crate) fn secret_unseal(&self, handle: &SecretHandle) -> Result<ToolCallResult, String> {
         let Some(field) = handle.field.as_deref() else {
             return Ok(ToolCallResult::error(
@@ -685,7 +729,11 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         )))
     }
 
-    fn set_entry_field(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+    fn set_entry_field(
+        &self,
+        arguments: &Value,
+        approval: Option<&mut WriteApprovalCallback<'_>>,
+    ) -> Result<ToolCallResult, String> {
         if !self.config.can_write {
             return Err("write operations not permitted for this agent".into());
         }
@@ -715,18 +763,29 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         } else {
             self.config.approval_mode.as_str()
         };
-        match approval_mode {
-            "deny" => {
-                return Ok(ToolCallResult::error(
-                    "set_entry_field denied: approval mode is 'deny'",
-                ));
+        if let Some(approval) = approval {
+            if let Err(error) = approval("set_entry_field", path, Some(field), approval_mode) {
+                return Ok(ToolCallResult::error(error));
             }
-            "prompt" => {
-                if let Err(error) = self.request_write_approval("set_entry_field", path) {
-                    return Ok(ToolCallResult::error(error));
+        } else {
+            match write_approval_decision(approval_mode) {
+                WriteApprovalDecision::Deny => {
+                    if approval_mode != "deny" {
+                        return Ok(ToolCallResult::error(format!(
+                            "set_entry_field denied: unknown approval mode {approval_mode:?}"
+                        )));
+                    }
+                    return Ok(ToolCallResult::error(
+                        "set_entry_field denied: approval mode is 'deny'",
+                    ));
                 }
+                WriteApprovalDecision::Prompt => {
+                    if let Err(error) = self.request_write_approval("set_entry_field", path) {
+                        return Ok(ToolCallResult::error(error));
+                    }
+                }
+                WriteApprovalDecision::Allow => {}
             }
-            _ => {}
         }
 
         let force = arguments
@@ -815,7 +874,11 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         Ok(ToolCallResult::text(format!("Set {path}.{field} = ***")))
     }
 
-    fn delete_entry(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+    fn delete_entry(
+        &self,
+        arguments: &Value,
+        approval: Option<&mut WriteApprovalCallback<'_>>,
+    ) -> Result<ToolCallResult, String> {
         if !self.config.can_write {
             return Err("delete operations not permitted for this agent".into());
         }
@@ -837,18 +900,29 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         } else {
             self.config.approval_mode.as_str()
         };
-        match approval_mode {
-            "deny" => {
-                return Ok(ToolCallResult::error(
-                    "delete_entry denied: approval mode is 'deny'",
-                ));
+        if let Some(approval) = approval {
+            if let Err(error) = approval("delete_entry", path, None, approval_mode) {
+                return Ok(ToolCallResult::error(error));
             }
-            "prompt" => {
-                if let Err(error) = self.request_write_approval("delete_entry", path) {
-                    return Ok(ToolCallResult::error(error));
+        } else {
+            match write_approval_decision(approval_mode) {
+                WriteApprovalDecision::Deny => {
+                    if approval_mode != "deny" {
+                        return Ok(ToolCallResult::error(format!(
+                            "delete_entry denied: unknown approval mode {approval_mode:?}"
+                        )));
+                    }
+                    return Ok(ToolCallResult::error(
+                        "delete_entry denied: approval mode is 'deny'",
+                    ));
                 }
+                WriteApprovalDecision::Prompt => {
+                    if let Err(error) = self.request_write_approval("delete_entry", path) {
+                        return Ok(ToolCallResult::error(error));
+                    }
+                }
+                WriteApprovalDecision::Allow => {}
             }
-            _ => {}
         }
         match self.store.delete_entry(path) {
             Ok(()) => Ok(ToolCallResult::text(format!(

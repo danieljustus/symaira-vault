@@ -1,7 +1,8 @@
 use crate::approval::ApprovalQueue;
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
-    ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, normalize_scope_path,
+    ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, WriteApprovalDecision,
+    normalize_scope_path, write_approval_decision,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
@@ -328,6 +329,7 @@ pub struct StoreReadOnlyRuntime {
     approval_mode: String,
     require_approval: bool,
     approval_timeout: Duration,
+    approval_queue_attached: bool,
     command_executor: Option<Arc<dyn CommandExecutor>>,
     allowed_executables: Vec<String>,
 }
@@ -392,6 +394,7 @@ impl StoreReadOnlyRuntime {
             approval_mode,
             require_approval,
             approval_timeout,
+            approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
         })
@@ -456,6 +459,7 @@ impl StoreReadOnlyRuntime {
             approval_mode,
             require_approval,
             approval_timeout,
+            approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
         })
@@ -474,6 +478,7 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_approval_queue(mut self, queue: Arc<ApprovalQueue>) -> Self {
         self.inner = self.inner.with_approval_queue(queue);
+        self.approval_queue_attached = true;
         self
     }
 
@@ -520,6 +525,87 @@ impl StoreReadOnlyRuntime {
         if let Ok(mut logger) = audit.lock() {
             let _ = logger.append(entry);
         }
+    }
+
+    fn approve_write(
+        &self,
+        tool: &str,
+        path: &str,
+        field: Option<&str>,
+        mode: &str,
+    ) -> Result<(), String> {
+        match write_approval_decision(mode) {
+            WriteApprovalDecision::Allow => return Ok(()),
+            WriteApprovalDecision::Deny => {
+                self.append_audit(&format!("approval.{tool}.denied"), path, false);
+                return Err(if mode == "deny" {
+                    format!("{tool} denied: approval mode is 'deny'")
+                } else {
+                    // Go's profile loader validates configured modes before
+                    // runtime construction. Public Rust runtime configs can
+                    // bypass the loader, so fail closed here.
+                    format!("{tool} denied: unknown approval mode {mode:?}")
+                });
+            }
+            WriteApprovalDecision::Prompt => {}
+        }
+
+        if !self.approval.is_tty_present() {
+            self.append_audit(&format!("approval.{tool}.denied"), path, false);
+            return Err(format!(
+                "{tool} requires approval but no TTY or GUI dialog available"
+            ));
+        }
+
+        self.append_audit(&format!("approval.{tool}.requested"), path, true);
+        // Go sanitizes the path and field independently in RenderSummary.
+        // Keep those boundaries: an unterminated escape in the path must not
+        // consume the following literal field label or field name.
+        let safe_path = sanitize_approval_summary(path);
+        let description = match tool {
+            "set_entry_field" => {
+                let safe_field = sanitize_approval_summary(field.unwrap_or(""));
+                if safe_field.is_empty() {
+                    format!("set field on {safe_path}")
+                } else {
+                    format!("set field on {safe_path} field {safe_field}")
+                }
+            }
+            _ => format!("delete entry on {safe_path}"),
+        };
+        let request = ApprovalRequest {
+            operation: tool.to_owned(),
+            details: description,
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir: std::env::current_dir()
+                .map(|directory| directory.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            risk_level: RiskLevel::Critical,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: false,
+            ..ApprovalRequest::default()
+        };
+        let result = self.approval.request(&request);
+        if let Some(error) = result.error {
+            // The Go helper leaves the requested audit event in place but does
+            // not write a denied event for prompt I/O failures.
+            return Err(format!("{tool} approval failed: {error}"));
+        }
+        if !result.approved {
+            self.append_audit(&format!("approval.{tool}.denied"), path, false);
+            return Err(format!("{tool} denied: user did not approve"));
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit(&format!("approval.{tool}.granted"), path, true);
+        Ok(())
     }
 
     fn run_command(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -1950,7 +2036,18 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 "rate limit exceeded: max {limit} requests per minute"
             ));
         }
-        let result = if name == "symaira_audit_self" {
+        let mut approval_failed = false;
+        let result = if matches!(name, "set_entry_field" | "delete_entry" | "symaira_delete")
+            && !self.approval_queue_attached
+        {
+            let mut approve = |tool: &str, path: &str, field: Option<&str>, mode: &str| {
+                let result = self.approve_write(tool, path, field, mode);
+                approval_failed = result.is_err();
+                result
+            };
+            self.inner
+                .call_with_write_approval(name, arguments, &mut approve)
+        } else if name == "symaira_audit_self" {
             self.audit_self(arguments)
         } else if name == "list_shares" {
             self.list_shares(arguments)
@@ -2009,7 +2106,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate_totp", path, ok);
             }
-            "set_entry_field" => {
+            "set_entry_field" if !approval_failed => {
                 let path = arguments
                     .get("path")
                     .and_then(Value::as_str)
@@ -2017,7 +2114,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("set", path, ok);
             }
-            "delete_entry" => {
+            "delete_entry" if !approval_failed => {
                 let path = arguments
                     .get("path")
                     .and_then(Value::as_str)
@@ -2127,6 +2224,51 @@ fn render_list_shares(
 
 fn store_error(error: StoreError) -> String {
     error.to_string()
+}
+
+/// Strip the ANSI/OSC and control bytes Go removes before rendering an
+/// approval summary. User-controlled paths and field names are terminal text,
+/// never escape sequences.
+fn sanitize_approval_summary(input: &str) -> String {
+    // Port Go's byte-oriented stripTerminalControl state machine. Iterating
+    // UTF-8 bytes preserves its C1 behavior and its treatment of simple ESC,
+    // OSC backslashes, and the TAB/LF/CR exceptions.
+    let bytes = input.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut state = 0_u8;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match state {
+            0 => match byte {
+                0x1b if bytes.get(index + 1) == Some(&b'[') => {
+                    state = 2;
+                    index += 1;
+                }
+                0x1b if bytes.get(index + 1) == Some(&b']') => {
+                    state = 3;
+                    index += 1;
+                }
+                0x1b => {}
+                byte if byte < 0x20 && !matches!(byte, b'\t' | b'\n' | b'\r') => {}
+                0x7f => {}
+                byte => output.push(byte),
+            },
+            2 => {
+                if !(byte == b'[' || byte == b';' || byte.is_ascii_digit()) {
+                    state = 0;
+                }
+            }
+            3 => {
+                if byte == 0x07 || byte == b'\\' {
+                    state = 0;
+                }
+            }
+            _ => unreachable!("approval-summary sanitizer state"),
+        }
+        index += 1;
+    }
+    String::from_utf8_lossy(&output).into_owned()
 }
 
 fn format_go_secret_map(values: &BTreeMap<String, Value>) -> String {
