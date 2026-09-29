@@ -328,8 +328,8 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
                 Err(error) => panic!("accept API request: {error}"),
             };
             stream
-                .set_read_timeout(Some(std::time::Duration::from_secs(2)))
-                .expect("bound API request read");
+                .set_nonblocking(false)
+                .expect("make accepted API stream blocking");
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(2)))
                 .expect("bound API request read");
