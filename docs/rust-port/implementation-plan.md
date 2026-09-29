@@ -1,5 +1,26 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated execute-with-secret approval evidence — 2026-09-29
+
+Candidate `cfbfd59a8a4580e8547e278ff8b9de6c7e806967` composes the shared
+executor, source-bound Go15 environment-name/redaction contract and direct
+controlling-TTY approval seam. Production Go handler oracles exercise granted,
+denied, remembered, helper-error and consecutive-grant cases. The fixture
+builds its already-bound Go child as `true`/`true.exe`; it needs no Unix command.
+Rust compares the actual prompt `secrets_accessed` sequence `[0, 1]` to Go,
+as well as prompt count, cache behavior and audit order. The terminal seam is
+mocked; this does not claim a physical terminal or GUI approval acceptance run.
+
+Independent checks on clean exact candidate HEAD pass on Darwin/arm64 and
+Linux/arm64: full `make mcp-call-differential`, all 165 MCP tests, and 26 filtered
+CLI MCP tests (13 unit and 13 contract), zero failed or ignored. Receipts:
+`../builds/symaira-vault/mcp-execute-approval-20260929/coordinator-receipt-cfbfd59a.json`
+and `../builds/native-linux-20260929/vault-approval-receipt-cfbfd59a.json`.
+Explicit manifests, Cargo metadata and compiler paths bind the evidence.
+MCP-003 remains in progress: GUI, other handlers, remaining native targets and
+complete integrated ledger checks are still required. No publication or cutover.
+
+
 > **For Hermes:** Use subagent-driven-development to implement independent work
 > items, but keep parity-sensitive cascading slices under one coordinator. Work
 > strictly in dependency order from `work-items.json`.
