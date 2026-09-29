@@ -2849,9 +2849,8 @@ impl StoreReadOnlyRuntime {
             cancel.clone(),
             Arc::clone(&clear_claimed),
         );
-        #[cfg(not(unix))]
-        let signal_registration = ();
         thread::spawn(move || {
+            #[cfg(unix)]
             let _signal_registration = signal_registration;
             if matches!(
                 receiver.recv_timeout(delay),
