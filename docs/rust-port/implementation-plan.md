@@ -1,5 +1,33 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated embedded API template catalog — 2026-09-29
+
+Candidate `aab7422b730b399d2b0dbc774199505c02852c92` loads all 17 existing Go
+YAML assets directly through compile-time inclusion, with no second asset copy.
+Per-call custom files retain precedence; a truly absent directory/file falls
+back to the matching built-in. Existing malformed, symlinked, inaccessible or
+otherwise invalid custom paths fail closed. This is intentionally stricter than
+Go's fallback after any stat error and its willingness to follow symlinks.
+
+A source-bound actual Go `apitemplates.Load` fixture pins template.go, auth.go and
+all 17 asset blobs at c94a10d7. Its 24 cases compare every loaded field, custom
+precedence, absence, malformed overrides and unsafe/unknown names. Unknown-name
+errors match exactly; malformed YAML compares rejection rather than parser text.
+Unix dangling-symlink controls run separately. The full Make MCP gate now includes
+fixture freshness and Rust replay; existing CI invokes that gate.
+
+Independent clean Darwin/arm64 and Linux/arm64 gates pass Go freshness/full MCP
+differentials, 91 core tests, 171 MCP tests, 35 CLI contracts and one controlling
+PTY acceptance. Two ordinary opt-in helpers execute in that dedicated gate.
+Strict all-target Clippy and fmt pass on both hosts. Receipts
+`api-builtins-receipt-aab7422b.json` in the Vault/native-linux build roots retain
+source metadata, fixture and log hashes.
+
+MCP-003/BROKER-002 remain open: built-in HTTPS endpoints were not executed, and
+transport still accepts only loopback HTTP with redirects disabled. TLS, public
+DNS, other tools and required native targets remain outstanding. No provider
+calls, publication, cutover, Go removal or trust changes occurred.
+
 ## Integrated API authentication and substitutions — 2026-09-29
 
 Candidate `f47b2fdb74e0ad0172aa195c6a185f2f42c411af` adds basic, custom-header, query-parameter
