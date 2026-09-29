@@ -569,6 +569,12 @@ fn build_handler(
 
 fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {
     let mut available_tools = read_only_tool_names();
+    if profile.can_run_commands {
+        // This CLI always installs McpCommandExecutor in build_handler. Keep
+        // the secret-aware command tool opt-in to the profile capability and
+        // let the normal allowed_tools filter below further restrict it.
+        available_tools.push("execute_with_secret".into());
+    }
     if !profile.allowed_tools.is_empty() {
         available_tools.retain(|name| profile.allowed_tools.iter().any(|allowed| allowed == name));
     }
@@ -764,6 +770,40 @@ mod tests {
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn runtime_config_exposes_secret_command_only_with_capability_and_allowlist() {
+        let capable_but_excluded = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["health".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(Path::new("/fixture"), &capable_but_excluded, "agent").available_tools,
+            ["health"],
+            "explicit allowlist must exclude execute_with_secret"
+        );
+
+        let capable_and_allowed = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["execute_with_secret".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent").available_tools,
+            ["execute_with_secret"]
+        );
+
+        let no_command_capability = AgentProfile {
+            allowed_tools: vec!["execute_with_secret".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            runtime_config(Path::new("/fixture"), &no_command_capability, "agent")
+                .available_tools
+                .is_empty()
+        );
     }
 
     #[test]
