@@ -1,5 +1,29 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated verified local HTTPS — 2026-09-29
+
+Candidate `3698d45b095c94817ff65ee2de37cf60eac5360a` adds certificate-verified
+HTTPS for numeric loopback and statically pinned localhost targets. Request URL
+substitution must preserve the validated scheme and authority. Public DNS and
+redirects remain rejected. No installed trust settings or provider were used.
+
+The actual Go API handler at `864f1ad1` produces three TLS cases: trusted local
+success, wrong hostname, and untrusted root. Rust reuses the production client
+builder with a private fixture CA and test-only dial pinning for the wrong-host
+case. It compares status/body/rejection and the actual count of received HTTP
+requests (one on success, zero on TLS rejection). Full CLI API semantics remain
+covered by the existing HTTP replay. The fixture preserves observed outcomes;
+no expected value overwrites a handler result.
+
+Independent clean Darwin/arm64 and Linux/arm64 gates pass complete Go MCP,
+template and HTTPS freshness/differentials, 91 core tests, 173 MCP tests,
+35 CLI contracts and one controlling-PTY acceptance. Two opt-in helpers run
+through that dedicated PTY gate. Strict all-target Clippy and fmt pass on both.
+`api-https-receipt-3698d45b.json` in both build roots records source metadata and
+fixture/log hashes. MCP-003/BROKER-002 remain open for public DNS/redirects,
+other tools and remaining native targets. No publication, cutover or Go removal.
+
+
 ## Integrated embedded API template catalog — 2026-09-29
 
 Candidate `aab7422b730b399d2b0dbc774199505c02852c92` loads all 17 existing Go
