@@ -1,5 +1,34 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated API authentication and substitutions — 2026-09-29
+
+Candidate `f47b2fdb74e0ad0172aa195c6a185f2f42c411af` adds basic, custom-header, query-parameter
+and substitution-only authentication to the preceding Bearer path. It preserves
+Go's default-header, caller-header, substitution and final authentication order,
+including body/query/path/header substitution and automatic JSON Content-Type.
+All credential access uses the existing scoped entry path and critical approval.
+HTTP remains restricted to loopback; TLS and redirects are not enabled.
+
+The actual pinned Go handler emits 15 cases with seven upstream requests. Real
+Rust CLI replay checks methods, URI, selected headers, bodies and results; denial
+cases make no upstream request. A Darwin-only harness defect was reproduced:
+accepted sockets inherited O_NONBLOCK, returning WouldBlock before request data.
+The listener now explicitly uses blocking accepted sockets with its original
+bounded timeout. Five complete CLI repetitions passed after that root fix.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 gates pass the full Go
+MCP differential, 91 core tests, 169 MCP tests, 35 CLI contracts and one dedicated
+controlling-PTY acceptance test. Two ordinary opt-in helpers remain ignored in
+the ordinary suite and execute via that PTY gate. Strict all-target Clippy and
+formatting pass on both hosts, with source-path metadata and log hashes in
+`api-semantics-receipt-f47b2fdb.json` under the existing build roots.
+
+The earlier cadfa parent run is not accepted as full evidence: its Make wrapper
+selected an older worktree; the subsequent direct candidate test exposed the
+socket defect. The corrected current runs use direct Cargo in this worktree.
+MCP-003/BROKER-002 remain open for built-in templates, TLS/redirects, other tools
+and required native targets. No live provider, release, cutover or Go removal.
+
 ## Integrated custom Bearer API request — 2026-09-29
 
 Candidate `ca1dba8db88c149b94676d91b031ba909eff3a5a` connects bounded custom
