@@ -19,6 +19,11 @@
     )
 )]
 
+#[cfg(unix)]
+use std::sync::{
+    Arc, Mutex, MutexGuard, OnceLock, TryLockError,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 #[path = "go_unicode_print_15.rs"]
 mod go_unicode_print_15;
@@ -209,8 +214,9 @@ pub fn request_approval(req: &ApprovalRequest) -> ApprovalResult {
 
 /// Reads a hidden value from `/dev/tty`, never from MCP stdin or stdout.
 /// Terminal mode is restored by the terminal guard on every return path.
-/// Raw Ctrl-C is handled as cancellation. External SIGINT/SIGTERM cancellation
-/// is not yet wired to this reader and remains a separate parity follow-up.
+/// Raw Ctrl-C is handled as cancellation. The standalone CLI stdio process
+/// may install [`install_stdio_secure_input_signal_router`] so external
+/// SIGINT/SIGTERM also cancel an active prompt and retain default idle behavior.
 pub fn request_secure_input(req: &SecureInputRequest) -> Result<String, SecureInputError> {
     #[cfg(unix)]
     {
@@ -239,16 +245,163 @@ trait Terminal {
 enum ReadFailure {
     TimedOut,
     Io(String),
+    Canceled,
+}
+
+#[cfg(unix)]
+struct SecureInputSignalState {
+    idle: Arc<AtomicBool>,
+    pending_signal: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(unix)]
+static SECURE_INPUT_SIGNAL_STATE: OnceLock<SecureInputSignalState> = OnceLock::new();
+#[cfg(unix)]
+static SECURE_INPUT_SIGNAL_INSTALL_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(unix)]
+static SECURE_INPUT_PROMPT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Installs the process-lifetime SIGINT/SIGTERM router for the foreground CLI
+/// stdio MCP server. Call only when this process owns the normal signal
+/// disposition; embedding applications with their own signal handlers must
+/// leave the generic platform API uninstalled.
+#[cfg(unix)]
+pub fn install_stdio_secure_input_signal_router() -> Result<(), String> {
+    use signal_hook::{consts::signal::*, flag};
+
+    if SECURE_INPUT_SIGNAL_STATE.get().is_some() {
+        return Ok(());
+    }
+    let _install = SECURE_INPUT_SIGNAL_INSTALL_LOCK
+        .lock()
+        .map_err(|_| "secure-input signal installation lock is poisoned".to_owned())?;
+    if SECURE_INPUT_SIGNAL_STATE.get().is_some() {
+        return Ok(());
+    }
+
+    let idle = Arc::new(AtomicBool::new(true));
+    let pending_signal = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    for signal in [SIGINT, SIGTERM] {
+        // Record the signal before the conditional default action checks the
+        // active scope. That ordering closes the finish/read race: a signal
+        // that sees an active prompt is visible before the scope can finish.
+        if let Err(error) = flag::register_usize(signal, pending_signal.clone(), signal as usize) {
+            idle.store(true, Ordering::SeqCst);
+            return Err(format!(
+                "register secure-input {signal} cancellation: {error}"
+            ));
+        }
+        if let Err(error) = flag::register_conditional_default(signal, idle.clone()) {
+            idle.store(true, Ordering::SeqCst);
+            return Err(format!("register default {signal} behavior: {error}"));
+        }
+    }
+
+    SECURE_INPUT_SIGNAL_STATE
+        .set(SecureInputSignalState {
+            idle,
+            pending_signal,
+        })
+        .map_err(|_| "secure-input signal router was initialized concurrently".to_owned())
+}
+
+#[cfg(unix)]
+struct SecureInputPromptScope {
+    _prompt_lock: Option<MutexGuard<'static, ()>>,
+    signal_state: Option<&'static SecureInputSignalState>,
+    secure_input: bool,
+}
+
+#[cfg(unix)]
+impl SecureInputPromptScope {
+    fn enter(secure_input: bool) -> Result<Self, SecureInputError> {
+        let signal_state = SECURE_INPUT_SIGNAL_STATE.get();
+        let prompt_lock = if signal_state.is_some() {
+            Some(match SECURE_INPUT_PROMPT_LOCK.try_lock() {
+                Ok(guard) => guard,
+                Err(TryLockError::WouldBlock) => {
+                    return Err(SecureInputError::Read(
+                        "another terminal prompt is active".to_owned(),
+                    ));
+                }
+                Err(TryLockError::Poisoned(_)) => {
+                    return Err(SecureInputError::Read(
+                        "terminal prompt lock is poisoned".to_owned(),
+                    ));
+                }
+            })
+        } else {
+            None
+        };
+        if let Some(state) = signal_state {
+            state.pending_signal.store(0, Ordering::SeqCst);
+            state.idle.store(false, Ordering::SeqCst);
+        }
+        Ok(Self {
+            _prompt_lock: prompt_lock,
+            signal_state,
+            secure_input,
+        })
+    }
+    fn finish(&self) -> Option<i32> {
+        if let Some(state) = self.signal_state {
+            state.idle.store(true, Ordering::SeqCst);
+            let signal = state.pending_signal.swap(0, Ordering::SeqCst);
+            (signal != 0).then_some(signal as i32)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for SecureInputPromptScope {
+    fn drop(&mut self) {
+        if let Some(signal) = self.finish()
+            && !self.secure_input
+            && signal_hook::low_level::emulate_default_handler(signal).is_err()
+        {
+            // A failed default re-raise must never turn a pending termination
+            // signal into a silently continued MCP session.
+            std::process::abort();
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct SecureInputPromptScope;
+
+#[cfg(not(unix))]
+impl SecureInputPromptScope {
+    fn enter(_secure_input: bool) -> Result<Self, SecureInputError> {
+        Ok(Self)
+    }
+    fn finish(&self) -> Option<i32> {
+        None
+    }
 }
 
 fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> ApprovalResult {
-    let Some(mut terminal) = terminal else {
+    let Some(terminal) = terminal else {
         return ApprovalResult {
             approved: false,
             remembered: false,
             error: Some(ApprovalError::NoTty),
         };
     };
+    let _prompt_scope = match SecureInputPromptScope::enter(false) {
+        Ok(scope) => scope,
+        Err(error) => {
+            return ApprovalResult {
+                approved: false,
+                remembered: false,
+                error: Some(ApprovalError::Read(error.to_string())),
+            };
+        }
+    };
+    // Keep scope alive through terminal Drop so a signal can't regain its idle
+    // default action before the terminal guard has restored cooked mode.
+    let mut terminal = terminal;
 
     if let Err(message) = terminal.set_raw_mode() {
         return ApprovalResult {
@@ -290,6 +443,13 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
                 error: Some(ApprovalError::Read(message)),
             };
         }
+        Err(ReadFailure::Canceled) => {
+            return ApprovalResult {
+                approved: false,
+                remembered: false,
+                error: Some(ApprovalError::Read("terminal input interrupted".into())),
+            };
+        }
     };
 
     let approved = parse_approval_response(&response);
@@ -318,9 +478,13 @@ fn run_secure_input<T: Terminal>(
     req: &SecureInputRequest,
     terminal: Option<T>,
 ) -> Result<String, SecureInputError> {
-    let Some(mut terminal) = terminal else {
+    let Some(terminal) = terminal else {
         return Err(SecureInputError::NoTty);
     };
+    let _prompt_scope = SecureInputPromptScope::enter(true)?;
+    // Declare the terminal after the scope so its Drop restores termios before
+    // the scope returns signal delivery to the idle/default state.
+    let mut terminal = terminal;
     terminal.set_raw_mode().map_err(SecureInputError::RawMode)?;
 
     let prompt = build_secure_input_prompt(req);
@@ -336,6 +500,11 @@ fn run_secure_input<T: Terminal>(
         Ok(response) => response,
         Err(ReadFailure::TimedOut) => return Err(SecureInputError::Timeout),
         Err(ReadFailure::Io(message)) => return Err(SecureInputError::Read(message)),
+        Err(ReadFailure::Canceled) => {
+            terminal.restore();
+            let _ = terminal.write_all(b"\nAborted.\n");
+            return Err(SecureInputError::Canceled);
+        }
     };
     let value = match parse_secure_input(&response) {
         Ok(value) => value,
@@ -347,6 +516,10 @@ fn run_secure_input<T: Terminal>(
         Err(error) => return Err(error),
     };
     terminal.restore();
+    if _prompt_scope.finish().is_some() {
+        let _ = terminal.write_all(b"\nAborted.\n");
+        return Err(SecureInputError::Canceled);
+    }
     let _ = terminal.write_all(b"\n");
     if value.is_empty() {
         return Err(SecureInputError::Empty);
@@ -753,11 +926,23 @@ impl RealTerminal {
 
         let mut collected = Vec::new();
         let outcome = loop {
+            if SECURE_INPUT_SIGNAL_STATE
+                .get()
+                .is_some_and(|state| state.pending_signal.load(Ordering::SeqCst) != 0)
+            {
+                break Err(ReadFailure::Canceled);
+            }
             let mut chunk = [0_u8; 256];
             match rustix::io::read(&self.fd, &mut chunk[..]) {
                 Ok(0) => break Ok(()),
                 Ok(n) => {
                     collected.extend_from_slice(&chunk[..n]);
+                    if SECURE_INPUT_SIGNAL_STATE
+                        .get()
+                        .is_some_and(|state| state.pending_signal.load(Ordering::SeqCst) != 0)
+                    {
+                        break Err(ReadFailure::Canceled);
+                    }
                     if response_is_complete(&collected, secure_input)
                         || collected.len() >= MAX_RESPONSE_BYTES
                     {

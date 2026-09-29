@@ -210,6 +210,11 @@ pub fn run(
             &(touch_id_available, backend, persistent, message),
             None,
         )?;
+        #[cfg(unix)]
+        if is_tty_present() {
+            symvault_platform::approval::install_stdio_secure_input_signal_router()
+                .map_err(|error| format!("install stdio secure-input signal router: {error}"))?;
+        }
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)

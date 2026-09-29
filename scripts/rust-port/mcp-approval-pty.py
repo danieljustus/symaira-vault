@@ -4,6 +4,7 @@
 import errno
 import os
 import pty
+import re
 import select
 import signal
 import sys
@@ -23,8 +24,14 @@ PROMPTS = (
     b"Enter value (input hidden): ",
     b"Approve this operation? (y/n): ",
     b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Approve this operation? (y/n): ",
 )
-ANSWERS = (
+ACTIONS = (
     b"y\r",
     b"y\r",
     b"n\r",
@@ -35,8 +42,15 @@ ANSWERS = (
     b"y\r",
     b"\x03",
     b"y\r",
+    "SIGINT",
+    b"y\r",
     b"synthetic-credential-three\r",
+    b"y\r",
+    "SIGTERM",
+    "SIGINT",
+    "SIGTERM",
 )
+
 TIMEOUT_SECONDS = 300
 
 
@@ -106,6 +120,9 @@ def main(argv):
     deadline = time.monotonic() + TIMEOUT_SECONDS
     status = None
     terminal_restored = False
+    restored_cancellations = 0
+    used_signal_targets = set()
+    used_idle_signals = set()
     try:
         while status is None:
             if time.monotonic() >= deadline:
@@ -125,24 +142,48 @@ def main(argv):
                         raise
                 if chunk:
                     transcript.extend(chunk)
-                    if b"PTY_SECURE_INPUT_CANCELLED termios_restore_check=required" in transcript:
+                    secure_marker = b"PTY_SECURE_INPUT_CANCELLED termios_restore_check=required"
+                    approval_marker = b"PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required"
+                    restoration_events = transcript.count(secure_marker) + transcript.count(approval_marker)
+                    while restoration_events > restored_cancellations:
                         flags = termios.tcgetattr(master)[3]
                         terminal_restored = bool(flags & termios.ECHO) and bool(flags & termios.ICANON)
+                        if terminal_restored:
+                            restored_cancellations += 1
+                        else:
+                            break
                     view = memoryview(chunk)
                     while view:
                         written = os.write(sys.stdout.fileno(), view)
                         view = view[written:]
                     sys.stdout.flush()
-                    while sent < len(ANSWERS):
+                    while sent < len(ACTIONS):
                         prompt_at = transcript.find(PROMPTS[sent], prompt_cursor)
                         if prompt_at < 0:
                             break
                         prompt_cursor = prompt_at + len(PROMPTS[sent])
-                        answer = memoryview(ANSWERS[sent])
-                        while answer:
-                            written = os.write(master, answer)
-                            answer = answer[written:]
+                        action = ACTIONS[sent]
+                        if isinstance(action, str):
+                            matches = list(re.finditer(rb"PTY_SIGNAL_TARGET pid=(\d+) signal=(SIGINT|SIGTERM)", transcript))
+                            target = next((m for i, m in enumerate(matches) if i not in used_signal_targets and m.group(2).decode() == action), None)
+                            if target is None:
+                                prompt_cursor = prompt_at
+                                break
+                            used_signal_targets.add(matches.index(target))
+                            os.kill(int(target.group(1)), getattr(signal, action))
+                        else:
+                            answer = memoryview(action)
+                            while answer:
+                                written = os.write(master, answer)
+                                answer = answer[written:]
                         sent += 1
+
+                    idle_matches = list(re.finditer(rb"PTY_IDLE_SIGNAL pid=(\d+) signal=(SIGINT|SIGTERM)", transcript))
+                    for i, marker in enumerate(idle_matches):
+                        if i not in used_idle_signals:
+                            used_idle_signals.add(i)
+                            signal_name = marker.group(2).decode()
+                            os.kill(int(marker.group(1)), getattr(signal, signal_name))
 
             waited, child_status = os.waitpid(pid, os.WNOHANG)
             if waited == pid:
@@ -189,13 +230,15 @@ def main(argv):
         )
     )
     print(
-        f"\nPTY_DRIVER_RECEIPT critical_prompts={critical_prompts} execute_prompts={execute_prompts} secure_input_prompts={secure_input_prompts} answers={sent} receipt={str(has_acceptance_receipt).lower()} credentials_hidden={str(credentials_hidden).lower()} bounded=true controlling_pty=true",
+        f"\nPTY_DRIVER_RECEIPT critical_prompts={critical_prompts} execute_prompts={execute_prompts} secure_input_prompts={secure_input_prompts} prompt_actions={sent} restored_cancellations={restored_cancellations} idle_signals={len(used_idle_signals)} receipt={str(has_acceptance_receipt).lower()} credentials_hidden={str(credentials_hidden).lower()} bounded=true controlling_pty=true",
         flush=True,
     )
     exit_code = os.waitstatus_to_exitcode(status)
     if (
-        prompts != (6, 1, 4)
-        or sent != len(ANSWERS)
+        prompts != (10, 1, 6)
+        or sent != len(ACTIONS)
+        or restored_cancellations != 5
+        or len(used_idle_signals) != 2
         or not has_acceptance_receipt
         or not credentials_hidden
         or not terminal_restored
