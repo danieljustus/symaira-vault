@@ -67,6 +67,7 @@ type executeWithSecretApprovalObservation struct {
 	Remembered      bool                             `json:"remembered"`
 	ApprovalCounter int64                            `json:"approval_counter"`
 	PromptCount     int                              `json:"prompt_count"`
+	RequestCounters []int64                          `json:"request_counters"`
 	Events          []executeWithSecretApprovalEvent `json:"events"`
 	VisibleDetails  []string                         `json:"visible_details,omitempty"`
 }
@@ -126,6 +127,23 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 	if err := json.Unmarshal(provenanceOutput, &provenanceResult); err != nil {
 		t.Fatalf("decode provenance: %v", err)
 	}
+	fixtureBinDir := t.TempDir()
+	childBinaryName := "true"
+	if runtime.GOOS == "windows" {
+		childBinaryName += ".exe"
+	}
+	childBinary := filepath.Join(fixtureBinDir, childBinaryName)
+	childSource := filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")
+	buildChild := exec.Command("go", "build", "-o", childBinary, childSource)
+	buildChild.Dir = root
+	if output, err := buildChild.CombinedOutput(); err != nil {
+		t.Fatalf("build fixture-local true child: %v: %s", err, output)
+	}
+	oldPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", fixtureBinDir+string(os.PathListSeparator)+oldPath); err != nil {
+		t.Fatalf("prepend fixture-local child to PATH: %v", err)
+	}
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
 
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{"password": "testpass123"})
 	baseProfile := config.AgentProfile{
@@ -283,13 +301,14 @@ func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string
 	t.Helper()
 	original := openTTYDevice
 	defer func() { openTTYDevice = original }()
-	observations := make([]executeWithSecretApprovalObservation, 0, 4)
+	observations := make([]executeWithSecretApprovalObservation, 0, 5)
 	for _, scenario := range []struct {
 		name      string
 		responses []string
 		rawError  error
 	}{
 		{name: "granted", responses: []string{"y"}},
+		{name: "granted_twice", responses: []string{"y", "y"}},
 		{name: "denied", responses: []string{"n"}},
 		{name: "remembered", responses: []string{"r"}},
 		{name: "helper_error", responses: []string{"y"}, rawError: errors.New("fixture raw failure")},
@@ -318,6 +337,7 @@ func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string
 			t.Fatal(err)
 		}
 		var rawCalls, responseIndex int
+		observation := executeWithSecretApprovalObservation{Name: scenario.name}
 		openTTYDevice = func() (ttyDevice, error) {
 			response := ""
 			if responseIndex < len(scenario.responses) {
@@ -328,6 +348,7 @@ func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string
 				output:     promptWriter,
 				raw: func() (func(), error) {
 					rawCalls++
+					observation.RequestCounters = append(observation.RequestCounters, srv.approvalKeyCounter.Load())
 					if scenario.rawError != nil {
 						return nil, scenario.rawError
 					}
@@ -341,10 +362,9 @@ func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string
 			"timeout":     5,
 		}
 		attempts := 1
-		if scenario.name == "remembered" {
+		if scenario.name == "remembered" || scenario.name == "granted_twice" {
 			attempts = 2
 		}
-		observation := executeWithSecretApprovalObservation{Name: scenario.name}
 		for index := 0; index < attempts; index++ {
 			_, callErr := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{Arguments: args})
 			if callErr == nil {

@@ -27,6 +27,7 @@ struct ApprovalObservation {
     remembered: bool,
     approval_counter: i64,
     prompt_count: usize,
+    request_counters: Vec<i64>,
     events: Vec<ApprovalEvent>,
     #[serde(default)]
     visible_details: Vec<String>,
@@ -338,6 +339,7 @@ fn source_bound_go_execute_with_secret_approval_contract() {
         ));
         let (approved, remembered, error) = match observation.name.as_str() {
             "granted" => (true, false, None),
+            "granted_twice" => (true, false, None),
             "denied" => (false, false, None),
             "remembered" => (true, true, None),
             "helper_error" => (
@@ -352,7 +354,7 @@ fn source_bound_go_execute_with_secret_approval_contract() {
             result: ApprovalResult {
                 approved,
                 remembered,
-                error,
+                error: error.clone(),
             },
             requests: Arc::clone(&requests),
         };
@@ -406,16 +408,6 @@ fn source_bound_go_execute_with_secret_approval_contract() {
             observation.name
         );
         assert_eq!(
-            observation
-                .events
-                .iter()
-                .filter(|event| event.action == "approval.execute_with_secret.granted")
-                .count() as i64,
-            observation.approval_counter,
-            "{} granted approval counter",
-            observation.name
-        );
-        assert_eq!(
             observation.remembered,
             observation
                 .events
@@ -430,7 +422,30 @@ fn source_bound_go_execute_with_secret_approval_contract() {
             "{} prompt count",
             observation.name
         );
-        if let Some(request) = requests.lock().expect("request log").first() {
+        let requests = requests.lock().expect("request log");
+        let actual_request_counters = requests
+            .iter()
+            .map(|request| request.secrets_accessed)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_request_counters, observation.request_counters,
+            "{} live approval counter at each prompt",
+            observation.name
+        );
+        if observation.name == "granted_twice" {
+            assert_eq!(actual_request_counters, [0, 1]);
+        }
+        let expected_final_counter = if approved && error.is_none() {
+            requests.len() as i64
+        } else {
+            0
+        };
+        assert_eq!(
+            observation.approval_counter, expected_final_counter,
+            "{} final Go/Rust approval counter",
+            observation.name
+        );
+        if let Some(request) = requests.first() {
             assert_eq!(
                 request.timeout,
                 Duration::from_secs(30),
