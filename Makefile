@@ -931,11 +931,19 @@ mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::https_is_verified_for_local_targets_and_public_dns_remains_blocked --exact
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::local_https_contract_matches_the_source_bound_go_handler_fixture --exact
 
-.PHONY: mcp-copy-clipboard-fixtures-check mcp-copy-clipboard-differential
+.PHONY: mcp-copy-clipboard-fixtures-check mcp-copy-clipboard-differential mcp-clipboard-signals-differential
+mcp-clipboard-signals-differential:
+ifeq ($(OS),Windows_NT)
+	@echo "SKIP Unix clipboard signal contract: native Windows signal behavior remains unverified"
+else
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/clipboard -run '^TestStartAutoClearSignalRouterProcessContract$$' -count=1
+	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::stdio_clipboard_signal_router_process_contract --exact
+endif
+
 mcp-copy-clipboard-fixtures-check:
 	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardFixture$$' -count=1
 
-mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check
+mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard-signals-differential
 	$(CARGO) test -p symvault-mcp --test tools_copy_to_clipboard_contract --locked
 
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
