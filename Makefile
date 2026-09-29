@@ -933,6 +933,7 @@ mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
 mcp-secure-input-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
 	SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSecureInputFixture$$' -count=1
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
