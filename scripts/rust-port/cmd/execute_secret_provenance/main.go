@@ -13,11 +13,14 @@ import (
 const pinnedOracleCommit = "12d8c616ae98b954a9b906e0984af1613ca05fde"
 
 var sources = []string{
+	"internal/audit/audit.go",
+	"internal/mcp/server/approval.go",
 	"internal/mcp/server/approval_helper.go",
 	"internal/mcp/server/command_policy.go",
 	"internal/mcp/server/render.go",
 	"internal/mcp/server/server_authorize.go",
 	"internal/mcp/server/server_dispatch.go",
+	"internal/mcp/server/server.go",
 	"internal/mcp/server/tools_execute_with_secret.go",
 	"internal/mcp/server/tools_sanitize.go",
 	"internal/mcp/server/tools_run.go",
@@ -31,7 +34,10 @@ var sources = []string{
 }
 
 var generatorFiles = []string{
+	"internal/mcp/server/approval_test.go",
 	"internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go",
+	"internal/mcp/server/tools_run_test.go",
+	"internal/mcp/server/tools_test_helpers.go",
 	"scripts/rust-port/cmd/execute_secret_child/main.go",
 	"scripts/rust-port/cmd/execute_secret_provenance/main.go",
 	"scripts/rust-port/cmd/execute_secret_unicode/main.go",

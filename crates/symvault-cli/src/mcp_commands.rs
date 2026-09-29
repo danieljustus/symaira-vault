@@ -604,6 +604,7 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         tier: profile.tier.clone().unwrap_or_default(),
         allowed_paths: profile.allowed_paths.clone(),
         approval_mode: profile.approval_mode.clone().unwrap_or_default(),
+        approval_timeout: profile.approval_timeout,
         can_write: profile.can_write,
         can_read_values: profile.can_read_values,
         require_approval: profile.require_approval,
@@ -747,6 +748,7 @@ mod tests {
             allowed_paths: vec!["work/*".into()],
             allowed_tools: vec!["health".into()],
             allowed_executables: vec!["git".into()],
+            approval_timeout: std::time::Duration::from_secs(91),
             can_read_values: true,
             auto_unseal: true,
             expose_payment_values: true,
@@ -756,6 +758,7 @@ mod tests {
         assert_eq!(config.allowed_paths, ["work/*"]);
         assert_eq!(config.available_tools, ["health"]);
         assert_eq!(config.allowed_executables, ["git"]);
+        assert_eq!(config.approval_timeout, std::time::Duration::from_secs(91));
         assert_eq!(config.tier, "standard");
         assert!(config.can_read_values);
         assert!(config.auto_unseal);

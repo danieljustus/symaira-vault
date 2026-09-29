@@ -2,9 +2,12 @@ use std::{collections::BTreeMap, fs, path::Path, sync::Arc, time::Duration};
 
 use serde::Deserialize;
 use serde_json::{Value, json};
+use symvault_core::session::MemoryKeyring;
+use symvault_mcp::store_adapter::ApprovalSeam;
 use symvault_mcp::{
     CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, StoreReadOnlyRuntime, ToolCallRuntime,
 };
+use symvault_platform::approval::{ApprovalError, ApprovalRequest, ApprovalResult};
 use symvault_store::{Entry, Store};
 use tempfile::tempdir;
 
@@ -13,6 +16,27 @@ struct Fixture {
     schema_version: u32,
     oracle: Oracle,
     cases: Vec<Case>,
+    approval_observations: Vec<ApprovalObservation>,
+}
+
+#[derive(Deserialize)]
+struct ApprovalObservation {
+    name: String,
+    attempt_outcomes: Vec<String>,
+    attempt_errors: Vec<String>,
+    remembered: bool,
+    approval_counter: i64,
+    prompt_count: usize,
+    events: Vec<ApprovalEvent>,
+    #[serde(default)]
+    visible_details: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ApprovalEvent {
+    action: String,
+    path: String,
+    ok: bool,
 }
 
 #[derive(Deserialize)]
@@ -110,7 +134,20 @@ fn source_bound_go_execute_with_secret_contract() {
     assert_eq!(fixture.oracle.commit_sha, fixture.oracle.commit);
     assert!(!fixture.oracle.source_files.is_empty());
     assert_eq!(fixture.oracle.source_digest.len(), 64);
-    assert_eq!(fixture.oracle.generator_files.len(), 5);
+    assert_eq!(fixture.oracle.generator_files.len(), 8);
+    for path in [
+        "internal/mcp/server/approval_test.go",
+        "internal/mcp/server/tools_run_test.go",
+        "internal/mcp/server/tools_test_helpers.go",
+    ] {
+        assert!(
+            fixture
+                .oracle
+                .generator_files
+                .iter()
+                .any(|file| file == path)
+        );
+    }
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
 
     for case in fixture.cases {
@@ -215,6 +252,226 @@ fn source_bound_go_execute_with_secret_contract() {
                 assert!(case.output.text.is_empty(), "{} expected text", case.name);
             }
         }
+    }
+}
+
+#[derive(Clone)]
+struct ContractApproval {
+    result: ApprovalResult,
+    requests: Arc<std::sync::Mutex<Vec<ApprovalRequest>>>,
+}
+
+impl ApprovalSeam for ContractApproval {
+    fn is_tty_present(&self) -> bool {
+        true
+    }
+
+    fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
+        self.requests
+            .lock()
+            .expect("request log")
+            .push(request.clone());
+        self.result.clone()
+    }
+}
+
+struct ApprovalContractExecutor;
+
+impl CommandExecutor for ApprovalContractExecutor {
+    fn run(
+        &self,
+        _command: &[String],
+        _environment: &BTreeMap<String, String>,
+        _files: &BTreeMap<String, Vec<u8>>,
+        _additional_redactions: &[Vec<u8>],
+        _working_directory: Option<&Path>,
+        _timeout: Duration,
+    ) -> Result<CommandExecution, String> {
+        Ok(CommandExecution {
+            stdout: String::new(),
+            stderr: String::new(),
+            exit_code: 0,
+            timed_out: false,
+            duration: Duration::ZERO,
+        })
+    }
+}
+
+#[test]
+fn source_bound_go_execute_with_secret_approval_contract() {
+    let fixture: Fixture = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/execute-with-secret.json"
+    ))
+    .expect("decode Go oracle fixture");
+    for observation in fixture.approval_observations {
+        let directory = tempdir().expect("temporary approval vault");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(directory.path(), &identity).expect("open fixture vault");
+        store
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("testpass123"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write synthetic secret");
+        let keyring = MemoryKeyring::new();
+        let audit = Arc::new(std::sync::Mutex::new(
+            symvault_store::audit::open_with_keyring(
+                "fixture-approval-agent",
+                directory.path(),
+                &keyring,
+                symvault_store::audit::RotationConfig::default(),
+            )
+            .expect("audit logger"),
+        ));
+        let (approved, remembered, error) = match observation.name.as_str() {
+            "granted" => (true, false, None),
+            "denied" => (false, false, None),
+            "remembered" => (true, true, None),
+            "helper_error" => (
+                false,
+                false,
+                Some(ApprovalError::RawMode("fixture raw failure".into())),
+            ),
+            other => panic!("unknown Go approval observation {other}"),
+        };
+        let requests = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seam = ContractApproval {
+            result: ApprovalResult {
+                approved,
+                remembered,
+                error,
+            },
+            requests: Arc::clone(&requests),
+        };
+        let config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["execute_with_secret".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["true".into()],
+            allowed_paths: vec!["*".into()],
+            approval_mode: "prompt".into(),
+            agent_name: "fixture-approval-agent".into(),
+            approval_timeout: Duration::ZERO,
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime = StoreReadOnlyRuntime::open_with_audit(
+            directory.path(),
+            identity,
+            config,
+            None,
+            Some(Arc::clone(&audit)),
+        )
+        .expect("runtime")
+        .with_approval_seam(Arc::new(seam))
+        .with_command_executor(Arc::new(ApprovalContractExecutor));
+        let input = json!({
+            "command": ["true", "testpass123"],
+            "secret_refs": ["op://vault/github/password"],
+            "timeout": 5
+        });
+        let mut actual_outcomes = Vec::new();
+        let mut actual_errors = Vec::new();
+        for _ in &observation.attempt_outcomes {
+            match runtime.call("execute_with_secret", &input) {
+                Ok(_) => {
+                    actual_outcomes.push("granted".to_owned());
+                    actual_errors.push(String::new());
+                }
+                Err(error) => {
+                    actual_outcomes.push("error".to_owned());
+                    actual_errors.push(error);
+                }
+            }
+        }
+        assert_eq!(
+            actual_outcomes, observation.attempt_outcomes,
+            "{} outcomes",
+            observation.name
+        );
+        assert_eq!(
+            actual_errors, observation.attempt_errors,
+            "{} errors",
+            observation.name
+        );
+        assert_eq!(
+            observation
+                .events
+                .iter()
+                .filter(|event| event.action == "approval.execute_with_secret.granted")
+                .count() as i64,
+            observation.approval_counter,
+            "{} granted approval counter",
+            observation.name
+        );
+        assert_eq!(
+            observation.remembered,
+            observation
+                .events
+                .iter()
+                .any(|event| event.action == "approval.execute_with_secret.remembered"),
+            "{} remember cache state",
+            observation.name
+        );
+        assert_eq!(
+            requests.lock().expect("request log").len(),
+            observation.prompt_count,
+            "{} prompt count",
+            observation.name
+        );
+        if let Some(request) = requests.lock().expect("request log").first() {
+            assert_eq!(
+                request.timeout,
+                Duration::from_secs(30),
+                "zero timeout Go fallback"
+            );
+            assert!(
+                request.details.contains("[REDACTED]"),
+                "Rust prompt redacts command secrets"
+            );
+            assert!(
+                !request.details.contains("testpass123"),
+                "Rust prompt does not expose the Go fixture secret"
+            );
+            // The fixture's named normalization is limited to visible prompt details.
+            if !observation.visible_details.is_empty() {
+                assert!(observation.visible_details[0].contains("testpass1"));
+            }
+        }
+        let event_path = audit.lock().expect("audit logger").path().to_owned();
+        let actual_events = fs::read_to_string(event_path)
+            .expect("read audit log")
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).expect("audit event"))
+            .map(|event| {
+                (
+                    event["action"].as_str().unwrap_or_default().to_owned(),
+                    event["path"].as_str().unwrap_or_default().to_owned(),
+                    event["ok"].as_bool().unwrap_or(false),
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected_events = observation
+            .events
+            .into_iter()
+            .map(|event| (event.action, event.path, event.ok))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            actual_events, expected_events,
+            "{} audit order",
+            observation.name
+        );
     }
 }
 

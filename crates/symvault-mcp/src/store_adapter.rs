@@ -327,6 +327,7 @@ pub struct StoreReadOnlyRuntime {
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
     require_approval: bool,
+    approval_timeout: Duration,
     command_executor: Option<Arc<dyn CommandExecutor>>,
     allowed_executables: Vec<String>,
 }
@@ -362,6 +363,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let approval_timeout = config.approval_timeout;
         let allowed_executables = config.allowed_executables.clone();
         let now_unix = config.now_unix;
         let unavailable_tools = config
@@ -389,6 +391,7 @@ impl StoreReadOnlyRuntime {
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            approval_timeout,
             command_executor: None,
             allowed_executables,
         })
@@ -423,6 +426,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let approval_timeout = config.approval_timeout;
         let allowed_executables = config.allowed_executables.clone();
         let share_root = adapter.root().to_path_buf();
         let now_unix = config.now_unix;
@@ -451,6 +455,7 @@ impl StoreReadOnlyRuntime {
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            approval_timeout,
             command_executor: None,
             allowed_executables,
         })
@@ -748,6 +753,120 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
+    fn check_execute_with_secret_approval(
+        &self,
+        command: &[String],
+        environment: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => return Ok(()),
+            "deny" => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err("execute_with_secret denied: approval mode is 'deny'".into());
+            }
+            "prompt" => {}
+            // RuntimeConfig is public and may be constructed without the
+            // profile validator, so unknown modes must never bypass approval.
+            _ => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err(format!(
+                    "execute_with_secret denied: unknown approval mode {mode:?}"
+                ));
+            }
+        }
+
+        // This Rust platform seam currently supports controlling-TTY approval
+        // only. Fail closed before consulting remembered approvals, matching
+        // Go's no-TTY/no-GUI guard ordering.
+        if !self.approval.is_tty_present() {
+            self.append_audit("approval.execute_with_secret.denied", "", false);
+            return Err(
+                "execute_with_secret requires approval but no TTY or GUI dialog available".into(),
+            );
+        }
+
+        let cache_key = format!("{}:execute_with_secret:", self.agent_name);
+        if self
+            .approval_cache
+            .lock()
+            .is_ok_and(|cache| cache.contains(&cache_key))
+        {
+            self.append_audit("approval.execute_with_secret.remembered", "", true);
+            return Ok(());
+        }
+
+        self.append_audit("approval.execute_with_secret.requested", "", true);
+
+        // Go currently puts raw command arguments in the approval prompt.
+        // This port intentionally redacts every resolved environment value so
+        // a command that repeats an injected value cannot expose it to the UI.
+        // Environment names remain visible, sorted by BTreeMap iteration.
+        let known_values = environment.values().cloned().collect::<Vec<_>>();
+        let safe_command = command
+            .iter()
+            .map(|argument| {
+                symvault_core::redact::redact_known_values(argument, &known_values, "[REDACTED]").0
+            })
+            .collect::<Vec<_>>();
+        let summary = format!(
+            "agent {:?} requests to execute command [{}] with secret injection (env vars: [{}])",
+            self.agent_name,
+            safe_command.join(" "),
+            environment.keys().cloned().collect::<Vec<_>>().join(" ")
+        );
+        let working_dir = std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "execute_with_secret".into(),
+            details: summary,
+            // Go treats an explicitly configured zero timeout like an absent
+            // value and falls back to 30 seconds.
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir,
+            risk_level: RiskLevel::High,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: true,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            // Go records the operation-level denial in the handler, but does
+            // not emit approval.execute_with_secret.denied for prompt errors.
+            return Err(format!("execute_with_secret approval failed: {error}"));
+        }
+        if !approval.approved {
+            self.append_audit("approval.execute_with_secret.denied", "", false);
+            return Err("execute_with_secret denied: user did not approve".into());
+        }
+        if approval.remembered {
+            if let Ok(mut cache) = self.approval_cache.lock() {
+                cache.insert(cache_key);
+            }
+            self.append_audit("approval.execute_with_secret.remembered", "", true);
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit("approval.execute_with_secret.granted", "", true);
+        Ok(())
+    }
+
     fn execute_with_secret(&self, arguments: &Value) -> Result<ToolCallResult, String> {
         let Some(executor) = &self.command_executor else {
             return Err("execute_with_secret has no configured command executor".into());
@@ -924,26 +1043,9 @@ impl StoreReadOnlyRuntime {
                 denied.join(", ")
             )));
         }
-        let approval_mode = if self.approval_mode.is_empty() && self.require_approval {
-            "prompt"
-        } else if self.approval_mode.is_empty() {
-            "none"
-        } else {
-            self.approval_mode.as_str()
-        };
-        match approval_mode {
-            "none" | "auto" => {}
-            "deny" => {
-                self.append_audit("approval.execute_with_secret.denied", "", false);
-                return Err("execute_with_secret denied: approval mode is 'deny'".into());
-            }
-            _ => {
-                self.append_audit("approval.execute_with_secret.denied", "", false);
-                return Err(
-                    "execute_with_secret requires approval but no TTY or GUI dialog available"
-                        .into(),
-                );
-            }
+        if let Err(error) = self.check_execute_with_secret_approval(&command, &environment) {
+            self.append_audit("execute_with_secret", "<approval-denied>", false);
+            return Err(error);
         }
         let working_directory = arguments
             .get("working_dir")
@@ -2276,6 +2378,7 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
+    use super::ApprovalSeam;
     use super::{
         MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
         execute_with_secret_audit_path, generate_env_var_name, parse_command_timeout,
@@ -2284,7 +2387,13 @@ mod tests {
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
     use serde_json::{Value, json};
     use std::time::{Duration, Instant};
-    use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
+    use symvault_platform::approval::{ApprovalRequest, ApprovalResult, RiskLevel};
     use symvault_store::{Entry, Store, sharing::ShareStore};
     use tempfile::tempdir;
 
@@ -2587,6 +2696,209 @@ mod tests {
             )
             .unwrap_err();
         assert!(prompt.contains("requires approval"));
+    }
+
+    struct RecordingApproval {
+        tty: bool,
+        answer: ApprovalResult,
+        requests: Mutex<Vec<ApprovalRequest>>,
+    }
+
+    impl RecordingApproval {
+        fn new(tty: bool, approved: bool, remembered: bool) -> Arc<Self> {
+            Arc::new(Self {
+                tty,
+                answer: ApprovalResult {
+                    approved,
+                    remembered,
+                    error: None,
+                },
+                requests: Mutex::new(Vec::new()),
+            })
+        }
+
+        fn requests(&self) -> Vec<ApprovalRequest> {
+            self.requests.lock().expect("approval request lock").clone()
+        }
+    }
+
+    impl ApprovalSeam for RecordingApproval {
+        fn is_tty_present(&self) -> bool {
+            self.tty
+        }
+
+        fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
+            self.requests
+                .lock()
+                .expect("approval request lock")
+                .push(request.clone());
+            self.answer.clone()
+        }
+    }
+
+    fn approval_test_runtime(
+        root: &Path,
+        mut config: ReadOnlyRuntimeConfig,
+        approval: Arc<dyn ApprovalSeam>,
+    ) -> StoreReadOnlyRuntime {
+        config.available_tools = vec!["execute_with_secret".into()];
+        fs::create_dir_all(root.join("entries")).expect("entries directory");
+        fs::write(root.join("config.yaml"), b"vault:\n  format_version: 2\n")
+            .expect("vault config");
+        fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(root, &identity).expect("open temporary vault");
+        StoreReadOnlyRuntime::open(root, identity, config, None, None)
+            .expect("runtime")
+            .with_approval_seam(approval)
+    }
+
+    #[test]
+    fn execute_with_secret_prompt_redacts_values_and_remembers_agent_scope() {
+        let directory = tempdir().expect("temporary vault directory");
+        let fake = RecordingApproval::new(true, true, true);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&fake) as Arc<dyn ApprovalSeam>,
+        );
+        let environment = BTreeMap::from([
+            ("API_KEY".to_owned(), "secret-from-ref".to_owned()),
+            ("PLAIN".to_owned(), "literal-value".to_owned()),
+        ]);
+        let command = vec![
+            "curl".to_owned(),
+            "--header=secret-from-ref".to_owned(),
+            "literal-value".to_owned(),
+        ];
+
+        runtime
+            .check_execute_with_secret_approval(&command, &environment)
+            .expect("approval granted");
+        let request = fake.requests().pop().expect("one approval request");
+        assert_eq!(request.operation, "execute_with_secret");
+        assert_eq!(request.agent_name, "alice");
+        assert_eq!(request.timeout, Duration::from_secs(73));
+        assert_eq!(request.risk_level, RiskLevel::High);
+        assert_eq!(request.secrets_accessed, 0);
+        assert!(request.can_remember);
+        assert!(request.details.contains("[REDACTED]"));
+        assert!(request.details.contains("env vars: [API_KEY PLAIN]"));
+        assert!(!request.details.contains("secret-from-ref"));
+        assert!(!request.details.contains("literal-value"));
+
+        runtime
+            .check_execute_with_secret_approval(&["sh".into()], &environment)
+            .expect("remembered approval applies to this agent's action scope");
+        assert_eq!(fake.requests().len(), 1, "remembered approval skips prompt");
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "remembered cache hit does not increment the approval counter"
+        );
+    }
+
+    #[test]
+    fn execute_with_secret_approval_denial_and_missing_tty_fail_closed() {
+        let directory = tempdir().expect("temporary vault directory");
+        let no_tty = RecordingApproval::new(false, true, false);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&no_tty) as Arc<dyn ApprovalSeam>,
+        );
+        let result = runtime.check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new());
+        assert_eq!(
+            result.unwrap_err(),
+            "execute_with_secret requires approval but no TTY or GUI dialog available"
+        );
+        assert!(no_tty.requests().is_empty());
+
+        let prompt_directory = tempdir().expect("temporary prompt vault");
+        let denied = RecordingApproval::new(true, false, false);
+        let runtime = approval_test_runtime(
+            prompt_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&denied) as Arc<dyn ApprovalSeam>,
+        );
+        assert_eq!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err(),
+            "execute_with_secret denied: user did not approve"
+        );
+        assert_eq!(denied.requests().len(), 1);
+
+        let deny_directory = tempdir().expect("temporary deny vault");
+        let unused = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            deny_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "deny".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&unused) as Arc<dyn ApprovalSeam>,
+        );
+        assert_eq!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err(),
+            "execute_with_secret denied: approval mode is 'deny'"
+        );
+        assert!(unused.requests().is_empty());
+    }
+
+    #[test]
+    fn execute_with_secret_unknown_mode_fails_closed_and_zero_timeout_defaults() {
+        let directory = tempdir().expect("temporary vault directory");
+        let unused = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "unrecognized".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&unused) as Arc<dyn ApprovalSeam>,
+        );
+        assert!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err()
+                .contains("unknown approval mode")
+        );
+        assert!(
+            unused.requests().is_empty(),
+            "unknown mode cannot reach executor"
+        );
+
+        let zero_directory = tempdir().expect("temporary zero-timeout vault");
+        let prompt = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            zero_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::ZERO,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&prompt) as Arc<dyn ApprovalSeam>,
+        );
+        runtime
+            .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+            .expect("approved with fallback timeout");
+        assert_eq!(prompt.requests()[0].timeout, Duration::from_secs(30));
     }
 
     #[test]

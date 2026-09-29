@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
+	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/vault"
@@ -24,12 +28,14 @@ import (
 // This fixture executes the production Go secret-injection handler against a
 // synthetic vault. It is opt-in so ordinary Go tests never rewrite artifacts.
 type executeWithSecretFixture struct {
-	SchemaVersion     int                            `json:"schema_version"`
-	UnicodeNameDigest string                         `json:"unicode_name_digest"`
-	Oracle            executeWithSecretOracle        `json:"oracle"`
-	NameCases         map[string]string              `json:"name_cases"`
-	AuditPath         string                         `json:"audit_path"`
-	Cases             []executeWithSecretFixtureCase `json:"cases"`
+	SchemaVersion     int                                    `json:"schema_version"`
+	UnicodeNameDigest string                                 `json:"unicode_name_digest"`
+	Oracle            executeWithSecretOracle                `json:"oracle"`
+	NameCases         map[string]string                      `json:"name_cases"`
+	AuditPath         string                                 `json:"audit_path"`
+	Cases             []executeWithSecretFixtureCase         `json:"cases"`
+	Approval          []executeWithSecretApprovalObservation `json:"approval_observations"`
+	Normalizations    []string                               `json:"normalizations,omitempty"`
 }
 
 type executeWithSecretOracle struct {
@@ -54,14 +60,34 @@ type executeWithSecretResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type executeWithSecretApprovalObservation struct {
+	Name            string                           `json:"name"`
+	AttemptOutcomes []string                         `json:"attempt_outcomes"`
+	AttemptErrors   []string                         `json:"attempt_errors"`
+	Remembered      bool                             `json:"remembered"`
+	ApprovalCounter int64                            `json:"approval_counter"`
+	PromptCount     int                              `json:"prompt_count"`
+	Events          []executeWithSecretApprovalEvent `json:"events"`
+	VisibleDetails  []string                         `json:"visible_details,omitempty"`
+}
+
+type executeWithSecretApprovalEvent struct {
+	Action string `json:"action"`
+	Path   string `json:"path"`
+	OK     bool   `json:"ok"`
+}
+
 const executeWithSecretOracleCommit = "12d8c616ae98b954a9b906e0984af1613ca05fde"
 
 var executeWithSecretOracleSources = []string{
+	"internal/audit/audit.go",
+	"internal/mcp/server/approval.go",
 	"internal/mcp/server/approval_helper.go",
 	"internal/mcp/server/command_policy.go",
 	"internal/mcp/server/render.go",
 	"internal/mcp/server/server_authorize.go",
 	"internal/mcp/server/server_dispatch.go",
+	"internal/mcp/server/server.go",
 	"internal/mcp/server/tools_execute_with_secret.go",
 	"internal/mcp/server/tools_sanitize.go",
 	"internal/mcp/server/tools_run.go",
@@ -141,7 +167,10 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		Commit: executeWithSecretOracleCommit, CommitSHA: provenanceResult.CommitSHA,
 		SourceFiles: executeWithSecretOracleSources, SourceDigest: provenanceResult.SourceDigest,
 		GeneratorFiles: []string{
+			"internal/mcp/server/approval_test.go",
 			"internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go",
+			"internal/mcp/server/tools_run_test.go",
+			"internal/mcp/server/tools_test_helpers.go",
 			"scripts/rust-port/cmd/execute_secret_child/main.go",
 			"scripts/rust-port/cmd/execute_secret_provenance/main.go",
 			"scripts/rust-port/cmd/execute_secret_unicode/main.go",
@@ -161,6 +190,8 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		"han_ext_h_letter":    generateEnvVarName("\U00031350", "password"),
 		"leading_digit":       generateEnvVarName("9service", ""),
 		"empty":               generateEnvVarName("", ""),
+	}, Normalizations: []string{
+		"approval_observations: Go's TTY prompt may display synthetic resolved secret values embedded in command arguments; Rust redacts those values as [REDACTED] before constructing approval details.",
 	}}
 	redactedCommand := redactSecrets([]string{"go", "run", filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")}, map[string]string{"GITHUB_PASSWORD": "testpass123"})
 	redactedCommand[2] = "<fixture-child-go-source>"
@@ -219,6 +250,7 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		}
 		fixture.Cases = append(fixture.Cases, executeWithSecretFixtureCase{Name: tc.name, Phase: tc.phase, Input: encodedInput, Output: output})
 	}
+	fixture.Approval = generateExecuteWithSecretApprovalObservations(t, vaultDir, identity)
 	content, err := json.MarshalIndent(fixture, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -243,6 +275,126 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("wrote %s (%d bytes)", path, len(content))
+}
+
+func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string, identity *age.X25519Identity) []executeWithSecretApprovalObservation {
+	// Kept as a separate source-bound execution path so the fixture records
+	// actual Go TTY, cache, counter, and audit behavior rather than copied rules.
+	t.Helper()
+	original := openTTYDevice
+	defer func() { openTTYDevice = original }()
+	observations := make([]executeWithSecretApprovalObservation, 0, 4)
+	for _, scenario := range []struct {
+		name      string
+		responses []string
+		rawError  error
+	}{
+		{name: "granted", responses: []string{"y"}},
+		{name: "denied", responses: []string{"n"}},
+		{name: "remembered", responses: []string{"r"}},
+		{name: "helper_error", responses: []string{"y"}, rawError: errors.New("fixture raw failure")},
+	} {
+		profile := config.AgentProfile{
+			Name: "a", AllowedPaths: []string{"*"},
+			AllowedExecutables: []string{"true"}, CanRunCommands: config.BoolPtr(true),
+			ApprovalMode: config.StrPtr("prompt"), ApprovalTimeout: config.DurationPtr(0),
+		}
+		srv := newTestServerWithVault(t, profile, "stdio", vaultDir)
+		srv.vault.Identity = identity
+		if err := srv.auditLog.Close(); err != nil {
+			t.Fatalf("close default audit logger: %v", err)
+		}
+		auditDir := t.TempDir()
+		logger, err := audit.New(profile.Name, auditDir, nil)
+		if err != nil {
+			t.Fatalf("create fixture audit logger: %v", err)
+		}
+		srv.auditLog = logger
+		srv.auditLog.SetSyncMode(true)
+		srv.approvalCache = newApprovalCache()
+
+		promptReader, promptWriter, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var rawCalls, responseIndex int
+		openTTYDevice = func() (ttyDevice, error) {
+			response := ""
+			if responseIndex < len(scenario.responses) {
+				response = scenario.responses[responseIndex]
+			}
+			return &mockTTYDevice{
+				readString: func() (string, error) { responseIndex++; return response, nil },
+				output:     promptWriter,
+				raw: func() (func(), error) {
+					rawCalls++
+					if scenario.rawError != nil {
+						return nil, scenario.rawError
+					}
+					return func() {}, nil
+				},
+			}, nil
+		}
+		args := map[string]any{
+			"command":     []any{"true", "testpass123"},
+			"secret_refs": []any{"op://vault/github/password"},
+			"timeout":     5,
+		}
+		attempts := 1
+		if scenario.name == "remembered" {
+			attempts = 2
+		}
+		observation := executeWithSecretApprovalObservation{Name: scenario.name}
+		for index := 0; index < attempts; index++ {
+			_, callErr := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{Arguments: args})
+			if callErr == nil {
+				observation.AttemptOutcomes = append(observation.AttemptOutcomes, "granted")
+				observation.AttemptErrors = append(observation.AttemptErrors, "")
+			} else {
+				observation.AttemptOutcomes = append(observation.AttemptOutcomes, "error")
+				observation.AttemptErrors = append(observation.AttemptErrors, callErr.Error())
+			}
+		}
+		observation.Remembered = srv.approvalCache.isRemembered(approvalCacheKey(profile.Name, "execute_with_secret", ""))
+		observation.ApprovalCounter = srv.approvalKeyCounter.Load()
+		observation.PromptCount = rawCalls
+		if err := promptWriter.Close(); err != nil {
+			t.Fatal(err)
+		}
+		promptBytes, err := io.ReadAll(promptReader)
+		_ = promptReader.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(string(promptBytes), "\n") {
+			if strings.Contains(line, "║ Details:") {
+				observation.VisibleDetails = append(observation.VisibleDetails, strings.TrimSpace(line))
+			}
+		}
+		if err := srv.auditLog.Close(); err != nil {
+			t.Fatal(err)
+		}
+		auditBytes, err := os.ReadFile(filepath.Join(auditDir, "audit-"+profile.Name+".log"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, line := range strings.Split(strings.TrimSpace(string(auditBytes)), "\n") {
+			if line == "" {
+				continue
+			}
+			var event struct {
+				Action string `json:"action"`
+				Path   string `json:"path"`
+				OK     bool   `json:"ok"`
+			}
+			if err := json.Unmarshal([]byte(line), &event); err != nil {
+				t.Fatal(err)
+			}
+			observation.Events = append(observation.Events, executeWithSecretApprovalEvent{Action: event.Action, Path: event.Path, OK: event.OK})
+		}
+		observations = append(observations, observation)
+	}
+	return observations
 }
 
 func goUnicodeNameDigest() string {

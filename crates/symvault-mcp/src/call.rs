@@ -216,6 +216,8 @@ pub struct ReadOnlyRuntimeConfig {
     pub allowed_paths: Vec<String>,
     pub approval_mode: String,
     pub require_approval: bool,
+    /// Human approval prompt timeout inherited from the agent profile.
+    pub approval_timeout: std::time::Duration,
     pub can_read_values: bool,
     pub auto_unseal: bool,
     pub expose_payment_values: bool,
@@ -260,6 +262,7 @@ impl Default for ReadOnlyRuntimeConfig {
             allowed_paths: vec!["*".into()],
             approval_mode: String::new(),
             require_approval: false,
+            approval_timeout: std::time::Duration::from_secs(30),
             can_read_values: false,
             auto_unseal: false,
             expose_payment_values: false,
