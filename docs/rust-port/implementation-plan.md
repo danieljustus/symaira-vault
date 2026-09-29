@@ -1,5 +1,34 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated custom Bearer API request — 2026-09-29
+
+Candidate `ca1dba8db88c149b94676d91b031ba909eff3a5a` connects bounded custom
+Bearer GET templates to the assembled CLI MCP handler. Command capability,
+profile allowlist, endpoint/method guards, scope and critical approval precede
+the credential read and loopback request. Templates reload on each call: a
+same-handler revocation test changes the YAML and proves no second request.
+Reads are bounded and reject static symlinks; these path checks are not a
+race-proof descriptor-relative opening protocol.
+
+The actual Go handler oracle is source-bound to `c94a10d7`; real Rust CLI replay
+compares exact results, denials and request counts. Recursive entry values and
+generic sensitive patterns are masked without replacing a literal `[REDACTED]`.
+Sensitive response headers are filtered and the API's100KiB truncation preserves
+Go invalid-UTF8 behavior. The generic broker still rejects bodies exceeding16MiB.
+Fixture SHA256: `0e14eb3bf935dc50433f8ef29707c95cfa06a3980d295320ff3b6c87dff31c3c`.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 pass the full Go MCP
+differential,91 core tests,169 MCP tests,35 CLI contracts and the dedicated real
+PTY acceptance test. Two ordinary opt-in PTY helpers are ignored and explicitly
+executed by that gate. No failures. Source metadata, log hashes and receipts
+`api-request-receipt-ca1dba8d.json` remain in the existing Vault/native-linux build
+roots. Linux emits an unused timeout-helper warning; shared-path cleanup is queued.
+
+Basic/header/query auth, substitutions, bodies, caller headers, built-in templates,
+TLS and remaining native platforms remain open. MCP-003/BROKER-002 stay in progress;
+no remote candidate run, release, installed cutover or Go removal is claimed.
+
+
 ## Integrated real Unix approval acceptance — 2026-09-29
 
 Candidate `58e06e4bad4853d5ababaf2f42e31791547b5286` includes the preceding
