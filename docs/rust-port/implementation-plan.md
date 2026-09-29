@@ -1,5 +1,29 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated set/delete approval evidence — 2026-09-29
+
+Candidate `c4a71828f7d109445062cfb952218385120c98d7` adds shared platform-seam
+approval to stdio `set_entry_field` and `delete_entry` while preserving the
+existing HTTP queue path. Critical writes never offer remembered approval.
+Argument/scope checks precede approval; denied, absent-TTY, timeout and prompt
+I/O failures leave the synthetic vault unchanged. Invalid constructed approval
+modes fail closed. Audit order and consecutive prompt counters match Go.
+
+The oracle verifies production Git blobs at `cfbfd59a` before invoking actual
+Go handlers and separately binds its generator/helpers. Real Go counterexamples
+cover separate path/field sanitization, unterminated escapes, OSC termination,
+byte controls, malformed UTF8 replacement and an empty sanitized field. The
+new differential is included in the existing native MCP CI gate.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 checks pass: full MCP
+call differential, all 167 MCP tests and 26 filtered CLI MCP tests, zero failed
+or ignored. Receipts `write-tty-receipt-c4a71828.json` are under the existing
+Vault and native-linux build roots. The approval provider is injected here;
+actual controlling-PTY acceptance, Windows TTY implementation, GUI providers,
+remaining handlers and other required native targets remain open. MCP-003
+stays in progress; no release, installed cutover or real vault operation occurred.
+
+
 ## Integrated execute-with-secret approval evidence — 2026-09-29
 
 Candidate `cfbfd59a8a4580e8547e278ff8b9de6c7e806967` composes the shared
