@@ -1,5 +1,29 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated MCP clipboard dispatch — 2026-09-29
+
+Candidate `d5bacb7925232c2e08213be0b8564798f5576486` connects
+`copy_to_clipboard` through the existing injected clipboard boundary and
+approval/scope checks. Sixteen cases recorded from the actual Go dispatcher
+cover preflight ordering, approval reuse, missing values, provider errors,
+TTL clearing and timer replacement/runtime-drop cancellation. The production
+CLI supplies its existing macOS adapter; tests use synthetic clipboard state.
+
+Independent native Darwin/arm64 and Linux/arm64 gates pass the complete MCP
+call/fixture differential, 91 core, 176 MCP, 36 CLI and 59/52 platform tests,
+strict all-target Clippy and formatting. The existing 17-action controlling-PTY
+gate also passes, including five restoration checks and two idle signals.
+Four Darwin/one Linux host-integration opt-ins remain ignored; the two ordinary
+PTY helpers are exercised by the dedicated acceptance gate.
+
+`clipboard-receipt-d5bacb79.json` in both existing build roots binds candidate,
+Cargo paths, the 16-case fixture and logs. Log SHA-256:
+Darwin `0140d58a9881e16d82eafd2ab0dce8ebda47cfd79057ae37327ce6c5eea6bfe3`;
+Linux `9d208e8340c64dc1fabd739fd26220caabdf7a1f2b2a9725fb6679fc4a24c9c3`.
+Signal-triggered clipboard clearing is separate pending work. Native host
+clipboard/autotype, Windows TTY and other required targets remain unverified;
+MCP-003 and RUST-010 remain open. No host clipboard or credential state changed.
+
 ## Integrated Unix terminal signals — 2026-09-29
 
 Candidate `7be90e81454f1b192f200ba8e496f9ef8009c31e` passes the complete
