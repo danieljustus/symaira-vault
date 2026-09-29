@@ -246,7 +246,7 @@ design decision, not drift — see "Key Design Decisions" below.
 - `CanWrite` — Whether write operations are allowed
 - `ApprovalMode` — `none`, `deny`, or `prompt` (degrades to deny in MCP)
 
-**Available tools (34 registered, excluding the deprecated `symaira_delete` alias):**
+**Available tools (35 registered, including the deprecated `symaira_delete` alias):**
 
 Vault operations:
 - `list_entries` — List vault entries matching a prefix
@@ -255,6 +255,7 @@ Vault operations:
 - `get_entry_metadata` — Get metadata without sensitive data
 - `set_entry_field` — Set a field on an entry
 - `delete_entry` — Delete an entry by path
+- `symaira_delete` — Deprecated alias for `delete_entry`
 - `find_entries` — Search entries by query
 - `generate_password` — Generate a secure password
 - `generate_totp` — Generate a TOTP code
@@ -284,6 +285,7 @@ Input/Output:
 - `secure_input` — Prompt user for sensitive data via TTY/GUI dialog
 - `copy_to_clipboard` — Copy entry field to clipboard without exposing value
 - `autotype` — Type entry field as keyboard input into focused application
+- `prepare_payment` — Validate payment metadata and approve autotyping without returning card values
 - `sanitize_output` — Scan text for secrets and mask them
 
 Web & AI:
@@ -573,7 +575,7 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 
 ## Tool Addition Review
 
-Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (34, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit.
+Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (35, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit. Deprecated aliases count toward the same cap.
 
 **Adding a new tool** requires:
 
