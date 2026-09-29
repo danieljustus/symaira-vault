@@ -1848,6 +1848,10 @@ mod tests {
             // active. Once its scoped registration ends, the same signal must
             // regain its normal process disposition.
             signal_hook::low_level::raise(signal).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
             panic!("idle signal unexpectedly returned");
         }
 
