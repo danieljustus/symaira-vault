@@ -909,6 +909,10 @@ mcp-execute-with-secret-fixtures-check:
 mcp-execute-with-secret-differential: mcp-execute-with-secret-fixtures-check
 	$(CARGO) test -p symvault-mcp --test execute_with_secret_contract --locked
 
+.PHONY: mcp-approval-pty-acceptance
+mcp-approval-pty-acceptance:
+	python3 scripts/rust-port/mcp-approval-pty.py -- $(CARGO) test -p symvault-cli --test mcp_commands_contract --locked -- --ignored --exact unix_platform_approval_pty_acceptance --nocapture
+
 .PHONY: mcp-write-tty-approval-fixtures-check mcp-write-tty-approval-differential
 mcp-write-tty-approval-fixtures-check:
 	SYMAIRA_CHECK_MCP_WRITE_APPROVAL_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPWriteApprovalFixture$$' -count=1

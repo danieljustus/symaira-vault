@@ -253,6 +253,9 @@ jobs:
       - name: Run Rust gates and Go differential contract
         run: make rust-gates-core
 
+      - name: Verify real Unix MCP approval terminal
+        run: make mcp-approval-pty-acceptance
+
   rust-miri:
     name: Rust Miri
     runs-on: ubuntu-latest
@@ -330,8 +333,17 @@ jobs:
       - name: Check and lint
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      - name: Verify native Go MCP handler fixtures
+        shell: bash
+        run: make mcp-call-fixtures-check
+
       - name: Test including doctests
         run: cargo test --workspace --all-features --locked
+
+      - name: Verify real Unix MCP approval terminal
+        if: runner.os != 'Windows'
+        shell: bash
+        run: make mcp-approval-pty-acceptance
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
