@@ -2835,7 +2835,7 @@ impl StoreReadOnlyRuntime {
         }
         let (cancel, receiver) = mpsc::channel();
         if let Ok(mut active) = self.clipboard_clear_cancel.lock() {
-            if let Some(previous) = active.replace(cancel) {
+            if let Some(previous) = active.replace(cancel.clone()) {
                 let _ = previous.send(());
             }
         } else {
@@ -2843,11 +2843,21 @@ impl StoreReadOnlyRuntime {
         }
         let clipboard = Arc::clone(&self.clipboard);
         let delay = self.clipboard_auto_clear_duration;
+        let clear_claimed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        #[cfg(unix)]
+        let signal_registration = approval_prompt::register_stdio_clipboard_auto_clear(
+            cancel.clone(),
+            Arc::clone(&clear_claimed),
+        );
+        #[cfg(not(unix))]
+        let signal_registration = ();
         thread::spawn(move || {
+            let _signal_registration = signal_registration;
             if matches!(
                 receiver.recv_timeout(delay),
                 Err(mpsc::RecvTimeoutError::Timeout)
-            ) {
+            ) && !clear_claimed.swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
                 let _ = clipboard.clear();
             }
         });

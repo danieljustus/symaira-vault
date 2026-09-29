@@ -279,3 +279,177 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
         }
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn copy_to_clipboard_signal_clears_active_timer_and_continues() {
+    use std::{
+        env,
+        io::{Read, Write},
+        process::{Command, Output, Stdio},
+        thread,
+        time::Instant,
+    };
+
+    fn bounded_output(mut command: Command, timeout: Duration) -> Output {
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+        let mut child = command
+            .spawn()
+            .expect("spawn bounded clipboard signal process");
+        let mut stdout = child.stdout.take().expect("capture child stdout");
+        let mut stderr = child.stderr.take().expect("capture child stderr");
+        let stdout_reader = thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stdout.read_to_end(&mut bytes).expect("read child stdout");
+            bytes
+        });
+        let stderr_reader = thread::spawn(move || {
+            let mut bytes = Vec::new();
+            stderr.read_to_end(&mut bytes).expect("read child stderr");
+            bytes
+        });
+        let deadline = Instant::now() + timeout;
+        let status = loop {
+            if let Some(status) = child.try_wait().expect("poll clipboard signal process") {
+                break status;
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                panic!("clipboard signal process exceeded {timeout:?}");
+            }
+            thread::sleep(Duration::from_millis(10));
+        };
+        Output {
+            status,
+            stdout: stdout_reader.join().expect("join stdout reader"),
+            stderr: stderr_reader.join().expect("join stderr reader"),
+        }
+    }
+
+    fn signal_child(pid: &str, signal: &str) {
+        let mut command = Command::new("kill");
+        command.args([signal, pid]);
+        let output = bounded_output(command, Duration::from_secs(2));
+        assert!(
+            output.status.success(),
+            "signal {signal} failed: {output:?}"
+        );
+    }
+
+    if env::var_os("SYMVAULT_MCP_CLIPBOARD_SIGNAL_CHILD").is_some() {
+        use std::process::id;
+
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/copy-clipboard.json"
+        ))
+        .expect("decode source-bound Go clipboard fixture");
+        let case = fixture
+            .cases
+            .iter()
+            .find(|case| case.name == "success_auto_clear")
+            .expect("Go auto-clear case");
+        let root = tempdir().expect("synthetic disposable vault");
+        fs::write(
+            root.path().join("config.yaml"),
+            "vault:\n  format_version: 1\n",
+        )
+        .expect("write synthetic config");
+        fs::write(
+            root.path().join("identity.age"),
+            b"synthetic identity marker",
+        )
+        .expect("write synthetic identity marker");
+        fs::create_dir(root.path().join("entries")).expect("create entries");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        store
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([(
+                        "password".into(),
+                        serde_json::json!("synthetic-clipboard-value"),
+                    )]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("seed synthetic password entry");
+        let clipboard = Arc::new(FakeClipboard::default());
+        symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
+            .expect("install process-owned child signal router");
+        let runtime = StoreReadOnlyRuntime::from_store(
+            store,
+            identity,
+            ReadOnlyRuntimeConfig {
+                server_name: fixture.server_name.clone(),
+                server_version: fixture.server_version.clone(),
+                transport: "stdio".into(),
+                agent_name: "signal-child".into(),
+                tier: "admin".into(),
+                allowed_paths: case.allowed_paths.clone(),
+                approval_mode: "none".into(),
+                can_use_clipboard: true,
+                available_tools: read_only_tool_names(),
+                vault_dir: "<fixture-vault>".into(),
+                vault_unlocked: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("construct synthetic runtime")
+        .with_clipboard(clipboard.clone())
+        .with_clipboard_auto_clear_duration(Duration::from_secs(30));
+        let mut handler = ProtocolHandler::with_tool_call_runtime(
+            &fixture.server_name,
+            &fixture.server_version,
+            Arc::new(runtime),
+        );
+        let input = case
+            .input
+            .iter()
+            .map(|line| format!("{line}\n"))
+            .collect::<String>();
+        let responses = run_stream(&input, &mut handler).expect("dispatch actual clipboard tool");
+        assert_eq!(responses.len(), case.output.len());
+        assert!(clipboard.writes.lock().unwrap()[0].starts_with(b"synthetic-clipboard-value"));
+
+        let pid = id().to_string();
+        signal_child(&pid, "-TERM");
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while clipboard.writes.lock().unwrap().len() < 2 && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(clipboard.writes.lock().unwrap().len(), 2);
+        assert!(clipboard.writes.lock().unwrap()[1].is_empty());
+        println!("RUST_MCP_CLIPBOARD_SIGNAL_RECEIPT clear=1 continued=true");
+        std::io::stdout().flush().unwrap();
+        return;
+    }
+
+    let mut command = Command::new(env::current_exe().expect("current test binary"));
+    command
+        .arg("--exact")
+        .arg("copy_to_clipboard_signal_clears_active_timer_and_continues")
+        .arg("--nocapture")
+        .env("SYMVAULT_MCP_CLIPBOARD_SIGNAL_CHILD", "1");
+    let output = bounded_output(command, Duration::from_secs(10));
+    assert!(
+        output.status.success(),
+        "active clipboard signal child did not continue: status={:?}, stdout={}, stderr={}",
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("RUST_MCP_CLIPBOARD_SIGNAL_RECEIPT clear=1 continued=true"),
+        "child did not prove active timer clear-and-continue: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}

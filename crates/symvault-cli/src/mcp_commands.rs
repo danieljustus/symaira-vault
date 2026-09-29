@@ -22,8 +22,11 @@ use std::{
 };
 
 use crate::run_commands::McpCommandExecutor;
+#[cfg(not(target_os = "macos"))]
+use symvault_core::platform::UnavailablePlatform;
 use symvault_core::{
     config::{AgentProfile, Config, McpConfig},
+    platform::Clipboard,
     policy::{Engine, Policy},
     session::Keyring,
 };
@@ -64,6 +67,7 @@ pub fn run(
             .unwrap_or(30)
             .max(0) as u64,
     );
+    let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
@@ -159,6 +163,7 @@ pub fn run(
                 &runtime_status,
                 Some(approval_queue_for_agent.clone()),
                 clipboard_auto_clear_duration,
+                clipboard.clone(),
             )
         };
         let registry_path = root.join("mcp-tokens.json");
@@ -200,6 +205,9 @@ pub fn run(
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
+        #[cfg(unix)]
+        symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
+            .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
@@ -218,12 +226,8 @@ pub fn run(
             &(touch_id_available, backend, persistent, message),
             None,
             clipboard_auto_clear_duration,
+            clipboard,
         )?;
-        #[cfg(unix)]
-        if is_tty_present() {
-            symvault_platform::approval::install_stdio_secure_input_signal_router()
-                .map_err(|error| format!("install stdio secure-input signal router: {error}"))?;
-        }
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
@@ -548,6 +552,7 @@ fn build_handler(
     runtime_status: &(bool, String, bool, String),
     approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
     clipboard_auto_clear_duration: Duration,
+    clipboard: Arc<dyn Clipboard>,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
         agent_name,
@@ -575,9 +580,7 @@ fn build_handler(
             .with_grant_signing_key(signing_key)
             .with_command_executor(command_executor)
             .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
-    #[cfg(target_os = "macos")]
-    let runtime = runtime.with_clipboard(Arc::new(symvault_platform::MacOsPlatform));
-    let mut runtime = runtime;
+    let mut runtime = runtime.with_clipboard(clipboard);
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
@@ -614,7 +617,19 @@ pub fn build_handler_for_contract_test(
         runtime_status,
         None,
         Duration::from_secs(30),
+        clipboard_backend(),
     )
+}
+
+fn clipboard_backend() -> Arc<dyn Clipboard> {
+    #[cfg(target_os = "macos")]
+    {
+        Arc::new(symvault_platform::MacOsPlatform)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Arc::new(UnavailablePlatform)
+    }
 }
 
 fn runtime_config(

@@ -22,7 +22,7 @@
 #[cfg(unix)]
 use std::sync::{
     Arc, Mutex, MutexGuard, OnceLock, TryLockError,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::time::{Duration, Instant};
 #[path = "go_unicode_print_15.rs"]
@@ -250,8 +250,26 @@ enum ReadFailure {
 
 #[cfg(unix)]
 struct SecureInputSignalState {
-    idle: Arc<AtomicBool>,
-    pending_signal: Arc<std::sync::atomic::AtomicUsize>,
+    state: Mutex<StdioSignalState>,
+    next_clipboard_id: AtomicUsize,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+}
+
+#[cfg(unix)]
+#[derive(Default)]
+struct StdioSignalState {
+    prompt_active: bool,
+    secure_input_prompt: bool,
+    pending_signal: usize,
+    clipboard_auto_clear: Option<ActiveClipboardAutoClear>,
+}
+
+#[cfg(unix)]
+#[derive(Clone)]
+struct ActiveClipboardAutoClear {
+    id: usize,
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
 }
 
 #[cfg(unix)]
@@ -261,13 +279,24 @@ static SECURE_INPUT_SIGNAL_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 #[cfg(unix)]
 static SECURE_INPUT_PROMPT_LOCK: Mutex<()> = Mutex::new(());
 
-/// Installs the process-lifetime SIGINT/SIGTERM router for the foreground CLI
-/// stdio MCP server. Call only when this process owns the normal signal
-/// disposition; embedding applications with their own signal handlers must
-/// leave the generic platform API uninstalled.
+/// Installs the process-lifetime signal router for the foreground CLI stdio
+/// MCP process. HTTP server shutdown signals use a separate lifecycle and
+/// must not install this router. Embedding applications must leave this
+/// process-owned router uninstalled.
 #[cfg(unix)]
 pub fn install_stdio_secure_input_signal_router() -> Result<(), String> {
-    use signal_hook::{consts::signal::*, flag};
+    install_stdio_clipboard_signal_router(Arc::new(symvault_core::platform::UnavailablePlatform))
+}
+
+/// Installs the process-owned stdio MCP signal router with its injected clipboard.
+/// SIGINT/SIGTERM/SIGHUP clear and cancel an active auto-clear timer; without
+/// an active timer, prompt scopes retain their cancellation/default behavior
+/// and idle signals retain the OS default action.
+#[cfg(unix)]
+pub fn install_stdio_clipboard_signal_router(
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+) -> Result<(), String> {
+    use signal_hook::{consts::signal::*, iterator::Signals};
 
     if SECURE_INPUT_SIGNAL_STATE.get().is_some() {
         return Ok(());
@@ -279,30 +308,150 @@ pub fn install_stdio_secure_input_signal_router() -> Result<(), String> {
         return Ok(());
     }
 
-    let idle = Arc::new(AtomicBool::new(true));
-    let pending_signal = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    for signal in [SIGINT, SIGTERM] {
-        // Record the signal before the conditional default action checks the
-        // active scope. That ordering closes the finish/read race: a signal
-        // that sees an active prompt is visible before the scope can finish.
-        if let Err(error) = flag::register_usize(signal, pending_signal.clone(), signal as usize) {
-            idle.store(true, Ordering::SeqCst);
-            return Err(format!(
-                "register secure-input {signal} cancellation: {error}"
-            ));
-        }
-        if let Err(error) = flag::register_conditional_default(signal, idle.clone()) {
-            idle.store(true, Ordering::SeqCst);
-            return Err(format!("register default {signal} behavior: {error}"));
-        }
-    }
-
+    let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP])
+        .map_err(|error| format!("register MCP process signal listener: {error}"))?;
     SECURE_INPUT_SIGNAL_STATE
         .set(SecureInputSignalState {
-            idle,
-            pending_signal,
+            state: Mutex::new(StdioSignalState::default()),
+            next_clipboard_id: AtomicUsize::new(1),
+            clipboard,
         })
-        .map_err(|_| "secure-input signal router was initialized concurrently".to_owned())
+        .map_err(|_| "secure-input signal router was initialized concurrently".to_owned())?;
+    std::thread::Builder::new()
+        .name("symvault-mcp-signal-router".to_owned())
+        .spawn(move || {
+            for signal in signals.forever() {
+                dispatch_stdio_signal(signal);
+            }
+        })
+        .map_err(|error| format!("start MCP process signal listener: {error}"))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn dispatch_stdio_signal(signal: i32) {
+    let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
+        if signal_hook::low_level::emulate_default_handler(signal).is_err() {
+            std::process::abort();
+        }
+        return;
+    };
+    let (prompt_active, active) = {
+        let mut state = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let prompt_active = state.prompt_active;
+        let active = state.clipboard_auto_clear.clone();
+        if active.is_some() {
+            if prompt_active
+                && state.secure_input_prompt
+                && signal != signal_hook::consts::signal::SIGHUP
+            {
+                // Go's secure-input helper has its own signal subscription, so
+                // it cancels the prompt while the clipboard subscription clears.
+                state.pending_signal = signal as usize;
+            }
+        } else {
+            state.pending_signal = signal as usize;
+        }
+        (prompt_active, active)
+    };
+    if let Some(active) = active {
+        if !active.clear_claimed.swap(true, Ordering::AcqRel) {
+            let _ = state.clipboard.clear();
+        }
+        let _ = active.cancel.send(());
+        // Keep the registration active through clear(), like Go's signal.Notify
+        // subscription. Remove it before returning so a later signal regains
+        // the idle process disposition.
+        let mut inner = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if inner
+            .clipboard_auto_clear
+            .as_ref()
+            .is_some_and(|current| current.id == active.id)
+        {
+            inner.clipboard_auto_clear = None;
+        }
+        return;
+    }
+    if prompt_active {
+        // Terminal scopes restore cooked mode before handling pending signals.
+        return;
+    }
+    if signal_hook::low_level::emulate_default_handler(signal).is_err() {
+        std::process::abort();
+    }
+}
+
+#[cfg(unix)]
+fn stdio_signal_is_pending() -> bool {
+    SECURE_INPUT_SIGNAL_STATE.get().is_some_and(|state| {
+        state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pending_signal
+            != 0
+    })
+}
+
+/// A process-owned auto-clear registration. Its Drop removes the signal
+/// subscription when the timer expires, is canceled, or is replaced.
+#[cfg(unix)]
+pub struct StdioClipboardAutoClearRegistration {
+    state: &'static SecureInputSignalState,
+    id: usize,
+}
+
+#[cfg(unix)]
+impl Drop for StdioClipboardAutoClearRegistration {
+    fn drop(&mut self) {
+        let mut state = self
+            .state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state
+            .clipboard_auto_clear
+            .as_ref()
+            .is_some_and(|active| active.id == self.id)
+        {
+            state.clipboard_auto_clear = None;
+        }
+    }
+}
+
+/// Registers the active timer. A new clipboard timer replaces the previous
+/// process registration, matching Go's shared cancellation channel.
+/// Embedded runtimes without the process-owned router receive `None`.
+#[cfg(unix)]
+pub fn register_stdio_clipboard_auto_clear(
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+) -> Option<StdioClipboardAutoClearRegistration> {
+    let state = SECURE_INPUT_SIGNAL_STATE.get()?;
+    let id = state.next_clipboard_id.fetch_add(1, Ordering::Relaxed);
+    let previous = {
+        let mut inner = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        inner
+            .clipboard_auto_clear
+            .replace(ActiveClipboardAutoClear {
+                id,
+                cancel,
+                clear_claimed,
+            })
+    };
+    if let Some(previous) = previous {
+        let _ = previous.cancel.send(());
+    }
+    Some(StdioClipboardAutoClearRegistration { state, id })
 }
 
 #[cfg(unix)]
@@ -334,8 +483,13 @@ impl SecureInputPromptScope {
             None
         };
         if let Some(state) = signal_state {
-            state.pending_signal.store(0, Ordering::SeqCst);
-            state.idle.store(false, Ordering::SeqCst);
+            let mut state = state
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.pending_signal = 0;
+            state.prompt_active = true;
+            state.secure_input_prompt = secure_input;
         }
         Ok(Self {
             _prompt_lock: prompt_lock,
@@ -345,8 +499,13 @@ impl SecureInputPromptScope {
     }
     fn finish(&self) -> Option<i32> {
         if let Some(state) = self.signal_state {
-            state.idle.store(true, Ordering::SeqCst);
-            let signal = state.pending_signal.swap(0, Ordering::SeqCst);
+            let mut state = state
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.prompt_active = false;
+            state.secure_input_prompt = false;
+            let signal = std::mem::take(&mut state.pending_signal);
             (signal != 0).then_some(signal as i32)
         } else {
             None
@@ -358,7 +517,7 @@ impl SecureInputPromptScope {
 impl Drop for SecureInputPromptScope {
     fn drop(&mut self) {
         if let Some(signal) = self.finish()
-            && !self.secure_input
+            && (!self.secure_input || signal == signal_hook::consts::signal::SIGHUP)
             && signal_hook::low_level::emulate_default_handler(signal).is_err()
         {
             // A failed default re-raise must never turn a pending termination
@@ -516,8 +675,13 @@ fn run_secure_input<T: Terminal>(
         Err(error) => return Err(error),
     };
     terminal.restore();
-    if _prompt_scope.finish().is_some() {
+    if let Some(signal) = _prompt_scope.finish() {
         let _ = terminal.write_all(b"\nAborted.\n");
+        if signal == signal_hook::consts::signal::SIGHUP
+            && signal_hook::low_level::emulate_default_handler(signal).is_err()
+        {
+            std::process::abort();
+        }
         return Err(SecureInputError::Canceled);
     }
     let _ = terminal.write_all(b"\n");
@@ -926,10 +1090,7 @@ impl RealTerminal {
 
         let mut collected = Vec::new();
         let outcome = loop {
-            if SECURE_INPUT_SIGNAL_STATE
-                .get()
-                .is_some_and(|state| state.pending_signal.load(Ordering::SeqCst) != 0)
-            {
+            if stdio_signal_is_pending() {
                 break Err(ReadFailure::Canceled);
             }
             let mut chunk = [0_u8; 256];
@@ -937,10 +1098,7 @@ impl RealTerminal {
                 Ok(0) => break Ok(()),
                 Ok(n) => {
                     collected.extend_from_slice(&chunk[..n]);
-                    if SECURE_INPUT_SIGNAL_STATE
-                        .get()
-                        .is_some_and(|state| state.pending_signal.load(Ordering::SeqCst) != 0)
-                    {
+                    if stdio_signal_is_pending() {
                         break Err(ReadFailure::Canceled);
                     }
                     if response_is_complete(&collected, secure_input)
@@ -1579,5 +1737,144 @@ mod tests {
         let result = run_approval(&approved_request(), Some(terminal));
         assert!(result.approved);
         assert!(result.remembered);
+    }
+
+    #[cfg(unix)]
+    #[derive(Default)]
+    struct SignalClipboard(AtomicUsize);
+
+    #[cfg(unix)]
+    impl symvault_core::platform::Clipboard for SignalClipboard {
+        fn set(&self, _: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
+            Ok(())
+        }
+
+        fn clear(&self) -> Result<(), symvault_core::platform::PlatformError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stdio_clipboard_signal_router_process_contract() {
+        use std::{
+            env,
+            io::{Read, Write},
+            os::unix::process::ExitStatusExt,
+            process::{Command, Output, Stdio},
+            sync::mpsc,
+            thread,
+            time::{Duration, Instant},
+        };
+
+        fn bounded_output(mut command: Command, timeout: Duration) -> Output {
+            command.stdout(Stdio::piped()).stderr(Stdio::piped());
+            let mut child = command.spawn().expect("spawn bounded signal child");
+            let mut stdout = child.stdout.take().expect("capture child stdout");
+            let mut stderr = child.stderr.take().expect("capture child stderr");
+            let stdout_reader = thread::spawn(move || {
+                let mut bytes = Vec::new();
+                stdout.read_to_end(&mut bytes).expect("read child stdout");
+                bytes
+            });
+            let stderr_reader = thread::spawn(move || {
+                let mut bytes = Vec::new();
+                stderr.read_to_end(&mut bytes).expect("read child stderr");
+                bytes
+            });
+            let deadline = Instant::now() + timeout;
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("poll signal child") {
+                    break status;
+                }
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_reader.join();
+                    let _ = stderr_reader.join();
+                    panic!("signal child exceeded {timeout:?}");
+                }
+                thread::sleep(Duration::from_millis(10));
+            };
+            Output {
+                status,
+                stdout: stdout_reader.join().expect("join stdout reader"),
+                stderr: stderr_reader.join().expect("join stderr reader"),
+            }
+        }
+
+        let signal_name = env::var("SYMVAULT_PLATFORM_SIGNAL_CHILD").ok();
+        if let Some(signal_name) = signal_name {
+            use signal_hook::consts::signal::*;
+
+            let signal = match signal_name.as_str() {
+                "SIGINT" => SIGINT,
+                "SIGTERM" => SIGTERM,
+                "SIGHUP" => SIGHUP,
+                _ => panic!("unknown child signal"),
+            };
+            let clipboard = Arc::new(SignalClipboard::default());
+            install_stdio_clipboard_signal_router(clipboard.clone()).unwrap();
+            let prompt_scope = if signal != SIGHUP {
+                Some(SecureInputPromptScope::enter(true).unwrap())
+            } else {
+                None
+            };
+            let (cancel, canceled) = mpsc::channel();
+            let clear_claimed = Arc::new(AtomicBool::new(false));
+            let registration =
+                register_stdio_clipboard_auto_clear(cancel, Arc::clone(&clear_claimed))
+                    .expect("installed process router registers active auto-clear");
+
+            signal_hook::low_level::raise(signal).unwrap();
+            canceled
+                .recv_timeout(Duration::from_secs(3))
+                .expect("active signal cancels the timer");
+            assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
+            assert!(clear_claimed.load(Ordering::SeqCst));
+            if let Some(prompt_scope) = prompt_scope {
+                assert_eq!(prompt_scope.finish(), Some(signal));
+                drop(prompt_scope);
+            }
+            drop(registration);
+            println!(
+                "RUST_CLIPBOARD_SIGNAL_RECEIPT signal={signal_name} clear=1 continued=true prompt_canceled={}",
+                signal != SIGHUP
+            );
+            std::io::stdout().flush().unwrap();
+
+            // The first signal was consumed while the Go-equivalent timer was
+            // active. Once its scoped registration ends, the same signal must
+            // regain its normal process disposition.
+            signal_hook::low_level::raise(signal).unwrap();
+            panic!("idle signal unexpectedly returned");
+        }
+
+        use signal_hook::consts::signal::*;
+        for (signal_name, signal) in [("SIGINT", SIGINT), ("SIGTERM", SIGTERM), ("SIGHUP", SIGHUP)]
+        {
+            let mut command = Command::new(env::current_exe().unwrap());
+            command
+                .arg("--exact")
+                .arg("approval::tests::stdio_clipboard_signal_router_process_contract")
+                .arg("--nocapture")
+                .env("SYMVAULT_PLATFORM_SIGNAL_CHILD", signal_name);
+            let output = bounded_output(command, Duration::from_secs(8));
+            assert_eq!(
+                output.status.signal(),
+                Some(signal),
+                "idle {signal_name} should terminate child; output={}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains(&format!(
+                    "RUST_CLIPBOARD_SIGNAL_RECEIPT signal={signal_name} clear=1 continued=true prompt_canceled={}",
+                    signal != SIGHUP
+                )),
+                "child did not prove active {signal_name} clear-and-continue; output={}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
     }
 }
