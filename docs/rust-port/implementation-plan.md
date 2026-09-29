@@ -1,5 +1,26 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated secure terminal input — 2026-09-29
+
+Candidate `c00841be7cee780d91bbe68376ebda895196ea14` connects secure_input and
+request_credential to the existing encrypted Store, shared scope/approval checks,
+audit and a hidden controlling-TTY reader. Eleven source-bound actual Go handler
+cases and Go's real go-tty rune-editing oracle cover mutation/error semantics.
+The generated Go Unicode 15 printable table has an executable freshness check.
+Rust deliberately hides characters that Go's go-tty reader echoes.
+
+Independent native Darwin/arm64 and Linux/arm64 gates pass the full MCP
+differential, 91 core, 175 MCP, 35 CLI and 59/52 platform tests, plus strict
+Clippy/fmt. Four Darwin/one Linux host-integration opt-ins remain ignored; the
+two ordinary PTY helpers are exercised through dedicated real controlling-PTY
+acceptance. Its 11 prompts prove hidden input, scope approval, Ctrl-C no-write,
+ECHO/ICANON restoration and a successful following request with piped MCP stdin.
+`secure-input-receipt-c00841be.json` in both build roots binds logs, metadata and
+fixture hashes to the candidate. No host credentials or system trust changed.
+External SIGINT/SIGTERM restoration, GUI, Windows and remaining native targets
+are still open; MCP-003 remains in progress.
+
+
 ## Integrated verified local HTTPS — 2026-09-29
 
 Candidate `3698d45b095c94817ff65ee2de37cf60eac5360a` adds certificate-verified
