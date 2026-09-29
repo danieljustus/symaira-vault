@@ -2,6 +2,10 @@
 //! The socket listener stays with the caller; this module owns `/mcp` request
 //! checks and response framing for bounded HTTP/1.x connections.
 
+#[path = "http_shutdown.rs"]
+mod shutdown;
+pub use shutdown::HttpShutdown;
+
 use crate::approval::{ApprovalQueue, handle_local_request};
 use crate::{
     Error, Message, ProtocolHandler, error_code, handle_line, is_supported_protocol_version,
@@ -414,6 +418,29 @@ where
     )
 }
 
+/// Serves the same authenticated loopback transport with explicit cancellation.
+/// Cancellation interrupts socket I/O, but callbacks already executing must
+/// finish before this function returns. It is not a graceful-drain API.
+pub fn serve_loopback_until_cancelled<F>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    shutdown: HttpShutdown,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+{
+    serve_loopback_inner_with_shutdown(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        None,
+        None,
+        None,
+        Some(shutdown),
+    )
+}
+
 fn serve_loopback_inner<F>(
     listener: TcpListener,
     registry_path: &Path,
@@ -425,8 +452,33 @@ fn serve_loopback_inner<F>(
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
 {
+    serve_loopback_inner_with_shutdown(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth,
+        tls,
+        local_approval,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)] // Existing transport inputs plus explicit lifecycle.
+fn serve_loopback_inner_with_shutdown<F>(
+    listener: TcpListener,
+    registry_path: &Path,
+    handler_for_agent: F,
+    oauth: Option<crate::oauth::OAuthState>,
+    tls: Option<Arc<ServerConfig>>,
+    local_approval: Option<Arc<LocalApprovalApi>>,
+    shutdown: Option<HttpShutdown>,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+{
     validate_listener_security(listener.local_addr()?, tls.is_some())?;
     load_token_registry(registry_path)?;
+    listener.set_nonblocking(shutdown.is_some())?;
     let registry_path = registry_path.to_path_buf();
     let state = Arc::new(Mutex::new(HttpServerState {
         handler_for_agent,
@@ -436,15 +488,55 @@ where
     let oauth = oauth.map(Arc::new);
     let active = Arc::new(AtomicUsize::new(0));
     thread::scope(|scope| {
-        for incoming in listener.incoming() {
-            let mut stream = HttpStream::new(incoming?, tls.clone())?;
+        // Drop inside the scope, before scoped threads are joined, including
+        // listener/setup errors. Otherwise idle reads can delay error returns.
+        let _cleanup = shutdown.clone().map(shutdown::CancelOnDrop);
+        loop {
+            if let Some(shutdown) = &shutdown
+                && shutdown.is_cancelled()?
+            {
+                break;
+            }
+            let socket = match listener.accept() {
+                Ok((socket, _)) => socket,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if let Some(shutdown) = &shutdown {
+                        shutdown.wait_for_accept()?;
+                        continue;
+                    }
+                    return Err(error);
+                }
+                Err(error) => return Err(error),
+            };
+            // Accepted sockets must remain blocking on every supported OS.
+            socket.set_nonblocking(false)?;
+            // Finish socket timeout/TLS setup before exposing it to cancel().
+            // On macOS, configuring a socket concurrently shut down through a
+            // clone can fail with EINVAL even though cancellation succeeded.
+            let cancellation_socket = shutdown.as_ref().map(|_| socket.try_clone()).transpose()?;
+            let mut stream = HttpStream::new(socket, tls.clone())?;
+            let connection = match (&shutdown, &cancellation_socket) {
+                (Some(shutdown), Some(socket)) => match shutdown.register(socket)? {
+                    Some(connection) => Some(connection),
+                    None => break,
+                },
+                _ => None,
+            };
             if active
                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                     (count < MAX_HTTP_CONNECTIONS).then_some(count + 1)
                 })
                 .is_err()
             {
-                write_plain_error(&mut stream, 503, "server busy")?;
+                if let Err(error) = write_plain_error(&mut stream, 503, "server busy") {
+                    if let Some(shutdown) = &shutdown
+                        && shutdown.is_cancelled()?
+                    {
+                        break;
+                    }
+                    return Err(error);
+                }
                 continue;
             }
             let state = Arc::clone(&state);
@@ -453,6 +545,7 @@ where
             let registry_path = registry_path.clone();
             let local_approval = local_approval.clone();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
+                let _connection = connection;
                 let _active = ActiveHttpConnection(active_for_thread);
                 let _ = serve_connection_shared(
                     stream,
