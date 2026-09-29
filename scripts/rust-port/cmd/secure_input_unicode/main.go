@@ -1,3 +1,4 @@
+// Command secure_input_unicode verifies Go-compatible printable Unicode ranges.
 package main
 
 import (
@@ -28,7 +29,7 @@ func main() {
 		fatal(err)
 	}
 	if !bytes.Equal(current, data) {
-		fatal(fmt.Errorf("Go IsPrint table is stale; regenerate with go run ./scripts/rust-port/cmd/secure_input_unicode -write"))
+		fatal(fmt.Errorf("go IsPrint table is stale; regenerate with go run ./scripts/rust-port/cmd/secure_input_unicode -write"))
 	}
 }
 

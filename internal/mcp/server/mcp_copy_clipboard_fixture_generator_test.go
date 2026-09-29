@@ -234,14 +234,15 @@ func runCopyClipboardScenario(t *testing.T, scenario copyClipboardScenario) copy
 		_ = approvalFile.Close()
 	}()
 
-	inputs := []string{
-		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"fixture","version":"1.0"},"capabilities":{}}}`,
-		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
-	}
 	repeat := scenario.Repeat
 	if repeat == 0 {
 		repeat = 1
 	}
+	inputs := make([]string, 0, 2+repeat)
+	inputs = append(inputs,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"fixture","version":"1.0"},"capabilities":{}}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+	)
 	for index := 0; index < repeat; index++ {
 		arguments := map[string]any{}
 		if scenario.Path != nil {

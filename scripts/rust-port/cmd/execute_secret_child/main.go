@@ -1,3 +1,4 @@
+// Command execute_secret_child observes synthetic secret injection.
 package main
 
 import (

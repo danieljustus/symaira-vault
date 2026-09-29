@@ -1,3 +1,4 @@
+// Command execute_secret_unicode verifies Go-compatible Unicode tables.
 package main
 
 import (
@@ -28,7 +29,7 @@ func main() {
 		fatal(err)
 	}
 	if !bytes.Equal(current, data) {
-		fatal(fmt.Errorf("Go Unicode 15 table is stale; regenerate with go run ./scripts/rust-port/cmd/execute_secret_unicode -write"))
+		fatal(fmt.Errorf("go Unicode 15 table is stale; regenerate with go run ./scripts/rust-port/cmd/execute_secret_unicode -write"))
 	}
 }
 

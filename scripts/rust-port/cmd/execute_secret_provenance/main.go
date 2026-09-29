@@ -1,3 +1,4 @@
+// Command execute_secret_provenance verifies the secret-execution oracle inputs.
 package main
 
 import (
