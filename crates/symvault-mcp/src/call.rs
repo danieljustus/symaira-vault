@@ -318,6 +318,18 @@ pub(crate) enum WriteApprovalDecision {
 pub(crate) type WriteApprovalCallback<'a> =
     dyn FnMut(&str, &str, Option<&str>, &str) -> Result<(), String> + 'a;
 
+pub(crate) struct SecureInputPreflight {
+    pub path: String,
+    pub field: String,
+    pub description: String,
+    pub approval_mode: String,
+}
+
+pub(crate) enum SecureInputPreflightError {
+    Tool(ToolCallResult),
+    Handler(String),
+}
+
 pub(crate) fn write_approval_decision(mode: &str) -> WriteApprovalDecision {
     match mode {
         "none" | "auto" => WriteApprovalDecision::Allow,
@@ -443,6 +455,12 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"set_entry_field\" requires tier \"standard\"",
             ));
         }
+        if self.config.tier == "read-only" && matches!(name, "secure_input" | "request_credential")
+        {
+            return Err(ToolCallResult::error(format!(
+                "Tool \"{name}\" requires tier \"standard\""
+            )));
+        }
         let deletes = name == "delete_entry" || name == "symaira_delete";
         if self.config.tier == "read-only" && deletes {
             return Err(ToolCallResult::error(format!(
@@ -534,6 +552,70 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
 }
 
 impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    pub(crate) fn secure_input_preflight(
+        &self,
+        arguments: &Value,
+    ) -> Result<SecureInputPreflight, SecureInputPreflightError> {
+        if !self.config.can_write {
+            return Err(SecureInputPreflightError::Handler(
+                "write operations not permitted for this agent".into(),
+            ));
+        }
+        let path = required_string(arguments, "path")
+            .map_err(SecureInputPreflightError::Tool)?
+            .to_owned();
+        let field = required_string(arguments, "field")
+            .map_err(SecureInputPreflightError::Tool)?
+            .to_owned();
+        let description = arguments
+            .get("description")
+            .and_then(Value::as_str)
+            .or_else(|| arguments.get("reason").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_owned();
+        if !self.scope_allows(&path) {
+            return Err(SecureInputPreflightError::Handler(format!(
+                "access denied: path {path:?} outside allowed scope"
+            )));
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        Ok(SecureInputPreflight {
+            path,
+            field,
+            description,
+            approval_mode: approval_mode.to_owned(),
+        })
+    }
+
+    pub(crate) fn store_secure_input(
+        &self,
+        path: &str,
+        field: &str,
+        value: &str,
+    ) -> Result<ToolCallResult, String> {
+        let now = match self.config.now_unix {
+            Some(value) => OffsetDateTime::from_unix_timestamp(value)
+                .map_err(|error| format!("format write clock: {error}"))?,
+            None => OffsetDateTime::now_utc(),
+        }
+        .format(&Rfc3339)
+        .map_err(|error| format!("format write clock: {error}"))?;
+        self.store
+            .set_field(path, field, Value::String(value.to_owned()), &now)
+            .map_err(|error| format!("vault operation failed: {error}"))?;
+        Ok(ToolCallResult::text(format!(
+            "Securely stored {path}.{field} = *** (value hidden from agent)"
+        )))
+    }
+
     /// Dispatch a write through the owning store runtime's approval path.
     /// The handler still owns argument validation and scope ordering; only the
     /// approval decision is supplied by the wrapper that owns the platform

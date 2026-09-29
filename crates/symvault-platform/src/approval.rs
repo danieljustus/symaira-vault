@@ -20,6 +20,8 @@
 )]
 
 use std::time::{Duration, Instant};
+#[path = "go_unicode_print_15.rs"]
+mod go_unicode_print_15;
 
 /// Default approval timeout, mirroring Go's `defaultTimeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -87,6 +89,44 @@ pub struct ApprovalRequest {
     pub secrets_accessed: i64,
     pub can_remember: bool,
 }
+
+/// A request to collect a sensitive value from the controlling terminal.
+#[derive(Debug, Clone, Default)]
+pub struct SecureInputRequest {
+    pub title: String,
+    pub path: String,
+    pub field: String,
+    pub description: String,
+    pub timeout: Duration,
+}
+
+/// Failures from the hidden controlling-terminal input prompt.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SecureInputError {
+    NoTty,
+    RawMode(String),
+    Write(String),
+    Timeout,
+    Read(String),
+    Canceled,
+    Empty,
+}
+
+impl std::fmt::Display for SecureInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoTty => write!(f, "secure input requires an interactive terminal"),
+            Self::RawMode(message) => write!(f, "failed to set terminal raw mode: {message}"),
+            Self::Write(message) => write!(f, "failed to write to terminal: {message}"),
+            Self::Timeout => write!(f, "secure input timed out"),
+            Self::Read(message) => write!(f, "failed to read from terminal: {message}"),
+            Self::Canceled => write!(f, "secure input canceled by user"),
+            Self::Empty => write!(f, "secure input canceled: empty value provided"),
+        }
+    }
+}
+
+impl std::error::Error for SecureInputError {}
 
 /// Distinguishable approval failure modes, mirroring the Go wrapped errors.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,12 +207,33 @@ pub fn request_approval(req: &ApprovalRequest) -> ApprovalResult {
     }
 }
 
+/// Reads a hidden value from `/dev/tty`, never from MCP stdin or stdout.
+/// Terminal mode is restored by the terminal guard on every return path.
+/// Raw Ctrl-C is handled as cancellation. External SIGINT/SIGTERM cancellation
+/// is not yet wired to this reader and remains a separate parity follow-up.
+pub fn request_secure_input(req: &SecureInputRequest) -> Result<String, SecureInputError> {
+    #[cfg(unix)]
+    {
+        run_secure_input(req, open_real_terminal())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = req;
+        Err(SecureInputError::NoTty)
+    }
+}
+
 /// Seam abstracting a terminal so tests never touch a real TTY.
 trait Terminal {
     fn set_raw_mode(&mut self) -> Result<(), String>;
     fn restore(&mut self);
     fn write_all(&mut self, buf: &[u8]) -> Result<(), String>;
     fn read_response(&mut self, deadline: Instant) -> Result<String, ReadFailure>;
+
+    /// Reads secure input with Ctrl-C recognized during the bounded poll.
+    fn read_secure_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
+        self.read_response(deadline)
+    }
 }
 
 enum ReadFailure {
@@ -251,6 +312,160 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
         remembered,
         error: None,
     }
+}
+
+fn run_secure_input<T: Terminal>(
+    req: &SecureInputRequest,
+    terminal: Option<T>,
+) -> Result<String, SecureInputError> {
+    let Some(mut terminal) = terminal else {
+        return Err(SecureInputError::NoTty);
+    };
+    terminal.set_raw_mode().map_err(SecureInputError::RawMode)?;
+
+    let prompt = build_secure_input_prompt(req);
+    if let Err(message) = terminal.write_all(prompt.as_bytes()) {
+        return Err(SecureInputError::Write(message));
+    }
+    let timeout = if req.timeout.is_zero() {
+        Duration::from_secs(60)
+    } else {
+        req.timeout
+    };
+    let response = match terminal.read_secure_response(Instant::now() + timeout) {
+        Ok(response) => response,
+        Err(ReadFailure::TimedOut) => return Err(SecureInputError::Timeout),
+        Err(ReadFailure::Io(message)) => return Err(SecureInputError::Read(message)),
+    };
+    let value = match parse_secure_input(&response) {
+        Ok(value) => value,
+        Err(SecureInputError::Canceled) => {
+            terminal.restore();
+            let _ = terminal.write_all(b"\nAborted.\n");
+            return Err(SecureInputError::Canceled);
+        }
+        Err(error) => return Err(error),
+    };
+    terminal.restore();
+    let _ = terminal.write_all(b"\n");
+    if value.is_empty() {
+        return Err(SecureInputError::Empty);
+    }
+    Ok(value)
+}
+
+/// Match `go-tty`'s rune editing: CR completes, BS/DEL removes one rune, and
+/// only Go `unicode.IsPrint` characters are retained. Input remains hidden in
+/// Rust; the Go implementation currently echoes despite its hidden-input UI.
+fn parse_secure_input(response: &str) -> Result<String, SecureInputError> {
+    let mut value = String::new();
+    let mut completed = false;
+    for character in response.chars() {
+        match character {
+            '\u{3}' => return Err(SecureInputError::Canceled),
+            '\r' => {
+                completed = true;
+                break;
+            }
+            '\u{8}' | '\u{7f}' => {
+                value.pop();
+            }
+            character if go_is_print(character) => value.push(character),
+            _ => {}
+        }
+    }
+    if !completed {
+        return Err(SecureInputError::Read(
+            "terminal input exceeded its bound or ended before Enter".into(),
+        ));
+    }
+    Ok(value.trim().to_owned())
+}
+
+fn go_is_print(character: char) -> bool {
+    let code = u32::from(character);
+    go_unicode_print_15::PRINT_RANGES
+        .binary_search_by(|(first, last)| {
+            if code < *first {
+                std::cmp::Ordering::Greater
+            } else if code > *last {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+fn build_secure_input_prompt(req: &SecureInputRequest) -> String {
+    build_secure_input_prompt_with_mode(req, screen_reader_mode())
+}
+
+fn build_secure_input_prompt_with_mode(req: &SecureInputRequest, screen_reader: bool) -> String {
+    if screen_reader {
+        let mut prompt =
+            String::from("\nSecure input required. The connected agent cannot see this value.\n");
+        if !req.path.is_empty() {
+            prompt.push_str(&format!("Entry: {}\n", terminal_safe_text(&req.path)));
+        }
+        if !req.field.is_empty() {
+            prompt.push_str(&format!("Field: {}\n", terminal_safe_text(&req.field)));
+        }
+        if !req.description.is_empty() {
+            prompt.push_str(&format!(
+                "Details: {}\n",
+                terminal_safe_text(&req.description)
+            ));
+        }
+        prompt.push_str("Enter value, input hidden: ");
+        return prompt;
+    }
+    let mut prompt = String::from(
+        "\n╔════════════════════════════════════════════════════════════════╗\n\
+         ║         SECURE INPUT REQUIRED — AGENT CANNOT SEE          ║\n\
+         ╠════════════════════════════════════════════════════════════════╣\n",
+    );
+    if !req.title.is_empty() {
+        prompt.push_str(&format!("Title: {}\n", terminal_safe_text(&req.title)));
+    }
+    if !req.path.is_empty() {
+        prompt.push_str(&format!("Entry: {}\n", terminal_safe_text(&req.path)));
+    }
+    if !req.field.is_empty() {
+        prompt.push_str(&format!("Field: {}\n", terminal_safe_text(&req.field)));
+    }
+    if !req.description.is_empty() {
+        prompt.push_str(&format!(
+            "Details: {}\n",
+            terminal_safe_text(&req.description)
+        ));
+    }
+    prompt.push_str("╚════════════════════════════════════════════════════════════════╝\nEnter value (input hidden): ");
+    prompt
+}
+
+fn screen_reader_mode() -> bool {
+    let nonempty_env = |name| std::env::var(name).is_ok_and(|value| !value.is_empty());
+    screen_reader_mode_from(
+        std::env::var("SYMVAULT_SCREEN_READER").ok().as_deref(),
+        nonempty_env("NVDA_SCREEN_READER"),
+        nonempty_env("ORCA_RUNNING"),
+    )
+}
+
+fn screen_reader_mode_from(explicit: Option<&str>, nvda: bool, orca: bool) -> bool {
+    match explicit {
+        Some("1" | "true" | "yes") => true,
+        Some("0" | "false" | "no") => false,
+        _ => nvda || orca,
+    }
+}
+
+fn terminal_safe_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
 }
 
 /// Builds the approval prompt string with full context display, mirroring
@@ -520,6 +735,48 @@ impl RealTerminal {
             );
         }
     }
+
+    fn read_until(&mut self, deadline: Instant, secure_input: bool) -> Result<String, ReadFailure> {
+        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+        use rustix::io::Errno;
+
+        // A nonblocking read/sleep loop keeps /dev/tty cancellation bounded on
+        // macOS, where poll/select are unreliable. Secure input also wakes as
+        // soon as raw Ctrl-C (ETX) arrives instead of waiting for Enter.
+        const MAX_RESPONSE_BYTES: usize = 4096;
+        const POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+        let original_flags =
+            fcntl_getfl(&self.fd).map_err(|error| ReadFailure::Io(error.to_string()))?;
+        fcntl_setfl(&self.fd, original_flags | OFlags::NONBLOCK)
+            .map_err(|error| ReadFailure::Io(error.to_string()))?;
+
+        let mut collected = Vec::new();
+        let outcome = loop {
+            let mut chunk = [0_u8; 256];
+            match rustix::io::read(&self.fd, &mut chunk[..]) {
+                Ok(0) => break Ok(()),
+                Ok(n) => {
+                    collected.extend_from_slice(&chunk[..n]);
+                    if response_is_complete(&collected, secure_input)
+                        || collected.len() >= MAX_RESPONSE_BYTES
+                    {
+                        break Ok(());
+                    }
+                }
+                Err(Errno::WOULDBLOCK) => {
+                    if Instant::now() >= deadline {
+                        break Err(ReadFailure::TimedOut);
+                    }
+                    std::thread::sleep(POLL_INTERVAL);
+                }
+                Err(Errno::INTR) => continue,
+                Err(error) => break Err(ReadFailure::Io(error.to_string())),
+            }
+        };
+        let _ = fcntl_setfl(&self.fd, original_flags);
+        outcome.map(|()| String::from_utf8_lossy(&collected).into_owned())
+    }
 }
 
 #[cfg(unix)]
@@ -552,63 +809,24 @@ impl Terminal for RealTerminal {
     }
 
     fn read_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
-        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-        use rustix::io::Errno;
+        self.read_until(deadline, false)
+    }
 
-        // ponytail: macOS `poll`/`select` on /dev/tty is documented as
-        // unreliable, and `select` requires unsafe code this crate denies.
-        // A non-blocking-read + sleep poll loop sidesteps both, matching the
-        // pattern already used for native helper pipes in macos.rs. Ceiling:
-        // up to POLL_INTERVAL of added latency past the deadline; fine for a
-        // human-facing prompt.
-        const MAX_RESPONSE_BYTES: usize = 4096;
-        const POLL_INTERVAL: Duration = Duration::from_millis(5);
-
-        let original_flags =
-            fcntl_getfl(&self.fd).map_err(|error| ReadFailure::Io(error.to_string()))?;
-        fcntl_setfl(&self.fd, original_flags | OFlags::NONBLOCK)
-            .map_err(|error| ReadFailure::Io(error.to_string()))?;
-
-        let mut collected = Vec::new();
-        let outcome = loop {
-            let mut chunk = [0_u8; 256];
-            match rustix::io::read(&self.fd, &mut chunk[..]) {
-                Ok(0) => break Ok(()),
-                Ok(n) => {
-                    collected.extend_from_slice(&chunk[..n]);
-                    if response_is_complete(&collected) || collected.len() >= MAX_RESPONSE_BYTES {
-                        break Ok(());
-                    }
-                }
-                Err(Errno::WOULDBLOCK) => {
-                    if Instant::now() >= deadline {
-                        break Err(ReadFailure::TimedOut);
-                    }
-                    std::thread::sleep(POLL_INTERVAL);
-                }
-                Err(Errno::INTR) => continue,
-                Err(error) => break Err(ReadFailure::Io(error.to_string())),
-            }
-        };
-
-        // Reset the deadline seam, mirroring Go's deferred
-        // `SetReadDeadline(time.Time{})`.
-        let _ = fcntl_setfl(&self.fd, original_flags);
-
-        outcome.map(|()| String::from_utf8_lossy(&collected).into_owned())
+    fn read_secure_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
+        self.read_until(deadline, true)
     }
 }
 
 /// Whether the collected terminal bytes already hold a complete answer.
 ///
 /// Go reads through `go-tty`, whose `ReadString` stops at either Enter byte, so
-/// both `\r` and `\n` complete the answer. Raw mode clears `ICRNL`, which means
-/// the Enter key arrives as `\r` only — waiting for `\n` alone would never see a
-/// human keypress and would run into the timeout with the answer already typed.
-fn response_is_complete(collected: &[u8]) -> bool {
-    collected
-        .iter()
-        .any(|byte| *byte == b'\n' || *byte == b'\r')
+/// both `\r` and `\n` complete approval answers. Secure input stops at `\r` or
+/// raw Ctrl-C; its Go `ReadString` contract uses CR termination. Raw mode clears
+/// `ICRNL`, so the Enter key arrives as `\r`.
+fn response_is_complete(collected: &[u8], secure_input: bool) -> bool {
+    collected.iter().any(|byte| {
+        *byte == b'\r' || (!secure_input && *byte == b'\n') || (secure_input && *byte == 0x03)
+    })
 }
 
 #[cfg(test)]
@@ -714,6 +932,97 @@ mod tests {
             can_remember: true,
             ..Default::default()
         }
+    }
+
+    fn secure_input_request() -> SecureInputRequest {
+        SecureInputRequest {
+            title: "Test secure input".into(),
+            path: "fixture/token".into(),
+            field: "credential".into(),
+            description: "synthetic prompt".into(),
+            timeout: Duration::from_secs(1),
+        }
+    }
+
+    #[test]
+    fn secure_input_reads_trimmed_value_and_never_echoes_it() {
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Ok("  synthetic-secret  \r".into()));
+        let result = run_secure_input(&secure_input_request(), Some(terminal));
+        assert_eq!(result.unwrap(), "synthetic-secret");
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_rejects_empty_cancelled_and_unterminated_input() {
+        for response in ["\r", " \t\r", "partial"] {
+            let restored = Arc::new(Mutex::new(false));
+            let mut terminal = FakeTerminal::tracking(restored.clone());
+            terminal.read_result = Some(Ok(response.into()));
+            assert!(run_secure_input(&secure_input_request(), Some(terminal)).is_err());
+            assert!(*restored.lock().unwrap());
+        }
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Ok("\u{3}".into()));
+        assert_eq!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Canceled)
+        );
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_timeout_and_prompt_errors_restore_terminal() {
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Err(ReadFailureKind::TimedOut));
+        assert_eq!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Timeout)
+        );
+        assert!(*restored.lock().unwrap());
+
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.write_result = Some(Err("fixture write failure".into()));
+        assert!(matches!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Write(_))
+        ));
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_matches_go_rune_editing_and_printable_filter() {
+        assert_eq!(
+            parse_secure_input("abé\u{8}界\u{7f}c\u{1}\t\r"),
+            Ok("abc".into())
+        );
+        assert_eq!(parse_secure_input("e\u{301}\r"), Ok("e\u{301}".into()));
+        assert_eq!(
+            parse_secure_input("discarded\u{3}"),
+            Err(SecureInputError::Canceled)
+        );
+        assert!(parse_secure_input("unfinished").is_err());
+    }
+
+    #[test]
+    fn screen_reader_override_and_hints_match_go_theme_contract() {
+        assert!(screen_reader_mode_from(Some("1"), false, false));
+        assert!(screen_reader_mode_from(Some("yes"), false, false));
+        assert!(!screen_reader_mode_from(Some("0"), true, true));
+        assert!(!screen_reader_mode_from(Some("false"), true, false));
+        assert!(screen_reader_mode_from(None, true, false));
+        assert!(screen_reader_mode_from(None, false, true));
+        assert!(!screen_reader_mode_from(None, false, false));
+        let mut request = secure_input_request();
+        request.title.clear();
+        let prompt = build_secure_input_prompt_with_mode(&request, true);
+        assert!(prompt.contains("Secure input required."));
+        assert!(!prompt.contains('╔'));
+        assert!(prompt.contains("Enter value, input hidden: "));
     }
 
     #[test]
@@ -878,11 +1187,13 @@ mod tests {
     fn response_is_complete_accepts_both_enter_bytes() {
         // Raw mode clears ICRNL, so the Enter key arrives as CR. Go stops at
         // either byte; stopping only at LF would never end a real keypress.
-        assert!(response_is_complete(b"y\r"));
-        assert!(response_is_complete(b"y\n"));
-        assert!(response_is_complete(b"\r\n"));
-        assert!(!response_is_complete(b"yes"));
-        assert!(!response_is_complete(b""));
+        assert!(response_is_complete(b"y\r", false));
+        assert!(response_is_complete(b"y\n", false));
+        assert!(response_is_complete(b"\r\n", false));
+        assert!(!response_is_complete(b"yes", false));
+        assert!(!response_is_complete(b"", false));
+        assert!(response_is_complete(b"\x03", true));
+        assert!(!response_is_complete(b"\n", true));
     }
 
     #[test]

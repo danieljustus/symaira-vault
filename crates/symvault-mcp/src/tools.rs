@@ -13,6 +13,7 @@ pub struct ToolListConfig {
     pub expose_value_tools: Option<bool>,
     pub execute_api_available: bool,
     pub secure_input_available: bool,
+    pub request_credential_available: bool,
     pub generate_totp_available: bool,
 }
 
@@ -23,6 +24,7 @@ impl Default for ToolListConfig {
             expose_value_tools: None,
             execute_api_available: false,
             secure_input_available: false,
+            request_credential_available: false,
             // Go shows this tool without profile context.
             generate_totp_available: true,
         }
@@ -43,6 +45,7 @@ impl ToolListConfig {
             expose_value_tools,
             execute_api_available,
             secure_input_available,
+            request_credential_available: secure_input_available,
             generate_totp_available,
         }
     }
@@ -227,9 +230,10 @@ fn available(def: &ToolDefinition, config: &ToolListConfig) -> bool {
     if matches!(def.name.as_str(), "execute_api_request") && !config.execute_api_available {
         return false;
     }
-    if matches!(def.name.as_str(), "secure_input" | "request_credential")
-        && !config.secure_input_available
-    {
+    if def.name == "secure_input" && !config.secure_input_available {
+        return false;
+    }
+    if def.name == "request_credential" && !config.request_credential_available {
         return false;
     }
     if def.name == "generate_totp" && !config.generate_totp_available {
@@ -343,5 +347,24 @@ mod tests {
                 .iter()
                 .any(|tool| tool["name"] == "get_entry_value")
         );
+    }
+
+    #[test]
+    fn secure_input_tools_can_be_filtered_independently_by_profile_allowlist() {
+        let config = ToolListConfig {
+            tier: Some("admin".into()),
+            secure_input_available: true,
+            request_credential_available: false,
+            ..ToolListConfig::default()
+        };
+        let tools = list_tools(&config, true).unwrap();
+        let names = tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"secure_input"));
+        assert!(!names.contains(&"request_credential"));
     }
 }

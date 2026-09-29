@@ -2,8 +2,8 @@ use crate::approval::ApprovalQueue;
 use crate::broker::{self, ApiSubstitution, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
-    ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, WriteApprovalDecision,
-    normalize_scope_path, write_approval_decision,
+    ReadOnlyUnavailableTool, SecureInputPreflightError, ToolCallResult, ToolCallRuntime,
+    WriteApprovalDecision, normalize_scope_path, write_approval_decision,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
@@ -19,7 +19,8 @@ use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
-    self as approval_prompt, ApprovalRequest, ApprovalResult, RiskLevel, format_go_duration,
+    self as approval_prompt, ApprovalRequest, ApprovalResult, RiskLevel, SecureInputError,
+    SecureInputRequest, format_go_duration,
 };
 use symvault_store::{
     Entry, Store, StoreError, WriteRecord,
@@ -151,6 +152,25 @@ impl ApprovalSeam for PlatformApproval {
 
     fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
         approval_prompt::request_approval(request)
+    }
+}
+
+/// Boundary for collecting a user-supplied secret. The production platform
+/// implementation reads only the controlling terminal; tests inject a fake.
+pub trait SecureInputSeam: Send + Sync {
+    fn is_tty_present(&self) -> bool;
+    fn prompt(&self, request: &SecureInputRequest) -> Result<String, SecureInputError>;
+}
+
+pub struct PlatformSecureInput;
+
+impl SecureInputSeam for PlatformSecureInput {
+    fn is_tty_present(&self) -> bool {
+        approval_prompt::is_tty_present()
+    }
+
+    fn prompt(&self, request: &SecureInputRequest) -> Result<String, SecureInputError> {
+        approval_prompt::request_secure_input(request)
     }
 }
 
@@ -412,6 +432,7 @@ pub struct StoreReadOnlyRuntime {
     unavailable_tools: Vec<String>,
     now_unix: Option<i64>,
     approval: Arc<dyn ApprovalSeam>,
+    secure_input: Arc<dyn SecureInputSeam>,
     approval_cache: Mutex<HashSet<String>>,
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
@@ -477,6 +498,7 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
@@ -542,6 +564,7 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
@@ -558,6 +581,12 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_approval_seam(mut self, seam: Arc<dyn ApprovalSeam>) -> Self {
         self.approval = seam;
+        self
+    }
+
+    #[must_use]
+    pub fn with_secure_input_seam(mut self, seam: Arc<dyn SecureInputSeam>) -> Self {
+        self.secure_input = seam;
         self
     }
 
@@ -659,6 +688,7 @@ impl StoreReadOnlyRuntime {
                     format!("set field on {safe_path} field {safe_field}")
                 }
             }
+            "secure_input" | "request_credential" => format!("{tool} for {safe_path}"),
             _ => format!("delete entry on {safe_path}"),
         };
         let request = ApprovalRequest {
@@ -2519,6 +2549,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             };
             self.inner
                 .call_with_write_approval(name, arguments, &mut approve)
+        } else if matches!(name, "secure_input" | "request_credential") {
+            self.secure_input_tool(name, arguments)
         } else if name == "symaira_audit_self" {
             self.audit_self(arguments)
         } else if name == "list_shares" {
@@ -2659,6 +2691,88 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             "run_command" => {}
             _ => {}
         }
+        result
+    }
+}
+
+impl StoreReadOnlyRuntime {
+    fn secure_input_tool(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
+        let audit_path = arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("<invalid>");
+        let preflight = match self.inner.secure_input_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit(name, audit_path, false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                self.append_audit(name, audit_path, false);
+                return Err(error);
+            }
+        };
+
+        if let Err(error) = self.approve_write(
+            name,
+            &preflight.path,
+            Some(&preflight.field),
+            &preflight.approval_mode,
+        ) {
+            return Ok(ToolCallResult::error(error));
+        }
+        if !self.secure_input.is_tty_present() {
+            self.append_audit(name, &preflight.path, false);
+            return Err("secure input unavailable on this host (no controlling TTY)".into());
+        }
+
+        let title = if name == "request_credential" {
+            "Symaira Vault: Agent requesting credential"
+        } else {
+            "Symaira Vault: Secure Input"
+        };
+        let request = SecureInputRequest {
+            title: title.into(),
+            path: preflight.path.clone(),
+            field: preflight.field.clone(),
+            description: preflight.description,
+            timeout: Duration::from_secs(60),
+        };
+        let value = match self.secure_input.prompt(&request) {
+            Ok(value) => value.trim().to_owned(),
+            Err(SecureInputError::Canceled) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error("secure input canceled by user"));
+            }
+            Err(SecureInputError::Timeout) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error("secure input timed out"));
+            }
+            Err(SecureInputError::Empty) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error(
+                    "secure input canceled: empty value provided",
+                ));
+            }
+            Err(SecureInputError::NoTty) => {
+                self.append_audit(name, &preflight.path, false);
+                return Err("secure input unavailable on this host (no controlling TTY)".into());
+            }
+            Err(error) => {
+                self.append_audit(name, &preflight.path, false);
+                return Err(format!("secure input failed: {error}"));
+            }
+        };
+        if value.is_empty() {
+            self.append_audit(name, &preflight.path, false);
+            return Ok(ToolCallResult::error(
+                "secure input canceled: empty value provided",
+            ));
+        }
+        let result = self
+            .inner
+            .store_secure_input(&preflight.path, &preflight.field, &value);
+        self.append_audit(name, &preflight.path, result.is_ok());
         result
     }
 }

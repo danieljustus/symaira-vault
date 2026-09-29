@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "8088c38f",
+    "commit_sha": "8088c38fc86535d82950c27d2fb3e169fef1e1c1",
+    "source_files": [
+      "go.mod",
+      "go.sum",
+      "internal/mcp/server/tools_secure_input.go",
+      "internal/mcp/server/tools_request_credential.go",
+      "internal/mcp/server/secure_input.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/mcptypes.go",
+      "internal/mcp/server/approval_helper.go",
+      "internal/mcp/server/approval.go",
+      "internal/secureui/backend.go",
+      "internal/secureui/backend_tty.go",
+      "internal/ui/theme/a11y.go",
+      "internal/secureui/secureui.go",
+      "internal/vault/service.go",
+      "internal/vault/entry_readwrite.go"
+    ],
+    "source_hash": "85e076d44791b951dd337d2096a4fc8e786ccf937d9314cf3505a7bcc75f920f",
+    "generator_files": [
+      "internal/mcp/server/mcp_secure_input_fixture_generator_test.go",
+      "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
+      "internal/mcp/server/approval_test.go",
+      "internal/mcp/server/tools_test_helpers.go",
+      "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
+      "internal/secureui/pty_test.go",
+      "scripts/rust-port/cmd/secure_input_unicode/main.go"
+    ],
+    "generator_hash": "8208c3adf035d23e34385eac3910314f67060539a393ff09172c9f0981b7b76c"
+  },
+  "normalizations": [
+    "Rust deliberately suppresses terminal echo for secure input; Go's go-tty ReadString echoes printable runes despite the hidden-input prompt."
+  ],
+  "cases": [
+    {
+      "name": "secure_input_success",
+      "tool": "secure_input",
+      "arguments": {
+        "description": "synthetic fixture",
+        "field": "token",
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "Securely stored allowed/service.token = *** (value hidden from agent)",
+            "type": "text"
+          }
+        ],
+        "isError": false
+      },
+      "stored_value": "synthetic-secret-one",
+      "prompt_calls": 1,
+      "prompt_title": "Symaira Vault: Secure Input",
+      "prompt_path": "allowed/service",
+      "prompt_field": "token",
+      "prompt_description": "synthetic fixture",
+      "prompt_hidden": true,
+      "input_value": "synthetic-secret-one",
+      "approval_reads": 0,
+      "call_order": [
+        "secure_input"
+      ]
+    },
+    {
+      "name": "request_credential_success",
+      "tool": "request_credential",
+      "arguments": {
+        "field": "password",
+        "path": "allowed/service",
+        "reason": "synthetic fixture"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "Securely stored allowed/service.password = *** (value hidden from agent)",
+            "type": "text"
+          }
+        ],
+        "isError": false
+      },
+      "stored_value": "synthetic-secret-two",
+      "prompt_calls": 1,
+      "prompt_title": "Symaira Vault: Agent requesting credential",
+      "prompt_path": "allowed/service",
+      "prompt_field": "password",
+      "prompt_description": "synthetic fixture",
+      "prompt_hidden": true,
+      "input_value": "synthetic-secret-two",
+      "approval_reads": 0,
+      "call_order": [
+        "secure_input"
+      ]
+    },
+    {
+      "name": "approval_then_secure_input",
+      "tool": "secure_input",
+      "arguments": {
+        "description": "must approve first",
+        "field": "approved",
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "Securely stored allowed/service.approved = *** (value hidden from agent)",
+            "type": "text"
+          }
+        ],
+        "isError": false
+      },
+      "stored_value": "approved-secret",
+      "prompt_calls": 1,
+      "prompt_title": "Symaira Vault: Secure Input",
+      "prompt_path": "allowed/service",
+      "prompt_field": "approved",
+      "prompt_description": "must approve first",
+      "prompt_hidden": true,
+      "input_value": "approved-secret",
+      "approval_reads": 1,
+      "call_order": [
+        "approval",
+        "secure_input"
+      ]
+    },
+    {
+      "name": "approval_denied_before_prompt",
+      "tool": "request_credential",
+      "arguments": {
+        "field": "denied",
+        "path": "allowed/service",
+        "reason": "must deny first"
+      },
+      "raw_error": "request_credential denied: user did not approve",
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 1,
+      "call_order": [
+        "approval"
+      ]
+    },
+    {
+      "name": "approval_mode_deny",
+      "tool": "secure_input",
+      "arguments": {
+        "field": "denied",
+        "path": "allowed/service"
+      },
+      "raw_error": "secure_input denied: approval mode is 'deny'",
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 0,
+      "call_order": []
+    },
+    {
+      "name": "write_capability_denied",
+      "tool": "secure_input",
+      "arguments": {
+        "field": "denied",
+        "path": "allowed/service"
+      },
+      "raw_error": "write operations not permitted for this agent",
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 0,
+      "call_order": []
+    },
+    {
+      "name": "scope_denied",
+      "tool": "request_credential",
+      "arguments": {
+        "field": "denied",
+        "path": "outside/service"
+      },
+      "raw_error": "access denied: path \"outside/service\" outside allowed scope",
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 0,
+      "call_order": []
+    },
+    {
+      "name": "missing_field",
+      "tool": "secure_input",
+      "arguments": {
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "missing string argument \"field\"",
+            "type": "text"
+          }
+        ],
+        "isError": true
+      },
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 0,
+      "call_order": []
+    },
+    {
+      "name": "empty_input",
+      "tool": "secure_input",
+      "arguments": {
+        "field": "empty",
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "secure input canceled: empty value provided",
+            "type": "text"
+          }
+        ],
+        "isError": true
+      },
+      "prompt_calls": 1,
+      "prompt_title": "Symaira Vault: Secure Input",
+      "prompt_path": "allowed/service",
+      "prompt_field": "empty",
+      "prompt_hidden": true,
+      "approval_reads": 0,
+      "call_order": [
+        "secure_input"
+      ]
+    },
+    {
+      "name": "input_timeout",
+      "tool": "request_credential",
+      "arguments": {
+        "field": "timeout",
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "secure input timed out",
+            "type": "text"
+          }
+        ],
+        "isError": true
+      },
+      "prompt_calls": 1,
+      "prompt_title": "Symaira Vault: Agent requesting credential",
+      "prompt_path": "allowed/service",
+      "prompt_field": "timeout",
+      "prompt_hidden": true,
+      "approval_reads": 0,
+      "call_order": [
+        "secure_input"
+      ]
+    },
+    {
+      "name": "backend_unavailable",
+      "tool": "secure_input",
+      "arguments": {
+        "field": "unavailable",
+        "path": "allowed/service"
+      },
+      "response": {
+        "content": [
+          {
+            "text": "tool \"secure_input\" is not available in the current environment (requires TTY or GUI dialog). Alternatives: set_entry_field",
+            "type": "text"
+          }
+        ],
+        "isError": true
+      },
+      "prompt_calls": 0,
+      "prompt_hidden": false,
+      "input_value": "must-not-be-read",
+      "approval_reads": 0,
+      "call_order": []
+    }
+  ]
+}

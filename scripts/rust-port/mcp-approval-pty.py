@@ -7,6 +7,7 @@ import pty
 import select
 import signal
 import sys
+import termios
 import time
 
 
@@ -14,8 +15,28 @@ PROMPTS = (
     b"Approve this operation? (y/n): ",
     b"Approve this operation? (y/n/r, r=remember for session): ",
     b"Approve this operation? (y/n): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
+    b"Approve this operation? (y/n): ",
+    b"Enter value (input hidden): ",
 )
-ANSWERS = (b"y\r", b"y\r", b"n\r")
+ANSWERS = (
+    b"y\r",
+    b"y\r",
+    b"n\r",
+    b"y\r",
+    b"synthetic-credential-one\r",
+    b"y\r",
+    b"synthetic-credential-two\r",
+    b"y\r",
+    b"\x03",
+    b"y\r",
+    b"synthetic-credential-three\r",
+)
 TIMEOUT_SECONDS = 300
 
 
@@ -84,6 +105,7 @@ def main(argv):
     prompt_cursor = 0
     deadline = time.monotonic() + TIMEOUT_SECONDS
     status = None
+    terminal_restored = False
     try:
         while status is None:
             if time.monotonic() >= deadline:
@@ -103,6 +125,9 @@ def main(argv):
                         raise
                 if chunk:
                     transcript.extend(chunk)
+                    if b"PTY_SECURE_INPUT_CANCELLED termios_restore_check=required" in transcript:
+                        flags = termios.tcgetattr(master)[3]
+                        terminal_restored = bool(flags & termios.ECHO) and bool(flags & termios.ICANON)
                     view = memoryview(chunk)
                     while view:
                         written = os.write(sys.stdout.fileno(), view)
@@ -152,14 +177,29 @@ def main(argv):
 
     critical_prompts = transcript.count(PROMPTS[0])
     execute_prompts = transcript.count(PROMPTS[1])
-    prompts = (transcript.count(PROMPTS[0]), execute_prompts, transcript.count(PROMPTS[2]))
+    secure_input_prompts = transcript.count(PROMPTS[4])
+    prompts = (critical_prompts, execute_prompts, secure_input_prompts)
     has_acceptance_receipt = b"PTY_ACCEPTANCE_RECEIPT " in transcript
+    credentials_hidden = all(
+        value not in transcript
+        for value in (
+            b"synthetic-credential-one",
+            b"synthetic-credential-two",
+            b"synthetic-credential-three",
+        )
+    )
     print(
-        f"\nPTY_DRIVER_RECEIPT critical_prompts={critical_prompts} execute_prompts={execute_prompts} answers={sent} receipt={str(has_acceptance_receipt).lower()} bounded=true controlling_pty=true",
+        f"\nPTY_DRIVER_RECEIPT critical_prompts={critical_prompts} execute_prompts={execute_prompts} secure_input_prompts={secure_input_prompts} answers={sent} receipt={str(has_acceptance_receipt).lower()} credentials_hidden={str(credentials_hidden).lower()} bounded=true controlling_pty=true",
         flush=True,
     )
     exit_code = os.waitstatus_to_exitcode(status)
-    if prompts != (2, 1, 2) or sent != len(ANSWERS) or not has_acceptance_receipt:
+    if (
+        prompts != (6, 1, 4)
+        or sent != len(ANSWERS)
+        or not has_acceptance_receipt
+        or not credentials_hidden
+        or not terminal_restored
+    ):
         print("PTY driver did not observe every real prompt or the MCP acceptance receipt", file=sys.stderr)
         return 1
     return exit_code

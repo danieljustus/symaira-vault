@@ -33,6 +33,7 @@ use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
     ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
+use symvault_platform::approval::is_tty_present;
 
 /// Starts the bounded native MCP server for an already unlocked vault.
 ///
@@ -542,7 +543,7 @@ fn build_handler(
     .map_err(|error| format!("open audit logger: {error}"))?;
     let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
     let policy = load_policy_engine(root)?;
-    let mut settings = runtime_config(root, profile, agent_name);
+    let mut settings = runtime_config(root, profile, agent_name, transport);
     let signing_key =
         symvault_store::grant_key::load_or_create_grant_signing_key(root, keyring, Some(&identity))
             .map_err(|error| format!("load grant signing key: {error}"))?;
@@ -563,7 +564,10 @@ fn build_handler(
     }
     let mut handler =
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
-    handler.set_tool_list_config(tool_list_config(profile));
+    handler.set_tool_list_config(tool_list_config(
+        profile,
+        transport == "stdio" && is_tty_present(),
+    ));
     Ok(handler)
 }
 
@@ -593,7 +597,12 @@ pub fn build_handler_for_contract_test(
     )
 }
 
-fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {
+fn runtime_config(
+    root: &Path,
+    profile: &AgentProfile,
+    agent_name: &str,
+    transport: &str,
+) -> ReadOnlyRuntimeConfig {
     let mut available_tools = read_only_tool_names();
     // Keep direct calls subject to the same actionable capability check as
     // Go; tools/list separately hides the tool when the profile lacks access.
@@ -604,11 +613,32 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         // let the normal allowed_tools filter below further restrict it.
         available_tools.push("execute_with_secret".into());
     }
+    let secure_input_available = transport == "stdio" && is_tty_present();
+    let mut unavailable_tools = Vec::new();
+    if secure_input_available {
+        available_tools.push("secure_input".into());
+        available_tools.push("request_credential".into());
+    } else {
+        for name in ["secure_input", "request_credential"] {
+            unavailable_tools.push(unavailable_tool(
+                name,
+                "not_available",
+                format!(
+                    "tool \"{name}\" is not available in the current environment (requires TTY or GUI dialog). Alternatives: set_entry_field"
+                ),
+            ));
+        }
+    }
     if !profile.allowed_tools.is_empty() {
         available_tools.retain(|name| profile.allowed_tools.iter().any(|allowed| allowed == name));
+        unavailable_tools.retain(|tool| {
+            profile
+                .allowed_tools
+                .iter()
+                .any(|allowed| allowed == &tool.name)
+        });
     }
     let expose_value_tools = profile.expose_value_tools;
-    let mut unavailable_tools = Vec::new();
     if !(profile.can_read_values || profile.can_use_clipboard || profile.can_use_autotype) {
         unavailable_tools.push(unavailable_tool(
             "generate_totp",
@@ -657,7 +687,11 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
     }
 }
 
-fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
+fn tool_list_config(profile: &AgentProfile, secure_input_available: bool) -> ToolListConfig {
+    let allowed = |tool: &str| {
+        profile.allowed_tools.is_empty()
+            || profile.allowed_tools.iter().any(|allowed| allowed == tool)
+    };
     let execute_api_available = profile.can_run_commands
         && (profile.allowed_tools.is_empty()
             || profile
@@ -668,7 +702,8 @@ fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
         tier: profile.tier.clone(),
         expose_value_tools: Some(profile.expose_value_tools),
         execute_api_available,
-        secure_input_available: false,
+        secure_input_available: secure_input_available && allowed("secure_input"),
+        request_credential_available: secure_input_available && allowed("request_credential"),
         generate_totp_available: profile.can_read_values
             || profile.can_use_clipboard
             || profile.can_use_autotype,
@@ -790,7 +825,7 @@ mod tests {
             expose_payment_values: true,
             ..AgentProfile::default()
         };
-        let config = runtime_config(Path::new("/fixture"), &profile, "agent");
+        let config = runtime_config(Path::new("/fixture"), &profile, "agent", "http");
         assert_eq!(config.allowed_paths, ["work/*"]);
         assert_eq!(config.available_tools, ["health"]);
         assert_eq!(config.allowed_executables, ["git"]);
@@ -810,7 +845,13 @@ mod tests {
             ..AgentProfile::default()
         };
         assert_eq!(
-            runtime_config(Path::new("/fixture"), &capable_but_excluded, "agent").available_tools,
+            runtime_config(
+                Path::new("/fixture"),
+                &capable_but_excluded,
+                "agent",
+                "http"
+            )
+            .available_tools,
             ["health"],
             "explicit allowlist must exclude execute_with_secret"
         );
@@ -821,7 +862,8 @@ mod tests {
             ..AgentProfile::default()
         };
         assert_eq!(
-            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent").available_tools,
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent", "http")
+                .available_tools,
             ["execute_with_secret"]
         );
 
@@ -830,9 +872,14 @@ mod tests {
             ..AgentProfile::default()
         };
         assert!(
-            runtime_config(Path::new("/fixture"), &no_command_capability, "agent")
-                .available_tools
-                .is_empty()
+            runtime_config(
+                Path::new("/fixture"),
+                &no_command_capability,
+                "agent",
+                "http"
+            )
+            .available_tools
+            .is_empty()
         );
     }
 
@@ -844,10 +891,11 @@ mod tests {
             ..AgentProfile::default()
         };
         assert_eq!(
-            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent").available_tools,
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent", "http")
+                .available_tools,
             ["execute_api_request"]
         );
-        assert!(tool_list_config(&capable_and_allowed).execute_api_available);
+        assert!(tool_list_config(&capable_and_allowed, false).execute_api_available);
 
         let explicitly_excluded = AgentProfile {
             can_run_commands: true,
@@ -855,23 +903,23 @@ mod tests {
             ..AgentProfile::default()
         };
         assert!(
-            !runtime_config(Path::new("/fixture"), &explicitly_excluded, "agent")
+            !runtime_config(Path::new("/fixture"), &explicitly_excluded, "agent", "http")
                 .available_tools
                 .contains(&"execute_api_request".into())
         );
-        assert!(!tool_list_config(&explicitly_excluded).execute_api_available);
+        assert!(!tool_list_config(&explicitly_excluded, false).execute_api_available);
 
         let no_run_capability = AgentProfile {
             allowed_tools: vec!["execute_api_request".into()],
             ..AgentProfile::default()
         };
         assert!(
-            runtime_config(Path::new("/fixture"), &no_run_capability, "agent")
+            runtime_config(Path::new("/fixture"), &no_run_capability, "agent", "http")
                 .available_tools
                 .contains(&"execute_api_request".into()),
             "runtime keeps the dispatch route installed so direct calls reach the capability denial"
         );
-        assert!(!tool_list_config(&no_run_capability).execute_api_available);
+        assert!(!tool_list_config(&no_run_capability, false).execute_api_available);
     }
 
     #[test]
@@ -1002,7 +1050,7 @@ mod tests {
                 ..AgentProfile::default()
             };
             assert_eq!(
-                tool_list_config(&profile).generate_totp_available,
+                tool_list_config(&profile, false).generate_totp_available,
                 read || clipboard || autotype
             );
         }
