@@ -12,6 +12,7 @@ use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     redirect::Policy,
 };
+use serde::Deserialize;
 use std::{
     collections::BTreeMap,
     io::Read,
@@ -20,6 +21,7 @@ use std::{
 };
 
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
+pub const API_RESPONSE_LIMIT: usize = 100 * 1024;
 const MAX_REQUEST_HEADER_BYTES: usize = 16 * 1024;
 const REQWEST_IMPLICIT_HEADER_BUDGET: usize = 128;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -33,10 +35,37 @@ pub struct ApiTemplate {
     pub allow_private: bool,
 }
 
+/// YAML-facing template definition used by the CLI's existing template loader.
+/// The runtime deliberately supports only a strict subset of the Go template
+/// schema until substitutions and other auth modes have their own contracts.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApiTemplateDefinition {
+    #[serde(default)]
+    pub base_url: String,
+    #[serde(default)]
+    pub auth_type: String,
+    #[serde(default)]
+    pub entry_ref: String,
+    #[serde(default)]
+    pub allowed_endpoints: Vec<String>,
+    #[serde(default)]
+    pub allowed_methods: Vec<String>,
+    #[serde(default)]
+    pub default_headers: BTreeMap<String, String>,
+    #[serde(default)]
+    pub substitutions: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub allow_private: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ApiResponse {
     pub status: u16,
     pub body: Vec<u8>,
+    pub headers: BTreeMap<String, String>,
+    pub body_truncated: bool,
+    pub sanitized: bool,
 }
 
 /// Send one template-bound request. Redirects are returned, never followed.
@@ -48,7 +77,7 @@ pub fn execute_http(
     body: &[u8],
     bearer: Option<&str>,
 ) -> Result<ApiResponse, String> {
-    execute_http_with_timeout(
+    execute_http_inner(
         template,
         method,
         endpoint,
@@ -56,6 +85,9 @@ pub fn execute_http(
         body,
         bearer,
         REQUEST_TIMEOUT,
+        MAX_BODY_BYTES,
+        false,
+        true,
     )
 }
 
@@ -68,8 +100,69 @@ fn execute_http_with_timeout(
     bearer: Option<&str>,
     timeout: Duration,
 ) -> Result<ApiResponse, String> {
+    execute_http_inner(
+        template,
+        method,
+        endpoint,
+        headers,
+        body,
+        bearer,
+        timeout,
+        MAX_BODY_BYTES,
+        false,
+        true,
+    )
+}
+
+/// Bounded API response transport; the caller immediately applies exact
+/// redaction for every credential-entry string followed by Go-compatible
+/// pattern masking before it can become an MCP result.
+pub(crate) fn execute_http_for_api(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+    bearer: &str,
+    bounds: ApiResponseBounds,
+) -> Result<ApiResponse, String> {
+    execute_http_inner(
+        template,
+        method,
+        endpoint,
+        headers,
+        body,
+        Some(bearer),
+        bounds.timeout,
+        bounds.response_limit,
+        true,
+        false,
+    )
+}
+
+pub(crate) struct ApiResponseBounds {
+    pub timeout: Duration,
+    pub response_limit: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_http_inner(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+    bearer: Option<&str>,
+    timeout: Duration,
+    response_limit: usize,
+    truncate_response: bool,
+    redact_bearer: bool,
+) -> Result<ApiResponse, String> {
     if body.len() > MAX_BODY_BYTES {
         return Err("request body too large".into());
+    }
+    if response_limit == 0 || response_limit > MAX_BODY_BYTES {
+        return Err("invalid response body limit".into());
     }
     let target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
     if !template.allowed_endpoints.is_empty()
@@ -175,9 +268,10 @@ fn execute_http_with_timeout(
         })?;
 
     let status = response.status().as_u16();
+    let raw_response_headers = response.headers().clone();
     let mut response_body = Vec::new();
     response
-        .take((MAX_BODY_BYTES + 1) as u64)
+        .take((response_limit + 1) as u64)
         .read_to_end(&mut response_body)
         .map_err(|error| {
             if matches!(
@@ -189,16 +283,115 @@ fn execute_http_with_timeout(
                 "upstream request failed"
             }
         })?;
-    if response_body.len() > MAX_BODY_BYTES {
+    let body_truncated = response_body.len() > response_limit;
+    if body_truncated && !truncate_response {
         return Err("upstream response too large".into());
     }
-    if let Some(token) = bearer {
-        response_body = replace_bytes(&response_body, token.as_bytes(), b"***");
+    response_body.truncate(response_limit);
+    let mut sanitized = false;
+    let mut response_headers = BTreeMap::new();
+    for name in raw_response_headers.keys() {
+        let lower = name.as_str().to_ascii_lowercase();
+        if matches!(
+            lower.as_str(),
+            "set-cookie"
+                | "authorization"
+                | "www-authenticate"
+                | "proxy-authenticate"
+                | "proxy-authorization"
+        ) {
+            continue;
+        }
+        let raw_value = raw_response_headers
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        let token = if redact_bearer { bearer } else { None };
+        let sanitized_value = token.map_or_else(
+            || raw_value.to_owned(),
+            |token| {
+                String::from_utf8_lossy(&replace_bytes(
+                    raw_value.as_bytes(),
+                    token.as_bytes(),
+                    b"***",
+                ))
+                .into_owned()
+            },
+        );
+        sanitized |= sanitized_value != raw_value;
+        response_headers.insert(canonical_header_name(name.as_str()), sanitized_value);
+    }
+    if redact_bearer && let Some(token) = bearer {
+        let redacted = replace_bytes(&response_body, token.as_bytes(), b"***");
+        sanitized |= redacted != response_body;
+        response_body = redacted;
     }
     Ok(ApiResponse {
         status,
         body: response_body,
+        headers: response_headers,
+        body_truncated,
+        sanitized,
     })
+}
+
+fn canonical_header_name(name: &str) -> String {
+    name.split('-')
+        .map(|part| {
+            let mut chars = part.chars();
+            chars
+                .next()
+                .map(|first| first.to_ascii_uppercase().to_string() + chars.as_str())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Validate endpoint and method policy before approval or credential access.
+pub fn validate_api_request(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+) -> Result<(), String> {
+    let target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
+    if template.allowed_endpoints.is_empty()
+        || !template
+            .allowed_endpoints
+            .iter()
+            .any(|pattern| endpoint_matches(pattern, target.endpoint_path))
+    {
+        return Err("endpoint not allowed by template".into());
+    }
+    if template.allowed_methods.is_empty()
+        || !template
+            .allowed_methods
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(method))
+    {
+        return Err("method not allowed by template".into());
+    }
+    if !is_http_token(method) || method.eq_ignore_ascii_case("HEAD") {
+        return Err("invalid request method".into());
+    }
+    let mut header_bytes = 0;
+    let mut seen = std::collections::BTreeSet::new();
+    for (name, value) in &template.default_headers {
+        validate_header(name, value)?;
+        if matches!(
+            name.to_ascii_lowercase().as_str(),
+            "host" | "content-length" | "transfer-encoding" | "connection" | "proxy-connection"
+        ) {
+            return Err("request header is controlled by the broker".into());
+        }
+        if !seen.insert(name.to_ascii_lowercase()) {
+            return Err("duplicate request header".into());
+        }
+        add_header_bytes(&mut header_bytes, name.len())?;
+        add_header_bytes(&mut header_bytes, value.len())?;
+        add_header_bytes(&mut header_bytes, 4)?;
+    }
+    Ok(())
 }
 
 struct Target<'a> {
@@ -457,6 +650,43 @@ mod tests {
         server.join().unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"***:ok!!");
+    }
+
+    #[test]
+    fn execute_http_keeps_the_sixteen_mib_response_error_contract() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+            }
+            let body = vec![b'x'; MAX_BODY_BYTES + 1];
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+        });
+        let template = ApiTemplate {
+            base_url: format!("http://{address}"),
+            allowed_endpoints: vec!["/oversized".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: true,
+        };
+        assert_eq!(
+            execute_http(&template, "GET", "/oversized", &BTreeMap::new(), b"", None).unwrap_err(),
+            "upstream response too large"
+        );
+        server.join().unwrap();
     }
 
     #[test]

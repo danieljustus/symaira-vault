@@ -189,6 +189,7 @@ enum PatternValidator {
 /// overlapping lower-priority match cannot expose a suffix.
 pub struct PatternDetector {
     rules: Vec<PatternRule>,
+    marker: String,
 }
 
 impl PatternDetector {
@@ -296,7 +297,19 @@ impl PatternDetector {
             validator,
         })
         .collect();
-        Self { rules }
+        Self {
+            rules,
+            marker: MARKER.to_owned(),
+        }
+    }
+
+    /// Uses a caller-selected replacement while retaining the built-in rules.
+    /// The default remains [`MARKER`]; this is for contracts whose wire format
+    /// specifies a different safe marker.
+    #[must_use]
+    pub fn with_marker(mut self, marker: impl Into<String>) -> Self {
+        self.marker = marker.into();
+        self
     }
 
     fn matches(&self, text: &str) -> Vec<(usize, usize)> {
@@ -362,7 +375,7 @@ impl Detector for PatternDetector {
         let mut last_end = 0;
         for (start, end) in &matches {
             output.push_str(&text[last_end..*start]);
-            output.push_str(MARKER);
+            output.push_str(&self.marker);
             last_end = *end;
         }
         output.push_str(&text[last_end..]);
@@ -898,6 +911,16 @@ mod tests {
         // independent reason.
         assert_eq!(redacted, "card=[REDACTED] invalid=[REDACTED]");
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn pattern_detector_supports_contract_marker_without_rewriting_literal_default_marker() {
+        let detector = PatternDetector::new().with_marker("***");
+        let (redacted, count) = detector
+            .redact("literal [REDACTED] and card 4111111111111111")
+            .expect("pattern scan");
+        assert_eq!(count, 1);
+        assert_eq!(redacted, "literal [REDACTED] and card ***");
     }
 
     #[test]

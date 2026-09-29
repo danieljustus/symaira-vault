@@ -1,4 +1,5 @@
 use crate::approval::ApprovalQueue;
+use crate::broker::{self, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
     ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, WriteApprovalDecision,
@@ -8,7 +9,8 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
-    io::{BufRead, BufReader},
+    fs,
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -28,6 +30,52 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 mod go_unicode_15;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
+
+const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
+
+/// Load one custom API template at request time so on-disk endpoint, method,
+/// or credential-reference revocations take effect without restarting MCP.
+pub fn load_api_template_definition(
+    vault_root: &Path,
+    name: &str,
+) -> Result<ApiTemplateDefinition, String> {
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err(format!("invalid template name: {name:?}"));
+    }
+    let root = fs::canonicalize(vault_root).map_err(|error| format!("read vault root: {error}"))?;
+    let directory = fs::canonicalize(root.join("templates"))
+        .map_err(|error| format!("read template directory: {error}"))?;
+    if !directory.starts_with(&root) {
+        return Err("template directory escapes the vault root".into());
+    }
+    let path = directory.join(format!("{name}.yaml"));
+    let metadata =
+        fs::symlink_metadata(&path).map_err(|error| format!("read template: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("template must be a regular file".into());
+    }
+    let canonical = fs::canonicalize(&path).map_err(|error| format!("read template: {error}"))?;
+    if !canonical.starts_with(&directory) {
+        return Err("template path escapes the template directory".into());
+    }
+    let file = fs::File::open(&canonical).map_err(|error| format!("read template: {error}"))?;
+    if file
+        .metadata()
+        .map_err(|error| format!("stat template: {error}"))?
+        .len()
+        > MAX_API_TEMPLATE_BYTES
+    {
+        return Err("template exceeds the 65536-byte limit".into());
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_API_TEMPLATE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("read template: {error}"))?;
+    if bytes.len() as u64 > MAX_API_TEMPLATE_BYTES {
+        return Err("template exceeds the 65536-byte limit".into());
+    }
+    serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse template: {error}"))
+}
 
 #[derive(Default)]
 struct ResolvedRunFiles {
@@ -1199,6 +1247,333 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
+    fn execute_api_request(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let Some(name) = arguments.get("template").and_then(Value::as_str) else {
+            self.append_audit("execute_api_request", "<invalid:missing-template>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"template\"",
+            ));
+        };
+        let Some(endpoint) = arguments.get("endpoint").and_then(Value::as_str) else {
+            self.append_audit("execute_api_request", "<invalid:missing-endpoint>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"endpoint\"",
+            ));
+        };
+        let timeout = match api_timeout(arguments.get("timeout")) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                self.append_audit("execute_api_request", "<invalid:timeout>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let definition = match load_api_template_definition(&self.share_root, name) {
+            Ok(definition) => definition,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<template-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "cannot load template {name:?}: {error}"
+                )));
+            }
+        };
+
+        // This first migration slice accepts only custom bearer templates with
+        // no credential substitutions, request body, or caller headers. Reject
+        // unsupported secret-bearing shapes before approval, vault access, or
+        // any network activity.
+        if definition.auth_type != "bearer" {
+            self.append_audit(
+                "execute_api_request",
+                &format!("<unsupported-auth:{name}>"),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "unsupported API template auth type: only bearer is supported",
+            ));
+        }
+        if !definition.substitutions.is_empty() {
+            self.append_audit(
+                "execute_api_request",
+                &format!("<unsupported-substitutions:{name}>"),
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "unsupported API template substitutions",
+            ));
+        }
+        if arguments.get("body").is_some_and(|body| {
+            !body.is_null() && body.as_str().is_none_or(|value| !value.is_empty())
+        }) || arguments.get("headers").is_some_and(|headers| {
+            !headers.is_null() && headers.as_object().is_none_or(|value| !value.is_empty())
+        }) {
+            self.append_audit("execute_api_request", "<unsupported-request-shape>", false);
+            return Ok(ToolCallResult::error(
+                "unsupported API request shape: this runtime slice accepts only bodyless requests without caller headers",
+            ));
+        }
+        if arguments
+            .get("method")
+            .and_then(Value::as_str)
+            .is_some_and(|method| !method.eq_ignore_ascii_case("GET"))
+        {
+            let method = arguments
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            self.append_audit(
+                "execute_api_request",
+                &format!("<method-denied:{name}>"),
+                false,
+            );
+            return Ok(ToolCallResult::error(format!(
+                "method not allowed: {}",
+                method.to_ascii_uppercase()
+            )));
+        }
+        if definition.default_headers.keys().any(|header| {
+            matches!(
+                header.to_ascii_lowercase().as_str(),
+                "authorization"
+                    | "cookie"
+                    | "proxy-authorization"
+                    | "host"
+                    | "content-length"
+                    | "transfer-encoding"
+            )
+        }) {
+            self.append_audit(
+                "execute_api_request",
+                "<unsupported-template-headers>",
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "unsupported API template headers: credential or transport headers are not accepted in this runtime slice",
+            ));
+        }
+        let endpoint = endpoint.trim();
+        let runtime_template = ApiTemplate {
+            base_url: definition.base_url,
+            allowed_endpoints: definition.allowed_endpoints,
+            allowed_methods: definition.allowed_methods,
+            default_headers: definition.default_headers,
+            allow_private: definition.allow_private,
+        };
+        if let Err(error) = broker::validate_api_request(&runtime_template, "GET", endpoint) {
+            let audit_target = if error == "method not allowed by template" {
+                format!("<method-denied:{name}>")
+            } else if error == "endpoint not allowed by template" {
+                format!("<endpoint-denied:{name}>")
+            } else {
+                format!("<blocked-target:{name}>")
+            };
+            self.append_audit("execute_api_request", &audit_target, false);
+            return Ok(ToolCallResult::error(match error.as_str() {
+                "method not allowed by template" => "method not allowed: GET".into(),
+                "endpoint not allowed by template" => {
+                    format!("endpoint not allowed: {endpoint}")
+                }
+                _ => error,
+            }));
+        }
+
+        if let Err(error) = self.check_execute_api_request_approval() {
+            self.append_audit("execute_api_request", "<approval-denied>", false);
+            return Err(error);
+        }
+
+        let entry_path = match simple_api_entry_path(&definition.entry_ref) {
+            Ok(path) => path,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<template-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "invalid entry_ref for {name:?}: {error}"
+                )));
+            }
+        };
+        if !self.inner.scope_allows(&entry_path) {
+            self.append_audit(
+                "execute_api_request",
+                &format!("<scope-denied:{name}>"),
+                false,
+            );
+            return Err(format!(
+                "access denied: template entry path {entry_path:?} outside allowed scope"
+            ));
+        }
+
+        // Resolve only after scope and approval. This scoped accessor returns
+        // the selected bearer value and response-redaction strings only.
+        let (bearer, known_values) = self
+            .inner
+            .resolve_api_credential_at_path(&entry_path)
+            .map_err(|error| {
+                let detail = if error.starts_with("no bearer token") {
+                    format!("<auth-error:{name}>")
+                } else {
+                    format!("<vault-error:{name}>")
+                };
+                self.append_audit("execute_api_request", &detail, false);
+                format!("cannot load credentials for {name:?}: {error}")
+            })?;
+
+        let response = match broker::execute_http_for_api(
+            &runtime_template,
+            "GET",
+            endpoint,
+            &BTreeMap::new(),
+            b"",
+            &bearer,
+            broker::ApiResponseBounds {
+                timeout,
+                response_limit: broker::API_RESPONSE_LIMIT,
+            },
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("template={name}, endpoint={endpoint}, method=GET, status=error"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!("request failed: {error}")));
+            }
+        };
+        let raw_body = go_json_text(&response.body);
+        let (body, body_sanitized) = sanitize_api_value(&raw_body, &known_values);
+        let mut headers = response.headers;
+        let mut header_sanitized = false;
+        for value in headers.values_mut() {
+            let (sanitized, changed) = sanitize_api_value(value, &known_values);
+            *value = sanitized;
+            header_sanitized |= changed;
+        }
+        let content_type = headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("content-type"))
+            .map(|(_, value)| value.clone())
+            .unwrap_or_default();
+        let response_sanitized = response.sanitized || body_sanitized || header_sanitized;
+        if response_sanitized {
+            self.append_audit(
+                "execute_api_request",
+                &format!(
+                    "template={name}, endpoint={endpoint}, method=GET, status={}, sanitized=true",
+                    response.status
+                ),
+                true,
+            );
+        }
+        let ok = response.status < 400;
+        self.append_audit(
+            "execute_api_request",
+            &format!(
+                "template={name}, endpoint={endpoint}, method=GET, status={}",
+                response.status
+            ),
+            ok,
+        );
+        let text = symvault_gojson::to_string(&json!({
+            "status_code": response.status,
+            "headers": headers,
+            "body": body,
+            "body_truncated": response.body_truncated,
+            "content_type": content_type,
+        }))
+        .map_err(|error| format!("marshal API response: {error}"))?;
+        Ok(ToolCallResult::text(text))
+    }
+
+    fn check_execute_api_request_approval(&self) -> Result<(), String> {
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => Ok(()),
+            "deny" => {
+                self.append_audit("approval.execute_api_request.denied", "", false);
+                Err("execute_api_request denied: approval mode is 'deny'".into())
+            }
+            "prompt" => {
+                if !self.approval_queue_attached && !self.approval.is_tty_present() {
+                    self.append_audit("approval.execute_api_request.denied", "", false);
+                    return Err(
+                        "execute_api_request requires approval but no TTY or GUI dialog available"
+                            .into(),
+                    );
+                }
+                self.append_audit("approval.execute_api_request.requested", "", true);
+                let request = ApprovalRequest {
+                    operation: "execute_api_request".into(),
+                    details: format!(
+                        "agent {:?} requests to execute an API request",
+                        self.agent_name
+                    ),
+                    timeout: if self.approval_timeout.is_zero() {
+                        Duration::from_secs(30)
+                    } else {
+                        self.approval_timeout
+                    },
+                    agent_name: self.agent_name.clone(),
+                    working_dir: std::env::current_dir()
+                        .map(|directory| directory.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                    risk_level: RiskLevel::Critical,
+                    secrets_accessed: self
+                        .approval_key_counter
+                        .load(std::sync::atomic::Ordering::Acquire),
+                    can_remember: false,
+                    ..ApprovalRequest::default()
+                };
+                if self.approval_queue_attached {
+                    if let Err(error) = self.inner.request_approval_queue(
+                        "execute_api_request",
+                        "",
+                        true,
+                        "agent API request requires approval",
+                    ) {
+                        if error.contains("denied") || error.contains("expired") {
+                            self.append_audit("approval.execute_api_request.denied", "", false);
+                        }
+                        return Err(error);
+                    }
+                } else {
+                    let outcome = self.approval.request(&request);
+                    if let Some(error) = outcome.error {
+                        return Err(format!("execute_api_request approval failed: {error}"));
+                    }
+                    if !outcome.approved {
+                        self.append_audit("approval.execute_api_request.denied", "", false);
+                        return Err("execute_api_request denied: user did not approve".into());
+                    }
+                }
+                self.approval_key_counter
+                    .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                self.append_audit("approval.execute_api_request.granted", "", true);
+                Ok(())
+            }
+            _ => {
+                self.append_audit("approval.execute_api_request.denied", "", false);
+                Err(format!(
+                    "execute_api_request denied: unknown approval mode {mode:?}"
+                ))
+            }
+        }
+    }
+
     fn resolve_run_command_files(
         &self,
         raw: Option<&Value>,
@@ -2061,6 +2436,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.secret_unseal(arguments)
         } else if name == "execute_with_secret" {
             self.execute_with_secret(arguments)
+        } else if name == "execute_api_request" {
+            self.execute_api_request(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -2365,6 +2742,68 @@ fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
     Ok(number as u64)
 }
 
+fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
+    let Some(value) = value else {
+        return Ok(Duration::from_secs(30));
+    };
+    let number = match value {
+        Value::Number(number) => number
+            .as_f64()
+            .ok_or_else(|| "argument \"timeout\" must be numeric".to_owned())?,
+        Value::String(string) => string
+            .parse::<f64>()
+            .map_err(|_| "argument \"timeout\" must be numeric".to_owned())?,
+        _ => return Err("argument \"timeout\" must be numeric".into()),
+    };
+    if !number.is_finite() {
+        return Err("argument \"timeout\" must be a finite number".into());
+    }
+    if number.fract() != 0.0 {
+        return Err("argument \"timeout\" must be a whole number of seconds".into());
+    }
+    Ok(Duration::from_secs((number as u64).clamp(1, 300)))
+}
+
+fn simple_api_entry_path(reference: &str) -> Result<String, String> {
+    let path = reference.trim();
+    if path.is_empty() {
+        return Err("entry_ref is required".into());
+    }
+    if path.starts_with("op://") {
+        return Err("this runtime slice accepts a plain vault entry path only".into());
+    }
+    if path.starts_with('/')
+        || path.contains('\\')
+        || path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("entry_ref must be a normalized vault entry path".into());
+    }
+    Ok(path.to_owned())
+}
+
+fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
+    let (known_sanitized, exact_count) =
+        symvault_core::redact::redact_known_values(text, known_values, "***");
+    let mut scanner = symvault_core::redact::Scanner::new(vec![Box::new(
+        symvault_core::redact::PatternDetector::new().with_marker("***"),
+    )]);
+    match scanner.scan(
+        &known_sanitized,
+        &symvault_core::redact::ScanOptions::default(),
+    ) {
+        Ok(result) => {
+            let changed = exact_count > 0 || result.text != known_sanitized;
+            (result.text, changed)
+        }
+        Err(error) => {
+            let safe = error.safe_result.text;
+            (safe, true)
+        }
+    }
+}
+
 fn parse_run_file_spec(raw: &Value) -> Result<(String, &str), String> {
     match raw {
         Value::String(reference) => Ok((reference.clone(), "")),
@@ -2526,6 +2965,7 @@ mod tests {
         execute_with_secret_audit_path, generate_env_var_name, parse_command_timeout,
         parse_run_file_spec, render_list_shares,
     };
+    use crate::approval::ApprovalQueue;
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
     use serde_json::{Value, json};
     use std::time::{Duration, Instant};
@@ -2844,6 +3284,7 @@ mod tests {
         tty: bool,
         answer: ApprovalResult,
         requests: Mutex<Vec<ApprovalRequest>>,
+        tty_checks: std::sync::atomic::AtomicUsize,
     }
 
     impl RecordingApproval {
@@ -2856,6 +3297,7 @@ mod tests {
                     error: None,
                 },
                 requests: Mutex::new(Vec::new()),
+                tty_checks: std::sync::atomic::AtomicUsize::new(0),
             })
         }
 
@@ -2866,6 +3308,8 @@ mod tests {
 
     impl ApprovalSeam for RecordingApproval {
         fn is_tty_present(&self) -> bool {
+            self.tty_checks
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
             self.tty
         }
 
@@ -2965,6 +3409,10 @@ mod tests {
             "execute_with_secret requires approval but no TTY or GUI dialog available"
         );
         assert!(no_tty.requests().is_empty());
+        assert_eq!(
+            no_tty.tty_checks.load(std::sync::atomic::Ordering::Acquire),
+            1
+        );
 
         let prompt_directory = tempdir().expect("temporary prompt vault");
         let denied = RecordingApproval::new(true, false, false);
@@ -3041,6 +3489,265 @@ mod tests {
             .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
             .expect("approved with fallback timeout");
         assert_eq!(prompt.requests()[0].timeout, Duration::from_secs(30));
+    }
+
+    fn api_approval_runtime(
+        root: &Path,
+        config: ReadOnlyRuntimeConfig,
+        approval: Arc<dyn ApprovalSeam>,
+        include_entry: bool,
+        base_url: String,
+    ) -> StoreReadOnlyRuntime {
+        let mut config = config;
+        config.available_tools = vec!["execute_api_request".into()];
+        fs::create_dir_all(root.join("entries")).expect("entries directory");
+        fs::write(root.join("config.yaml"), b"vault:\n  format_version: 2\n")
+            .expect("vault config");
+        fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
+        fs::create_dir_all(root.join("templates")).expect("template directory");
+        fs::write(
+            root.join("templates/fixture.yaml"),
+            format!(
+                "base_url: {base_url}\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\n"
+            ),
+        )
+        .expect("write synthetic API template");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root, &identity).expect("open temporary API vault");
+        if include_entry {
+            store
+                .write_new_entry(
+                    "api-fixture",
+                    &Entry {
+                        path: "api-fixture".into(),
+                        data: BTreeMap::from([
+                            ("credential".into(), json!("fixture-api-token")),
+                            (
+                                "nested".into(),
+                                json!({"long_secret":"fixture-api-token-extra"}),
+                            ),
+                        ]),
+                        ..Entry::default()
+                    },
+                    &identity,
+                )
+                .expect("synthetic API credential entry");
+        }
+        StoreReadOnlyRuntime::open(root, identity, config, None, None)
+            .expect("API runtime")
+            .with_approval_seam(approval)
+    }
+
+    #[test]
+    fn execute_api_request_approval_is_fail_closed_critical_and_queue_first() {
+        let no_tty_dir = tempdir().expect("no-TTY API vault");
+        let no_tty = RecordingApproval::new(false, true, false);
+        let runtime = api_approval_runtime(
+            no_tty_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&no_tty) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        );
+        assert_eq!(
+            runtime
+                .call(
+                    "execute_api_request",
+                    &json!({"template":"fixture","endpoint":"/v1/status"}),
+                )
+                .unwrap_err(),
+            "execute_api_request requires approval but no TTY or GUI dialog available"
+        );
+        assert!(no_tty.requests().is_empty());
+
+        let denied_dir = tempdir().expect("denied API vault");
+        let denied = RecordingApproval::new(true, false, false);
+        let runtime = api_approval_runtime(
+            denied_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&denied) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        );
+        assert_eq!(
+            runtime
+                .call(
+                    "execute_api_request",
+                    &json!({"template":"fixture","endpoint":"/v1/status"}),
+                )
+                .unwrap_err(),
+            "execute_api_request denied: user did not approve"
+        );
+        let denied_request = denied.requests().pop().expect("one denied prompt");
+        assert_eq!(denied_request.operation, "execute_api_request");
+        assert_eq!(denied_request.risk_level, RiskLevel::Critical);
+        assert!(!denied_request.can_remember);
+        assert_eq!(denied_request.secrets_accessed, 0);
+        assert_eq!(denied_request.timeout, Duration::from_secs(73));
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            0,
+            "denial happens before credential resolution"
+        );
+
+        let granted_dir = tempdir().expect("approved API vault");
+        let granted = RecordingApproval::new(true, true, false);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("local API listener");
+        let address = listener.local_addr().expect("local API address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept approved API request");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bounded API read");
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone stream"));
+            use std::io::BufRead as _;
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read API request line");
+            let mut headers = String::new();
+            loop {
+                line.clear();
+                reader
+                    .read_line(&mut line)
+                    .expect("read API request headers");
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                headers.push_str(&line);
+            }
+            assert!(
+                headers
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer fixture-api-token"),
+                "{headers}"
+            );
+            let body = r#"{"token":"fixture-api-token","long":"fixture-api-token-extra"}"#;
+            use std::io::Write as _;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("write approved API response");
+        });
+        let runtime = api_approval_runtime(
+            granted_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&granted) as Arc<dyn ApprovalSeam>,
+            true,
+            format!("http://{address}"),
+        );
+        let response = runtime
+            .call(
+                "execute_api_request",
+                &json!({"template":"fixture","endpoint":"/v1/status"}),
+            )
+            .expect("approved API execution");
+        assert!(
+            response.text.contains("\\\"token\\\":\\\"***\\\""),
+            "{}",
+            response.text
+        );
+        assert!(!response.text.contains("fixture-api-token-extra"));
+        server.join().expect("join approved API server");
+        let granted_request = granted.requests().pop().expect("one granted prompt");
+        assert_eq!(granted_request.risk_level, RiskLevel::Critical);
+        assert!(!granted_request.can_remember);
+        assert_eq!(granted_request.secrets_accessed, 0);
+        assert_eq!(granted_request.timeout, Duration::from_secs(73));
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "the granted prompt increments the API approval counter"
+        );
+
+        let queue_dir = tempdir().expect("queued API vault");
+        let queue_fake = RecordingApproval::new(false, true, false);
+        let queue = Arc::new(ApprovalQueue::default());
+        let runtime = api_approval_runtime(
+            queue_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&queue_fake) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        )
+        .with_approval_queue(Arc::clone(&queue));
+        let runtime = Arc::new(runtime);
+        let call_runtime = Arc::clone(&runtime);
+        let call = std::thread::spawn(move || {
+            call_runtime.call(
+                "execute_api_request",
+                &json!({"template":"fixture","endpoint":"/v1/status"}),
+            )
+        });
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let pending = loop {
+            if let Some(entry) = queue.pending().expect("read pending approvals").first() {
+                break entry.clone();
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "API approval was not queued"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(
+            pending.request.reason,
+            "agent API request requires approval"
+        );
+        queue
+            .deny(&pending.id, "fixture")
+            .expect("deny queued API request");
+        assert!(
+            call.join()
+                .expect("join queued API call")
+                .unwrap_err()
+                .contains("denied by approval device")
+        );
+        assert!(
+            queue_fake.requests().is_empty(),
+            "attached queue takes precedence over the TTY seam"
+        );
+        assert_eq!(
+            queue_fake
+                .tty_checks
+                .load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
     }
 
     #[test]

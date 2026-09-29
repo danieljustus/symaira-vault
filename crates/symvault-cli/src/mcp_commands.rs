@@ -567,8 +567,37 @@ fn build_handler(
     Ok(handler)
 }
 
+#[cfg(test)]
+#[doc(hidden)]
+#[allow(dead_code, clippy::too_many_arguments)]
+pub fn build_handler_for_contract_test(
+    root: &Path,
+    agent_name: &str,
+    profile: &AgentProfile,
+    identity: Identity,
+    keyring: &dyn Keyring,
+    transport: &str,
+    auth_method: &str,
+    runtime_status: &(bool, String, bool, String),
+) -> Result<ProtocolHandler, String> {
+    build_handler(
+        root,
+        agent_name,
+        profile,
+        identity,
+        keyring,
+        transport,
+        auth_method,
+        runtime_status,
+        None,
+    )
+}
+
 fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {
     let mut available_tools = read_only_tool_names();
+    // Keep direct calls subject to the same actionable capability check as
+    // Go; tools/list separately hides the tool when the profile lacks access.
+    available_tools.push("execute_api_request".into());
     if profile.can_run_commands {
         // This CLI always installs McpCommandExecutor in build_handler. Keep
         // the secret-aware command tool opt-in to the profile capability and
@@ -580,11 +609,6 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
     }
     let expose_value_tools = profile.expose_value_tools;
     let mut unavailable_tools = Vec::new();
-    unavailable_tools.push(unavailable_tool(
-        "execute_api_request",
-        "not_available",
-        "mcp.Tool is not available in the current environment",
-    ));
     if !(profile.can_read_values || profile.can_use_clipboard || profile.can_use_autotype) {
         unavailable_tools.push(unavailable_tool(
             "generate_totp",
@@ -634,10 +658,16 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
 }
 
 fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
+    let execute_api_available = profile.can_run_commands
+        && (profile.allowed_tools.is_empty()
+            || profile
+                .allowed_tools
+                .iter()
+                .any(|allowed| allowed == "execute_api_request"));
     ToolListConfig {
         tier: profile.tier.clone(),
         expose_value_tools: Some(profile.expose_value_tools),
-        execute_api_available: false,
+        execute_api_available,
         secure_input_available: false,
         generate_totp_available: profile.can_read_values
             || profile.can_use_clipboard
@@ -804,6 +834,44 @@ mod tests {
                 .available_tools
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn api_request_tool_requires_command_capability_and_profile_allowlist() {
+        let capable_and_allowed = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["execute_api_request".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent").available_tools,
+            ["execute_api_request"]
+        );
+        assert!(tool_list_config(&capable_and_allowed).execute_api_available);
+
+        let explicitly_excluded = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["health".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            !runtime_config(Path::new("/fixture"), &explicitly_excluded, "agent")
+                .available_tools
+                .contains(&"execute_api_request".into())
+        );
+        assert!(!tool_list_config(&explicitly_excluded).execute_api_available);
+
+        let no_run_capability = AgentProfile {
+            allowed_tools: vec!["execute_api_request".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            runtime_config(Path::new("/fixture"), &no_run_capability, "agent")
+                .available_tools
+                .contains(&"execute_api_request".into()),
+            "runtime keeps the dispatch route installed so direct calls reach the capability denial"
+        );
+        assert!(!tool_list_config(&no_run_capability).execute_api_available);
     }
 
     #[test]

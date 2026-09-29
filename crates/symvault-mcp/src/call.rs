@@ -348,23 +348,28 @@ impl<S> ReadOnlyRuntime<S> {
     }
 
     fn request_write_approval(&self, tool: &str, path: &str) -> Result<(), String> {
+        self.request_approval_queue(tool, path, true, "agent write requires approval")
+    }
+
+    pub(crate) fn request_approval_queue(
+        &self,
+        operation: &str,
+        path: &str,
+        write: bool,
+        reason: &str,
+    ) -> Result<(), String> {
         let Some(queue) = &self.approval_queue else {
             return Err(format!(
-                "{tool} requires approval but no TTY or GUI dialog available"
+                "{operation} requires approval but no TTY or GUI dialog available"
             ));
         };
         let outcome = queue
-            .request_and_wait(
-                self.config.agent_name.clone(),
-                path,
-                true,
-                "agent write requires approval",
-            )
-            .map_err(|error| format!("{tool} approval queue unavailable: {error}"))?;
+            .request_and_wait(self.config.agent_name.clone(), path, write, reason)
+            .map_err(|error| format!("{operation} approval queue unavailable: {error}"))?;
         match outcome.status.as_str() {
             "approved" => Ok(()),
-            "denied" => Err(format!("{tool} denied by approval device")),
-            _ => Err(format!("{tool} approval request expired")),
+            "denied" => Err(format!("{operation} denied by approval device")),
+            _ => Err(format!("{operation} approval request expired")),
         }
     }
 
@@ -386,6 +391,59 @@ impl<S> ReadOnlyRuntime<S> {
         self.store
             .resolve_secret_ref_at_path(reference, expected_path)
     }
+
+    /// Returns only the bearer credential and response-redaction strings for
+    /// one already-scoped API template entry. This keeps API auth from parsing
+    /// the Go-compatible display form returned by secret-ref resolution and
+    /// avoids exposing the full store through the runtime boundary.
+    pub(crate) fn resolve_api_credential_at_path(
+        &self,
+        path: &str,
+    ) -> Result<(String, Vec<String>), String>
+    where
+        S: ReadOnlyStore,
+    {
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: template entry path {path:?} outside allowed scope"
+            ));
+        }
+        let entry = self
+            .store
+            .get(path)?
+            .ok_or_else(|| format!("entry not found: {path}"))?;
+        let bearer = ["credential", "token", "password"]
+            .iter()
+            .filter_map(|field| entry.fields.get(*field).and_then(Value::as_str))
+            .find(|value| !value.is_empty())
+            .ok_or_else(|| {
+                "no bearer token found in vault entry (expected fields: credential, token, or password)"
+                    .to_owned()
+            })?
+            .to_owned();
+        let mut values = Vec::new();
+        for value in entry.fields.values() {
+            collect_string_values(value, &mut values);
+        }
+        Ok((bearer, values))
+    }
+}
+
+fn collect_string_values(value: &Value, values: &mut Vec<String>) {
+    match value {
+        Value::String(value) if !value.is_empty() => values.push(value.clone()),
+        Value::Array(items) => {
+            for item in items {
+                collect_string_values(item, values);
+            }
+        }
+        Value::Object(fields) => {
+            for value in fields.values() {
+                collect_string_values(value, values);
+            }
+        }
+        _ => {}
+    }
 }
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
@@ -406,7 +464,11 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"{name}\" requires tier \"admin\""
             )));
         }
-        if matches!(name, "run_command" | "execute_with_secret") && !self.config.can_run_commands {
+        if matches!(
+            name,
+            "run_command" | "execute_with_secret" | "execute_api_request"
+        ) && !self.config.can_run_commands
+        {
             let agent = if self.config.agent_name.is_empty() || self.config.agent_name == "default"
             {
                 "<name>"
