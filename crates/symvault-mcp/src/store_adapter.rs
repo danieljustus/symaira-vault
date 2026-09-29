@@ -12,7 +12,8 @@ use std::{
     fs,
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
+    thread,
     time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
@@ -441,6 +442,9 @@ pub struct StoreReadOnlyRuntime {
     approval_queue_attached: bool,
     command_executor: Option<Arc<dyn CommandExecutor>>,
     allowed_executables: Vec<String>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+    clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
+    clipboard_auto_clear_duration: Duration,
 }
 
 impl StoreReadOnlyRuntime {
@@ -507,6 +511,9 @@ impl StoreReadOnlyRuntime {
             approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
+            clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
+            clipboard_clear_cancel: Mutex::new(None),
+            clipboard_auto_clear_duration: Duration::from_secs(30),
         })
     }
 
@@ -573,6 +580,9 @@ impl StoreReadOnlyRuntime {
             approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
+            clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
+            clipboard_clear_cancel: Mutex::new(None),
+            clipboard_auto_clear_duration: Duration::from_secs(30),
         })
     }
 
@@ -587,6 +597,23 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_secure_input_seam(mut self, seam: Arc<dyn SecureInputSeam>) -> Self {
         self.secure_input = seam;
+        self
+    }
+
+    /// Installs the application-owned clipboard backend. The default remains
+    /// unavailable so constructing a runtime never touches the host clipboard.
+    #[must_use]
+    pub fn with_clipboard(
+        mut self,
+        clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+    ) -> Self {
+        self.clipboard = clipboard;
+        self
+    }
+
+    #[must_use]
+    pub fn with_clipboard_auto_clear_duration(mut self, duration: Duration) -> Self {
+        self.clipboard_auto_clear_duration = duration;
         self
     }
 
@@ -674,6 +701,25 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
+        let clipboard_cache_key = if tool == "copy_to_clipboard" {
+            Some(format!(
+                "{}:{tool}:{}",
+                self.agent_name,
+                normalize_scope_path(path)
+            ))
+        } else {
+            None
+        };
+        if let Some(cache_key) = clipboard_cache_key.as_ref()
+            && self
+                .approval_cache
+                .lock()
+                .is_ok_and(|cache| cache.contains(cache_key))
+        {
+            self.append_audit(&format!("approval.{tool}.remembered"), path, true);
+            return Ok(());
+        }
+
         self.append_audit(&format!("approval.{tool}.requested"), path, true);
         // Go sanitizes the path and field independently in RenderSummary.
         // Keep those boundaries: an unterminated escape in the path must not
@@ -689,6 +735,9 @@ impl StoreReadOnlyRuntime {
                 }
             }
             "secure_input" | "request_credential" => format!("{tool} for {safe_path}"),
+            "copy_to_clipboard" => {
+                format!("copy password from {safe_path} to clipboard")
+            }
             _ => format!("delete entry on {safe_path}"),
         };
         let request = ApprovalRequest {
@@ -703,11 +752,15 @@ impl StoreReadOnlyRuntime {
             working_dir: std::env::current_dir()
                 .map(|directory| directory.to_string_lossy().into_owned())
                 .unwrap_or_default(),
-            risk_level: RiskLevel::Critical,
+            risk_level: if tool == "copy_to_clipboard" {
+                RiskLevel::High
+            } else {
+                RiskLevel::Critical
+            },
             secrets_accessed: self
                 .approval_key_counter
                 .load(std::sync::atomic::Ordering::Acquire),
-            can_remember: false,
+            can_remember: tool == "copy_to_clipboard",
             ..ApprovalRequest::default()
         };
         let result = self.approval.request(&request);
@@ -719,6 +772,14 @@ impl StoreReadOnlyRuntime {
         if !result.approved {
             self.append_audit(&format!("approval.{tool}.denied"), path, false);
             return Err(format!("{tool} denied: user did not approve"));
+        }
+        if result.remembered
+            && let Some(cache_key) = clipboard_cache_key
+        {
+            if let Ok(mut cache) = self.approval_cache.lock() {
+                cache.insert(cache_key);
+            }
+            self.append_audit(&format!("approval.{tool}.remembered"), path, true);
         }
         self.approval_key_counter
             .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
@@ -2567,6 +2628,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.execute_with_secret(arguments)
         } else if name == "execute_api_request" {
             self.execute_api_request(arguments)
+        } else if name == "copy_to_clipboard" {
+            self.copy_to_clipboard(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -2696,6 +2759,100 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
 }
 
 impl StoreReadOnlyRuntime {
+    fn copy_to_clipboard(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let preflight = match self.inner.clipboard_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit("copy_to_clipboard", "<invalid>", false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<clipboard-denied>");
+                self.append_audit("copy_to_clipboard", path, false);
+                return Err(error);
+            }
+        };
+
+        if self.approval_queue_attached
+            && write_approval_decision(&preflight.approval_mode) == WriteApprovalDecision::Prompt
+        {
+            self.append_audit(
+                "approval.copy_to_clipboard.requested",
+                &preflight.path,
+                true,
+            );
+            if let Err(error) = self.inner.request_approval_queue(
+                "copy_to_clipboard",
+                &preflight.path,
+                true,
+                "copy password to clipboard",
+            ) {
+                if error.contains("denied") || error.contains("expired") {
+                    self.append_audit("approval.copy_to_clipboard.denied", &preflight.path, false);
+                }
+                return Err(error);
+            }
+            self.approval_key_counter
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            self.append_audit("approval.copy_to_clipboard.granted", &preflight.path, true);
+        } else {
+            self.approve_write(
+                "copy_to_clipboard",
+                &preflight.path,
+                None,
+                &preflight.approval_mode,
+            )?;
+        }
+
+        let password = match self.inner.clipboard_password(&preflight.path) {
+            Ok(password) => password,
+            Err(error) => {
+                self.append_audit("copy_to_clipboard", &preflight.path, false);
+                return Err(error);
+            }
+        };
+        if password.is_error {
+            self.append_audit("copy_to_clipboard", &preflight.path, false);
+            return Ok(password);
+        }
+        if let Err(error) = self.clipboard.set(password.text.as_bytes()) {
+            self.append_audit("copy_to_clipboard", &preflight.path, false);
+            return Ok(ToolCallResult::error(format!(
+                "clipboard copy failed: {error}"
+            )));
+        }
+        self.start_clipboard_auto_clear();
+        self.append_audit("copy_to_clipboard", &preflight.path, true);
+        Ok(ToolCallResult::text(r#"{"success": true}"#))
+    }
+
+    fn start_clipboard_auto_clear(&self) {
+        if self.clipboard_auto_clear_duration.is_zero() {
+            return;
+        }
+        let (cancel, receiver) = mpsc::channel();
+        if let Ok(mut active) = self.clipboard_clear_cancel.lock() {
+            if let Some(previous) = active.replace(cancel) {
+                let _ = previous.send(());
+            }
+        } else {
+            return;
+        }
+        let clipboard = Arc::clone(&self.clipboard);
+        let delay = self.clipboard_auto_clear_duration;
+        thread::spawn(move || {
+            if matches!(
+                receiver.recv_timeout(delay),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                let _ = clipboard.clear();
+            }
+        });
+    }
+
     fn secure_input_tool(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
         let audit_path = arguments
             .get("path")
@@ -2909,6 +3066,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "list_entries",
         "generate_password",
         "generate_totp",
+        "copy_to_clipboard",
         "set_entry_field",
         "delete_entry",
         "find_entries",

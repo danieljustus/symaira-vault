@@ -12,14 +12,13 @@ mod mcp_tls_cert;
 use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::sync::OnceLock;
-#[cfg(unix)]
-use std::time::Duration;
 use std::{
     fs,
     io::{self, BufReader, IsTerminal},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use crate::run_commands::McpCommandExecutor;
@@ -57,6 +56,14 @@ pub fn run(
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
+    let clipboard_auto_clear_duration = Duration::from_secs(
+        config
+            .clipboard
+            .as_ref()
+            .map(|clipboard| clipboard.auto_clear_duration)
+            .unwrap_or(30)
+            .max(0) as u64,
+    );
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
@@ -151,6 +158,7 @@ pub fn run(
                 &auth_method,
                 &runtime_status,
                 Some(approval_queue_for_agent.clone()),
+                clipboard_auto_clear_duration,
             )
         };
         let registry_path = root.join("mcp-tokens.json");
@@ -209,6 +217,7 @@ pub fn run(
             config.effective_auth_method().as_str(),
             &(touch_id_available, backend, persistent, message),
             None,
+            clipboard_auto_clear_duration,
         )?;
         #[cfg(unix)]
         if is_tty_present() {
@@ -538,6 +547,7 @@ fn build_handler(
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
     approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
+    clipboard_auto_clear_duration: Duration,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
         agent_name,
@@ -559,11 +569,15 @@ fn build_handler(
     settings.cache_persistent = runtime_status.2;
     settings.cache_message.clone_from(&runtime_status.3);
     let command_executor = Arc::new(McpCommandExecutor::new());
-    let mut runtime =
+    let runtime =
         StoreReadOnlyRuntime::open_with_audit(root, identity, settings, policy, Some(audit))
             .map_err(|error| format!("create MCP runtime: {error}"))?
             .with_grant_signing_key(signing_key)
-            .with_command_executor(command_executor);
+            .with_command_executor(command_executor)
+            .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
+    #[cfg(target_os = "macos")]
+    let runtime = runtime.with_clipboard(Arc::new(symvault_platform::MacOsPlatform));
+    let mut runtime = runtime;
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
@@ -599,6 +613,7 @@ pub fn build_handler_for_contract_test(
         auth_method,
         runtime_status,
         None,
+        Duration::from_secs(30),
     )
 }
 
@@ -840,6 +855,37 @@ mod tests {
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn runtime_config_preserves_clipboard_dispatch_capability_and_allowlist() {
+        let capability_denied_but_named = AgentProfile {
+            allowed_tools: vec!["copy_to_clipboard".into()],
+            can_use_clipboard: false,
+            ..AgentProfile::default()
+        };
+        let denied = runtime_config(
+            Path::new("/fixture"),
+            &capability_denied_but_named,
+            "agent",
+            "stdio",
+        );
+        assert_eq!(denied.available_tools, ["copy_to_clipboard"]);
+        assert!(!denied.can_use_clipboard);
+
+        let explicitly_excluded = AgentProfile {
+            allowed_tools: vec!["health".into()],
+            can_use_clipboard: true,
+            ..AgentProfile::default()
+        };
+        let excluded = runtime_config(
+            Path::new("/fixture"),
+            &explicitly_excluded,
+            "agent",
+            "stdio",
+        );
+        assert_eq!(excluded.available_tools, ["health"]);
+        assert!(excluded.can_use_clipboard);
     }
 
     #[test]

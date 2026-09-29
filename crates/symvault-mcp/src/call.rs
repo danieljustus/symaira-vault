@@ -325,6 +325,11 @@ pub(crate) struct SecureInputPreflight {
     pub approval_mode: String,
 }
 
+pub(crate) struct ClipboardPreflight {
+    pub path: String,
+    pub approval_mode: String,
+}
+
 pub(crate) enum SecureInputPreflightError {
     Tool(ToolCallResult),
     Handler(String),
@@ -552,6 +557,59 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
 }
 
 impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
+    pub(crate) fn clipboard_preflight(
+        &self,
+        arguments: &Value,
+    ) -> Result<ClipboardPreflight, SecureInputPreflightError> {
+        if !self.config.can_use_clipboard {
+            return Err(SecureInputPreflightError::Handler(
+                "clipboard operations not permitted for this agent".into(),
+            ));
+        }
+        let path = required_string(arguments, "path")
+            .map_err(SecureInputPreflightError::Tool)?
+            .to_owned();
+        if !self.scope_allows(&path) {
+            return Err(SecureInputPreflightError::Handler(format!(
+                "access denied: path {path:?} outside allowed scope"
+            )));
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        Ok(ClipboardPreflight {
+            path,
+            approval_mode: approval_mode.to_owned(),
+        })
+    }
+
+    /// Read only the password field after authorization and approval. The
+    /// returned text is consumed by the injected clipboard and never becomes
+    /// a protocol result.
+    pub(crate) fn clipboard_password(&self, path: &str) -> Result<ToolCallResult, String> {
+        let Some(entry) = self
+            .store
+            .get(path)
+            .map_err(|error| format!("read entry: {error}"))?
+        else {
+            // The Go handler passes the raw `ReadEntry` error through
+            // `vaultServiceErrorResult`, which currently emits a blank path
+            // for this branch. Keep the observable dispatcher contract exact.
+            return Ok(ToolCallResult::error("Entry \"\" not found"));
+        };
+        match entry.fields.get("password") {
+            None => Ok(ToolCallResult::error("password field not found")),
+            Some(Value::String(password)) => Ok(ToolCallResult::text(password.clone())),
+            Some(_) => Ok(ToolCallResult::error("password field is not a string")),
+        }
+    }
+
     pub(crate) fn secure_input_preflight(
         &self,
         arguments: &Value,
