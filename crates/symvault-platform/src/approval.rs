@@ -535,9 +535,6 @@ impl SecureInputPromptScope {
     fn enter(_secure_input: bool) -> Result<Self, SecureInputError> {
         Ok(Self)
     }
-    fn finish(&self) -> Option<i32> {
-        None
-    }
 }
 
 fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> ApprovalResult {
@@ -675,6 +672,7 @@ fn run_secure_input<T: Terminal>(
         Err(error) => return Err(error),
     };
     terminal.restore();
+    #[cfg(unix)]
     if let Some(signal) = _prompt_scope.finish() {
         let _ = terminal.write_all(b"\nAborted.\n");
         if signal == signal_hook::consts::signal::SIGHUP

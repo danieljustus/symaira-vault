@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -17,9 +16,9 @@ func main() {
 	write := flag.Bool("write", false, "write generated Rust Unicode tables")
 	flag.Parse()
 	data := generate()
-	path := filepath.Join("crates", "symvault-mcp", "src", "go_unicode_15.rs")
+	const path = "crates/symvault-mcp/src/go_unicode_15.rs"
 	if *write {
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			fatal(err)
 		}
 		return
