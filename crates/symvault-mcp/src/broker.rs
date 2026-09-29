@@ -36,8 +36,6 @@ pub struct ApiTemplate {
 }
 
 /// YAML-facing template definition used by the CLI's existing template loader.
-/// The runtime deliberately supports only a strict subset of the Go template
-/// schema until substitutions and other auth modes have their own contracts.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApiTemplateDefinition {
@@ -54,9 +52,18 @@ pub struct ApiTemplateDefinition {
     #[serde(default)]
     pub default_headers: BTreeMap<String, String>,
     #[serde(default)]
-    pub substitutions: Vec<serde_json::Value>,
+    pub substitutions: Vec<ApiSubstitution>,
     #[serde(default)]
     pub allow_private: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApiSubstitution {
+    pub placeholder: String,
+    pub field: String,
+    #[serde(default, rename = "in")]
+    pub surfaces: Vec<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -77,7 +84,7 @@ pub fn execute_http(
     body: &[u8],
     bearer: Option<&str>,
 ) -> Result<ApiResponse, String> {
-    execute_http_inner(
+    execute_http_with_timeout(
         template,
         method,
         endpoint,
@@ -85,9 +92,6 @@ pub fn execute_http(
         body,
         bearer,
         REQUEST_TIMEOUT,
-        MAX_BODY_BYTES,
-        false,
-        true,
     )
 }
 
@@ -111,6 +115,7 @@ fn execute_http_with_timeout(
         MAX_BODY_BYTES,
         false,
         true,
+        None,
     )
 }
 
@@ -121,22 +126,24 @@ pub(crate) fn execute_http_for_api(
     template: &ApiTemplate,
     method: &str,
     endpoint: &str,
+    request_url: &str,
     headers: &BTreeMap<String, String>,
     body: &[u8],
-    bearer: &str,
     bounds: ApiResponseBounds,
 ) -> Result<ApiResponse, String> {
+    let request_url = Url::parse(request_url).map_err(|_| "invalid template URL")?;
     execute_http_inner(
         template,
         method,
         endpoint,
         headers,
         body,
-        Some(bearer),
+        None,
         bounds.timeout,
         bounds.response_limit,
         true,
         false,
+        Some(request_url),
     )
 }
 
@@ -157,6 +164,7 @@ fn execute_http_inner(
     response_limit: usize,
     truncate_response: bool,
     redact_bearer: bool,
+    request_url_override: Option<Url>,
 ) -> Result<ApiResponse, String> {
     if body.len() > MAX_BODY_BYTES {
         return Err("request body too large".into());
@@ -164,7 +172,16 @@ fn execute_http_inner(
     if response_limit == 0 || response_limit > MAX_BODY_BYTES {
         return Err("invalid response body limit".into());
     }
-    let target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
+    let mut target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
+    if let Some(request_url) = request_url_override {
+        if request_url.scheme() != "http"
+            || request_url.host_str() != Some(target.host.as_str())
+            || request_url.port_or_known_default() != target.url.port_or_known_default()
+        {
+            return Err("API request URL changed the validated upstream authority".into());
+        }
+        target.url = request_url;
+    }
     if !template.allowed_endpoints.is_empty()
         && !template
             .allowed_endpoints

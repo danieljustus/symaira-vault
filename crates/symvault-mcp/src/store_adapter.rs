@@ -1,5 +1,5 @@
 use crate::approval::ApprovalQueue;
-use crate::broker::{self, ApiTemplate, ApiTemplateDefinition};
+use crate::broker::{self, ApiSubstitution, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
     ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, WriteApprovalDecision,
@@ -1281,80 +1281,35 @@ impl StoreReadOnlyRuntime {
             }
         };
 
-        // This first migration slice accepts only custom bearer templates with
-        // no credential substitutions, request body, or caller headers. Reject
-        // unsupported secret-bearing shapes before approval, vault access, or
-        // any network activity.
-        if definition.auth_type != "bearer" {
+        if let Err(error) = validate_api_template_definition(&definition) {
             self.append_audit(
                 "execute_api_request",
-                &format!("<unsupported-auth:{name}>"),
-                false,
-            );
-            return Ok(ToolCallResult::error(
-                "unsupported API template auth type: only bearer is supported",
-            ));
-        }
-        if !definition.substitutions.is_empty() {
-            self.append_audit(
-                "execute_api_request",
-                &format!("<unsupported-substitutions:{name}>"),
-                false,
-            );
-            return Ok(ToolCallResult::error(
-                "unsupported API template substitutions",
-            ));
-        }
-        if arguments.get("body").is_some_and(|body| {
-            !body.is_null() && body.as_str().is_none_or(|value| !value.is_empty())
-        }) || arguments.get("headers").is_some_and(|headers| {
-            !headers.is_null() && headers.as_object().is_none_or(|value| !value.is_empty())
-        }) {
-            self.append_audit("execute_api_request", "<unsupported-request-shape>", false);
-            return Ok(ToolCallResult::error(
-                "unsupported API request shape: this runtime slice accepts only bodyless requests without caller headers",
-            ));
-        }
-        if arguments
-            .get("method")
-            .and_then(Value::as_str)
-            .is_some_and(|method| !method.eq_ignore_ascii_case("GET"))
-        {
-            let method = arguments
-                .get("method")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            self.append_audit(
-                "execute_api_request",
-                &format!("<method-denied:{name}>"),
+                &format!("<template-error:{name}>"),
                 false,
             );
             return Ok(ToolCallResult::error(format!(
-                "method not allowed: {}",
-                method.to_ascii_uppercase()
+                "cannot load template {name:?}: {error}"
             )));
         }
-        if definition.default_headers.keys().any(|header| {
-            matches!(
-                header.to_ascii_lowercase().as_str(),
-                "authorization"
-                    | "cookie"
-                    | "proxy-authorization"
-                    | "host"
-                    | "content-length"
-                    | "transfer-encoding"
-            )
-        }) {
-            self.append_audit(
-                "execute_api_request",
-                "<unsupported-template-headers>",
-                false,
-            );
-            return Ok(ToolCallResult::error(
-                "unsupported API template headers: credential or transport headers are not accepted in this runtime slice",
-            ));
-        }
-        let endpoint = endpoint.trim();
+        let method = arguments
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or("GET")
+            .to_ascii_uppercase();
+        let body = arguments
+            .get("body")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        let endpoint = match normalize_api_endpoint(endpoint) {
+            Ok(endpoint) => endpoint,
+            Err(error) => {
+                self.append_audit("execute_api_request", "<invalid:endpoint>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "invalid endpoint {endpoint:?}: {error}"
+                )));
+            }
+        };
         let runtime_template = ApiTemplate {
             base_url: definition.base_url,
             allowed_endpoints: definition.allowed_endpoints,
@@ -1362,7 +1317,7 @@ impl StoreReadOnlyRuntime {
             default_headers: definition.default_headers,
             allow_private: definition.allow_private,
         };
-        if let Err(error) = broker::validate_api_request(&runtime_template, "GET", endpoint) {
+        if let Err(error) = broker::validate_api_request(&runtime_template, &method, &endpoint) {
             let audit_target = if error == "method not allowed by template" {
                 format!("<method-denied:{name}>")
             } else if error == "endpoint not allowed by template" {
@@ -1372,7 +1327,7 @@ impl StoreReadOnlyRuntime {
             };
             self.append_audit("execute_api_request", &audit_target, false);
             return Ok(ToolCallResult::error(match error.as_str() {
-                "method not allowed by template" => "method not allowed: GET".into(),
+                "method not allowed by template" => format!("method not allowed: {method}"),
                 "endpoint not allowed by template" => {
                     format!("endpoint not allowed: {endpoint}")
                 }
@@ -1385,7 +1340,7 @@ impl StoreReadOnlyRuntime {
             return Err(error);
         }
 
-        let entry_path = match simple_api_entry_path(&definition.entry_ref) {
+        let entry_path = match api_entry_path(&definition.entry_ref) {
             Ok(path) => path,
             Err(error) => {
                 self.append_audit(
@@ -1409,28 +1364,130 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        // Resolve only after scope and approval. This scoped accessor returns
-        // the selected bearer value and response-redaction strings only.
-        let (bearer, known_values) = self
+        // Resolve only after scope and approval. The accessor returns only the
+        // already-scoped entry projection and response-redaction strings.
+        let (entry_fields, mut known_values) = self
             .inner
-            .resolve_api_credential_at_path(&entry_path)
+            .resolve_api_entry_at_path(&entry_path)
             .map_err(|error| {
-                let detail = if error.starts_with("no bearer token") {
-                    format!("<auth-error:{name}>")
-                } else {
-                    format!("<vault-error:{name}>")
-                };
-                self.append_audit("execute_api_request", &detail, false);
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<vault-error:{name}>"),
+                    false,
+                );
                 format!("cannot load credentials for {name:?}: {error}")
             })?;
 
+        let substitutions =
+            match resolve_api_substitutions(&definition.substitutions, &entry_fields) {
+                Ok(values) => values,
+                Err(error) => {
+                    self.append_audit(
+                        "execute_api_request",
+                        &format!("<substitution-error:{name}>"),
+                        false,
+                    );
+                    return Ok(ToolCallResult::error(format!(
+                        "cannot resolve substitutions for {name:?}: {error}"
+                    )));
+                }
+            };
+        let mut request_url = api_request_url(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+        )?;
+        let request_body =
+            apply_api_body_substitutions(&body, &definition.substitutions, &substitutions);
+        let mut request_headers = runtime_template.default_headers.clone();
+        let caller_headers = match arguments.get("headers") {
+            None | Some(Value::Null) => BTreeMap::new(),
+            Some(Value::Object(headers)) => {
+                let mut parsed = BTreeMap::new();
+                for (key, value) in headers {
+                    let Some(value) = value.as_str() else {
+                        self.append_audit(
+                            "execute_api_request",
+                            "<invalid:header-value-not-string>",
+                            false,
+                        );
+                        return Ok(ToolCallResult::error(format!(
+                            "headers[{key:?}] must be a string"
+                        )));
+                    };
+                    parsed.insert(key.clone(), value.to_owned());
+                }
+                parsed
+            }
+            Some(_) => {
+                self.append_audit("execute_api_request", "<invalid:headers-not-object>", false);
+                return Ok(ToolCallResult::error(
+                    "argument \"headers\" must be an object",
+                ));
+            }
+        };
+        overlay_api_headers(&mut request_headers, caller_headers);
+        apply_api_header_substitutions(
+            &mut request_headers,
+            &definition.substitutions,
+            &substitutions,
+        );
+        let (auth_header, auth_query) = match api_auth(&definition.auth_type, &entry_fields) {
+            Ok(auth) => auth,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<auth-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "cannot resolve auth for {name:?}: {error}"
+                )));
+            }
+        };
+        if let Some((header, value)) = auth_header {
+            set_api_header(&mut request_headers, &header, value);
+        }
+        if let Some((key, value)) = auth_query {
+            request_url = set_api_query_parameter(&request_url, &key, &value)?;
+            known_values.push(api_query_escape(&value));
+        }
+        for value in substitutions.values() {
+            known_values.push(api_query_escape(value));
+            known_values.push(api_path_escape(value));
+            known_values.push(api_escaped_path(value));
+        }
+        if definition.auth_type == "basic"
+            && let (Some(user), Some(password)) = (
+                entry_fields.get("username").and_then(Value::as_str),
+                api_field(&entry_fields, &["credential", "password"]),
+            )
+        {
+            known_values.push(BASE64_STANDARD.encode(format!("{user}:{password}")));
+        }
+        if !request_body.is_empty()
+            && !request_headers
+                .keys()
+                .any(|key| key.eq_ignore_ascii_case("content-type"))
+        {
+            request_headers.insert("Content-Type".into(), "application/json".into());
+        }
+        // The broker's generic transport merges defaults after supplied values.
+        // API requests already applied Go's defaults -> caller -> substitutions
+        // -> auth order, so pass the merged headers once and no remaining defaults.
+        let transport_template = ApiTemplate {
+            default_headers: BTreeMap::new(),
+            ..runtime_template.clone()
+        };
+
         let response = match broker::execute_http_for_api(
-            &runtime_template,
-            "GET",
-            endpoint,
-            &BTreeMap::new(),
-            b"",
-            &bearer,
+            &transport_template,
+            &method,
+            &endpoint,
+            &request_url,
+            &request_headers,
+            request_body.as_bytes(),
             broker::ApiResponseBounds {
                 timeout,
                 response_limit: broker::API_RESPONSE_LIMIT,
@@ -1440,7 +1497,7 @@ impl StoreReadOnlyRuntime {
             Err(error) => {
                 self.append_audit(
                     "execute_api_request",
-                    &format!("template={name}, endpoint={endpoint}, method=GET, status=error"),
+                    &format!("template={name}, endpoint={endpoint}, method={method}, status=error"),
                     false,
                 );
                 return Ok(ToolCallResult::error(format!("request failed: {error}")));
@@ -1465,7 +1522,7 @@ impl StoreReadOnlyRuntime {
             self.append_audit(
                 "execute_api_request",
                 &format!(
-                    "template={name}, endpoint={endpoint}, method=GET, status={}, sanitized=true",
+                    "template={name}, endpoint={endpoint}, method={method}, status={}, sanitized=true",
                     response.status
                 ),
                 true,
@@ -1475,7 +1532,7 @@ impl StoreReadOnlyRuntime {
         self.append_audit(
             "execute_api_request",
             &format!(
-                "template={name}, endpoint={endpoint}, method=GET, status={}",
+                "template={name}, endpoint={endpoint}, method={method}, status={}",
                 response.status
             ),
             ok,
@@ -2764,13 +2821,132 @@ fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
     Ok(Duration::from_secs((number as u64).clamp(1, 300)))
 }
 
-fn simple_api_entry_path(reference: &str) -> Result<String, String> {
+fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return Err("endpoint is required".into());
+    }
+    if !endpoint.starts_with('/') {
+        return Err("endpoint must start with '/'".into());
+    }
+    let mut decoded = Vec::with_capacity(endpoint.len());
+    let bytes = endpoint.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return Err("invalid URL encoding".into());
+            }
+            let Some(high) = (bytes[index + 1] as char).to_digit(16) else {
+                return Err("invalid URL encoding".into());
+            };
+            let Some(low) = (bytes[index + 2] as char).to_digit(16) else {
+                return Err("invalid URL encoding".into());
+            };
+            decoded.push(((high << 4) | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    let decoded = String::from_utf8_lossy(&decoded);
+    if [endpoint, decoded.as_ref()]
+        .iter()
+        .any(|path| path.split('/').any(|part| part == "." || part == ".."))
+    {
+        return Err("dot-segments are not allowed".into());
+    }
+    let trailing_slash = endpoint.ends_with('/');
+    let mut components = Vec::new();
+    for component in endpoint.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                components.pop();
+            }
+            value => components.push(value),
+        }
+    }
+    let mut normalized = format!("/{}", components.join("/"));
+    if trailing_slash && normalized != "/" {
+        normalized.push('/');
+    }
+    Ok(normalized)
+}
+
+fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Result<(), String> {
+    if definition.base_url.is_empty() {
+        return Err("base_url is required".into());
+    }
+    if definition.auth_type.is_empty() {
+        return Err("auth_type is required".into());
+    }
+    if definition.entry_ref.trim().is_empty() {
+        return Err("entry_ref is required".into());
+    }
+    // Unknown auth names are parsed by Go too; api_auth reports them only after
+    // approval and the scoped entry read. The template's remaining structure
+    // is still validated here.
+    if definition.auth_type == "none" && definition.substitutions.is_empty() {
+        return Err("auth_type \"none\" requires at least one substitution".into());
+    }
+    let mut seen = HashSet::new();
+    for (index, substitution) in definition.substitutions.iter().enumerate() {
+        let label = format!("substitutions[{index}]");
+        let placeholder = substitution.placeholder.as_str();
+        let has_alnum = placeholder.bytes().any(|byte| byte.is_ascii_alphanumeric());
+        let has_delimiter = placeholder.contains("__")
+            || placeholder
+                .bytes()
+                .any(|byte| !byte.is_ascii_alphanumeric() && byte != b'_');
+        if placeholder.len() < 4
+            || !placeholder
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte))
+            || !has_alnum
+            || !has_delimiter
+        {
+            return Err(format!("{label}: invalid placeholder {placeholder:?}"));
+        }
+        if !seen.insert(placeholder) {
+            return Err(format!("{label}: duplicate placeholder {placeholder:?}"));
+        }
+        if substitution.field.is_empty() {
+            return Err(format!(
+                "{label}: field is required for placeholder {placeholder:?}"
+            ));
+        }
+        if substitution
+            .surfaces
+            .iter()
+            .any(|surface| !matches!(surface.as_str(), "path" | "query" | "header" | "body"))
+        {
+            return Err(format!("{label}: unsupported substitution surface"));
+        }
+    }
+    Ok(())
+}
+
+fn api_entry_path(reference: &str) -> Result<String, String> {
     let path = reference.trim();
     if path.is_empty() {
         return Err("entry_ref is required".into());
     }
-    if path.starts_with("op://") {
-        return Err("this runtime slice accepts a plain vault entry path only".into());
+    let path = if let Some(reference) = path.strip_prefix("op://") {
+        let parts = reference.split('/').collect::<Vec<_>>();
+        if parts.len() < 2 {
+            return Err("expected at least vault/entry".into());
+        }
+        if parts.len() > 2 {
+            return Err("entry_ref must reference an entry, not a field".into());
+        }
+        parts[1]
+    } else {
+        path
+    };
+    if path.is_empty() {
+        return Err("entry_ref must reference an entry".into());
     }
     if path.starts_with('/')
         || path.contains('\\')
@@ -2781,6 +2957,229 @@ fn simple_api_entry_path(reference: &str) -> Result<String, String> {
         return Err("entry_ref must be a normalized vault entry path".into());
     }
     Ok(path.to_owned())
+}
+
+fn substitution_surfaces(substitution: &ApiSubstitution) -> &[String] {
+    &substitution.surfaces
+}
+
+fn substitution_applies(substitution: &ApiSubstitution, surface: &str) -> bool {
+    substitution.surfaces.is_empty() && matches!(surface, "path" | "query")
+        || substitution_surfaces(substitution)
+            .iter()
+            .any(|item| item == surface)
+}
+
+fn resolve_api_substitutions(
+    substitutions: &[ApiSubstitution],
+    fields: &BTreeMap<String, Value>,
+) -> Result<BTreeMap<String, String>, String> {
+    let mut values = BTreeMap::new();
+    for substitution in substitutions {
+        let value = fields
+            .get(&substitution.field)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "no value for placeholder {:?} (expected vault entry field {:?})",
+                    substitution.placeholder, substitution.field
+                )
+            })?;
+        values.insert(substitution.placeholder.clone(), value.to_owned());
+    }
+    Ok(values)
+}
+
+fn api_request_url(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(&format!("{}{}", base_url.trim_end_matches('/'), endpoint))
+        .map_err(|_| "invalid template URL")?;
+    let mut path = url.path().to_owned();
+    let mut query = url.query().unwrap_or_default().to_owned();
+    for substitution in substitutions {
+        let Some(value) = values.get(&substitution.placeholder) else {
+            continue;
+        };
+        if substitution_applies(substitution, "path") {
+            path = path.replace(&substitution.placeholder, value);
+        }
+        if substitution_applies(substitution, "query") {
+            query = query.replace(&substitution.placeholder, value);
+        }
+    }
+    url.set_path(&path);
+    if !query.is_empty() || url.query().is_some() {
+        url.set_query(Some(&query));
+    }
+    Ok(url.to_string())
+}
+
+fn apply_api_body_substitutions(
+    body: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> String {
+    let mut body = body.to_owned();
+    for substitution in substitutions {
+        if substitution_applies(substitution, "body")
+            && let Some(value) = values.get(&substitution.placeholder)
+        {
+            body = body.replace(&substitution.placeholder, value);
+        }
+    }
+    body
+}
+
+fn apply_api_header_substitutions(
+    headers: &mut BTreeMap<String, String>,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) {
+    for substitution in substitutions {
+        if substitution_applies(substitution, "header")
+            && let Some(value) = values.get(&substitution.placeholder)
+        {
+            for header in headers.values_mut() {
+                *header = header.replace(&substitution.placeholder, value);
+            }
+        }
+    }
+}
+
+fn overlay_api_headers(target: &mut BTreeMap<String, String>, incoming: BTreeMap<String, String>) {
+    for (name, value) in incoming {
+        set_api_header(target, &name, value);
+    }
+}
+
+fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
+    headers.retain(|existing, _| !existing.eq_ignore_ascii_case(name));
+    headers.insert(name.to_owned(), value);
+}
+
+fn api_field<'a>(fields: &'a BTreeMap<String, Value>, names: &[&str]) -> Option<&'a str> {
+    names.iter().find_map(|name| {
+        fields
+            .get(*name)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+    })
+}
+
+type ApiAuthHeader = Option<(String, String)>;
+type ApiAuthQuery = Option<(String, String)>;
+type ApiAuthResult = Result<(ApiAuthHeader, ApiAuthQuery), String>;
+
+fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
+    match auth_type {
+        "bearer" => {
+            let token = api_field(fields, &["credential", "token", "password"])
+                .ok_or_else(|| "no bearer token found in vault entry (expected fields: credential, token, or password)".to_owned())?;
+            Ok((
+                Some(("Authorization".into(), format!("Bearer {token}"))),
+                None,
+            ))
+        }
+        "basic" => {
+            let username = api_field(fields, &["username"]);
+            let password = api_field(fields, &["credential", "password"]);
+            let (Some(username), Some(password)) = (username, password) else {
+                return Err(
+                    "basic auth requires username and password fields in vault entry".into(),
+                );
+            };
+            Ok((
+                Some((
+                    "Authorization".into(),
+                    format!(
+                        "Basic {}",
+                        BASE64_STANDARD.encode(format!("{username}:{password}"))
+                    ),
+                )),
+                None,
+            ))
+        }
+        "header" => {
+            let name = api_field(fields, &["header_name"]);
+            let value = api_field(fields, &["header_value", "credential", "token", "password"]);
+            let (Some(name), Some(value)) = (name, value) else {
+                return Err("header auth requires header_name and header_value (or credential/token/password) fields in vault entry".into());
+            };
+            Ok((Some((name.to_owned(), value.to_owned())), None))
+        }
+        "query_param" => {
+            let name = api_field(fields, &["param_name"]);
+            let value = api_field(fields, &["param_value", "credential", "token", "password"]);
+            let (Some(name), Some(value)) = (name, value) else {
+                return Err("query_param auth requires param_name and param_value (or credential/token/password) fields in vault entry".into());
+            };
+            Ok((None, Some((name.to_owned(), value.to_owned()))))
+        }
+        "none" => Ok((None, None)),
+        other => Err(format!("unsupported auth type: {other}")),
+    }
+}
+
+fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(url).map_err(|_| "invalid template URL")?;
+    let mut pairs = BTreeMap::<String, Vec<String>>::new();
+    for (key, value) in url.query_pairs() {
+        pairs
+            .entry(key.into_owned())
+            .or_default()
+            .push(value.into_owned());
+    }
+    pairs.insert(name.to_owned(), vec![value.to_owned()]);
+    let encoded = pairs
+        .into_iter()
+        .flat_map(|(key, values)| values.into_iter().map(move |value| (key.clone(), value)))
+        .map(|(key, value)| format!("{}={}", api_query_escape(&key), api_query_escape(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    url.set_query(Some(&encoded));
+    Ok(url.to_string())
+}
+
+fn api_query_escape(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            b' ' => "+".into(),
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn api_path_escape(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn api_escaped_path(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
 }
 
 fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {

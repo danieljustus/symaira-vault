@@ -238,7 +238,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     use std::{
         collections::BTreeMap,
         fs,
-        io::{BufRead, BufReader, Write},
+        io::{BufRead, BufReader, Read, Write},
         net::TcpListener,
         sync::{
             Arc,
@@ -266,10 +266,20 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     struct Case {
         name: String,
         arguments: Value,
+        template_yaml: Option<String>,
+        entry_fields: Option<Value>,
+        request: Option<ExpectedRequest>,
         text: String,
         is_error: bool,
         error: Option<String>,
         requests: usize,
+    }
+    #[derive(Deserialize, Debug, Clone, PartialEq)]
+    struct ExpectedRequest {
+        method: String,
+        request_uri: String,
+        headers: BTreeMap<String, String>,
+        body: String,
     }
 
     let fixture: Fixture = serde_json::from_str(include_str!(
@@ -293,11 +303,22 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind local synthetic API");
     let address = listener.local_addr().expect("read test endpoint");
     listener.set_nonblocking(true).expect("bound accept loop");
+    let query_secret = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "query_auth_get")
+        .and_then(|case| case.entry_fields.as_ref())
+        .and_then(|fields| fields.get("param_value"))
+        .and_then(Value::as_str)
+        .expect("source-bound query auth secret")
+        .to_owned();
     let hits = Arc::new(AtomicUsize::new(0));
+    let observed_requests = Arc::new(std::sync::Mutex::new(Vec::<ExpectedRequest>::new()));
     let server_hits = Arc::clone(&hits);
+    let observed_server_requests = Arc::clone(&observed_requests);
     let server = thread::spawn(move || {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        while server_hits.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < deadline {
+        while server_hits.load(Ordering::SeqCst) < 7 && std::time::Instant::now() < deadline {
             let (mut stream, _) = match listener.accept() {
                 Ok(pair) => pair,
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -322,20 +343,36 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
                 .nth(1)
                 .unwrap_or_default()
                 .to_owned();
+            let method = first_line
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
             let mut headers = String::new();
+            let mut parsed_headers = BTreeMap::new();
+            let mut content_length = 0usize;
             loop {
                 let mut line = String::new();
                 reader.read_line(&mut line).expect("read request headers");
                 if line == "\r\n" || line.is_empty() {
                     break;
                 }
+                if let Some((name, value)) = line.trim_end().split_once(':') {
+                    let name = name.to_ascii_lowercase();
+                    let value = value.trim().to_owned();
+                    if name == "content-length" {
+                        content_length = value.parse().expect("valid request Content-Length");
+                    }
+                    parsed_headers.insert(name, value);
+                }
                 headers.push_str(&line);
             }
-            let headers_lower = headers.to_ascii_lowercase();
-            assert!(
-                headers_lower.contains("authorization: bearer fixture-api-token"),
-                "{headers}"
-            );
+            let mut request_body = vec![0; content_length];
+            if content_length > 0 {
+                reader
+                    .read_exact(&mut request_body)
+                    .expect("read request body");
+            }
             server_hits.fetch_add(1, Ordering::SeqCst);
             if path == "/v1/large" {
                 let body = format!("{}€", "a".repeat(102398));
@@ -346,8 +383,50 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
                     body
                 )
                 .expect("write bounded large response");
+            } else if path.starts_with("/v1/semantic/") {
+                let selected = [
+                    "authorization",
+                    "x-api-key",
+                    "x-override",
+                    "x-caller",
+                    "content-type",
+                ]
+                .into_iter()
+                .map(|name| {
+                    (
+                        name.to_owned(),
+                        parsed_headers.get(name).cloned().unwrap_or_default(),
+                    )
+                })
+                .collect();
+                observed_server_requests
+                    .lock()
+                    .expect("record request")
+                    .push(ExpectedRequest {
+                        method,
+                        request_uri: path.clone(),
+                        headers: selected,
+                        body: String::from_utf8(request_body).expect("UTF-8 synthetic body"),
+                    });
+                let (body, echo_header) = if path.starts_with("/v1/semantic/query-auth?") {
+                    let body = format!(
+                        r#"{{"echo":{}}}"#,
+                        serde_json::to_string(&query_secret).expect("encode query secret")
+                    );
+                    (body, format!("X-Auth-Echo: {query_secret}\r\n"))
+                } else {
+                    (r#"{"accepted":true}"#.to_owned(), String::new())
+                };
+                write!(stream, "HTTP/1.1 200 OK\r\nDate: <fixture-date>\r\nContent-Type: application/json\r\n{echo_header}Content-Length: {}\r\n\r\n{}", body.len(), body)
+                    .expect("write semantic response");
             } else {
                 assert_eq!(path, "/v1/status");
+                assert!(
+                    headers
+                        .to_ascii_lowercase()
+                        .contains("authorization: bearer fixture-api-token"),
+                    "{headers}"
+                );
                 let body = r#"{"token":"fixture-api-token","long":"fixture-api-token-extra","note":"fixture-private-note","card":"4111111111111111","existing":"[REDACTED]"}"#;
                 write!(
                     stream,
@@ -355,13 +434,13 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
                     body.len(),
                     body
                 )
-                .expect("write synthetic API response");
+            .expect("write synthetic API response");
             }
         }
         assert_eq!(
             server_hits.load(Ordering::SeqCst),
-            2,
-            "expected exactly two successful API requests"
+            7,
+            "expected two bearer cases and five API-template semantic requests"
         );
     });
     let keyring = MemoryKeyring::new();
@@ -375,11 +454,12 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         let root = temporary.path().join("vault");
         fs::create_dir(&root).expect("create synthetic vault");
         fs::create_dir(root.join("templates")).expect("create templates directory");
-        fs::write(
-            root.join("templates/fixture.yaml"),
-            format!("base_url: http://{address}\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints:\n  - /v1/*\nallowed_methods:\n  - GET\nallow_private: true\n"),
-        )
-        .expect("write API template");
+        let template = case.template_yaml.as_deref().map(|template| {
+            template.lines().map(|line| {
+                if line.starts_with("base_url: ") { format!("base_url: http://{address}") } else { line.to_owned() }
+            }).collect::<Vec<_>>().join("\n") + "\n"
+        }).unwrap_or_else(|| format!("base_url: http://{address}\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints:\n  - /v1/*\nallowed_methods:\n  - GET\nallow_private: true\n"));
+        fs::write(root.join("templates/fixture.yaml"), template).expect("write API template");
         fs::write(root.join("config.yaml"), "vault:\n  format_version: 2\n")
             .expect("write synthetic vault config");
         fs::write(root.join("identity.age"), b"synthetic identity marker")
@@ -388,15 +468,18 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         let identity = generate_identity();
         let store = Store::open(&root, &identity).expect("open synthetic encrypted store");
         if with_entry {
+            let entry_fields = case.entry_fields.as_ref().and_then(Value::as_object)
+                .map(|fields| fields.iter().map(|(key, value)| (key.clone(), value.clone())).collect())
+                .unwrap_or_else(|| BTreeMap::from([
+                    ("credential".into(), json!("fixture-api-token")),
+                    ("nested".into(), json!({"private_note":"fixture-private-note","long_secret":"fixture-api-token-extra"})),
+                ]));
             store
                 .write_new_entry(
                     "api-fixture",
                     &Entry {
                         path: "api-fixture".into(),
-                        data: BTreeMap::from([
-                            ("credential".into(), json!("fixture-api-token")),
-                            ("nested".into(), json!({"private_note":"fixture-private-note","long_secret":"fixture-api-token-extra"})),
-                        ]),
+                        data: entry_fields,
                         metadata: EntryMetadata::default(),
                         ..Entry::default()
                     },
@@ -515,6 +598,44 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     assert_eq!(large_actual["body"], large_expected["body"]);
     assert_eq!(large_actual["body_truncated"], true);
 
+    let mut expected_wire = Vec::new();
+    for case in fixture.cases.iter().filter(|case| case.request.is_some()) {
+        assert_eq!(
+            case.requests, 1,
+            "Go oracle should send one {} request",
+            case.name
+        );
+        let (_vault, _handler, response) = execute_case(case, success_profile.clone(), true);
+        assert_eq!(
+            response["result"]["isError"], false,
+            "{}: {response}",
+            case.name
+        );
+        let actual_response: Value = serde_json::from_str(
+            response["result"]["content"][0]["text"]
+                .as_str()
+                .expect("API result text"),
+        )
+        .expect("decode semantic API result");
+        let go_response: Value = serde_json::from_str(&case.text).expect("decode Go API response");
+        assert_eq!(
+            actual_response, go_response,
+            "{} response projection",
+            case.name
+        );
+        expected_wire.push(case.request.as_ref().expect("request case").clone());
+    }
+    assert_eq!(
+        expected_wire.len(),
+        5,
+        "the source-bound fixture must retain all five semantic request cases"
+    );
+    assert_eq!(
+        *observed_requests.lock().expect("read captured requests"),
+        expected_wire,
+        "Rust request wire must match the production Go handler's captured method, URL, headers and body"
+    );
+
     let negative_profiles = [
         ("endpoint_denied_no_request", success_profile.clone(), false),
         ("method_denied_no_request", success_profile.clone(), false),
@@ -566,10 +687,24 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             .unwrap_or_else(|| panic!("{name}: unexpected MCP response {response}"));
         assert_eq!(actual_error, expected_error, "{name}: {response}");
     }
+    for name in [
+        "substitution_missing_field_no_request",
+        "basic_auth_missing_field_no_request",
+        "invalid_caller_header_no_request",
+    ] {
+        let case = cases_by_name[name];
+        assert_eq!(case.requests, 0, "Go oracle must not send {name}");
+        let (_vault, _handler, response) = execute_case(case, success_profile.clone(), true);
+        let expected_error = case.error.as_deref().unwrap_or(&case.text);
+        let actual_error = response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{name}: unexpected MCP response {response}"));
+        assert_eq!(actual_error, expected_error, "{name}: {response}");
+    }
     assert_eq!(
         hits.load(Ordering::SeqCst),
-        2,
-        "only the two Go-approved calls may reach the API"
+        7,
+        "only the seven Go-approved calls may reach the API"
     );
     server.join().expect("bounded local API server");
 }

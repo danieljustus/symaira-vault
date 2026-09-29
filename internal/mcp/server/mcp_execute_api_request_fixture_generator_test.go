@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -37,12 +39,22 @@ type executeAPIRequestFixtureRefs struct {
 }
 
 type executeAPIRequestCase struct {
-	Name      string         `json:"name"`
-	Arguments map[string]any `json:"arguments"`
-	Text      string         `json:"text"`
-	IsError   bool           `json:"is_error"`
-	Error     string         `json:"error,omitempty"`
-	Requests  int            `json:"requests"`
+	Name      string                 `json:"name"`
+	Arguments map[string]any         `json:"arguments"`
+	Template  string                 `json:"template_yaml,omitempty"`
+	Entry     map[string]any         `json:"entry_fields,omitempty"`
+	Request   *executeAPIRequestWire `json:"request,omitempty"`
+	Text      string                 `json:"text"`
+	IsError   bool                   `json:"is_error"`
+	Error     string                 `json:"error,omitempty"`
+	Requests  int                    `json:"requests"`
+}
+
+type executeAPIRequestWire struct {
+	Method     string            `json:"method"`
+	RequestURI string            `json:"request_uri"`
+	Headers    map[string]string `json:"headers"`
+	Body       string            `json:"body"`
 }
 
 const executeAPIRequestOracleCommit = "c94a10d78181caa91e7f3b977139e9d977315735"
@@ -85,8 +97,30 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 	generatorHash := executeAPIRequestWorkingDigest(t, root, generatorFiles)
 
 	var requests atomic.Int64
+	observations := make(chan executeAPIRequestWire, 16)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
+		if strings.HasPrefix(r.URL.Path, "/v1/semantic/") {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("read semantic request body: %v", err)
+			}
+			headers := map[string]string{}
+			for _, name := range []string{"authorization", "x-api-key", "x-override", "x-caller", "content-type"} {
+				headers[name] = r.Header.Get(name)
+			}
+			observations <- executeAPIRequestWire{Method: r.Method, RequestURI: r.URL.RequestURI(), Headers: headers, Body: string(body)}
+			if r.URL.Path == "/v1/semantic/query-auth" {
+				secret := r.URL.Query().Get("api_key")
+				w.Header().Set("X-Auth-Echo", secret)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprintf(w, `{"echo":%q}`, secret)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"accepted":true}`))
+			return
+		}
 		if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer fixture-api-token" {
 			http.Error(w, "unexpected request", http.StatusBadRequest)
 			return
@@ -118,6 +152,8 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 		approval string
 		scope    []string
 		wantHits int
+		template string
+		entry    map[string]any
 	}{
 		{name: "bearer_get_response_redaction", args: map[string]any{"template": "fixture", "endpoint": "/v1/status"}, canRun: true, approval: "none", wantHits: 1},
 		{name: "response_truncated_invalid_utf8", args: map[string]any{"template": "fixture", "endpoint": "/v1/large"}, canRun: true, approval: "none", wantHits: 1},
@@ -126,12 +162,111 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 		{name: "capability_denied_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/status"}, canRun: false, approval: "none"},
 		{name: "approval_denied_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/status"}, canRun: true, approval: "deny"},
 		{name: "scope_denied_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/status"}, canRun: true, approval: "none", scope: []string{"elsewhere/*"}},
+		{name: "basic_post_all_substitution_surfaces", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/__PATH__?q=__QUERY__", "method": "POST", "body": `{"value":"__BODY__"}`, "headers": map[string]any{"Authorization": "caller-auth", "X-Override": "caller", "X-Caller": "before-__HEADER__", "Content-Type": "application/custom"}}, canRun: true, approval: "none", wantHits: 1,
+			template: fmt.Sprintf(`base_url: %s
+auth_type: basic
+entry_ref: api-fixture
+allowed_endpoints:
+  - /v1/*
+allowed_methods:
+  - POST
+allow_private: true
+default_headers:
+  X-Override: default
+  X-Caller: default-value
+substitutions:
+  - placeholder: __PATH__
+    field: path_value
+    in: [path]
+  - placeholder: __QUERY__
+    field: query_value
+    in: [query]
+  - placeholder: __HEADER__
+    field: header_value
+    in: [header]
+  - placeholder: __BODY__
+    field: body_value
+    in: [body]
+`, upstream.URL),
+			entry: map[string]any{"username": "fixture-user", "password": "fixture-password", "path_value": "segment-1", "query_value": "query-2", "header_value": "header-3", "body_value": "body-4"}},
+		{name: "custom_header_auth_get", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/header-auth"}, canRun: true, approval: "none", wantHits: 1,
+			template: fmt.Sprintf(`base_url: %s
+auth_type: header
+entry_ref: api-fixture
+allowed_endpoints:
+  - /v1/*
+allowed_methods: [GET]
+allow_private: true
+`, upstream.URL),
+			entry: map[string]any{"header_name": "X-API-Key", "header_value": "fixture-header-secret"}},
+		{name: "query_auth_get", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/query-auth?mode=fast"}, canRun: true, approval: "none", wantHits: 1,
+			template: fmt.Sprintf(`base_url: %s
+auth_type: query_param
+entry_ref: op://vault/api-fixture
+allowed_endpoints:
+  - /v1/*
+allowed_methods: [GET]
+allow_private: true
+`, upstream.URL),
+			entry: map[string]any{"param_name": "api_key", "param_value": "fixture query&secret"}},
+		{name: "none_auth_substitution_get", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/none/__TOKEN__"}, canRun: true, approval: "none", wantHits: 1,
+			template: fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: api-fixture
+allowed_endpoints:
+  - /v1/*
+allowed_methods: [GET]
+allow_private: true
+substitutions:
+  - placeholder: __TOKEN__
+    field: credential
+    in: [path]
+`, upstream.URL),
+			entry: map[string]any{"credential": "fixture-none-secret"}},
+		{name: "json_post_default_content_type", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/json-post", "method": "POST", "body": `{"ok":true}`}, canRun: true, approval: "none", wantHits: 1,
+			template: fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: api-fixture
+allowed_endpoints: [/v1/*]
+allowed_methods: [POST]
+allow_private: true
+`, upstream.URL), entry: map[string]any{"credential": "fixture-api-token"}},
+		{name: "substitution_missing_field_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/missing/__MISSING__"}, canRun: true, approval: "none",
+			template: fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: api-fixture
+allowed_endpoints: [/v1/*]
+allowed_methods: [GET]
+allow_private: true
+substitutions:
+  - placeholder: __MISSING__
+    field: missing_value
+    in: [path]
+`, upstream.URL), entry: map[string]any{"other": "fixture-value"}},
+		{name: "basic_auth_missing_field_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/missing-auth"}, canRun: true, approval: "none",
+			template: fmt.Sprintf(`base_url: %s
+auth_type: basic
+entry_ref: api-fixture
+allowed_endpoints: [/v1/*]
+allowed_methods: [GET]
+allow_private: true
+`, upstream.URL), entry: map[string]any{"password": "fixture-password"}},
+		{name: "invalid_caller_header_no_request", args: map[string]any{"template": "fixture", "endpoint": "/v1/semantic/invalid-header", "headers": map[string]any{"X-Invalid": true}}, canRun: true, approval: "none",
+			template: fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: api-fixture
+allowed_endpoints: [/v1/*]
+allowed_methods: [GET]
+allow_private: true
+`, upstream.URL), entry: map[string]any{"credential": "fixture-api-token"}},
 	}
 	cases := make([]executeAPIRequestCase, 0, len(inputs))
 	for _, input := range inputs {
-		vaultDir, identity := mockVaultWithEntry(t, "api-fixture", map[string]any{
-			"credential": "fixture-api-token", "nested": map[string]any{"private_note": "fixture-private-note", "long_secret": "fixture-api-token-extra"},
-		})
+		entryFields := input.entry
+		if entryFields == nil {
+			entryFields = map[string]any{"credential": "fixture-api-token", "nested": map[string]any{"private_note": "fixture-private-note", "long_secret": "fixture-api-token-extra"}}
+		}
+		vaultDir, identity := mockVaultWithEntry(t, "api-fixture", entryFields)
 		allowedPaths := []string{"*"}
 		if input.scope != nil {
 			allowedPaths = input.scope
@@ -142,10 +277,18 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 		}
 		srv := newTestServerWithVault(t, profile, "stdio", vaultDir)
 		srv.vault.Identity = identity
-		writeTemplateOverride(t, vaultDir, "fixture", fmt.Sprintf("base_url: %s\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints:\n  - /v1/*\nallowed_methods:\n  - GET\nallow_private: true\n", upstream.URL))
+		templateYAML := input.template
+		if templateYAML == "" {
+			templateYAML = fmt.Sprintf("base_url: %s\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints:\n  - /v1/*\nallowed_methods:\n  - GET\nallow_private: true\n", upstream.URL)
+		}
+		writeTemplateOverride(t, vaultDir, "fixture", templateYAML)
 		before := requests.Load()
 		result, callErr := srv.handleExecuteAPIRequest(context.Background(), mcp.CallToolRequest{Arguments: input.args})
-		item := executeAPIRequestCase{Name: input.name, Arguments: input.args}
+		stableTemplate := strings.Split(templateYAML, "\n")
+		if len(stableTemplate) > 0 && strings.HasPrefix(stableTemplate[0], "base_url: ") {
+			stableTemplate[0] = "base_url: http://127.0.0.1:1"
+		}
+		item := executeAPIRequestCase{Name: input.name, Arguments: input.args, Template: strings.Join(stableTemplate, "\n"), Entry: entryFields}
 		if callErr != nil {
 			item.Error, item.IsError = callErr.Error(), true
 		} else if result == nil {
@@ -156,6 +299,14 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 		item.Requests = int(requests.Load() - before)
 		if item.Requests != input.wantHits {
 			t.Fatalf("%s: upstream requests=%d want %d", input.name, item.Requests, input.wantHits)
+		}
+		if input.wantHits > 0 && (strings.HasPrefix(input.name, "basic_post_") || strings.HasPrefix(input.name, "custom_header_") || strings.HasPrefix(input.name, "query_auth_") || strings.HasPrefix(input.name, "none_auth_") || strings.HasPrefix(input.name, "json_post_")) {
+			select {
+			case observation := <-observations:
+				item.Request = &observation
+			case <-time.After(2 * time.Second):
+				t.Fatalf("%s: missing captured Go wire request", input.name)
+			}
 		}
 		if !item.IsError && item.Error == "" {
 			var output map[string]any
@@ -191,7 +342,10 @@ func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {
 		}
 		cases = append(cases, item)
 	}
-	fixture := executeAPIRequestFixture{SchemaVersion: 1, Normalizations: []string{"response.headers.Date: replace the local httptest server's wall-clock Date with <fixture-date>"}, Oracle: executeAPIRequestFixtureRefs{
+	fixture := executeAPIRequestFixture{SchemaVersion: 1, Normalizations: []string{
+		"response.headers.Date: replace the local httptest server's wall-clock Date with <fixture-date>",
+		"case.template_yaml.base_url: replace the local httptest port with http://127.0.0.1:1",
+	}, Oracle: executeAPIRequestFixtureRefs{
 		Commit: executeAPIRequestOracleCommit, CommitSHA: executeAPIRequestOracleCommit,
 		SourceFiles: files, SourceDigest: sourceDigest, GeneratorFiles: generatorFiles, GeneratorHash: generatorHash,
 	}, Cases: cases}

@@ -392,14 +392,13 @@ impl<S> ReadOnlyRuntime<S> {
             .resolve_secret_ref_at_path(reference, expected_path)
     }
 
-    /// Returns only the bearer credential and response-redaction strings for
-    /// one already-scoped API template entry. This keeps API auth from parsing
-    /// the Go-compatible display form returned by secret-ref resolution and
-    /// avoids exposing the full store through the runtime boundary.
-    pub(crate) fn resolve_api_credential_at_path(
+    /// Returns the fields and response-redaction strings for one already-scoped
+    /// API template entry. This keeps API auth from parsing the Go-compatible
+    /// display form returned by secret-ref resolution or exposing the store.
+    pub(crate) fn resolve_api_entry_at_path(
         &self,
         path: &str,
-    ) -> Result<(String, Vec<String>), String>
+    ) -> Result<(BTreeMap<String, Value>, Vec<String>), String>
     where
         S: ReadOnlyStore,
     {
@@ -412,20 +411,11 @@ impl<S> ReadOnlyRuntime<S> {
             .store
             .get(path)?
             .ok_or_else(|| format!("entry not found: {path}"))?;
-        let bearer = ["credential", "token", "password"]
-            .iter()
-            .filter_map(|field| entry.fields.get(*field).and_then(Value::as_str))
-            .find(|value| !value.is_empty())
-            .ok_or_else(|| {
-                "no bearer token found in vault entry (expected fields: credential, token, or password)"
-                    .to_owned()
-            })?
-            .to_owned();
         let mut values = Vec::new();
         for value in entry.fields.values() {
             collect_string_values(value, &mut values);
         }
-        Ok((bearer, values))
+        Ok((entry.fields, values))
     }
 }
 
