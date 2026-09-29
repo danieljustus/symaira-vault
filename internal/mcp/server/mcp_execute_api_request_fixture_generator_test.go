@@ -57,7 +57,7 @@ type executeAPIRequestWire struct {
 	Body       string            `json:"body"`
 }
 
-const executeAPIRequestOracleCommit = "c94a10d78181caa91e7f3b977139e9d977315735"
+const executeAPIRequestOracleCommit = "864f1ad11877bc774616fde43e4a0d3ea928a370"
 
 var executeAPIRequestSourceFiles = []string{
 	"internal/mcp/server/approval.go",

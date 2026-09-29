@@ -2,9 +2,10 @@
 //! Oracle sources: broker proxy/auth at `ba4dc0680878870bfb30ccd39a0b973b960d3e09`,
 //! and `internal/ssrf/ssrf.go` at `c7c6d04b6dc6349800d12d87d605ae55081bf694`.
 //!
-//! This helper only sends plain HTTP to numeric loopback addresses or `localhost`.
-//! TLS interception, template loading, vault lookup, substitutions, audit, and
-//! response pattern sanitization remain separate migration work.
+//! This helper sends plain HTTP only to numeric loopback addresses or `localhost`,
+//! and verified HTTPS only to those same local targets in this slice. Public
+//! DNS validation, vault lookup, substitutions, audit, and response pattern
+//! sanitization remain separate migration work.
 
 use reqwest::{
     Method, Url,
@@ -116,6 +117,7 @@ fn execute_http_with_timeout(
         false,
         true,
         None,
+        &[],
     )
 }
 
@@ -144,6 +146,7 @@ pub(crate) fn execute_http_for_api(
         true,
         false,
         Some(request_url),
+        &[],
     )
 }
 
@@ -165,6 +168,7 @@ fn execute_http_inner(
     truncate_response: bool,
     redact_bearer: bool,
     request_url_override: Option<Url>,
+    extra_root_certificates: &[reqwest::Certificate],
 ) -> Result<ApiResponse, String> {
     if body.len() > MAX_BODY_BYTES {
         return Err("request body too large".into());
@@ -174,9 +178,11 @@ fn execute_http_inner(
     }
     let mut target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
     if let Some(request_url) = request_url_override {
-        if request_url.scheme() != "http"
+        if request_url.scheme() != target.url.scheme()
             || request_url.host_str() != Some(target.host.as_str())
             || request_url.port_or_known_default() != target.url.port_or_known_default()
+            || !request_url.username().is_empty()
+            || request_url.password().is_some()
         {
             return Err("API request URL changed the validated upstream authority".into());
         }
@@ -259,17 +265,7 @@ fn execute_http_inner(
     }
 
     let addresses = target.addresses;
-    let mut builder = Client::builder()
-        .timeout(timeout)
-        .connect_timeout(timeout)
-        .redirect(Policy::none())
-        .no_proxy();
-    if target.host.eq_ignore_ascii_case("localhost") {
-        builder = builder.resolve_to_addrs("localhost", &addresses);
-    }
-    let client = builder
-        .build()
-        .map_err(|_| "cannot configure upstream connection")?;
+    let client = build_http_client(timeout, &target.host, &addresses, extra_root_certificates)?;
     let method = Method::from_bytes(method.as_bytes()).map_err(|_| "invalid request method")?;
     let response = client
         .request(method, target.url)
@@ -352,6 +348,30 @@ fn execute_http_inner(
     })
 }
 
+fn build_http_client(
+    timeout: Duration,
+    host: &str,
+    addresses: &[SocketAddr],
+    extra_root_certificates: &[reqwest::Certificate],
+) -> Result<Client, String> {
+    let mut builder = Client::builder()
+        .timeout(timeout)
+        .connect_timeout(timeout)
+        .redirect(Policy::none())
+        .no_proxy();
+    if host.parse::<IpAddr>().is_err() {
+        builder = builder.resolve_to_addrs(host, addresses);
+    }
+    if !extra_root_certificates.is_empty() {
+        // Tests may provide a private fixture CA. Keep that root scoped to the
+        // constructed client; production requests never enter this branch.
+        builder = builder.tls_certs_only(extra_root_certificates.iter().cloned());
+    }
+    builder
+        .build()
+        .map_err(|_| "cannot configure upstream connection".into())
+}
+
 fn canonical_header_name(name: &str) -> String {
     name.split('-')
         .map(|part| {
@@ -411,6 +431,7 @@ pub fn validate_api_request(
     Ok(())
 }
 
+#[derive(Debug)]
 struct Target<'a> {
     url: Url,
     host: String,
@@ -423,16 +444,21 @@ impl<'a> Target<'a> {
         if base_url.len().saturating_add(endpoint.len()) > MAX_REQUEST_HEADER_BYTES {
             return Err("request headers too large".into());
         }
-        if !base_url.starts_with("http://")
-            || base_url
-                .bytes()
-                .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'\\')
+        if base_url
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control() || byte == b'\\')
         {
             return Err(
                 "only plain HTTP loopback template URLs are supported by this broker slice".into(),
             );
         }
-        let raw_base = &base_url["http://".len()..];
+        let (scheme, raw_base) = if let Some(raw) = base_url.strip_prefix("http://") {
+            ("http", raw)
+        } else if let Some(raw) = base_url.strip_prefix("https://") {
+            ("https", raw)
+        } else {
+            return Err("only HTTP and HTTPS template URLs are supported".into());
+        };
         let (authority, base_path) = raw_base.split_once('/').unwrap_or((raw_base, ""));
         if authority.is_empty()
             || authority.contains('@')
@@ -468,9 +494,20 @@ impl<'a> Target<'a> {
             .trim_end_matches(']')
             .to_owned();
         let port = url.port_or_known_default().ok_or("invalid template URL")?;
-        let addresses = loopback_addresses(&host, port)?;
+        let addresses = match loopback_addresses(&host, port) {
+            Ok(addresses) => addresses,
+            Err(_) if scheme == "https" => {
+                return Err(
+                    "HTTPS public DNS targets are not supported by this broker slice".into(),
+                );
+            }
+            Err(error) => return Err(error),
+        };
         if !allow_private {
             return Err("blocked private or local upstream host".into());
+        }
+        if url.scheme() != scheme {
+            return Err("invalid template URL".into());
         }
         Ok(Self {
             url,
@@ -608,9 +645,11 @@ fn replace_bytes(haystack: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use std::{
         io::{BufRead, BufReader, Write},
         net::TcpListener,
+        sync::Arc,
         thread,
     };
 
@@ -760,6 +799,202 @@ mod tests {
             execute_http(&template, "GET", "/safe/item", &BTreeMap::new(), b"", None).unwrap_err(),
             "plain HTTP is restricted to loopback targets"
         );
+    }
+
+    #[test]
+    fn https_is_verified_for_local_targets_and_public_dns_remains_blocked() {
+        let template = |base_url: &str, allow_private| ApiTemplate {
+            base_url: base_url.into(),
+            allowed_endpoints: vec!["/v1/*".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private,
+        };
+        assert!(Target::parse("https://localhost:443", "/v1/status", true).is_ok());
+        assert_eq!(
+            Target::parse("https://localhost:443", "/v1/status", false).unwrap_err(),
+            "blocked private or local upstream host"
+        );
+        assert_eq!(
+            Target::parse("https://api.example.test", "/v1/status", true).unwrap_err(),
+            "HTTPS public DNS targets are not supported by this broker slice"
+        );
+        assert_eq!(
+            execute_http(
+                &template("https://api.example.test", true),
+                "GET",
+                "/v1/status",
+                &BTreeMap::new(),
+                b"",
+                None,
+            )
+            .unwrap_err(),
+            "HTTPS public DNS targets are not supported by this broker slice"
+        );
+    }
+
+    #[test]
+    fn local_https_contract_matches_the_source_bound_go_handler_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/execute-api-https.json"
+        ))
+        .unwrap();
+        for (case_name, host, bind, trust_root) in [
+            ("valid_local_tls", "127.0.0.1", "127.0.0.1:0", true),
+            (
+                "wrong_hostname_tls",
+                "wrong.example.test",
+                "127.0.0.1:0",
+                true,
+            ),
+            ("untrusted_root_tls", "127.0.0.1", "127.0.0.1:0", false),
+        ] {
+            let expected = fixture["cases"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|case| case["name"] == case_name)
+                .unwrap_or_else(|| panic!("missing Go HTTPS fixture case {case_name}"));
+            assert_eq!(expected["host"], host);
+            let listener = TcpListener::bind(bind).unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = thread::spawn(move || serve_test_tls_once(listener));
+            let template = ApiTemplate {
+                base_url: format!("https://{host}:{}", address.port()),
+                allowed_endpoints: vec!["/v1/*".into()],
+                allowed_methods: vec!["GET".into()],
+                default_headers: BTreeMap::new(),
+                allow_private: true,
+            };
+            let roots = if trust_root {
+                vec![
+                    reqwest::Certificate::from_pem(include_bytes!("../tests/fixtures/tls-ca.pem"))
+                        .unwrap(),
+                ]
+            } else {
+                Vec::new()
+            };
+            let response = if case_name == "wrong_hostname_tls" {
+                let client = build_http_client(
+                    Duration::from_secs(3),
+                    host,
+                    &[SocketAddr::new(
+                        IpAddr::V4(Ipv4Addr::LOCALHOST),
+                        address.port(),
+                    )],
+                    &roots,
+                )
+                .unwrap();
+                client
+                    .get(format!("https://{host}:{}/v1/status", address.port()))
+                    .send()
+                    .map(|response| ApiResponse {
+                        status: response.status().as_u16(),
+                        body: Vec::new(),
+                        headers: BTreeMap::new(),
+                        body_truncated: false,
+                        sanitized: false,
+                    })
+                    .map_err(|_| "upstream request failed".to_owned())
+            } else {
+                execute_http_inner(
+                    &template,
+                    "GET",
+                    "/v1/status",
+                    &BTreeMap::new(),
+                    b"",
+                    None,
+                    Duration::from_secs(3),
+                    MAX_BODY_BYTES,
+                    false,
+                    false,
+                    None,
+                    &roots,
+                )
+            };
+            let actual_requests = server.join().unwrap();
+            assert_eq!(
+                actual_requests,
+                expected["requests"].as_u64().unwrap() as usize
+            );
+            if expected["is_error"] == true {
+                assert!(response.is_err(), "{case_name} unexpectedly succeeded");
+            } else {
+                let response = response.unwrap_or_else(|error| panic!("{case_name}: {error}"));
+                assert_eq!(response.status, expected["status"].as_u64().unwrap() as u16);
+                assert_eq!(response.body, expected["body"].as_str().unwrap().as_bytes());
+            }
+        }
+    }
+
+    fn serve_test_tls_once(listener: TcpListener) -> usize {
+        use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+
+        listener.set_nonblocking(true).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(4);
+        let (stream, _) = loop {
+            match listener.accept() {
+                Ok(pair) => break pair,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    if std::time::Instant::now() >= deadline {
+                        return 0;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => return 0,
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+        let cert = decode_pem_fixture(
+            include_str!("../tests/fixtures/tls-server.pem"),
+            "CERTIFICATE",
+        );
+        let key = decode_pem_fixture(
+            include_str!("../tests/fixtures/tls-server.key"),
+            "PRIVATE KEY",
+        );
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let config = rustls::ServerConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![CertificateDer::from(cert)],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key)),
+            )
+            .unwrap();
+        let connection = rustls::ServerConnection::new(Arc::new(config)).unwrap();
+        let mut stream = rustls::StreamOwned::new(connection, stream);
+        let mut request = Vec::new();
+        let mut byte = [0u8; 1];
+        while !request.ends_with(b"\r\n\r\n") {
+            match stream.read(&mut byte) {
+                Ok(0) => return 0,
+                Err(_) => return 0,
+                Ok(_) => request.push(byte[0]),
+            }
+            if request.len() > 16 * 1024 {
+                return 0;
+            }
+        }
+        assert!(request.starts_with(b"GET /v1/status HTTP/1.1\r\n"));
+        let response = b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 14\r\nConnection: close\r\n\r\nfixture tls ok";
+        let _ = stream.write_all(response);
+        1
+    }
+
+    fn decode_pem_fixture(pem: &str, label: &str) -> Vec<u8> {
+        let begin = format!("-----BEGIN {label}-----");
+        let end = format!("-----END {label}-----");
+        let body = pem
+            .split_once(&begin)
+            .and_then(|(_, rest)| rest.split_once(&end).map(|(body, _)| body))
+            .expect("fixture PEM block");
+        STANDARD
+            .decode(body.split_whitespace().collect::<String>())
+            .unwrap()
     }
 
     #[test]
