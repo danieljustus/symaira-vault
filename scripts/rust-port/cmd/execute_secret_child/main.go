@@ -6,5 +6,5 @@ import (
 )
 
 func main() {
-	_, _ = fmt.Fprint(os.Stdout, os.Getenv("GITHUB_PASSWORD"))
+	_, _ = fmt.Fprintf(os.Stdout, "%s:%s", os.Getenv("GITHUB_PASSWORD"), os.Getenv("PLAIN"))
 }

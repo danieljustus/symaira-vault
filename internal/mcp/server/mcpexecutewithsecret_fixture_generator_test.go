@@ -3,8 +3,10 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,19 +14,22 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // This fixture executes the production Go secret-injection handler against a
 // synthetic vault. It is opt-in so ordinary Go tests never rewrite artifacts.
 type executeWithSecretFixture struct {
-	SchemaVersion int                            `json:"schema_version"`
-	Oracle        executeWithSecretOracle        `json:"oracle"`
-	NameCases     map[string]string              `json:"name_cases"`
-	AuditPath     string                         `json:"audit_path"`
-	Cases         []executeWithSecretFixtureCase `json:"cases"`
+	SchemaVersion     int                            `json:"schema_version"`
+	UnicodeNameDigest string                         `json:"unicode_name_digest"`
+	Oracle            executeWithSecretOracle        `json:"oracle"`
+	NameCases         map[string]string              `json:"name_cases"`
+	AuditPath         string                         `json:"audit_path"`
+	Cases             []executeWithSecretFixtureCase `json:"cases"`
 }
 
 type executeWithSecretOracle struct {
@@ -38,6 +43,7 @@ type executeWithSecretOracle struct {
 
 type executeWithSecretFixtureCase struct {
 	Name   string                  `json:"name"`
+	Phase  string                  `json:"phase"`
 	Input  json.RawMessage         `json:"input"`
 	Output executeWithSecretResult `json:"output"`
 }
@@ -59,8 +65,11 @@ var executeWithSecretOracleSources = []string{
 	"internal/mcp/server/tools_execute_with_secret.go",
 	"internal/mcp/server/tools_sanitize.go",
 	"internal/mcp/server/tools_run.go",
+	"internal/mcp/masking/sanitizer.go",
 	"internal/mcp/transport/transport.go",
 	"internal/mcp/apitemplates/auth.go",
+	"internal/redact/detectors.go",
+	"internal/redact/redact.go",
 	"internal/secrets/filter.go",
 	"internal/secrets/runner.go",
 }
@@ -72,6 +81,11 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_EXECUTE_WITH_SECRET_FIXTURE=1 or SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE=1")
 	}
 	root := executeWithSecretRepoRoot(t)
+	unicodeCmd := exec.Command("go", "run", "./scripts/rust-port/cmd/execute_secret_unicode")
+	unicodeCmd.Dir = root
+	if output, err := unicodeCmd.CombinedOutput(); err != nil {
+		t.Fatalf("verify generated Go Unicode table: %v: %s", err, output)
+	}
 	provenanceCmd := exec.Command("go", "run", "./scripts/rust-port/cmd/execute_secret_provenance")
 	provenanceCmd.Dir = root
 	provenanceOutput, err := provenanceCmd.Output()
@@ -88,20 +102,26 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 	}
 
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{"password": "testpass123"})
-	profile := config.AgentProfile{
+	baseProfile := config.AgentProfile{
 		Name: "execute-with-secret-fixture", AllowedPaths: []string{"*"},
 		CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr("none"),
 	}
-	srv := newTestServerWithVault(t, profile, "stdio", vaultDir)
-	srv.vault.Identity = identity
+	if err := vault.WriteEntry(vaultDir, "allowed/foo", &vault.Entry{Data: map[string]any{"other": "inside"}}, identity); err != nil {
+		t.Fatalf("write dotted resolver candidate: %v", err)
+	}
+	if err := vault.WriteEntry(vaultDir, "allowed/foo.bar", &vault.Entry{Data: map[string]any{"token": "outside"}}, identity); err != nil {
+		t.Fatalf("write dotted bare entry: %v", err)
+	}
 
 	inputs := []struct {
-		name string
-		args map[string]any
+		name    string
+		phase   string
+		profile config.AgentProfile
+		args    map[string]any
 	}{
 		{name: "secret_injection_masks_output", args: map[string]any{
 			"command":     []any{"go", "run", "<fixture-child-go-source>"},
-			"secret_refs": []any{"op://vault/github/password"}, "timeout": 30,
+			"secret_refs": []any{"op://vault/github/password"}, "env_vars": map[string]any{"PLAIN": "literal-value"}, "timeout": 30,
 		}},
 		{name: "missing_secret_refs", args: map[string]any{"command": []any{"true"}}},
 		{name: "wrong_secret_refs_type", args: map[string]any{"command": []any{"true"}, "secret_refs": "op://vault/github/password"}},
@@ -109,15 +129,23 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		{name: "missing_entry", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{"op://vault/missing/password"}}},
 		{name: "missing_field", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{"op://vault/github/missing"}}},
 		{name: "denied_environment_key", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{}, "env_vars": map[string]any{"LD_PRELOAD": "fixture"}}},
+		{name: "can_run_commands_denied", phase: "authorize", profile: config.AgentProfile{Name: "fixture-readonly", AllowedPaths: []string{"*"}, CanRunCommands: config.BoolPtr(false), ApprovalMode: config.StrPtr("none")}, args: map[string]any{"command": []any{"true"}, "secret_refs": []any{}}},
+		{name: "executable_allowlist_denied", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{}}},
+		{name: "reference_scope_denied", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{"op://vault/github/password"}}},
+		{name: "dotted_resolution_scope_denied", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{"op://vault/allowed/foo/bar"}}},
+		{name: "approval_mode_denied", args: map[string]any{"command": []any{"true"}, "secret_refs": []any{}}},
+		{name: "timeout_protocol_error", args: map[string]any{"command": []any{"<fixture-timeout-child>"}, "secret_refs": []any{}, "env_vars": map[string]any{"SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD": "1"}, "timeout": 1}},
 	}
 
-	fixture := executeWithSecretFixture{SchemaVersion: 1, Oracle: executeWithSecretOracle{
+	fixture := executeWithSecretFixture{SchemaVersion: 1, UnicodeNameDigest: goUnicodeNameDigest(), Oracle: executeWithSecretOracle{
 		Commit: executeWithSecretOracleCommit, CommitSHA: provenanceResult.CommitSHA,
 		SourceFiles: executeWithSecretOracleSources, SourceDigest: provenanceResult.SourceDigest,
 		GeneratorFiles: []string{
 			"internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go",
 			"scripts/rust-port/cmd/execute_secret_child/main.go",
 			"scripts/rust-port/cmd/execute_secret_provenance/main.go",
+			"scripts/rust-port/cmd/execute_secret_unicode/main.go",
+			"crates/symvault-mcp/src/go_unicode_15.rs",
 		},
 		GeneratorDigest: provenanceResult.GeneratorDigest,
 	}, NameCases: map[string]string{
@@ -127,6 +155,10 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		"combining_uppercase": generateEnvVarName("i\u0307", "password"),
 		"greek_simple_upper":  generateEnvVarName("\u1f80", "password"),
 		"greek_upper":         generateEnvVarName("\u1f88", "password"),
+		"kawi_letter":         generateEnvVarName("\U00011f04", "password"),
+		"kawi_digit":          generateEnvVarName("service\U00011f50", ""),
+		"nag_mundari_letter":  generateEnvVarName("\U0001e4d0", "password"),
+		"han_ext_h_letter":    generateEnvVarName("\U00031350", "password"),
 		"leading_digit":       generateEnvVarName("9service", ""),
 		"empty":               generateEnvVarName("", ""),
 	}}
@@ -134,6 +166,24 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 	redactedCommand[2] = "<fixture-child-go-source>"
 	fixture.AuditPath = fmt.Sprintf("command=[%s], refs=%v, exit=0", strings.Join(redactedCommand, " "), []string{"op://vault/github/password"})
 	for _, tc := range inputs {
+		profile := baseProfile
+		if tc.name == "can_run_commands_denied" {
+			profile = tc.profile
+		}
+		if tc.name == "executable_allowlist_denied" {
+			profile.AllowedExecutables = []string{"echo"}
+		}
+		if tc.name == "reference_scope_denied" {
+			profile.AllowedPaths = []string{"other"}
+		}
+		if tc.name == "dotted_resolution_scope_denied" {
+			profile.AllowedPaths = []string{"allowed/foo"}
+		}
+		if tc.name == "approval_mode_denied" {
+			profile.ApprovalMode = config.StrPtr("deny")
+		}
+		srv := newTestServerWithVault(t, profile, "stdio", vaultDir)
+		srv.vault.Identity = identity
 		encodedInput, err := json.Marshal(tc.args)
 		if err != nil {
 			t.Fatal(err)
@@ -147,6 +197,17 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 			actualCommand := []any{"go", "run", filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")}
 			actualArgs["command"] = actualCommand
 		}
+		if tc.name == "timeout_protocol_error" {
+			executable, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			actualArgs = map[string]any{}
+			for key, value := range tc.args {
+				actualArgs[key] = value
+			}
+			actualArgs["command"] = []any{executable, "-test.run=^TestExecuteWithSecretTimeoutChild$"}
+		}
 		result, callErr := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{Arguments: actualArgs})
 		output := executeWithSecretResult{}
 		if callErr != nil {
@@ -156,7 +217,7 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 			output.Text, output.IsError = result.Text, result.IsError
 			output.Text = normalizeExecuteWithSecretOutput(t, output.Text)
 		}
-		fixture.Cases = append(fixture.Cases, executeWithSecretFixtureCase{Name: tc.name, Input: encodedInput, Output: output})
+		fixture.Cases = append(fixture.Cases, executeWithSecretFixtureCase{Name: tc.name, Phase: tc.phase, Input: encodedInput, Output: output})
 	}
 	content, err := json.MarshalIndent(fixture, "", "  ")
 	if err != nil {
@@ -182,6 +243,27 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("wrote %s (%d bytes)", path, len(content))
+}
+
+func goUnicodeNameDigest() string {
+	h := fnv.New64a()
+	var encoded [4]byte
+	for code := uint32(0); code <= 0x10ffff; code++ {
+		if code >= 0xd800 && code <= 0xdfff {
+			continue
+		}
+		binary.BigEndian.PutUint32(encoded[:], code)
+		_, _ = h.Write(encoded[:])
+		_, _ = h.Write([]byte(generateEnvVarName(string(rune(code)), "")))
+		_, _ = h.Write([]byte{0})
+	}
+	return fmt.Sprintf("%016x", h.Sum64())
+}
+
+func TestExecuteWithSecretTimeoutChild(t *testing.T) {
+	if os.Getenv("SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD") == "1" {
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func normalizeExecuteWithSecretOutput(t *testing.T, text string) string {

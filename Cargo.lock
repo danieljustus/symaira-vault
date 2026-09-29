@@ -3450,7 +3450,6 @@ dependencies = [
  "tempfile",
  "time",
  "unicode-normalization",
- "unicode_categories",
 ]
 
 [[package]]

@@ -21,8 +21,11 @@ var sources = []string{
 	"internal/mcp/server/tools_execute_with_secret.go",
 	"internal/mcp/server/tools_sanitize.go",
 	"internal/mcp/server/tools_run.go",
+	"internal/mcp/masking/sanitizer.go",
 	"internal/mcp/transport/transport.go",
 	"internal/mcp/apitemplates/auth.go",
+	"internal/redact/detectors.go",
+	"internal/redact/redact.go",
 	"internal/secrets/filter.go",
 	"internal/secrets/runner.go",
 }
@@ -31,6 +34,8 @@ var generatorFiles = []string{
 	"internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go",
 	"scripts/rust-port/cmd/execute_secret_child/main.go",
 	"scripts/rust-port/cmd/execute_secret_provenance/main.go",
+	"scripts/rust-port/cmd/execute_secret_unicode/main.go",
+	"crates/symvault-mcp/src/go_unicode_15.rs",
 }
 
 func main() {

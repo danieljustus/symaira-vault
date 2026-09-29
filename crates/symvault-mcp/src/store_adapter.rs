@@ -23,7 +23,8 @@ use symvault_store::{
     sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use unicode_categories::UnicodeCategories;
+#[path = "go_unicode_15.rs"]
+mod go_unicode_15;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
@@ -681,6 +682,16 @@ impl StoreReadOnlyRuntime {
             Err(RunFilesError::Tool(message)) => return Ok(ToolCallResult::error(message)),
             Err(RunFilesError::Denied(message)) => return Err(message),
         };
+        // run_command's environment contains only resolved vault references,
+        // matching Go KnownSecrets. Literal execute_with_secret env_vars are
+        // not included here and remain visible unless generic scanning flags them.
+        let mut redactions = files.redactions.clone();
+        redactions.extend(
+            environment
+                .values()
+                .filter(|value| !value.is_empty())
+                .map(|value| value.as_bytes().to_vec()),
+        );
         let mode = if self.approval_mode.is_empty() && self.require_approval {
             "prompt"
         } else {
@@ -700,7 +711,7 @@ impl StoreReadOnlyRuntime {
             &command,
             &environment,
             &files.content,
-            &files.redactions,
+            &redactions,
             working_directory,
             Duration::from_secs(timeout_seconds),
         ) {
@@ -2197,27 +2208,14 @@ fn generate_env_var_name(entry_path: &str, field: &str) -> String {
         .map(|part| {
             part.chars()
                 .map(|character| {
-                    // Go's strings.ToUpper uses Unicode's simple one-rune
-                    // mapping. Rust's full mapping expands some Greek letters
-                    // and sharp-s; Go keeps the simple mapping for the former
-                    // and leaves sharp-s unchanged.
-                    let uppercase = match character {
-                        '\u{1f80}'..='\u{1f87}' => {
-                            char::from_u32(character as u32 + 8).unwrap_or(character)
-                        }
-                        'ß' => character,
-                        _ => {
-                            let mut mapping = character.to_uppercase();
-                            let first = mapping.next().unwrap_or(character);
-                            if mapping.next().is_some() {
-                                character
-                            } else {
-                                first
-                            }
-                        }
-                    };
-                    if uppercase.is_letter()
-                        || uppercase.is_number_decimal_digit()
+                    let code = character as u32;
+                    let uppercase = go_unicode_15::SIMPLE_UPPER
+                        .binary_search_by_key(&code, |(source, _)| *source)
+                        .ok()
+                        .and_then(|index| char::from_u32(go_unicode_15::SIMPLE_UPPER[index].1))
+                        .unwrap_or(character);
+                    if go_unicode15_contains(go_unicode_15::LETTER_RANGES, uppercase)
+                        || go_unicode15_contains(go_unicode_15::DECIMAL_DIGIT_RANGES, uppercase)
                         || uppercase == '_'
                     {
                         uppercase
@@ -2229,6 +2227,14 @@ fn generate_env_var_name(entry_path: &str, field: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("_")
+}
+
+fn go_unicode15_contains(ranges: &[(u32, u32)], character: char) -> bool {
+    let code = character as u32;
+    let index = ranges.partition_point(|(_, end)| *end < code);
+    ranges
+        .get(index)
+        .is_some_and(|(start, end)| *start <= code && code <= *end)
 }
 
 fn execute_with_secret_audit_path(
@@ -2271,9 +2277,9 @@ pub fn unavailable_tool(
 #[cfg(test)]
 mod tests {
     use super::{
-        MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime,
-        denied_env_names, execute_with_secret_audit_path, generate_env_var_name,
-        parse_command_timeout, parse_run_file_spec, render_list_shares,
+        MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
+        execute_with_secret_audit_path, generate_env_var_name, parse_command_timeout,
+        parse_run_file_spec, render_list_shares,
     };
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
     use serde_json::{Value, json};
@@ -2356,7 +2362,7 @@ mod tests {
             );
             assert_eq!(working_directory, None);
             assert!(files.is_empty());
-            assert!(additional_redactions.is_empty());
+            assert_eq!(additional_redactions, [b"synthetic-secret".to_vec()]);
             assert_eq!(timeout, Duration::from_secs(30));
             Ok(CommandExecution {
                 stdout: "ok\n".into(),
@@ -2597,11 +2603,38 @@ mod tests {
             (("i\u{0307}", "password"), "combining_uppercase"),
             (("\u{1f80}", "password"), "greek_simple_upper"),
             (("\u{1f88}", "password"), "greek_upper"),
+            (("\u{11f04}", "password"), "kawi_letter"),
+            (("service\u{11f50}", ""), "kawi_digit"),
+            (("\u{1e4d0}", "password"), "nag_mundari_letter"),
+            (("\u{31350}", "password"), "han_ext_h_letter"),
             (("9service", ""), "leading_digit"),
             (("", ""), "empty"),
         ] {
             assert_eq!(generate_env_var_name(input.0, input.1), names[key], "{key}");
         }
+        let expected_digest = fixture["unicode_name_digest"]
+            .as_str()
+            .expect("Go exhaustive Unicode digest");
+        assert_eq!(expected_digest.len(), 16);
+        let mut digest = 0xcbf29ce484222325_u64;
+        let mut add = |byte: u8| {
+            digest ^= u64::from(byte);
+            digest = digest.wrapping_mul(0x100000001b3);
+        };
+        for code in 0..=0x10ffff_u32 {
+            if (0xd800..=0xdfff).contains(&code) {
+                continue;
+            }
+            let character = char::from_u32(code).expect("Unicode scalar");
+            for byte in code.to_be_bytes() {
+                add(byte);
+            }
+            let name = generate_env_var_name(&character.to_string(), "");
+            for byte in name.bytes().chain(std::iter::once(0)) {
+                add(byte);
+            }
+        }
+        assert_eq!(format!("{digest:016x}"), expected_digest);
         let expected_audit = fixture["audit_path"].as_str().expect("Go audit path");
         let actual_audit = execute_with_secret_audit_path(
             &[

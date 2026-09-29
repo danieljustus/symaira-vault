@@ -69,17 +69,11 @@ impl CommandExecutor for McpCommandExecutor {
         working_directory: Option<&Path>,
         timeout: Duration,
     ) -> Result<CommandExecution, String> {
-        let mut redactions = environment
-            .values()
+        let redactions = additional_redactions
+            .iter()
             .filter(|value| !value.is_empty())
-            .map(|value| value.as_bytes().to_vec())
+            .cloned()
             .collect::<Vec<_>>();
-        redactions.extend(
-            additional_redactions
-                .iter()
-                .filter(|value| !value.is_empty())
-                .cloned(),
-        );
         let result = run_process(ProcessOptions {
             command,
             environment,
@@ -1182,15 +1176,19 @@ mod tests {
         let command = vec![
             "sh".to_owned(),
             "-c".to_owned(),
-            "printf '%s' \"$TOKEN\"".to_owned(),
+            "printf '%s:%s' \"$TOKEN\" \"$PLAIN\"".to_owned(),
         ];
-        let environment = BTreeMap::from([("TOKEN".to_owned(), "synthetic-secret".to_owned())]);
+        let environment = BTreeMap::from([
+            ("TOKEN".to_owned(), "synthetic-secret".to_owned()),
+            ("PLAIN".to_owned(), "literal-value".to_owned()),
+        ]);
+        let known_secret = vec![b"synthetic-secret".to_vec()];
         let result = executor
             .run(
                 &command,
                 &environment,
                 &BTreeMap::new(),
-                &[],
+                &known_secret,
                 None,
                 Duration::from_secs(2),
             )
@@ -1198,8 +1196,9 @@ mod tests {
 
         assert_eq!(result.exit_code, 0);
         assert!(!result.timed_out);
-        assert_eq!(result.stdout, "***");
+        assert_eq!(result.stdout, "***:literal-value");
         assert!(!result.stdout.contains("synthetic-secret"));
+        assert!(result.stdout.contains("literal-value"));
     }
 
     #[test]
