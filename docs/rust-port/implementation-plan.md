@@ -1,5 +1,30 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated Unix terminal signals — 2026-09-29
+
+Candidate `7be90e81454f1b192f200ba8e496f9ef8009c31e` passes the complete
+MCP call/fixture differential, 91 core, 175 MCP, 35 CLI and 59/52 platform
+tests on native Darwin/Linux ARM64, plus strict all-target Clippy and formatting.
+Four Darwin and one Linux platform opt-ins remain ignored; the dedicated
+controlling-PTY acceptance explicitly runs the normal suite's opt-in helper.
+
+The actual Go terminal signal-cancellation oracle and Rust process acceptance
+cover SIGINT and SIGTERM during secure input, idle stdio, and ordinary approval.
+The PTY driver records 17 actions (10 critical approval, one execute approval,
+six hidden inputs), five cooked-mode restoration checks and two idle default
+terminations. Canceled inputs do not mutate the vault; subsequent input works.
+Ordinary approval restores the terminal before terminating with the original
+signal. The process-owned router is installed only by the standalone Unix
+stdio MCP CLI when a controlling terminal exists.
+
+`secure-input-signals-receipt-7be90e81.json` in both existing build roots binds
+the final candidate, Cargo manifest paths, fixture and logs. Log SHA-256:
+Darwin `30b725b82575584be855cd7a9fc080622723bf1f4d629ef4a55d286811388ab2`;
+Linux `a7431ffc0f8a69026b1d8864f6bed93efa18cb2e7ee4f7db57f5a2aaf8f4982d`.
+This supersedes the earlier Unix external-signal gap. Windows TTY, other required
+native targets, GUI and remaining MCP tools stay open. No release, cutover,
+Go removal or host credential operation was performed.
+
 ## Integrated secure terminal input — 2026-09-29
 
 Candidate `c00841be7cee780d91bbe68376ebda895196ea14` connects secure_input and
