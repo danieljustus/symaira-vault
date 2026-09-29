@@ -937,7 +937,7 @@ mcp-secure-input-fixtures-check:
 	SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSecureInputFixture$$' -count=1
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/secureui -run '^TestTTYReadStringRuneEditing$$' -count=1
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/secureui -run '^(TestTTYReadStringRuneEditing|TestPrompt_TTYBackend_SignalCancel)$$' -count=1
 	$(CARGO) test -p symvault-mcp --test secure_input_contract --locked
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::secure_input_
 
