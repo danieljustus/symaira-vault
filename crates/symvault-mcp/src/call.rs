@@ -379,7 +379,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 "Tool \"{name}\" requires tier \"admin\""
             )));
         }
-        if name == "run_command" && !self.config.can_run_commands {
+        if matches!(name, "run_command" | "execute_with_secret") && !self.config.can_run_commands {
             let agent = if self.config.agent_name.is_empty() || self.config.agent_name == "default"
             {
                 "<name>"
@@ -387,7 +387,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
                 &self.config.agent_name
             };
             return Err(ToolCallResult::error(format!(
-                "command execution not permitted for this agent: set \"canRunCommands: true\" in its profile (symvault config set agents.{agent}.canRunCommands true), or add \"run_command\" to allowed_tools if tier-based scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, or request_credential instead"
+                "command execution not permitted for this agent: set \"canRunCommands: true\" in its profile (symvault config set agents.{agent}.canRunCommands true), or add \"{name}\" to allowed_tools if tier-based scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, or request_credential instead"
             )));
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
@@ -444,6 +444,9 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
             "run_command" => Err("run_command has no configured command executor".into()),
+            "execute_with_secret" => {
+                Err("execute_with_secret has no configured command executor".into())
+            }
             "search" => self.search_openai(arguments),
             "fetch" => self.fetch_openai(arguments),
             _ => Err(format!("read-only runtime has no handler for {name}")),

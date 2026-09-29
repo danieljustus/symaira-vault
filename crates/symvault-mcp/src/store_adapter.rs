@@ -23,6 +23,7 @@ use symvault_store::{
     sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use unicode_categories::UnicodeCategories;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
@@ -736,6 +737,269 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
+    fn execute_with_secret(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let Some(executor) = &self.command_executor else {
+            return Err("execute_with_secret has no configured command executor".into());
+        };
+        let Some(command_value) = arguments.get("command") else {
+            self.append_audit("execute_with_secret", "<invalid:missing-command>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"command\"",
+            ));
+        };
+        let Some(command_values) = command_value.as_array() else {
+            self.append_audit("execute_with_secret", "<invalid:command-not-array>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"command\" must be an array",
+            ));
+        };
+        if command_values.is_empty() {
+            self.append_audit("execute_with_secret", "<invalid:empty-command>", false);
+            return Ok(ToolCallResult::error("command array must not be empty"));
+        }
+        let mut command = Vec::with_capacity(command_values.len());
+        for (index, value) in command_values.iter().enumerate() {
+            let Some(value) = value.as_str() else {
+                self.append_audit("execute_with_secret", "<invalid:command-type>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "command[{index}] must be a string"
+                )));
+            };
+            command.push(value.to_owned());
+        }
+        if !self.allowed_executables.is_empty() {
+            let executable = Path::new(&command[0])
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            if !self
+                .allowed_executables
+                .iter()
+                .any(|allowed| allowed == &executable)
+            {
+                self.append_audit("execute_with_secret", &command[0], false);
+                return Err(format!(
+                    "command execution denied: executable {executable:?} not in agent allowlist"
+                ));
+            }
+        }
+        let timeout_seconds = match parse_command_timeout(arguments.get("timeout")) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                self.append_audit("execute_with_secret", "<invalid:timeout>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let Some(refs_value) = arguments.get("secret_refs") else {
+            self.append_audit(
+                "execute_with_secret",
+                "<invalid:missing-secret_refs>",
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "missing required argument \"secret_refs\"",
+            ));
+        };
+        let mut environment = BTreeMap::new();
+        let mut secret_values = BTreeMap::new();
+        let mut secret_refs = Vec::new();
+        let mut ref_names = HashSet::new();
+        if !refs_value.is_null() {
+            let Some(refs) = refs_value.as_array() else {
+                self.append_audit(
+                    "execute_with_secret",
+                    "<invalid:secret_refs-not-array>",
+                    false,
+                );
+                return Ok(ToolCallResult::error(
+                    "argument \"secret_refs\" must be an array",
+                ));
+            };
+            for (index, value) in refs.iter().enumerate() {
+                let Some(reference) = value.as_str() else {
+                    self.append_audit("execute_with_secret", "<invalid:secret_ref-type>", false);
+                    return Ok(ToolCallResult::error(format!(
+                        "secret_refs[{index}] must be a string"
+                    )));
+                };
+                let (entry_path, field) = match parse_op_ref(reference) {
+                    Ok(parsed) => parsed,
+                    Err(error) => {
+                        self.append_audit("execute_with_secret", reference, false);
+                        return Ok(ToolCallResult::error(format!(
+                            "invalid secret ref {reference:?}: {error}"
+                        )));
+                    }
+                };
+                let generated_name = generate_env_var_name(&entry_path, &field);
+                self.authorize_run_secret_path(&entry_path, "execute_with_secret")
+                    .map_err(run_files_error)?;
+                let resolver_ref = if field.is_empty() {
+                    entry_path.clone()
+                } else {
+                    format!("{entry_path}.{field}")
+                };
+                let resolved_path = self
+                    .inner
+                    .resolve_secret_ref_path(&resolver_ref)
+                    .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
+                self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
+                    .map_err(run_files_error)?;
+                let value = self
+                    .inner
+                    .resolve_secret_ref_at_path(&resolver_ref, &resolved_path)
+                    .map_err(|error| {
+                        self.append_audit("execute_with_secret", reference, false);
+                        format!("cannot resolve secret ref {reference:?}: {error}")
+                    });
+                let value = match value {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let detail = error
+                            .strip_prefix("cannot resolve secret ref ")
+                            .and_then(|rest| rest.split_once(": ").map(|(_, detail)| detail))
+                            .unwrap_or(&error);
+                        let detail = detail.strip_prefix("entry not found: ").map_or_else(
+                            || detail.to_owned(),
+                            |path| format!("secret ref not found: {path}"),
+                        );
+                        return Ok(ToolCallResult::error(format!(
+                            "cannot resolve secret ref {reference:?}: {detail}"
+                        )));
+                    }
+                };
+                if !ref_names.insert(generated_name.clone()) {
+                    self.append_audit("execute_with_secret", reference, false);
+                    return Ok(ToolCallResult::error(format!(
+                        "duplicate environment variable name {generated_name:?} from secret ref {reference:?}"
+                    )));
+                }
+                environment.insert(generated_name.clone(), value.clone());
+                secret_values.insert(generated_name, value);
+                secret_refs.push(reference.to_owned());
+            }
+        }
+        secret_refs.sort();
+        if let Some(value) = arguments.get("env_vars").filter(|value| !value.is_null()) {
+            let Some(env_vars) = value.as_object() else {
+                self.append_audit(
+                    "execute_with_secret",
+                    "<invalid:env_vars-not-object>",
+                    false,
+                );
+                return Ok(ToolCallResult::error(
+                    "argument \"env_vars\" must be an object",
+                ));
+            };
+            for (name, value) in env_vars {
+                let Some(value) = value.as_str() else {
+                    self.append_audit(
+                        "execute_with_secret",
+                        "<invalid:env_vars-value-type>",
+                        false,
+                    );
+                    return Ok(ToolCallResult::error(format!(
+                        "env_vars.{name} value must be a string"
+                    )));
+                };
+                environment.insert(name.clone(), value.to_owned());
+            }
+        }
+        let denied = denied_env_names(environment.keys());
+        if !denied.is_empty() {
+            self.append_audit("execute_with_secret", "<validation-denied-env>", false);
+            return Ok(ToolCallResult::error(format!(
+                "env_vars contains denied keys: {}",
+                denied.join(", ")
+            )));
+        }
+        let approval_mode = if self.approval_mode.is_empty() && self.require_approval {
+            "prompt"
+        } else if self.approval_mode.is_empty() {
+            "none"
+        } else {
+            self.approval_mode.as_str()
+        };
+        match approval_mode {
+            "none" | "auto" => {}
+            "deny" => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err("execute_with_secret denied: approval mode is 'deny'".into());
+            }
+            _ => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err(
+                    "execute_with_secret requires approval but no TTY or GUI dialog available"
+                        .into(),
+                );
+            }
+        }
+        let working_directory = arguments
+            .get("working_dir")
+            .and_then(Value::as_str)
+            .filter(|directory| !directory.is_empty())
+            .map(Path::new);
+        let files = BTreeMap::new();
+        let redactions = secret_values
+            .values()
+            .filter(|value| !value.is_empty())
+            .map(|value| value.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let known_values = secret_values.values().cloned().collect::<Vec<_>>();
+        let execution = match executor.run(
+            &command,
+            &environment,
+            &files,
+            &redactions,
+            working_directory,
+            Duration::from_secs(timeout_seconds),
+        ) {
+            Ok(execution) => execution,
+            Err(error) => {
+                self.append_audit("execute_with_secret", "<execution-failed>", false);
+                let (error, _) =
+                    symvault_core::redact::redact_known_values(&error, &known_values, "***");
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let audit_path = execute_with_secret_audit_path(
+            &command,
+            &secret_refs,
+            &known_values,
+            execution.exit_code,
+        );
+        self.append_audit(
+            "execute_with_secret",
+            &audit_path,
+            execution.exit_code == 0 && !execution.timed_out,
+        );
+        let (stdout, _) =
+            symvault_core::redact::redact_known_values(&execution.stdout, &known_values, "***");
+        let (stderr, _) =
+            symvault_core::redact::redact_known_values(&execution.stderr, &known_values, "***");
+        let stdout = crate::render::sanitize_for_mcp(&stdout);
+        let stderr = crate::render::sanitize_for_mcp(&stderr);
+        let stdout = crate::render::embed_as_data("command_output", &stdout)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        let stderr = crate::render::embed_as_data("command_output", &stderr)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        if execution.timed_out {
+            return Ok(ToolCallResult::error(format!(
+                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                execution.exit_code
+            )));
+        }
+        Ok(ToolCallResult::text(
+            symvault_gojson::to_string(&json!({
+                "exit_code": execution.exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "duration_ms": execution.duration.as_millis().min(i64::MAX as u128) as i64,
+            }))
+            .map_err(|error| error.to_string())?,
+        ))
+    }
+
     fn resolve_run_command_files(
         &self,
         raw: Option<&Value>,
@@ -756,14 +1020,14 @@ impl StoreReadOnlyRuntime {
             let (reference, encoding) = parse_run_file_spec(spec)
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
-            self.authorize_run_secret_path(&candidate_path)?;
+            self.authorize_run_secret_path(&candidate_path, "run_command")?;
             let path = self
                 .inner
                 .resolve_secret_ref_path(&reference)
                 .map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
                 })?;
-            self.authorize_run_secret_path(&path)?;
+            self.authorize_run_secret_path(&path, "run_command")?;
             let source = self
                 .inner
                 .resolve_secret_ref_at_path(&reference, &path)
@@ -793,7 +1057,7 @@ impl StoreReadOnlyRuntime {
         Ok(files)
     }
 
-    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
+    fn authorize_run_secret_path(&self, path: &str, tool_name: &str) -> Result<(), RunFilesError> {
         if !self.inner.scope_allows(path) {
             self.append_audit("scope_denied", path, false);
             return Err(RunFilesError::Denied(format!(
@@ -805,7 +1069,7 @@ impl StoreReadOnlyRuntime {
                 agent_id: self.agent_name.clone(),
                 path: path.to_owned(),
                 action_type: "run".into(),
-                tool_name: "run_command".into(),
+                tool_name: tool_name.into(),
                 ..EvalContext::default()
             });
             if !result.matched || result.action != Action::Allow {
@@ -1585,6 +1849,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.revoke_share(arguments)
         } else if name == "secret_unseal" {
             self.secret_unseal(arguments)
+        } else if name == "execute_with_secret" {
+            self.execute_with_secret(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -1904,6 +2170,92 @@ fn denied_env_names<'a>(names: impl Iterator<Item = &'a String>) -> Vec<String> 
     denied
 }
 
+fn parse_op_ref(reference: &str) -> Result<(String, String), &'static str> {
+    let Some(reference) = reference.strip_prefix("op://") else {
+        return Err("expected op:// prefix");
+    };
+    let parts = reference.split('/').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return Err("expected at least vault/entry");
+    }
+    if parts.len() == 2 {
+        return Ok((parts[1].to_owned(), String::new()));
+    }
+    Ok((
+        parts[1..parts.len() - 1].join("/"),
+        parts[parts.len() - 1].to_owned(),
+    ))
+}
+
+fn generate_env_var_name(entry_path: &str, field: &str) -> String {
+    let mut parts = entry_path.split('/').map(str::to_owned).collect::<Vec<_>>();
+    if !field.is_empty() {
+        parts.push(field.to_owned());
+    }
+    parts
+        .iter()
+        .map(|part| {
+            part.chars()
+                .map(|character| {
+                    // Go's strings.ToUpper uses Unicode's simple one-rune
+                    // mapping. Rust's full mapping expands some Greek letters
+                    // and sharp-s; Go keeps the simple mapping for the former
+                    // and leaves sharp-s unchanged.
+                    let uppercase = match character {
+                        '\u{1f80}'..='\u{1f87}' => {
+                            char::from_u32(character as u32 + 8).unwrap_or(character)
+                        }
+                        'ß' => character,
+                        _ => {
+                            let mut mapping = character.to_uppercase();
+                            let first = mapping.next().unwrap_or(character);
+                            if mapping.next().is_some() {
+                                character
+                            } else {
+                                first
+                            }
+                        }
+                    };
+                    if uppercase.is_letter()
+                        || uppercase.is_number_decimal_digit()
+                        || uppercase == '_'
+                    {
+                        uppercase
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn execute_with_secret_audit_path(
+    command: &[String],
+    secret_refs: &[String],
+    known_values: &[String],
+    exit_code: i32,
+) -> String {
+    let redacted_command = command
+        .iter()
+        .map(|argument| {
+            symvault_core::redact::redact_known_values(argument, known_values, "[REDACTED]").0
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "command=[{redacted_command}], refs=[{}], exit={exit_code}",
+        secret_refs.join(" ")
+    )
+}
+
+fn run_files_error(error: RunFilesError) -> String {
+    match error {
+        RunFilesError::Tool(message) | RunFilesError::Denied(message) => message,
+    }
+}
+
 pub fn unavailable_tool(
     name: impl Into<String>,
     code: impl Into<String>,
@@ -1919,11 +2271,12 @@ pub fn unavailable_tool(
 #[cfg(test)]
 mod tests {
     use super::{
-        MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
+        MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime,
+        denied_env_names, execute_with_secret_audit_path, generate_env_var_name,
         parse_command_timeout, parse_run_file_spec, render_list_shares,
     };
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
-    use serde_json::json;
+    use serde_json::{Value, json};
     use std::time::{Duration, Instant};
     use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
     use symvault_store::{Entry, Store, sharing::ShareStore};
@@ -2020,6 +2373,40 @@ mod tests {
         expected_redactions: Vec<Vec<u8>>,
     }
 
+    struct SecretCommandExecutor;
+
+    impl CommandExecutor for SecretCommandExecutor {
+        fn run(
+            &self,
+            command: &[String],
+            environment: &BTreeMap<String, String>,
+            files: &BTreeMap<String, Vec<u8>>,
+            additional_redactions: &[Vec<u8>],
+            working_directory: Option<&Path>,
+            timeout: Duration,
+        ) -> Result<CommandExecution, String> {
+            assert_eq!(command, ["sh", "-c", "echo ok"]);
+            assert_eq!(
+                environment,
+                &BTreeMap::from([
+                    ("GITHUB_PASSWORD".into(), "synthetic-secret".into()),
+                    ("PLAIN".into(), "literal-value".into()),
+                ])
+            );
+            assert!(files.is_empty());
+            assert_eq!(additional_redactions, [b"synthetic-secret".to_vec()]);
+            assert_eq!(working_directory, None);
+            assert_eq!(timeout, Duration::from_secs(30));
+            Ok(CommandExecution {
+                stdout: "synthetic-secret\n".into(),
+                stderr: "synthetic-secret\n".into(),
+                exit_code: 0,
+                timed_out: false,
+                duration: Duration::from_millis(7),
+            })
+        }
+    }
+
     impl CommandExecutor for FileCommandExecutor {
         fn run(
             &self,
@@ -2044,6 +2431,190 @@ mod tests {
                 duration: Duration::from_millis(1),
             })
         }
+    }
+
+    #[test]
+    fn execute_with_secret_resolves_op_refs_overlays_env_and_masks_outputs() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(directory.path(), &identity)
+            .expect("open temporary vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source-shaped secret entry");
+        let config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["execute_with_secret".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["sh".into()],
+            allowed_paths: vec!["github".into()],
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime = StoreReadOnlyRuntime::open(directory.path(), identity, config, None, None)
+            .expect("runtime")
+            .with_command_executor(Arc::new(SecretCommandExecutor));
+        let arguments = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "secret_refs": ["op://vault/github/password"],
+            "env_vars": {"PLAIN": "literal-value"},
+            "timeout": 30
+        });
+
+        runtime
+            .authorize("execute_with_secret", &arguments)
+            .expect("authorized");
+        let result = runtime
+            .call("execute_with_secret", &arguments)
+            .expect("dispatch");
+        assert!(!result.is_error, "{}", result.text);
+        let output: serde_json::Value = serde_json::from_str(&result.text).expect("JSON result");
+        assert_eq!(output["exit_code"], 0);
+        assert_eq!(output["duration_ms"], 7);
+        assert!(output["stdout"].as_str().unwrap().contains("***"));
+        assert!(output["stderr"].as_str().unwrap().contains("***"));
+        assert!(!result.text.contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn execute_with_secret_fails_closed_for_duplicate_names_and_prompt_approval() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(directory.path(), &identity)
+            .expect("open temporary vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source-shaped secret entry");
+        let base_config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["execute_with_secret".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["sh".into()],
+            allowed_paths: vec!["github".into()],
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime =
+            StoreReadOnlyRuntime::open(directory.path(), identity, base_config.clone(), None, None)
+                .expect("runtime")
+                .with_command_executor(Arc::new(SecretCommandExecutor));
+        let duplicate = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "secret_refs": ["op://vault/github/password", "op://vault/github/password"]
+        });
+        assert!(
+            runtime
+                .call("execute_with_secret", &duplicate)
+                .unwrap()
+                .text
+                .contains("duplicate environment variable name")
+        );
+
+        let prompt_directory = tempdir().expect("temporary prompt vault");
+        fs::create_dir(prompt_directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            prompt_directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(
+            prompt_directory.path().join("identity.age"),
+            b"fixture marker",
+        )
+        .expect("identity marker");
+        let prompt_identity = symvault_crypto::generate_identity();
+        Store::open(prompt_directory.path(), &prompt_identity)
+            .expect("open prompt vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &prompt_identity,
+            )
+            .expect("write source-shaped secret entry");
+        let prompt_config = ReadOnlyRuntimeConfig {
+            approval_mode: "prompt".into(),
+            ..base_config
+        };
+        let prompt_runtime = StoreReadOnlyRuntime::open(
+            prompt_directory.path(),
+            prompt_identity,
+            prompt_config,
+            None,
+            None,
+        )
+        .expect("prompt runtime")
+        .with_command_executor(Arc::new(SecretCommandExecutor));
+        let prompt = prompt_runtime
+            .call(
+                "execute_with_secret",
+                &json!({"command":["sh","-c","echo ok"],"secret_refs":[]}),
+            )
+            .unwrap_err();
+        assert!(prompt.contains("requires approval"));
+    }
+
+    #[test]
+    fn execute_with_secret_environment_names_match_go_unicode_oracle() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/execute-with-secret.json"
+        ))
+        .expect("Go oracle fixture");
+        let names = &fixture["name_cases"];
+        for (input, key) in [
+            (("ß", "password"), "sharp_s"),
+            (("service²", "password"), "superscript_two"),
+            (("serviceⅫ", "password"), "letter_number"),
+            (("i\u{0307}", "password"), "combining_uppercase"),
+            (("\u{1f80}", "password"), "greek_simple_upper"),
+            (("\u{1f88}", "password"), "greek_upper"),
+            (("9service", ""), "leading_digit"),
+            (("", ""), "empty"),
+        ] {
+            assert_eq!(generate_env_var_name(input.0, input.1), names[key], "{key}");
+        }
+        let expected_audit = fixture["audit_path"].as_str().expect("Go audit path");
+        let actual_audit = execute_with_secret_audit_path(
+            &[
+                "go".into(),
+                "run".into(),
+                "<fixture-child-go-source>".into(),
+            ],
+            &["op://vault/github/password".into()],
+            &["testpass123".into()],
+            0,
+        );
+        assert_eq!(actual_audit, expected_audit);
+        assert!(!actual_audit.contains("testpass123"));
     }
 
     #[test]
