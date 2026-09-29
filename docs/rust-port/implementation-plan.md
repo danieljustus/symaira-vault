@@ -1,5 +1,38 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated real Unix approval acceptance — 2026-09-29
+
+Candidate `58e06e4bad4853d5ababaf2f42e31791547b5286` includes the preceding
+write/execute approval slices and the actual CLI runtime assembly correction:
+`execute_with_secret` is available only with command capability, then filtered
+by the profile allowlist. Tests also prove explicit exclusion and absent capability.
+
+`make mcp-approval-pty-acceptance` drives the assembled `mcp_commands::run`
+stdio service through a real controlling terminal while MCP uses separate pipes.
+It approves a critical write and a command with empty secret references, then
+rejects another write with the exact user-denial response and unchanged state.
+A Python standard-library runner checks two critical prompts, one command prompt,
+three answers, bounded process-group cleanup and a successful protocol receipt.
+A no-terminal invocation fails closed. The identity, vault and MemoryKeyring are
+synthetic; this does not exercise `main` bootstrap, human credentials or GUI.
+
+Independent clean-candidate Go1.26.6 MCP differential and Rust gates pass on
+Darwin/arm64 and Linux/arm64: 167 MCP tests, 32 CLI contract tests, and the dedicated
+PTY parent test invoking its child helper. The ordinary suite explicitly ignores
+the two opt-in PTY entrypoints; they are executed by the dedicated gate. No failures.
+Receipts `pty-receipt-58e06e4b.json` are retained in the existing Vault and native-linux
+build roots. Native CI now checks Go MCP fixture freshness; Unix CI invokes the PTY
+gate. That wiring has not been run remotely on this candidate.
+
+The integrated check exposed checkout-dependent Go prompt fixtures. Only the
+Directory/Git/Project context rows are now omitted by a declared normalization;
+all approval observations, details, risk, counters, answers, audit and state fields
+remain unchanged. Production Go source binding is unchanged; generator digest is
+`cdc1abdb75d04992e5fe49869cd2daf25741ecc0a046ab84b799094fafc55c8e`.
+MCP-003 remains in progress for other tools, GUI, Windows TTY and remaining native
+targets. No publication, installed cutover or Go removal occurred.
+
+
 ## Integrated set/delete approval evidence — 2026-09-29
 
 Candidate `c4a71828f7d109445062cfb952218385120c98d7` adds shared platform-seam
