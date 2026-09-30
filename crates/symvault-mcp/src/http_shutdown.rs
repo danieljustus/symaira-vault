@@ -5,7 +5,7 @@ use std::{
     io,
     net::{Shutdown, TcpStream},
     sync::{Arc, Condvar, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Default)]
@@ -32,6 +32,37 @@ fn close_transport(socket: &TcpStream) -> io::Result<()> {
 }
 
 impl HttpShutdown {
+    // Windows shutdown does not wake a blocking recv/send (Rust 1.98's
+    // std/net/tcp/tests.rs, close_read_wakes_up). Cancellable sockets use
+    // nonblocking I/O, retaining the caller's full per-operation timeout.
+    pub(super) fn socket_io<T>(
+        &self,
+        timeout: Option<Duration>,
+        mut operation: impl FnMut() -> io::Result<T>,
+    ) -> io::Result<T> {
+        let started = Instant::now();
+        loop {
+            if self.is_cancelled()? {
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    "HTTP transport cancelled",
+                ));
+            }
+            match operation() {
+                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                    if timeout.is_some_and(|timeout| started.elapsed() >= timeout) {
+                        return Err(io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "HTTP socket timeout",
+                        ));
+                    }
+                    self.wait_for_activity()?;
+                }
+                result => return result,
+            }
+        }
+    }
+
     /// Prevents new admissions and interrupts every registered transport.
     pub fn cancel(&self) -> io::Result<()> {
         let (lock, changed) = &*self.state;
@@ -59,12 +90,12 @@ impl HttpShutdown {
             .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))
     }
 
-    pub(super) fn wait_for_accept(&self) -> io::Result<()> {
+    pub(super) fn wait_for_activity(&self) -> io::Result<()> {
         let (lock, changed) = &*self.state;
         let state = lock
             .lock()
             .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))?;
-        // ponytail: bounded nonblocking accept polling avoids another reactor;
+        // ponytail: bounded nonblocking socket polling avoids another reactor;
         // replace with the platform event loop if measured idle cost warrants it.
         let _state = changed
             .wait_timeout_while(state, Duration::from_millis(10), |state| !state.cancelled)
@@ -373,6 +404,49 @@ mod tests {
             drop(guard);
             assert!(shutdown.state.0.lock().expect("state").sockets.is_empty());
         }
+    }
+
+    #[test]
+    fn cancellable_io_preserves_timeout_and_wakes_without_socket_shutdown() {
+        let shutdown = HttpShutdown::default();
+        let started = Instant::now();
+        let result: io::Result<()> = shutdown.socket_io(Some(Duration::from_millis(20)), || {
+            Err(io::ErrorKind::WouldBlock.into())
+        });
+        assert_eq!(
+            result.expect_err("retained operation deadline").kind(),
+            io::ErrorKind::TimedOut
+        );
+        assert!(started.elapsed() >= Duration::from_millis(20));
+
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker_shutdown = shutdown.clone();
+        let worker = thread::spawn(move || {
+            let mut ready = Some(ready_tx);
+            let result: io::Result<()> = worker_shutdown.socket_io(None, || {
+                if let Some(ready) = ready.take() {
+                    ready.send(()).expect("notify pending I/O");
+                }
+                Err(io::ErrorKind::WouldBlock.into())
+            });
+            done_tx.send(result).expect("notify completed I/O");
+        });
+        ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("I/O started");
+        // No registered socket: cancellation must wake the retry wait itself,
+        // independent of whether the native shutdown syscall wakes recv/send.
+        shutdown.cancel().expect("cancel pending I/O");
+        let result = done_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("bounded cancellation");
+        worker.join().expect("join completed I/O");
+        assert_eq!(
+            result.expect_err("cancelled I/O").kind(),
+            io::ErrorKind::ConnectionAborted
+        );
+        let _: io::Result<()> = shutdown.socket_io(None, || panic!("cancelled I/O must not retry"));
     }
 
     #[test]

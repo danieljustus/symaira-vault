@@ -47,7 +47,7 @@ pub struct HttpResponse {
 }
 
 enum HttpStream {
-    Tcp(TcpStream),
+    Tcp(TcpStream, Option<HttpShutdown>),
     Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
 }
 
@@ -57,7 +57,7 @@ impl HttpStream {
             Some(config) => ServerConnection::new(config)
                 .map(|connection| Self::Tls(Box::new(StreamOwned::new(connection, stream))))
                 .map_err(std::io::Error::other),
-            None => Ok(Self::Tcp(stream)),
+            None => Ok(Self::Tcp(stream, None)),
         }?;
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
@@ -67,28 +67,28 @@ impl HttpStream {
 
     fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.peer_addr(),
+            Self::Tcp(stream, _) => stream.peer_addr(),
             Self::Tls(stream) => stream.sock.peer_addr(),
         }
     }
 
     fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.local_addr(),
+            Self::Tcp(stream, _) => stream.local_addr(),
             Self::Tls(stream) => stream.sock.local_addr(),
         }
     }
 
     fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.set_read_timeout(timeout),
+            Self::Tcp(stream, _) => stream.set_read_timeout(timeout),
             Self::Tls(stream) => stream.sock.set_read_timeout(timeout),
         }
     }
 
     fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.set_write_timeout(timeout),
+            Self::Tcp(stream, _) => stream.set_write_timeout(timeout),
             Self::Tls(stream) => stream.sock.set_write_timeout(timeout),
         }
     }
@@ -100,14 +100,17 @@ impl HttpStream {
 
 impl From<TcpStream> for HttpStream {
     fn from(stream: TcpStream) -> Self {
-        Self::Tcp(stream)
+        Self::Tcp(stream, None)
     }
 }
 
 impl Read for HttpStream {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.read(buffer),
+            Self::Tcp(stream, Some(shutdown)) => {
+                shutdown.socket_io(stream.read_timeout()?, || stream.read(buffer))
+            }
+            Self::Tcp(stream, None) => stream.read(buffer),
             Self::Tls(stream) => stream.read(buffer),
         }
     }
@@ -116,14 +119,17 @@ impl Read for HttpStream {
 impl Write for HttpStream {
     fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.write(buffer),
+            Self::Tcp(stream, Some(shutdown)) => {
+                shutdown.socket_io(stream.write_timeout()?, || stream.write(buffer))
+            }
+            Self::Tcp(stream, None) => stream.write(buffer),
             Self::Tls(stream) => stream.write(buffer),
         }
     }
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
         match self {
-            Self::Tcp(stream) => stream.flush(),
+            Self::Tcp(stream, _) => stream.flush(),
             Self::Tls(stream) => stream.flush(),
         }
     }
@@ -502,20 +508,26 @@ where
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                     if let Some(shutdown) = &shutdown {
-                        shutdown.wait_for_accept()?;
+                        shutdown.wait_for_activity()?;
                         continue;
                     }
                     return Err(error);
                 }
                 Err(error) => return Err(error),
             };
-            // Accepted sockets must remain blocking on every supported OS.
+            // Non-cancellable transports retain their existing blocking mode.
             socket.set_nonblocking(false)?;
             // Finish socket timeout/TLS setup before exposing it to cancel().
             // On macOS, configuring a socket concurrently shut down through a
             // clone can fail with EINVAL even though cancellation succeeded.
             let cancellation_socket = shutdown.as_ref().map(|_| socket.try_clone()).transpose()?;
             let mut stream = HttpStream::new(socket, tls.clone())?;
+            if let (HttpStream::Tcp(socket, cancellation), Some(shutdown)) =
+                (&mut stream, &shutdown)
+            {
+                socket.set_nonblocking(true)?;
+                *cancellation = Some(shutdown.clone());
+            }
             let connection = match (&shutdown, &cancellation_socket) {
                 (Some(shutdown), Some(socket)) => match shutdown.register(socket)? {
                     Some(connection) => Some(connection),
