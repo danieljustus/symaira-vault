@@ -1055,7 +1055,10 @@ fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Er
         match options.open(&path) {
             Ok(file) => return Ok((path, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
+            Err(error) => {
+                report_process_io_error("allocate output", &error);
+                return Err(error);
+            }
         }
     }
     Err(io::Error::new(
@@ -1064,11 +1067,25 @@ fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Er
     ))
 }
 
+// Only fixed operation labels and error codes, never arguments, paths or output.
+// Diagnostics must leave the original error and cleanup behavior unchanged.
+fn report_process_io_error(operation: &str, error: &io::Error) {
+    eprintln!(
+        "Git process {operation} failed: kind={:?}, os={:?}",
+        error.kind(),
+        error.raw_os_error()
+    );
+}
+
 fn read_and_remove(path: &Path) -> Result<Vec<u8>, io::Error> {
-    let mut file = std::fs::File::open(path)?;
+    let mut file = std::fs::File::open(path)
+        .inspect_err(|error| report_process_io_error("open output", error))?;
     let mut bytes = Vec::new();
-    let result = file.read_to_end(&mut bytes);
-    let remove_result = fs::remove_file(path);
+    let result = file
+        .read_to_end(&mut bytes)
+        .inspect_err(|error| report_process_io_error("read output", error));
+    let remove_result =
+        fs::remove_file(path).inspect_err(|error| report_process_io_error("remove output", error));
     result?;
     remove_result?;
     Ok(bytes)
@@ -1086,7 +1103,7 @@ fn terminate_process_group(child: &mut std::process::Child) {
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod windows_process {
-    use super::{GitError, read_and_remove};
+    use super::{GitError, read_and_remove, report_process_io_error};
     use std::{
         fs, io,
         os::windows::{io::AsRawHandle, process::CommandExt},
@@ -1117,7 +1134,9 @@ mod windows_process {
         fn new() -> io::Result<Self> {
             let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
             if handle.is_null() {
-                return Err(io::Error::last_os_error());
+                let error = io::Error::last_os_error();
+                report_process_io_error("CreateJobObjectW", &error);
+                return Err(error);
             }
 
             let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
@@ -1138,6 +1157,7 @@ mod windows_process {
             };
             if configured == 0 {
                 let error = io::Error::last_os_error();
+                report_process_io_error("SetInformationJobObject", &error);
                 unsafe { CloseHandle(handle) };
                 return Err(error);
             }
@@ -1175,7 +1195,9 @@ mod windows_process {
         timeout: Duration,
     ) -> Result<Output, GitError> {
         command.creation_flags(CREATE_SUSPENDED);
-        let job = match Job::new() {
+        let job = match Job::new()
+            .inspect_err(|error| report_process_io_error("create/configure job", error))
+        {
             Ok(job) => job,
             Err(error) => {
                 let _ = fs::remove_file(stdout_path);
@@ -1186,6 +1208,7 @@ mod windows_process {
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
+                report_process_io_error("spawn suspended child", &error);
                 let _ = fs::remove_file(stdout_path);
                 let _ = fs::remove_file(stderr_path);
                 return Err(GitError::Io(error));
@@ -1193,12 +1216,14 @@ mod windows_process {
         };
 
         if let Err(error) = job.assign(child.as_raw_handle()) {
+            report_process_io_error("assign job", &error);
             abort_child(&job, &mut child);
             let _ = fs::remove_file(stdout_path);
             let _ = fs::remove_file(stderr_path);
             return Err(GitError::Io(error));
         }
         if let Err(error) = resume_primary_thread(child.id()) {
+            report_process_io_error("resume primary thread", &error);
             abort_child(&job, &mut child);
             let _ = fs::remove_file(stdout_path);
             let _ = fs::remove_file(stderr_path);
@@ -1213,6 +1238,7 @@ mod windows_process {
                 Ok(None) => thread::sleep(Duration::from_millis(10)),
                 Err(error) => {
                     abort_child(&job, &mut child);
+                    report_process_io_error("poll child", &error);
                     let _ = fs::remove_file(stdout_path);
                     let _ = fs::remove_file(stderr_path);
                     return Err(GitError::Io(error));
@@ -1230,7 +1256,9 @@ mod windows_process {
             });
         }
 
-        let status = child.wait()?;
+        let status = child
+            .wait()
+            .inspect_err(|error| report_process_io_error("wait child", error))?;
         drop(job);
         let stdout = read_and_remove(&stdout_path)?;
         let stderr = read_and_remove(&stderr_path)?;
@@ -1252,7 +1280,9 @@ mod windows_process {
     fn resume_primary_thread(pid: u32) -> io::Result<()> {
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            report_process_io_error("CreateToolhelp32Snapshot", &error);
+            return Err(error);
         }
 
         let mut entry = THREADENTRY32 {
@@ -1262,6 +1292,7 @@ mod windows_process {
         let first = unsafe { Thread32First(snapshot, &mut entry) };
         if first == 0 {
             let error = io::Error::last_os_error();
+            report_process_io_error("Thread32First", &error);
             unsafe { CloseHandle(snapshot) };
             return Err(error);
         }
@@ -1271,12 +1302,15 @@ mod windows_process {
                 let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
                 if thread.is_null() {
                     let error = io::Error::last_os_error();
+                    report_process_io_error("OpenThread", &error);
                     unsafe { CloseHandle(snapshot) };
                     return Err(error);
                 }
                 let previous = unsafe { ResumeThread(thread) };
                 let resume_error = if previous == u32::MAX {
-                    Some(io::Error::last_os_error())
+                    let error = io::Error::last_os_error();
+                    report_process_io_error("ResumeThread", &error);
+                    Some(error)
                 } else if previous != 1 {
                     Some(io::Error::other(format!(
                         "primary process thread had suspend count {previous}, want 1"
@@ -1293,6 +1327,7 @@ mod windows_process {
 
             if unsafe { Thread32Next(snapshot, &mut entry) } == 0 {
                 let error = io::Error::last_os_error();
+                report_process_io_error("Thread32Next", &error);
                 unsafe { CloseHandle(snapshot) };
                 return Err(error);
             }
@@ -1328,6 +1363,19 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn output_diagnostics_preserve_missing_file_error() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("missing.out");
+        let expected = fs::File::open(&path).unwrap_err();
+        let actual = read_and_remove(&path).unwrap_err();
+        assert_eq!(actual.kind(), io::ErrorKind::NotFound);
+        assert_eq!(actual.kind(), expected.kind());
+        assert_eq!(actual.raw_os_error(), expected.raw_os_error());
+        assert_eq!(actual.to_string(), expected.to_string());
+        assert!(!path.exists());
+    }
 
     fn command_error(stderr: &str) -> GitError {
         GitError::Command {

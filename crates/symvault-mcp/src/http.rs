@@ -513,7 +513,14 @@ where
                     }
                     return Err(error);
                 }
-                Err(error) => return Err(error),
+                Err(error) => {
+                    eprintln!(
+                        "HTTP listener accept failed: kind={:?}, os={:?}",
+                        error.kind(),
+                        error.raw_os_error()
+                    );
+                    return Err(error);
+                }
             };
             // Non-cancellable transports retain their existing blocking mode.
             socket.set_nonblocking(false)?;
@@ -547,6 +554,11 @@ where
                     {
                         break;
                     }
+                    eprintln!(
+                        "HTTP busy response write failed: kind={:?}, os={:?}",
+                        error.kind(),
+                        error.raw_os_error()
+                    );
                     return Err(error);
                 }
                 continue;
