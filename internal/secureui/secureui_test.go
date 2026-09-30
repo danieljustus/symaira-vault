@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -132,73 +133,88 @@ func (f *fakeTTY) Close() error {
 	return nil
 }
 
-func TestPrompt_TTYBackend_SIGINTCancel(t *testing.T) {
-	t.Setenv("SYMVAULT_SECUREUI", "tty")
+func TestPrompt_TTYBackend_SignalCancel(t *testing.T) {
+	for _, signal := range []os.Signal{os.Interrupt, syscall.SIGTERM} {
+		t.Run(signal.String(), func(t *testing.T) {
+			t.Setenv("SYMVAULT_SECUREUI", "tty")
 
-	oldOpen := openTTYDevice
-	defer func() { openTTYDevice = oldOpen }()
+			oldOpen := openTTYDevice
+			defer func() { openTTYDevice = oldOpen }()
 
-	// newTTYBackend probes the device on construction, then ttyBackend.prompt
-	// opens it again for the actual read. Only the second open should be the
-	// blocking device that the test will cancel.
-	var dev *fakeTTY
-	openCalls := 0
-	openTTYDevice = func() (ttyDevice, error) {
-		openCalls++
-		if openCalls == 1 {
-			return &fakeTTY{value: ""}, nil
-		}
-		dev = &fakeTTY{
-			value:   "should-not-be-read",
-			block:   make(chan struct{}),
-			closeCh: make(chan struct{}),
-		}
-		return dev, nil
-	}
+			// newTTYBackend probes the device on construction, then ttyBackend.prompt
+			// opens it again for the actual read. Only the second open should block.
+			var dev *fakeTTY
+			openCalls := 0
+			openTTYDevice = func() (ttyDevice, error) {
+				openCalls++
+				if openCalls == 1 {
+					return &fakeTTY{value: ""}, nil
+				}
+				dev = &fakeTTY{
+					value:   "should-not-be-read",
+					block:   make(chan struct{}),
+					closeCh: make(chan struct{}),
+				}
+				return dev, nil
+			}
 
-	// Capture the signal channel that readTTY registers so the test can
-	// inject a fake signal without delivering a real one to the process.
-	registered := make(chan chan<- os.Signal, 1)
-	oldNotify := signalNotify
-	oldStop := signalStop
-	defer func() {
-		signalNotify = oldNotify
-		signalStop = oldStop
-	}()
-	signalNotify = func(ch chan<- os.Signal, _ ...os.Signal) {
-		registered <- ch
-	}
-	signalStop = func(_ chan<- os.Signal) {}
+			registered := make(chan chan<- os.Signal, 1)
+			stopped := make(chan chan<- os.Signal, 1)
+			oldNotify := signalNotify
+			oldStop := signalStop
+			defer func() {
+				signalNotify = oldNotify
+				signalStop = oldStop
+			}()
+			signalNotify = func(ch chan<- os.Signal, got ...os.Signal) {
+				if len(got) != 2 || got[0] != os.Interrupt || got[1] != syscall.SIGTERM {
+					t.Errorf("signalNotify registered %v, want interrupt and SIGTERM", got)
+				}
+				registered <- ch
+			}
+			signalStop = func(ch chan<- os.Signal) { stopped <- ch }
 
-	done := make(chan struct {
-		val string
-		err error
-	}, 1)
-	go func() {
-		v, e := Prompt(PromptRequest{Path: "p", Field: "f"})
-		done <- struct {
-			val string
-			err error
-		}{v, e}
-	}()
+			type result struct {
+				val string
+				err error
+			}
+			done := make(chan result, 1)
+			go func() {
+				v, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+				done <- result{val: v, err: err}
+			}()
 
-	// Wait until readTTY has registered the signal handler.
-	var sigCh chan<- os.Signal
-	select {
-	case sigCh = <-registered:
-	case <-time.After(2 * time.Second):
-		t.Fatal("signal handler never registered")
-	}
+			var sigCh chan<- os.Signal
+			select {
+			case sigCh = <-registered:
+			case <-time.After(2 * time.Second):
+				t.Fatal("signal handler never registered")
+			}
+			sigCh <- signal
 
-	sigCh <- os.Interrupt
+			select {
+			case res := <-done:
+				if !errors.Is(res.err, ErrCanceled) || res.val != "" {
+					t.Fatalf("Prompt() = (%q, %v), want empty value and ErrCanceled", res.val, res.err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatalf("Prompt() did not return after %s", signal)
+			}
 
-	select {
-	case res := <-done:
-		if !errors.Is(res.err, ErrCanceled) {
-			t.Fatalf("Prompt() err = %v, want ErrCanceled", res.err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Prompt() did not return after SIGINT")
+			select {
+			case <-dev.closeCh:
+			default:
+				t.Fatal("signal cancellation did not close the TTY to unblock ReadString")
+			}
+			select {
+			case stoppedCh := <-stopped:
+				if stoppedCh != sigCh {
+					t.Fatal("signalStop received a different channel from signalNotify")
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("signalStop was not called after cancellation")
+			}
+		})
 	}
 }
 

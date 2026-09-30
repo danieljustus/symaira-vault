@@ -29,6 +29,11 @@ const (
 	maxAPIResponseBodyBytes  = 100 * 1024
 )
 
+// newExecuteAPIRequestHTTPClient is the production SSRF-hardened client factory.
+// Keeping the transport boundary injectable lets contract tests trust only a
+// checked-in test CA without changing system roots or the production client.
+var newExecuteAPIRequestHTTPClient = ssrf.NewHTTPClient
+
 // handleExecuteAPIRequest executes an HTTP API request using a named template.
 // Credentials are loaded from the vault and injected into the request without
 // exposing their values to the agent.
@@ -194,7 +199,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	// Execute request
-	client := ssrf.NewHTTPClient(time.Duration(timeoutSec)*time.Second, tmpl.AllowPrivate)
+	client := newExecuteAPIRequestHTTPClient(time.Duration(timeoutSec)*time.Second, tmpl.AllowPrivate)
 	resp, respErr := client.Do(httpReq)
 	if respErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=error",

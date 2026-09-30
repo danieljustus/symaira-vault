@@ -19,7 +19,14 @@
     )
 )]
 
+#[cfg(unix)]
+use std::sync::{
+    Arc, Mutex, MutexGuard, OnceLock, TryLockError,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 use std::time::{Duration, Instant};
+#[path = "go_unicode_print_15.rs"]
+mod go_unicode_print_15;
 
 /// Default approval timeout, mirroring Go's `defaultTimeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -87,6 +94,44 @@ pub struct ApprovalRequest {
     pub secrets_accessed: i64,
     pub can_remember: bool,
 }
+
+/// A request to collect a sensitive value from the controlling terminal.
+#[derive(Debug, Clone, Default)]
+pub struct SecureInputRequest {
+    pub title: String,
+    pub path: String,
+    pub field: String,
+    pub description: String,
+    pub timeout: Duration,
+}
+
+/// Failures from the hidden controlling-terminal input prompt.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SecureInputError {
+    NoTty,
+    RawMode(String),
+    Write(String),
+    Timeout,
+    Read(String),
+    Canceled,
+    Empty,
+}
+
+impl std::fmt::Display for SecureInputError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoTty => write!(f, "secure input requires an interactive terminal"),
+            Self::RawMode(message) => write!(f, "failed to set terminal raw mode: {message}"),
+            Self::Write(message) => write!(f, "failed to write to terminal: {message}"),
+            Self::Timeout => write!(f, "secure input timed out"),
+            Self::Read(message) => write!(f, "failed to read from terminal: {message}"),
+            Self::Canceled => write!(f, "secure input canceled by user"),
+            Self::Empty => write!(f, "secure input canceled: empty value provided"),
+        }
+    }
+}
+
+impl std::error::Error for SecureInputError {}
 
 /// Distinguishable approval failure modes, mirroring the Go wrapped errors.
 #[derive(Debug, Clone, PartialEq)]
@@ -167,27 +212,352 @@ pub fn request_approval(req: &ApprovalRequest) -> ApprovalResult {
     }
 }
 
+/// Reads a hidden value from `/dev/tty`, never from MCP stdin or stdout.
+/// Terminal mode is restored by the terminal guard on every return path.
+/// Raw Ctrl-C is handled as cancellation. The standalone CLI stdio process
+/// may install [`install_stdio_secure_input_signal_router`] so external
+/// SIGINT/SIGTERM also cancel an active prompt and retain default idle behavior.
+pub fn request_secure_input(req: &SecureInputRequest) -> Result<String, SecureInputError> {
+    #[cfg(unix)]
+    {
+        run_secure_input(req, open_real_terminal())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = req;
+        Err(SecureInputError::NoTty)
+    }
+}
+
 /// Seam abstracting a terminal so tests never touch a real TTY.
 trait Terminal {
     fn set_raw_mode(&mut self) -> Result<(), String>;
     fn restore(&mut self);
     fn write_all(&mut self, buf: &[u8]) -> Result<(), String>;
     fn read_response(&mut self, deadline: Instant) -> Result<String, ReadFailure>;
+
+    /// Reads secure input with Ctrl-C recognized during the bounded poll.
+    fn read_secure_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
+        self.read_response(deadline)
+    }
 }
 
 enum ReadFailure {
     TimedOut,
     Io(String),
+    Canceled,
+}
+
+#[cfg(unix)]
+struct SecureInputSignalState {
+    state: Mutex<StdioSignalState>,
+    next_clipboard_id: AtomicUsize,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+}
+
+#[cfg(unix)]
+#[derive(Default)]
+struct StdioSignalState {
+    prompt_active: bool,
+    secure_input_prompt: bool,
+    pending_signal: usize,
+    clipboard_auto_clear: Option<ActiveClipboardAutoClear>,
+}
+
+#[cfg(unix)]
+#[derive(Clone)]
+struct ActiveClipboardAutoClear {
+    id: usize,
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+}
+
+#[cfg(unix)]
+static SECURE_INPUT_SIGNAL_STATE: OnceLock<SecureInputSignalState> = OnceLock::new();
+#[cfg(unix)]
+static SECURE_INPUT_SIGNAL_INSTALL_LOCK: Mutex<()> = Mutex::new(());
+#[cfg(unix)]
+static SECURE_INPUT_PROMPT_LOCK: Mutex<()> = Mutex::new(());
+
+/// Installs the process-lifetime signal router for the foreground CLI stdio
+/// MCP process. HTTP server shutdown signals use a separate lifecycle and
+/// must not install this router. Embedding applications must leave this
+/// process-owned router uninstalled.
+#[cfg(unix)]
+pub fn install_stdio_secure_input_signal_router() -> Result<(), String> {
+    install_stdio_clipboard_signal_router(Arc::new(symvault_core::platform::UnavailablePlatform))
+}
+
+/// Installs the process-owned stdio MCP signal router with its injected clipboard.
+/// SIGINT/SIGTERM/SIGHUP clear and cancel an active auto-clear timer; without
+/// an active timer, prompt scopes retain their cancellation/default behavior
+/// and idle signals retain the OS default action.
+#[cfg(unix)]
+pub fn install_stdio_clipboard_signal_router(
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+) -> Result<(), String> {
+    use signal_hook::{consts::signal::*, iterator::Signals};
+
+    if SECURE_INPUT_SIGNAL_STATE.get().is_some() {
+        return Ok(());
+    }
+    let _install = SECURE_INPUT_SIGNAL_INSTALL_LOCK
+        .lock()
+        .map_err(|_| "secure-input signal installation lock is poisoned".to_owned())?;
+    if SECURE_INPUT_SIGNAL_STATE.get().is_some() {
+        return Ok(());
+    }
+
+    let mut signals = Signals::new([SIGINT, SIGTERM, SIGHUP])
+        .map_err(|error| format!("register MCP process signal listener: {error}"))?;
+    SECURE_INPUT_SIGNAL_STATE
+        .set(SecureInputSignalState {
+            state: Mutex::new(StdioSignalState::default()),
+            next_clipboard_id: AtomicUsize::new(1),
+            clipboard,
+        })
+        .map_err(|_| "secure-input signal router was initialized concurrently".to_owned())?;
+    std::thread::Builder::new()
+        .name("symvault-mcp-signal-router".to_owned())
+        .spawn(move || {
+            for signal in signals.forever() {
+                dispatch_stdio_signal(signal);
+            }
+        })
+        .map_err(|error| format!("start MCP process signal listener: {error}"))?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn dispatch_stdio_signal(signal: i32) {
+    let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
+        if signal_hook::low_level::emulate_default_handler(signal).is_err() {
+            std::process::abort();
+        }
+        return;
+    };
+    let (prompt_active, active) = {
+        let mut state = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let prompt_active = state.prompt_active;
+        let active = state.clipboard_auto_clear.clone();
+        if active.is_some() {
+            if prompt_active
+                && state.secure_input_prompt
+                && signal != signal_hook::consts::signal::SIGHUP
+            {
+                // Go's secure-input helper has its own signal subscription, so
+                // it cancels the prompt while the clipboard subscription clears.
+                state.pending_signal = signal as usize;
+            }
+        } else {
+            state.pending_signal = signal as usize;
+        }
+        (prompt_active, active)
+    };
+    if let Some(active) = active {
+        if !active.clear_claimed.swap(true, Ordering::AcqRel) {
+            let _ = state.clipboard.clear();
+        }
+        let _ = active.cancel.send(());
+        // Keep the registration active through clear(), like Go's signal.Notify
+        // subscription. Remove it before returning so a later signal regains
+        // the idle process disposition.
+        let mut inner = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if inner
+            .clipboard_auto_clear
+            .as_ref()
+            .is_some_and(|current| current.id == active.id)
+        {
+            inner.clipboard_auto_clear = None;
+        }
+        return;
+    }
+    if prompt_active {
+        // Terminal scopes restore cooked mode before handling pending signals.
+        return;
+    }
+    if signal_hook::low_level::emulate_default_handler(signal).is_err() {
+        std::process::abort();
+    }
+}
+
+#[cfg(unix)]
+fn stdio_signal_is_pending() -> bool {
+    SECURE_INPUT_SIGNAL_STATE.get().is_some_and(|state| {
+        state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pending_signal
+            != 0
+    })
+}
+
+/// A process-owned auto-clear registration. Its Drop removes the signal
+/// subscription when the timer expires, is canceled, or is replaced.
+#[cfg(unix)]
+pub struct StdioClipboardAutoClearRegistration {
+    state: &'static SecureInputSignalState,
+    id: usize,
+}
+
+#[cfg(unix)]
+impl Drop for StdioClipboardAutoClearRegistration {
+    fn drop(&mut self) {
+        let mut state = self
+            .state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state
+            .clipboard_auto_clear
+            .as_ref()
+            .is_some_and(|active| active.id == self.id)
+        {
+            state.clipboard_auto_clear = None;
+        }
+    }
+}
+
+/// Registers the active timer. A new clipboard timer replaces the previous
+/// process registration, matching Go's shared cancellation channel.
+/// Embedded runtimes without the process-owned router receive `None`.
+#[cfg(unix)]
+pub fn register_stdio_clipboard_auto_clear(
+    cancel: std::sync::mpsc::Sender<()>,
+    clear_claimed: Arc<AtomicBool>,
+) -> Option<StdioClipboardAutoClearRegistration> {
+    let state = SECURE_INPUT_SIGNAL_STATE.get()?;
+    let id = state.next_clipboard_id.fetch_add(1, Ordering::Relaxed);
+    let previous = {
+        let mut inner = state
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        inner
+            .clipboard_auto_clear
+            .replace(ActiveClipboardAutoClear {
+                id,
+                cancel,
+                clear_claimed,
+            })
+    };
+    if let Some(previous) = previous {
+        let _ = previous.cancel.send(());
+    }
+    Some(StdioClipboardAutoClearRegistration { state, id })
+}
+
+#[cfg(unix)]
+struct SecureInputPromptScope {
+    _prompt_lock: Option<MutexGuard<'static, ()>>,
+    signal_state: Option<&'static SecureInputSignalState>,
+    secure_input: bool,
+}
+
+#[cfg(unix)]
+impl SecureInputPromptScope {
+    fn enter(secure_input: bool) -> Result<Self, SecureInputError> {
+        let signal_state = SECURE_INPUT_SIGNAL_STATE.get();
+        let prompt_lock = if signal_state.is_some() {
+            Some(match SECURE_INPUT_PROMPT_LOCK.try_lock() {
+                Ok(guard) => guard,
+                Err(TryLockError::WouldBlock) => {
+                    return Err(SecureInputError::Read(
+                        "another terminal prompt is active".to_owned(),
+                    ));
+                }
+                Err(TryLockError::Poisoned(_)) => {
+                    return Err(SecureInputError::Read(
+                        "terminal prompt lock is poisoned".to_owned(),
+                    ));
+                }
+            })
+        } else {
+            None
+        };
+        if let Some(state) = signal_state {
+            let mut state = state
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.pending_signal = 0;
+            state.prompt_active = true;
+            state.secure_input_prompt = secure_input;
+        }
+        Ok(Self {
+            _prompt_lock: prompt_lock,
+            signal_state,
+            secure_input,
+        })
+    }
+    fn finish(&self) -> Option<i32> {
+        if let Some(state) = self.signal_state {
+            let mut state = state
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.prompt_active = false;
+            state.secure_input_prompt = false;
+            let signal = std::mem::take(&mut state.pending_signal);
+            (signal != 0).then_some(signal as i32)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for SecureInputPromptScope {
+    fn drop(&mut self) {
+        if let Some(signal) = self.finish()
+            && (!self.secure_input || signal == signal_hook::consts::signal::SIGHUP)
+            && signal_hook::low_level::emulate_default_handler(signal).is_err()
+        {
+            // A failed default re-raise must never turn a pending termination
+            // signal into a silently continued MCP session.
+            std::process::abort();
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct SecureInputPromptScope;
+
+#[cfg(not(unix))]
+impl SecureInputPromptScope {
+    fn enter(_secure_input: bool) -> Result<Self, SecureInputError> {
+        Ok(Self)
+    }
 }
 
 fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> ApprovalResult {
-    let Some(mut terminal) = terminal else {
+    let Some(terminal) = terminal else {
         return ApprovalResult {
             approved: false,
             remembered: false,
             error: Some(ApprovalError::NoTty),
         };
     };
+    let _prompt_scope = match SecureInputPromptScope::enter(false) {
+        Ok(scope) => scope,
+        Err(error) => {
+            return ApprovalResult {
+                approved: false,
+                remembered: false,
+                error: Some(ApprovalError::Read(error.to_string())),
+            };
+        }
+    };
+    // Keep scope alive through terminal Drop so a signal can't regain its idle
+    // default action before the terminal guard has restored cooked mode.
+    let mut terminal = terminal;
 
     if let Err(message) = terminal.set_raw_mode() {
         return ApprovalResult {
@@ -229,6 +599,13 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
                 error: Some(ApprovalError::Read(message)),
             };
         }
+        Err(ReadFailure::Canceled) => {
+            return ApprovalResult {
+                approved: false,
+                remembered: false,
+                error: Some(ApprovalError::Read("terminal input interrupted".into())),
+            };
+        }
     };
 
     let approved = parse_approval_response(&response);
@@ -251,6 +628,179 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
         remembered,
         error: None,
     }
+}
+
+fn run_secure_input<T: Terminal>(
+    req: &SecureInputRequest,
+    terminal: Option<T>,
+) -> Result<String, SecureInputError> {
+    let Some(terminal) = terminal else {
+        return Err(SecureInputError::NoTty);
+    };
+    let _prompt_scope = SecureInputPromptScope::enter(true)?;
+    // Declare the terminal after the scope so its Drop restores termios before
+    // the scope returns signal delivery to the idle/default state.
+    let mut terminal = terminal;
+    terminal.set_raw_mode().map_err(SecureInputError::RawMode)?;
+
+    let prompt = build_secure_input_prompt(req);
+    if let Err(message) = terminal.write_all(prompt.as_bytes()) {
+        return Err(SecureInputError::Write(message));
+    }
+    let timeout = if req.timeout.is_zero() {
+        Duration::from_secs(60)
+    } else {
+        req.timeout
+    };
+    let response = match terminal.read_secure_response(Instant::now() + timeout) {
+        Ok(response) => response,
+        Err(ReadFailure::TimedOut) => return Err(SecureInputError::Timeout),
+        Err(ReadFailure::Io(message)) => return Err(SecureInputError::Read(message)),
+        Err(ReadFailure::Canceled) => {
+            terminal.restore();
+            let _ = terminal.write_all(b"\nAborted.\n");
+            return Err(SecureInputError::Canceled);
+        }
+    };
+    let value = match parse_secure_input(&response) {
+        Ok(value) => value,
+        Err(SecureInputError::Canceled) => {
+            terminal.restore();
+            let _ = terminal.write_all(b"\nAborted.\n");
+            return Err(SecureInputError::Canceled);
+        }
+        Err(error) => return Err(error),
+    };
+    terminal.restore();
+    #[cfg(unix)]
+    if let Some(signal) = _prompt_scope.finish() {
+        let _ = terminal.write_all(b"\nAborted.\n");
+        if signal == signal_hook::consts::signal::SIGHUP
+            && signal_hook::low_level::emulate_default_handler(signal).is_err()
+        {
+            std::process::abort();
+        }
+        return Err(SecureInputError::Canceled);
+    }
+    let _ = terminal.write_all(b"\n");
+    if value.is_empty() {
+        return Err(SecureInputError::Empty);
+    }
+    Ok(value)
+}
+
+/// Match `go-tty`'s rune editing: CR completes, BS/DEL removes one rune, and
+/// only Go `unicode.IsPrint` characters are retained. Input remains hidden in
+/// Rust; the Go implementation currently echoes despite its hidden-input UI.
+fn parse_secure_input(response: &str) -> Result<String, SecureInputError> {
+    let mut value = String::new();
+    let mut completed = false;
+    for character in response.chars() {
+        match character {
+            '\u{3}' => return Err(SecureInputError::Canceled),
+            '\r' => {
+                completed = true;
+                break;
+            }
+            '\u{8}' | '\u{7f}' => {
+                value.pop();
+            }
+            character if go_is_print(character) => value.push(character),
+            _ => {}
+        }
+    }
+    if !completed {
+        return Err(SecureInputError::Read(
+            "terminal input exceeded its bound or ended before Enter".into(),
+        ));
+    }
+    Ok(value.trim().to_owned())
+}
+
+fn go_is_print(character: char) -> bool {
+    let code = u32::from(character);
+    go_unicode_print_15::PRINT_RANGES
+        .binary_search_by(|(first, last)| {
+            if code < *first {
+                std::cmp::Ordering::Greater
+            } else if code > *last {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        })
+        .is_ok()
+}
+
+fn build_secure_input_prompt(req: &SecureInputRequest) -> String {
+    build_secure_input_prompt_with_mode(req, screen_reader_mode())
+}
+
+fn build_secure_input_prompt_with_mode(req: &SecureInputRequest, screen_reader: bool) -> String {
+    if screen_reader {
+        let mut prompt =
+            String::from("\nSecure input required. The connected agent cannot see this value.\n");
+        if !req.path.is_empty() {
+            prompt.push_str(&format!("Entry: {}\n", terminal_safe_text(&req.path)));
+        }
+        if !req.field.is_empty() {
+            prompt.push_str(&format!("Field: {}\n", terminal_safe_text(&req.field)));
+        }
+        if !req.description.is_empty() {
+            prompt.push_str(&format!(
+                "Details: {}\n",
+                terminal_safe_text(&req.description)
+            ));
+        }
+        prompt.push_str("Enter value, input hidden: ");
+        return prompt;
+    }
+    let mut prompt = String::from(
+        "\n╔════════════════════════════════════════════════════════════════╗\n\
+         ║         SECURE INPUT REQUIRED — AGENT CANNOT SEE          ║\n\
+         ╠════════════════════════════════════════════════════════════════╣\n",
+    );
+    if !req.title.is_empty() {
+        prompt.push_str(&format!("Title: {}\n", terminal_safe_text(&req.title)));
+    }
+    if !req.path.is_empty() {
+        prompt.push_str(&format!("Entry: {}\n", terminal_safe_text(&req.path)));
+    }
+    if !req.field.is_empty() {
+        prompt.push_str(&format!("Field: {}\n", terminal_safe_text(&req.field)));
+    }
+    if !req.description.is_empty() {
+        prompt.push_str(&format!(
+            "Details: {}\n",
+            terminal_safe_text(&req.description)
+        ));
+    }
+    prompt.push_str("╚════════════════════════════════════════════════════════════════╝\nEnter value (input hidden): ");
+    prompt
+}
+
+fn screen_reader_mode() -> bool {
+    let nonempty_env = |name| std::env::var(name).is_ok_and(|value| !value.is_empty());
+    screen_reader_mode_from(
+        std::env::var("SYMVAULT_SCREEN_READER").ok().as_deref(),
+        nonempty_env("NVDA_SCREEN_READER"),
+        nonempty_env("ORCA_RUNNING"),
+    )
+}
+
+fn screen_reader_mode_from(explicit: Option<&str>, nvda: bool, orca: bool) -> bool {
+    match explicit {
+        Some("1" | "true" | "yes") => true,
+        Some("0" | "false" | "no") => false,
+        _ => nvda || orca,
+    }
+}
+
+fn terminal_safe_text(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect()
 }
 
 /// Builds the approval prompt string with full context display, mirroring
@@ -520,6 +1070,54 @@ impl RealTerminal {
             );
         }
     }
+
+    fn read_until(&mut self, deadline: Instant, secure_input: bool) -> Result<String, ReadFailure> {
+        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+        use rustix::io::Errno;
+
+        // A nonblocking read/sleep loop keeps /dev/tty cancellation bounded on
+        // macOS, where poll/select are unreliable. Secure input also wakes as
+        // soon as raw Ctrl-C (ETX) arrives instead of waiting for Enter.
+        const MAX_RESPONSE_BYTES: usize = 4096;
+        const POLL_INTERVAL: Duration = Duration::from_millis(5);
+
+        let original_flags =
+            fcntl_getfl(&self.fd).map_err(|error| ReadFailure::Io(error.to_string()))?;
+        fcntl_setfl(&self.fd, original_flags | OFlags::NONBLOCK)
+            .map_err(|error| ReadFailure::Io(error.to_string()))?;
+
+        let mut collected = Vec::new();
+        let outcome = loop {
+            if stdio_signal_is_pending() {
+                break Err(ReadFailure::Canceled);
+            }
+            let mut chunk = [0_u8; 256];
+            match rustix::io::read(&self.fd, &mut chunk[..]) {
+                Ok(0) => break Ok(()),
+                Ok(n) => {
+                    collected.extend_from_slice(&chunk[..n]);
+                    if stdio_signal_is_pending() {
+                        break Err(ReadFailure::Canceled);
+                    }
+                    if response_is_complete(&collected, secure_input)
+                        || collected.len() >= MAX_RESPONSE_BYTES
+                    {
+                        break Ok(());
+                    }
+                }
+                Err(Errno::WOULDBLOCK) => {
+                    if Instant::now() >= deadline {
+                        break Err(ReadFailure::TimedOut);
+                    }
+                    std::thread::sleep(POLL_INTERVAL);
+                }
+                Err(Errno::INTR) => continue,
+                Err(error) => break Err(ReadFailure::Io(error.to_string())),
+            }
+        };
+        let _ = fcntl_setfl(&self.fd, original_flags);
+        outcome.map(|()| String::from_utf8_lossy(&collected).into_owned())
+    }
 }
 
 #[cfg(unix)]
@@ -552,63 +1150,24 @@ impl Terminal for RealTerminal {
     }
 
     fn read_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
-        use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
-        use rustix::io::Errno;
+        self.read_until(deadline, false)
+    }
 
-        // ponytail: macOS `poll`/`select` on /dev/tty is documented as
-        // unreliable, and `select` requires unsafe code this crate denies.
-        // A non-blocking-read + sleep poll loop sidesteps both, matching the
-        // pattern already used for native helper pipes in macos.rs. Ceiling:
-        // up to POLL_INTERVAL of added latency past the deadline; fine for a
-        // human-facing prompt.
-        const MAX_RESPONSE_BYTES: usize = 4096;
-        const POLL_INTERVAL: Duration = Duration::from_millis(5);
-
-        let original_flags =
-            fcntl_getfl(&self.fd).map_err(|error| ReadFailure::Io(error.to_string()))?;
-        fcntl_setfl(&self.fd, original_flags | OFlags::NONBLOCK)
-            .map_err(|error| ReadFailure::Io(error.to_string()))?;
-
-        let mut collected = Vec::new();
-        let outcome = loop {
-            let mut chunk = [0_u8; 256];
-            match rustix::io::read(&self.fd, &mut chunk[..]) {
-                Ok(0) => break Ok(()),
-                Ok(n) => {
-                    collected.extend_from_slice(&chunk[..n]);
-                    if response_is_complete(&collected) || collected.len() >= MAX_RESPONSE_BYTES {
-                        break Ok(());
-                    }
-                }
-                Err(Errno::WOULDBLOCK) => {
-                    if Instant::now() >= deadline {
-                        break Err(ReadFailure::TimedOut);
-                    }
-                    std::thread::sleep(POLL_INTERVAL);
-                }
-                Err(Errno::INTR) => continue,
-                Err(error) => break Err(ReadFailure::Io(error.to_string())),
-            }
-        };
-
-        // Reset the deadline seam, mirroring Go's deferred
-        // `SetReadDeadline(time.Time{})`.
-        let _ = fcntl_setfl(&self.fd, original_flags);
-
-        outcome.map(|()| String::from_utf8_lossy(&collected).into_owned())
+    fn read_secure_response(&mut self, deadline: Instant) -> Result<String, ReadFailure> {
+        self.read_until(deadline, true)
     }
 }
 
 /// Whether the collected terminal bytes already hold a complete answer.
 ///
 /// Go reads through `go-tty`, whose `ReadString` stops at either Enter byte, so
-/// both `\r` and `\n` complete the answer. Raw mode clears `ICRNL`, which means
-/// the Enter key arrives as `\r` only — waiting for `\n` alone would never see a
-/// human keypress and would run into the timeout with the answer already typed.
-fn response_is_complete(collected: &[u8]) -> bool {
-    collected
-        .iter()
-        .any(|byte| *byte == b'\n' || *byte == b'\r')
+/// both `\r` and `\n` complete approval answers. Secure input stops at `\r` or
+/// raw Ctrl-C; its Go `ReadString` contract uses CR termination. Raw mode clears
+/// `ICRNL`, so the Enter key arrives as `\r`.
+fn response_is_complete(collected: &[u8], secure_input: bool) -> bool {
+    collected.iter().any(|byte| {
+        *byte == b'\r' || (!secure_input && *byte == b'\n') || (secure_input && *byte == 0x03)
+    })
 }
 
 #[cfg(test)]
@@ -714,6 +1273,97 @@ mod tests {
             can_remember: true,
             ..Default::default()
         }
+    }
+
+    fn secure_input_request() -> SecureInputRequest {
+        SecureInputRequest {
+            title: "Test secure input".into(),
+            path: "fixture/token".into(),
+            field: "credential".into(),
+            description: "synthetic prompt".into(),
+            timeout: Duration::from_secs(1),
+        }
+    }
+
+    #[test]
+    fn secure_input_reads_trimmed_value_and_never_echoes_it() {
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Ok("  synthetic-secret  \r".into()));
+        let result = run_secure_input(&secure_input_request(), Some(terminal));
+        assert_eq!(result.unwrap(), "synthetic-secret");
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_rejects_empty_cancelled_and_unterminated_input() {
+        for response in ["\r", " \t\r", "partial"] {
+            let restored = Arc::new(Mutex::new(false));
+            let mut terminal = FakeTerminal::tracking(restored.clone());
+            terminal.read_result = Some(Ok(response.into()));
+            assert!(run_secure_input(&secure_input_request(), Some(terminal)).is_err());
+            assert!(*restored.lock().unwrap());
+        }
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Ok("\u{3}".into()));
+        assert_eq!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Canceled)
+        );
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_timeout_and_prompt_errors_restore_terminal() {
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.read_result = Some(Err(ReadFailureKind::TimedOut));
+        assert_eq!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Timeout)
+        );
+        assert!(*restored.lock().unwrap());
+
+        let restored = Arc::new(Mutex::new(false));
+        let mut terminal = FakeTerminal::tracking(restored.clone());
+        terminal.write_result = Some(Err("fixture write failure".into()));
+        assert!(matches!(
+            run_secure_input(&secure_input_request(), Some(terminal)),
+            Err(SecureInputError::Write(_))
+        ));
+        assert!(*restored.lock().unwrap());
+    }
+
+    #[test]
+    fn secure_input_matches_go_rune_editing_and_printable_filter() {
+        assert_eq!(
+            parse_secure_input("abé\u{8}界\u{7f}c\u{1}\t\r"),
+            Ok("abc".into())
+        );
+        assert_eq!(parse_secure_input("e\u{301}\r"), Ok("e\u{301}".into()));
+        assert_eq!(
+            parse_secure_input("discarded\u{3}"),
+            Err(SecureInputError::Canceled)
+        );
+        assert!(parse_secure_input("unfinished").is_err());
+    }
+
+    #[test]
+    fn screen_reader_override_and_hints_match_go_theme_contract() {
+        assert!(screen_reader_mode_from(Some("1"), false, false));
+        assert!(screen_reader_mode_from(Some("yes"), false, false));
+        assert!(!screen_reader_mode_from(Some("0"), true, true));
+        assert!(!screen_reader_mode_from(Some("false"), true, false));
+        assert!(screen_reader_mode_from(None, true, false));
+        assert!(screen_reader_mode_from(None, false, true));
+        assert!(!screen_reader_mode_from(None, false, false));
+        let mut request = secure_input_request();
+        request.title.clear();
+        let prompt = build_secure_input_prompt_with_mode(&request, true);
+        assert!(prompt.contains("Secure input required."));
+        assert!(!prompt.contains('╔'));
+        assert!(prompt.contains("Enter value, input hidden: "));
     }
 
     #[test]
@@ -878,11 +1528,13 @@ mod tests {
     fn response_is_complete_accepts_both_enter_bytes() {
         // Raw mode clears ICRNL, so the Enter key arrives as CR. Go stops at
         // either byte; stopping only at LF would never end a real keypress.
-        assert!(response_is_complete(b"y\r"));
-        assert!(response_is_complete(b"y\n"));
-        assert!(response_is_complete(b"\r\n"));
-        assert!(!response_is_complete(b"yes"));
-        assert!(!response_is_complete(b""));
+        assert!(response_is_complete(b"y\r", false));
+        assert!(response_is_complete(b"y\n", false));
+        assert!(response_is_complete(b"\r\n", false));
+        assert!(!response_is_complete(b"yes", false));
+        assert!(!response_is_complete(b"", false));
+        assert!(response_is_complete(b"\x03", true));
+        assert!(!response_is_complete(b"\n", true));
     }
 
     #[test]
@@ -1083,5 +1735,148 @@ mod tests {
         let result = run_approval(&approved_request(), Some(terminal));
         assert!(result.approved);
         assert!(result.remembered);
+    }
+
+    #[cfg(unix)]
+    #[derive(Default)]
+    struct SignalClipboard(AtomicUsize);
+
+    #[cfg(unix)]
+    impl symvault_core::platform::Clipboard for SignalClipboard {
+        fn set(&self, _: &[u8]) -> Result<(), symvault_core::platform::PlatformError> {
+            Ok(())
+        }
+
+        fn clear(&self) -> Result<(), symvault_core::platform::PlatformError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stdio_clipboard_signal_router_process_contract() {
+        use std::{
+            env,
+            io::{Read, Write},
+            os::unix::process::ExitStatusExt,
+            process::{Command, Output, Stdio},
+            sync::mpsc,
+            thread,
+            time::{Duration, Instant},
+        };
+
+        fn bounded_output(mut command: Command, timeout: Duration) -> Output {
+            command.stdout(Stdio::piped()).stderr(Stdio::piped());
+            let mut child = command.spawn().expect("spawn bounded signal child");
+            let mut stdout = child.stdout.take().expect("capture child stdout");
+            let mut stderr = child.stderr.take().expect("capture child stderr");
+            let stdout_reader = thread::spawn(move || {
+                let mut bytes = Vec::new();
+                stdout.read_to_end(&mut bytes).expect("read child stdout");
+                bytes
+            });
+            let stderr_reader = thread::spawn(move || {
+                let mut bytes = Vec::new();
+                stderr.read_to_end(&mut bytes).expect("read child stderr");
+                bytes
+            });
+            let deadline = Instant::now() + timeout;
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("poll signal child") {
+                    break status;
+                }
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_reader.join();
+                    let _ = stderr_reader.join();
+                    panic!("signal child exceeded {timeout:?}");
+                }
+                thread::sleep(Duration::from_millis(10));
+            };
+            Output {
+                status,
+                stdout: stdout_reader.join().expect("join stdout reader"),
+                stderr: stderr_reader.join().expect("join stderr reader"),
+            }
+        }
+
+        let signal_name = env::var("SYMVAULT_PLATFORM_SIGNAL_CHILD").ok();
+        if let Some(signal_name) = signal_name {
+            use signal_hook::consts::signal::*;
+
+            let signal = match signal_name.as_str() {
+                "SIGINT" => SIGINT,
+                "SIGTERM" => SIGTERM,
+                "SIGHUP" => SIGHUP,
+                _ => panic!("unknown child signal"),
+            };
+            let clipboard = Arc::new(SignalClipboard::default());
+            install_stdio_clipboard_signal_router(clipboard.clone()).unwrap();
+            let prompt_scope = if signal != SIGHUP {
+                Some(SecureInputPromptScope::enter(true).unwrap())
+            } else {
+                None
+            };
+            let (cancel, canceled) = mpsc::channel();
+            let clear_claimed = Arc::new(AtomicBool::new(false));
+            let registration =
+                register_stdio_clipboard_auto_clear(cancel, Arc::clone(&clear_claimed))
+                    .expect("installed process router registers active auto-clear");
+
+            signal_hook::low_level::raise(signal).unwrap();
+            canceled
+                .recv_timeout(Duration::from_secs(3))
+                .expect("active signal cancels the timer");
+            assert_eq!(clipboard.0.load(Ordering::SeqCst), 1);
+            assert!(clear_claimed.load(Ordering::SeqCst));
+            if let Some(prompt_scope) = prompt_scope {
+                assert_eq!(prompt_scope.finish(), Some(signal));
+                drop(prompt_scope);
+            }
+            drop(registration);
+            println!(
+                "RUST_CLIPBOARD_SIGNAL_RECEIPT signal={signal_name} clear=1 continued=true prompt_canceled={}",
+                signal != SIGHUP
+            );
+            std::io::stdout().flush().unwrap();
+
+            // The first signal was consumed while the Go-equivalent timer was
+            // active. Once its scoped registration ends, the same signal must
+            // regain its normal process disposition.
+            signal_hook::low_level::raise(signal).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            panic!("idle signal unexpectedly returned");
+        }
+
+        use signal_hook::consts::signal::*;
+        for (signal_name, signal) in [("SIGINT", SIGINT), ("SIGTERM", SIGTERM), ("SIGHUP", SIGHUP)]
+        {
+            let mut command = Command::new(env::current_exe().unwrap());
+            command
+                .arg("--exact")
+                .arg("approval::tests::stdio_clipboard_signal_router_process_contract")
+                .arg("--nocapture")
+                .env("SYMVAULT_PLATFORM_SIGNAL_CHILD", signal_name);
+            let output = bounded_output(command, Duration::from_secs(8));
+            assert_eq!(
+                output.status.signal(),
+                Some(signal),
+                "idle {signal_name} should terminate child; output={}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains(&format!(
+                    "RUST_CLIPBOARD_SIGNAL_RECEIPT signal={signal_name} clear=1 continued=true prompt_canceled={}",
+                    signal != SIGHUP
+                )),
+                "child did not prove active {signal_name} clear-and-continue; output={}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+        }
     }
 }

@@ -1,0 +1,562 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "cfbfd59a",
+    "commit_sha": "cfbfd59a8a4580e8547e278ff8b9de6c7e806967",
+    "source_files": [
+      "internal/mcp/server/approval.go",
+      "internal/mcp/server/approval_helper.go",
+      "internal/config/config_validate.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/tools_set.go",
+      "internal/mcp/server/tools_delete.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/secureui/backend.go",
+      "internal/secureui/secureui.go",
+      "internal/mcp/mcptypes.go",
+      "internal/audit/audit.go",
+      "internal/audit/export.go",
+      "internal/vault/service.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_readwrite.go"
+    ],
+    "source_hash": "9b98f83f96e8b07cc8f8916f66d3682c200b89b89919ccc09a7508bfe6c5ce57",
+    "generator_files": [
+      "internal/mcp/server/mcp_write_approval_fixture_generator_test.go",
+      "internal/mcp/server/approval_test.go",
+      "internal/mcp/server/tools_test_helpers.go",
+      "internal/mcp/server/mcpsetentry_fixture_generator_test.go"
+    ],
+    "generator_hash": "cdc1abdb75d04992e5fe49869cd2daf25741ecc0a046ab84b799094fafc55c8e"
+  },
+  "normalizations": [
+    "terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages",
+    "terminal Directory/Git/Project context rows are omitted; they describe the checkout rather than approval behavior"
+  ],
+  "cases": [
+    {
+      "name": "set_approved_twice",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github",
+        "value": "approved-user"
+      },
+      "response": "y",
+      "text": "Set github.username = ***",
+      "error_class": "none",
+      "is_error": false,
+      "exists": true,
+      "username": "approved-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.granted",
+        "set",
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.granted",
+        "set"
+      ],
+      "approval_calls": 2,
+      "prompt_details": [
+        "set field on github field username",
+        "set field on github field username"
+      ],
+      "summary_details": [
+        "set field on github field username",
+        "set field on github field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL",
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false,
+        false
+      ],
+      "secrets_accessed": [
+        0,
+        1
+      ],
+      "prompt_timeout_seconds": [
+        30,
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): yes\n\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   1 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): yes\n"
+    },
+    {
+      "name": "set_denied_unterminated_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github\u001b[31",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github field username"
+      ],
+      "summary_details": [
+        "set field on github field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_unterminated_osc_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github\u001b]open",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github field username"
+      ],
+      "summary_details": [
+        "set field on github field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_osc_backslash_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github\u001b]hidden\\tail",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on githubtail field username"
+      ],
+      "summary_details": [
+        "set field on githubtail field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on githubtail field username                   ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_byte_controls_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "git\t\u001bXhub",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on git\tXhub field username"
+      ],
+      "summary_details": [
+        "set field on git\tXhub field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on git\tXhub field username                    ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_csi_intermediate_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github\u001b[?25l",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github25l field username"
+      ],
+      "summary_details": [
+        "set field on github25l field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github25l field username                    ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_csi_unicode_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github\u001b[é",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github\ufffd field username"
+      ],
+      "summary_details": [
+        "set field on github\ufffd field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github\ufffd field username                      ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_denied_empty_sanitized_field_summary",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "\u001b[31",
+        "path": "github",
+        "value": "blocked-user"
+      },
+      "response": "n",
+      "text": "set_entry_field denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested",
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github"
+      ],
+      "summary_details": [
+        "set field on github"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github                                      ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "set_prompt_read_error",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github",
+        "value": "blocked-user"
+      },
+      "response_error": "fixture read error",
+      "text": "set_entry_field approval failed: failed to read from terminal: fixture read error",
+      "error_class": "approval_failed",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github field username"
+      ],
+      "summary_details": [
+        "set field on github field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): "
+    },
+    {
+      "name": "set_prompt_timeout",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github",
+        "value": "blocked-user"
+      },
+      "response_error": "__timeout__",
+      "text": "set_entry_field approval failed: approval timed out after 30s",
+      "error_class": "approval_failed",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.requested"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "set field on github field username"
+      ],
+      "summary_details": [
+        "set field on github field username"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: set_entry_field                                          ║\n║ Details:   set field on github field username                       ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): "
+    },
+    {
+      "name": "set_no_tty",
+      "tool": "set_entry_field",
+      "arguments": {
+        "field": "username",
+        "path": "github",
+        "value": "blocked-user"
+      },
+      "text": "set_entry_field requires approval but no TTY or GUI dialog available",
+      "error_class": "no_tty",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.set_entry_field.denied"
+      ],
+      "approval_calls": 0,
+      "prompt_details": [],
+      "summary_details": [
+        "set field on github field username"
+      ],
+      "prompt_risks": [],
+      "can_remember": [],
+      "secrets_accessed": [],
+      "prompt_timeout_seconds": []
+    },
+    {
+      "name": "delete_approved",
+      "tool": "delete_entry",
+      "arguments": {
+        "path": "github"
+      },
+      "response": "yes",
+      "text": "Successfully deleted entry: github",
+      "error_class": "none",
+      "is_error": false,
+      "exists": false,
+      "audit_actions": [
+        "approval.delete_entry.requested",
+        "approval.delete_entry.granted",
+        "delete"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "delete entry on github"
+      ],
+      "summary_details": [
+        "delete entry on github"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: delete_entry                                             ║\n║ Details:   delete entry on github                                   ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): yes\n"
+    },
+    {
+      "name": "delete_denied",
+      "tool": "delete_entry",
+      "arguments": {
+        "path": "github"
+      },
+      "response": "no",
+      "text": "delete_entry denied: user did not approve",
+      "error_class": "denied",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.delete_entry.requested",
+        "approval.delete_entry.denied"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [
+        "delete entry on github"
+      ],
+      "summary_details": [
+        "delete entry on github"
+      ],
+      "prompt_risks": [
+        "CRITICAL"
+      ],
+      "can_remember": [
+        false
+      ],
+      "secrets_accessed": [
+        0
+      ],
+      "prompt_timeout_seconds": [
+        30
+      ],
+      "prompt_text": "\n╔════════════════════════════════════════════════════════════════════╗\n║                  MCP OPERATION APPROVAL REQUIRED                   ║\n╠════════════════════════════════════════════════════════════════════╣\n║ Agent:     fixture                                                  ║\n║ Risk:      🔴 CRITICAL                                               ║\n║ Secrets:   0 accessed this session                                  ║\n║────────────────────────────────────────────────────────────────────║\n║ Operation: delete_entry                                             ║\n║ Details:   delete entry on github                                   ║\n╚════════════════════════════════════════════════════════════════════╝\n\nApprove this operation? (y/n): no\n"
+    },
+    {
+      "name": "delete_prompt_raw_error",
+      "tool": "delete_entry",
+      "arguments": {
+        "path": "github"
+      },
+      "raw_error": "fixture raw error",
+      "text": "delete_entry approval failed: failed to set terminal raw mode: fixture raw error",
+      "error_class": "approval_failed",
+      "is_error": true,
+      "exists": true,
+      "username": "fixture-user",
+      "audit_actions": [
+        "approval.delete_entry.requested"
+      ],
+      "approval_calls": 1,
+      "prompt_details": [],
+      "summary_details": [
+        "delete entry on github"
+      ],
+      "prompt_risks": [],
+      "can_remember": [],
+      "secrets_accessed": [],
+      "prompt_timeout_seconds": []
+    }
+  ]
+}

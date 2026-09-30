@@ -12,19 +12,21 @@ mod mcp_tls_cert;
 use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::sync::OnceLock;
-#[cfg(unix)]
-use std::time::Duration;
 use std::{
     fs,
     io::{self, BufReader, IsTerminal},
     net::TcpListener,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use crate::run_commands::McpCommandExecutor;
+#[cfg(not(target_os = "macos"))]
+use symvault_core::platform::UnavailablePlatform;
 use symvault_core::{
     config::{AgentProfile, Config, McpConfig},
+    platform::Clipboard,
     policy::{Engine, Policy},
     session::Keyring,
 };
@@ -33,6 +35,7 @@ use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
     ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
+use symvault_platform::approval::is_tty_present;
 
 /// Starts the bounded native MCP server for an already unlocked vault.
 ///
@@ -56,6 +59,15 @@ pub fn run(
     let root = vault.as_ref();
     let config = Config::load(root.join("config.yaml"))
         .map_err(|error| format!("load vault config: {error}"))?;
+    let clipboard_auto_clear_duration = Duration::from_secs(
+        config
+            .clipboard
+            .as_ref()
+            .map(|clipboard| clipboard.auto_clear_duration)
+            .unwrap_or(30)
+            .max(0) as u64,
+    );
+    let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
@@ -150,6 +162,8 @@ pub fn run(
                 &auth_method,
                 &runtime_status,
                 Some(approval_queue_for_agent.clone()),
+                clipboard_auto_clear_duration,
+                clipboard.clone(),
             )
         };
         let registry_path = root.join("mcp-tokens.json");
@@ -191,6 +205,9 @@ pub fn run(
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
+        #[cfg(unix)]
+        symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
+            .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
@@ -208,6 +225,8 @@ pub fn run(
             config.effective_auth_method().as_str(),
             &(touch_id_available, backend, persistent, message),
             None,
+            clipboard_auto_clear_duration,
+            clipboard,
         )?;
         let stdin = io::stdin();
         let stdout = io::stdout();
@@ -532,6 +551,8 @@ fn build_handler(
     auth_method: &str,
     runtime_status: &(bool, String, bool, String),
     approval_queue: Option<Arc<symvault_mcp::approval::ApprovalQueue>>,
+    clipboard_auto_clear_duration: Duration,
+    clipboard: Arc<dyn Clipboard>,
 ) -> Result<ProtocolHandler, String> {
     let audit = symvault_store::audit::open_with_keyring(
         agent_name,
@@ -542,7 +563,7 @@ fn build_handler(
     .map_err(|error| format!("open audit logger: {error}"))?;
     let audit: SharedAuditLogger = Arc::new(Mutex::new(audit));
     let policy = load_policy_engine(root)?;
-    let mut settings = runtime_config(root, profile, agent_name);
+    let mut settings = runtime_config(root, profile, agent_name, transport);
     let signing_key =
         symvault_store::grant_key::load_or_create_grant_signing_key(root, keyring, Some(&identity))
             .map_err(|error| format!("load grant signing key: {error}"))?;
@@ -553,32 +574,106 @@ fn build_handler(
     settings.cache_persistent = runtime_status.2;
     settings.cache_message.clone_from(&runtime_status.3);
     let command_executor = Arc::new(McpCommandExecutor::new());
-    let mut runtime =
+    let runtime =
         StoreReadOnlyRuntime::open_with_audit(root, identity, settings, policy, Some(audit))
             .map_err(|error| format!("create MCP runtime: {error}"))?
             .with_grant_signing_key(signing_key)
-            .with_command_executor(command_executor);
+            .with_command_executor(command_executor)
+            .with_clipboard_auto_clear_duration(clipboard_auto_clear_duration);
+    let mut runtime = runtime.with_clipboard(clipboard);
     if let Some(queue) = approval_queue {
         runtime = runtime.with_approval_queue(queue);
     }
     let mut handler =
         ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
-    handler.set_tool_list_config(tool_list_config(profile));
+    handler.set_tool_list_config(tool_list_config(
+        profile,
+        transport == "stdio" && is_tty_present(),
+    ));
     Ok(handler)
 }
 
-fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> ReadOnlyRuntimeConfig {
+#[cfg(test)]
+#[doc(hidden)]
+#[allow(dead_code, clippy::too_many_arguments)]
+pub fn build_handler_for_contract_test(
+    root: &Path,
+    agent_name: &str,
+    profile: &AgentProfile,
+    identity: Identity,
+    keyring: &dyn Keyring,
+    transport: &str,
+    auth_method: &str,
+    runtime_status: &(bool, String, bool, String),
+) -> Result<ProtocolHandler, String> {
+    build_handler(
+        root,
+        agent_name,
+        profile,
+        identity,
+        keyring,
+        transport,
+        auth_method,
+        runtime_status,
+        None,
+        Duration::from_secs(30),
+        clipboard_backend(),
+    )
+}
+
+fn clipboard_backend() -> Arc<dyn Clipboard> {
+    #[cfg(target_os = "macos")]
+    {
+        Arc::new(symvault_platform::MacOsPlatform)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Arc::new(UnavailablePlatform)
+    }
+}
+
+fn runtime_config(
+    root: &Path,
+    profile: &AgentProfile,
+    agent_name: &str,
+    transport: &str,
+) -> ReadOnlyRuntimeConfig {
     let mut available_tools = read_only_tool_names();
+    // Keep direct calls subject to the same actionable capability check as
+    // Go; tools/list separately hides the tool when the profile lacks access.
+    available_tools.push("execute_api_request".into());
+    if profile.can_run_commands {
+        // This CLI always installs McpCommandExecutor in build_handler. Keep
+        // the secret-aware command tool opt-in to the profile capability and
+        // let the normal allowed_tools filter below further restrict it.
+        available_tools.push("execute_with_secret".into());
+    }
+    let secure_input_available = transport == "stdio" && is_tty_present();
+    let mut unavailable_tools = Vec::new();
+    if secure_input_available {
+        available_tools.push("secure_input".into());
+        available_tools.push("request_credential".into());
+    } else {
+        for name in ["secure_input", "request_credential"] {
+            unavailable_tools.push(unavailable_tool(
+                name,
+                "not_available",
+                format!(
+                    "tool \"{name}\" is not available in the current environment (requires TTY or GUI dialog). Alternatives: set_entry_field"
+                ),
+            ));
+        }
+    }
     if !profile.allowed_tools.is_empty() {
         available_tools.retain(|name| profile.allowed_tools.iter().any(|allowed| allowed == name));
+        unavailable_tools.retain(|tool| {
+            profile
+                .allowed_tools
+                .iter()
+                .any(|allowed| allowed == &tool.name)
+        });
     }
     let expose_value_tools = profile.expose_value_tools;
-    let mut unavailable_tools = Vec::new();
-    unavailable_tools.push(unavailable_tool(
-        "execute_api_request",
-        "not_available",
-        "mcp.Tool is not available in the current environment",
-    ));
     if !(profile.can_read_values || profile.can_use_clipboard || profile.can_use_autotype) {
         unavailable_tools.push(unavailable_tool(
             "generate_totp",
@@ -604,6 +699,7 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         tier: profile.tier.clone().unwrap_or_default(),
         allowed_paths: profile.allowed_paths.clone(),
         approval_mode: profile.approval_mode.clone().unwrap_or_default(),
+        approval_timeout: profile.approval_timeout,
         can_write: profile.can_write,
         can_read_values: profile.can_read_values,
         require_approval: profile.require_approval,
@@ -626,12 +722,23 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
     }
 }
 
-fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
+fn tool_list_config(profile: &AgentProfile, secure_input_available: bool) -> ToolListConfig {
+    let allowed = |tool: &str| {
+        profile.allowed_tools.is_empty()
+            || profile.allowed_tools.iter().any(|allowed| allowed == tool)
+    };
+    let execute_api_available = profile.can_run_commands
+        && (profile.allowed_tools.is_empty()
+            || profile
+                .allowed_tools
+                .iter()
+                .any(|allowed| allowed == "execute_api_request"));
     ToolListConfig {
         tier: profile.tier.clone(),
         expose_value_tools: Some(profile.expose_value_tools),
-        execute_api_available: false,
-        secure_input_available: false,
+        execute_api_available,
+        secure_input_available: secure_input_available && allowed("secure_input"),
+        request_credential_available: secure_input_available && allowed("request_credential"),
         generate_totp_available: profile.can_read_values
             || profile.can_use_clipboard
             || profile.can_use_autotype,
@@ -747,20 +854,138 @@ mod tests {
             allowed_paths: vec!["work/*".into()],
             allowed_tools: vec!["health".into()],
             allowed_executables: vec!["git".into()],
+            approval_timeout: std::time::Duration::from_secs(91),
             can_read_values: true,
             auto_unseal: true,
             expose_payment_values: true,
             ..AgentProfile::default()
         };
-        let config = runtime_config(Path::new("/fixture"), &profile, "agent");
+        let config = runtime_config(Path::new("/fixture"), &profile, "agent", "http");
         assert_eq!(config.allowed_paths, ["work/*"]);
         assert_eq!(config.available_tools, ["health"]);
         assert_eq!(config.allowed_executables, ["git"]);
+        assert_eq!(config.approval_timeout, std::time::Duration::from_secs(91));
         assert_eq!(config.tier, "standard");
         assert!(config.can_read_values);
         assert!(config.auto_unseal);
         assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
+    }
+
+    #[test]
+    fn runtime_config_preserves_clipboard_dispatch_capability_and_allowlist() {
+        let capability_denied_but_named = AgentProfile {
+            allowed_tools: vec!["copy_to_clipboard".into()],
+            can_use_clipboard: false,
+            ..AgentProfile::default()
+        };
+        let denied = runtime_config(
+            Path::new("/fixture"),
+            &capability_denied_but_named,
+            "agent",
+            "stdio",
+        );
+        assert_eq!(denied.available_tools, ["copy_to_clipboard"]);
+        assert!(!denied.can_use_clipboard);
+
+        let explicitly_excluded = AgentProfile {
+            allowed_tools: vec!["health".into()],
+            can_use_clipboard: true,
+            ..AgentProfile::default()
+        };
+        let excluded = runtime_config(
+            Path::new("/fixture"),
+            &explicitly_excluded,
+            "agent",
+            "stdio",
+        );
+        assert_eq!(excluded.available_tools, ["health"]);
+        assert!(excluded.can_use_clipboard);
+    }
+
+    #[test]
+    fn runtime_config_exposes_secret_command_only_with_capability_and_allowlist() {
+        let capable_but_excluded = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["health".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(
+                Path::new("/fixture"),
+                &capable_but_excluded,
+                "agent",
+                "http"
+            )
+            .available_tools,
+            ["health"],
+            "explicit allowlist must exclude execute_with_secret"
+        );
+
+        let capable_and_allowed = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["execute_with_secret".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent", "http")
+                .available_tools,
+            ["execute_with_secret"]
+        );
+
+        let no_command_capability = AgentProfile {
+            allowed_tools: vec!["execute_with_secret".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            runtime_config(
+                Path::new("/fixture"),
+                &no_command_capability,
+                "agent",
+                "http"
+            )
+            .available_tools
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn api_request_tool_requires_command_capability_and_profile_allowlist() {
+        let capable_and_allowed = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["execute_api_request".into()],
+            ..AgentProfile::default()
+        };
+        assert_eq!(
+            runtime_config(Path::new("/fixture"), &capable_and_allowed, "agent", "http")
+                .available_tools,
+            ["execute_api_request"]
+        );
+        assert!(tool_list_config(&capable_and_allowed, false).execute_api_available);
+
+        let explicitly_excluded = AgentProfile {
+            can_run_commands: true,
+            allowed_tools: vec!["health".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            !runtime_config(Path::new("/fixture"), &explicitly_excluded, "agent", "http")
+                .available_tools
+                .contains(&"execute_api_request".into())
+        );
+        assert!(!tool_list_config(&explicitly_excluded, false).execute_api_available);
+
+        let no_run_capability = AgentProfile {
+            allowed_tools: vec!["execute_api_request".into()],
+            ..AgentProfile::default()
+        };
+        assert!(
+            runtime_config(Path::new("/fixture"), &no_run_capability, "agent", "http")
+                .available_tools
+                .contains(&"execute_api_request".into()),
+            "runtime keeps the dispatch route installed so direct calls reach the capability denial"
+        );
+        assert!(!tool_list_config(&no_run_capability, false).execute_api_available);
     }
 
     #[test]
@@ -891,7 +1116,7 @@ mod tests {
                 ..AgentProfile::default()
             };
             assert_eq!(
-                tool_list_config(&profile).generate_totp_available,
+                tool_list_config(&profile, false).generate_totp_available,
                 read || clipboard || autotype
             );
         }

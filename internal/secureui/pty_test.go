@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/mattn/go-tty"
 )
 
 // TestTTY_EchoOffOverPty verifies that the TTY backend, when handed a real
@@ -49,5 +50,75 @@ func TestTTY_EchoOffOverPty(t *testing.T) {
 	// Sanity: the bytes round-tripped through the pty.
 	if !strings.Contains(string(buf[:n]), "hunter2") {
 		t.Errorf("pty read returned %q, want to contain 'hunter2'", string(buf[:n]))
+	}
+}
+
+// TestTTYReadStringRuneEditing records the exact line-editing contract used by
+// the production secure prompt: go-tty consumes CR, edits by Unicode rune for
+// BS/DEL, and appends only unicode.IsPrint input.
+func TestTTYReadStringRuneEditing(t *testing.T) {
+	master, slave, err := pty.Open()
+	if err != nil {
+		t.Fatalf("native secure-input parity requires a usable PTY: %v", err)
+	}
+	defer func() {
+		_ = master.Close()
+		_ = slave.Close()
+	}()
+
+	device, err := tty.OpenDevice(slave.Name())
+	if err != nil {
+		t.Fatalf("open go-tty over synthetic pty: %v", err)
+	}
+	defer func() { _ = device.Close() }()
+
+	type result struct {
+		value string
+		err   error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		value, readErr := device.ReadString()
+		resultCh <- result{value: value, err: readErr}
+	}()
+	if _, err := master.Write([]byte("abé\b界\x7fc\x01\t\r")); err != nil {
+		t.Fatalf("write synthetic rune sequence: %v", err)
+	}
+	select {
+	case got := <-resultCh:
+		if got.err != nil {
+			t.Fatalf("go-tty ReadString: %v", got.err)
+		}
+		if got.value != "abc" {
+			t.Fatalf("go-tty ReadString() = %q, want %q", got.value, "abc")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("go-tty ReadString did not stop at CR")
+	}
+	type echoResult struct {
+		text string
+		err  error
+	}
+	echoCh := make(chan echoResult, 1)
+	go func() {
+		output := make([]byte, 128)
+		n, readErr := master.Read(output)
+		echoCh <- echoResult{text: string(output[:n]), err: readErr}
+	}()
+	var transcript string
+	select {
+	case echo := <-echoCh:
+		if echo.err != nil && echo.err != io.EOF {
+			t.Fatalf("read go-tty prompt echo: %v", echo.err)
+		}
+		transcript = echo.text
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("bounded Go prompt echo observation timed out")
+	}
+	if !strings.Contains(transcript, "abé\b \b界\b \bc") {
+		t.Fatalf("go-tty ReadString echo = %q, want typed runes and rune erase sequence", transcript)
+	}
+	if strings.ContainsAny(transcript, "\x01\t") {
+		t.Fatalf("go-tty echoed filtered controls: %q", transcript)
 	}
 }

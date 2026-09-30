@@ -1,30 +1,123 @@
 use crate::approval::ApprovalQueue;
+use crate::broker::{self, ApiSubstitution, ApiTemplate, ApiTemplateDefinition};
 use crate::call::{
     CommandExecutor, ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore,
-    ReadOnlyUnavailableTool, ToolCallResult, ToolCallRuntime, normalize_scope_path,
+    ReadOnlyUnavailableTool, SecureInputPreflightError, ToolCallResult, ToolCallRuntime,
+    WriteApprovalDecision, normalize_scope_path, write_approval_decision,
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
-    io::{BufRead, BufReader},
+    fs,
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
+    thread,
     time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_core::secret_ref::SecretHandle;
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_platform::approval::{
-    self as approval_prompt, ApprovalRequest, ApprovalResult, RiskLevel, format_go_duration,
+    self as approval_prompt, ApprovalRequest, ApprovalResult, RiskLevel, SecureInputError,
+    SecureInputRequest, format_go_duration,
 };
 use symvault_store::{
     Entry, Store, StoreError, WriteRecord,
     sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+#[path = "go_unicode_15.rs"]
+mod go_unicode_15;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
+
+const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
+
+/// Load one API template at request time so on-disk endpoint, method,
+/// or credential-reference revocations take effect without restarting MCP.
+pub fn load_api_template_definition(
+    vault_root: &Path,
+    name: &str,
+) -> Result<ApiTemplateDefinition, String> {
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err(format!("invalid template name: {name:?}"));
+    }
+    let root = fs::canonicalize(vault_root).map_err(|error| format!("read vault root: {error}"))?;
+    let directory = match fs::canonicalize(root.join("templates")) {
+        Ok(directory) => directory,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return match fs::symlink_metadata(root.join("templates")) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    load_builtin_api_template(name)
+                }
+                _ => Err("template directory is unavailable".into()),
+            };
+        }
+        Err(error) => return Err(format!("read template directory: {error}")),
+    };
+    if !directory.starts_with(&root) {
+        return Err("template directory escapes the vault root".into());
+    }
+    let path = directory.join(format!("{name}.yaml"));
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return load_builtin_api_template(name);
+        }
+        Err(error) => return Err(format!("read template: {error}")),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("template must be a regular file".into());
+    }
+    let canonical = fs::canonicalize(&path).map_err(|error| format!("read template: {error}"))?;
+    if !canonical.starts_with(&directory) {
+        return Err("template path escapes the template directory".into());
+    }
+    let file = fs::File::open(&canonical).map_err(|error| format!("read template: {error}"))?;
+    if file
+        .metadata()
+        .map_err(|error| format!("stat template: {error}"))?
+        .len()
+        > MAX_API_TEMPLATE_BYTES
+    {
+        return Err("template exceeds the 65536-byte limit".into());
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_API_TEMPLATE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("read template: {error}"))?;
+    if bytes.len() as u64 > MAX_API_TEMPLATE_BYTES {
+        return Err("template exceeds the 65536-byte limit".into());
+    }
+    serde_yaml_ng::from_slice(&bytes).map_err(|error| format!("parse template: {error}"))
+}
+
+fn load_builtin_api_template(name: &str) -> Result<ApiTemplateDefinition, String> {
+    // Share the authoritative Go assets; custom files always take precedence.
+    let yaml = match name {
+        "anthropic" => include_str!("../../../internal/mcp/apitemplates/builtin/anthropic.yaml"),
+        "cloudflare" => include_str!("../../../internal/mcp/apitemplates/builtin/cloudflare.yaml"),
+        "gemini" => include_str!("../../../internal/mcp/apitemplates/builtin/gemini.yaml"),
+        "github" => include_str!("../../../internal/mcp/apitemplates/builtin/github.yaml"),
+        "gitlab" => include_str!("../../../internal/mcp/apitemplates/builtin/gitlab.yaml"),
+        "linear" => include_str!("../../../internal/mcp/apitemplates/builtin/linear.yaml"),
+        "notion" => include_str!("../../../internal/mcp/apitemplates/builtin/notion.yaml"),
+        "npm" => include_str!("../../../internal/mcp/apitemplates/builtin/npm.yaml"),
+        "openai" => include_str!("../../../internal/mcp/apitemplates/builtin/openai.yaml"),
+        "openrouter" => include_str!("../../../internal/mcp/apitemplates/builtin/openrouter.yaml"),
+        "perplexity" => include_str!("../../../internal/mcp/apitemplates/builtin/perplexity.yaml"),
+        "resend" => include_str!("../../../internal/mcp/apitemplates/builtin/resend.yaml"),
+        "sentry" => include_str!("../../../internal/mcp/apitemplates/builtin/sentry.yaml"),
+        "slack" => include_str!("../../../internal/mcp/apitemplates/builtin/slack.yaml"),
+        "stripe" => include_str!("../../../internal/mcp/apitemplates/builtin/stripe.yaml"),
+        "telegram" => include_str!("../../../internal/mcp/apitemplates/builtin/telegram.yaml"),
+        "vercel" => include_str!("../../../internal/mcp/apitemplates/builtin/vercel.yaml"),
+        _ => return Err(format!("template {name:?} not found")),
+    };
+    serde_yaml_ng::from_str(yaml).map_err(|error| format!("parse template: {error}"))
+}
 
 #[derive(Default)]
 struct ResolvedRunFiles {
@@ -60,6 +153,25 @@ impl ApprovalSeam for PlatformApproval {
 
     fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
         approval_prompt::request_approval(request)
+    }
+}
+
+/// Boundary for collecting a user-supplied secret. The production platform
+/// implementation reads only the controlling terminal; tests inject a fake.
+pub trait SecureInputSeam: Send + Sync {
+    fn is_tty_present(&self) -> bool;
+    fn prompt(&self, request: &SecureInputRequest) -> Result<String, SecureInputError>;
+}
+
+pub struct PlatformSecureInput;
+
+impl SecureInputSeam for PlatformSecureInput {
+    fn is_tty_present(&self) -> bool {
+        approval_prompt::is_tty_present()
+    }
+
+    fn prompt(&self, request: &SecureInputRequest) -> Result<String, SecureInputError> {
+        approval_prompt::request_secure_input(request)
     }
 }
 
@@ -321,12 +433,18 @@ pub struct StoreReadOnlyRuntime {
     unavailable_tools: Vec<String>,
     now_unix: Option<i64>,
     approval: Arc<dyn ApprovalSeam>,
+    secure_input: Arc<dyn SecureInputSeam>,
     approval_cache: Mutex<HashSet<String>>,
     approval_key_counter: std::sync::atomic::AtomicI64,
     approval_mode: String,
     require_approval: bool,
+    approval_timeout: Duration,
+    approval_queue_attached: bool,
     command_executor: Option<Arc<dyn CommandExecutor>>,
     allowed_executables: Vec<String>,
+    clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+    clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
+    clipboard_auto_clear_duration: Duration,
 }
 
 impl StoreReadOnlyRuntime {
@@ -360,6 +478,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let approval_timeout = config.approval_timeout;
         let allowed_executables = config.allowed_executables.clone();
         let now_unix = config.now_unix;
         let unavailable_tools = config
@@ -383,12 +502,18 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            approval_timeout,
+            approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
+            clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
+            clipboard_clear_cancel: Mutex::new(None),
+            clipboard_auto_clear_duration: Duration::from_secs(30),
         })
     }
 
@@ -421,6 +546,7 @@ impl StoreReadOnlyRuntime {
         let transport = config.transport.clone();
         let approval_mode = config.approval_mode.clone();
         let require_approval = config.require_approval;
+        let approval_timeout = config.approval_timeout;
         let allowed_executables = config.allowed_executables.clone();
         let share_root = adapter.root().to_path_buf();
         let now_unix = config.now_unix;
@@ -445,12 +571,18 @@ impl StoreReadOnlyRuntime {
             unavailable_tools,
             now_unix,
             approval: Arc::new(PlatformApproval),
+            secure_input: Arc::new(PlatformSecureInput),
             approval_cache: Mutex::new(HashSet::new()),
             approval_key_counter: std::sync::atomic::AtomicI64::new(0),
             approval_mode,
             require_approval,
+            approval_timeout,
+            approval_queue_attached: false,
             command_executor: None,
             allowed_executables,
+            clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
+            clipboard_clear_cancel: Mutex::new(None),
+            clipboard_auto_clear_duration: Duration::from_secs(30),
         })
     }
 
@@ -462,11 +594,35 @@ impl StoreReadOnlyRuntime {
         self
     }
 
+    #[must_use]
+    pub fn with_secure_input_seam(mut self, seam: Arc<dyn SecureInputSeam>) -> Self {
+        self.secure_input = seam;
+        self
+    }
+
+    /// Installs the application-owned clipboard backend. The default remains
+    /// unavailable so constructing a runtime never touches the host clipboard.
+    #[must_use]
+    pub fn with_clipboard(
+        mut self,
+        clipboard: Arc<dyn symvault_core::platform::Clipboard>,
+    ) -> Self {
+        self.clipboard = clipboard;
+        self
+    }
+
+    #[must_use]
+    pub fn with_clipboard_auto_clear_duration(mut self, duration: Duration) -> Self {
+        self.clipboard_auto_clear_duration = duration;
+        self
+    }
+
     /// Connects prompt-mode write authorization to the live local approval
     /// queue exposed by the HTTP server. Callers without that API stay closed.
     #[must_use]
     pub fn with_approval_queue(mut self, queue: Arc<ApprovalQueue>) -> Self {
         self.inner = self.inner.with_approval_queue(queue);
+        self.approval_queue_attached = true;
         self
     }
 
@@ -513,6 +669,122 @@ impl StoreReadOnlyRuntime {
         if let Ok(mut logger) = audit.lock() {
             let _ = logger.append(entry);
         }
+    }
+
+    fn approve_write(
+        &self,
+        tool: &str,
+        path: &str,
+        field: Option<&str>,
+        mode: &str,
+    ) -> Result<(), String> {
+        match write_approval_decision(mode) {
+            WriteApprovalDecision::Allow => return Ok(()),
+            WriteApprovalDecision::Deny => {
+                self.append_audit(&format!("approval.{tool}.denied"), path, false);
+                return Err(if mode == "deny" {
+                    format!("{tool} denied: approval mode is 'deny'")
+                } else {
+                    // Go's profile loader validates configured modes before
+                    // runtime construction. Public Rust runtime configs can
+                    // bypass the loader, so fail closed here.
+                    format!("{tool} denied: unknown approval mode {mode:?}")
+                });
+            }
+            WriteApprovalDecision::Prompt => {}
+        }
+
+        if !self.approval.is_tty_present() {
+            self.append_audit(&format!("approval.{tool}.denied"), path, false);
+            return Err(format!(
+                "{tool} requires approval but no TTY or GUI dialog available"
+            ));
+        }
+
+        let clipboard_cache_key = if tool == "copy_to_clipboard" {
+            Some(format!(
+                "{}:{tool}:{}",
+                self.agent_name,
+                normalize_scope_path(path)
+            ))
+        } else {
+            None
+        };
+        if let Some(cache_key) = clipboard_cache_key.as_ref()
+            && self
+                .approval_cache
+                .lock()
+                .is_ok_and(|cache| cache.contains(cache_key))
+        {
+            self.append_audit(&format!("approval.{tool}.remembered"), path, true);
+            return Ok(());
+        }
+
+        self.append_audit(&format!("approval.{tool}.requested"), path, true);
+        // Go sanitizes the path and field independently in RenderSummary.
+        // Keep those boundaries: an unterminated escape in the path must not
+        // consume the following literal field label or field name.
+        let safe_path = sanitize_approval_summary(path);
+        let description = match tool {
+            "set_entry_field" => {
+                let safe_field = sanitize_approval_summary(field.unwrap_or(""));
+                if safe_field.is_empty() {
+                    format!("set field on {safe_path}")
+                } else {
+                    format!("set field on {safe_path} field {safe_field}")
+                }
+            }
+            "secure_input" | "request_credential" => format!("{tool} for {safe_path}"),
+            "copy_to_clipboard" => {
+                format!("copy password from {safe_path} to clipboard")
+            }
+            _ => format!("delete entry on {safe_path}"),
+        };
+        let request = ApprovalRequest {
+            operation: tool.to_owned(),
+            details: description,
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir: std::env::current_dir()
+                .map(|directory| directory.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            risk_level: if tool == "copy_to_clipboard" {
+                RiskLevel::High
+            } else {
+                RiskLevel::Critical
+            },
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: tool == "copy_to_clipboard",
+            ..ApprovalRequest::default()
+        };
+        let result = self.approval.request(&request);
+        if let Some(error) = result.error {
+            // The Go helper leaves the requested audit event in place but does
+            // not write a denied event for prompt I/O failures.
+            return Err(format!("{tool} approval failed: {error}"));
+        }
+        if !result.approved {
+            self.append_audit(&format!("approval.{tool}.denied"), path, false);
+            return Err(format!("{tool} denied: user did not approve"));
+        }
+        if result.remembered
+            && let Some(cache_key) = clipboard_cache_key
+        {
+            if let Ok(mut cache) = self.approval_cache.lock() {
+                cache.insert(cache_key);
+            }
+            self.append_audit(&format!("approval.{tool}.remembered"), path, true);
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit(&format!("approval.{tool}.granted"), path, true);
+        Ok(())
     }
 
     fn run_command(&self, arguments: &Value) -> Result<ToolCallResult, String> {
@@ -680,6 +952,16 @@ impl StoreReadOnlyRuntime {
             Err(RunFilesError::Tool(message)) => return Ok(ToolCallResult::error(message)),
             Err(RunFilesError::Denied(message)) => return Err(message),
         };
+        // run_command's environment contains only resolved vault references,
+        // matching Go KnownSecrets. Literal execute_with_secret env_vars are
+        // not included here and remain visible unless generic scanning flags them.
+        let mut redactions = files.redactions.clone();
+        redactions.extend(
+            environment
+                .values()
+                .filter(|value| !value.is_empty())
+                .map(|value| value.as_bytes().to_vec()),
+        );
         let mode = if self.approval_mode.is_empty() && self.require_approval {
             "prompt"
         } else {
@@ -699,7 +981,7 @@ impl StoreReadOnlyRuntime {
             &command,
             &environment,
             &files.content,
-            &files.redactions,
+            &redactions,
             working_directory,
             Duration::from_secs(timeout_seconds),
         ) {
@@ -736,6 +1018,750 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
+    fn check_execute_with_secret_approval(
+        &self,
+        command: &[String],
+        environment: &BTreeMap<String, String>,
+    ) -> Result<(), String> {
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => return Ok(()),
+            "deny" => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err("execute_with_secret denied: approval mode is 'deny'".into());
+            }
+            "prompt" => {}
+            // RuntimeConfig is public and may be constructed without the
+            // profile validator, so unknown modes must never bypass approval.
+            _ => {
+                self.append_audit("approval.execute_with_secret.denied", "", false);
+                return Err(format!(
+                    "execute_with_secret denied: unknown approval mode {mode:?}"
+                ));
+            }
+        }
+
+        // This Rust platform seam currently supports controlling-TTY approval
+        // only. Fail closed before consulting remembered approvals, matching
+        // Go's no-TTY/no-GUI guard ordering.
+        if !self.approval.is_tty_present() {
+            self.append_audit("approval.execute_with_secret.denied", "", false);
+            return Err(
+                "execute_with_secret requires approval but no TTY or GUI dialog available".into(),
+            );
+        }
+
+        let cache_key = format!("{}:execute_with_secret:", self.agent_name);
+        if self
+            .approval_cache
+            .lock()
+            .is_ok_and(|cache| cache.contains(&cache_key))
+        {
+            self.append_audit("approval.execute_with_secret.remembered", "", true);
+            return Ok(());
+        }
+
+        self.append_audit("approval.execute_with_secret.requested", "", true);
+
+        // Go currently puts raw command arguments in the approval prompt.
+        // This port intentionally redacts every resolved environment value so
+        // a command that repeats an injected value cannot expose it to the UI.
+        // Environment names remain visible, sorted by BTreeMap iteration.
+        let known_values = environment.values().cloned().collect::<Vec<_>>();
+        let safe_command = command
+            .iter()
+            .map(|argument| {
+                symvault_core::redact::redact_known_values(argument, &known_values, "[REDACTED]").0
+            })
+            .collect::<Vec<_>>();
+        let summary = format!(
+            "agent {:?} requests to execute command [{}] with secret injection (env vars: [{}])",
+            self.agent_name,
+            safe_command.join(" "),
+            environment.keys().cloned().collect::<Vec<_>>().join(" ")
+        );
+        let working_dir = std::env::current_dir()
+            .ok()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let approval = self.approval.request(&ApprovalRequest {
+            operation: "execute_with_secret".into(),
+            details: summary,
+            // Go treats an explicitly configured zero timeout like an absent
+            // value and falls back to 30 seconds.
+            timeout: if self.approval_timeout.is_zero() {
+                Duration::from_secs(30)
+            } else {
+                self.approval_timeout
+            },
+            agent_name: self.agent_name.clone(),
+            working_dir,
+            risk_level: RiskLevel::High,
+            secrets_accessed: self
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            can_remember: true,
+            ..ApprovalRequest::default()
+        });
+        if let Some(error) = &approval.error {
+            // Go records the operation-level denial in the handler, but does
+            // not emit approval.execute_with_secret.denied for prompt errors.
+            return Err(format!("execute_with_secret approval failed: {error}"));
+        }
+        if !approval.approved {
+            self.append_audit("approval.execute_with_secret.denied", "", false);
+            return Err("execute_with_secret denied: user did not approve".into());
+        }
+        if approval.remembered {
+            if let Ok(mut cache) = self.approval_cache.lock() {
+                cache.insert(cache_key);
+            }
+            self.append_audit("approval.execute_with_secret.remembered", "", true);
+        }
+        self.approval_key_counter
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        self.append_audit("approval.execute_with_secret.granted", "", true);
+        Ok(())
+    }
+
+    fn execute_with_secret(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let Some(executor) = &self.command_executor else {
+            return Err("execute_with_secret has no configured command executor".into());
+        };
+        let Some(command_value) = arguments.get("command") else {
+            self.append_audit("execute_with_secret", "<invalid:missing-command>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"command\"",
+            ));
+        };
+        let Some(command_values) = command_value.as_array() else {
+            self.append_audit("execute_with_secret", "<invalid:command-not-array>", false);
+            return Ok(ToolCallResult::error(
+                "argument \"command\" must be an array",
+            ));
+        };
+        if command_values.is_empty() {
+            self.append_audit("execute_with_secret", "<invalid:empty-command>", false);
+            return Ok(ToolCallResult::error("command array must not be empty"));
+        }
+        let mut command = Vec::with_capacity(command_values.len());
+        for (index, value) in command_values.iter().enumerate() {
+            let Some(value) = value.as_str() else {
+                self.append_audit("execute_with_secret", "<invalid:command-type>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "command[{index}] must be a string"
+                )));
+            };
+            command.push(value.to_owned());
+        }
+        if !self.allowed_executables.is_empty() {
+            let executable = Path::new(&command[0])
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy();
+            if !self
+                .allowed_executables
+                .iter()
+                .any(|allowed| allowed == &executable)
+            {
+                self.append_audit("execute_with_secret", &command[0], false);
+                return Err(format!(
+                    "command execution denied: executable {executable:?} not in agent allowlist"
+                ));
+            }
+        }
+        let timeout_seconds = match parse_command_timeout(arguments.get("timeout")) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                self.append_audit("execute_with_secret", "<invalid:timeout>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let Some(refs_value) = arguments.get("secret_refs") else {
+            self.append_audit(
+                "execute_with_secret",
+                "<invalid:missing-secret_refs>",
+                false,
+            );
+            return Ok(ToolCallResult::error(
+                "missing required argument \"secret_refs\"",
+            ));
+        };
+        let mut environment = BTreeMap::new();
+        let mut secret_values = BTreeMap::new();
+        let mut secret_refs = Vec::new();
+        let mut ref_names = HashSet::new();
+        if !refs_value.is_null() {
+            let Some(refs) = refs_value.as_array() else {
+                self.append_audit(
+                    "execute_with_secret",
+                    "<invalid:secret_refs-not-array>",
+                    false,
+                );
+                return Ok(ToolCallResult::error(
+                    "argument \"secret_refs\" must be an array",
+                ));
+            };
+            for (index, value) in refs.iter().enumerate() {
+                let Some(reference) = value.as_str() else {
+                    self.append_audit("execute_with_secret", "<invalid:secret_ref-type>", false);
+                    return Ok(ToolCallResult::error(format!(
+                        "secret_refs[{index}] must be a string"
+                    )));
+                };
+                let (entry_path, field) = match parse_op_ref(reference) {
+                    Ok(parsed) => parsed,
+                    Err(error) => {
+                        self.append_audit("execute_with_secret", reference, false);
+                        return Ok(ToolCallResult::error(format!(
+                            "invalid secret ref {reference:?}: {error}"
+                        )));
+                    }
+                };
+                let generated_name = generate_env_var_name(&entry_path, &field);
+                self.authorize_run_secret_path(&entry_path, "execute_with_secret")
+                    .map_err(run_files_error)?;
+                let resolver_ref = if field.is_empty() {
+                    entry_path.clone()
+                } else {
+                    format!("{entry_path}.{field}")
+                };
+                let resolved_path = self
+                    .inner
+                    .resolve_secret_ref_path(&resolver_ref)
+                    .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
+                self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
+                    .map_err(run_files_error)?;
+                let value = self
+                    .inner
+                    .resolve_secret_ref_at_path(&resolver_ref, &resolved_path)
+                    .map_err(|error| {
+                        self.append_audit("execute_with_secret", reference, false);
+                        format!("cannot resolve secret ref {reference:?}: {error}")
+                    });
+                let value = match value {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let detail = error
+                            .strip_prefix("cannot resolve secret ref ")
+                            .and_then(|rest| rest.split_once(": ").map(|(_, detail)| detail))
+                            .unwrap_or(&error);
+                        let detail = detail.strip_prefix("entry not found: ").map_or_else(
+                            || detail.to_owned(),
+                            |path| format!("secret ref not found: {path}"),
+                        );
+                        return Ok(ToolCallResult::error(format!(
+                            "cannot resolve secret ref {reference:?}: {detail}"
+                        )));
+                    }
+                };
+                if !ref_names.insert(generated_name.clone()) {
+                    self.append_audit("execute_with_secret", reference, false);
+                    return Ok(ToolCallResult::error(format!(
+                        "duplicate environment variable name {generated_name:?} from secret ref {reference:?}"
+                    )));
+                }
+                environment.insert(generated_name.clone(), value.clone());
+                secret_values.insert(generated_name, value);
+                secret_refs.push(reference.to_owned());
+            }
+        }
+        secret_refs.sort();
+        if let Some(value) = arguments.get("env_vars").filter(|value| !value.is_null()) {
+            let Some(env_vars) = value.as_object() else {
+                self.append_audit(
+                    "execute_with_secret",
+                    "<invalid:env_vars-not-object>",
+                    false,
+                );
+                return Ok(ToolCallResult::error(
+                    "argument \"env_vars\" must be an object",
+                ));
+            };
+            for (name, value) in env_vars {
+                let Some(value) = value.as_str() else {
+                    self.append_audit(
+                        "execute_with_secret",
+                        "<invalid:env_vars-value-type>",
+                        false,
+                    );
+                    return Ok(ToolCallResult::error(format!(
+                        "env_vars.{name} value must be a string"
+                    )));
+                };
+                environment.insert(name.clone(), value.to_owned());
+            }
+        }
+        let denied = denied_env_names(environment.keys());
+        if !denied.is_empty() {
+            self.append_audit("execute_with_secret", "<validation-denied-env>", false);
+            return Ok(ToolCallResult::error(format!(
+                "env_vars contains denied keys: {}",
+                denied.join(", ")
+            )));
+        }
+        if let Err(error) = self.check_execute_with_secret_approval(&command, &environment) {
+            self.append_audit("execute_with_secret", "<approval-denied>", false);
+            return Err(error);
+        }
+        let working_directory = arguments
+            .get("working_dir")
+            .and_then(Value::as_str)
+            .filter(|directory| !directory.is_empty())
+            .map(Path::new);
+        let files = BTreeMap::new();
+        let redactions = secret_values
+            .values()
+            .filter(|value| !value.is_empty())
+            .map(|value| value.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let known_values = secret_values.values().cloned().collect::<Vec<_>>();
+        let execution = match executor.run(
+            &command,
+            &environment,
+            &files,
+            &redactions,
+            working_directory,
+            Duration::from_secs(timeout_seconds),
+        ) {
+            Ok(execution) => execution,
+            Err(error) => {
+                self.append_audit("execute_with_secret", "<execution-failed>", false);
+                let (error, _) =
+                    symvault_core::redact::redact_known_values(&error, &known_values, "***");
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let audit_path = execute_with_secret_audit_path(
+            &command,
+            &secret_refs,
+            &known_values,
+            execution.exit_code,
+        );
+        self.append_audit(
+            "execute_with_secret",
+            &audit_path,
+            execution.exit_code == 0 && !execution.timed_out,
+        );
+        let (stdout, _) =
+            symvault_core::redact::redact_known_values(&execution.stdout, &known_values, "***");
+        let (stderr, _) =
+            symvault_core::redact::redact_known_values(&execution.stderr, &known_values, "***");
+        let stdout = crate::render::sanitize_for_mcp(&stdout);
+        let stderr = crate::render::sanitize_for_mcp(&stderr);
+        let stdout = crate::render::embed_as_data("command_output", &stdout)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        let stderr = crate::render::embed_as_data("command_output", &stderr)
+            .map_err(|error| format!("embed command output: {error}"))?;
+        if execution.timed_out {
+            return Ok(ToolCallResult::error(format!(
+                "command timed out after {timeout_seconds}s\nExit code: {}\nStdout: {stdout}\nStderr: {stderr}",
+                execution.exit_code
+            )));
+        }
+        Ok(ToolCallResult::text(
+            symvault_gojson::to_string(&json!({
+                "exit_code": execution.exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+                "duration_ms": execution.duration.as_millis().min(i64::MAX as u128) as i64,
+            }))
+            .map_err(|error| error.to_string())?,
+        ))
+    }
+
+    fn execute_api_request(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let Some(name) = arguments.get("template").and_then(Value::as_str) else {
+            self.append_audit("execute_api_request", "<invalid:missing-template>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"template\"",
+            ));
+        };
+        let Some(endpoint) = arguments.get("endpoint").and_then(Value::as_str) else {
+            self.append_audit("execute_api_request", "<invalid:missing-endpoint>", false);
+            return Ok(ToolCallResult::error(
+                "missing required argument \"endpoint\"",
+            ));
+        };
+        let timeout = match api_timeout(arguments.get("timeout")) {
+            Ok(timeout) => timeout,
+            Err(error) => {
+                self.append_audit("execute_api_request", "<invalid:timeout>", false);
+                return Ok(ToolCallResult::error(error));
+            }
+        };
+        let definition = match load_api_template_definition(&self.share_root, name) {
+            Ok(definition) => definition,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<template-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "cannot load template {name:?}: {error}"
+                )));
+            }
+        };
+
+        if let Err(error) = validate_api_template_definition(&definition) {
+            self.append_audit(
+                "execute_api_request",
+                &format!("<template-error:{name}>"),
+                false,
+            );
+            return Ok(ToolCallResult::error(format!(
+                "cannot load template {name:?}: {error}"
+            )));
+        }
+        let method = arguments
+            .get("method")
+            .and_then(Value::as_str)
+            .unwrap_or("GET")
+            .to_ascii_uppercase();
+        let body = arguments
+            .get("body")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        let endpoint = match normalize_api_endpoint(endpoint) {
+            Ok(endpoint) => endpoint,
+            Err(error) => {
+                self.append_audit("execute_api_request", "<invalid:endpoint>", false);
+                return Ok(ToolCallResult::error(format!(
+                    "invalid endpoint {endpoint:?}: {error}"
+                )));
+            }
+        };
+        let runtime_template = ApiTemplate {
+            base_url: definition.base_url,
+            allowed_endpoints: definition.allowed_endpoints,
+            allowed_methods: definition.allowed_methods,
+            default_headers: definition.default_headers,
+            allow_private: definition.allow_private,
+        };
+        if let Err(error) = broker::validate_api_request(&runtime_template, &method, &endpoint) {
+            let audit_target = if error == "method not allowed by template" {
+                format!("<method-denied:{name}>")
+            } else if error == "endpoint not allowed by template" {
+                format!("<endpoint-denied:{name}>")
+            } else {
+                format!("<blocked-target:{name}>")
+            };
+            self.append_audit("execute_api_request", &audit_target, false);
+            return Ok(ToolCallResult::error(match error.as_str() {
+                "method not allowed by template" => format!("method not allowed: {method}"),
+                "endpoint not allowed by template" => {
+                    format!("endpoint not allowed: {endpoint}")
+                }
+                _ => error,
+            }));
+        }
+
+        if let Err(error) = self.check_execute_api_request_approval() {
+            self.append_audit("execute_api_request", "<approval-denied>", false);
+            return Err(error);
+        }
+
+        let entry_path = match api_entry_path(&definition.entry_ref) {
+            Ok(path) => path,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<template-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "invalid entry_ref for {name:?}: {error}"
+                )));
+            }
+        };
+        if !self.inner.scope_allows(&entry_path) {
+            self.append_audit(
+                "execute_api_request",
+                &format!("<scope-denied:{name}>"),
+                false,
+            );
+            return Err(format!(
+                "access denied: template entry path {entry_path:?} outside allowed scope"
+            ));
+        }
+
+        // Resolve only after scope and approval. The accessor returns only the
+        // already-scoped entry projection and response-redaction strings.
+        let (entry_fields, mut known_values) = self
+            .inner
+            .resolve_api_entry_at_path(&entry_path)
+            .map_err(|error| {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<vault-error:{name}>"),
+                    false,
+                );
+                format!("cannot load credentials for {name:?}: {error}")
+            })?;
+
+        let substitutions =
+            match resolve_api_substitutions(&definition.substitutions, &entry_fields) {
+                Ok(values) => values,
+                Err(error) => {
+                    self.append_audit(
+                        "execute_api_request",
+                        &format!("<substitution-error:{name}>"),
+                        false,
+                    );
+                    return Ok(ToolCallResult::error(format!(
+                        "cannot resolve substitutions for {name:?}: {error}"
+                    )));
+                }
+            };
+        let mut request_url = api_request_url(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+        )?;
+        let request_body =
+            apply_api_body_substitutions(&body, &definition.substitutions, &substitutions);
+        let mut request_headers = runtime_template.default_headers.clone();
+        let caller_headers = match arguments.get("headers") {
+            None | Some(Value::Null) => BTreeMap::new(),
+            Some(Value::Object(headers)) => {
+                let mut parsed = BTreeMap::new();
+                for (key, value) in headers {
+                    let Some(value) = value.as_str() else {
+                        self.append_audit(
+                            "execute_api_request",
+                            "<invalid:header-value-not-string>",
+                            false,
+                        );
+                        return Ok(ToolCallResult::error(format!(
+                            "headers[{key:?}] must be a string"
+                        )));
+                    };
+                    parsed.insert(key.clone(), value.to_owned());
+                }
+                parsed
+            }
+            Some(_) => {
+                self.append_audit("execute_api_request", "<invalid:headers-not-object>", false);
+                return Ok(ToolCallResult::error(
+                    "argument \"headers\" must be an object",
+                ));
+            }
+        };
+        overlay_api_headers(&mut request_headers, caller_headers);
+        apply_api_header_substitutions(
+            &mut request_headers,
+            &definition.substitutions,
+            &substitutions,
+        );
+        let (auth_header, auth_query) = match api_auth(&definition.auth_type, &entry_fields) {
+            Ok(auth) => auth,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("<auth-error:{name}>"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!(
+                    "cannot resolve auth for {name:?}: {error}"
+                )));
+            }
+        };
+        if let Some((header, value)) = auth_header {
+            set_api_header(&mut request_headers, &header, value);
+        }
+        if let Some((key, value)) = auth_query {
+            request_url = set_api_query_parameter(&request_url, &key, &value)?;
+            known_values.push(api_query_escape(&value));
+        }
+        for value in substitutions.values() {
+            known_values.push(api_query_escape(value));
+            known_values.push(api_path_escape(value));
+            known_values.push(api_escaped_path(value));
+        }
+        if definition.auth_type == "basic"
+            && let (Some(user), Some(password)) = (
+                entry_fields.get("username").and_then(Value::as_str),
+                api_field(&entry_fields, &["credential", "password"]),
+            )
+        {
+            known_values.push(BASE64_STANDARD.encode(format!("{user}:{password}")));
+        }
+        if !request_body.is_empty()
+            && !request_headers
+                .keys()
+                .any(|key| key.eq_ignore_ascii_case("content-type"))
+        {
+            request_headers.insert("Content-Type".into(), "application/json".into());
+        }
+        // The broker's generic transport merges defaults after supplied values.
+        // API requests already applied Go's defaults -> caller -> substitutions
+        // -> auth order, so pass the merged headers once and no remaining defaults.
+        let transport_template = ApiTemplate {
+            default_headers: BTreeMap::new(),
+            ..runtime_template.clone()
+        };
+
+        let response = match broker::execute_http_for_api(
+            &transport_template,
+            &method,
+            &endpoint,
+            &request_url,
+            &request_headers,
+            request_body.as_bytes(),
+            broker::ApiResponseBounds {
+                timeout,
+                response_limit: broker::API_RESPONSE_LIMIT,
+            },
+        ) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_audit(
+                    "execute_api_request",
+                    &format!("template={name}, endpoint={endpoint}, method={method}, status=error"),
+                    false,
+                );
+                return Ok(ToolCallResult::error(format!("request failed: {error}")));
+            }
+        };
+        let raw_body = go_json_text(&response.body);
+        let (body, body_sanitized) = sanitize_api_value(&raw_body, &known_values);
+        let mut headers = response.headers;
+        let mut header_sanitized = false;
+        for value in headers.values_mut() {
+            let (sanitized, changed) = sanitize_api_value(value, &known_values);
+            *value = sanitized;
+            header_sanitized |= changed;
+        }
+        let content_type = headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case("content-type"))
+            .map(|(_, value)| value.clone())
+            .unwrap_or_default();
+        let response_sanitized = response.sanitized || body_sanitized || header_sanitized;
+        if response_sanitized {
+            self.append_audit(
+                "execute_api_request",
+                &format!(
+                    "template={name}, endpoint={endpoint}, method={method}, status={}, sanitized=true",
+                    response.status
+                ),
+                true,
+            );
+        }
+        let ok = response.status < 400;
+        self.append_audit(
+            "execute_api_request",
+            &format!(
+                "template={name}, endpoint={endpoint}, method={method}, status={}",
+                response.status
+            ),
+            ok,
+        );
+        let text = symvault_gojson::to_string(&json!({
+            "status_code": response.status,
+            "headers": headers,
+            "body": body,
+            "body_truncated": response.body_truncated,
+            "content_type": content_type,
+        }))
+        .map_err(|error| format!("marshal API response: {error}"))?;
+        Ok(ToolCallResult::text(text))
+    }
+
+    fn check_execute_api_request_approval(&self) -> Result<(), String> {
+        let mode = if self.approval_mode.is_empty() {
+            if self.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.approval_mode.as_str()
+        };
+        match mode {
+            "none" | "auto" => Ok(()),
+            "deny" => {
+                self.append_audit("approval.execute_api_request.denied", "", false);
+                Err("execute_api_request denied: approval mode is 'deny'".into())
+            }
+            "prompt" => {
+                if !self.approval_queue_attached && !self.approval.is_tty_present() {
+                    self.append_audit("approval.execute_api_request.denied", "", false);
+                    return Err(
+                        "execute_api_request requires approval but no TTY or GUI dialog available"
+                            .into(),
+                    );
+                }
+                self.append_audit("approval.execute_api_request.requested", "", true);
+                let request = ApprovalRequest {
+                    operation: "execute_api_request".into(),
+                    details: format!(
+                        "agent {:?} requests to execute an API request",
+                        self.agent_name
+                    ),
+                    timeout: if self.approval_timeout.is_zero() {
+                        Duration::from_secs(30)
+                    } else {
+                        self.approval_timeout
+                    },
+                    agent_name: self.agent_name.clone(),
+                    working_dir: std::env::current_dir()
+                        .map(|directory| directory.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                    risk_level: RiskLevel::Critical,
+                    secrets_accessed: self
+                        .approval_key_counter
+                        .load(std::sync::atomic::Ordering::Acquire),
+                    can_remember: false,
+                    ..ApprovalRequest::default()
+                };
+                if self.approval_queue_attached {
+                    if let Err(error) = self.inner.request_approval_queue(
+                        "execute_api_request",
+                        "",
+                        true,
+                        "agent API request requires approval",
+                    ) {
+                        if error.contains("denied") || error.contains("expired") {
+                            self.append_audit("approval.execute_api_request.denied", "", false);
+                        }
+                        return Err(error);
+                    }
+                } else {
+                    let outcome = self.approval.request(&request);
+                    if let Some(error) = outcome.error {
+                        return Err(format!("execute_api_request approval failed: {error}"));
+                    }
+                    if !outcome.approved {
+                        self.append_audit("approval.execute_api_request.denied", "", false);
+                        return Err("execute_api_request denied: user did not approve".into());
+                    }
+                }
+                self.approval_key_counter
+                    .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                self.append_audit("approval.execute_api_request.granted", "", true);
+                Ok(())
+            }
+            _ => {
+                self.append_audit("approval.execute_api_request.denied", "", false);
+                Err(format!(
+                    "execute_api_request denied: unknown approval mode {mode:?}"
+                ))
+            }
+        }
+    }
+
     fn resolve_run_command_files(
         &self,
         raw: Option<&Value>,
@@ -756,14 +1782,14 @@ impl StoreReadOnlyRuntime {
             let (reference, encoding) = parse_run_file_spec(spec)
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
-            self.authorize_run_secret_path(&candidate_path)?;
+            self.authorize_run_secret_path(&candidate_path, "run_command")?;
             let path = self
                 .inner
                 .resolve_secret_ref_path(&reference)
                 .map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
                 })?;
-            self.authorize_run_secret_path(&path)?;
+            self.authorize_run_secret_path(&path, "run_command")?;
             let source = self
                 .inner
                 .resolve_secret_ref_at_path(&reference, &path)
@@ -793,7 +1819,7 @@ impl StoreReadOnlyRuntime {
         Ok(files)
     }
 
-    fn authorize_run_secret_path(&self, path: &str) -> Result<(), RunFilesError> {
+    fn authorize_run_secret_path(&self, path: &str, tool_name: &str) -> Result<(), RunFilesError> {
         if !self.inner.scope_allows(path) {
             self.append_audit("scope_denied", path, false);
             return Err(RunFilesError::Denied(format!(
@@ -805,7 +1831,7 @@ impl StoreReadOnlyRuntime {
                 agent_id: self.agent_name.clone(),
                 path: path.to_owned(),
                 action_type: "run".into(),
-                tool_name: "run_command".into(),
+                tool_name: tool_name.into(),
                 ..EvalContext::default()
             });
             if !result.matched || result.action != Action::Allow {
@@ -1573,7 +2599,20 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 "rate limit exceeded: max {limit} requests per minute"
             ));
         }
-        let result = if name == "symaira_audit_self" {
+        let mut approval_failed = false;
+        let result = if matches!(name, "set_entry_field" | "delete_entry" | "symaira_delete")
+            && !self.approval_queue_attached
+        {
+            let mut approve = |tool: &str, path: &str, field: Option<&str>, mode: &str| {
+                let result = self.approve_write(tool, path, field, mode);
+                approval_failed = result.is_err();
+                result
+            };
+            self.inner
+                .call_with_write_approval(name, arguments, &mut approve)
+        } else if matches!(name, "secure_input" | "request_credential") {
+            self.secure_input_tool(name, arguments)
+        } else if name == "symaira_audit_self" {
             self.audit_self(arguments)
         } else if name == "list_shares" {
             self.list_shares(arguments)
@@ -1585,6 +2624,12 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             self.revoke_share(arguments)
         } else if name == "secret_unseal" {
             self.secret_unseal(arguments)
+        } else if name == "execute_with_secret" {
+            self.execute_with_secret(arguments)
+        } else if name == "execute_api_request" {
+            self.execute_api_request(arguments)
+        } else if name == "copy_to_clipboard" {
+            self.copy_to_clipboard(arguments)
         } else if name == "run_command" {
             self.run_command(arguments)
         } else {
@@ -1630,7 +2675,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate_totp", path, ok);
             }
-            "set_entry_field" => {
+            "set_entry_field" if !approval_failed => {
                 let path = arguments
                     .get("path")
                     .and_then(Value::as_str)
@@ -1638,7 +2683,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("set", path, ok);
             }
-            "delete_entry" => {
+            "delete_entry" if !approval_failed => {
                 let path = arguments
                     .get("path")
                     .and_then(Value::as_str)
@@ -1713,6 +2758,191 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
     }
 }
 
+impl StoreReadOnlyRuntime {
+    fn copy_to_clipboard(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let preflight = match self.inner.clipboard_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit("copy_to_clipboard", "<invalid>", false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<clipboard-denied>");
+                self.append_audit("copy_to_clipboard", path, false);
+                return Err(error);
+            }
+        };
+
+        if self.approval_queue_attached
+            && write_approval_decision(&preflight.approval_mode) == WriteApprovalDecision::Prompt
+        {
+            self.append_audit(
+                "approval.copy_to_clipboard.requested",
+                &preflight.path,
+                true,
+            );
+            if let Err(error) = self.inner.request_approval_queue(
+                "copy_to_clipboard",
+                &preflight.path,
+                true,
+                "copy password to clipboard",
+            ) {
+                if error.contains("denied") || error.contains("expired") {
+                    self.append_audit("approval.copy_to_clipboard.denied", &preflight.path, false);
+                }
+                return Err(error);
+            }
+            self.approval_key_counter
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            self.append_audit("approval.copy_to_clipboard.granted", &preflight.path, true);
+        } else {
+            self.approve_write(
+                "copy_to_clipboard",
+                &preflight.path,
+                None,
+                &preflight.approval_mode,
+            )?;
+        }
+
+        let password = match self.inner.clipboard_password(&preflight.path) {
+            Ok(password) => password,
+            Err(error) => {
+                self.append_audit("copy_to_clipboard", &preflight.path, false);
+                return Err(error);
+            }
+        };
+        if password.is_error {
+            self.append_audit("copy_to_clipboard", &preflight.path, false);
+            return Ok(password);
+        }
+        if let Err(error) = self.clipboard.set(password.text.as_bytes()) {
+            self.append_audit("copy_to_clipboard", &preflight.path, false);
+            return Ok(ToolCallResult::error(format!(
+                "clipboard copy failed: {error}"
+            )));
+        }
+        self.start_clipboard_auto_clear();
+        self.append_audit("copy_to_clipboard", &preflight.path, true);
+        Ok(ToolCallResult::text(r#"{"success": true}"#))
+    }
+
+    fn start_clipboard_auto_clear(&self) {
+        if self.clipboard_auto_clear_duration.is_zero() {
+            return;
+        }
+        let (cancel, receiver) = mpsc::channel();
+        if let Ok(mut active) = self.clipboard_clear_cancel.lock() {
+            if let Some(previous) = active.replace(cancel.clone()) {
+                let _ = previous.send(());
+            }
+        } else {
+            return;
+        }
+        let clipboard = Arc::clone(&self.clipboard);
+        let delay = self.clipboard_auto_clear_duration;
+        let clear_claimed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        #[cfg(unix)]
+        let signal_registration = approval_prompt::register_stdio_clipboard_auto_clear(
+            cancel.clone(),
+            Arc::clone(&clear_claimed),
+        );
+        thread::spawn(move || {
+            #[cfg(unix)]
+            let _signal_registration = signal_registration;
+            if matches!(
+                receiver.recv_timeout(delay),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) && !clear_claimed.swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
+                let _ = clipboard.clear();
+            }
+        });
+    }
+
+    fn secure_input_tool(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
+        let audit_path = arguments
+            .get("path")
+            .and_then(Value::as_str)
+            .unwrap_or("<invalid>");
+        let preflight = match self.inner.secure_input_preflight(arguments) {
+            Ok(preflight) => preflight,
+            Err(SecureInputPreflightError::Tool(result)) => {
+                self.append_audit(name, audit_path, false);
+                return Ok(result);
+            }
+            Err(SecureInputPreflightError::Handler(error)) => {
+                self.append_audit(name, audit_path, false);
+                return Err(error);
+            }
+        };
+
+        if let Err(error) = self.approve_write(
+            name,
+            &preflight.path,
+            Some(&preflight.field),
+            &preflight.approval_mode,
+        ) {
+            return Ok(ToolCallResult::error(error));
+        }
+        if !self.secure_input.is_tty_present() {
+            self.append_audit(name, &preflight.path, false);
+            return Err("secure input unavailable on this host (no controlling TTY)".into());
+        }
+
+        let title = if name == "request_credential" {
+            "Symaira Vault: Agent requesting credential"
+        } else {
+            "Symaira Vault: Secure Input"
+        };
+        let request = SecureInputRequest {
+            title: title.into(),
+            path: preflight.path.clone(),
+            field: preflight.field.clone(),
+            description: preflight.description,
+            timeout: Duration::from_secs(60),
+        };
+        let value = match self.secure_input.prompt(&request) {
+            Ok(value) => value.trim().to_owned(),
+            Err(SecureInputError::Canceled) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error("secure input canceled by user"));
+            }
+            Err(SecureInputError::Timeout) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error("secure input timed out"));
+            }
+            Err(SecureInputError::Empty) => {
+                self.append_audit(name, &preflight.path, false);
+                return Ok(ToolCallResult::error(
+                    "secure input canceled: empty value provided",
+                ));
+            }
+            Err(SecureInputError::NoTty) => {
+                self.append_audit(name, &preflight.path, false);
+                return Err("secure input unavailable on this host (no controlling TTY)".into());
+            }
+            Err(error) => {
+                self.append_audit(name, &preflight.path, false);
+                return Err(format!("secure input failed: {error}"));
+            }
+        };
+        if value.is_empty() {
+            self.append_audit(name, &preflight.path, false);
+            return Ok(ToolCallResult::error(
+                "secure input canceled: empty value provided",
+            ));
+        }
+        let result = self
+            .inner
+            .store_secure_input(&preflight.path, &preflight.field, &value);
+        self.append_audit(name, &preflight.path, result.is_ok());
+        result
+    }
+}
+
 fn render_list_shares(
     share_store: &ShareStore,
     agent_name: &str,
@@ -1748,6 +2978,51 @@ fn render_list_shares(
 
 fn store_error(error: StoreError) -> String {
     error.to_string()
+}
+
+/// Strip the ANSI/OSC and control bytes Go removes before rendering an
+/// approval summary. User-controlled paths and field names are terminal text,
+/// never escape sequences.
+fn sanitize_approval_summary(input: &str) -> String {
+    // Port Go's byte-oriented stripTerminalControl state machine. Iterating
+    // UTF-8 bytes preserves its C1 behavior and its treatment of simple ESC,
+    // OSC backslashes, and the TAB/LF/CR exceptions.
+    let bytes = input.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut state = 0_u8;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        match state {
+            0 => match byte {
+                0x1b if bytes.get(index + 1) == Some(&b'[') => {
+                    state = 2;
+                    index += 1;
+                }
+                0x1b if bytes.get(index + 1) == Some(&b']') => {
+                    state = 3;
+                    index += 1;
+                }
+                0x1b => {}
+                byte if byte < 0x20 && !matches!(byte, b'\t' | b'\n' | b'\r') => {}
+                0x7f => {}
+                byte => output.push(byte),
+            },
+            2 => {
+                if !(byte == b'[' || byte == b';' || byte.is_ascii_digit()) {
+                    state = 0;
+                }
+            }
+            3 => {
+                if byte == 0x07 || byte == b'\\' {
+                    state = 0;
+                }
+            }
+            _ => unreachable!("approval-summary sanitizer state"),
+        }
+        index += 1;
+    }
+    String::from_utf8_lossy(&output).into_owned()
 }
 
 fn format_go_secret_map(values: &BTreeMap<String, Value>) -> String {
@@ -1800,6 +3075,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "list_entries",
         "generate_password",
         "generate_totp",
+        "copy_to_clipboard",
         "set_entry_field",
         "delete_entry",
         "find_entries",
@@ -1842,6 +3118,410 @@ fn parse_command_timeout(value: Option<&Value>) -> Result<u64, String> {
         return Err("argument \"timeout\" must be between 1 and 300 seconds".into());
     }
     Ok(number as u64)
+}
+
+fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
+    let Some(value) = value else {
+        return Ok(Duration::from_secs(30));
+    };
+    let number = match value {
+        Value::Number(number) => number
+            .as_f64()
+            .ok_or_else(|| "argument \"timeout\" must be numeric".to_owned())?,
+        Value::String(string) => string
+            .parse::<f64>()
+            .map_err(|_| "argument \"timeout\" must be numeric".to_owned())?,
+        _ => return Err("argument \"timeout\" must be numeric".into()),
+    };
+    if !number.is_finite() {
+        return Err("argument \"timeout\" must be a finite number".into());
+    }
+    if number.fract() != 0.0 {
+        return Err("argument \"timeout\" must be a whole number of seconds".into());
+    }
+    Ok(Duration::from_secs((number as u64).clamp(1, 300)))
+}
+
+fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return Err("endpoint is required".into());
+    }
+    if !endpoint.starts_with('/') {
+        return Err("endpoint must start with '/'".into());
+    }
+    let mut decoded = Vec::with_capacity(endpoint.len());
+    let bytes = endpoint.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len() {
+                return Err("invalid URL encoding".into());
+            }
+            let Some(high) = (bytes[index + 1] as char).to_digit(16) else {
+                return Err("invalid URL encoding".into());
+            };
+            let Some(low) = (bytes[index + 2] as char).to_digit(16) else {
+                return Err("invalid URL encoding".into());
+            };
+            decoded.push(((high << 4) | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    let decoded = String::from_utf8_lossy(&decoded);
+    if [endpoint, decoded.as_ref()]
+        .iter()
+        .any(|path| path.split('/').any(|part| part == "." || part == ".."))
+    {
+        return Err("dot-segments are not allowed".into());
+    }
+    let trailing_slash = endpoint.ends_with('/');
+    let mut components = Vec::new();
+    for component in endpoint.split('/') {
+        match component {
+            "" | "." => {}
+            ".." => {
+                components.pop();
+            }
+            value => components.push(value),
+        }
+    }
+    let mut normalized = format!("/{}", components.join("/"));
+    if trailing_slash && normalized != "/" {
+        normalized.push('/');
+    }
+    Ok(normalized)
+}
+
+fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Result<(), String> {
+    if definition.base_url.is_empty() {
+        return Err("base_url is required".into());
+    }
+    if definition.auth_type.is_empty() {
+        return Err("auth_type is required".into());
+    }
+    if definition.entry_ref.trim().is_empty() {
+        return Err("entry_ref is required".into());
+    }
+    // Unknown auth names are parsed by Go too; api_auth reports them only after
+    // approval and the scoped entry read. The template's remaining structure
+    // is still validated here.
+    if definition.auth_type == "none" && definition.substitutions.is_empty() {
+        return Err("auth_type \"none\" requires at least one substitution".into());
+    }
+    let mut seen = HashSet::new();
+    for (index, substitution) in definition.substitutions.iter().enumerate() {
+        let label = format!("substitutions[{index}]");
+        let placeholder = substitution.placeholder.as_str();
+        let has_alnum = placeholder.bytes().any(|byte| byte.is_ascii_alphanumeric());
+        let has_delimiter = placeholder.contains("__")
+            || placeholder
+                .bytes()
+                .any(|byte| !byte.is_ascii_alphanumeric() && byte != b'_');
+        if placeholder.len() < 4
+            || !placeholder
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-._~".contains(&byte))
+            || !has_alnum
+            || !has_delimiter
+        {
+            return Err(format!("{label}: invalid placeholder {placeholder:?}"));
+        }
+        if !seen.insert(placeholder) {
+            return Err(format!("{label}: duplicate placeholder {placeholder:?}"));
+        }
+        if substitution.field.is_empty() {
+            return Err(format!(
+                "{label}: field is required for placeholder {placeholder:?}"
+            ));
+        }
+        if substitution
+            .surfaces
+            .iter()
+            .any(|surface| !matches!(surface.as_str(), "path" | "query" | "header" | "body"))
+        {
+            return Err(format!("{label}: unsupported substitution surface"));
+        }
+    }
+    Ok(())
+}
+
+fn api_entry_path(reference: &str) -> Result<String, String> {
+    let path = reference.trim();
+    if path.is_empty() {
+        return Err("entry_ref is required".into());
+    }
+    let path = if let Some(reference) = path.strip_prefix("op://") {
+        let parts = reference.split('/').collect::<Vec<_>>();
+        if parts.len() < 2 {
+            return Err("expected at least vault/entry".into());
+        }
+        if parts.len() > 2 {
+            return Err("entry_ref must reference an entry, not a field".into());
+        }
+        parts[1]
+    } else {
+        path
+    };
+    if path.is_empty() {
+        return Err("entry_ref must reference an entry".into());
+    }
+    if path.starts_with('/')
+        || path.contains('\\')
+        || path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("entry_ref must be a normalized vault entry path".into());
+    }
+    Ok(path.to_owned())
+}
+
+fn substitution_surfaces(substitution: &ApiSubstitution) -> &[String] {
+    &substitution.surfaces
+}
+
+fn substitution_applies(substitution: &ApiSubstitution, surface: &str) -> bool {
+    substitution.surfaces.is_empty() && matches!(surface, "path" | "query")
+        || substitution_surfaces(substitution)
+            .iter()
+            .any(|item| item == surface)
+}
+
+fn resolve_api_substitutions(
+    substitutions: &[ApiSubstitution],
+    fields: &BTreeMap<String, Value>,
+) -> Result<BTreeMap<String, String>, String> {
+    let mut values = BTreeMap::new();
+    for substitution in substitutions {
+        let value = fields
+            .get(&substitution.field)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "no value for placeholder {:?} (expected vault entry field {:?})",
+                    substitution.placeholder, substitution.field
+                )
+            })?;
+        values.insert(substitution.placeholder.clone(), value.to_owned());
+    }
+    Ok(values)
+}
+
+fn api_request_url(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(&format!("{}{}", base_url.trim_end_matches('/'), endpoint))
+        .map_err(|_| "invalid template URL")?;
+    let mut path = url.path().to_owned();
+    let mut query = url.query().unwrap_or_default().to_owned();
+    for substitution in substitutions {
+        let Some(value) = values.get(&substitution.placeholder) else {
+            continue;
+        };
+        if substitution_applies(substitution, "path") {
+            path = path.replace(&substitution.placeholder, value);
+        }
+        if substitution_applies(substitution, "query") {
+            query = query.replace(&substitution.placeholder, value);
+        }
+    }
+    url.set_path(&path);
+    if !query.is_empty() || url.query().is_some() {
+        url.set_query(Some(&query));
+    }
+    Ok(url.to_string())
+}
+
+fn apply_api_body_substitutions(
+    body: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> String {
+    let mut body = body.to_owned();
+    for substitution in substitutions {
+        if substitution_applies(substitution, "body")
+            && let Some(value) = values.get(&substitution.placeholder)
+        {
+            body = body.replace(&substitution.placeholder, value);
+        }
+    }
+    body
+}
+
+fn apply_api_header_substitutions(
+    headers: &mut BTreeMap<String, String>,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) {
+    for substitution in substitutions {
+        if substitution_applies(substitution, "header")
+            && let Some(value) = values.get(&substitution.placeholder)
+        {
+            for header in headers.values_mut() {
+                *header = header.replace(&substitution.placeholder, value);
+            }
+        }
+    }
+}
+
+fn overlay_api_headers(target: &mut BTreeMap<String, String>, incoming: BTreeMap<String, String>) {
+    for (name, value) in incoming {
+        set_api_header(target, &name, value);
+    }
+}
+
+fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
+    headers.retain(|existing, _| !existing.eq_ignore_ascii_case(name));
+    headers.insert(name.to_owned(), value);
+}
+
+fn api_field<'a>(fields: &'a BTreeMap<String, Value>, names: &[&str]) -> Option<&'a str> {
+    names.iter().find_map(|name| {
+        fields
+            .get(*name)
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+    })
+}
+
+type ApiAuthHeader = Option<(String, String)>;
+type ApiAuthQuery = Option<(String, String)>;
+type ApiAuthResult = Result<(ApiAuthHeader, ApiAuthQuery), String>;
+
+fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
+    match auth_type {
+        "bearer" => {
+            let token = api_field(fields, &["credential", "token", "password"])
+                .ok_or_else(|| "no bearer token found in vault entry (expected fields: credential, token, or password)".to_owned())?;
+            Ok((
+                Some(("Authorization".into(), format!("Bearer {token}"))),
+                None,
+            ))
+        }
+        "basic" => {
+            let username = api_field(fields, &["username"]);
+            let password = api_field(fields, &["credential", "password"]);
+            let (Some(username), Some(password)) = (username, password) else {
+                return Err(
+                    "basic auth requires username and password fields in vault entry".into(),
+                );
+            };
+            Ok((
+                Some((
+                    "Authorization".into(),
+                    format!(
+                        "Basic {}",
+                        BASE64_STANDARD.encode(format!("{username}:{password}"))
+                    ),
+                )),
+                None,
+            ))
+        }
+        "header" => {
+            let name = api_field(fields, &["header_name"]);
+            let value = api_field(fields, &["header_value", "credential", "token", "password"]);
+            let (Some(name), Some(value)) = (name, value) else {
+                return Err("header auth requires header_name and header_value (or credential/token/password) fields in vault entry".into());
+            };
+            Ok((Some((name.to_owned(), value.to_owned())), None))
+        }
+        "query_param" => {
+            let name = api_field(fields, &["param_name"]);
+            let value = api_field(fields, &["param_value", "credential", "token", "password"]);
+            let (Some(name), Some(value)) = (name, value) else {
+                return Err("query_param auth requires param_name and param_value (or credential/token/password) fields in vault entry".into());
+            };
+            Ok((None, Some((name.to_owned(), value.to_owned()))))
+        }
+        "none" => Ok((None, None)),
+        other => Err(format!("unsupported auth type: {other}")),
+    }
+}
+
+fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String, String> {
+    let mut url = reqwest::Url::parse(url).map_err(|_| "invalid template URL")?;
+    let mut pairs = BTreeMap::<String, Vec<String>>::new();
+    for (key, value) in url.query_pairs() {
+        pairs
+            .entry(key.into_owned())
+            .or_default()
+            .push(value.into_owned());
+    }
+    pairs.insert(name.to_owned(), vec![value.to_owned()]);
+    let encoded = pairs
+        .into_iter()
+        .flat_map(|(key, values)| values.into_iter().map(move |value| (key.clone(), value)))
+        .map(|(key, value)| format!("{}={}", api_query_escape(&key), api_query_escape(&value)))
+        .collect::<Vec<_>>()
+        .join("&");
+    url.set_query(Some(&encoded));
+    Ok(url.to_string())
+}
+
+fn api_query_escape(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            b' ' => "+".into(),
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn api_path_escape(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn api_escaped_path(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
+                (byte as char).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
+fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
+    let (known_sanitized, exact_count) =
+        symvault_core::redact::redact_known_values(text, known_values, "***");
+    let mut scanner = symvault_core::redact::Scanner::new(vec![Box::new(
+        symvault_core::redact::PatternDetector::new().with_marker("***"),
+    )]);
+    match scanner.scan(
+        &known_sanitized,
+        &symvault_core::redact::ScanOptions::default(),
+    ) {
+        Ok(result) => {
+            let changed = exact_count > 0 || result.text != known_sanitized;
+            (result.text, changed)
+        }
+        Err(error) => {
+            let safe = error.safe_result.text;
+            (safe, true)
+        }
+    }
 }
 
 fn parse_run_file_spec(raw: &Value) -> Result<(String, &str), String> {
@@ -1904,6 +3584,87 @@ fn denied_env_names<'a>(names: impl Iterator<Item = &'a String>) -> Vec<String> 
     denied
 }
 
+fn parse_op_ref(reference: &str) -> Result<(String, String), &'static str> {
+    let Some(reference) = reference.strip_prefix("op://") else {
+        return Err("expected op:// prefix");
+    };
+    let parts = reference.split('/').collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return Err("expected at least vault/entry");
+    }
+    if parts.len() == 2 {
+        return Ok((parts[1].to_owned(), String::new()));
+    }
+    Ok((
+        parts[1..parts.len() - 1].join("/"),
+        parts[parts.len() - 1].to_owned(),
+    ))
+}
+
+fn generate_env_var_name(entry_path: &str, field: &str) -> String {
+    let mut parts = entry_path.split('/').map(str::to_owned).collect::<Vec<_>>();
+    if !field.is_empty() {
+        parts.push(field.to_owned());
+    }
+    parts
+        .iter()
+        .map(|part| {
+            part.chars()
+                .map(|character| {
+                    let code = character as u32;
+                    let uppercase = go_unicode_15::SIMPLE_UPPER
+                        .binary_search_by_key(&code, |(source, _)| *source)
+                        .ok()
+                        .and_then(|index| char::from_u32(go_unicode_15::SIMPLE_UPPER[index].1))
+                        .unwrap_or(character);
+                    if go_unicode15_contains(go_unicode_15::LETTER_RANGES, uppercase)
+                        || go_unicode15_contains(go_unicode_15::DECIMAL_DIGIT_RANGES, uppercase)
+                        || uppercase == '_'
+                    {
+                        uppercase
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn go_unicode15_contains(ranges: &[(u32, u32)], character: char) -> bool {
+    let code = character as u32;
+    let index = ranges.partition_point(|(_, end)| *end < code);
+    ranges
+        .get(index)
+        .is_some_and(|(start, end)| *start <= code && code <= *end)
+}
+
+fn execute_with_secret_audit_path(
+    command: &[String],
+    secret_refs: &[String],
+    known_values: &[String],
+    exit_code: i32,
+) -> String {
+    let redacted_command = command
+        .iter()
+        .map(|argument| {
+            symvault_core::redact::redact_known_values(argument, known_values, "[REDACTED]").0
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "command=[{redacted_command}], refs=[{}], exit={exit_code}",
+        secret_refs.join(" ")
+    )
+}
+
+fn run_files_error(error: RunFilesError) -> String {
+    match error {
+        RunFilesError::Tool(message) | RunFilesError::Denied(message) => message,
+    }
+}
+
 pub fn unavailable_tool(
     name: impl Into<String>,
     code: impl Into<String>,
@@ -1918,14 +3679,23 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
+    use super::ApprovalSeam;
     use super::{
         MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, StoreReadOnlyRuntime, denied_env_names,
-        parse_command_timeout, parse_run_file_spec, render_list_shares,
+        execute_with_secret_audit_path, generate_env_var_name, parse_command_timeout,
+        parse_run_file_spec, render_list_shares,
     };
+    use crate::approval::ApprovalQueue;
     use crate::{CommandExecution, CommandExecutor, ReadOnlyRuntimeConfig, ToolCallRuntime};
-    use serde_json::json;
+    use serde_json::{Value, json};
     use std::time::{Duration, Instant};
-    use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
+    use std::{
+        collections::BTreeMap,
+        fs,
+        path::Path,
+        sync::{Arc, Mutex},
+    };
+    use symvault_platform::approval::{ApprovalRequest, ApprovalResult, RiskLevel};
     use symvault_store::{Entry, Store, sharing::ShareStore};
     use tempfile::tempdir;
 
@@ -2003,7 +3773,7 @@ mod tests {
             );
             assert_eq!(working_directory, None);
             assert!(files.is_empty());
-            assert!(additional_redactions.is_empty());
+            assert_eq!(additional_redactions, [b"synthetic-secret".to_vec()]);
             assert_eq!(timeout, Duration::from_secs(30));
             Ok(CommandExecution {
                 stdout: "ok\n".into(),
@@ -2018,6 +3788,40 @@ mod tests {
     struct FileCommandExecutor {
         expected_files: BTreeMap<String, Vec<u8>>,
         expected_redactions: Vec<Vec<u8>>,
+    }
+
+    struct SecretCommandExecutor;
+
+    impl CommandExecutor for SecretCommandExecutor {
+        fn run(
+            &self,
+            command: &[String],
+            environment: &BTreeMap<String, String>,
+            files: &BTreeMap<String, Vec<u8>>,
+            additional_redactions: &[Vec<u8>],
+            working_directory: Option<&Path>,
+            timeout: Duration,
+        ) -> Result<CommandExecution, String> {
+            assert_eq!(command, ["sh", "-c", "echo ok"]);
+            assert_eq!(
+                environment,
+                &BTreeMap::from([
+                    ("GITHUB_PASSWORD".into(), "synthetic-secret".into()),
+                    ("PLAIN".into(), "literal-value".into()),
+                ])
+            );
+            assert!(files.is_empty());
+            assert_eq!(additional_redactions, [b"synthetic-secret".to_vec()]);
+            assert_eq!(working_directory, None);
+            assert_eq!(timeout, Duration::from_secs(30));
+            Ok(CommandExecution {
+                stdout: "synthetic-secret\n".into(),
+                stderr: "synthetic-secret\n".into(),
+                exit_code: 0,
+                timed_out: false,
+                duration: Duration::from_millis(7),
+            })
+        }
     }
 
     impl CommandExecutor for FileCommandExecutor {
@@ -2044,6 +3848,687 @@ mod tests {
                 duration: Duration::from_millis(1),
             })
         }
+    }
+
+    #[test]
+    fn execute_with_secret_resolves_op_refs_overlays_env_and_masks_outputs() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(directory.path(), &identity)
+            .expect("open temporary vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source-shaped secret entry");
+        let config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["execute_with_secret".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["sh".into()],
+            allowed_paths: vec!["github".into()],
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime = StoreReadOnlyRuntime::open(directory.path(), identity, config, None, None)
+            .expect("runtime")
+            .with_command_executor(Arc::new(SecretCommandExecutor));
+        let arguments = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "secret_refs": ["op://vault/github/password"],
+            "env_vars": {"PLAIN": "literal-value"},
+            "timeout": 30
+        });
+
+        runtime
+            .authorize("execute_with_secret", &arguments)
+            .expect("authorized");
+        let result = runtime
+            .call("execute_with_secret", &arguments)
+            .expect("dispatch");
+        assert!(!result.is_error, "{}", result.text);
+        let output: serde_json::Value = serde_json::from_str(&result.text).expect("JSON result");
+        assert_eq!(output["exit_code"], 0);
+        assert_eq!(output["duration_ms"], 7);
+        assert!(output["stdout"].as_str().unwrap().contains("***"));
+        assert!(output["stderr"].as_str().unwrap().contains("***"));
+        assert!(!result.text.contains("synthetic-secret"));
+    }
+
+    #[test]
+    fn execute_with_secret_fails_closed_for_duplicate_names_and_prompt_approval() {
+        let directory = tempdir().expect("temporary vault directory");
+        fs::create_dir(directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(directory.path().join("identity.age"), b"fixture marker")
+            .expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(directory.path(), &identity)
+            .expect("open temporary vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("write source-shaped secret entry");
+        let base_config = ReadOnlyRuntimeConfig {
+            available_tools: vec!["execute_with_secret".into()],
+            can_run_commands: true,
+            allowed_executables: vec!["sh".into()],
+            allowed_paths: vec!["github".into()],
+            ..ReadOnlyRuntimeConfig::default()
+        };
+        let runtime =
+            StoreReadOnlyRuntime::open(directory.path(), identity, base_config.clone(), None, None)
+                .expect("runtime")
+                .with_command_executor(Arc::new(SecretCommandExecutor));
+        let duplicate = json!({
+            "command": ["sh", "-c", "echo ok"],
+            "secret_refs": ["op://vault/github/password", "op://vault/github/password"]
+        });
+        assert!(
+            runtime
+                .call("execute_with_secret", &duplicate)
+                .unwrap()
+                .text
+                .contains("duplicate environment variable name")
+        );
+
+        let prompt_directory = tempdir().expect("temporary prompt vault");
+        fs::create_dir(prompt_directory.path().join("entries")).expect("entries directory");
+        fs::write(
+            prompt_directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .expect("vault config");
+        fs::write(
+            prompt_directory.path().join("identity.age"),
+            b"fixture marker",
+        )
+        .expect("identity marker");
+        let prompt_identity = symvault_crypto::generate_identity();
+        Store::open(prompt_directory.path(), &prompt_identity)
+            .expect("open prompt vault")
+            .write_new_entry(
+                "github",
+                &Entry {
+                    path: "github".into(),
+                    data: BTreeMap::from([("password".into(), json!("synthetic-secret"))]),
+                    ..Entry::default()
+                },
+                &prompt_identity,
+            )
+            .expect("write source-shaped secret entry");
+        let prompt_config = ReadOnlyRuntimeConfig {
+            approval_mode: "prompt".into(),
+            ..base_config
+        };
+        let prompt_runtime = StoreReadOnlyRuntime::open(
+            prompt_directory.path(),
+            prompt_identity,
+            prompt_config,
+            None,
+            None,
+        )
+        .expect("prompt runtime")
+        .with_command_executor(Arc::new(SecretCommandExecutor));
+        let prompt = prompt_runtime
+            .call(
+                "execute_with_secret",
+                &json!({"command":["sh","-c","echo ok"],"secret_refs":[]}),
+            )
+            .unwrap_err();
+        assert!(prompt.contains("requires approval"));
+    }
+
+    struct RecordingApproval {
+        tty: bool,
+        answer: ApprovalResult,
+        requests: Mutex<Vec<ApprovalRequest>>,
+        tty_checks: std::sync::atomic::AtomicUsize,
+    }
+
+    impl RecordingApproval {
+        fn new(tty: bool, approved: bool, remembered: bool) -> Arc<Self> {
+            Arc::new(Self {
+                tty,
+                answer: ApprovalResult {
+                    approved,
+                    remembered,
+                    error: None,
+                },
+                requests: Mutex::new(Vec::new()),
+                tty_checks: std::sync::atomic::AtomicUsize::new(0),
+            })
+        }
+
+        fn requests(&self) -> Vec<ApprovalRequest> {
+            self.requests.lock().expect("approval request lock").clone()
+        }
+    }
+
+    impl ApprovalSeam for RecordingApproval {
+        fn is_tty_present(&self) -> bool {
+            self.tty_checks
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            self.tty
+        }
+
+        fn request(&self, request: &ApprovalRequest) -> ApprovalResult {
+            self.requests
+                .lock()
+                .expect("approval request lock")
+                .push(request.clone());
+            self.answer.clone()
+        }
+    }
+
+    fn approval_test_runtime(
+        root: &Path,
+        mut config: ReadOnlyRuntimeConfig,
+        approval: Arc<dyn ApprovalSeam>,
+    ) -> StoreReadOnlyRuntime {
+        config.available_tools = vec!["execute_with_secret".into()];
+        fs::create_dir_all(root.join("entries")).expect("entries directory");
+        fs::write(root.join("config.yaml"), b"vault:\n  format_version: 2\n")
+            .expect("vault config");
+        fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
+        let identity = symvault_crypto::generate_identity();
+        Store::open(root, &identity).expect("open temporary vault");
+        StoreReadOnlyRuntime::open(root, identity, config, None, None)
+            .expect("runtime")
+            .with_approval_seam(approval)
+    }
+
+    #[test]
+    fn execute_with_secret_prompt_redacts_values_and_remembers_agent_scope() {
+        let directory = tempdir().expect("temporary vault directory");
+        let fake = RecordingApproval::new(true, true, true);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&fake) as Arc<dyn ApprovalSeam>,
+        );
+        let environment = BTreeMap::from([
+            ("API_KEY".to_owned(), "secret-from-ref".to_owned()),
+            ("PLAIN".to_owned(), "literal-value".to_owned()),
+        ]);
+        let command = vec![
+            "curl".to_owned(),
+            "--header=secret-from-ref".to_owned(),
+            "literal-value".to_owned(),
+        ];
+
+        runtime
+            .check_execute_with_secret_approval(&command, &environment)
+            .expect("approval granted");
+        let request = fake.requests().pop().expect("one approval request");
+        assert_eq!(request.operation, "execute_with_secret");
+        assert_eq!(request.agent_name, "alice");
+        assert_eq!(request.timeout, Duration::from_secs(73));
+        assert_eq!(request.risk_level, RiskLevel::High);
+        assert_eq!(request.secrets_accessed, 0);
+        assert!(request.can_remember);
+        assert!(request.details.contains("[REDACTED]"));
+        assert!(request.details.contains("env vars: [API_KEY PLAIN]"));
+        assert!(!request.details.contains("secret-from-ref"));
+        assert!(!request.details.contains("literal-value"));
+
+        runtime
+            .check_execute_with_secret_approval(&["sh".into()], &environment)
+            .expect("remembered approval applies to this agent's action scope");
+        assert_eq!(fake.requests().len(), 1, "remembered approval skips prompt");
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "remembered cache hit does not increment the approval counter"
+        );
+    }
+
+    #[test]
+    fn execute_with_secret_approval_denial_and_missing_tty_fail_closed() {
+        let directory = tempdir().expect("temporary vault directory");
+        let no_tty = RecordingApproval::new(false, true, false);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&no_tty) as Arc<dyn ApprovalSeam>,
+        );
+        let result = runtime.check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new());
+        assert_eq!(
+            result.unwrap_err(),
+            "execute_with_secret requires approval but no TTY or GUI dialog available"
+        );
+        assert!(no_tty.requests().is_empty());
+        assert_eq!(
+            no_tty.tty_checks.load(std::sync::atomic::Ordering::Acquire),
+            1
+        );
+
+        let prompt_directory = tempdir().expect("temporary prompt vault");
+        let denied = RecordingApproval::new(true, false, false);
+        let runtime = approval_test_runtime(
+            prompt_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&denied) as Arc<dyn ApprovalSeam>,
+        );
+        assert_eq!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err(),
+            "execute_with_secret denied: user did not approve"
+        );
+        assert_eq!(denied.requests().len(), 1);
+
+        let deny_directory = tempdir().expect("temporary deny vault");
+        let unused = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            deny_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "deny".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&unused) as Arc<dyn ApprovalSeam>,
+        );
+        assert_eq!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err(),
+            "execute_with_secret denied: approval mode is 'deny'"
+        );
+        assert!(unused.requests().is_empty());
+    }
+
+    #[test]
+    fn execute_with_secret_unknown_mode_fails_closed_and_zero_timeout_defaults() {
+        let directory = tempdir().expect("temporary vault directory");
+        let unused = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "unrecognized".into(),
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&unused) as Arc<dyn ApprovalSeam>,
+        );
+        assert!(
+            runtime
+                .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+                .unwrap_err()
+                .contains("unknown approval mode")
+        );
+        assert!(
+            unused.requests().is_empty(),
+            "unknown mode cannot reach executor"
+        );
+
+        let zero_directory = tempdir().expect("temporary zero-timeout vault");
+        let prompt = RecordingApproval::new(true, true, false);
+        let runtime = approval_test_runtime(
+            zero_directory.path(),
+            ReadOnlyRuntimeConfig {
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::ZERO,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&prompt) as Arc<dyn ApprovalSeam>,
+        );
+        runtime
+            .check_execute_with_secret_approval(&["sh".into()], &BTreeMap::new())
+            .expect("approved with fallback timeout");
+        assert_eq!(prompt.requests()[0].timeout, Duration::from_secs(30));
+    }
+
+    fn api_approval_runtime(
+        root: &Path,
+        config: ReadOnlyRuntimeConfig,
+        approval: Arc<dyn ApprovalSeam>,
+        include_entry: bool,
+        base_url: String,
+    ) -> StoreReadOnlyRuntime {
+        let mut config = config;
+        config.available_tools = vec!["execute_api_request".into()];
+        fs::create_dir_all(root.join("entries")).expect("entries directory");
+        fs::write(root.join("config.yaml"), b"vault:\n  format_version: 2\n")
+            .expect("vault config");
+        fs::write(root.join("identity.age"), b"fixture marker").expect("identity marker");
+        fs::create_dir_all(root.join("templates")).expect("template directory");
+        fs::write(
+            root.join("templates/fixture.yaml"),
+            format!(
+                "base_url: {base_url}\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\n"
+            ),
+        )
+        .expect("write synthetic API template");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root, &identity).expect("open temporary API vault");
+        if include_entry {
+            store
+                .write_new_entry(
+                    "api-fixture",
+                    &Entry {
+                        path: "api-fixture".into(),
+                        data: BTreeMap::from([
+                            ("credential".into(), json!("fixture-api-token")),
+                            (
+                                "nested".into(),
+                                json!({"long_secret":"fixture-api-token-extra"}),
+                            ),
+                        ]),
+                        ..Entry::default()
+                    },
+                    &identity,
+                )
+                .expect("synthetic API credential entry");
+        }
+        StoreReadOnlyRuntime::open(root, identity, config, None, None)
+            .expect("API runtime")
+            .with_approval_seam(approval)
+    }
+
+    #[test]
+    fn execute_api_request_approval_is_fail_closed_critical_and_queue_first() {
+        let no_tty_dir = tempdir().expect("no-TTY API vault");
+        let no_tty = RecordingApproval::new(false, true, false);
+        let runtime = api_approval_runtime(
+            no_tty_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&no_tty) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        );
+        assert_eq!(
+            runtime
+                .call(
+                    "execute_api_request",
+                    &json!({"template":"fixture","endpoint":"/v1/status"}),
+                )
+                .unwrap_err(),
+            "execute_api_request requires approval but no TTY or GUI dialog available"
+        );
+        assert!(no_tty.requests().is_empty());
+
+        let denied_dir = tempdir().expect("denied API vault");
+        let denied = RecordingApproval::new(true, false, false);
+        let runtime = api_approval_runtime(
+            denied_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&denied) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        );
+        assert_eq!(
+            runtime
+                .call(
+                    "execute_api_request",
+                    &json!({"template":"fixture","endpoint":"/v1/status"}),
+                )
+                .unwrap_err(),
+            "execute_api_request denied: user did not approve"
+        );
+        let denied_request = denied.requests().pop().expect("one denied prompt");
+        assert_eq!(denied_request.operation, "execute_api_request");
+        assert_eq!(denied_request.risk_level, RiskLevel::Critical);
+        assert!(!denied_request.can_remember);
+        assert_eq!(denied_request.secrets_accessed, 0);
+        assert_eq!(denied_request.timeout, Duration::from_secs(73));
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            0,
+            "denial happens before credential resolution"
+        );
+
+        let granted_dir = tempdir().expect("approved API vault");
+        let granted = RecordingApproval::new(true, true, false);
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("local API listener");
+        let address = listener.local_addr().expect("local API address");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept approved API request");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .expect("bounded API read");
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone stream"));
+            use std::io::BufRead as _;
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read API request line");
+            let mut headers = String::new();
+            loop {
+                line.clear();
+                reader
+                    .read_line(&mut line)
+                    .expect("read API request headers");
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                headers.push_str(&line);
+            }
+            assert!(
+                headers
+                    .to_ascii_lowercase()
+                    .contains("authorization: bearer fixture-api-token"),
+                "{headers}"
+            );
+            let body = r#"{"token":"fixture-api-token","long":"fixture-api-token-extra"}"#;
+            use std::io::Write as _;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            )
+            .expect("write approved API response");
+        });
+        let runtime = api_approval_runtime(
+            granted_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                approval_timeout: Duration::from_secs(73),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&granted) as Arc<dyn ApprovalSeam>,
+            true,
+            format!("http://{address}"),
+        );
+        let response = runtime
+            .call(
+                "execute_api_request",
+                &json!({"template":"fixture","endpoint":"/v1/status"}),
+            )
+            .expect("approved API execution");
+        assert!(
+            response.text.contains("\\\"token\\\":\\\"***\\\""),
+            "{}",
+            response.text
+        );
+        assert!(!response.text.contains("fixture-api-token-extra"));
+        server.join().expect("join approved API server");
+        let granted_request = granted.requests().pop().expect("one granted prompt");
+        assert_eq!(granted_request.risk_level, RiskLevel::Critical);
+        assert!(!granted_request.can_remember);
+        assert_eq!(granted_request.secrets_accessed, 0);
+        assert_eq!(granted_request.timeout, Duration::from_secs(73));
+        assert_eq!(
+            runtime
+                .approval_key_counter
+                .load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "the granted prompt increments the API approval counter"
+        );
+
+        let queue_dir = tempdir().expect("queued API vault");
+        let queue_fake = RecordingApproval::new(false, true, false);
+        let queue = Arc::new(ApprovalQueue::default());
+        let runtime = api_approval_runtime(
+            queue_dir.path(),
+            ReadOnlyRuntimeConfig {
+                agent_name: "alice".into(),
+                approval_mode: "prompt".into(),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                require_approval: true,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            Arc::clone(&queue_fake) as Arc<dyn ApprovalSeam>,
+            false,
+            "http://127.0.0.1:9".into(),
+        )
+        .with_approval_queue(Arc::clone(&queue));
+        let runtime = Arc::new(runtime);
+        let call_runtime = Arc::clone(&runtime);
+        let call = std::thread::spawn(move || {
+            call_runtime.call(
+                "execute_api_request",
+                &json!({"template":"fixture","endpoint":"/v1/status"}),
+            )
+        });
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        let pending = loop {
+            if let Some(entry) = queue.pending().expect("read pending approvals").first() {
+                break entry.clone();
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "API approval was not queued"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(
+            pending.request.reason,
+            "agent API request requires approval"
+        );
+        queue
+            .deny(&pending.id, "fixture")
+            .expect("deny queued API request");
+        assert!(
+            call.join()
+                .expect("join queued API call")
+                .unwrap_err()
+                .contains("denied by approval device")
+        );
+        assert!(
+            queue_fake.requests().is_empty(),
+            "attached queue takes precedence over the TTY seam"
+        );
+        assert_eq!(
+            queue_fake
+                .tty_checks
+                .load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+    }
+
+    #[test]
+    fn execute_with_secret_environment_names_match_go_unicode_oracle() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../testdata/port/mcp/execute-with-secret.json"
+        ))
+        .expect("Go oracle fixture");
+        let names = &fixture["name_cases"];
+        for (input, key) in [
+            (("ß", "password"), "sharp_s"),
+            (("service²", "password"), "superscript_two"),
+            (("serviceⅫ", "password"), "letter_number"),
+            (("i\u{0307}", "password"), "combining_uppercase"),
+            (("\u{1f80}", "password"), "greek_simple_upper"),
+            (("\u{1f88}", "password"), "greek_upper"),
+            (("\u{11f04}", "password"), "kawi_letter"),
+            (("service\u{11f50}", ""), "kawi_digit"),
+            (("\u{1e4d0}", "password"), "nag_mundari_letter"),
+            (("\u{31350}", "password"), "han_ext_h_letter"),
+            (("9service", ""), "leading_digit"),
+            (("", ""), "empty"),
+        ] {
+            assert_eq!(generate_env_var_name(input.0, input.1), names[key], "{key}");
+        }
+        let expected_digest = fixture["unicode_name_digest"]
+            .as_str()
+            .expect("Go exhaustive Unicode digest");
+        assert_eq!(expected_digest.len(), 16);
+        let mut digest = 0xcbf29ce484222325_u64;
+        let mut add = |byte: u8| {
+            digest ^= u64::from(byte);
+            digest = digest.wrapping_mul(0x100000001b3);
+        };
+        for code in 0..=0x10ffff_u32 {
+            if (0xd800..=0xdfff).contains(&code) {
+                continue;
+            }
+            let character = char::from_u32(code).expect("Unicode scalar");
+            for byte in code.to_be_bytes() {
+                add(byte);
+            }
+            let name = generate_env_var_name(&character.to_string(), "");
+            for byte in name.bytes().chain(std::iter::once(0)) {
+                add(byte);
+            }
+        }
+        assert_eq!(format!("{digest:016x}"), expected_digest);
+        let expected_audit = fixture["audit_path"].as_str().expect("Go audit path");
+        let actual_audit = execute_with_secret_audit_path(
+            &[
+                "go".into(),
+                "run".into(),
+                "<fixture-child-go-source>".into(),
+            ],
+            &["op://vault/github/password".into()],
+            &["testpass123".into()],
+            0,
+        );
+        assert_eq!(actual_audit, expected_audit);
+        assert!(!actual_audit.contains("testpass123"));
     }
 
     #[test]

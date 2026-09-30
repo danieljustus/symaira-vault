@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "2b703647",
-    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
+    "commit": "864f1ad1",
+    "commit_sha": "864f1ad11877bc774616fde43e4a0d3ea928a370",
     "source_files": [
       "internal/mcp/server/tool_registry.go",
       "internal/mcp/server/leanmode.go",
@@ -12,8 +12,8 @@
       "internal/mcp/server/tools_totp.go",
       "internal/mcp/server/server_authorize.go"
     ],
-    "source_hash": "3d42b1c303d0f45e7098ddf5a24e5b70471ca4ea11ddc6cc98437982e199f014",
-    "generator_hash": "2de05181e1d132c33d60fe7dcd47beb9e7b50ef0edb7f1c99a846b38ab604453"
+    "source_hash": "e8546c0d8c06dec722618d93ca1cbc0263bd1057024ea22b722abf29d5365fa5",
+    "generator_hash": "46c1f3b84b3d81532b174dec9bf1ab403767686efde73fd0e1167a46c1a63f0d"
   },
   "catalog": [
     {

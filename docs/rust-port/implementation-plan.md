@@ -1,5 +1,285 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Integrated Unix stdio clipboard signals — 2026-09-29
+
+Candidate `b92054f8dc6fa83f99aeaf7c37821e89cd00803d` shares one synchronized
+process signal state between hidden input and the active clipboard timer.
+Actual Go and Rust child processes prove SIGINT/SIGTERM clear the clipboard
+and cancel concurrent hidden input; SIGHUP clears the active timer. A later
+idle signal regains its OS default. The CLI installs this router only for
+stdio, including piped input without a terminal. HTTP shutdown is separate.
+
+Complete native Darwin/arm64 and Linux/arm64 gates pass:91 core,177 MCP,
+36 CLI and60/53 platform tests, source-bound Go differentials, strict Clippy/
+formatting and the17-action PTY gate (five restoration checks/two idle signals).
+Four Darwin/one Linux host opt-ins remain ignored; two ordinary PTY helpers
+are separately exercised by the acceptance gate. Focused process contracts
+also passed ten repeated runs each before integration verification.
+
+`clipboard-signals-receipt-b92054f8.json` in both build roots binds the exact
+candidate, Cargo paths, Go fixtures and log hashes. HTTP signal fan-out and
+graceful shutdown, host clipboard/autotype, Windows TTY and remaining native
+targets stay open. No real clipboard or credential provider was exercised.
+
+
+## Integrated MCP clipboard dispatch — 2026-09-29
+
+Candidate `d5bacb7925232c2e08213be0b8564798f5576486` connects
+`copy_to_clipboard` through the existing injected clipboard boundary and
+approval/scope checks. Sixteen cases recorded from the actual Go dispatcher
+cover preflight ordering, approval reuse, missing values, provider errors,
+TTL clearing and timer replacement/runtime-drop cancellation. The production
+CLI supplies its existing macOS adapter; tests use synthetic clipboard state.
+
+Independent native Darwin/arm64 and Linux/arm64 gates pass the complete MCP
+call/fixture differential, 91 core, 176 MCP, 36 CLI and 59/52 platform tests,
+strict all-target Clippy and formatting. The existing 17-action controlling-PTY
+gate also passes, including five restoration checks and two idle signals.
+Four Darwin/one Linux host-integration opt-ins remain ignored; the two ordinary
+PTY helpers are exercised by the dedicated acceptance gate.
+
+`clipboard-receipt-d5bacb79.json` in both existing build roots binds candidate,
+Cargo paths, the 16-case fixture and logs. Log SHA-256:
+Darwin `0140d58a9881e16d82eafd2ab0dce8ebda47cfd79057ae37327ce6c5eea6bfe3`;
+Linux `9d208e8340c64dc1fabd739fd26220caabdf7a1f2b2a9725fb6679fc4a24c9c3`.
+Signal-triggered clipboard clearing is separate pending work. Native host
+clipboard/autotype, Windows TTY and other required targets remain unverified;
+MCP-003 and RUST-010 remain open. No host clipboard or credential state changed.
+
+## Integrated Unix terminal signals — 2026-09-29
+
+Candidate `7be90e81454f1b192f200ba8e496f9ef8009c31e` passes the complete
+MCP call/fixture differential, 91 core, 175 MCP, 35 CLI and 59/52 platform
+tests on native Darwin/Linux ARM64, plus strict all-target Clippy and formatting.
+Four Darwin and one Linux platform opt-ins remain ignored; the dedicated
+controlling-PTY acceptance explicitly runs the normal suite's opt-in helper.
+
+The actual Go terminal signal-cancellation oracle and Rust process acceptance
+cover SIGINT and SIGTERM during secure input, idle stdio, and ordinary approval.
+The PTY driver records 17 actions (10 critical approval, one execute approval,
+six hidden inputs), five cooked-mode restoration checks and two idle default
+terminations. Canceled inputs do not mutate the vault; subsequent input works.
+Ordinary approval restores the terminal before terminating with the original
+signal. The process-owned router is installed only by the standalone Unix
+stdio MCP CLI when a controlling terminal exists.
+
+`secure-input-signals-receipt-7be90e81.json` in both existing build roots binds
+the final candidate, Cargo manifest paths, fixture and logs. Log SHA-256:
+Darwin `30b725b82575584be855cd7a9fc080622723bf1f4d629ef4a55d286811388ab2`;
+Linux `a7431ffc0f8a69026b1d8864f6bed93efa18cb2e7ee4f7db57f5a2aaf8f4982d`.
+This supersedes the earlier Unix external-signal gap. Windows TTY, other required
+native targets, GUI and remaining MCP tools stay open. No release, cutover,
+Go removal or host credential operation was performed.
+
+## Integrated secure terminal input — 2026-09-29
+
+Candidate `c00841be7cee780d91bbe68376ebda895196ea14` connects secure_input and
+request_credential to the existing encrypted Store, shared scope/approval checks,
+audit and a hidden controlling-TTY reader. Eleven source-bound actual Go handler
+cases and Go's real go-tty rune-editing oracle cover mutation/error semantics.
+The generated Go Unicode 15 printable table has an executable freshness check.
+Rust deliberately hides characters that Go's go-tty reader echoes.
+
+Independent native Darwin/arm64 and Linux/arm64 gates pass the full MCP
+differential, 91 core, 175 MCP, 35 CLI and 59/52 platform tests, plus strict
+Clippy/fmt. Four Darwin/one Linux host-integration opt-ins remain ignored; the
+two ordinary PTY helpers are exercised through dedicated real controlling-PTY
+acceptance. Its 11 prompts prove hidden input, scope approval, Ctrl-C no-write,
+ECHO/ICANON restoration and a successful following request with piped MCP stdin.
+`secure-input-receipt-c00841be.json` in both build roots binds logs, metadata and
+fixture hashes to the candidate. No host credentials or system trust changed.
+External SIGINT/SIGTERM restoration, GUI, Windows and remaining native targets
+are still open; MCP-003 remains in progress.
+
+
+## Integrated verified local HTTPS — 2026-09-29
+
+Candidate `3698d45b095c94817ff65ee2de37cf60eac5360a` adds certificate-verified
+HTTPS for numeric loopback and statically pinned localhost targets. Request URL
+substitution must preserve the validated scheme and authority. Public DNS and
+redirects remain rejected. No installed trust settings or provider were used.
+
+The actual Go API handler at `864f1ad1` produces three TLS cases: trusted local
+success, wrong hostname, and untrusted root. Rust reuses the production client
+builder with a private fixture CA and test-only dial pinning for the wrong-host
+case. It compares status/body/rejection and the actual count of received HTTP
+requests (one on success, zero on TLS rejection). Full CLI API semantics remain
+covered by the existing HTTP replay. The fixture preserves observed outcomes;
+no expected value overwrites a handler result.
+
+Independent clean Darwin/arm64 and Linux/arm64 gates pass complete Go MCP,
+template and HTTPS freshness/differentials, 91 core tests, 173 MCP tests,
+35 CLI contracts and one controlling-PTY acceptance. Two opt-in helpers run
+through that dedicated PTY gate. Strict all-target Clippy and fmt pass on both.
+`api-https-receipt-3698d45b.json` in both build roots records source metadata and
+fixture/log hashes. MCP-003/BROKER-002 remain open for public DNS/redirects,
+other tools and remaining native targets. No publication, cutover or Go removal.
+
+
+## Integrated embedded API template catalog — 2026-09-29
+
+Candidate `aab7422b730b399d2b0dbc774199505c02852c92` loads all 17 existing Go
+YAML assets directly through compile-time inclusion, with no second asset copy.
+Per-call custom files retain precedence; a truly absent directory/file falls
+back to the matching built-in. Existing malformed, symlinked, inaccessible or
+otherwise invalid custom paths fail closed. This is intentionally stricter than
+Go's fallback after any stat error and its willingness to follow symlinks.
+
+A source-bound actual Go `apitemplates.Load` fixture pins template.go, auth.go and
+all 17 asset blobs at c94a10d7. Its 24 cases compare every loaded field, custom
+precedence, absence, malformed overrides and unsafe/unknown names. Unknown-name
+errors match exactly; malformed YAML compares rejection rather than parser text.
+Unix dangling-symlink controls run separately. The full Make MCP gate now includes
+fixture freshness and Rust replay; existing CI invokes that gate.
+
+Independent clean Darwin/arm64 and Linux/arm64 gates pass Go freshness/full MCP
+differentials, 91 core tests, 171 MCP tests, 35 CLI contracts and one controlling
+PTY acceptance. Two ordinary opt-in helpers execute in that dedicated gate.
+Strict all-target Clippy and fmt pass on both hosts. Receipts
+`api-builtins-receipt-aab7422b.json` in the Vault/native-linux build roots retain
+source metadata, fixture and log hashes.
+
+MCP-003/BROKER-002 remain open: built-in HTTPS endpoints were not executed, and
+transport still accepts only loopback HTTP with redirects disabled. TLS, public
+DNS, other tools and required native targets remain outstanding. No provider
+calls, publication, cutover, Go removal or trust changes occurred.
+
+## Integrated API authentication and substitutions — 2026-09-29
+
+Candidate `f47b2fdb74e0ad0172aa195c6a185f2f42c411af` adds basic, custom-header, query-parameter
+and substitution-only authentication to the preceding Bearer path. It preserves
+Go's default-header, caller-header, substitution and final authentication order,
+including body/query/path/header substitution and automatic JSON Content-Type.
+All credential access uses the existing scoped entry path and critical approval.
+HTTP remains restricted to loopback; TLS and redirects are not enabled.
+
+The actual pinned Go handler emits 15 cases with seven upstream requests. Real
+Rust CLI replay checks methods, URI, selected headers, bodies and results; denial
+cases make no upstream request. A Darwin-only harness defect was reproduced:
+accepted sockets inherited O_NONBLOCK, returning WouldBlock before request data.
+The listener now explicitly uses blocking accepted sockets with its original
+bounded timeout. Five complete CLI repetitions passed after that root fix.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 gates pass the full Go
+MCP differential, 91 core tests, 169 MCP tests, 35 CLI contracts and one dedicated
+controlling-PTY acceptance test. Two ordinary opt-in helpers remain ignored in
+the ordinary suite and execute via that PTY gate. Strict all-target Clippy and
+formatting pass on both hosts, with source-path metadata and log hashes in
+`api-semantics-receipt-f47b2fdb.json` under the existing build roots.
+
+The earlier cadfa parent run is not accepted as full evidence: its Make wrapper
+selected an older worktree; the subsequent direct candidate test exposed the
+socket defect. The corrected current runs use direct Cargo in this worktree.
+MCP-003/BROKER-002 remain open for built-in templates, TLS/redirects, other tools
+and required native targets. No live provider, release, cutover or Go removal.
+
+## Integrated custom Bearer API request — 2026-09-29
+
+Candidate `ca1dba8db88c149b94676d91b031ba909eff3a5a` connects bounded custom
+Bearer GET templates to the assembled CLI MCP handler. Command capability,
+profile allowlist, endpoint/method guards, scope and critical approval precede
+the credential read and loopback request. Templates reload on each call: a
+same-handler revocation test changes the YAML and proves no second request.
+Reads are bounded and reject static symlinks; these path checks are not a
+race-proof descriptor-relative opening protocol.
+
+The actual Go handler oracle is source-bound to `c94a10d7`; real Rust CLI replay
+compares exact results, denials and request counts. Recursive entry values and
+generic sensitive patterns are masked without replacing a literal `[REDACTED]`.
+Sensitive response headers are filtered and the API's100KiB truncation preserves
+Go invalid-UTF8 behavior. The generic broker still rejects bodies exceeding16MiB.
+Fixture SHA256: `0e14eb3bf935dc50433f8ef29707c95cfa06a3980d295320ff3b6c87dff31c3c`.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 pass the full Go MCP
+differential,91 core tests,169 MCP tests,35 CLI contracts and the dedicated real
+PTY acceptance test. Two ordinary opt-in PTY helpers are ignored and explicitly
+executed by that gate. No failures. Source metadata, log hashes and receipts
+`api-request-receipt-ca1dba8d.json` remain in the existing Vault/native-linux build
+roots. Linux emits an unused timeout-helper warning; shared-path cleanup is queued.
+
+Basic/header/query auth, substitutions, bodies, caller headers, built-in templates,
+TLS and remaining native platforms remain open. MCP-003/BROKER-002 stay in progress;
+no remote candidate run, release, installed cutover or Go removal is claimed.
+
+
+## Integrated real Unix approval acceptance — 2026-09-29
+
+Candidate `58e06e4bad4853d5ababaf2f42e31791547b5286` includes the preceding
+write/execute approval slices and the actual CLI runtime assembly correction:
+`execute_with_secret` is available only with command capability, then filtered
+by the profile allowlist. Tests also prove explicit exclusion and absent capability.
+
+`make mcp-approval-pty-acceptance` drives the assembled `mcp_commands::run`
+stdio service through a real controlling terminal while MCP uses separate pipes.
+It approves a critical write and a command with empty secret references, then
+rejects another write with the exact user-denial response and unchanged state.
+A Python standard-library runner checks two critical prompts, one command prompt,
+three answers, bounded process-group cleanup and a successful protocol receipt.
+A no-terminal invocation fails closed. The identity, vault and MemoryKeyring are
+synthetic; this does not exercise `main` bootstrap, human credentials or GUI.
+
+Independent clean-candidate Go1.26.6 MCP differential and Rust gates pass on
+Darwin/arm64 and Linux/arm64: 167 MCP tests, 32 CLI contract tests, and the dedicated
+PTY parent test invoking its child helper. The ordinary suite explicitly ignores
+the two opt-in PTY entrypoints; they are executed by the dedicated gate. No failures.
+Receipts `pty-receipt-58e06e4b.json` are retained in the existing Vault and native-linux
+build roots. Native CI now checks Go MCP fixture freshness; Unix CI invokes the PTY
+gate. That wiring has not been run remotely on this candidate.
+
+The integrated check exposed checkout-dependent Go prompt fixtures. Only the
+Directory/Git/Project context rows are now omitted by a declared normalization;
+all approval observations, details, risk, counters, answers, audit and state fields
+remain unchanged. Production Go source binding is unchanged; generator digest is
+`cdc1abdb75d04992e5fe49869cd2daf25741ecc0a046ab84b799094fafc55c8e`.
+MCP-003 remains in progress for other tools, GUI, Windows TTY and remaining native
+targets. No publication, installed cutover or Go removal occurred.
+
+
+## Integrated set/delete approval evidence — 2026-09-29
+
+Candidate `c4a71828f7d109445062cfb952218385120c98d7` adds shared platform-seam
+approval to stdio `set_entry_field` and `delete_entry` while preserving the
+existing HTTP queue path. Critical writes never offer remembered approval.
+Argument/scope checks precede approval; denied, absent-TTY, timeout and prompt
+I/O failures leave the synthetic vault unchanged. Invalid constructed approval
+modes fail closed. Audit order and consecutive prompt counters match Go.
+
+The oracle verifies production Git blobs at `cfbfd59a` before invoking actual
+Go handlers and separately binds its generator/helpers. Real Go counterexamples
+cover separate path/field sanitization, unterminated escapes, OSC termination,
+byte controls, malformed UTF8 replacement and an empty sanitized field. The
+new differential is included in the existing native MCP CI gate.
+
+Independent clean-candidate Darwin/arm64 and Linux/arm64 checks pass: full MCP
+call differential, all 167 MCP tests and 26 filtered CLI MCP tests, zero failed
+or ignored. Receipts `write-tty-receipt-c4a71828.json` are under the existing
+Vault and native-linux build roots. The approval provider is injected here;
+actual controlling-PTY acceptance, Windows TTY implementation, GUI providers,
+remaining handlers and other required native targets remain open. MCP-003
+stays in progress; no release, installed cutover or real vault operation occurred.
+
+
+## Integrated execute-with-secret approval evidence — 2026-09-29
+
+Candidate `cfbfd59a8a4580e8547e278ff8b9de6c7e806967` composes the shared
+executor, source-bound Go15 environment-name/redaction contract and direct
+controlling-TTY approval seam. Production Go handler oracles exercise granted,
+denied, remembered, helper-error and consecutive-grant cases. The fixture
+builds its already-bound Go child as `true`/`true.exe`; it needs no Unix command.
+Rust compares the actual prompt `secrets_accessed` sequence `[0, 1]` to Go,
+as well as prompt count, cache behavior and audit order. The terminal seam is
+mocked; this does not claim a physical terminal or GUI approval acceptance run.
+
+Independent checks on clean exact candidate HEAD pass on Darwin/arm64 and
+Linux/arm64: full `make mcp-call-differential`, all 165 MCP tests, and 26 filtered
+CLI MCP tests (13 unit and 13 contract), zero failed or ignored. Receipts:
+`../builds/symaira-vault/mcp-execute-approval-20260929/coordinator-receipt-cfbfd59a.json`
+and `../builds/native-linux-20260929/vault-approval-receipt-cfbfd59a.json`.
+Explicit manifests, Cargo metadata and compiler paths bind the evidence.
+MCP-003 remains in progress: GUI, other handlers, remaining native targets and
+complete integrated ledger checks are still required. No publication or cutover.
+
+
 > **For Hermes:** Use subagent-driven-development to implement independent work
 > items, but keep parity-sensitive cascading slices under one coordinator. Work
 > strictly in dependency order from `work-items.json`.

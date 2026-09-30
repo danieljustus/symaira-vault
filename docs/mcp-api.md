@@ -30,13 +30,23 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 
 ### Available Tools
 
+The complete Go registry contains 35 definitions, including the deprecated
+`symaira_delete` alias. Runtime `tools/list` is filtered by the agent tier,
+value-tool exposure and backend availability; registration alone does not grant
+permission to call a tool. `secure_input` and `request_credential` require an
+available TTY or native GUI backend. `execute_api_request` and `generate_totp`
+also have runtime availability checks. The Rust migration's implemented subset
+and outstanding native-platform contracts are tracked in
+[the contract matrix](rust-port/contract-matrix.md).
+
 | Tool | Description | Write Operation |
 |------|-------------|-----------------|
 | `health` | Check server health status | No |
 | `get_auth_status` | Check Symaira Vault unlock auth status | No |
 | `set_auth_method` | Change unlock auth method | Config write |
 | `list_entries` | List all vault entries | No |
-| `get_entry` | Retrieve entry contents | No |
+| `get_entry` | Retrieve field metadata and secret handles without secret values | No |
+| `get_entry_value` | Retrieve secret values with explicit value-tool access | No |
 | `get_entry_metadata` | Get entry metadata without sensitive data | No |
 | `find_entries` | Search entries by path | No |
 | `search` | Search vault entries by query (OpenAI Company Knowledge format) | No |
@@ -47,11 +57,25 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 | `autotype` | Type entry field as keyboard input into focused app | No |
 | `set_entry_field` | Store or update a field | **Yes** |
 | `run_command` | Execute command with secret env injection | **Yes** |
+| `execute_with_secret` | Execute command with op:// secret references | Command execution |
+| `execute_api_request` | Execute template-based HTTP requests with injected credentials | HTTP side effects |
 | `delete_entry` | Delete an entry | **Yes** |
-| `symvault_delete` | Deprecated alias for delete_entry | **Yes** |
+| `symaira_delete` | Deprecated alias for delete_entry | **Yes** |
 | `secure_input` | Prompt user for sensitive data via TTY or native GUI dialog | **Yes** |
 | `request_credential` | Agent-initiated: native dialog for a missing credential, stored without exposure | **Yes** |
 | `prepare_payment` | Validate a payment entry, show approval prompt, autotype card/bank fields — card values never returned | No |
+| `symaira_audit_self` | Return recent audit events for the calling agent | No |
+| `symaira_whoami` | Return agent capabilities, quotas and vault status | No |
+| `symaira_search` | Discover registered tools by intent | No |
+| `sanitize_output` | Mask secrets in supplied text | No |
+| `perplexity_search` | Search the web through Perplexity | External request |
+| `perplexity_ask` | Ask Perplexity a question with optional context | External request |
+| `request_share` | Create a pending share request | Share state |
+| `approve_share` | Approve a pending share after human confirmation | Share state |
+| `revoke_share` | Revoke a share grant | Share state |
+| `list_shares` | List and filter share grants | No |
+| `generate_template` | Generate configuration from a template, optionally to a file | Optional file output |
+| `secret_unseal` | Resolve a secret handle with approval | No |
 
 ---
 
@@ -442,7 +466,10 @@ List all password entries in the vault.
 
 ### get_entry
 
-Retrieve the contents of a password entry.
+Retrieve field metadata and secret handles without secret values. The Go
+handler does not use `include_metadata` or `include_value` to expose values;
+use the separately authorized `get_entry_value` tool when value access is
+necessary.
 
 **Request**:
 
@@ -451,7 +478,7 @@ Retrieve the contents of a password entry.
   "tool": "get_entry",
   "arguments": {
     "path": "github",
-    "include_metadata": false
+    "include_value": false
   }
 }
 ```
@@ -461,38 +488,17 @@ Retrieve the contents of a password entry.
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `path` | string | Yes | Entry path (e.g., "github" or "work/aws") |
-| `include_metadata` | boolean | No | Include creation/update metadata |
+Metadata is always included. Additional value-selection arguments do not
+change this handler's metadata-only response.
 
-**Response** (without metadata):
+**Response fields**:
 
-```json
-{
-  "path": "github",
-  "data": {
-    "password": "mysecretpassword",
-    "username": "myuser",
-    "url": "https://github.com"
-  }
-}
-```
+- `path`, `type`, `usage_hint`, `auto_rotate`, `has_value` and `tags`
+- `fields`: field names, `op://` handles, inferred kinds and consumption hints
+- `meta`: creation time, update time and version
+- `expires_at`: present when the entry defines an expiration
 
-**Response** (with metadata):
-
-```json
-{
-  "path": "github",
-  "data": {
-    "password": "mysecretpassword",
-    "username": "myuser",
-    "url": "https://github.com"
-  },
-  "meta": {
-    "created": "2026-01-15T14:32:00Z",
-    "updated": "2026-04-21T09:45:00Z",
-    "version": 5
-  }
-}
-```
+Field values are not included.
 
 **Errors**:
 - `not_found`: Entry does not exist
@@ -870,7 +876,9 @@ Type a vault entry's field value as keyboard input into the currently focused ap
 
 ### secure_input
 
-Prompt the user for sensitive data via an interactive TTY and store it without exposing the value to the agent. Only available in stdio mode with a TTY.
+Prompt the user for sensitive data through an available TTY or native GUI
+backend and store it without exposing the value to the agent. Availability
+depends on the secure-input backend, not solely on the stdio transport.
 
 **Request**:
 
@@ -1258,7 +1266,7 @@ Delete a password entry. Requires write permission.
 
 ---
 
-### symvault_delete
+### symaira_delete
 
 **Deprecated**: Use `delete_entry` instead. This is a legacy alias maintained for backward compatibility.
 

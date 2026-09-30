@@ -60,7 +60,7 @@ var mcpListSourceFiles = []string{
 	"internal/mcp/server/server_authorize.go",
 }
 
-const mcpListPinnedSourceHash = "3d42b1c303d0f45e7098ddf5a24e5b70471ca4ea11ddc6cc98437982e199f014"
+const mcpListPinnedSourceHash = "e8546c0d8c06dec722618d93ca1cbc0263bd1057024ea22b722abf29d5365fa5"
 
 func TestGenerateMCPListFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_LIST_FIXTURE") == "1"
@@ -110,14 +110,14 @@ func TestGenerateMCPListFixture(t *testing.T) {
 		t.Fatalf("Go MCP list sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpListPinnedSourceHash)
 	}
 	if pinnedHash := mcpListGitSourceHash(t, mcpListSourceFiles); pinnedHash != sourceHash {
-		t.Fatalf("working Go MCP list sources differ from 2b703647: got %s, want %s", sourceHash, pinnedHash)
+		t.Fatalf("working Go MCP list sources differ from 864f1ad1: got %s, want %s", sourceHash, pinnedHash)
 	}
 	generatorHash := mcpListGeneratorHash(t)
 	fixture := mcpListFixture{
 		SchemaVersion: 1,
 		Oracle: mcpListOracle{
-			Commit:        "2b703647",
-			CommitSHA:     "2b703647a821d7236aa8a66032852ab3ee606701",
+			Commit:        "864f1ad1",
+			CommitSHA:     "864f1ad11877bc774616fde43e4a0d3ea928a370",
 			SourceFiles:   mcpListSourceFiles,
 			SourceHash:    sourceHash,
 			GeneratorHash: generatorHash,
@@ -218,7 +218,7 @@ func mcpListGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "2b703647:"+name)
+		cmd := exec.Command("git", "show", "864f1ad11877bc774616fde43e4a0d3ea928a370:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

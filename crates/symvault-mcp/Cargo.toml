@@ -15,6 +15,7 @@ sha2 = "=0.10.9"
 serde.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 serde_json = { workspace = true, features = ["raw_value"] }
+serde_yaml_ng = "=0.10.0"
 reqwest.workspace = true
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 # Go 1.26 selects Unicode 15 tables; ICU 2.3 normalizes newer codepoints differently.
