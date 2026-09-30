@@ -9,6 +9,7 @@ Continue the code and integration work from the published repository, without ne
 - Base code commit before this document/checkpoint: `d7d937c070831a803a9b34464315c9ba772c68d0`.
 - Working directory for every command below: the checked-out repository root.
 - Publication does not authorize a merge, release, tag, destructive cleanup or paid service.
+- Continuation draft PR: #1235. Keep it draft until its code/acceptance gates are independently satisfied.
 
 Retain the candidate of PR #1228. Older PR #1227 failed its Windows saturated HTTP shutdown test. #1228 had a successful exact-head CI snapshot; do not treat that as a merge decision while pinned Oracle durability remains unresolved.
 
@@ -72,7 +73,13 @@ Prepublication secret-pattern/outgoing-history scans succeeded for the selected 
 
 No new source code was changed on this branch; the fresh remote-clone command results will be recorded below.
 
-Fresh remote-clone verification: pending publication and replay. Target cloud runtime, permissions, secrets and network gates: **not checked**.
+Fresh remote-clone verification was executed locally on macOS at published checkpoint `49925c531695956886df4210b1193c01b2dbe516`. The repository was cloned directly from GitHub, without copied worktree files, stashes or source/configuration overrides. The following scoped command chain exited **0**:
+
+```sh
+cargo test --locked -p symvault-mcp --lib http::shutdown
+```
+
+Rust compilation used two jobs, disabled dev/test debug info and a distinct build-output directory for each variant. Those output directories contained no required source or fixture inputs. Package manager dependency caches were allowed; application state and credentials were not supplied. This verifies repository-contained inputs and these scoped checks, not every product test or native acceptance criterion. Final documentation changes do not change the tested source; the published final HEAD must still be verified before continuation. Target cloud runtime, permissions, secrets and network gates: **not checked**.
 
 ## Copyable continuation request
 
