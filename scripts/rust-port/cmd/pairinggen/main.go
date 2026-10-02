@@ -48,6 +48,7 @@ var (
 		"scripts/rust-port/cmd/pairinggen/archive_extract.go",
 		"scripts/rust-port/cmd/pairinggen/archive_extract_test.go",
 		"scripts/rust-port/cmd/pairinggen/main.go",
+		"scripts/rust-port/cmd/pairinggen/main_test.go",
 		"scripts/rust-port/cmd/pairinggen/oracle.go.txt",
 	}
 )
