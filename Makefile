@@ -602,7 +602,11 @@ manpages-differential:
 cli-help-differential: manpages-differential
 	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --locked
 
-port-contract: mcp-oauth-contract
+.PHONY: store004-isolation-check
+store004-isolation-check:
+	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
+
+port-contract: mcp-oauth-contract store004-isolation-check
 port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check

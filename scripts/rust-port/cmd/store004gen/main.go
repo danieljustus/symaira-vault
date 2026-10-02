@@ -32,6 +32,7 @@ const (
 
 var goExecutable = "go"
 var oracleTimeout = 2 * time.Minute
+var oracleContext = context.Background()
 
 var sourceFiles = []string{
 	"internal/config/config.go",
@@ -307,7 +308,7 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	if pseudonymize {
 		args = append(args, "--pseudonymize")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), oracleTimeout)
+	ctx, cancel := context.WithTimeout(oracleContext, oracleTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, goPath, args...) // #nosec G204 -- goPath is the version-checked toolchain from resolveGo; args are fixed literals above
 	cmd.Dir, cmd.Env = tree, isolatedEnvironment(goPath, home, tmp)
