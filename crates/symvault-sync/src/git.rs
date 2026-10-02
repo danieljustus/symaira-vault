@@ -76,16 +76,34 @@ pub struct GitRepository {
 impl GitRepository {
     pub fn init(root: impl AsRef<Path>) -> Result<Self, GitError> {
         let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(&root)?;
+        fs::create_dir_all(&root)
+            .inspect_err(|error| report_process_io_error("init create directory", error))?;
         if !root.is_dir() {
             return Err(GitError::InvalidPath(root));
         }
         let repo = Self { root };
         if !repo.root.join(".git").exists() {
-            repo.command(&["init", "--quiet"])?;
-            repo.command(&["symbolic-ref", "HEAD", "refs/heads/master"])?;
-            repo.command(&["config", "user.name", "Symaira Vault"])?;
-            repo.command(&["config", "user.email", "symvault@example.com"])?;
+            for (operation, args) in [
+                ("init git init", ["init", "--quiet"].as_slice()),
+                (
+                    "init symbolic-ref",
+                    ["symbolic-ref", "HEAD", "refs/heads/master"].as_slice(),
+                ),
+                (
+                    "init config user.name",
+                    ["config", "user.name", "Symaira Vault"].as_slice(),
+                ),
+                (
+                    "init config user.email",
+                    ["config", "user.email", "symvault@example.com"].as_slice(),
+                ),
+            ] {
+                repo.command(args).inspect_err(|error| {
+                    if let GitError::Io(error) = error {
+                        report_process_io_error(operation, error);
+                    }
+                })?;
+            }
         }
         Ok(repo)
     }
@@ -1364,6 +1382,22 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn init_directory_diagnostic_preserves_original_error() {
+        let root = tempfile::tempdir().unwrap();
+        let blocker = root.path().join("private-path-marker");
+        fs::write(&blocker, b"not a directory").unwrap();
+        let target = blocker.join("repository");
+        let expected = fs::create_dir_all(&target).unwrap_err();
+        let GitError::Io(actual) = GitRepository::init(&target).unwrap_err() else {
+            panic!("init must retain the original I/O error");
+        };
+        assert_eq!(actual.kind(), expected.kind());
+        assert_eq!(actual.raw_os_error(), expected.raw_os_error());
+        assert_eq!(actual.to_string(), expected.to_string());
+        assert_eq!(fs::read(&blocker).unwrap(), b"not a directory");
+    }
 
     #[test]
     fn output_diagnostics_preserve_missing_file_error() {
