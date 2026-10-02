@@ -96,9 +96,11 @@
     ],
     "source_digest": "61095fe087f104ee0bca1de0582e1b0fb72bba4979aac84b0a5ef06dc4830a55",
     "generator_files": [
+      "scripts/rust-port/cmd/cxfgen/archive_extract.go",
+      "scripts/rust-port/cmd/cxfgen/archive_extract_test.go",
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "6bfc7b0f268eecb55bcdb470c97ed51996db07d716d824e1a43b8cc22fa087fc"
+    "generator_digest": "44aceb4641c7117abc47869b2b33342ba4195ec1adf9e78f8fdcdb2e4cce096c"
   },
   "cases": [
     {

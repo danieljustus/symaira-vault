@@ -16,10 +16,12 @@
     ],
     "source_digest": "9da7bd562c492cc8d868d818241711b7dab186ea3684712279ce5951dc710de6",
     "generator_files": [
+      "scripts/rust-port/cmd/pairinggen/archive_extract.go",
+      "scripts/rust-port/cmd/pairinggen/archive_extract_test.go",
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "85484252513863fb654c48de8bf81e7016558685e385feccc57130ec06a5a82f"
+    "generator_digest": "b6f0a5a49b6eb2ec2a79bf68df42c5f834a93e3206817ecfaa848dfaf7db9fff"
   },
   "cases": [
     {

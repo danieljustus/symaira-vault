@@ -2,7 +2,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,7 +9,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,7 +30,7 @@ var sourceFiles = []string{
 	"internal/vault/entry.go", "internal/vault/entry_readwrite.go", "internal/vault/entry_validate.go",
 	"internal/vault/recipients.go", "internal/vault/types.go", "internal/vault/vault.go",
 }
-var generatorFiles = []string{"scripts/rust-port/cmd/storegen/main.go", "scripts/rust-port/cmd/storegen/main_test.go"}
+var generatorFiles = []string{"scripts/rust-port/cmd/storegen/main.go", "scripts/rust-port/cmd/storegen/main_test.go", "scripts/rust-port/cmd/storegen/archive_extract.go", "scripts/rust-port/cmd/storegen/archive_extract_test.go"}
 var requiredVaults = []string{"fresh", "legacy"}
 var requiredEntries = []string{"minimal", "full", "nested/large"}
 var requiredTypeVectors = []string{"empty", "ssh", "certificate", "database", "github_pat", "github_fine_grained", "github_malformed", "aws", "aws_malformed", "totp", "totp_malformed", "jwt", "jwt_malformed", "basic", "basic_malformed", "generic_api_key", "generic_malformed", "password", "explicit_custom", "explicit_payment", "unknown_explicit", "path_seed", "field_certificate", "field_connection_string", "path_api_key"}
@@ -277,56 +275,9 @@ func extractOracleTree(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tr := tar.NewReader(archive)
-	for {
-		hdr, e := tr.Next()
-		if errors.Is(e, io.EOF) {
-			break
-		}
-		if e != nil {
-			_ = archive.Close()
-			return "", e
-		}
-		name := filepath.Clean(hdr.Name)
-		if name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			_ = archive.Close()
-			return "", errors.New("unsafe oracle archive path")
-		}
-		out := filepath.Join(dir, name)
-		switch hdr.Typeflag {
-		case tar.TypeDir:
-			if e = os.MkdirAll(out, 0750); e != nil {
-				_ = archive.Close()
-				return "", e
-			}
-		case tar.TypeReg:
-			if e = os.MkdirAll(filepath.Dir(out), 0750); e != nil {
-				_ = archive.Close()
-				return "", e
-			}
-			if hdr.Mode < 0 || hdr.Mode > int64(^uint32(0)) {
-				_ = archive.Close()
-				return "", fmt.Errorf("invalid archive mode %d", hdr.Mode)
-			}
-			f, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(uint32(hdr.Mode))) // #nosec G304 -- cleaned archive names cannot escape the controlled tree
-			if e != nil {
-				_ = archive.Close()
-				return "", e
-			}
-			n, e := io.Copy(f, io.LimitReader(tr, maxArchiveBytes+1))
-			if e == nil && n > maxArchiveBytes {
-				e = fmt.Errorf("archive exceeds %d bytes", maxArchiveBytes)
-			}
-			ce := f.Close()
-			if e != nil {
-				_ = archive.Close()
-				return "", e
-			}
-			if ce != nil {
-				_ = archive.Close()
-				return "", ce
-			}
-		}
+	if err = extractArchive(archive, dir, maxArchiveBytes, true); err != nil {
+		_ = archive.Close()
+		return "", err
 	}
 	if err = archive.Close(); err != nil {
 		return "", err
@@ -522,11 +473,64 @@ func verify(root, path string) error {
 	}
 	return validate(v, expected)
 }
+
+func refreshProvenanceOnly(root, path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var v fixture
+	if err = json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	expected, err := authoritative(root)
+	if err != nil {
+		return err
+	}
+	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release ||
+		v.Oracle.SourceDigest != expected.SourceDigest || !reflect.DeepEqual(v.Oracle.SourceFiles, expected.SourceFiles) {
+		return errors.New("store fixture source provenance changed; refusing a provenance-only refresh")
+	}
+	currentFiles := make(map[string]bool, len(expected.GeneratorFiles))
+	for _, name := range expected.GeneratorFiles {
+		currentFiles[name] = true
+	}
+	for _, name := range v.Oracle.GeneratorFiles {
+		if !currentFiles[name] {
+			return fmt.Errorf("store fixture generator file %q is absent from current provenance", name)
+		}
+	}
+	v.Oracle.GeneratorFiles = append([]string(nil), expected.GeneratorFiles...)
+	v.Oracle.GeneratorDigest = expected.GeneratorDigest
+	if err = validate(v, expected); err != nil {
+		return err
+	}
+	updated, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	updated = append(updated, '\n')
+	return os.WriteFile(path, updated, 0600)
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/store/store.json", "fixture path")
 	check := flag.Bool("check", false, "verify fixture provenance and cardinalities")
+	refresh := flag.Bool("refresh-provenance-only", false, "refresh generator provenance without regenerating fixture observations")
 	flag.Parse()
 	root := rootDir()
+	if *refresh {
+		if *check {
+			fmt.Fprintln(os.Stderr, "FAIL store fixture: --check and --refresh-provenance-only cannot be combined")
+			os.Exit(1)
+		}
+		if err := refreshProvenanceOnly(root, *output); err != nil {
+			fmt.Fprintln(os.Stderr, "FAIL refresh store fixture provenance:", err)
+			os.Exit(1)
+		}
+		fmt.Println("REFRESHED store fixture provenance (observations preserved)")
+		return
+	}
 	if *check {
 		if err := verify(root, *output); err != nil {
 			fmt.Fprintln(os.Stderr, "FAIL store fixture:", err)

@@ -77,9 +77,12 @@
     ],
     "source_digest": "b58a46f4eac25e1910bccddd8f2cf6b1d581e1e588874eda9a0b04474f7c0f14",
     "generator_files": [
-      "scripts/rust-port/cmd/syncgen/main.go"
+      "scripts/rust-port/cmd/syncgen/archive_extract.go",
+      "scripts/rust-port/cmd/syncgen/archive_extract_test.go",
+      "scripts/rust-port/cmd/syncgen/main.go",
+      "scripts/rust-port/cmd/syncgen/main_test.go"
     ],
-    "generator_digest": "e11de63e162123bcaf8d8d815c6fc7c00f8f9beb53ce00190c4e31eb70fec422"
+    "generator_digest": "affe3e7316d938f7420ef112f1b7f37320d95b425c8d8a7b81df135c43a847ad"
   },
   "cases": [
     {
