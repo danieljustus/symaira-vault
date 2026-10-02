@@ -90,6 +90,19 @@ func sourceNames(root string) ([]string, error) {
 		}
 		sources = append(sources, name)
 	}
+	// Check inventory separately: hashing pinned names cannot see added files.
+	args = append([]string{"diff", "--no-renames", "--name-only", "--diff-filter=ADRT", "-z", revision, "--"}, sourceRoots...)
+	cmd = exec.Command("git", args...) // #nosec G204 -- fixed revision/roots; read-only inventory comparison
+	cmd.Dir = root
+	changed, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("compare production source inventory: %w", err)
+	}
+	for _, name := range strings.Split(string(changed), "\x00") {
+		if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") {
+			return nil, fmt.Errorf("production Go source inventory differs from %s: %s; intentionally advance the main-reachable oracle pin or review an explicit exclusion", revision, name)
+		}
+	}
 	return sources, nil
 }
 
