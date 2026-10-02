@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, OpenOptions},
-    io::{self, Read},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     time::Duration,
@@ -1070,7 +1070,8 @@ fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Er
 // Only fixed operation labels and error codes, never arguments, paths or output.
 // Diagnostics must leave the original error and cleanup behavior unchanged.
 fn report_process_io_error(operation: &str, error: &io::Error) {
-    eprintln!(
+    let _ = writeln!(
+        io::stderr().lock(),
         "Git process {operation} failed: kind={:?}, os={:?}",
         error.kind(),
         error.raw_os_error()
