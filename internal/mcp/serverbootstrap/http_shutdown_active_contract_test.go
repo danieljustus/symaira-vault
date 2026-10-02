@@ -30,6 +30,7 @@ func TestHTTPShutdownActiveFactoryContract(t *testing.T) {
 	callbackDone := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseCallback := func() { releaseOnce.Do(func() { close(release) }) }
+	//nolint:unparam // Production factory signature requires a server result; this observation always exercises its error path.
 	factory := func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error) {
 		close(entered)
 		<-release

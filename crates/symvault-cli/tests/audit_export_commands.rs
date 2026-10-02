@@ -1,5 +1,8 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 #[path = "../src/audit_export_commands.rs"]
 mod audit_export_commands;
 
@@ -8,28 +11,17 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process::Command,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use symvault_store::audit::{self, LogEntry};
 
-struct TempDir(PathBuf);
+struct TempDir(test_temp_root::TempRoot);
 
 impl TempDir {
-    fn new(name: &str) -> Self {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let path = env::temp_dir().join(format!("symvault-audit-export-{name}-{suffix}"));
-        fs::create_dir_all(&path).expect("temporary directory");
-        Self(path)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+    fn new(label: &str) -> Self {
+        Self(test_temp_root::TempRoot::existing(&format!(
+            "symvault-audit-export-{label}-"
+        )))
     }
 }
 
