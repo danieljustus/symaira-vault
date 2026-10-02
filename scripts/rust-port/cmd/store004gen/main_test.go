@@ -40,20 +40,53 @@ func TestCheckFixtureRejectsDriftWithoutRewriting(t *testing.T) {
 }
 
 func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
-	root := rootDir()
-	fixture := filepath.Join(root, "testdata/port/store/store004_manifest_failure.json")
+	root := filepath.Join(t.TempDir(), "repo")
+	if output, err := exec.Command("git", "clone", "--shared", "--no-checkout", rootDir(), root).CombinedOutput(); err != nil {
+		t.Fatalf("clone oracle repository: %v: %s", err, output)
+	}
+	for _, name := range generatorFiles {
+		data, err := os.ReadFile(filepath.Join(rootDir(), name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixture := filepath.Join(root, "fixture.json")
+	want, err := generated(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fixture, want, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFixture(root, fixture); err != nil {
+		t.Fatalf("check rejected unchanged isolated fixture: %v", err)
+	}
 	source := filepath.Join(root, "scripts/rust-port/cmd/store004gen/process_group_unix.go")
 	original, err := os.ReadFile(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		if err := os.WriteFile(source, original, 0o600); err != nil {
-			t.Errorf("restore process-group source: %v", err)
-		}
-	})
 	if err := os.WriteFile(source, append(original, '\n'), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	tracked, err := os.ReadFile(filepath.Join(rootDir(), "scripts/rust-port/cmd/store004gen/process_group_unix.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(tracked, original) {
+		t.Fatal("drift check modified tracked repository source")
+	}
+	// Let the external cancellation probe stop here without relying on timing.
+	if os.Getenv("SYMVAULT_TEST_STORE004_PAUSE_AFTER_DRIFT") == "1" {
+		t.Log("STORE004_ISOLATED_DRIFT_READY")
+		select {}
 	}
 	if err := checkFixture(root, fixture); err == nil {
 		t.Fatal("check accepted process-group source drift")
