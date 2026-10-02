@@ -100,7 +100,7 @@
       "scripts/rust-port/cmd/cxfgen/archive_extract_test.go",
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "44aceb4641c7117abc47869b2b33342ba4195ec1adf9e78f8fdcdb2e4cce096c"
+    "generator_digest": "1998be3a765f221f430706e3ffec4fcb9f2f91ba5547c7296ac2b0e9cf471a0b"
   },
   "cases": [
     {
