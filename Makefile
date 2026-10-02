@@ -4,6 +4,9 @@
 BINARY_NAME := symvault
 GO := go
 CARGO := cargo
+# Vault-containing suites require the real Rust CLI. Caller-supplied binaries
+# are preserved; otherwise Cargo supplies the native/custom-target artifact.
+GO_TEST := python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
@@ -49,16 +52,16 @@ build:
 
 # Run all tests with race detector (default, for CI-like local testing)
 test:
-	$(GO) test ./... -race -v
+	$(GO_TEST) ./... -race -v
 
 # Run all tests without race detector (faster, for quick iteration)
 test-fast:
-	$(GO) test ./... -v
+	$(GO_TEST) ./... -v
 
 # Run tests with coverage
 test-coverage:
 	@mkdir -p $(COVERAGE_DIR)
-	$(GO) test ./... -coverprofile=$(COVERAGE_FILE) -covermode=atomic
+	$(GO_TEST) ./... -coverprofile=$(COVERAGE_FILE) -covermode=atomic
 	$(GO) tool cover -func=$(COVERAGE_FILE)
 	@echo ""
 	@echo "Coverage report saved to $(COVERAGE_FILE)"
@@ -70,23 +73,23 @@ test-coverage-html: test-coverage
 
 # Run tests with race detector
 test-race:
-	$(GO) test ./... -race -timeout=30m -v
+	$(GO_TEST) ./... -race -timeout=30m -v
 
 # Run tests for core packages only (vault, config, crypto)
 test-core:
-	$(GO) test ./internal/vault/... ./internal/config/... ./internal/crypto/... -v
+	$(GO_TEST) ./internal/vault/... ./internal/config/... ./internal/crypto/... -v
 
 # Run tests for core packages with coverage
 test-core-coverage:
 	@mkdir -p $(COVERAGE_DIR)
-	$(GO) test ./internal/vault/... ./internal/config/... ./internal/crypto/... \
+	$(GO_TEST) ./internal/vault/... ./internal/config/... ./internal/crypto/... \
 		-coverprofile=$(COVERAGE_FILE) -covermode=atomic
 	$(GO) tool cover -func=$(COVERAGE_FILE) | grep "total:"
 	$(GO) tool cover -func=$(COVERAGE_FILE)
 
 # Run specific package tests
 test-vault:
-	$(GO) test ./internal/vault/... -v
+	$(GO_TEST) ./internal/vault/... -v
 
 test-config:
 	$(GO) test ./internal/config/... -v
@@ -96,12 +99,12 @@ test-crypto:
 
 # Run benchmarks
 test-bench:
-	$(GO) test ./... -bench=. -benchmem
+	$(GO_TEST) ./... -bench=. -benchmem
 
 # Generate coverage report (canonical single-file output)
 cover:
 	@mkdir -p $(COVERAGE_DIR)
-	$(GO) test ./... -coverprofile=$(COVERAGE_FILE) -covermode=atomic
+	$(GO_TEST) ./... -coverprofile=$(COVERAGE_FILE) -covermode=atomic
 	$(GO) tool cover -func=$(COVERAGE_FILE)
 	@echo ""
 	@echo "Coverage report: $(COVERAGE_FILE)"
@@ -151,7 +154,7 @@ lint-fix:
 # Run CI-like tests (race + coverage + timeout, same as CI)
 test-ci:
 	@echo "Running CI-like test suite..."
-	GOWORK=off $(GO) test -v -race -timeout=30m -coverprofile=$(COVERAGE_FILE) -covermode=atomic ./...
+	GOWORK=off $(GO_TEST) -v -race -timeout=30m -coverprofile=$(COVERAGE_FILE) -covermode=atomic ./...
 	@echo ""
 	@echo "Coverage summary:"
 	$(GO) tool cover -func=$(COVERAGE_FILE) | grep "total:"
