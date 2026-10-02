@@ -13,13 +13,15 @@
     ],
     "source_digest": "ce11654f548221307d12fdfdca54654abdad28eec207df765cca73f6b67ea008",
     "generator_files": [
+      "scripts/rust-port/cmd/store004gen/archive_extract.go",
+      "scripts/rust-port/cmd/store004gen/archive_extract_test.go",
       "scripts/rust-port/cmd/store004gen/main.go",
       "scripts/rust-port/cmd/store004gen/main_test.go",
       "scripts/rust-port/cmd/store004gen/process_group_unix.go",
       "scripts/rust-port/cmd/store004gen/process_group_windows.go",
       "scripts/rust-port/cmd/store004gen/process_group_windows_test.go"
     ],
-    "generator_digest": "7deb52a9ae776c1eb1fddc13b00ecf338755b33f81d4046dfb088b8d8c98a91a"
+    "generator_digest": "3ae87e2b11f7d5276bbfe163baa8dff37324453cad2000f943efe571bb2d8fd2"
   },
   "cases": [
     {

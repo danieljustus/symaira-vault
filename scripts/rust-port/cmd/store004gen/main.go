@@ -2,7 +2,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -43,6 +42,8 @@ var sourceFiles = []string{
 	"internal/vault/manifest.go",
 }
 var generatorFiles = []string{
+	"scripts/rust-port/cmd/store004gen/archive_extract.go",
+	"scripts/rust-port/cmd/store004gen/archive_extract_test.go",
 	"scripts/rust-port/cmd/store004gen/main.go",
 	"scripts/rust-port/cmd/store004gen/main_test.go",
 	"scripts/rust-port/cmd/store004gen/process_group_unix.go",
@@ -141,19 +142,6 @@ func authoritative(root string) (oracle, error) {
 	}
 	return oracle{oracleCommit, oracleRelease, append([]string(nil), sourceFiles...), sourceDigest, append([]string(nil), generatorFiles...), generatorDigest}, nil
 }
-func safeArchivePath(name string) (string, error) {
-	if name == "" || strings.IndexByte(name, 0) >= 0 || filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
-		return "", errors.New("archive path is empty or absolute")
-	}
-	if runtime.GOOS != "windows" && strings.ContainsRune(name, '\\') {
-		return "", errors.New("archive path has unsupported separator")
-	}
-	clean := filepath.Clean(filepath.FromSlash(name))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", errors.New("unsafe archive path")
-	}
-	return clean, nil
-}
 func extract(root string) (string, error) {
 	dir := filepath.Join(root, sourceTree)
 	if err := os.RemoveAll(dir); err != nil {
@@ -188,54 +176,8 @@ func extract(root string) (string, error) {
 		return "", err
 	}
 	defer func(c io.Closer) { _ = c.Close() }(f)
-	tr := tar.NewReader(f)
-	for {
-		h, e := tr.Next()
-		if errors.Is(e, io.EOF) {
-			break
-		}
-		if e != nil {
-			return "", e
-		}
-		name, e := safeArchivePath(h.Name)
-		if e != nil {
-			return "", e
-		}
-		out := filepath.Join(dir, name)
-		rel, e := filepath.Rel(dir, out)
-		if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", errors.New("archive path escapes extraction root")
-		}
-		switch h.Typeflag {
-		case tar.TypeXGlobalHeader, tar.TypeXHeader:
-			// Metadata records are interpreted by archive/tar and have no tree path.
-			continue
-		case tar.TypeDir:
-			if e = os.MkdirAll(out, 0750); e != nil {
-				return "", e
-			}
-		case tar.TypeReg:
-			if e = os.MkdirAll(filepath.Dir(out), 0750); e != nil {
-				return "", e
-			}
-			file, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) // #nosec G304 -- safeArchivePath and the Rel check above confirm the name cannot escape the extraction root
-			if e != nil {
-				return "", e
-			}
-			n, copyErr := io.Copy(file, io.LimitReader(tr, (64<<20)+1))
-			closeErr := file.Close()
-			if copyErr != nil {
-				return "", copyErr
-			}
-			if closeErr != nil {
-				return "", closeErr
-			}
-			if n > 64<<20 {
-				return "", errors.New("oracle archive member exceeds 67108864 bytes")
-			}
-		default:
-			return "", fmt.Errorf("unsupported archive entry type %d for %q", h.Typeflag, h.Name)
-		}
+	if err := extractArchive(f, dir, 64<<20, false); err != nil {
+		return "", err
 	}
 	return dir, nil
 }
