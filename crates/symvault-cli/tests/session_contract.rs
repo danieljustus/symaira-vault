@@ -1,11 +1,13 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use serde::Deserialize;
@@ -80,13 +82,8 @@ fn fixture_path(root: &Path, relative: &str) -> PathBuf {
         })
 }
 
-fn run_case(case: &Case) -> (std::process::Output, PathBuf) {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock after epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("symvault-session-cli-case-{unique}"));
-    fs::create_dir_all(&root).expect("create isolated case root");
+fn run_case(case: &Case) -> (std::process::Output, test_temp_root::TempRoot) {
+    let root = test_temp_root::TempRoot::existing("symvault-session-cli-case-");
     let vault = fixture_path(
         &root,
         if case.vault_dir.is_empty() {
@@ -227,13 +224,7 @@ fn expand_json_markers(bytes: &[u8], root: &Path, vault: &Path) -> serde_json::R
 
 #[test]
 fn initialized_status_uses_memory_fallback_in_ci_without_keychain_access() {
-    let root = std::env::temp_dir().join(format!(
-        "symvault-session-cli-initialized-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock after epoch")
-            .as_nanos()
-    ));
+    let root = test_temp_root::TempRoot::missing("symvault-session-cli-initialized-");
     let vault = root.join("vault");
     fs::create_dir_all(&vault).expect("create isolated vault");
     fs::write(
@@ -257,7 +248,6 @@ fn initialized_status_uses_memory_fallback_in_ci_without_keychain_access() {
         .env_remove("SYMVAULT_PASSPHRASE")
         .output()
         .expect("run initialized Rust session status");
-    let _ = fs::remove_dir_all(&root);
 
     assert!(output.status.success(), "stderr: {:?}", output.stderr);
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).expect("status JSON");
@@ -268,13 +258,7 @@ fn initialized_status_uses_memory_fallback_in_ci_without_keychain_access() {
 
 #[test]
 fn unlock_validates_identity_and_uses_memory_fallback_without_keychain_access() {
-    let root = std::env::temp_dir().join(format!(
-        "symvault-session-cli-unlock-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock after epoch")
-            .as_nanos()
-    ));
+    let root = test_temp_root::TempRoot::missing("symvault-session-cli-unlock-");
     let vault = root.join("vault");
     fs::create_dir_all(&vault).expect("create isolated vault");
     let passphrase = b"fixture-passphrase";
@@ -328,7 +312,6 @@ fn unlock_validates_identity_and_uses_memory_fallback_without_keychain_access() 
     let wrong_output = wrong.wait_with_output().expect("wait for wrong unlock");
     assert_eq!(wrong_output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&wrong_output.stderr).contains("unlock vault"));
-    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
