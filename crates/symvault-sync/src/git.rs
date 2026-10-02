@@ -6,6 +6,7 @@ use std::{
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 #[cfg(not(windows))]
@@ -1056,12 +1057,15 @@ fn run_process_with_timeout(
 }
 
 fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Error> {
+    // Do not recycle names while another command still holds a deleted file.
+    // Windows returns AccessDenied, not AlreadyExists, for delete-pending names.
+    static NEXT_OUTPUT_ID: AtomicU64 = AtomicU64::new(0);
     let base = std::env::temp_dir();
-    for attempt in 0..100 {
+    for _ in 0..100 {
         let path = base.join(format!(
             "symvault-git-{}-{}-{label}.out",
             std::process::id(),
-            attempt
+            NEXT_OUTPUT_ID.fetch_add(1, Ordering::Relaxed)
         ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -1382,6 +1386,35 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temporary_output_names_are_not_reused_while_deleted_handles_are_open() {
+        let label = "delete-pending-regression";
+        let (first_path, first_file) = temporary_output_file(label).unwrap();
+        fs::remove_file(&first_path).unwrap();
+        // Windows retains the deleted name until every handle closes. On Unix
+        // the name disappears immediately, but must still not be reused.
+        #[cfg(windows)]
+        {
+            let blocked = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&first_path)
+                .expect_err("reopening a delete-pending name must fail");
+            assert_eq!(blocked.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(blocked.raw_os_error(), Some(5));
+        }
+        let second = temporary_output_file(label);
+        drop(first_file);
+        let (second_path, second_file) = second.expect("allocate a fresh output name");
+        let distinct = first_path != second_path;
+        drop(second_file);
+        fs::remove_file(second_path).unwrap();
+        assert!(
+            distinct,
+            "allocator reused a deleted but still-open output name"
+        );
+    }
 
     #[test]
     fn init_directory_diagnostic_preserves_original_error() {
