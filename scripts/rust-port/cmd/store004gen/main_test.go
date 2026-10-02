@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -40,6 +42,12 @@ func TestCheckFixtureRejectsDriftWithoutRewriting(t *testing.T) {
 }
 
 func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
+	if os.Getenv("SYMVAULT_TEST_STORE004_PAUSE_AFTER_DRIFT") == "1" {
+		previous := oracleContext
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		oracleContext = ctx
+		t.Cleanup(func() { stop(); oracleContext = previous })
+	}
 	root := filepath.Join(t.TempDir(), "repo")
 	if output, err := exec.Command("git", "clone", "--shared", "--no-checkout", rootDir(), root).CombinedOutput(); err != nil {
 		t.Fatalf("clone oracle repository: %v: %s", err, output)
@@ -58,7 +66,7 @@ func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
 		}
 	}
 	fixture := filepath.Join(root, "fixture.json")
-	want, err := generated(root)
+	want, err := os.ReadFile(filepath.Join(rootDir(), "testdata/port/store/store004_manifest_failure.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,71 +154,84 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("descendant cleanup proof is Unix-specific")
 	}
-	stubDir := t.TempDir()
-	goStub := filepath.Join(stubDir, "go-stub")
-	readyPath := filepath.Join(stubDir, "descendant-ready")
-	if err := os.WriteFile(goStub, []byte(fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then echo 'go version go1.26.6 darwin/arm64'; exit 0; fi\n(trap '' TERM INT; while :; do sleep 60; done) &\nchild=$!\nprintf '%%s\\n' \"$child\" > %q\nwait \"$child\"\n", readyPath)), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	oldGo, oldTimeout := goExecutable, oracleTimeout
-	goExecutable, oracleTimeout = goStub, 100*time.Millisecond
-	t.Cleanup(func() { goExecutable, oracleTimeout = oldGo, oldTimeout })
-
-	started := time.Now()
-	result := make(chan error, 1)
-	go func() {
-		_, err := runOracle(rootDir(), false)
-		result <- err
-	}()
-
-	var descendantPID int
-	readyDeadline := time.NewTimer(5 * time.Second)
-	readyTicker := time.NewTicker(10 * time.Millisecond)
-	for descendantPID == 0 {
-		select {
-		case <-readyTicker.C:
-			data, err := os.ReadFile(readyPath)
-			if err != nil {
-				continue
+	for _, parentCancel := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parent-cancel=%t", parentCancel), func(t *testing.T) {
+			stubDir := t.TempDir()
+			goStub := filepath.Join(stubDir, "go-stub")
+			readyPath := filepath.Join(stubDir, "descendant-ready")
+			if err := os.WriteFile(goStub, []byte(fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then echo 'go version go1.26.6 darwin/arm64'; exit 0; fi\n(trap '' TERM INT; while :; do sleep 60; done) &\nchild=$!\nprintf '%%s\\n' \"$child\" > %q\nwait \"$child\"\n", readyPath)), 0o700); err != nil {
+				t.Fatal(err)
 			}
-			pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-			if err != nil || pid <= 0 {
-				t.Fatalf("invalid descendant readiness PID %q: %v", data, err)
+			oldGo, oldTimeout := goExecutable, oracleTimeout
+			oldContext := oracleContext
+			ctx, cancel := context.WithCancel(context.Background())
+			oracleContext = ctx
+			goExecutable, oracleTimeout = goStub, 100*time.Millisecond
+			if parentCancel {
+				oracleTimeout = 2 * time.Minute
 			}
-			descendantPID = pid
-		case <-readyDeadline.C:
-			t.Fatal("timeout stub did not signal descendant readiness")
-		}
-	}
-	readyTicker.Stop()
-	if !readyDeadline.Stop() {
-		<-readyDeadline.C
-	}
+			t.Cleanup(func() { cancel(); oracleContext = oldContext; goExecutable, oracleTimeout = oldGo, oldTimeout })
 
-	select {
-	case err := <-result:
-		if err == nil {
-			t.Fatal("timeout stub unexpectedly succeeded")
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("runOracle did not return within cleanup bound")
-	}
-	if elapsed := time.Since(started); elapsed > 5*time.Second {
-		t.Fatalf("timeout cleanup exceeded bound: %v", elapsed)
-	}
+			started := time.Now()
+			result := make(chan error, 1)
+			go func() {
+				_, err := runOracle(rootDir(), false)
+				result <- err
+			}()
 
-	goneDeadline := time.NewTimer(2 * time.Second)
-	goneTicker := time.NewTicker(10 * time.Millisecond)
-	defer goneDeadline.Stop()
-	defer goneTicker.Stop()
-	for {
-		if err := exec.Command("kill", "-0", strconv.Itoa(descendantPID)).Run(); err != nil {
-			return
-		}
-		select {
-		case <-goneTicker.C:
-		case <-goneDeadline.C:
-			t.Fatalf("descendant PID %d survived process-group cleanup", descendantPID)
-		}
+			var descendantPID int
+			readyDeadline := time.NewTimer(5 * time.Second)
+			readyTicker := time.NewTicker(10 * time.Millisecond)
+			for descendantPID == 0 {
+				select {
+				case <-readyTicker.C:
+					data, err := os.ReadFile(readyPath)
+					if err != nil {
+						continue
+					}
+					pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+					if err != nil || pid <= 0 {
+						t.Fatalf("invalid descendant readiness PID %q: %v", data, err)
+					}
+					descendantPID = pid
+				case <-readyDeadline.C:
+					t.Fatal("timeout stub did not signal descendant readiness")
+				}
+			}
+			readyTicker.Stop()
+			if parentCancel {
+				cancel()
+			}
+			if !readyDeadline.Stop() {
+				<-readyDeadline.C
+			}
+
+			select {
+			case err := <-result:
+				if err == nil {
+					t.Fatal("timeout stub unexpectedly succeeded")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("runOracle did not return within cleanup bound")
+			}
+			if elapsed := time.Since(started); elapsed > 5*time.Second {
+				t.Fatalf("timeout cleanup exceeded bound: %v", elapsed)
+			}
+
+			goneDeadline := time.NewTimer(2 * time.Second)
+			goneTicker := time.NewTicker(10 * time.Millisecond)
+			defer goneDeadline.Stop()
+			defer goneTicker.Stop()
+			for {
+				if err := exec.Command("kill", "-0", strconv.Itoa(descendantPID)).Run(); err != nil {
+					return
+				}
+				select {
+				case <-goneTicker.C:
+				case <-goneDeadline.C:
+					t.Fatalf("descendant PID %d survived process-group cleanup", descendantPID)
+				}
+			}
+		})
 	}
 }

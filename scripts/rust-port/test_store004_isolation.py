@@ -9,6 +9,18 @@ import tempfile
 import time
 
 
+def kill_owned(process):
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15, check=False)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    process.wait(timeout=15)
+
+
 root = Path(__file__).resolve().parents[2]
 source = root / "scripts/rust-port/cmd/store004gen/process_group_unix.go"
 before, mode = source.read_bytes(), source.stat().st_mode
@@ -23,18 +35,29 @@ with tempfile.TemporaryDirectory(prefix="store004-cancel-", dir=os.environ.get("
     sandbox = Path(directory)
     binary = sandbox / ("store004.test" + suffix)
     with (sandbox / "build.log").open("w") as output:
-        subprocess.run([go, "test", "-c", "-o", str(binary), "./scripts/rust-port/cmd/store004gen"],
-                       cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT, check=True, timeout=120)
+        compiler = subprocess.Popen([go, "test", "-c", "-o", str(binary), "./scripts/rust-port/cmd/store004gen"],
+                                    cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT,
+                                    start_new_session=os.name != "nt")
+        try:
+            result = compiler.wait(timeout=120)
+        except BaseException:
+            kill_owned(compiler)
+            raise
+        if result != 0:
+            raise RuntimeError("test compilation failed: " + (sandbox / "build.log").read_text())
     for key in ["HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP", "XDG_CONFIG_HOME", "XDG_DATA_HOME"]:
         env[key] = str(sandbox)
     env["SYMVAULT_TEST_STORE004_PAUSE_AFTER_DRIFT"] = "1"
     log = sandbox / "test.log"
     with log.open("w") as output:
         process = subprocess.Popen([str(binary), "-test.run=^TestCheckFixtureRejectsProcessGroupSourceDrift$",
-                                    "-test.v", "-test.timeout=90s"], cwd=root, env=env,
+                                    "-test.v", "-test.timeout=0"], cwd=root, env=env,
                                    stdout=output, stderr=subprocess.STDOUT, start_new_session=os.name != "nt")
+        ready = False
         try:
-            deadline = time.monotonic() + 90
+            # Two real oracle calls each have a 2-minute bound. Do not let
+            # Go's test alarm kill their owner before process-group cleanup.
+            deadline = time.monotonic() + 600
             while "STORE004_ISOLATED_DRIFT_READY" not in log.read_text():
                 assert source.read_bytes() == before and source.stat().st_mode == mode, "tracked source changed"
                 if process.poll() is not None:
@@ -42,15 +65,21 @@ with tempfile.TemporaryDirectory(prefix="store004-cancel-", dir=os.environ.get("
                 if time.monotonic() >= deadline:
                     raise TimeoutError("source-drift test did not reach its ready point")
                 time.sleep(0.02)
+            ready = True
         finally:
-            if os.name == "nt":
-                process.kill()
-            else:
+            if not ready and os.name != "nt" and process.poll() is None:
+                # Cancel the Go owner context first: oracle children have
+                # separate groups, and runOracle must kill and await them.
+                process.send_signal(signal.SIGINT)
                 try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            process.wait(timeout=10)
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    kill_owned(process)
+                    raise
+            else:
+                # At readiness no oracle is running. On Windows killing the
+                # owner also closes its kill-on-close oracle Job Objects.
+                kill_owned(process)
     assert process.returncode != 0, "cancellation did not terminate the test"
     assert source.read_bytes() == before and source.stat().st_mode == mode, "cancellation changed tracked source"
 print("PASS: real source-drift test killed after isolated mutation; tracked bytes/mode unchanged")
