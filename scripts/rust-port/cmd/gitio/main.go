@@ -368,7 +368,7 @@ func validateOutputPath(root, output string) (string, error) {
 }
 
 // fixtureDifference reports only fixed projection fields and safe scalar values.
-// Fixture bytes, paths, helper output and arbitrary strings stay out of diagnostics.
+// Fixture bytes, fixture-internal paths, helper output and arbitrary strings are omitted.
 func fixtureDifference(existing []byte, generated Fixture) string {
 	var frozen Fixture
 	if err := json.Unmarshal(existing, &frozen); err != nil {
