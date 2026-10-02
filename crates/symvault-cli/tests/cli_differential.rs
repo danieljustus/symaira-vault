@@ -1,24 +1,32 @@
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Output, Stdio},
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::Instant,
 };
 
-fn temporary_root(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    env::temp_dir().join(format!("symvault-cli-differential-{name}-{suffix}"))
+fn temporary_root(name: &str) -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::missing(&format!("symvault-cli-differential-{name}-"))
 }
 
 struct TempFixture(Vec<PathBuf>);
 
 impl TempFixture {
-    fn new(paths: impl IntoIterator<Item = PathBuf>) -> Self {
-        Self(paths.into_iter().collect())
+    fn new<I, P>(paths: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        Self(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_path_buf())
+                .collect(),
+        )
     }
 }
 
