@@ -22,7 +22,7 @@
       "scripts/rust-port/cmd/pairinggen/main_test.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "64f4985478dfcac436cc46d70b4e549a1a4bea4e95b5d96d890c35c8c3bfe82a"
+    "generator_digest": "71595dc629c7de9b50aa33755bbc3fc69ef38afc1119ef11ba5bd3410dd92b44"
   },
   "cases": [
     {

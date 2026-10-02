@@ -475,7 +475,13 @@ func verify(root, path string) error {
 }
 
 func refreshProvenanceOnly(root, path string) error {
-	data, err := os.ReadFile(path)
+	fixtures, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fixtures.Close() }()
+	name := filepath.Base(path)
+	data, err := fixtures.ReadFile(name)
 	if err != nil {
 		return err
 	}
@@ -510,7 +516,7 @@ func refreshProvenanceOnly(root, path string) error {
 		return err
 	}
 	updated = append(updated, '\n')
-	return os.WriteFile(path, updated, 0600)
+	return fixtures.WriteFile(name, updated, 0600)
 }
 
 func main() {

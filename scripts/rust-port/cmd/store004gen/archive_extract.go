@@ -55,8 +55,7 @@ func extractArchive(source io.Reader, destination string, maxMemberBytes int64, 
 		}
 		name = filepath.Clean(filepath.FromSlash(name))
 
-		out := filepath.Join(destination, name)
-		relative, err := filepath.Rel(destination, out)
+		relative, err := filepath.Rel(".", name)
 		if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("oracle archive path %q escapes extraction root", header.Name)
 		}

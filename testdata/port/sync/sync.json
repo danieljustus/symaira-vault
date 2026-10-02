@@ -82,7 +82,7 @@
       "scripts/rust-port/cmd/syncgen/main.go",
       "scripts/rust-port/cmd/syncgen/main_test.go"
     ],
-    "generator_digest": "bcdf4e4b07ad97a72a99cbd20a13e321f16bcfd24645130419406687ad1319f7"
+    "generator_digest": "6efd95c1151cf65373270d9b7e3fc0a434a4e6a06fbc1f6c92773cabecbe8c68"
   },
   "cases": [
     {

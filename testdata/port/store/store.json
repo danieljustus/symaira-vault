@@ -24,7 +24,7 @@
       "scripts/rust-port/cmd/storegen/archive_extract.go",
       "scripts/rust-port/cmd/storegen/archive_extract_test.go"
     ],
-    "generator_digest": "ac7129bc74c1712f62bd5446ece1d4e8b64d612b914094d82ecde24b80c886fe"
+    "generator_digest": "e1bedaeeb55518f67c1a49b5490ff072959f889fc304594f47d2c53621887c77"
   },
   "vaults": [
     {
