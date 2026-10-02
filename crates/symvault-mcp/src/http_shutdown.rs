@@ -449,8 +449,7 @@ mod tests {
         let _: io::Result<()> = shutdown.socket_io(None, || panic!("cancelled I/O must not retry"));
     }
 
-    #[test]
-    fn saturated_connections_keep_busy_response_and_cancel_cleanly() {
+    fn saturation_case(abort_peers: bool) {
         let root = tempfile::tempdir().expect("registry root");
         let registry = root.path().join("tokens.json");
         std::fs::write(&registry, br#"{"tokens":{}}"#).expect("registry");
@@ -468,15 +467,37 @@ mod tests {
             );
             thread::yield_now();
         }
+        if abort_peers {
+            // Abort after the first reply byte, while later response writes
+            // may still be pending. Every following peer must still be served.
+            for _ in 0..64 {
+                let mut peer = TcpStream::connect(address).expect("aborting excess peer");
+                peer.set_read_timeout(Some(Duration::from_secs(2)))
+                    .expect("aborting peer bound");
+                peer.read_exact(&mut [0]).expect("busy reply started");
+            }
+            assert!(
+                !server.shutdown.is_cancelled().expect("listener state"),
+                "an overflow peer abort must not cancel admitted transports"
+            );
+        }
         let excess = TcpStream::connect(address).expect("excess connection");
         excess
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("response bound");
-        let mut status = String::new();
-        BufReader::new(excess)
-            .read_line(&mut status)
+        // Consume the complete reply before closing the peer. Dropping after
+        // only the status line can reset the socket during the remaining
+        // writes on Windows, testing a peer abort rather than cancellation.
+        // One-byte buffering exercises fragmented reads; cap the transcript.
+        let response: Vec<u8> = BufReader::with_capacity(1, excess)
+            .bytes()
+            .take(256)
+            .collect::<io::Result<_>>()
             .expect("busy response");
-        assert_eq!(status, "HTTP/1.1 503 Service Unavailable\r\n");
+        assert_eq!(
+            response,
+            b"HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: 12\r\nConnection: close\r\n\r\nserver busy\n"
+        );
         server
             .shutdown
             .cancel()
@@ -493,6 +514,16 @@ mod tests {
             .join()
             .expect("join")
             .expect("clean cancellation");
+    }
+
+    #[test]
+    fn saturated_connections_keep_busy_response_and_cancel_cleanly() {
+        saturation_case(false);
+    }
+
+    #[test]
+    fn saturated_peer_aborts_do_not_terminate_listener() {
+        saturation_case(true);
     }
 
     #[test]

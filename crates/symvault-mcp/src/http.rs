@@ -561,7 +561,8 @@ where
                         error.kind(),
                         error.raw_os_error()
                     );
-                    return Err(error);
+                    // Like worker-owned I/O, an overflow peer write failure
+                    // belongs to that connection, not the whole listener.
                 }
                 continue;
             }
