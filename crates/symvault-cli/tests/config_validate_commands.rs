@@ -66,7 +66,6 @@ fn config_validate_invalid_schema() {
 vaultDir: ""
 agents:
   default:
-    approvalMode: invalid_mode
     allowedPaths:
       - "/tmp/[unterminated"
 vault:
@@ -85,7 +84,6 @@ clipboard:
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(&format!("Configuration is invalid ({path_str}):")));
     assert!(stdout.contains("  ✗ vaultDir: must not be empty"));
-    assert!(stdout.contains("  ✗ agents.default.approvalMode:"));
     assert!(stdout.contains("  ✗ agents.default.allowedPaths[0]:"));
     assert!(stdout.contains("  ✗ vault.argon2id_time:"));
     assert!(stdout.contains("  ✗ vault.argon2id_threads:"));
@@ -105,7 +103,38 @@ clipboard:
     let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON stdout");
     assert_eq!(parsed["valid"], false);
     let errors = parsed["errors"].as_array().expect("errors array");
-    assert_eq!(errors.len(), 7);
+    assert_eq!(errors.len(), 6);
+}
+
+#[test]
+fn config_validate_rejects_auto_approval_mode_during_load() {
+    let home = TempDir::new("home");
+    let invalid_file = home.0.join("auto-approval-mode.yaml");
+    fs::write(
+        &invalid_file,
+        "vaultDir: /tmp/test\nagents:\n  default:\n    approvalMode: auto\n",
+    )
+    .unwrap();
+    let path_str = invalid_file.to_str().unwrap();
+
+    let out = run_cli(&home.0, &["config", "validate", path_str]);
+    assert_eq!(out.status.code(), Some(6));
+    assert!(out.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains(&format!("Error: cannot load config from {path_str}:")));
+    assert!(stderr.contains("approvalMode"));
+
+    let out_json = run_cli(
+        &home.0,
+        &["config", "validate", path_str, "--output", "json"],
+    );
+    assert_eq!(out_json.status.code(), Some(6));
+    let stdout = String::from_utf8_lossy(&out_json.stdout);
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON stdout");
+    assert_eq!(parsed["valid"], false);
+    assert!(parsed["error"].as_str().unwrap().contains("approvalMode"));
+    let stderr = String::from_utf8_lossy(&out_json.stderr);
+    assert!(stderr.contains("Error: config load failed:"));
 }
 
 #[test]
@@ -120,7 +149,7 @@ session_timeout: 15m
 session_max_lifetime: 8h
 agents:
   default:
-    approval_mode: auto
+    approval_mode: prompt
     allowed_paths:
       - "/tmp/*"
 vault:

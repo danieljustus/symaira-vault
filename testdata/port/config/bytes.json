@@ -14,7 +14,7 @@
       "internal/config/warn.go"
     ],
     "source_digest": "1704c153d56a7e96369d72200677899afa6e55d5dcf6cca4ae40c240aa542c71",
-    "generator_digest": "5bf5684fc1b2bb0a9a9982942bb38773d9913de1b88b8bf7e6c2d118fa4006df"
+    "generator_digest": "d4a95c4bb8f049e2601a217dbe81c74724825914937ca0eae9c9c0943944bfa7"
   },
   "cases": [
     {
@@ -35,7 +35,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
       "round_trips_to": "identical_snapshot"
@@ -58,7 +61,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
       "round_trips_to": "identical_snapshot"
@@ -82,7 +88,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -106,7 +115,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -130,7 +142,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -153,7 +168,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -224,7 +242,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -247,7 +268,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -277,7 +301,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    a:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: a\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -301,7 +328,10 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
@@ -342,9 +372,245 @@
           "hermes",
           "openclaw",
           "opencode"
-        ]
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 100000h0m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "approval_mode_auto",
+      "description": "auto is accepted by Validate but rejected by Load",
+      "input": "agents:\n  default:\n    approvalMode: auto\n",
+      "rejected": true
+    },
+    {
+      "name": "approval_mode_bogus",
+      "description": "an unknown approval mode is rejected after merge",
+      "input": "agents:\n  default:\n    approvalMode: bogus\n",
+      "rejected": true
+    },
+    {
+      "name": "approval_mode_control_character",
+      "description": "a control character inside a mode is rejected",
+      "input": "agents:\n  default:\n    approvalMode: \"prompt\\u0001\"\n",
+      "rejected": true
+    },
+    {
+      "name": "approval_mode_unicode_unrecognized",
+      "description": "a Unicode mode outside the accepted set is rejected",
+      "input": "agents:\n  default:\n    approvalMode: \"prомpt\"\n",
+      "rejected": true
+    },
+    {
+      "name": "approval_mode_empty",
+      "description": "an explicit empty mode is preserved and accepted",
+      "input": "agents:\n  default:\n    approvalMode: \"\"\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": "",
+        "require_approval_raw": null,
+        "require_approval": false
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: \"\"\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "approval_mode_null",
+      "description": "an explicit null mode clears the pointer and is accepted",
+      "input": "agents:\n  default:\n    approvalMode: null\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": null,
+        "require_approval_raw": null,
+        "require_approval": false
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "null_approval_mode_defaults_to_deny"
+    },
+    {
+      "name": "approval_mode_require_true",
+      "description": "requireApproval true derives prompt",
+      "input": "agents:\n  default:\n    requireApproval: true\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": "prompt",
+        "require_approval_raw": true,
+        "require_approval": true
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: prompt\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n        requireApproval: true\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "approval_mode_require_false",
+      "description": "requireApproval false derives none",
+      "input": "agents:\n  default:\n    requireApproval: false\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": "none",
+        "require_approval_raw": false,
+        "require_approval": false
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: none\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n        requireApproval: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "approval_mode_explicit_precedence",
+      "description": "an explicit mode wins over requireApproval",
+      "input": "agents:\n  default:\n    requireApproval: true\n    approvalMode: deny\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": true,
+        "require_approval": true
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n        requireApproval: true\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "approval_mode_null_precedence",
+      "description": "an explicit null mode still wins over requireApproval",
+      "input": "agents:\n  default:\n    requireApproval: true\n    approvalMode: null\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": null,
+        "require_approval_raw": true,
+        "require_approval": true
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n        requireApproval: true\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "null_approval_mode_rederived_from_legacy"
+    },
+    {
+      "name": "approval_mode_null_legacy",
+      "description": "a null legacy boolean does not override the default mode",
+      "input": "agents:\n  default:\n    requireApproval: null\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": "deny",
+        "require_approval_raw": null,
+        "require_approval": false
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "custom_agent_mode_omitted",
+      "description": "a defined custom selected agent keeps its unset mode",
+      "input": "defaultAgent: custom\nagents:\n  custom:\n    canWrite: true\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "custom",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "custom",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ],
+        "approval_mode": null,
+        "require_approval_raw": null,
+        "require_approval": false
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
     }
   ],

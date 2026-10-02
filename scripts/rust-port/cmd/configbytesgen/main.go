@@ -69,6 +69,9 @@ type snapshot struct {
 	AuthMethod         string   `json:"auth_method"`
 	VaultDir           string   `json:"vault_dir"`
 	AgentNames         []string `json:"agent_names"`
+	ApprovalMode       *string  `json:"approval_mode"`
+	RequireApprovalRaw *bool    `json:"require_approval_raw"`
+	RequireApproval    bool     `json:"require_approval"`
 }
 
 type bytesCase struct {
@@ -189,6 +192,18 @@ func inputs() []struct{ name, description, input string } {
 		{"zero_duration", "an explicitly zero session duration is rejected", "sessionTimeout: 0s\n"},
 		{"negative_max_lifetime", "the rule covers sessionMaxLifetime too", "sessionMaxLifetime: -1h\n"},
 		{"large_duration", "a very large duration is accepted verbatim", "sessionTimeout: 100000h\n"},
+		{"approval_mode_auto", "auto is accepted by Validate but rejected by Load", "agents:\n  default:\n    approvalMode: auto\n"},
+		{"approval_mode_bogus", "an unknown approval mode is rejected after merge", "agents:\n  default:\n    approvalMode: bogus\n"},
+		{"approval_mode_control_character", "a control character inside a mode is rejected", "agents:\n  default:\n    approvalMode: \"prompt\\u0001\"\n"},
+		{"approval_mode_unicode_unrecognized", "a Unicode mode outside the accepted set is rejected", "agents:\n  default:\n    approvalMode: \"prомpt\"\n"},
+		{"approval_mode_empty", "an explicit empty mode is preserved and accepted", "agents:\n  default:\n    approvalMode: \"\"\n"},
+		{"approval_mode_null", "an explicit null mode clears the pointer and is accepted", "agents:\n  default:\n    approvalMode: null\n"},
+		{"approval_mode_require_true", "requireApproval true derives prompt", "agents:\n  default:\n    requireApproval: true\n"},
+		{"approval_mode_require_false", "requireApproval false derives none", "agents:\n  default:\n    requireApproval: false\n"},
+		{"approval_mode_explicit_precedence", "an explicit mode wins over requireApproval", "agents:\n  default:\n    requireApproval: true\n    approvalMode: deny\n"},
+		{"approval_mode_null_precedence", "an explicit null mode still wins over requireApproval", "agents:\n  default:\n    requireApproval: true\n    approvalMode: null\n"},
+		{"approval_mode_null_legacy", "a null legacy boolean does not override the default mode", "agents:\n  default:\n    requireApproval: null\n"},
+		{"custom_agent_mode_omitted", "a defined custom selected agent keeps its unset mode", "defaultAgent: custom\nagents:\n  custom:\n    canWrite: true\n"},
 	}
 }
 
@@ -289,12 +304,16 @@ func snapshotOf(cfg *configpkg.Config) *snapshot {
 		names = append(names, name)
 	}
 	sort.Strings(names)
+	selected := cfg.Agents[cfg.DefaultAgent]
 	return &snapshot{
 		DefaultAgent:       cfg.DefaultAgent,
 		SessionTimeout:     cfg.SessionTimeout.String(),
 		SessionMaxLifetime: cfg.SessionMaxLifetime.String(),
 		AuthMethod:         cfg.EffectiveAuthMethod(),
 		AgentNames:         names,
+		ApprovalMode:       selected.ApprovalMode,
+		RequireApprovalRaw: selected.RequireApproval,
+		RequireApproval:    selected.RequireApprovalValue(),
 	}
 }
 
@@ -338,9 +357,31 @@ func buildCases(workDir string) ([]bytesCase, error) {
 		}
 		again := snapshotOf(reloaded)
 		if !reflect.DeepEqual(again, item.Snapshot) {
-			return nil, fmt.Errorf("case %s does not round-trip: %+v vs %+v", input.name, again, item.Snapshot)
+			// SaveTo omits a nil approvalMode pointer. On reload, the built-in
+			// default is restored, or requireApproval derives a mode again. Record
+			// those source-observed null round trips explicitly rather than calling
+			// them identical or weakening the general round-trip gate.
+			var expectedMode string
+			var roundTripsTo string
+			switch input.name {
+			case "approval_mode_null":
+				expectedMode = "deny"
+				roundTripsTo = "null_approval_mode_defaults_to_deny"
+			case "approval_mode_null_precedence":
+				expectedMode = "prompt"
+				roundTripsTo = "null_approval_mode_rederived_from_legacy"
+			default:
+				return nil, fmt.Errorf("case %s does not round-trip: %+v vs %+v", input.name, again, item.Snapshot)
+			}
+			expected := *item.Snapshot
+			expected.ApprovalMode = &expectedMode
+			if !reflect.DeepEqual(again, &expected) {
+				return nil, fmt.Errorf("case %s has an unexpected null-mode round trip: %+v vs %+v", input.name, again, &expected)
+			}
+			item.RoundTripsTo = roundTripsTo
+		} else {
+			item.RoundTripsTo = "identical_snapshot"
 		}
-		item.RoundTripsTo = "identical_snapshot"
 		cases = append(cases, item)
 	}
 	return cases, nil
