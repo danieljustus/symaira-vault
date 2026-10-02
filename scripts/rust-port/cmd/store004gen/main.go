@@ -142,19 +142,6 @@ func authoritative(root string) (oracle, error) {
 	}
 	return oracle{oracleCommit, oracleRelease, append([]string(nil), sourceFiles...), sourceDigest, append([]string(nil), generatorFiles...), generatorDigest}, nil
 }
-func safeArchivePath(name string) (string, error) {
-	if name == "" || strings.IndexByte(name, 0) >= 0 || filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
-		return "", errors.New("archive path is empty or absolute")
-	}
-	if runtime.GOOS != "windows" && strings.ContainsRune(name, '\\') {
-		return "", errors.New("archive path has unsupported separator")
-	}
-	clean := filepath.Clean(filepath.FromSlash(name))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", errors.New("unsafe archive path")
-	}
-	return clean, nil
-}
 func extract(root string) (string, error) {
 	dir := filepath.Join(root, sourceTree)
 	if err := os.RemoveAll(dir); err != nil {
