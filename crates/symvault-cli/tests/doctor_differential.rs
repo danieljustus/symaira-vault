@@ -1,5 +1,8 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     io::{Read, Write},
@@ -7,30 +10,26 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Output},
     thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-fn temporary_root(name: &str) -> PathBuf {
-    let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let pid = std::process::id();
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let path = env::temp_dir().join(format!(
-        "symvault-doctor-diff-{name}-{pid}-{suffix}-{count}"
-    ));
-    fs::create_dir_all(&path).expect("create temp root");
-    path
+fn temporary_root(name: &str) -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::existing(&format!("symvault-doctor-diff-{name}-"))
 }
 
 struct TempFixture(Vec<PathBuf>);
 
 impl TempFixture {
-    fn new(paths: impl IntoIterator<Item = PathBuf>) -> Self {
-        Self(paths.into_iter().collect())
+    fn new<I, P>(paths: I) -> Self
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        Self(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_path_buf())
+                .collect(),
+        )
     }
 }
 
