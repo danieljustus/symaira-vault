@@ -32,6 +32,16 @@ fn close_transport(socket: &TcpStream) -> io::Result<()> {
 }
 
 impl HttpShutdown {
+    #[cfg(test)]
+    pub(super) fn registered_connection_count(&self) -> usize {
+        self.state
+            .0
+            .lock()
+            .expect("HTTP shutdown state")
+            .sockets
+            .len()
+    }
+
     // Windows shutdown does not wake a blocking recv/send (Rust 1.98's
     // std/net/tcp/tests.rs, close_read_wakes_up). Cancellable sockets use
     // nonblocking I/O, retaining the caller's full per-operation timeout.
