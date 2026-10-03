@@ -39,7 +39,7 @@ func TestCleanupObservationRejectsLiveProcessAndAcceptsReapedProcess(t *testing.
 	}
 }
 
-func TestCleanupObservationChild(t *testing.T) {
+func TestCleanupObservationChild(_ *testing.T) {
 	if os.Getenv("GITIO_CLEANUP_CHILD") == "1" {
 		time.Sleep(10 * time.Second)
 	}
