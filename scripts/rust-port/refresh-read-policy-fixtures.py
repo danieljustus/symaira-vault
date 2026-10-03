@@ -40,7 +40,8 @@ def digest(base, names):
 def isolated_env(home, vault=None):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("SYMVAULT_")}
-    env.update(HOME=str(home), USERPROFILE=str(home),
+    env.update(SYMVAULT_TEST_KEYRING="memory",
+               HOME=str(home), USERPROFILE=str(home),
                XDG_CONFIG_HOME=str(home / ".config"),
                XDG_DATA_HOME=str(home / ".local/share"),
                XDG_CACHE_HOME=str(home / ".cache"))

@@ -208,3 +208,10 @@ hash their kind marker and derive the complete synthetic tree/file state from
 the recorded count; byte recipes hash their generated plaintext. Existing
 import-review CLI cases must re-execute with identical output and side effects
 before the source-bound fixture provenance advances.
+
+
+Corpus processes explicitly select Go's existing `SYMVAULT_TEST_KEYRING=memory`
+test backend as well as disposable HOME/XDG roots. Environment isolation alone
+does not disable a native OS credential service. This keeps these resource and
+CLI observations independent of credential-service availability and prevents a
+fallback warning from masquerading as a resource-policy semantic difference.
