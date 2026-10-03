@@ -45,6 +45,9 @@ fn review_echo_server_with(
                 Err(error) => panic!("accept: {error}"),
             }
         };
+        // Darwin can inherit O_NONBLOCK from the listener; timeouts require a
+        // blocking accepted socket, not a race against request arrival.
+        stream.set_nonblocking(false).unwrap();
         stream
             .set_read_timeout(Some(Duration::from_secs(2)))
             .unwrap();
@@ -220,6 +223,59 @@ fn api_review_decoded_query_echo_masks_boundary_fragment() {
                 .unwrap()
                 .1
                 .into_owned()
+        },
+    );
+}
+
+#[test]
+fn api_review_decoded_query_without_query_auth_masks_substitutions() {
+    for (credential, endpoint, wire) in [
+        (
+            "alpha+beta gamma",
+            "/v1/status?limit=50&q=__TOKEN__",
+            "/v1/status?limit=50&q=alpha+beta%20gamma",
+        ),
+        (
+            "alpha%",
+            "/v1/status?limit=50&q=__TOKEN__41",
+            "/v1/status?limit=50&q=alpha%41",
+        ),
+        (
+            "alpha%c3",
+            "/v1/status?limit=50&q=__TOKEN__%bc",
+            "/v1/status?limit=50&q=alpha%c3%bc",
+        ),
+    ] {
+        review_assert_substitution_echo_with(
+            credential,
+            "none",
+            endpoint,
+            wire,
+            "limit=50&q=***",
+            |target| {
+                let url = reqwest::Url::parse(&format!("http://localhost{target}")).unwrap();
+                url.query_pairs()
+                    .map(|(key, value)| format!("{key}={value}"))
+                    .collect::<Vec<_>>()
+                    .join("&")
+            },
+        );
+    }
+}
+
+#[test]
+fn api_review_decoded_path_with_malformed_percent_masks_surviving_fragment() {
+    review_assert_substitution_echo_with(
+        "alpha%zz beta/path/.",
+        "none",
+        "/v1/__TOKEN__.",
+        "/v1/alpha%zz%20beta/",
+        "/v1/***",
+        |target| {
+            let mut url = reqwest::Url::parse(&format!("http://localhost{target}")).unwrap();
+            let path = url.path().replace('+', "%2B").replace('&', "%26");
+            url.set_query(Some(&format!("q={path}")));
+            url.query_pairs().next().unwrap().1.into_owned()
         },
     );
 }
