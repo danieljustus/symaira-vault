@@ -114,6 +114,8 @@ Install existing platform build prerequisites and Git, rustup, Go, Node/npm and 
 git clone --branch handoff/vault-continuation-20261003 \
   https://github.com/danieljustus/symaira-vault.git vault-continuation
 cd vault-continuation
+unset CARGO_TARGET_DIR SYMVAULT_VAULT SYMVAULT_PASSPHRASE SYMVAULT_ALLOW_ENV_PASSPHRASE
+export GOTOOLCHAIN=go1.26.6 GOWORK=off
 git fetch origin --tags
 git rev-parse HEAD
 git status --porcelain=v1 -uall
@@ -127,7 +129,7 @@ cargo test -p symvault-mcp --locked
 cargo test -p symvault-cli --locked --test mcp_commands_contract
 cargo clippy -p symvault-mcp -p symvault-cli --all-targets --all-features --locked -- -D warnings
 cargo build -p symvault-cli --locked
-target/debug/symvault --version
+target/debug/symvault version
 mkdir -p target/handoff
 cp docs/rust-port/evidence/api-1222/url_oracle.go.txt target/handoff/url_oracle.go
 GOTOOLCHAIN=go1.26.6 go run target/handoff/url_oracle.go \
@@ -150,11 +152,30 @@ npm audit --json
 
 The last command is expected to exit nonzero for the separate #1273 finding. Inspect it, do not suppress it. Full repository follow-up commands are `make test`, `make lint`, `make build`, `make port-contract` and the workflow-specific native gates; the full set was not rerun merely for this documentation checkpoint.
 
-No operator credential variables are required by the synthetic tests. Do not forward `SYMVAULT_VAULT`, `SYMVAULT_PASSPHRASE`, `SYMVAULT_ALLOW_ENV_PASSPHRASE` or credential-provider variables from a real installation. `GOTOOLCHAIN` and `GOWORK` are non-secret selectors. `GH_TOKEN` may be needed for authorized GitHub writes, but its value must come from the runner's approved secret provisioning and must never be recorded. Safe startup here means `--version` only, not opening an operator vault, daemon or keychain.
+No operator credential variables are required by the synthetic tests. Do not forward `SYMVAULT_VAULT`, `SYMVAULT_PASSPHRASE`, `SYMVAULT_ALLOW_ENV_PASSPHRASE` or credential-provider variables from a real installation. `GOTOOLCHAIN` and `GOWORK` are non-secret selectors. `GH_TOKEN` may be needed for authorized GitHub writes, but its value must come from the runner's approved secret provisioning and must never be recorded. Safe startup here means the `version` subcommand only, not opening an operator vault, daemon or keychain. The compatibility parser deliberately rejects `--version`; the first fresh-checkout attempt exited 1 for that incorrect documentation command, and the corrected subcommand exited 0 with `symvault dev`.
 
 ## Fresh-checkout evidence and target-cloud limits
 
-Fresh-checkout verification of the published continuation branch is pending at this initial documentation commit. Record actual commands, counts, exit codes and source-tree identity after execution; publication alone is not verification. Earlier exact source/native evidence remains scoped to `c72b9100` and run 37104261874.
+An ordinary fresh clone from GitHub at `c836e32ef7328f04e977e67963b9ffafbc5c6513` was actually exercised on local macOS arm64. No linked worktree, stash, copied target directory, local untracked source or private sibling checkout was used. The full production/code/manifests diff against `c72b9100` was empty. `CARGO_TARGET_DIR` and operator vault/passphrase variables were removed; Go was explicitly 1.26.6 with `GOWORK=off`. Normal installed registry/module caches were reused; this is not an empty-cache network test or target-cloud execution.
+
+| Fresh-clone command | Actual result |
+| --- | --- |
+| `rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy` | Exit 0 |
+| `cargo fetch --locked` and `go mod download` | Exit 0 for both; pinned public dependencies resolved without sibling replacements |
+| `cargo fmt --all --check` and `make docs-check` | Exit 0 for both |
+| `cargo test -p symvault-mcp --locked api_review_` | Exit 0, exact set of 26 named cases passed |
+| `cargo test -p symvault-mcp --locked` | Exit 0, 212 passed, zero failed/ignored |
+| `cargo test -p symvault-cli --locked --test mcp_commands_contract` | Exit 0, 36 passed, two existing PTY exclusions |
+| `cargo clippy -p symvault-mcp -p symvault-cli --all-targets --all-features --locked -- -D warnings` | Exit 0 |
+| `cargo build -p symvault-cli --locked` | Exit 0, CLI artifact built in the fresh checkout |
+| `target/debug/symvault version` | Exit 0, `symvault dev`; corrected the failed documentation-only `--version` attempt |
+| Public Go URL probe and decoded-JSON equality check shown above | Exit 0, all four vectors and every spelling exactly matched |
+
+The checkout had no tracked/untracked source changes after Rust/probe verification. Repository inventory confirmed no submodule or Git LFS input and that all referenced contracts exist. The final receipt edit only documents these outcomes; it does not alter the exercised code or test inputs.
+
+A separate fresh GitHub clone of #1225 at exact `ce2f0dbdf3c8aa978545d9f277a70c7d68004157` passed `npm ci`, `npm run build`, all 29 tests and `npm ls brace-expansion` (1.1.21) on the same Node 22.22.3/npm 10.9.8 runtime. `npm audit --json` again exited 1 for exactly the one #1273 advisory propagated to 29 packages. The two build-generated tracked tsbuildinfo outputs are disposable verification outputs, not unpublished source. This is not fresh-head acceptance after a future base update and not a Node 20 execution claim.
+
+Earlier native evidence remains scoped to `c72b9100` and run 37104261874. A documentation-only branch may have no Actions run due to path filtering; that must be reported as absent, not green. Main-merge CI, if pending, likewise does not inherit the PR-head conclusion.
 
 Target agent cloud runtime, write permissions, secret provisioning and network policy: **not checked**. No target-cloud agent job, paid model/provider, production service, user keychain or physical iOS device was started by this handoff. Native macOS/Windows CI evidence belongs to the linked GitHub-hosted jobs, not to an arbitrary cloud environment. GUI, Touch ID, signed native apps and iOS/Windows ARM device acceptance require their actual platform and permissions.
 
