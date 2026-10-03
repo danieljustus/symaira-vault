@@ -1,37 +1,24 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use symvault_core::session::{Keyring, MemoryKeyring};
 use symvault_store::audit::{load_or_create_key_with_keyring, rotate_key_with_keyring};
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-struct TempDir(PathBuf);
+struct TempDir(test_temp_root::TempRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let pid = std::process::id();
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let path =
-            env::temp_dir().join(format!("symvault-audit-cmd-{label}-{pid}-{suffix}-{count}"));
-        fs::create_dir_all(&path).expect("temporary directory");
-        Self(path)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        Self(test_temp_root::TempRoot::existing(&format!(
+            "symvault-audit-cmd-{label}-"
+        )))
     }
 }
 

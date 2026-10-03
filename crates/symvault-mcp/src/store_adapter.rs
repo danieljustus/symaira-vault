@@ -271,6 +271,8 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
     }
 
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String> {
+        #[cfg(test)]
+        tests::API_REVIEW_READS.with(|count| count.set(count.get() + 1));
         match self.store.get(path, &self.identity) {
             Ok(entry) => Ok(Some(Self::project(path, entry))),
             Err(StoreError::EntryNotFound(_)) => Ok(None),
@@ -1495,8 +1497,14 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        // Resolve only after scope and approval. The accessor returns only the
-        // already-scoped entry projection and response-redaction strings.
+        // Security hardening pending Go alignment: path-less Go API arguments
+        // bypass entry policy. Reuse the command secret-use authorization boundary
+        // before resolving the template entry's credentials.
+        self.authorize_run_secret_path(&entry_path, "execute_api_request")
+            .map_err(run_files_error)?;
+
+        // Resolve only after scope, policy and approval. The accessor returns
+        // the authorized entry projection and response-redaction strings.
         let (entry_fields, mut known_values) = self
             .inner
             .resolve_api_entry_at_path(&entry_path)
@@ -1529,6 +1537,13 @@ impl StoreReadOnlyRuntime {
             &definition.substitutions,
             &substitutions,
         )?;
+        known_values.extend(api_path_substitution_redaction_values(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+            &request_url,
+        )?);
         let request_body =
             apply_api_body_substitutions(&body, &definition.substitutions, &substitutions);
         let mut request_headers = runtime_template.default_headers.clone();
@@ -1584,10 +1599,14 @@ impl StoreReadOnlyRuntime {
             request_url = set_api_query_parameter(&request_url, &key, &value)?;
             known_values.push(api_query_escape(&value));
         }
+        known_values.extend(api_query_substitution_redaction_values(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+        )?);
         for value in substitutions.values() {
-            known_values.push(api_query_escape(value));
-            known_values.push(api_path_escape(value));
-            known_values.push(api_escaped_path(value));
+            known_values.extend(api_substitution_redaction_values(value));
         }
         if definition.auth_type == "basic"
             && let (Some(user), Some(password)) = (
@@ -1612,6 +1631,8 @@ impl StoreReadOnlyRuntime {
             ..runtime_template.clone()
         };
 
+        #[cfg(test)]
+        tests::API_REVIEW_REQUESTS.with(|count| count.set(count.get() + 1));
         let response = match broker::execute_http_for_api(
             &transport_template,
             &method,
@@ -3142,6 +3163,38 @@ fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
     Ok(Duration::from_secs((number as u64).clamp(1, 300)))
 }
 
+fn api_path_unescape(value: &str) -> Result<String, String> {
+    let decoded = api_percent_decoded_bytes(value, false)?;
+    Ok(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn api_percent_decoded_bytes(value: &str, tolerate_malformed: bool) -> Result<Vec<u8>, String> {
+    let mut decoded = Vec::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = bytes
+                .get(index + 1)
+                .and_then(|byte| (*byte as char).to_digit(16));
+            let low = bytes
+                .get(index + 2)
+                .and_then(|byte| (*byte as char).to_digit(16));
+            if let Some((high, low)) = high.zip(low) {
+                decoded.push(((high << 4) | low) as u8);
+                index += 3;
+                continue;
+            }
+            if !tolerate_malformed {
+                return Err("invalid URL encoding".into());
+            }
+        }
+        decoded.push(bytes[index]);
+        index += 1;
+    }
+    Ok(decoded)
+}
+
 fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
     let endpoint = endpoint.trim();
     if endpoint.is_empty() {
@@ -3150,29 +3203,8 @@ fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
     if !endpoint.starts_with('/') {
         return Err("endpoint must start with '/'".into());
     }
-    let mut decoded = Vec::with_capacity(endpoint.len());
-    let bytes = endpoint.as_bytes();
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' {
-            if index + 2 >= bytes.len() {
-                return Err("invalid URL encoding".into());
-            }
-            let Some(high) = (bytes[index + 1] as char).to_digit(16) else {
-                return Err("invalid URL encoding".into());
-            };
-            let Some(low) = (bytes[index + 2] as char).to_digit(16) else {
-                return Err("invalid URL encoding".into());
-            };
-            decoded.push(((high << 4) | low) as u8);
-            index += 3;
-        } else {
-            decoded.push(bytes[index]);
-            index += 1;
-        }
-    }
-    let decoded = String::from_utf8_lossy(&decoded);
-    if [endpoint, decoded.as_ref()]
+    let decoded = api_path_unescape(endpoint)?;
+    if [endpoint, decoded.as_str()]
         .iter()
         .any(|path| path.split('/').any(|part| part == "." || part == ".."))
     {
@@ -3479,28 +3511,216 @@ fn api_query_escape(value: &str) -> String {
         .collect()
 }
 
+// Go net/url.PathEscape preserves these reserved path-segment bytes.
 fn api_path_escape(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (byte as char).to_string()
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'$'
+            | b'&'
+            | b'+'
+            | b':'
+            | b'='
+            | b'@' => (byte as char).to_string(),
             _ => format!("%{byte:02X}"),
         })
         .collect()
 }
 
+// Go URL.EscapedPath additionally preserves slash, comma and semicolon.
 fn api_escaped_path(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                (byte as char).to_string()
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'$'
+            | b'&'
+            | b'+'
+            | b':'
+            | b'='
+            | b'@'
+            | b'/'
+            | b','
+            | b';' => (byte as char).to_string(),
             _ => format!("%{byte:02X}"),
         })
         .collect()
+}
+
+fn api_substitution_redaction_values(value: &str) -> Vec<String> {
+    // Preserve Go escaping while covering the URL serializer used by the request.
+    let mut url = reqwest::Url::parse("http://localhost/").expect("static URL");
+    url.set_path(&format!("/{value}"));
+    let path = url
+        .path()
+        .strip_prefix('/')
+        .unwrap_or(url.path())
+        .to_owned();
+    // A placeholder suffix makes trailing dot-segments literal. Retain this
+    // contextual spelling as well as the standalone normalized path.
+    url.set_path(&format!("/{value}x"));
+    let suffixed_path = url
+        .path()
+        .strip_prefix('/')
+        .unwrap_or(url.path())
+        .strip_suffix('x')
+        .unwrap_or_default()
+        .to_owned();
+    url.set_query(Some(value));
+    // Keep earlier, more aggressively escaped forms for upstream re-encoding.
+    let query = api_query_escape(value);
+    let percent_encoded = query.replace('+', "%20");
+    vec![
+        value.to_owned(),
+        percent_encoded.replace("%2F", "/"),
+        percent_encoded,
+        query,
+        api_path_escape(value),
+        api_escaped_path(value),
+        path,
+        suffixed_path,
+        url.query().unwrap_or_default().to_owned(),
+    ]
+}
+
+fn api_path_substitution_redaction_values(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+    request_url: &str,
+) -> Result<Vec<String>, String> {
+    let template =
+        reqwest::Url::parse(&api_request_url(base_url, endpoint, &[], &BTreeMap::new())?)
+            .map_err(|_| "invalid template URL")?;
+    let path = template.path();
+    let mut first = path.len();
+    let mut last = 0;
+    for substitution in substitutions {
+        if substitution_applies(substitution, "path")
+            && values.contains_key(&substitution.placeholder)
+            && let Some(start) = path.find(&substitution.placeholder)
+        {
+            first = first.min(start);
+            last = last.max(
+                path.rfind(&substitution.placeholder).unwrap() + substitution.placeholder.len(),
+            );
+        }
+    }
+    if last == 0 {
+        return Ok(Vec::new());
+    }
+    // Use the actual complete renderer result: literal suffixes and other
+    // placeholders can normalize away only part of a credential. Keep static
+    // outer context where it survives and mask both the remaining span and
+    // individual surviving path segments echoed without their surrounding URI.
+    let rendered = reqwest::Url::parse(request_url).map_err(|_| "invalid template URL")?;
+    let span = rendered
+        .path()
+        .strip_prefix(&path[..first])
+        .unwrap_or(rendered.path());
+    let span = span.strip_suffix(&path[last..]).unwrap_or(span);
+    let mut known = vec![span.to_owned()];
+    known.extend(
+        span.split('/')
+            .filter(|part| !part.is_empty())
+            .map(str::to_owned),
+    );
+    // Decode the complete path before trimming context, so percent/UTF-8 bytes
+    // spanning a placeholder boundary are not replaced or decoded in isolation.
+    // Keep bytes until applying both upstream text decoding and our actual
+    // response-body projection. They replace incomplete UTF-8 differently.
+    // Tolerant decoding is masking-only; endpoint validation remains strict.
+    let decoded_bytes = api_percent_decoded_bytes(rendered.path(), true)?;
+    for decoded in [
+        String::from_utf8_lossy(&decoded_bytes).into_owned(),
+        go_json_text(&decoded_bytes),
+    ] {
+        let prefix = api_path_unescape(&path[..first]).unwrap_or_default();
+        let suffix = api_path_unescape(&path[last..]).unwrap_or_default();
+        let span = decoded.strip_prefix(&prefix).unwrap_or(&decoded);
+        let span = span.strip_suffix(&suffix).unwrap_or(span);
+        known.push(span.to_owned());
+        known.extend(
+            span.split('/')
+                .filter(|part| !part.is_empty())
+                .map(str::to_owned),
+        );
+    }
+    Ok(known)
+}
+
+fn api_query_substitution_redaction_values(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> Result<Vec<String>, String> {
+    // Reuse the request renderer without substitutions to retain the actual
+    // template query, including literal percent bytes bordering placeholders.
+    let mut url = reqwest::Url::parse(&api_request_url(base_url, endpoint, &[], &BTreeMap::new())?)
+        .map_err(|_| "invalid template URL")?;
+    let template_query = url.query().unwrap_or_default().to_owned();
+    let mut known = Vec::new();
+    for pair in template_query.split('&') {
+        let key = pair.split_once('=').map_or(pair, |(key, _)| key);
+        let mut tainted = false;
+        let mut tainted_key = false;
+        let mut rendered = pair.to_owned();
+        for substitution in substitutions {
+            if substitution_applies(substitution, "query")
+                && let Some(value) = values.get(&substitution.placeholder)
+            {
+                tainted |= pair.contains(&substitution.placeholder);
+                tainted_key |= key.contains(&substitution.placeholder);
+                rendered = rendered.replace(&substitution.placeholder, value);
+            }
+        }
+        if !tainted {
+            continue;
+        }
+        // Decode complete rendered fields and mirror query authentication's
+        // Go encoding. An injected '=' or '&' can taint both keys and values;
+        // unrelated query fields and the original non-secret key stay public.
+        url.set_query(Some(&rendered));
+        for (index, pair) in url
+            .query()
+            .unwrap_or_default()
+            .split('&')
+            .filter(|pair| !pair.is_empty())
+            .enumerate()
+        {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            for (field, tainted) in [(key, tainted_key || index != 0), (value, true)] {
+                if !tainted {
+                    continue;
+                }
+                // Raw fields may be echoed separately after a substituted '&'
+                // splits the credential. Keep wire, form-text, Go re-encoding,
+                // and binary-body spellings without masking public fields.
+                known.push(field.to_owned());
+                let bytes = api_percent_decoded_bytes(&field.replace('+', " "), true)?;
+                let decoded = String::from_utf8_lossy(&bytes).into_owned();
+                known.push(api_query_escape(&decoded));
+                known.push(decoded);
+                known.push(go_json_text(&bytes));
+            }
+        }
+    }
+    Ok(known)
 }
 
 fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
@@ -4935,4 +5155,5 @@ mod tests {
             .expect_err("run policy denies before resolving the missing entry");
         assert_eq!(error, "policy denied by rule \"deny command use\"");
     }
+    include!("api_review_tests.rs");
 }

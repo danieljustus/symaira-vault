@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -39,6 +40,75 @@ func TestManifestKeySourceScope(t *testing.T) {
 		if !bound[name] {
 			t.Fatalf("manifest dependency missing from oracle sources: %s", name)
 		}
+	}
+}
+
+func TestManifestKeyTrackedSourceInventory(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		remove     bool
+		reject     bool
+	}{
+		{"added", "internal/vault/inventory_probe.go", false, true},
+		{"removed", "internal/vault/manifest.go", true, true},
+		{"test-only", "internal/vault/inventory_probe_test.go", false, false},
+		{"outside-scope", "internal/intake/inventory_probe.go", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "repo")
+			git := func(args ...string) {
+				t.Helper()
+				if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+					t.Fatalf("git %v: %v: %s", args, err, output)
+				}
+			}
+			git("clone", "--shared", "--no-checkout", repoRoot(), root)
+			git("-C", root, "reset", "--mixed", "HEAD")
+			names, err := sourceNames(repoRoot())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range names {
+				data, err := os.ReadFile(filepath.Join(repoRoot(), name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				path := filepath.Join(root, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, err := sourceDigest(root)
+			if err != nil {
+				t.Fatalf("unchanged isolated source rejected: %v", err)
+			}
+			if tc.remove {
+				git("-C", root, "rm", "--cached", "--", tc.path)
+			} else {
+				path := filepath.Join(root, tc.path)
+				if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("package vault\nfunc inventoryProbe() {}\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				git("-C", root, "add", "--", tc.path)
+			}
+			after, err := sourceDigest(root)
+			if tc.reject {
+				if err == nil {
+					t.Fatal("tracked production Go inventory drift accepted")
+				}
+				if !strings.Contains(err.Error(), "inventory") || !strings.Contains(err.Error(), revision) {
+					t.Fatalf("inventory diagnostic missing pinned revision: %v", err)
+				}
+			} else if err != nil || after != before {
+				t.Fatalf("unrelated file changed source provenance: %v", err)
+			}
+		})
 	}
 }
 

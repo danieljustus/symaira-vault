@@ -2,7 +2,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -30,7 +29,7 @@ var sourceRoots = []string{
 	"internal/git", "internal/vault", "internal/importer", "internal/exporter",
 	"internal/intake", "cmd/admin",
 }
-var generatorFiles = []string{"scripts/rust-port/cmd/syncgen/main.go"}
+var generatorFiles = []string{"scripts/rust-port/cmd/syncgen/archive_extract.go", "scripts/rust-port/cmd/syncgen/archive_extract_test.go", "scripts/rust-port/cmd/syncgen/main.go", "scripts/rust-port/cmd/syncgen/main_test.go"}
 
 const oracleProgram = `package main
 
@@ -368,36 +367,8 @@ func extract(root string) (string, error) {
 	if _, e = archive.Seek(0, io.SeekStart); e != nil {
 		return "", fmt.Errorf("rewind oracle archive: %w", e)
 	}
-	tr := tar.NewReader(archive)
-	for {
-		h, e := tr.Next()
-		if errors.Is(e, io.EOF) {
-			break
-		}
-		if e != nil {
-			return "", e
-		}
-		name, err := safeRelativePath(h.Name)
-		if err != nil {
-			return "", fmt.Errorf("unsafe oracle path %q: %w", h.Name, err)
-		}
-		out := filepath.Join(dir, name)
-		switch h.Typeflag {
-		case tar.TypeDir:
-			e = os.MkdirAll(out, 0750)
-		case tar.TypeReg:
-			e = os.MkdirAll(filepath.Dir(out), 0750)
-			if e == nil {
-				data := make([]byte, h.Size)
-				_, e = io.ReadFull(tr, data)
-				if e == nil {
-					e = os.WriteFile(out, data, 0600)
-				}
-			}
-		}
-		if e != nil {
-			return "", e
-		}
+	if e := extractArchive(archive, dir, 0, false); e != nil {
+		return "", e
 	}
 	keep = true
 	return dir, nil

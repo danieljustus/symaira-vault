@@ -1,29 +1,21 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-struct TempDir(PathBuf);
+struct TempDir(test_temp_root::TempRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let path = env::temp_dir().join(format!("symvault-policy-cli-{label}-{suffix}"));
-        fs::create_dir_all(&path).expect("temporary directory");
-        Self(path)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        Self(test_temp_root::TempRoot::existing(&format!(
+            "symvault-policy-cli-{label}-"
+        )))
     }
 }
 
