@@ -1110,6 +1110,9 @@ enum MigrateCommand {
     Kdf {
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Allow one exclusive historical-budget read for local policy migration.
+        #[arg(long)]
+        allow_legacy_kdf: bool,
     },
     /// Migrate agent profiles and config to the v4.0 tier format.
     V4 {
@@ -2314,8 +2317,17 @@ fn run_cli() -> ExitCode {
             cli.quiet,
         ),
         Some(Command::Migrate {
-            command: MigrateCommand::Kdf { yes },
-        }) => run_migrate_kdf(cli.vault.as_deref(), cli._profile.as_deref(), yes),
+            command:
+                MigrateCommand::Kdf {
+                    yes,
+                    allow_legacy_kdf,
+                },
+        }) => run_migrate_kdf(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            yes,
+            allow_legacy_kdf,
+        ),
         Some(Command::Migrate {
             command: MigrateCommand::V4 { yes, dry_run },
         }) => run_migrate_v4(
@@ -4017,11 +4029,17 @@ fn run_migrate_pseudonymize(
     finish_vault_result(result)
 }
 
-fn run_migrate_kdf(explicit_vault: Option<&Path>, profile: Option<&str>, yes: bool) -> ExitCode {
+fn run_migrate_kdf(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    yes: bool,
+    allow_legacy_kdf: bool,
+) -> ExitCode {
     let result = (|| {
         use migrate_kdf_commands::MigrationResult;
         let vault = resolve_vault(explicit_vault, profile)?;
-        match migrate_kdf_commands::inspect_identity(&vault)? {
+        let inspection = migrate_kdf_commands::inspect_identity(&vault)?;
+        match inspection {
             MigrationResult::AlreadyArgon2id => {
                 println!(
                     "✓ Your vault identity is already protected with argon2id.\nNo migration is needed."
@@ -4035,6 +4053,35 @@ fn run_migrate_kdf(explicit_vault: Option<&Path>, profile: Option<&str>, yes: bo
                 return Ok(());
             }
             _ => {}
+        }
+        if inspection == MigrationResult::NeedsResourceMigration {
+            if !allow_legacy_kdf {
+                return Err("argon2id resource policy: use migrate kdf --allow-legacy-kdf for a historical identity".to_owned());
+            }
+            let passphrase = session_input::read_passphrase("Passphrase: ")?;
+            let secret = SecretBytes::new(passphrase.as_bytes());
+            if !yes {
+                eprint!(
+                    "Migrate historical Argon2 parameters to the current resource policy (encrypted identity and config backups are retained) (y/N): "
+                );
+                io::stderr().flush().map_err(|e| e.to_string())?;
+                let mut answer = String::new();
+                if io::stdin()
+                    .read_line(&mut answer)
+                    .map_err(|e| e.to_string())?
+                    == 0
+                {
+                    return Err("read confirmation: EOF".to_owned());
+                }
+                if !answer.trim().eq_ignore_ascii_case("y") {
+                    eprintln!("Canceled");
+                    return Ok(());
+                }
+            }
+            migrate_kdf_commands::migrate_resource_policy(&vault, &secret)?;
+            println!("✓ Migrated vault identity to the current Argon2 resource policy.");
+            println!("The original identity and config backups are retained as .bak files.");
+            return Ok(());
         }
         println!("Your vault identity is currently protected with scrypt.");
         let passphrase = session_input::read_passphrase("Passphrase: ")?;

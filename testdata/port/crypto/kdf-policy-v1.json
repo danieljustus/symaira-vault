@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "oracle_commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+  "source_files": [
+    "go.mod",
+    "go.sum",
+    "internal/crypto/argon2id.go",
+    "internal/crypto/symmetric.go"
+  ],
+  "source_digest": "47610449a0171fc6c0096021487381f7b421da3c57f419f05dff9fbcd671c465",
+  "program_digest": "2b17d8f4e8b6f51cfed77523f1757c910f5d026dccb23be71a00f1005404bd2c",
+  "driver_digest": "861f36f032991592b6ba98db478620900517508cc490a6deb87cefc380e1b4c8",
+  "go_version": "go1.26.6",
+  "identity": "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",
+  "passphrase": "public-kdf-policy-fixture-passphrase",
+  "cases": [
+    {
+      "name": "historical_time",
+      "time": 5,
+      "memory_kib": 32,
+      "threads": 1,
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIG9UOHorK3BXejZNOW4wU095a0tVTkEgdD01LG09MzIscD0xCng4VjNqT24zbGZUbFVHSFN1bGtnb3hPNUhNVGVEM0FUNmJPTkhlSGR1WU9CRUFlanBramkyci9iQVVFCi0tLSBLVFFBNlBxQkxJL2NlV2hReEN1Mit4VWJhMGdORWJObzE0MVY0WG1TS0FJCsM66xwE9DOYwVKOgcgwIoFnnThrza7qE7sYPmp878G4PfckKyj+SBDxcc40nNKui16pwfYLRfDTXz5jwwmx+vv+DwFiSQLS/8JezzmEC83AdM0JsW9zwrJyY0TnDq3ph82wwizNqRAITxw=",
+      "sha256": "a1195e077bed9e5e307c6199ce6c2d4d65e01e53ebe5949f5c8003472821010d"
+    },
+    {
+      "name": "historical_memory",
+      "time": 1,
+      "memory_kib": 132096,
+      "threads": 1,
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEpmM2w0d3VoQzBhc1NsSUlMdk4wSVEgdD0xLG09MTMyMDk2LHA9MQp4bUpOayt4MHhOWHNzL3R0UVdUaWN0a2V0czNaYkpwQjVZK2g1YVo2VVREdUFsazVtcDlwaXZFb1J3QQotLS0gKzAycElOSE4vNDhOcmErbzl1aDRTMGNHK2h6NklGOEk4KzVKV0FHME8wOAqhhBmEZAFfJQmlULAkPiu/6nO6hAmpNqAsa6hOBAoh2yan1ddoKqLe2pTvxqzgHHvGH3FJfgBD5K9IlWi1MpXVf02J494hVhTQThM18oKOOk0zkJuXf2XE5/rzBF2w/QspxG+G31m9TqFc",
+      "sha256": "09d487e93d1ea66825ec0be072054300407615b0c888301615c12cce973bd8cb"
+    },
+    {
+      "name": "historical_threads",
+      "time": 1,
+      "memory_kib": 64,
+      "threads": 5,
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFJidGhObk5NaythUTNYeXNHb3Z5OFEgdD0xLG09NjQscD01CjRTbnZUWDkyczZ2Vmx4SXNzK1drUFZCZ2ZKYWxIakNoRWs1bTlKY0J5MGdqWmVoQ0c0TWJrcG5kWWNJCi0tLSA1a0x0ZmdNMVJCeUowRjNIVWFoMTV1dzNodXJSelBWZklMbnZjNFVYRDVnCq9UXo+evM6uOHZ3h4BIhzIddH0HAf8Ovqh9DAFKKlfUqUkZKlilIcnof6AxCHpOxxgE+yqPt59T+YILssB1TT9K8+sSjYpfzoMCdeZr03qI3nX+DMXge0VLCSX1dUc4W68rBNcS6m/RCvc=",
+      "sha256": "c3a58021674f28ab66b6fce3e5b2f66942d035f63c15a72daf4731f025e13ada"
+    },
+    {
+      "name": "minimum_read",
+      "time": 1,
+      "memory_kib": 4,
+      "threads": 1,
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkICtzeFNydE9uN2thWFBoN2VZazZ4TWcgdD0xLG09NCxwPTEKdTBLM2FjRkVKY0ZSMHplMit6c3RxOFQrK1JiYUswNkNBeS94aFMwMnJSWGFsZU9HS0JVUlM1OEN4N2cKLS0tIGI4TS91Q2VqbS9PeXlkUjJLSDlYUEFGc0FKUzJCaFBZd0RyaGpyYzhkekkKrgDdZ3EAsV8PFJdaZsJixMtXjKkQV+tJNR+HzCViSXjqQg8dYXXnt4SZ1ciFxCa840ceWdbMpSUWS3qLy6+9uKcMB0dEsqsUrOIODqUhAbTpD78xOaCCAam5tGgjGPw2Z00zpj62pajJ/w==",
+      "sha256": "4637b0409a20fa401700d23fd00c7e90cea1b5c7f83eb85b50545c35f16bcfae"
+    }
+  ]
+}

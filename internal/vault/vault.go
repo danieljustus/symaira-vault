@@ -292,7 +292,7 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	switch format {
 	case vaultcrypto.Argon2idStanzaType:
 		identity, err = vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase))
-		if err != nil {
+		if err != nil && !vaultcrypto.IsArgon2ResourceError(err) {
 			// The argon2id unwrap failed. The file may have been written under
 			// the pre-#476 zero-key bug, in which case the wrap key depends
 			// only on the passphrase byte length. Attempt a length-n recovery
@@ -350,16 +350,9 @@ func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byt
 	if err != nil {
 		return nil, false, err
 	}
-	var recovered *age.X25519Identity
-	for _, authority := range authorities {
-		candidate, recoverErr := vaultcrypto.RecoverZeroKeyIdentity(raw, len(passphrase), authority)
-		if recoverErr == nil {
-			recovered = candidate
-			break
-		}
-	}
-	if recovered == nil {
-		return nil, false, vaultcrypto.ErrZeroKeyRecovery
+	recovered, recoverErr := vaultcrypto.RecoverZeroKeyIdentityWithAuthorities(raw, len(passphrase), authorities)
+	if recoverErr != nil {
+		return nil, false, recoverErr
 	}
 
 	// Do not heal if the trust file or encrypted identity changed while the
@@ -434,6 +427,10 @@ func trustedZeroKeyAuthorities(vaultDir string) ([]vaultcrypto.ZeroKeyAuthority,
 func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte, v *Vault) error {
 	if v == nil || v.Config == nil || v.Config.Vault == nil {
 		return nil
+	}
+	if Argon2ConfigNeedsResourceMigration(v.Config) {
+		v.NeedsMigration = true
+		return vaultcrypto.ErrArgon2Policy
 	}
 	identityPath := filepath.Join(vaultDir, "identity.age")
 	params := resolveArgon2idParams(v.Config)

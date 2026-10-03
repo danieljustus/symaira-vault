@@ -155,3 +155,140 @@ fn already_modern_and_unknown_files_are_not_mutated() {
     assert_ne!(migrated, original);
     let _ = fs::remove_dir_all(root);
 }
+
+fn policy_fixture() -> (tempfile::TempDir, SecretBytes, Vec<u8>, Vec<u8>) {
+    use base64::Engine as _;
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../testdata/port/crypto/kdf-policy-v1.json"
+    ))
+    .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let original = base64::engine::general_purpose::STANDARD
+        .decode(fixture["cases"][0]["ciphertext"].as_str().unwrap())
+        .unwrap();
+    let config = b"vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  custom: retained\nroot_unknown: [true, 7]\n".to_vec();
+    fs::write(root.path().join("identity.age"), &original).unwrap();
+    fs::write(root.path().join("config.yaml"), &config).unwrap();
+    (
+        root,
+        SecretBytes::new(fixture["passphrase"].as_str().unwrap().as_bytes()),
+        original,
+        config,
+    )
+}
+
+#[test]
+fn policy_migration_retains_originals_and_rewrites_same_identity() {
+    let (root, passphrase, original, config) = policy_fixture();
+    assert_eq!(
+        inspect_identity(root.path()).unwrap(),
+        MigrationResult::NeedsResourceMigration
+    );
+    let identity =
+        symvault_crypto::decrypt_identity_for_legacy_kdf_migration(&original, &passphrase).unwrap();
+    assert!(
+        migrate_kdf(root.path(), &identity, &passphrase)
+            .unwrap_err()
+            .contains("--allow-legacy-kdf")
+    );
+    assert!(!root.path().join("identity.age.bak").exists());
+    migrate_resource_policy(root.path(), &passphrase).unwrap();
+    assert_eq!(
+        fs::read(root.path().join("identity.age.bak")).unwrap(),
+        original
+    );
+    assert_eq!(
+        fs::read(root.path().join("config.yaml.bak")).unwrap(),
+        config
+    );
+    assert_eq!(
+        inspect_identity(root.path()).unwrap(),
+        MigrationResult::AlreadyArgon2id
+    );
+    let migrated = fs::read(root.path().join("identity.age")).unwrap();
+    assert_eq!(
+        symvault_crypto::recipient_string(&decrypt_identity(&migrated, &passphrase).unwrap()),
+        symvault_crypto::recipient_string(&identity)
+    );
+    let rendered = fs::read_to_string(root.path().join("config.yaml")).unwrap();
+    assert!(rendered.contains("custom: retained"));
+    assert!(rendered.contains("root_unknown:"));
+    assert!(rendered.contains("argon2id_time: 3"));
+}
+
+#[test]
+fn policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files() {
+    let (root, passphrase, original, config) = policy_fixture();
+    assert!(
+        migrate_resource_policy(root.path(), &SecretBytes::new(b"wrong public fixture")).is_err()
+    );
+    assert!(!root.path().join("identity.age.bak").exists());
+    fs::write(
+        root.path().join("identity.age.bak"),
+        b"earlier retained backup",
+    )
+    .unwrap();
+    assert!(
+        migrate_resource_policy(root.path(), &passphrase)
+            .unwrap_err()
+            .contains("backup differs")
+    );
+    assert_eq!(
+        fs::read(root.path().join("identity.age")).unwrap(),
+        original
+    );
+    assert_eq!(fs::read(root.path().join("config.yaml")).unwrap(), config);
+    assert_eq!(
+        fs::read(root.path().join("identity.age.bak")).unwrap(),
+        b"earlier retained backup"
+    );
+}
+
+#[test]
+fn policy_migration_restores_both_files_after_post_replacement_failure() {
+    let (root, passphrase, original, config) = policy_fixture();
+    let config_path = root.path().join("config.yaml");
+    let mut failed = false;
+    let mut replace = |path: &Path, data: &[u8]| {
+        safeio::write_atomic(path, data)?;
+        if path == config_path && !failed {
+            failed = true;
+            return Err(safeio::SafeIoError::Io(std::io::Error::other(
+                "injected post-replacement failure",
+            )));
+        }
+        Ok(())
+    };
+    assert!(
+        migrate_resource_policy_locked(root.path(), &passphrase, &mut replace)
+            .unwrap_err()
+            .contains("injected post-replacement failure")
+    );
+    assert_eq!(
+        fs::read(root.path().join("identity.age")).unwrap(),
+        original
+    );
+    assert_eq!(fs::read(root.path().join("config.yaml")).unwrap(), config);
+    assert_eq!(
+        fs::read(root.path().join("identity.age.bak")).unwrap(),
+        original
+    );
+    assert_eq!(
+        fs::read(root.path().join("config.yaml.bak")).unwrap(),
+        config
+    );
+}
+
+#[test]
+fn policy_migration_accepts_null_vault_configuration() {
+    let (root, passphrase, _, _) = policy_fixture();
+    let config = b"vault: null\ncustom: retained\n";
+    fs::write(root.path().join("config.yaml"), config).unwrap();
+    migrate_resource_policy(root.path(), &passphrase).unwrap();
+    assert_eq!(
+        fs::read(root.path().join("config.yaml.bak")).unwrap(),
+        config
+    );
+    let rendered = fs::read_to_string(root.path().join("config.yaml")).unwrap();
+    assert!(rendered.contains("custom: retained") && rendered.contains("argon2id_time: 3"));
+}

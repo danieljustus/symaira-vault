@@ -1,0 +1,115 @@
+name: KDF resource policy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/kdf-resource-policy.yml'
+      - 'internal/crypto/**'
+      - 'internal/vault/**'
+      - 'internal/config/**'
+      - 'cmd/admin/migrate.go'
+      - 'crates/symvault-crypto/**'
+      - 'crates/symvault-cli/src/migrate_kdf_commands*'
+      - 'crates/symvault-cli/src/main.rs'
+      - 'crates/symvault-cli/tests/migrate_kdf_differential.rs'
+      - 'scripts/rust-port/*kdf*'
+      - 'scripts/rust-port/check_argon2_upstream.py'
+      - 'testdata/port/crypto/kdf-policy-v1.json'
+      - 'third_party/argon2/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Makefile'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kdf-resource-policy.yml'
+      - 'internal/crypto/**'
+      - 'internal/vault/**'
+      - 'internal/config/**'
+      - 'cmd/admin/migrate.go'
+      - 'crates/symvault-crypto/**'
+      - 'crates/symvault-cli/src/migrate_kdf_commands*'
+      - 'crates/symvault-cli/src/main.rs'
+      - 'crates/symvault-cli/tests/migrate_kdf_differential.rs'
+      - 'scripts/rust-port/*kdf*'
+      - 'scripts/rust-port/check_argon2_upstream.py'
+      - 'testdata/port/crypto/kdf-policy-v1.json'
+      - 'third_party/argon2/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-policy:
+    name: KDF policy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: 1.98.0
+    steps:
+      - name: Checkout retained oracle history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+      - name: Check genuine Go historical envelopes and retained dependency
+        run: |
+          set -euo pipefail
+          python3 scripts/rust-port/check_argon2_upstream.py
+          python3 scripts/rust-port/kdf_policy_fixtures.py
+          cargo test --manifest-path third_party/argon2/Cargo.toml --all-features --locked
+      - name: Run policy, admission and migration checks
+        run: |
+          set -euo pipefail
+          umask 0022
+          go test -race ./internal/crypto -count=1 -json > kdf-go.jsonl
+          go test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1 -json >> kdf-go.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("kdf-go.jsonl")]; names={"TestArgon2ResourcePolicyLimits","TestArgon2PreflightRejectsWholeEnvelopeBeforeKDF","TestHistoricalGoKDFPolicyEnvelopes","TestArgon2BoundedAdmissionRunsRealDerivations","TestArgon2LegacyAdmissionExcludesAutomaticDerivation","TestKDFPolicyMigrationVerifiesIdentityAndRetainsBothBackups","TestKDFPolicyMigrationWrongPassphraseAndExistingBackupLeaveFilesIntact","TestKDFPolicyMigrationRollsBackAfterConfigReplacementFailure","TestKDFPolicyMigrationAcceptsNullVaultConfig"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert names <= passed, names-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in names for r in rows)'
+          cargo test -p symvault-crypto --all-features --locked
+          cargo test -p symvault-cli --bin symvault --locked migrate_kdf_commands::tests | tee kdf-rust-migration.log
+          python3 -c 'from pathlib import Path; text=Path("kdf-rust-migration.log").read_text(); names={"policy_migration_retains_originals_and_rewrites_same_identity","policy_migration_wrong_passphrase_and_old_backup_do_not_mutate_files","policy_migration_restores_both_files_after_post_replacement_failure","policy_migration_accepts_null_vault_configuration"}; assert all(f"test migrate_kdf_commands::tests::{name} ... ok" in text for name in names); assert "9 passed; 0 failed; 0 ignored" in text'
+          cargo clippy -p symvault-crypto -p symvault-cli --all-targets --all-features --locked -- -D warnings
+          mkdir -p target/kdf-policy
+          go build -o target/kdf-policy/go-cli.exe .
+          SYMVAULT_GO_BINARY="$GITHUB_WORKSPACE/target/kdf-policy/go-cli.exe" cargo test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored | tee kdf-cli.log
+          python3 -c 'from pathlib import Path; text=Path("kdf-cli.log").read_text(); assert "test kdf_resource_policy_go_rust_integration ... ok" in text; assert "test migrate_kdf_go_rust_integration ... ok" in text; assert "2 passed; 0 failed; 0 ignored" in text'
+      - name: Upload native policy evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: kdf-resource-policy-${{ matrix.os }}
+          path: |
+            kdf-go.jsonl
+            kdf-cli.log
+            kdf-rust-migration.log
+          if-no-files-found: error
+          retention-days: 14

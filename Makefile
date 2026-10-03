@@ -516,7 +516,7 @@ differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
 		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
 
-crypto-differential:
+crypto-differential: kdf-policy-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptogen \
 		--check --output testdata/port/crypto/age-kdf.json
 	$(CARGO) test -p symvault-crypto --all-features --locked
@@ -611,7 +611,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 .PHONY: update-fixtures-check
 update-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 1add155a1ab213cbe8bb42a24254f972cda0ffc1 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: kdf-resource-policy-differential reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -993,3 +993,15 @@ export-cli-fixtures-check:
 reencrypt-journal-differential:
 	$(CARGO) build -p symvault-cli --locked
 	SYMVAULT_RUST_BINARY="$(abspath $(RUST_BINARY))" GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/vault -run '^TestReencryptJournalGoRustIntegration$$' -count=1
+
+.PHONY: kdf-policy-fixtures-check kdf-resource-policy-differential
+kdf-policy-fixtures-check:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/check_argon2_upstream.py
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/kdf_policy_fixtures.py
+
+kdf-resource-policy-differential: kdf-policy-fixtures-check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -race ./internal/crypto -count=1
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -race ./internal/vault -run '^TestKDFPolicyMigration' -count=1
+	@mkdir -p target/kdf-policy
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -o target/kdf-policy/go-cli.exe .
+	SYMVAULT_GO_BINARY="$(CURDIR)/target/kdf-policy/go-cli.exe" $(CARGO) test -p symvault-cli --test migrate_kdf_differential --locked -- --ignored

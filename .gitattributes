@@ -32,3 +32,7 @@ crates/symvault-cli/src/help-*.txt text eol=lf
 
 # Keep the embedded native Git test helper identical across checkouts.
 crates/symvault-sync/tests/fixtures/** text eol=lf
+
+# Retained upstream source and the historical KDF driver feed byte hashes.
+third_party/argon2/** text eol=lf
+scripts/rust-port/kdf_policy_fixtures.py text eol=lf
