@@ -1,35 +1,22 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-struct TempDir(PathBuf);
+struct TempDir(test_temp_root::TempRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let pid = std::process::id();
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let path =
-            env::temp_dir().join(format!("symvault-auth-diff-{label}-{pid}-{suffix}-{count}"));
-        fs::create_dir_all(&path).expect("temporary directory");
-        Self(path)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        Self(test_temp_root::TempRoot::existing(&format!(
+            "symvault-auth-diff-{label}-"
+        )))
     }
 }
 

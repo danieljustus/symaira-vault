@@ -347,7 +347,12 @@ fn go_generated_sync_fixture_is_provenance_bound_and_scope_honest() {
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(
         fixture.oracle.generator_files,
-        ["scripts/rust-port/cmd/syncgen/main.go"]
+        [
+            "scripts/rust-port/cmd/syncgen/archive_extract.go",
+            "scripts/rust-port/cmd/syncgen/archive_extract_test.go",
+            "scripts/rust-port/cmd/syncgen/main.go",
+            "scripts/rust-port/cmd/syncgen/main_test.go",
+        ]
     );
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     assert!(fixture.cases.iter().all(|case| !case.seam.is_empty()));

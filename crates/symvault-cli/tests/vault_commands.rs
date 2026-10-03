@@ -1,29 +1,16 @@
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 #[path = "../src/vault_commands.rs"]
 mod vault_commands;
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    io::Cursor,
-    path::PathBuf,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::BTreeMap, fs, io::Cursor};
 
 use symvault_crypto::{SecretBytes, decrypt_identity};
 use symvault_store::{Entry, EntryMetadata, SecretMetadata, Store};
 
-fn temporary_root() -> PathBuf {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    std::env::temp_dir().join(format!(
-        "symvault-cli-commands-{}-{suffix}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    ))
+fn temporary_root() -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::missing("symvault-cli-commands-")
 }
 
 #[test]

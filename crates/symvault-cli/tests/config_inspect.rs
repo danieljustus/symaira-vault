@@ -1,11 +1,9 @@
 #![deny(unsafe_code)]
 
-use std::{
-    fs,
-    path::Path,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
+use std::{fs, path::Path, process::Command};
 
 use serde::Deserialize;
 
@@ -203,12 +201,7 @@ fn fixture_pins_go_oracle_and_exercises_config_edges() {
 
 #[test]
 fn config_cases_match_go_generated_contract() {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock after epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("symvault-config-cli-{unique}"));
-    fs::create_dir_all(&root).expect("create isolated roots");
+    let root = test_temp_root::TempRoot::existing("symvault-config-cli-");
     let fixture = fixture();
     let mut failures = Vec::new();
     for case in &fixture.cases {
