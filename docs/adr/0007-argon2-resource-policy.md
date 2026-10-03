@@ -134,3 +134,11 @@ The new policy is an intentional correction absent from that released oracle;
 a separate current-Go/Rust CLI gate exercises it using genuine historical
 ciphertexts. Both gates are required, rather than asking the old executable to
 accept a flag or resource policy that it never implemented.
+
+The immutable implementation source `21f849ee971ba60ca3a85eaf4e61e6e520b41034`
+is retained for command-tree and config/Auth-status fixture provenance. Actual
+Go regeneration preserves every config, platform and Auth-status observation
+and each source inventory; the only command-tree behavior change is the new
+`migrate kdf` flag and its operational help. These are generated observations,
+not manually rewritten source digests. The historical KDF oracle remains the
+released `caadd5e` source and still authenticates its original envelopes.
