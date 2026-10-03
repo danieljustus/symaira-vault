@@ -241,11 +241,11 @@ fn initialized_go_fixture_matches_injected_read_only_runtime() {
     .expect("valid initialized Go tools/call fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "2b703647a821d7236aa8a66032852ab3ee606701"
+        "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
     assert_eq!(
         fixture.oracle.source_hash.as_deref(),
-        Some("9a6b9cd9e4e576a0ae937135be020a4f85e5a6f6dee250622b978beec26c8dbf")
+        Some("c3fb517544755bd590ac74e205475b75554e2443544a2c66b18b03723e292df6")
     );
     assert_eq!(
         fixture.oracle.generator_hash.as_deref().map(str::len),

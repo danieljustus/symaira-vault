@@ -103,10 +103,10 @@ fn audit_self_matches_source_bound_go_fixture() {
         "../../../testdata/port/mcp/tools-audit-self.json"
     ))
     .expect("valid Go audit-self fixture");
-    assert_eq!(fixture.oracle.commit, "2b703647");
+    assert_eq!(fixture.oracle.commit, "a581df7b");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "2b703647a821d7236aa8a66032852ab3ee606701"
+        "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
     assert_eq!(fixture.oracle.source_files.len(), 8);
     assert_eq!(fixture.oracle.source_hash.len(), 64);

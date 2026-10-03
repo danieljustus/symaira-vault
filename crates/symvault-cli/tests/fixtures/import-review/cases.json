@@ -2,7 +2,7 @@
  "schema": 1,
  "slice": "import-review",
  "oracle": {
-  "commit": "b13189220519de245d8972d7af2e2d81618f0432",
+  "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
   "binary": "actual detached Go build (-trimpath -buildvcs=false)",
   "sha256": "a8634e29d3cd7f761b5fad7637bb0b98380218f12791b5c8cdeb7f469c1a9fb9",
   "captured": "2026-10-03",
@@ -16,7 +16,7 @@
    "scripts/rust-port/cmd/entrypolicygen/main.go",
    "scripts/rust-port/refresh-read-policy-fixtures.py"
   ],
-  "generator_digest": "b6295e95b38809f68c42728ccb71a07a7e796a499654eb5619ea573c1736c231"
+  "generator_digest": "861755b12fb7294bfa8dddbf9c1958f9cfc9b7d7edc0071caac8371e74a0e3bf"
  },
  "notes": [
   "Every case ran the pinned Go oracle in its own throwaway HOME/XDG/vault root.",

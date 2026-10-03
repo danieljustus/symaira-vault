@@ -269,3 +269,15 @@ policy mismatch. The two G304 diagnostics describe intended accesses to the
 caller-selected vault directory and a fixed synthetic recipe's disposable file;
 the narrow inline annotations explain those boundaries without excluding a
 package or rule from scanning.
+
+The refreshed immutable oracle `a581df7b09630a0d8c572af727b7cf096d2557ad`
+re-executed the 19 policy cases and 17 unchanged import-review cases. Actual
+MCP generators recaptured 25 corpora with every semantic observation unchanged;
+manifest generation retained all 16 vectors. The MCP source declarations now
+include the 77 production files from the shared read packages wherever a
+capture reads vault entries. Exact Rust provenance assertions are updated from
+those generated files, including the complete write-approval source inventory.
+The shared MCP test helper closes its audit log, including existing native
+authorization fixtures. Each worktree uses a separate Cargo target directory;
+sharing one directory across these differing store implementations produced
+stale dependency metadata and is not valid evidence for either candidate.

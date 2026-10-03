@@ -46,17 +46,91 @@ var mcpTOTPCode = regexp.MustCompile(`(\\"code\\":\\")[0-9]{6,8}(\\")`)
 var mcpTOTPTime = regexp.MustCompile(`20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})`)
 
 var mcpGenerateTOTPSourceFiles = []string{
+	"internal/config/config.go",
+	"internal/config/config_load.go",
+	"internal/config/config_merge.go",
+	"internal/config/config_save.go",
+	"internal/config/config_validate.go",
+	"internal/config/dottedpath.go",
+	"internal/config/migrate.go",
+	"internal/config/migrate_copy_unix.go",
+	"internal/config/migrate_copy_windows.go",
+	"internal/config/migrate_source_unix.go",
+	"internal/config/migrate_source_windows.go",
+	"internal/config/paths.go",
+	"internal/config/presets.go",
+	"internal/config/schema.go",
+	"internal/config/warn.go",
+	"internal/crypto/age.go",
+	"internal/crypto/argon2id.go",
+	"internal/crypto/diceware.go",
+	"internal/crypto/hmac.go",
+	"internal/crypto/interop.go",
+	"internal/crypto/keygen.go",
+	"internal/crypto/keystore.go",
+	"internal/crypto/password.go",
+	"internal/crypto/secstring_other.go",
+	"internal/crypto/secstring_unix.go",
+	"internal/crypto/symmetric.go",
+	"internal/crypto/totp.go",
+	"internal/fsutil/createsensitiveoutput.go",
+	"internal/fsutil/doc.go",
+	"internal/fsutil/reexport.go",
+	"internal/fsutil/safepath/doc.go",
+	"internal/fsutil/safepath/manager_unix.go",
+	"internal/fsutil/safepath/manager_windows.go",
+	"internal/fsutil/safepath/safepath.go",
+	"internal/fsutil/safewrite_windows.go",
+	"internal/mcp/mcptypes.go",
+	"internal/mcp/server/approval_helper.go",
 	"internal/mcp/server/protocol.go",
 	"internal/mcp/server/server_authorize.go",
 	"internal/mcp/server/server_dispatch.go",
 	"internal/mcp/server/tool_registry.go",
 	"internal/mcp/server/tools_totp.go",
-	"internal/mcp/server/approval_helper.go",
 	"internal/mcp/transport/transport.go",
-	"internal/mcp/mcptypes.go",
+	"internal/template/builtins.go",
+	"internal/template/engine.go",
+	"internal/template/funcs.go",
+	"internal/template/resolver.go",
+	"internal/vault/backup_codes.go",
+	"internal/vault/cache.go",
+	"internal/vault/devices.go",
 	"internal/vault/entry.go",
+	"internal/vault/entry_canary.go",
+	"internal/vault/entry_metadata.go",
 	"internal/vault/entry_readwrite.go",
-	"internal/crypto/totp.go",
+	"internal/vault/entry_resources.go",
+	"internal/vault/entry_validate.go",
+	"internal/vault/file_digest.go",
+	"internal/vault/git.go",
+	"internal/vault/index_resources.go",
+	"internal/vault/lock_unix.go",
+	"internal/vault/lock_windows.go",
+	"internal/vault/manifest.go",
+	"internal/vault/manifest_updater.go",
+	"internal/vault/metrics.go",
+	"internal/vault/payment.go",
+	"internal/vault/read_admission.go",
+	"internal/vault/recipients.go",
+	"internal/vault/reencrypt.go",
+	"internal/vault/reencrypt_journal.go",
+	"internal/vault/reencrypt_journal_unix.go",
+	"internal/vault/reencrypt_journal_windows.go",
+	"internal/vault/reencrypt_unix.go",
+	"internal/vault/reencrypt_windows.go",
+	"internal/vault/retention_budget.go",
+	"internal/vault/search.go",
+	"internal/vault/search_index.go",
+	"internal/vault/service.go",
+	"internal/vault/symlink_harden.go",
+	"internal/vault/symlink_harden_windows.go",
+	"internal/vault/sync/sync.go",
+	"internal/vault/taint/taint.go",
+	"internal/vault/types.go",
+	"internal/vault/url.go",
+	"internal/vault/vault.go",
+	"internal/vault/vault_sync_reconcile.go",
 }
 
 func TestGenerateMCPGenerateTOTPFixture(t *testing.T) {
@@ -134,12 +208,12 @@ func TestGenerateMCPGenerateTOTPFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpGenerateTOTPSourceFiles)
 	pinned := mcpGenerateTOTPGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go generate_totp sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go generate_totp sources differ from a581df7b: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGenerateTOTPFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGenerateTOTPOracle{
-			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
+			Commit: "a581df7b", CommitSHA: "a581df7b09630a0d8c572af727b7cf096d2557ad",
 			SourceFiles: mcpGenerateTOTPSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGenerateTOTPGeneratorHash(t),
 		},
@@ -194,7 +268,7 @@ func mcpGenerateTOTPGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpGenerateTOTPSourceFiles {
-		cmd := exec.Command("git", "show", "2b703647:"+name)
+		cmd := exec.Command("git", "show", "a581df7b:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

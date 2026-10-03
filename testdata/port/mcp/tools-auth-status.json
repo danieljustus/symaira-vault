@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "2b703647",
-    "commit_sha": "2b703647a821d7236aa8a66032852ab3ee606701",
+    "commit": "a581df7b",
+    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
     "source_files": [
       "internal/mcp/server/protocol.go",
       "internal/mcp/server/server_authorize.go",
@@ -18,7 +18,7 @@
       "internal/session/oskeyring.go"
     ],
     "source_hash": "63fcc17d6c64eea63722d4aa31faf45ef366da36ce42ece563ac3c6c81fbfd6c",
-    "generator_hash": "0526f2731b62ac9470d2c6a4e1593d1abd3bdae96714711e41fa1e5861001a67"
+    "generator_hash": "79c818d20c0f95623c67d7f07dc87eb73b9f421ba6656f4c9c4f0500b6eddbc9"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-auth-status-fixture",

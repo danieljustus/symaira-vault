@@ -109,12 +109,12 @@ func TestGenerateMCPSymairaSearchFixture(t *testing.T) {
 	root := mcpSymairaSearchRepoRoot(t)
 	sourceHash := mcpSymairaSearchSourceHash(t, mcpSymairaSearchSourceFiles)
 	if pinned := mcpSymairaSearchGitSourceHash(t, mcpSymairaSearchSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go symaira-search sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go symaira-search sources differ from a581df7b: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpSymairaSearchFixture{
 		SchemaVersion: 1,
 		Oracle: mcpSymairaSearchOracle{
-			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
+			Commit: "a581df7b", CommitSHA: "a581df7b09630a0d8c572af727b7cf096d2557ad",
 			SourceFiles: mcpSymairaSearchSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpSymairaSearchGeneratorHash(t),
 		},
@@ -163,7 +163,7 @@ func mcpSymairaSearchGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpSymairaSearchRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "2b703647:"+name)
+		cmd := exec.Command("git", "show", "a581df7b:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

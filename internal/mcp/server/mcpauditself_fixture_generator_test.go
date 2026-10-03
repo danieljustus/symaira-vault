@@ -167,12 +167,12 @@ func TestGenerateMCPAuditSelfFixture(t *testing.T) {
 	root := mcpAuditSelfRepoRoot(t)
 	sourceHash := mcpAuditSelfSourceHash(t, mcpAuditSelfSourceFiles)
 	if pinned := mcpAuditSelfGitSourceHash(t, mcpAuditSelfSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go audit-self sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go audit-self sources differ from a581df7b: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpAuditSelfFixture{
 		SchemaVersion: 1,
 		Oracle: mcpAuditSelfOracle{
-			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
+			Commit: "a581df7b", CommitSHA: "a581df7b09630a0d8c572af727b7cf096d2557ad",
 			SourceFiles: mcpAuditSelfSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpAuditSelfGeneratorHash(t),
 		},
@@ -221,7 +221,7 @@ func mcpAuditSelfGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpAuditSelfRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "2b703647:"+name)
+		cmd := exec.Command("git", "show", "a581df7b:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

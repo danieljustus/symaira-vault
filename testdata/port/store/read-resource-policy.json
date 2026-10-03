@@ -2,8 +2,8 @@
   "schema_version": 1,
   "policy": "vault-read-resources-v2",
   "oracle": {
-    "commit": "b13189220519de245d8972d7af2e2d81618f0432",
-    "commit_sha": "b13189220519de245d8972d7af2e2d81618f0432",
+    "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
     "release": "unreleased-vault-read-resources-v2",
     "source_files": [
       "cmd/admin/audit.go",
@@ -527,12 +527,12 @@
       "scripts/rust-port/internal/diff/wait_error_windows.go",
       "scripts/rust-port/internal/provenance/provenance.go"
     ],
-    "source_digest": "9a4a1aaaa926d03aad209ca18bf64d236f902a52e0892424bbf113e6d2b59bc0",
+    "source_digest": "1893704a9e463164d7b8ff3e9cdd226259a9f4d0f44d4f8cd6332465ca347f52",
     "generator_files": [
       "scripts/rust-port/cmd/entrypolicygen/main.go",
       "scripts/rust-port/refresh-read-policy-fixtures.py"
     ],
-    "generator_digest": "b6295e95b38809f68c42728ccb71a07a7e796a499654eb5619ea573c1736c231"
+    "generator_digest": "861755b12fb7294bfa8dddbf9c1958f9cfc9b7d7edc0071caac8371e74a0e3bf"
   },
   "cases": [
     {
