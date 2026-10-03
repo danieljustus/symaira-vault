@@ -1987,8 +1987,20 @@ mod tests {
         let local_approval = Arc::new(LocalApprovalApi::new(Arc::clone(&queue), secret.clone()));
         let admission_counter = Arc::clone(&local_approval.active_mcp_requests);
 
-        let _server = thread::spawn(move || {
-            serve_loopback_inner(
+        let shutdown = HttpShutdown::default();
+        let worker_shutdown = shutdown.clone();
+        let wait_for_retired_responses = |maximum| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while shutdown.registered_connection_count() > maximum {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "completed response workers did not release their connection slots"
+                );
+                thread::sleep(Duration::from_millis(5));
+            }
+        };
+        let server = thread::spawn(move || {
+            serve_loopback_inner_with_shutdown(
                 listener,
                 &registry_path,
                 move |_| {
@@ -2001,6 +2013,7 @@ mod tests {
                 None,
                 None,
                 Some(local_approval),
+                Some(worker_shutdown),
             )
             .expect("serve production loopback accept loop");
         });
@@ -2017,6 +2030,7 @@ mod tests {
                 .expect("send initialize request");
             let initialized = read_http_response(&mut BufReader::new(stream));
             assert_eq!(raw_status(&initialized), 200, "{initialized}");
+            wait_for_retired_responses(0);
         }
 
         let mut calls = Vec::new();
@@ -2063,6 +2077,10 @@ mod tests {
             let response = read_http_response(&mut BufReader::new(stream));
             assert_eq!(raw_status(&response), 503, "excess call should fail closed");
             assert!(raw_body(&response).contains("server busy"), "{response}");
+            // Reading Content-Length bytes does not join the responding worker.
+            // Wait for rejected MCP requests to retire before measuring the two
+            // slots reserved alongside the six still-blocked approval calls.
+            wait_for_retired_responses(MAX_HTTP_MCP_REQUESTS);
         }
 
         let list_request = signed_request(address, &secret, "GET", "/api/v1/local/approvals");
@@ -2079,6 +2097,8 @@ mod tests {
             200,
             "reserved local list slot: {listed}"
         );
+
+        wait_for_retired_responses(MAX_HTTP_MCP_REQUESTS);
 
         let mut decided = 0;
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -2102,6 +2122,7 @@ mod tests {
                     .expect("send local approval decision");
                 let response = read_http_response(&mut BufReader::new(local_decision));
                 assert_eq!(raw_status(&response), 200, "local decision: {response}");
+                wait_for_retired_responses(MAX_HTTP_MCP_REQUESTS);
                 decided += 1;
             } else {
                 thread::sleep(Duration::from_millis(5));
@@ -2115,6 +2136,11 @@ mod tests {
                 serde_json::from_str(raw_body(&response)).expect("MCP response JSON");
             assert_eq!(response["result"]["content"][0]["text"], "approved");
         }
+        shutdown
+            .cancel()
+            .expect("cancel completed saturation server");
+        server.join().expect("join saturation server");
+        assert_eq!(shutdown.registered_connection_count(), 0);
     }
 
     fn registry(dir: &Path) -> std::path::PathBuf {
