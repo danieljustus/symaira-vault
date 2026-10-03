@@ -45,7 +45,7 @@ type executeAPIHTTPSCase struct {
 	ErrorKind string `json:"error_kind,omitempty"`
 }
 
-const executeAPIHTTPSOracleCommit = "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434"
+const executeAPIHTTPSOracleCommit = "34fb21a0601d6f74e4908639d9b339125a8cf230"
 
 var executeAPIHTTPSSourceFiles = []string{
 	"internal/mcp/server/tools_execute_api_request.go",

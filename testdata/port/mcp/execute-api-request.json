@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
-    "commit_sha": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
+    "commit": "34fb21a0601d6f74e4908639d9b339125a8cf230",
+    "commit_sha": "34fb21a0601d6f74e4908639d9b339125a8cf230",
     "source_files": [
       "internal/mcp/server/approval.go",
       "internal/mcp/server/approval_helper.go",
@@ -22,13 +22,13 @@
       "internal/policy/engine.go",
       "internal/policy/types.go"
     ],
-    "source_digest": "9e70a3d07782ba5c5d65f6ae2015b1e81e9145d471b354f1727f21ed5866b3fb",
+    "source_digest": "ab6dbf679511e35387be6c74a6848fa26ec971bdf6ff037521dcce802da9bd2f",
     "generator_files": [
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
       "internal/mcp/server/tools_execute_api_request_test.go",
       "internal/mcp/server/tools_test_helpers.go"
     ],
-    "generator_hash": "bf0e09618c533bc1a56d3b149a65db86b2d6b13e596eeb0b7bd4a6b79c87af50"
+    "generator_hash": "ddf0f736077f1b71150b6b1237dac30194470a99b4d32150ea92010dbd1b7f98"
   },
   "normalizations": [
     "response.headers.Date: replace the local httptest server's wall-clock Date with \u003cfixture-date\u003e",

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "go_version": "go1.26.6",
   "oracle": {
-    "commit": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
-    "commit_sha": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
+    "commit": "34fb21a0601d6f74e4908639d9b339125a8cf230",
+    "commit_sha": "34fb21a0601d6f74e4908639d9b339125a8cf230",
     "source_files": [
       "internal/mcp/server/approval.go",
       "internal/mcp/server/approval_helper.go",
@@ -23,7 +23,7 @@
       "internal/policy/engine.go",
       "internal/policy/types.go"
     ],
-    "source_digest": "9e70a3d07782ba5c5d65f6ae2015b1e81e9145d471b354f1727f21ed5866b3fb",
+    "source_digest": "ab6dbf679511e35387be6c74a6848fa26ec971bdf6ff037521dcce802da9bd2f",
     "generator_files": [
       "internal/mcp/server/mcp_execute_api_policy_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
@@ -31,7 +31,7 @@
       "internal/mcp/server/tools_execute_api_request_test.go",
       "internal/mcp/server/tools_test_helpers.go"
     ],
-    "generator_hash": "3c32fe3360ca6a9c3e9e6e659ab0f8c5a50a9f66fa0a04176f39f026f5f403be"
+    "generator_hash": "9742e1d798484027093c213c92efa5541ee59d46a6e60f4266eaf0f4eae91b86"
   },
   "cases": [
     {

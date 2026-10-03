@@ -125,12 +125,25 @@ observations in `testdata/port/mcp/execute-api-policy.json` record zero reads
 and requests for rejection and one of each for run allowance/no policy.
 Rust replays the same references, rule actions and side-effect counts.
 
-The immutable Go source is `2269b3e4b92d2e3c8fbae41d71edd0dec3a67434`, retained
+The immutable Go source is `34fb21a0601d6f74e4908639d9b339125a8cf230`, retained
 on `oracle/api-policy-20261003`. The fixture records Go 1.26.6, production
 source digests and generator digests. The HTTP, HTTPS and template corpora
 are regenerated against this source; their existing behavioral vectors stay
 unchanged. `make mcp-execute-api-policy-differential` checks freshness and the
 Rust replay and participates in the API-request differential target.
+
+The independent review also identified a pre-existing Go reader alias: a
+physical pseudonymized ciphertext name can reach a different embedded logical
+entry through its legacy fallback. A real encrypted-vault regression reproduced
+an outgoing request under a broad fallback allow rule. The handler now binds
+any nonempty authenticated `Entry.Path` to the authorized reference before
+credential substitution or dispatch. The physical-alias case decrypts once to
+check that binding and sends zero requests; logical policy denial still reads
+zero times, and an allowed logical reference still works. This is not a claim
+that the shared vault reader or other callers enforce that binding.
+
+The approval-denial regression now uses an isolated loopback template rather
+than public GitHub DNS, preserving production target validation order.
 
 This evidence concerns entry/action authorization. Go's shared policy helper
 still supplies an empty tool name; tool-name conditions and prompt/biometry
