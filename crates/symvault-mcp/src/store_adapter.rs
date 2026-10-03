@@ -1591,6 +1591,12 @@ impl StoreReadOnlyRuntime {
         if let Some((key, value)) = auth_query {
             request_url = set_api_query_parameter(&request_url, &key, &value)?;
             known_values.push(api_query_escape(&value));
+            known_values.extend(api_query_substitution_redaction_values(
+                &runtime_template.base_url,
+                &endpoint,
+                &definition.substitutions,
+                &substitutions,
+            )?);
         }
         for value in substitutions.values() {
             known_values.extend(api_substitution_redaction_values(value));
@@ -3559,7 +3565,7 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
     // Keep earlier, more aggressively escaped forms for upstream re-encoding.
     let query = api_query_escape(value);
     let percent_encoded = query.replace('+', "%20");
-    let mut known = vec![
+    vec![
         value.to_owned(),
         percent_encoded.replace("%2F", "/"),
         percent_encoded,
@@ -3569,17 +3575,50 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
         path,
         suffixed_path,
         url.query().unwrap_or_default().to_owned(),
-    ];
-    // Query authentication parses and Go-encodes the existing query again.
-    // Mirror that transform for substitution-derived pairs, not the dummy key.
-    url.set_query(Some(&format!("q={value}")));
-    for (index, (key, value)) in url.query_pairs().enumerate() {
-        if index != 0 {
-            known.push(api_query_escape(&key));
+    ]
+}
+
+fn api_query_substitution_redaction_values(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+) -> Result<Vec<String>, String> {
+    // Reuse the request renderer without substitutions to retain the actual
+    // template query, including literal percent bytes bordering placeholders.
+    let mut url = reqwest::Url::parse(&api_request_url(base_url, endpoint, &[], &BTreeMap::new())?)
+        .map_err(|_| "invalid template URL")?;
+    let template_query = url.query().unwrap_or_default().to_owned();
+    let mut known = Vec::new();
+    for pair in template_query.split('&') {
+        let key = pair.split_once('=').map_or(pair, |(key, _)| key);
+        let mut tainted = false;
+        let mut tainted_key = false;
+        let mut rendered = pair.to_owned();
+        for substitution in substitutions {
+            if substitution_applies(substitution, "query")
+                && let Some(value) = values.get(&substitution.placeholder)
+            {
+                tainted |= pair.contains(&substitution.placeholder);
+                tainted_key |= key.contains(&substitution.placeholder);
+                rendered = rendered.replace(&substitution.placeholder, value);
+            }
         }
-        known.push(api_query_escape(&value));
+        if !tainted {
+            continue;
+        }
+        // Decode complete rendered fields and mirror query authentication's
+        // Go encoding. An injected '=' or '&' can taint both keys and values;
+        // unrelated query fields and the original non-secret key stay public.
+        url.set_query(Some(&rendered));
+        for (index, (key, value)) in url.query_pairs().enumerate() {
+            if tainted_key || index != 0 {
+                known.push(api_query_escape(&key));
+            }
+            known.push(api_query_escape(&value));
+        }
     }
-    known
+    Ok(known)
 }
 
 fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {

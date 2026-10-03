@@ -112,6 +112,50 @@ fn api_review_query_auth_percent_reencoding_masks_handler_body_and_header() {
     );
 }
 
+#[test]
+fn api_review_query_key_substitution_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha=beta gamma",
+        "query_param",
+        "/v1/status?__TOKEN__=foo",
+        "/v1/status?alpha=beta+gamma%3Dfoo&auth_token=separate-auth",
+        "/v1/status?***=***&***=***",
+    );
+}
+
+#[test]
+fn api_review_query_boundary_substitution_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha%",
+        "query_param",
+        "/v1/status?q=__TOKEN__41",
+        "/v1/status?auth_token=separate-auth&q=alphaA",
+        "/v1/status?***=***&q=***",
+    );
+}
+
+#[test]
+fn api_review_query_utf8_boundary_substitution_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha%c3",
+        "query_param",
+        "/v1/status?q=__TOKEN__%bc",
+        "/v1/status?auth_token=separate-auth&q=alpha%C3%BC",
+        "/v1/status?***=***&q=***",
+    );
+}
+
+#[test]
+fn api_review_query_untainted_field_remains_public() {
+    review_assert_substitution_echo(
+        "alpha%",
+        "query_param",
+        "/v1/status?limit=50&q=__TOKEN__41",
+        "/v1/status?auth_token=separate-auth&limit=50&q=alphaA",
+        "/v1/status?***=***&limit=50&q=***",
+    );
+}
+
 fn review_assert_substitution_echo(
     credential: &str,
     auth_type: &str,
