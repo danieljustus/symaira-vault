@@ -2020,4 +2020,310 @@ mod tests {
         fs::remove_file(alias_parent).unwrap();
         let _ = fs::remove_dir_all(root);
     }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    enum ReencryptCrashBoundary {
+        InitialJournalPersisted,
+        OwnershipPersistedBeforeTempCreate,
+        TempCreatedEmpty,
+        TempPartiallyWritten,
+        TempDurableBeforeSecondJournalPersist,
+        SecondJournalPersisted,
+        OriginalRenamedToBackup,
+        ReplacementInstalledBeforeInstallJournal,
+        InstalledJournalPersisted,
+        ArtifactsCleanedBeforeJournalRemoval,
+    }
+
+    struct SyntheticReencryptVault {
+        _temp_dir: tempfile::TempDir,
+        root: PathBuf,
+        identity: Identity,
+        new_identity: Identity,
+        file: ReencryptFile,
+        target: PathBuf,
+        original: Vec<u8>,
+        user_entry: PathBuf,
+        user_entry_bytes: Vec<u8>,
+        unowned_staging: PathBuf,
+    }
+
+    fn synthetic_reencrypt_vault() -> SyntheticReencryptVault {
+        let temp_dir = tempfile::tempdir().expect("create disposable crash-test root");
+        let root = temp_dir.path().join("vault");
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).expect("create synthetic entries directory");
+
+        let identity = generate_identity();
+        let config = Config {
+            vault_dir: root.to_str().expect("UTF-8 test path").to_owned(),
+            ..Config::default()
+        };
+        fs::write(
+            root.join("config.yaml"),
+            config.to_yaml_bytes().expect("serialize test config"),
+        )
+        .expect("write synthetic config");
+        let encrypted_identity = encrypt_identity_scrypt(
+            &identity,
+            &SecretBytes::new(b"synthetic-crash-test-passphrase"),
+            10,
+        )
+        .expect("encrypt synthetic identity");
+        fs::write(root.join("identity.age"), encrypted_identity)
+            .expect("write synthetic encrypted identity");
+
+        let old_recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+        let new_identity = generate_identity();
+        let new_recipient = parse_recipient(&recipient_string(&new_identity)).unwrap();
+        let target = entries.join("a.age");
+        let original = encrypt(b"original synthetic entry", &[old_recipient]).unwrap();
+        let replacement = reencrypt(
+            &original,
+            &identity,
+            &[
+                parse_recipient(&recipient_string(&identity)).unwrap(),
+                new_recipient,
+            ],
+        )
+        .unwrap();
+        fs::write(&target, &original).expect("write encrypted synthetic entry");
+        let metadata = fs::symlink_metadata(&target).expect("stat synthetic entry");
+        let metadata = file_metadata(&metadata, &target).expect("read synthetic entry metadata");
+
+        // This is a real encrypted user entry whose name contains the old
+        // implementation's broad cleanup marker, but is not journal-owned.
+        let user_entry = entries.join("keep.reencrypt-user-owned.age");
+        let user_entry_bytes = encrypt(
+            b"legitimate user entry",
+            &[parse_recipient(&recipient_string(&identity)).unwrap()],
+        )
+        .unwrap();
+        fs::write(&user_entry, &user_entry_bytes).expect("write legitimate encrypted entry");
+
+        // A staging-shaped sibling not named by the durable journal is user
+        // data from recovery's perspective and must never be swept by pattern.
+        let unowned_staging = entries.join(".a.age.reencrypt-1003-99-99.tmp");
+        fs::write(&unowned_staging, b"unowned user bytes").expect("write unowned lookalike");
+
+        SyntheticReencryptVault {
+            _temp_dir: temp_dir,
+            root,
+            identity,
+            new_identity,
+            file: ReencryptFile {
+                path: target.clone(),
+                replacement,
+                metadata,
+            },
+            target,
+            original,
+            user_entry,
+            user_entry_bytes,
+            unowned_staging,
+        }
+    }
+
+    fn journaled_artifact_paths(root: &Path, target: &Path) -> (PathBuf, PathBuf) {
+        let temp = artifact_path(target, "tmp", 1003, 0).unwrap();
+        let backup = artifact_path(target, "backup", 1003, 0).unwrap();
+        assert!(temp.starts_with(root));
+        assert!(backup.starts_with(root));
+        (temp, backup)
+    }
+
+    #[test]
+    fn journal_recovery_covers_every_stage_and_journal_crash_boundary() {
+        use ReencryptCrashBoundary as Boundary;
+
+        let boundaries = [
+            Boundary::InitialJournalPersisted,
+            Boundary::OwnershipPersistedBeforeTempCreate,
+            Boundary::TempCreatedEmpty,
+            Boundary::TempPartiallyWritten,
+            Boundary::TempDurableBeforeSecondJournalPersist,
+            Boundary::SecondJournalPersisted,
+            Boundary::OriginalRenamedToBackup,
+            Boundary::ReplacementInstalledBeforeInstallJournal,
+            Boundary::InstalledJournalPersisted,
+            Boundary::ArtifactsCleanedBeforeJournalRemoval,
+        ];
+
+        for boundary in boundaries {
+            let fixture = synthetic_reencrypt_vault();
+            let (temp, backup) = journaled_artifact_paths(&fixture.root, &fixture.target);
+            let mut journal =
+                ReencryptJournal::new(&fixture.root, std::slice::from_ref(&fixture.file)).unwrap();
+            persist_reencrypt_journal(&fixture.root, &journal).unwrap();
+
+            if boundary >= Boundary::OwnershipPersistedBeforeTempCreate {
+                let entry = &mut journal.entries[0];
+                entry.digest = digest(&fixture.file.replacement);
+                entry.temp = journal_string(&fixture.root, &temp).unwrap();
+                entry.backup = journal_string(&fixture.root, &backup).unwrap();
+                persist_reencrypt_journal(&fixture.root, &journal).unwrap();
+                let durable = load_reencrypt_journal(&fixture.root).unwrap();
+                assert_eq!(durable.entries[0].temp, journal.entries[0].temp);
+                assert_eq!(durable.entries[0].backup, journal.entries[0].backup);
+                assert_eq!(durable.entries[0].digest, journal.entries[0].digest);
+            } else {
+                let durable = load_reencrypt_journal(&fixture.root).unwrap();
+                assert!(durable.entries[0].temp.is_empty());
+                assert!(durable.entries[0].backup.is_empty());
+                assert!(durable.entries[0].digest.is_empty());
+            }
+
+            let ownership_record = fs::read(journal_path(&fixture.root)).unwrap();
+            if boundary == Boundary::TempCreatedEmpty {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&temp)
+                    .expect("create empty owned temp");
+            } else if boundary == Boundary::TempPartiallyWritten {
+                let mut staged = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&temp)
+                    .expect("create partially written owned temp");
+                staged
+                    .write_all(&fixture.file.replacement[..8])
+                    .expect("write partial staged ciphertext");
+            } else if boundary >= Boundary::TempDurableBeforeSecondJournalPersist {
+                stage_reencrypted_file(&fixture.file, &temp).unwrap();
+                assert_eq!(fs::read(&temp).unwrap(), fixture.file.replacement);
+            }
+
+            if boundary >= Boundary::SecondJournalPersisted {
+                persist_reencrypt_journal(&fixture.root, &journal).unwrap();
+                // The second record is intentionally byte-identical: ownership
+                // must already be durable before the staged file is created.
+                assert_eq!(
+                    fs::read(journal_path(&fixture.root)).unwrap(),
+                    ownership_record
+                );
+            } else if boundary >= Boundary::TempCreatedEmpty {
+                assert_eq!(
+                    fs::read(journal_path(&fixture.root)).unwrap(),
+                    ownership_record
+                );
+            }
+
+            if boundary >= Boundary::OriginalRenamedToBackup {
+                fs::rename(&fixture.target, &backup).expect("move original to owned backup");
+                sync_directory(fixture.target.parent().unwrap()).unwrap();
+            }
+            if boundary >= Boundary::ReplacementInstalledBeforeInstallJournal {
+                fs::rename(&temp, &fixture.target).expect("install staged replacement");
+                sync_directory(fixture.target.parent().unwrap()).unwrap();
+            }
+            if boundary >= Boundary::InstalledJournalPersisted {
+                journal.entries[0].temp.clear();
+                journal.entries[0].installed = true;
+                persist_reencrypt_journal(&fixture.root, &journal).unwrap();
+            }
+            if boundary >= Boundary::ArtifactsCleanedBeforeJournalRemoval {
+                cleanup_reencrypt_artifacts(&fixture.root, &journal).unwrap();
+            }
+
+            // Store::open runs the production recovery path against each
+            // persisted snapshot, rather than testing a model of recovery.
+            drop(symvault_store::Store::open(&fixture.root, &fixture.identity).unwrap());
+
+            let target_bytes = fs::read(&fixture.target).expect("recovered target exists");
+            if boundary >= Boundary::ReplacementInstalledBeforeInstallJournal {
+                assert_eq!(
+                    target_bytes, fixture.file.replacement,
+                    "boundary: {boundary:?}"
+                );
+                assert_eq!(
+                    symvault_crypto::decrypt(&target_bytes, &fixture.new_identity).unwrap(),
+                    b"original synthetic entry",
+                    "boundary: {boundary:?}"
+                );
+            } else {
+                assert_eq!(target_bytes, fixture.original, "boundary: {boundary:?}");
+            }
+            assert_eq!(
+                symvault_crypto::decrypt(&target_bytes, &fixture.identity).unwrap(),
+                b"original synthetic entry",
+                "boundary: {boundary:?}"
+            );
+            assert_eq!(
+                fs::read(&fixture.user_entry).unwrap(),
+                fixture.user_entry_bytes
+            );
+            assert_eq!(
+                symvault_crypto::decrypt(
+                    &fs::read(&fixture.user_entry).unwrap(),
+                    &fixture.identity
+                )
+                .unwrap(),
+                b"legitimate user entry",
+                "boundary: {boundary:?}"
+            );
+            assert!(
+                !temp.exists(),
+                "owned staging file survived recovery at {boundary:?}"
+            );
+            assert!(
+                !backup.exists(),
+                "owned backup survived recovery at {boundary:?}"
+            );
+            assert!(
+                !journal_path(&fixture.root).exists(),
+                "journal survived recovery at {boundary:?}"
+            );
+            assert_eq!(
+                fs::read(&fixture.unowned_staging).unwrap(),
+                b"unowned user bytes",
+                "unowned lookalike was removed at {boundary:?}"
+            );
+            assert!(fixture.root.join("manifest.age").is_file());
+        }
+    }
+
+    #[test]
+    fn production_reencrypt_flow_preserves_unowned_reencrypt_names() {
+        let fixture = synthetic_reencrypt_vault();
+        let recipients = vec![
+            parse_recipient(&recipient_string(&fixture.identity)).unwrap(),
+            parse_recipient(&recipient_string(&fixture.new_identity)).unwrap(),
+        ];
+
+        reencrypt_all_entries(&fixture.root, &fixture.identity, &recipients).unwrap();
+
+        for (path, expected) in [
+            (&fixture.target, b"original synthetic entry".as_slice()),
+            (&fixture.user_entry, b"legitimate user entry".as_slice()),
+        ] {
+            let bytes = fs::read(path).unwrap();
+            assert_eq!(
+                symvault_crypto::decrypt(&bytes, &fixture.identity).unwrap(),
+                expected
+            );
+            assert_eq!(
+                symvault_crypto::decrypt(&bytes, &fixture.new_identity).unwrap(),
+                expected
+            );
+        }
+        assert!(!journal_path(&fixture.root).exists());
+        assert_eq!(
+            fs::read(&fixture.unowned_staging).unwrap(),
+            b"unowned user bytes"
+        );
+        let mut names: Vec<_> = fs::read_dir(fixture.target.parent().unwrap())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                ".a.age.reencrypt-1003-99-99.tmp".to_owned(),
+                "a.age".to_owned(),
+                "keep.reencrypt-user-owned.age".to_owned(),
+            ]
+        );
+    }
 }
