@@ -3545,11 +3545,21 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
         .strip_prefix('/')
         .unwrap_or(url.path())
         .to_owned();
+    // A placeholder suffix makes trailing dot-segments literal. Retain this
+    // contextual spelling as well as the standalone normalized path.
+    url.set_path(&format!("/{value}x"));
+    let suffixed_path = url
+        .path()
+        .strip_prefix('/')
+        .unwrap_or(url.path())
+        .strip_suffix('x')
+        .unwrap_or_default()
+        .to_owned();
     url.set_query(Some(value));
     // Keep earlier, more aggressively escaped forms for upstream re-encoding.
     let query = api_query_escape(value);
     let percent_encoded = query.replace('+', "%20");
-    vec![
+    let mut known = vec![
         value.to_owned(),
         percent_encoded.replace("%2F", "/"),
         percent_encoded,
@@ -3557,8 +3567,19 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
         api_path_escape(value),
         api_escaped_path(value),
         path,
+        suffixed_path,
         url.query().unwrap_or_default().to_owned(),
-    ]
+    ];
+    // Query authentication parses and Go-encodes the existing query again.
+    // Mirror that transform for substitution-derived pairs, not the dummy key.
+    url.set_query(Some(&format!("q={value}")));
+    for (index, (key, value)) in url.query_pairs().enumerate() {
+        if index != 0 {
+            known.push(api_query_escape(&key));
+        }
+        known.push(api_query_escape(&value));
+    }
+    known
 }
 
 fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {

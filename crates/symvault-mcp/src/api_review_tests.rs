@@ -70,6 +70,55 @@ fn review_echo_server(listener: std::net::TcpListener) -> std::thread::JoinHandl
 
 #[test]
 fn api_review_encoded_substitution_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha:beta gamma",
+        "none",
+        "/v1/__TOKEN__?q=__TOKEN__",
+        "/v1/alpha:beta%20gamma?q=alpha:beta%20gamma",
+        "/v1/***?q=***",
+    );
+}
+
+#[test]
+fn api_review_suffix_substitution_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha!? beta/..",
+        "none",
+        "/v1/__TOKEN__x",
+        "/v1/alpha!%3F%20beta/..x",
+        "/v1/***x",
+    );
+}
+
+#[test]
+fn api_review_query_auth_reencoding_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha+beta gamma",
+        "query_param",
+        "/v1/status?q=__TOKEN__",
+        "/v1/status?auth_token=separate-auth&q=alpha+beta+gamma",
+        "/v1/status?***=***&q=***",
+    );
+}
+
+#[test]
+fn api_review_query_auth_percent_reencoding_masks_handler_body_and_header() {
+    review_assert_substitution_echo(
+        "alpha%2Fbeta gamma",
+        "query_param",
+        "/v1/status?q=__TOKEN__",
+        "/v1/status?auth_token=separate-auth&q=alpha%2Fbeta+gamma",
+        "/v1/status?***=***&q=***",
+    );
+}
+
+fn review_assert_substitution_echo(
+    credential: &str,
+    auth_type: &str,
+    endpoint: &str,
+    expected_wire: &str,
+    expected_masked: &str,
+) {
     let root = tempdir().unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     fs::create_dir_all(root.path().join("entries")).unwrap();
@@ -81,7 +130,7 @@ fn api_review_encoded_substitution_masks_handler_body_and_header() {
     fs::write(root.path().join("identity.age"), b"fixture marker").unwrap();
     fs::create_dir_all(root.path().join("templates")).unwrap();
     fs::write(root.path().join("templates/fixture.yaml"), format!(
-        "base_url: http://{}\nauth_type: none\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\nsubstitutions:\n  - placeholder: __TOKEN__\n    field: credential\n    in: [path, query]\n",
+        "base_url: http://{}\nauth_type: {auth_type}\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\nsubstitutions:\n  - placeholder: __TOKEN__\n    field: credential\n    in: [path, query]\n",
         listener.local_addr().unwrap()
     )).unwrap();
     let identity = symvault_crypto::generate_identity();
@@ -91,7 +140,11 @@ fn api_review_encoded_substitution_masks_handler_body_and_header() {
             "api-fixture",
             &Entry {
                 path: "api-fixture".into(),
-                data: BTreeMap::from([("credential".into(), json!("alpha:beta gamma"))]),
+                data: BTreeMap::from([
+                    ("credential".into(), json!(credential)),
+                    ("param_name".into(), json!("auth_token")),
+                    ("param_value".into(), json!("separate-auth")),
+                ]),
                 ..Entry::default()
             },
             &identity,
@@ -115,18 +168,15 @@ fn api_review_encoded_substitution_masks_handler_body_and_header() {
     let server = review_echo_server(listener);
     let result = runtime.call(
         "execute_api_request",
-        &json!({"template":"fixture","endpoint":"/v1/__TOKEN__?q=__TOKEN__","timeout":1}),
+        &json!({"template":"fixture","endpoint":endpoint,"timeout":1}),
     );
     let wire = server.join().unwrap();
-    assert_eq!(
-        wire.as_deref(),
-        Some("/v1/alpha:beta%20gamma?q=alpha:beta%20gamma")
-    );
+    assert_eq!(wire.as_deref(), Some(expected_wire));
     let result = result.unwrap();
     assert!(!result.is_error, "{}", result.text);
     let payload: Value = serde_json::from_str(&result.text).unwrap();
-    assert_eq!(payload["body"], "/v1/***?q=***");
-    assert_eq!(payload["headers"]["X-Echo"], "/v1/***?q=***");
+    assert_eq!(payload["body"], expected_masked);
+    assert_eq!(payload["headers"]["X-Echo"], expected_masked);
 }
 
 #[test]
