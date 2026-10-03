@@ -114,36 +114,6 @@ fn update_cases_match_go_oracle_bytes() {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         match case.id.as_str() {
-            // Rust exits 0 and stays silent where the oracle prints the
-            // cobra help (documented help-rendering non-goal).
-            "update-bare" | "update-parent-output-text" => {
-                assert_eq!(exit, Some(case.exit), "{}: exit differs", case.id);
-                assert!(
-                    output.stdout.is_empty(),
-                    "{}: expected silence, got stdout {stdout:?}",
-                    case.id
-                );
-                assert!(
-                    output.stderr.is_empty(),
-                    "{}: expected silence, got stderr {stderr:?}",
-                    case.id
-                );
-            }
-            // `update --help` renders clap's help (help-rendering non-goal);
-            // only the exit status and a clean stderr are asserted.
-            "update-help" => {
-                assert_eq!(exit, Some(case.exit), "{}: exit differs", case.id);
-                assert!(
-                    output.stderr.is_empty(),
-                    "{}: expected empty stderr, got {stderr:?}",
-                    case.id
-                );
-                assert!(
-                    !output.stdout.is_empty(),
-                    "{}: expected help on stdout",
-                    case.id
-                );
-            }
             // Parser error style is out of scope (cligap's non-claim);
             // Rust must still fail closed.
             "update-unknown-flag-info" => {

@@ -9,6 +9,12 @@ const LIST_HELP: &str = include_str!("help-list.txt");
 const DYNAMIC_HELP: &str = include_str!("help-dynamic.txt");
 const DYNAMIC_GENERATE_HELP: &str = include_str!("help-dynamic-generate.txt");
 const SETUP_HELP: &str = include_str!("help-setup.txt");
+// Actual Go help captured at bd020d11dc9fa4611075117b4ab3a587fd010ddd
+// in a disposable HOME/XDG root; live freshness is checked by cli-help-differential.
+const UPDATE_HELP: &str = include_str!("help-update.txt");
+const UPDATE_CHECK_HELP: &str = include_str!("help-update-check.txt");
+const UPDATE_APPLY_HELP: &str = include_str!("help-update-apply.txt");
+const UPDATE_INFO_HELP: &str = include_str!("help-update-info.txt");
 const ROOT_HELP_FLAG: &str = "  -h, --help              help for symvault\n";
 
 /// Find direct nested `--help` requests before clap renders its
@@ -22,6 +28,7 @@ pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
                 index += 2;
                 continue;
             }
+            "update" => return update_flag_help_topic(&args[index + 1..]),
             "get" | "show" | "cat" => {
                 return args[index + 1..]
                     .iter()
@@ -63,6 +70,62 @@ pub fn flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
     None
 }
 
+// The update runner captures hyphenated values. Recognize help before it can
+// check releases or install anything, while respecting flag values and `--`.
+// Unknown flags stay in the ordinary error path instead of being hidden by help.
+fn update_flag_help_topic(args: &[std::ffi::OsString]) -> Option<&'static str> {
+    let mut topic = "update";
+    let mut selected = false;
+    let mut help = false;
+    let mut index = 0;
+    while let Some(argument) = args.get(index) {
+        let argument = argument.to_str()?;
+        if argument == "--" {
+            break;
+        }
+        let (name, value) = argument
+            .split_once('=')
+            .map_or((argument, None), |(name, value)| (name, Some(value)));
+        match name {
+            "--vault" | "--profile" | "--output" | "--color" | "--theme" => {
+                if value.is_none() {
+                    args.get(index + 1)?;
+                    index += 1;
+                }
+            }
+            "--help" | "-h" | "--quiet" | "--no-pipe-warning" | "--json" | "--force"
+            | "--dry-run" => {
+                if (name == "--force" && !matches!(topic, "update check" | "update apply"))
+                    || (name == "--dry-run" && topic != "update apply")
+                {
+                    return None;
+                }
+                let enabled = match value {
+                    None | Some("1" | "t" | "T" | "true" | "TRUE" | "True") => true,
+                    Some("0" | "f" | "F" | "false" | "FALSE" | "False") => false,
+                    _ => return None,
+                };
+                if matches!(name, "--help" | "-h") {
+                    help = enabled;
+                }
+            }
+            _ if argument.starts_with('-') => return None,
+            _ if !selected => {
+                topic = match argument {
+                    "check" => "update check",
+                    "apply" => "update apply",
+                    "info" => "update info",
+                    _ => "update",
+                };
+                selected = true;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    help.then_some(topic)
+}
+
 pub fn write_nested<W: Write>(topic: &str, output: &mut W) -> io::Result<()> {
     let help = match topic {
         "get" => GET_HELP,
@@ -70,6 +133,10 @@ pub fn write_nested<W: Write>(topic: &str, output: &mut W) -> io::Result<()> {
         "dynamic" => DYNAMIC_HELP,
         "dynamic generate" => DYNAMIC_GENERATE_HELP,
         "setup" => SETUP_HELP,
+        "update" => UPDATE_HELP,
+        "update check" => UPDATE_CHECK_HELP,
+        "update apply" => UPDATE_APPLY_HELP,
+        "update info" => UPDATE_INFO_HELP,
         _ => return Err(io::Error::other("unknown frozen help topic")),
     };
     output.write_all(help.as_bytes())
@@ -112,6 +179,10 @@ fn frozen_help(path: &[&str]) -> Option<&'static str> {
         ["dynamic"] => Some(DYNAMIC_HELP),
         ["dynamic", "generate"] => Some(DYNAMIC_GENERATE_HELP),
         ["setup"] => Some(SETUP_HELP),
+        ["update"] => Some(UPDATE_HELP),
+        ["update", "check"] => Some(UPDATE_CHECK_HELP),
+        ["update", "apply"] => Some(UPDATE_APPLY_HELP),
+        ["update", "info"] => Some(UPDATE_INFO_HELP),
         _ => None,
     }
 }

@@ -307,6 +307,35 @@ func TestRunCommand_PassthroughMultiple(t *testing.T) {
 	}
 }
 
+func TestRunCommand_PassthroughCommaSeparated(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("relies on sh")
+	}
+	t.Setenv("SYMV_TEST_FIRST", "alpha")
+	t.Setenv("SYMV_TEST_SECOND", "beta")
+	t.Setenv("SYMV_TEST_API_TOKEN", "synthetic-sensitive-value")
+	t.Setenv("SYMV_TEST_UNREQUESTED", "unrequested")
+	for _, names := range [][]string{
+		{"SYMV_TEST_FIRST,SYMV_TEST_SECOND,SYMV_TEST_API_TOKEN"},
+		{"SYMV_TEST_FIRST", "SYMV_TEST_SECOND", "SYMV_TEST_API_TOKEN"},
+		{"", ",SYMV_TEST_FIRST,", "SYMV_TEST_SECOND,SYMV_TEST_API_TOKEN,"},
+	} {
+		result, err := RunCommand(RunOptions{
+			Command:     []string{"sh", "-c", `printf '%s|%s|%s|%s' "$SYMV_TEST_FIRST" "$SYMV_TEST_SECOND" "${SYMV_TEST_API_TOKEN+x}" "${SYMV_TEST_UNREQUESTED+x}"`},
+			Passthrough: names,
+		})
+		if err != nil {
+			t.Fatalf("RunCommand(%q): %v", names, err)
+		}
+		if result.Stdout != "alpha|beta||" {
+			t.Errorf("RunCommand(%q) stdout = %q", names, result.Stdout)
+		}
+		if len(result.RejectedEnvVars) != 1 || result.RejectedEnvVars[0] != "SYMV_TEST_API_TOKEN" {
+			t.Errorf("RunCommand(%q) rejected names = %q", names, result.RejectedEnvVars)
+		}
+	}
+}
+
 func TestRunCommand_NonExitError(t *testing.T) {
 	_, err := RunCommand(RunOptions{
 		Command: []string{"symvault_nonexistent_command_xyz"},

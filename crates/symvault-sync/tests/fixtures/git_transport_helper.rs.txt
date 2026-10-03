@@ -1,0 +1,64 @@
+#![forbid(unsafe_code)]
+use std::{
+    env, fs,
+    process::{self, Command},
+    thread,
+    time::Duration,
+};
+fn main() {
+    let executable = env::current_exe().expect("helper executable");
+    if executable
+        .file_stem()
+        .is_some_and(|name| name == "askpass-helper")
+    {
+        fs::write(
+            executable
+                .parent()
+                .expect("helper directory")
+                .join("askpass-called"),
+            "called",
+        )
+        .expect("record actual askpass invocation");
+        process::exit(1);
+    }
+    let args: Vec<_> = env::args_os().collect();
+    if args.get(1).is_some_and(|mode| mode == "sleep") {
+        thread::sleep(Duration::from_secs(60));
+        return;
+    }
+    let Some(mode) = args.get(1).and_then(|mode| mode.to_str()) else {
+        process::exit(2)
+    };
+    let Some(marker) = args.get(2) else {
+        process::exit(2)
+    };
+    match mode {
+        "known-hosts" => eprintln!("known_hosts: authentication failed: connection refused"),
+        "askpass-env" => {
+            let present = if env::var_os("GIT_ASKPASS").is_some_and(|value| !value.is_empty()) {
+                "inherited"
+            } else {
+                ""
+            };
+            let output = format!(
+                "askpass={present}\nterminal_prompt={}\n",
+                env::var("GIT_TERMINAL_PROMPT").unwrap_or_default()
+            );
+            fs::write(marker, output).expect("write public environment projection");
+        }
+        "askpass-call" => fs::write(marker, "called").expect("record actual askpass invocation"),
+        "timeout" => {
+            let mut child = Command::new(env::current_exe().expect("helper executable"))
+                .arg("sleep")
+                .spawn()
+                .expect("start real descendant");
+            let temporary = std::path::PathBuf::from(marker).with_extension("tmp");
+            fs::write(&temporary, format!("{}\n", child.id())).expect("write complete PID");
+            fs::rename(temporary, marker).expect("publish complete PID atomically");
+            let status = child.wait().expect("wait for descendant");
+            process::exit(status.code().unwrap_or(2));
+        }
+        _ => process::exit(2),
+    }
+    process::exit(1);
+}

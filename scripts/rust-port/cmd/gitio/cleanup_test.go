@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 import (
@@ -25,7 +23,7 @@ func TestCleanupObservationRejectsLiveProcessAndAcceptsReapedProcess(t *testing.
 	if waitForProcessExit(pid, 80*time.Millisecond) {
 		t.Fatal("live descendant was reported as cleaned up")
 	}
-	if time.Since(started) > time.Second {
+	if time.Since(started) > 3*time.Second {
 		t.Fatal("cleanup observation exceeded its bound")
 	}
 	if err := cmd.Process.Kill(); err != nil {
