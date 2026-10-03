@@ -143,15 +143,15 @@ fn generate_totp_matches_source_bound_go_fixture() {
         "../../../testdata/port/mcp/tools-generate-totp.json"
     ))
     .expect("valid Go generate_totp fixture");
-    assert_eq!(fixture.oracle.commit, "2b703647");
+    assert_eq!(fixture.oracle.commit, "55da4ca1");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "2b703647a821d7236aa8a66032852ab3ee606701"
+        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 11);
+    assert_eq!(fixture.oracle.source_files.len(), 87);
     assert_eq!(
         fixture.oracle.source_hash,
-        "61b9e5cef50b182002d7074d335c5a88acf88f5e8b547579d588523ba8c9dc35"
+        "53c0dab51afc706660bd0532429c2c325d05dbb89ccd4e9047d61350c82bf7ed"
     );
 
     for case in fixture.cases {

@@ -77,16 +77,17 @@ included with the entry basename as the key.`,
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 				ctx := context.Background()
 				engine := template.NewEngine(v)
+				reader := vaultpkg.NewReadSession(v.Dir, v.Identity)
 
 				refs := make(map[string]string)
 
 				if templatePrefix != "" {
-					entries, listErr := vaultpkg.List(v.Dir, templatePrefix, v.Identity)
+					entries, listErr := reader.List(templatePrefix)
 					if listErr != nil {
 						return fmt.Errorf("list entries with prefix %q: %w", templatePrefix, listErr)
 					}
 					for _, entryPath := range entries {
-						entry, readErr := vaultpkg.ReadEntry(v.Dir, entryPath, v.Identity)
+						entry, readErr := reader.Get(entryPath)
 						if readErr != nil {
 							return fmt.Errorf("read entry %q: %w", entryPath, readErr)
 						}
@@ -121,7 +122,7 @@ included with the entry basename as the key.`,
 				customDir := os.ExpandEnv("$HOME/.config/symvault/templates")
 				_ = engine.LoadCustomTemplates(customDir)
 
-				output, err := engine.Render(ctx, templateType, templateName, refs, templateDryRun)
+				output, err := engine.Render(ctx, templateType, templateName, refs, templateDryRun, reader)
 				if err != nil {
 					return fmt.Errorf("render template: %w", err)
 				}

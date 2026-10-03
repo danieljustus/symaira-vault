@@ -2,16 +2,21 @@
  "schema": 1,
  "slice": "import-review",
  "oracle": {
-  "commit": "a226a6f74d406f6fb121992068638a9a03cba1d1",
-  "binary": "target/port/symvault-go",
-  "sha256": "76e3641fe631c59256891f192200a3e60eac2674e623b49bc8e2f5a805b887e3",
-  "captured": "2026-09-22",
+  "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+  "binary": "actual detached Go build (-trimpath -buildvcs=false)",
+  "sha256": "8f1b8439815ea36d5212c3830dfb49afbdff1b27a2b985ed0be6cd9b808e8fcc",
+  "captured": "2026-10-03",
   "source_files": [
-    "cmd/admin/import.go",
-    "internal/cli/cli.go",
-    "internal/cli/terminal.go"
+   "cmd/admin/import.go",
+   "internal/cli/cli.go",
+   "internal/cli/terminal.go"
   ],
-  "source_digest": "171520c95821f13a04d4bed00347e85a6f3fec7dde4750240cf326d7ccd46839"
+  "source_digest": "353df5b3db1109d601b8293ee520ef89493f31c831871299151cf0e20e22dc73",
+  "generator_files": [
+   "scripts/rust-port/cmd/entrypolicygen/main.go",
+   "scripts/rust-port/refresh-read-policy-fixtures.py"
+  ],
+  "generator_digest": "861755b12fb7294bfa8dddbf9c1958f9cfc9b7d7edc0071caac8371e74a0e3bf"
  },
  "notes": [
   "Every case ran the pinned Go oracle in its own throwaway HOME/XDG/vault root.",
@@ -34,7 +39,7 @@
    ],
    "exit": 0,
    "stdout": "No quarantined imports found.\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": null,
    "post_exit": null,
    "post_stdout": ""
@@ -66,7 +71,7 @@
    ],
    "exit": 0,
    "stdout": "import-alpha  (2 entries)\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": null,
    "post_exit": null,
    "post_stdout": ""
@@ -104,7 +109,7 @@
    ],
    "exit": 0,
    "stdout": "import-alpha  (1 entries)\nimport-beta  (1 entries)\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": null,
    "post_exit": null,
    "post_stdout": ""
@@ -210,7 +215,7 @@
    ],
    "exit": 0,
    "stdout": "Promoted: site1\nPromoted: site2\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": [
     "list"
    ],
@@ -239,7 +244,7 @@
    ],
    "exit": 0,
    "stdout": "Promoted: work/aws\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": [
     "list"
    ],
@@ -279,8 +284,8 @@
     "import-alpha"
    ],
    "exit": 1,
-   "stdout": "Warning: skipping site1 — destination already exists (use --overwrite)\nPromoted: site2\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: some entries could not be promoted\nError: some entries could not be promoted\n",
+   "stdout": "Warning: skipping site1 \u2014 destination already exists (use --overwrite)\nPromoted: site2\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\nError: some entries could not be promoted\nError: some entries could not be promoted\n",
    "post_argv": [
     "list"
    ],
@@ -322,7 +327,7 @@
    ],
    "exit": 0,
    "stdout": "Promoted: site1\nPromoted: site2\n",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\n",
    "post_argv": [
     "list"
    ],
@@ -351,7 +356,7 @@
    ],
    "exit": 1,
    "stdout": "",
-   "stderr": "SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"nope\"\nError: no quarantined entries found for import-id \"nope\"\n",
+   "stderr": "SYMVAULT_PASSPHRASE is active \u2014 environment passphrases are visible in process listings and crash dumps.\nError: no quarantined entries found for import-id \"nope\"\nError: no quarantined entries found for import-id \"nope\"\n",
    "post_argv": [
     "list"
    ],

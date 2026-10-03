@@ -176,8 +176,11 @@ fn property_handle_roundtrip_all_synthesized_pairs() {
 #[test]
 fn fixture_has_pinned_provenance() {
     let fixture = fixture();
-    assert_eq!(fixture.oracle.commit, "caadd5e");
-    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(
+        fixture.oracle.commit,
+        "b13189220519de245d8972d7af2e2d81618f0432"
+    );
+    assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
         fixture

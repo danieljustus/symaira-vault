@@ -76,6 +76,7 @@ func newExportCmd() *cobra.Command {
 			}
 
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) (retErr error) {
+				vs = vs.ForReadOperation()
 				entries, err := vs.ListEntries("")
 				if err != nil {
 					return fmt.Errorf("list entries: %w", err)
@@ -102,44 +103,20 @@ func newExportCmd() *cobra.Command {
 				}
 				maxWorkers := vaultpkg.SearchWorkerCount(workers)
 
-				entryChan := make(chan struct {
-					index int
-					path  string
-				}, len(entries))
-				resultChan := make(chan exportResult, len(entries))
+				entryChan := make(chan exportJob, maxWorkers)
+				resultChan := make(chan exportResult, maxWorkers)
 
 				done := make(chan struct{})
 				var cancelOnce sync.Once
 				cancel := func() { cancelOnce.Do(func() { close(done) }) }
 
 				var wg sync.WaitGroup
+				defer func() { cancel(); wg.Wait() }()
 				for i := 0; i < maxWorkers; i++ {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						for item := range entryChan {
-							select {
-							case <-done:
-								return
-							default:
-							}
-							entry, readErr := vs.GetEntry(item.path)
-							if readErr != nil {
-								resultChan <- exportResult{
-									index: item.index,
-									err:   fmt.Errorf("read entry %s: %w", item.path, readErr),
-								}
-								cancel()
-								return
-							}
-							resultChan <- exportResult{
-								index: item.index,
-								entry: exporter.ExportEntry{
-									Path: item.path,
-									Data: entry.Data,
-								},
-							}
-						}
+						readExportEntries(vs, entryChan, resultChan, done, cancel)
 					}()
 				}
 
@@ -149,10 +126,7 @@ func newExportCmd() *cobra.Command {
 						select {
 						case <-done:
 							return
-						case entryChan <- struct {
-							index int
-							path  string
-						}{index: i, path: path}:
+						case entryChan <- exportJob{index: i, path: path}:
 						}
 					}
 				}()
@@ -269,4 +243,33 @@ func exportJSONStreaming(out io.Writer, resultChan <-chan exportResult, mapping 
 	}
 
 	return stream.Close()
+}
+
+type exportJob struct {
+	index int
+	path  string
+}
+
+func readExportEntries(reader *cli.VaultService, jobs <-chan exportJob, results chan<- exportResult, done <-chan struct{}, cancel func()) {
+	for item := range jobs {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		entry, err := reader.GetEntry(item.path)
+		if err != nil {
+			select {
+			case results <- exportResult{index: item.index, err: fmt.Errorf("read entry %s: %w", item.path, err)}:
+			case <-done:
+			}
+			cancel()
+			return
+		}
+		select {
+		case results <- exportResult{index: item.index, entry: exporter.ExportEntry{Path: item.path, Data: entry.Data}}:
+		case <-done:
+			return
+		}
+	}
 }

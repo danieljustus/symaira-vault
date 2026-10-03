@@ -197,7 +197,7 @@ SESSION_ORACLE_RELEASE ?= unreleased
 # rather than sitting on the frozen v0.22.1 baseline. portgen used to read the
 # oracle back out of the fixture it was certifying, which made the claim
 # unfalsifiable; it now verifies cmd/ against this commit's blobs.
-CLI_ORACLE_COMMIT ?= a9f022c4
+CLI_ORACLE_COMMIT ?= 55da4ca13ead39d4000cf6f866ac8671ca86d8f2
 CLI_ORACLE_RELEASE ?= unreleased
 KEYRING_KEY_FIXTURE := testdata/port/session/keyring-keys.json
 # SESSION-002's portable half. The native keychain round-trip stays a
@@ -298,7 +298,7 @@ core-fixtures-check: quota-fixtures-check
 # (1605b180, "unreleased"), same pattern as AUDIT-001/002 and APPROVAL-001;
 # storemetagen has no built-in default, unlike sibling *gen tools, so the
 # pin lives here rather than as a Go constant.
-STORE_METADATA_ORACLE_COMMIT := 1605b180010782eb636e8af9b65e064741837065
+STORE_METADATA_ORACLE_COMMIT := b13189220519de245d8972d7af2e2d81618f0432
 STORE_METADATA_ORACLE_RELEASE := unreleased
 
 store-metadata-fixtures-check:

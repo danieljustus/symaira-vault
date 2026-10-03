@@ -5,7 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1169,5 +1172,34 @@ func TestHandleRunCommand_FileInjection_FilesNotObject(t *testing.T) {
 	}
 	if !strings.Contains(result.Text, "must be an object") {
 		t.Fatalf("result text = %q, want 'must be an object'", result.Text)
+	}
+}
+
+func TestResourcePolicyCommandRefsShareOneAllowance(t *testing.T) {
+	data := make(map[string]any)
+	for _, field := range []string{"one", "two", "three", "four"} {
+		data[field] = strings.Repeat("public-fixture", (1024*1024)/len("public-fixture"))
+	}
+	vaultDir, identity := mockVaultWithEntry(t, "control", data)
+	srv := newTestServerWithVault(t, config.AgentProfile{Name: "test", AllowedPaths: []string{"*"}, CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")}, "stdio", vaultDir)
+	t.Cleanup(func() { _ = srv.Close() })
+	srv.vault.Identity = identity
+	environment := make(map[string]any)
+	for i := 0; i < 8; i++ {
+		environment[fmt.Sprintf("KEY_%02d", i)] = "control.one"
+	}
+	// The command is a marker side effect, reached only if bounded resolution fails open.
+	marker := filepath.Join(t.TempDir(), "must-not-run")
+	req := mcp.CallToolRequest{Arguments: map[string]any{"command": []any{"sh", "-c", "touch " + strconv.Quote(marker)}, "env": environment}}
+	// Command never executes; the source allowance fails before process launch.
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result == nil || !result.IsError || !strings.Contains(result.Text, vault.ErrVaultResourceLimit.Error()) {
+		t.Fatalf("command reset read allowance: result=%v err=%v", result, err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatal("secret-resolution failure reached the command")
 	}
 }

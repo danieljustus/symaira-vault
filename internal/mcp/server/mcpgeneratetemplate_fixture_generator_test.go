@@ -126,12 +126,12 @@ func TestGenerateMCPGenerateTemplateFixture(t *testing.T) {
 	root := mcpGenerateTemplateRepoRoot(t)
 	sourceHash := mcpGenerateTemplateSourceHash(t, mcpGenerateTemplateSourceFiles)
 	if pinned := mcpGenerateTemplateGitSourceHash(t, mcpGenerateTemplateSourceFiles); pinned != sourceHash {
-		t.Fatalf("Go generate-template sources differ from 2b703647: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go generate-template sources differ from 55da4ca1: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGenerateTemplateFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGenerateTemplateOracle{
-			Commit: "2b703647", CommitSHA: "2b703647a821d7236aa8a66032852ab3ee606701",
+			Commit: "55da4ca1", CommitSHA: "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
 			SourceFiles: mcpGenerateTemplateSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGenerateTemplateGeneratorHash(t),
 		},
@@ -213,7 +213,7 @@ func mcpGenerateTemplateGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpGenerateTemplateRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "2b703647:"+name)
+		cmd := exec.Command("git", "show", "55da4ca1:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

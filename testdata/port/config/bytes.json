@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "aa21ec4e",
-    "commit_sha": "aa21ec4ee6eebc58b965b6ee028cb439730c059f",
+    "commit": "21f849ee",
+    "commit_sha": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -13,8 +13,8 @@
       "internal/config/schema.go",
       "internal/config/warn.go"
     ],
-    "source_digest": "1704c153d56a7e96369d72200677899afa6e55d5dcf6cca4ae40c240aa542c71",
-    "generator_digest": "07aa80242e54311cd837542a71749874b996968cb503da51e7a895a7a8f70b5c"
+    "source_digest": "65ec6fcc51d26f8e8267ea936d0d4411a05e9a710b27a7e33aa68cd905d7a3ac",
+    "generator_digest": "e796349898a68ba53ce5c1659299c2bd37d9ea17acdc0a76491d957f7efe009e"
   },
   "cases": [
     {

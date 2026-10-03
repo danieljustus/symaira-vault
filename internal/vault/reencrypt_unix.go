@@ -32,7 +32,7 @@ type unixReencryptStaged struct {
 	stagedIno  uint64
 }
 
-func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*reencryptCandidate, error) {
+func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo, budgets ...*vaultReadBatch) (*reencryptCandidate, error) {
 	rel, err := filepath.Rel(entriesPath, path)
 	if err != nil || rel == "." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
 		return nil, fmt.Errorf("entry path escapes entries directory: %q", path)
@@ -84,7 +84,7 @@ func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*r
 		_ = parent.Close()
 		return nil, fmt.Errorf("entry %q changed during preflight", path)
 	}
-	data, err := readEntryStreamBounded(file, path)
+	data, err := readEntryStreamLimited(file, path, maxEntryCiphertextBytesV1, budgets...)
 	closeErr := file.Close()
 	if err != nil {
 		_ = parent.Close()
@@ -355,7 +355,7 @@ func commitReencryptFile(item *reencryptStaged) error {
 	return nil
 }
 
-func rollbackReencryptFile(item *reencryptStaged) error {
+func rollbackReencryptFile(item *reencryptStaged, budgets ...*vaultReadBatch) error {
 	c, ok := item.candidate.platform.(*unixReencryptCandidate)
 	if !ok {
 		return fmt.Errorf("invalid Unix re-encryption candidate")

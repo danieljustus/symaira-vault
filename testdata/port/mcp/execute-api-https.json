@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "34fb21a0601d6f74e4908639d9b339125a8cf230",
-    "commit_sha": "34fb21a0601d6f74e4908639d9b339125a8cf230",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "internal/mcp/server/tools_execute_api_request.go",
       "internal/ssrf/ssrf.go"
@@ -17,7 +17,7 @@
       "crates/symvault-mcp/tests/fixtures/tls-server.pem",
       "crates/symvault-mcp/tests/fixtures/tls-server.key"
     ],
-    "generator_hash": "9aaf15769d75676061e2578e240f28799216d58e3c1f4a584dcb1b40891baf2e"
+    "generator_hash": "b879b7a3561a1495cb18134ec9b665d6141dde5d842c30a1e328bda601d98319"
   },
   "cases": [
     {

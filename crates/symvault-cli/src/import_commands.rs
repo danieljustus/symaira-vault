@@ -139,6 +139,7 @@ where
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| format!("open vault: {error}"))?;
 
+    let reader = store.read_session(identity);
     let mut imported = 0;
     let mut skipped = 0;
     let prefix = options
@@ -152,7 +153,7 @@ where
             skipped += 1;
             continue;
         }
-        let exists = match store.get(&path, identity) {
+        let exists = match reader.get(&path) {
             Ok(_) => true,
             Err(StoreError::EntryNotFound(_)) => false,
             Err(error) => return Err(format!("cannot check entry {path}: {error}")),

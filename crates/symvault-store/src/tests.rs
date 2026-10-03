@@ -811,13 +811,15 @@ fn file_manifest_enumeration_obeys_depth_and_entry_limits() {
     fs::write(temp.path().join("deep/one/two/file"), b"too deep").unwrap();
     let store = Store::open(temp.path(), &identity).unwrap();
 
-    let files = store.files_with_limits(2, 100).unwrap();
-    assert!(files.iter().any(|item| item.path == "shallow"));
-    assert!(
-        !files
-            .iter()
-            .any(|item| item.path.ends_with("deep/one/two/file"))
-    );
+    assert!(matches!(
+        store.files_with_limits(2, 100),
+        Err(StoreError::ResourceLimit)
+    ));
+    let files = store
+        .files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, 100)
+        .unwrap();
+    assert!(files.iter().any(|item| item.path == "shallow/file"));
+    assert!(files.iter().any(|item| item.path == "deep/one/two/file"));
     assert!(matches!(
         store.files_with_limits(MAX_VAULT_ENTRY_PATH_DEPTH + 1, 1),
         Err(StoreError::ValueLimit(_))
@@ -1002,10 +1004,7 @@ fn bounded_reads_reject_oversized_config_and_entry() {
     .unwrap();
     assert!(matches!(
         store.get("minimal", &identity),
-        Err(StoreError::Limit {
-            limit: MAX_ENTRY_CIPHERTEXT_BYTES_V1,
-            ..
-        })
+        Err(StoreError::ResourceLimit)
     ));
 
     let oversized_plaintext = vec![b'x'; (MAX_ENTRY_PLAINTEXT_BYTES_V1 + 1) as usize];
@@ -1179,7 +1178,9 @@ fn file_manifest_replacement_after_traversal_uses_opened_metadata() {
     fs::write(&replacement, replacement_bytes).unwrap();
     fs::set_permissions(&replacement, fs::Permissions::from_mode(0o640)).unwrap();
     fs::rename(&replacement, &path).unwrap();
-    let info = store.file_info(relative, observed).unwrap();
+    let info = store
+        .file_info(relative, observed, &read_admission::Batch::default())
+        .unwrap();
     assert_eq!(info.path, "replacement-race");
     assert_eq!(info.kind, FileKind::Regular);
     assert_eq!(info.sha256, sha256_hex(replacement_bytes));
@@ -2186,6 +2187,13 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
     }
     let root = fs::File::open(temp.path()).unwrap();
     for depth in 0..=4 {
+        if depth < 4 {
+            assert!(matches!(
+                rooted::walk_with_limits(&root, temp.path(), Some(depth), None),
+                Err(StoreError::ResourceLimit)
+            ));
+            continue;
+        }
         let mut expected = walkdir::WalkDir::new(temp.path())
             .max_depth(depth)
             .into_iter()
@@ -2674,4 +2682,177 @@ fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes
     assert!(!first.is_loaded(&store).unwrap());
     assert!(!temp.path().join(".search-index").exists());
     assert!(!second.load(&store, &identity).unwrap());
+}
+
+#[test]
+fn read_session_reserves_actual_ciphertext_before_decryption_and_stays_failed() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let reader = store.read_session(&identity);
+    let candidate = store
+        .candidates_for("minimal", &identity)
+        .unwrap()
+        .remove(0);
+    let size = fs::metadata(&candidate.path).unwrap().len() as usize;
+    reader
+        .batch
+        .consume(read_admission::MAX_BATCH_BYTES as usize - size)
+        .unwrap();
+    assert!(reader.get("minimal").is_ok());
+    assert!(matches!(
+        reader.get("minimal"),
+        Err(StoreError::ResourceLimit)
+    ));
+    fs::remove_file(&candidate.path).unwrap();
+    assert!(matches!(
+        reader.get("minimal"),
+        Err(StoreError::ResourceLimit)
+    ));
+    assert_eq!(
+        reader.get("minimal").unwrap_err().to_string(),
+        "vault resource limit exceeded"
+    );
+}
+
+#[test]
+fn decoded_batch_is_charged_before_typed_entry_materialization() {
+    let batch = read_admission::Batch::default();
+    batch
+        .consume_decoded(read_admission::MAX_BATCH_BYTES as usize - 256)
+        .unwrap();
+    entry_resources::validate_with_batch(b"null", "fixture", Some(&batch)).unwrap();
+    assert!(matches!(
+        entry_resources::validate_with_batch(b"null", "fixture", Some(&batch)),
+        Err(StoreError::ResourceLimit)
+    ));
+    assert!(matches!(batch.consume(0), Err(StoreError::ResourceLimit)));
+}
+
+#[test]
+fn optional_index_retention_failure_preserves_file_and_entry_read() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    SearchIndex::build(&store, &identity).unwrap();
+    let previous = fs::read(temp.path().join(".search-index")).unwrap();
+    let text: String = (0..50_000)
+        .map(|i| format!("public_token_{i:05} "))
+        .collect();
+    assert!(text.len() < MAX_VALUE_BYTES);
+    let entry = Entry {
+        data: BTreeMap::from([(
+            "public_fixture".into(),
+            serde_json::Value::String(text.clone()),
+        )]),
+        ..Entry::default()
+    };
+    let plain = serde_json::to_vec(&entry).unwrap();
+    let recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+    let ciphertext = encrypt(&plain, &[recipient]).unwrap();
+    fs::write(temp.path().join("entries/large.age"), ciphertext).unwrap();
+    assert!(matches!(
+        SearchIndex::build(&store, &identity),
+        Err(StoreError::ResourceLimit)
+    ));
+    assert_eq!(
+        fs::read(temp.path().join(".search-index")).unwrap(),
+        previous
+    );
+    assert_eq!(
+        store.get("large", &identity).unwrap().data["public_fixture"],
+        text
+    );
+}
+
+#[test]
+fn legacy_backup_code_strings_obey_normalized_array_limit() {
+    for count in [MAX_ARRAY_ITEMS, MAX_ARRAY_ITEMS + 1] {
+        let raw = serde_json::to_vec(
+            &serde_json::json!({"data":{"backup_codes":"public-code\n".repeat(count)}}),
+        )
+        .unwrap();
+        let result = entry_budget::validate(&raw, "fixture");
+        assert_eq!(result.is_ok(), count == MAX_ARRAY_ITEMS);
+        if let Err(error) = result {
+            assert!(error.is_resource_failure());
+        }
+    }
+    let raw = serde_json::to_vec(&serde_json::json!({"data":{"backup_codes":"\n".repeat(50_000)}}))
+        .unwrap();
+    entry_budget::validate(&raw, "fixture").unwrap();
+}
+
+#[test]
+fn integrity_streams_entry_ciphertext_above_generic_root_limit() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let file = fs::File::create(temp.path().join("entries/large.age")).unwrap();
+    file.set_len(17 * 1024 * 1024).unwrap();
+    drop(file);
+    let manifest = store.rebuild_manifest(&identity).unwrap();
+    assert_eq!(manifest.entries["large"].size, 17 * 1024 * 1024);
+    let files = store.files().unwrap();
+    let large = files
+        .iter()
+        .find(|file| file.path == "entries/large.age")
+        .unwrap();
+    assert_eq!(large.sha256, manifest.entries["large"].sha256);
+    let verified = store.verify_manifest(&identity).unwrap();
+    assert!(verified.tampered.is_empty() && verified.missing.is_empty());
+}
+
+#[test]
+fn recovery_resource_failures_preserve_journal_and_originals() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let original = fs::read(temp.path().join("entries/minimal.age")).unwrap();
+    let journal = temp.path().join(".reencrypt.journal");
+    let file = fs::File::create(&journal).unwrap();
+    file.set_len(MAX_ENTRY_PLAINTEXT_BYTES_V1 + 1).unwrap();
+    drop(file);
+    assert!(
+        Store::open(temp.path(), &identity)
+            .unwrap_err()
+            .is_resource_failure()
+    );
+    assert_eq!(
+        fs::read(temp.path().join("entries/minimal.age")).unwrap(),
+        original
+    );
+    fs::remove_file(&journal).unwrap();
+    let target = temp.path().join("entries/large.age");
+    let backup = temp
+        .path()
+        .join("entries/.large.age.reencrypt-fixture.backup");
+    let file = fs::File::create(&target).unwrap();
+    file.set_len(MAX_ENTRY_CIPHERTEXT_BYTES_V1 + 1).unwrap();
+    drop(file);
+    fs::write(&backup, &original).unwrap();
+    fs::write(
+        &journal,
+        serde_json::to_vec(&serde_json::json!({
+            "version":1,"entries":[{"path":target,"backup":backup,"digest":"0".repeat(64)}]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        store
+            .recover_reencrypt_journal_locked(&identity)
+            .unwrap_err()
+            .is_resource_failure()
+    );
+    assert_eq!(fs::read(&backup).unwrap(), original);
+    assert!(journal.is_file());
 }

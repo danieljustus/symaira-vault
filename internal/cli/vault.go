@@ -71,3 +71,8 @@ func (s *VaultService) VaultDir() string {
 func (s *VaultService) VaultIdentity() *age.X25519Identity {
 	return s.vaultService.VaultIdentity()
 }
+
+// ForReadOperation starts a shared allowance for this CLI command's entry reads.
+func (s *VaultService) ForReadOperation() *VaultService {
+	return &VaultService{vaultService: s.vaultService.ForReadOperation()}
+}

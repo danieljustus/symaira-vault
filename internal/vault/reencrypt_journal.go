@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -48,9 +49,15 @@ func (j *reencryptJournal) persist(vaultDir string) error {
 	if j == nil {
 		return errors.New("nil re-encryption journal")
 	}
+	if err := validateJournalEntries(j.Entries); err != nil {
+		return err
+	}
 	data, err := json.Marshal(j)
 	if err != nil {
 		return fmt.Errorf("marshal re-encryption journal: %w", err)
+	}
+	if err := validateRetainedJSON(data, maxEntryPlaintextBytesV1, maxEntryPlaintextBytesV1); err != nil {
+		return err
 	}
 	if err := fsutil.AtomicWriteFile(reencryptJournalPath(vaultDir), data, 0o600); err != nil {
 		return fmt.Errorf("write re-encryption journal: %w", err)
@@ -120,9 +127,17 @@ func recordReencryptInstalled(item *reencryptStaged) error {
 	return item.candidate.journal.persist(item.candidate.journalVaultDir)
 }
 
-func loadReencryptJournal(vaultDir string) (*reencryptJournal, error) {
-	data, err := os.ReadFile(reencryptJournalPath(vaultDir))
+func loadReencryptJournal(vaultDir string, budgets ...*vaultReadBatch) (*reencryptJournal, error) {
+	release, err := vaultReadAdmission.acquire()
 	if err != nil {
+		return nil, err
+	}
+	defer release()
+	data, err := readRootedFileLimited(vaultDir, reencryptJournalFileName, maxEntryPlaintextBytesV1, budgets...)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateRetainedJSON(data, maxEntryPlaintextBytesV1, maxEntryPlaintextBytesV1); err != nil {
 		return nil, err
 	}
 	var journal reencryptJournal
@@ -169,21 +184,25 @@ func recoverReencryptJournal(vaultDir string, identity *age.X25519Identity) erro
 }
 
 func recoverReencryptJournalLocked(vaultDir string, identity *age.X25519Identity) error {
-	journal, err := loadReencryptJournal(vaultDir)
+	batch := &vaultReadBatch{}
+	journal, err := loadReencryptJournal(vaultDir, batch)
 	if os.IsNotExist(err) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	if err := recoverReencryptArtifacts(vaultDir, journal); err != nil {
+	if err := recoverReencryptArtifacts(vaultDir, journal, batch); err != nil {
 		return fmt.Errorf("recover re-encryption artifacts: %w", err)
 	}
 	if err := cleanupUnjournaledReencryptArtifacts(vaultDir, journal); err != nil {
 		return fmt.Errorf("clean unjournaled re-encryption artifacts: %w", err)
 	}
-	if err := rebuildManifestStrict(vaultDir, identity); err != nil {
+	if err := rebuildManifestStrict(vaultDir, identity, batch); err != nil {
 		return fmt.Errorf("rebuild manifest after re-encryption recovery: %w", err)
+	}
+	if err := cleanupRecoveredReencryptBackups(vaultDir, journal); err != nil {
+		return err
 	}
 	if err := journal.remove(vaultDir); err != nil {
 		return fmt.Errorf("remove recovered re-encryption journal: %w", err)
@@ -191,21 +210,100 @@ func recoverReencryptJournalLocked(vaultDir string, identity *age.X25519Identity
 	return nil
 }
 
-func verifyReencryptDigest(path, want string) (bool, error) {
-	info, err := os.Lstat(path)
+func verifyReencryptDigestAtRoot(vaultDir, path, want string, batch *vaultReadBatch) (bool, error) {
+	digest, _, _, err := hashVaultEntry(vaultDir, path, batch)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return false, fmt.Errorf("re-encryption artifact target is not a regular file")
+	return strings.EqualFold(digest, want), nil
+}
+
+func validateJournalEntries(entries []reencryptJournalEntry) error {
+	if len(entries) > maxVaultEntryCount {
+		return ErrVaultResourceLimit
 	}
-	data, err := readReencryptArtifactNoFollow(path)
+	paths, cost := 0, 0
+	for _, entry := range entries {
+		for _, path := range []string{entry.Path, entry.Temp, entry.Backup} {
+			if pathErr := addVaultPathBytes(&paths, path); pathErr != nil {
+				return pathErr
+			}
+		}
+		// Bounds retained strings and serialized escape expansion before Marshal.
+		if len(entry.Digest) > maxEntryValueBytes {
+			return ErrVaultResourceLimit
+		}
+		entryCost := 4096 + 6*(len(entry.Path)+len(entry.Temp)+len(entry.Backup)+len(entry.Digest))
+		if entryCost > maxEntryPlaintextBytesV1-cost {
+			return ErrVaultResourceLimit
+		}
+		cost += entryCost
+	}
+	return nil
+}
+
+// Bound the entry slice before retaining synchronized journal objects.
+func (j *reencryptJournal) UnmarshalJSON(raw []byte) error {
+	var fields struct {
+		Version int             `json:"version"`
+		Entries json.RawMessage `json:"entries"`
+	}
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	j.Version = fields.Version
+	if len(fields.Entries) == 0 || bytes.Equal(fields.Entries, []byte("null")) {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(fields.Entries))
+	token, err := decoder.Token()
 	if err != nil {
-		return false, err
+		return err
 	}
-	sum := sha256.Sum256(data)
-	return strings.EqualFold(hex.EncodeToString(sum[:]), want), nil
+	if token != json.Delim('[') {
+		return errors.New("invalid journal entries")
+	}
+	paths := 0
+	for decoder.More() {
+		if len(j.Entries) >= maxVaultEntryCount {
+			return ErrVaultResourceLimit
+		}
+		var entry reencryptJournalEntry
+		if decodeErr := decoder.Decode(&entry); decodeErr != nil {
+			return decodeErr
+		}
+		for _, path := range []string{entry.Path, entry.Temp, entry.Backup} {
+			if pathErr := addVaultPathBytes(&paths, path); pathErr != nil {
+				return pathErr
+			}
+		}
+		j.Entries = append(j.Entries, entry)
+	}
+	_, err = decoder.Token()
+	return err
+}
+
+func cleanupRecoveredReencryptBackups(vaultDir string, journal *reencryptJournal) error {
+	batch := &vaultReadBatch{}
+	for _, entry := range journal.Entries {
+		if entry.Backup == "" {
+			continue
+		}
+		if err := validateReencryptJournalPath(vaultDir, entry.Backup); err != nil {
+			return err
+		}
+		matches, err := verifyReencryptDigestAtRoot(vaultDir, entry.Path, entry.Digest, batch)
+		if err != nil {
+			return err
+		}
+		if matches {
+			if err := removeReencryptArtifact(entry.Backup); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

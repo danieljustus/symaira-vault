@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a9f022c4",
-    "commit_sha": "a9f022c4d6ffa99f5feb4f8b7426915d87fcd67f",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "release": "unreleased",
     "source_files": [
       "cmd/admin/audit.go",
@@ -93,8 +93,8 @@
       "cmd/template.go",
       "cmd/ui.go"
     ],
-    "source_digest": "7cd0750829c0f44ba766238d16045b568e45b3e6cd7721a41c695117279a7281",
-    "generator_digest": "197f8bc5864ac47700829bbeb1597374e6981a5b1adfe660b97f928e943b60af"
+    "source_digest": "3a69f234cec2b7dffe8dc3ba678f93faf447efb2c90bc24ef288dc217ac13dd8",
+    "generator_digest": "2f241150759e65a9003a3d11a98fca1fa7fb65bdf86ff3970772a1772c4c7921"
   },
   "groups": [
     {
@@ -6335,7 +6335,7 @@
       "name": "kdf",
       "use": "kdf",
       "short": "Migrate the vault identity from scrypt to argon2id",
-      "long": "Migrate the vault identity's key derivation function from the legacy\nscrypt KDF to argon2id.\n\nArgon2id is the industry standard for password hashing and provides stronger\nresistance against GPU-based attacks than scrypt. New vaults already use\nargon2id.\n\nThis command performs the migration itself — it does not just report status.\nAutomatic migration on every unlock additionally happens when\nvault.auto_migrate_kdf: true is set in config.yaml, but by default that is\noff, so this command is the way to upgrade an existing scrypt vault.\n\nidentity.age is backed up to identity.age.bak before any change, and the new\nfile is decrypt-verified before the migration is considered done. On any\nfailure the original identity.age is restored automatically. Changing\nconfig.yaml's scrypt_work_factor alone does not perform this migration —\nonly this command (or auto_migrate_kdf) re-encrypts identity.age.",
+      "long": "Migrate the vault identity's key derivation function from the legacy\nscrypt KDF to argon2id.\n\nArgon2id is the industry standard for password hashing and provides stronger\nresistance against GPU-based attacks than scrypt. New vaults already use\nargon2id.\n\nThis command performs the migration itself — it does not just report status.\nAutomatic migration on every unlock additionally happens when\nvault.auto_migrate_kdf: true is set in config.yaml, but by default that is\noff, so this command is the way to upgrade an existing scrypt vault.\n\nidentity.age is backed up to identity.age.bak before any change, and the new\nfile is decrypt-verified before the migration is considered done. On any\nfailure the original identity.age is restored automatically. Changing\nconfig.yaml's scrypt_work_factor alone does not perform this migration —\nonly this command (or auto_migrate_kdf) re-encrypts identity.age.\n\nOlder Argon2 budgets require --allow-legacy-kdf. This local migration retains\nidentity/config backups and rewrites the same identity with current defaults.",
       "example": "  symvault migrate kdf\n  symvault migrate kdf --yes",
       "hidden": false,
       "disable_flag_parsing": false,
@@ -6343,6 +6343,14 @@
       "runnable": true,
       "has_subcommands": false,
       "local_flags": [
+        {
+          "name": "allow-legacy-kdf",
+          "usage": "Allow one exclusive historical-budget read for local Argon2 policy migration",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false
+        },
         {
           "name": "help",
           "shorthand": "h",
