@@ -3163,16 +3163,9 @@ fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
     Ok(Duration::from_secs((number as u64).clamp(1, 300)))
 }
 
-fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
-    let endpoint = endpoint.trim();
-    if endpoint.is_empty() {
-        return Err("endpoint is required".into());
-    }
-    if !endpoint.starts_with('/') {
-        return Err("endpoint must start with '/'".into());
-    }
-    let mut decoded = Vec::with_capacity(endpoint.len());
-    let bytes = endpoint.as_bytes();
+fn api_path_unescape(value: &str) -> Result<String, String> {
+    let mut decoded = Vec::with_capacity(value.len());
+    let bytes = value.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%' {
@@ -3192,8 +3185,19 @@ fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
             index += 1;
         }
     }
-    let decoded = String::from_utf8_lossy(&decoded);
-    if [endpoint, decoded.as_ref()]
+    Ok(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
+    let endpoint = endpoint.trim();
+    if endpoint.is_empty() {
+        return Err("endpoint is required".into());
+    }
+    if !endpoint.starts_with('/') {
+        return Err("endpoint must start with '/'".into());
+    }
+    let decoded = api_path_unescape(endpoint)?;
+    if [endpoint, decoded.as_str()]
         .iter()
         .any(|path| path.split('/').any(|part| part == "." || part == ".."))
     {
@@ -3628,6 +3632,20 @@ fn api_path_substitution_redaction_values(
             .filter(|part| !part.is_empty())
             .map(str::to_owned),
     );
+    // Decode the complete path before trimming context, so percent/UTF-8 bytes
+    // spanning a placeholder boundary are not replaced or decoded in isolation.
+    if let Ok(decoded) = api_path_unescape(rendered.path()) {
+        let prefix = api_path_unescape(&path[..first]).unwrap_or_default();
+        let suffix = api_path_unescape(&path[last..]).unwrap_or_default();
+        let span = decoded.strip_prefix(&prefix).unwrap_or(&decoded);
+        let span = span.strip_suffix(&suffix).unwrap_or(span);
+        known.push(span.to_owned());
+        known.extend(
+            span.split('/')
+                .filter(|part| !part.is_empty())
+                .map(str::to_owned),
+        );
+    }
     Ok(known)
 }
 
@@ -3667,8 +3685,10 @@ fn api_query_substitution_redaction_values(
         for (index, (key, value)) in url.query_pairs().enumerate() {
             if tainted_key || index != 0 {
                 known.push(api_query_escape(&key));
+                known.push(key.into_owned());
             }
             known.push(api_query_escape(&value));
+            known.push(value.into_owned());
         }
     }
     Ok(known)

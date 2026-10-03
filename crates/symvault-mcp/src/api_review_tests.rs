@@ -22,6 +22,13 @@ fn review_api_runtime(root: &Path, base: String) -> StoreReadOnlyRuntime {
 
 // No blocking accept, bounded socket I/O, and a joined worker even on handler failure.
 fn review_echo_server(listener: std::net::TcpListener) -> std::thread::JoinHandle<Option<String>> {
+    review_echo_server_with(listener, str::to_owned)
+}
+
+fn review_echo_server_with(
+    listener: std::net::TcpListener,
+    echo: fn(&str) -> String,
+) -> std::thread::JoinHandle<Option<String>> {
     listener.set_nonblocking(true).unwrap();
     std::thread::spawn(move || {
         use std::io::{BufRead, Write};
@@ -56,12 +63,13 @@ fn review_echo_server(listener: std::net::TcpListener) -> std::thread::JoinHandl
                 break;
             }
         }
+        let body = echo(&target);
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nX-Echo: {}\r\nConnection: close\r\n\r\n{}",
-            target.len(),
-            target,
-            target
+            body.len(),
+            body,
+            body
         )
         .unwrap();
         Some(target)
@@ -178,12 +186,86 @@ fn api_review_path_multiple_substitutions_mask_surviving_fragment() {
     );
 }
 
+#[test]
+fn api_review_decoded_path_echo_masks_surviving_fragment() {
+    review_assert_substitution_echo_with(
+        "alpha!? beta/path/.",
+        "none",
+        "/v1/__TOKEN__.",
+        "/v1/alpha!%3F%20beta/",
+        "/v1/***",
+        |target| {
+            let mut url = reqwest::Url::parse(&format!("http://localhost{target}")).unwrap();
+            // Independent form decoder, preserving path '+' and '&' literals.
+            let path = url.path().replace('+', "%2B").replace('&', "%26");
+            url.set_query(Some(&format!("q={path}")));
+            url.query_pairs().next().unwrap().1.into_owned()
+        },
+    );
+}
+
+#[test]
+fn api_review_decoded_query_echo_masks_boundary_fragment() {
+    review_assert_substitution_echo_with(
+        "alpha%c3",
+        "query_param",
+        "/v1/status?q=__TOKEN__%bc",
+        "/v1/status?auth_token=separate-auth&q=alpha%C3%BC",
+        "***",
+        |target| {
+            reqwest::Url::parse(&format!("http://localhost{target}"))
+                .unwrap()
+                .query_pairs()
+                .find(|(key, _)| key == "q")
+                .unwrap()
+                .1
+                .into_owned()
+        },
+    );
+}
+
+#[test]
+fn api_review_path_utf8_boundary_is_rejected_before_reads() {
+    let root = tempdir().unwrap();
+    let runtime = review_api_runtime(root.path(), "http://127.0.0.1:9".into());
+    API_REVIEW_READS.with(|count| count.set(0));
+    API_REVIEW_REQUESTS.with(|count| count.set(0));
+    let result = runtime
+        .call(
+            "execute_api_request",
+            &json!({"template":"fixture","endpoint":"/v1/__TOKEN__%bc","timeout":1}),
+        )
+        .unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.text, "invalid endpoint path");
+    assert_eq!(API_REVIEW_READS.with(|count| count.get()), 0);
+    assert_eq!(API_REVIEW_REQUESTS.with(|count| count.get()), 0);
+}
+
 fn review_assert_substitution_echo(
     credential: &str,
     auth_type: &str,
     endpoint: &str,
     expected_wire: &str,
     expected_masked: &str,
+) {
+    review_assert_substitution_echo_with(
+        credential,
+        auth_type,
+        endpoint,
+        expected_wire,
+        expected_masked,
+        str::to_owned,
+    );
+}
+
+fn review_assert_substitution_echo_with(
+    credential: &str,
+    auth_type: &str,
+    endpoint: &str,
+    expected_wire: &str,
+    expected_masked: &str,
+    echo: fn(&str) -> String,
 ) {
     let root = tempdir().unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -240,18 +322,25 @@ fn review_assert_substitution_echo(
         None,
     )
     .unwrap();
-    let server = review_echo_server(listener);
+    let server = review_echo_server_with(listener, echo);
     let result = runtime.call(
         "execute_api_request",
         &json!({"template":"fixture","endpoint":endpoint,"timeout":1}),
     );
     let wire = server.join().unwrap();
-    assert_eq!(wire.as_deref(), Some(expected_wire));
     let result = result.unwrap();
     assert!(!result.is_error, "{}", result.text);
+    assert_eq!(wire.as_deref(), Some(expected_wire));
     let payload: Value = serde_json::from_str(&result.text).unwrap();
     assert_eq!(payload["body"], expected_masked);
-    assert_eq!(payload["headers"]["X-Echo"], expected_masked);
+    // Existing broker projection drops non-ASCII HeaderValue::to_str failures.
+    // Preserve that behavior; ASCII header echoes still require exact masking.
+    let expected_header = if echo(expected_wire).is_ascii() {
+        expected_masked
+    } else {
+        ""
+    };
+    assert_eq!(payload["headers"]["X-Echo"], expected_header);
 }
 
 #[test]
