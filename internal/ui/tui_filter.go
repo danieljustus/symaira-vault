@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"sort"
 	"strings"
 
@@ -27,15 +28,32 @@ func (m *TUIModel) ensureMetaCache() {
 	if m.metaCache == nil {
 		m.metaCache = make(map[string]vaultpkg.EntryMetadata)
 	}
+	reader := vaultpkg.NewReadSession(m.vault.Dir, m.vault.Identity)
+	used, fits := vaultpkg.ReadCacheCost(m.metaCache)
+	if !fits {
+		clear(m.metaCache)
+		m.err = vaultpkg.ErrVaultResourceLimit
+		return
+	}
 	for _, path := range m.entries {
 		if _, ok := m.metaCache[path]; ok {
 			continue
 		}
-		meta, err := vaultpkg.GetEntryMetadata(m.vault.Dir, path, m.vault.Identity)
+		entry, err := reader.Get(path)
 		if err != nil {
+			if errors.Is(err, vaultpkg.ErrVaultResourceLimit) || errors.Is(err, vaultpkg.ErrVaultResourceBusy) {
+				m.err = err
+				return
+			}
 			continue
 		}
-		m.metaCache[path] = *meta
+		cost, fits := vaultpkg.ReadCacheCost(map[string]vaultpkg.EntryMetadata{path: entry.Metadata})
+		if !fits || cost > 16*1024*1024-used {
+			m.err = vaultpkg.ErrVaultResourceLimit
+			return
+		}
+		used += cost
+		m.metaCache[path] = entry.Metadata
 	}
 }
 
@@ -83,12 +101,23 @@ func (m *TUIModel) ensureSecretTypeCache() {
 	if m.secretTypeCache == nil {
 		m.secretTypeCache = make(map[string]vaultpkg.SecretType)
 	}
+	reader := vaultpkg.NewReadSession(m.vault.Dir, m.vault.Identity)
+	used, fits := vaultpkg.ReadCacheCost(m.secretTypeCache)
+	if !fits {
+		clear(m.secretTypeCache)
+		m.err = vaultpkg.ErrVaultResourceLimit
+		return
+	}
 	for _, path := range m.filtered {
 		if _, ok := m.secretTypeCache[path]; ok {
 			continue
 		}
-		entry, err := vaultpkg.ReadEntry(m.vault.Dir, path, m.vault.Identity)
+		entry, err := reader.Get(path)
 		if err != nil {
+			if errors.Is(err, vaultpkg.ErrVaultResourceLimit) || errors.Is(err, vaultpkg.ErrVaultResourceBusy) {
+				m.err = err
+				return
+			}
 			m.secretTypeCache[path] = vaultpkg.SecretTypeCustom
 			continue
 		}
@@ -96,6 +125,12 @@ func (m *TUIModel) ensureSecretTypeCache() {
 		if t == "" {
 			t = vaultpkg.SecretTypeCustom
 		}
+		cost, fits := vaultpkg.ReadCacheCost(map[string]vaultpkg.SecretType{path: t})
+		if !fits || cost > 16*1024*1024-used {
+			m.err = vaultpkg.ErrVaultResourceLimit
+			return
+		}
+		used += cost
 		m.secretTypeCache[path] = t
 	}
 }

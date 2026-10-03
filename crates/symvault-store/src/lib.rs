@@ -17,7 +17,7 @@ use std::{
 use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_string};
+use symvault_crypto::{Identity, encrypt, parse_recipient, recipient_string};
 use thiserror::Error;
 #[cfg(not(unix))]
 use walkdir::WalkDir;
@@ -42,7 +42,10 @@ pub mod sharing;
 pub mod token_registry;
 
 mod entry_budget;
+mod entry_resources;
+mod file_digest;
 mod publication;
+mod read_admission;
 mod reencrypt_journal;
 
 #[cfg(unix)]
@@ -72,6 +75,10 @@ pub const MAX_VAULT_ENTRY_PATH_DEPTH: usize = 64;
 /// Errors returned by the read-only store.
 #[derive(Debug, Error)]
 pub enum StoreError {
+    #[error("vault resource limit exceeded")]
+    ResourceLimit,
+    #[error("vault resources are busy")]
+    ResourceBusy,
     #[error("vault root is not a directory: {0}")]
     RootNotDirectory(PathBuf),
     #[error("vault root changed while it was being acquired: {0}")]
@@ -102,7 +109,7 @@ pub enum StoreError {
     SearchIndex(String),
     #[error("search index build produced no entries")]
     SearchIndexBuildEmpty,
-    #[error("vault resource exceeds {limit} bytes: {path}")]
+    #[error("vault resource limit exceeded")]
     Limit { path: PathBuf, limit: u64 },
     #[error("entry value exceeds the supported structure limits: {0}")]
     ValueLimit(String),
@@ -380,7 +387,53 @@ pub struct Store {
     presence: Presence,
 }
 
+/// One bounded multi-entry request. Listing and subsequent reads share the same
+/// non-resettable ciphertext allowance, including pseudonymized name discovery.
+pub struct ReadSession<'a> {
+    store: &'a Store,
+    identity: &'a Identity,
+    batch: read_admission::Batch,
+}
+
+impl ReadSession<'_> {
+    pub fn list(&self) -> Result<Vec<String>, StoreError> {
+        self.batch.consume(0)?;
+        self.store.list_with_budget(self.identity, &self.batch)
+    }
+
+    pub fn get(&self, path: &str) -> Result<Entry, StoreError> {
+        self.batch.consume(0)?;
+        self.store
+            .get_with_budget(path, self.identity, Some(&self.batch))
+    }
+}
+
+impl StoreError {
+    /// Resource failures must abort a batch instead of being treated as a
+    /// corrupt entry that an optional optimization can silently skip.
+    #[must_use]
+    pub fn is_resource_failure(&self) -> bool {
+        match self {
+            Self::ResourceLimit | Self::ResourceBusy | Self::Limit { .. } => true,
+            Self::ValueLimit(reason) => {
+                reason != "duplicate data fields" && reason != "entry data must be an object"
+            }
+            _ => false,
+        }
+    }
+}
+
 impl Store {
+    /// Starts the shared read allowance for one CLI command or service request.
+    #[must_use]
+    pub fn read_session<'a>(&'a self, identity: &'a Identity) -> ReadSession<'a> {
+        ReadSession {
+            store: self,
+            identity,
+            batch: read_admission::Batch::default(),
+        }
+    }
+
     /// Opens an existing vault and completes any pending re-encryption journal.
     pub fn open(root: impl AsRef<Path>, identity: &Identity) -> Result<Self, StoreError> {
         let store = Self::open_with_root_acquisition(root, |_: &Path| {})?;
@@ -535,31 +588,6 @@ impl Store {
         }
     }
 
-    fn read_path(&self, target: &Path) -> Result<Vec<u8>, StoreError> {
-        #[cfg(unix)]
-        {
-            let relative = self.relative_path(target)?;
-            self.read_relative_path(&relative, target)
-        }
-        #[cfg(not(unix))]
-        {
-            read_regular(target)
-        }
-    }
-
-    #[cfg(unix)]
-    fn read_relative_path(&self, relative: &Path, display: &Path) -> Result<Vec<u8>, StoreError> {
-        #[cfg(unix)]
-        {
-            rooted::read(&self.root_cap, relative, display)
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = relative;
-            read_regular(display)
-        }
-    }
-
     fn remove_path(&self, target: &Path) -> Result<bool, StoreError> {
         let relative = self.relative_path(target)?;
         #[cfg(unix)]
@@ -615,69 +643,45 @@ impl Store {
         #[cfg(unix)]
         {
             let mut result = Vec::new();
-            let fresh_entries = match rooted::walk_from_with_limits(
-                &self.root_cap,
-                Path::new(ENTRIES_DIR),
-                &self.root.join(ENTRIES_DIR),
-                Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
-                Some(MAX_VAULT_ENTRY_COUNT),
-            ) {
-                Ok(entries) => entries,
-                Err(StoreError::Read { source, .. })
-                    if source.kind() == io::ErrorKind::NotFound =>
-                {
-                    Vec::new()
-                }
-                Err(error) => return Err(error),
-            };
-            let legacy_entries = rooted::walk_with_limits(
+            for item in rooted::walk_with_limits(
                 &self.root_cap,
                 &self.root,
                 Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
                 Some(MAX_VAULT_ENTRY_COUNT),
-            )?;
-            for (entries, fresh) in [(fresh_entries, true), (legacy_entries, false)] {
-                for item in entries {
-                    if !item.regular {
-                        continue;
-                    }
-                    let relative = item.relative;
-                    let name = relative
-                        .file_name()
-                        .and_then(|value| value.to_str())
-                        .unwrap_or_default();
-                    if !name.ends_with(ENTRY_EXTENSION) {
-                        continue;
-                    }
-                    if !fresh && matches!(name, IDENTITY_FILE | MANIFEST_FILE) {
-                        continue;
-                    }
-                    if fresh != relative.starts_with(Path::new(ENTRIES_DIR)) {
-                        continue;
-                    }
-                    if result.len() >= MAX_VAULT_ENTRY_COUNT {
-                        return Err(StoreError::ValueLimit(
-                            "vault entry enumeration limit exceeded".into(),
-                        ));
-                    }
-                    let logical = if fresh {
-                        relative
-                            .strip_prefix(ENTRIES_DIR)
-                            .map_err(|_| StoreError::UnsafePath(relative.display().to_string()))?
-                            .to_string_lossy()
-                            .replace(std::path::MAIN_SEPARATOR, "/")
-                    } else {
-                        relative
-                            .to_string_lossy()
-                            .replace(std::path::MAIN_SEPARATOR, "/")
-                    };
-                    result.push(Candidate {
-                        path: self.root.join(&relative),
-                        relative,
-                        logical: logical.trim_end_matches(ENTRY_EXTENSION).to_owned(),
-                        fresh,
-                    });
+            )? {
+                let relative = item.relative;
+                let fresh = relative.starts_with(Path::new(ENTRIES_DIR));
+                if relative.components().count() - usize::from(fresh) > MAX_VAULT_ENTRY_PATH_DEPTH {
+                    return Err(StoreError::ResourceLimit);
                 }
+                if !item.regular {
+                    continue;
+                }
+                let name = relative
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or_default();
+                if !name.ends_with(ENTRY_EXTENSION)
+                    || (!fresh && matches!(name, IDENTITY_FILE | MANIFEST_FILE))
+                {
+                    continue;
+                }
+                let logical = if fresh {
+                    relative
+                        .strip_prefix(ENTRIES_DIR)
+                        .map_err(|_| StoreError::UnsafePath(relative.display().to_string()))?
+                } else {
+                    &relative
+                };
+                let logical = logical
+                    .to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/");
+                result.push(Candidate {
+                    path: self.root.join(&relative),
+                    relative,
+                    logical: logical.trim_end_matches(ENTRY_EXTENSION).to_owned(),
+                    fresh,
+                });
             }
             result.sort_by(|a, b| a.logical.cmp(&b.logical).then_with(|| a.path.cmp(&b.path)));
             Ok(result)
@@ -744,15 +748,30 @@ impl Store {
 
     /// Lists logical entry paths in deterministic lexical order.
     pub fn list(&self, identity: &Identity) -> Result<Vec<String>, StoreError> {
+        self.list_with_budget(identity, &read_admission::Batch::default())
+    }
+
+    fn list_with_budget(
+        &self,
+        identity: &Identity,
+        batch: &read_admission::Batch,
+    ) -> Result<Vec<String>, StoreError> {
+        let mut path_bytes = 0;
         let mut paths = BTreeSet::new();
         for candidate in self.entry_candidates()? {
             let logical = candidate.logical.clone();
             if self.config.pseudonymize_paths {
-                let entry = self.read_candidate(&candidate, identity)?;
+                let entry = self.read_candidate_with_budget(&candidate, identity, Some(batch))?;
                 if !entry.path.is_empty() {
+                    if !paths.contains(&entry.path) {
+                        read_admission::add_path_bytes(&mut path_bytes, &entry.path)?;
+                    }
                     paths.insert(entry.path);
                 }
             } else {
+                if !paths.contains(&logical) {
+                    read_admission::add_path_bytes(&mut path_bytes, &logical)?;
+                }
                 paths.insert(logical);
             }
         }
@@ -761,11 +780,20 @@ impl Store {
 
     /// Decrypts and parses one entry. This method never writes or migrates files.
     pub fn get(&self, path: &str, identity: &Identity) -> Result<Entry, StoreError> {
+        self.get_with_budget(path, identity, Some(&read_admission::Batch::default()))
+    }
+
+    fn get_with_budget(
+        &self,
+        path: &str,
+        identity: &Identity,
+        batch: Option<&read_admission::Batch>,
+    ) -> Result<Entry, StoreError> {
         validate_entry_path(path)?;
         let candidates = self.candidates_for(path, identity)?;
         for candidate in candidates {
             if self.regular_exists_path(&candidate.path)? {
-                return self.read_candidate(&candidate, identity);
+                return self.read_candidate_with_budget(&candidate, identity, batch);
             }
         }
         Err(StoreError::EntryNotFound(path.to_owned()))
@@ -826,6 +854,7 @@ impl Store {
                 limit: MAX_ENTRY_PLAINTEXT_BYTES_V1,
             });
         }
+        entry_budget::validate(&plaintext, path)?;
         let mut recipient_strings = self.recipients()?;
         recipient_strings.insert(0, recipient_string(identity));
         let mut seen = BTreeSet::new();
@@ -885,6 +914,7 @@ impl Store {
         max_entries: usize,
     ) -> Result<Vec<FileInfo>, StoreError> {
         let mut result = Vec::new();
+        let batch = read_admission::Batch::default();
         #[cfg(unix)]
         for item in rooted::walk_with_limits(
             &self.root_cap,
@@ -897,13 +927,15 @@ impl Store {
                 &item.relative,
                 &self.root.join(&item.relative),
             )?;
-            result.push(self.file_info(&item.relative, metadata)?);
+            result.push(self.file_info(&item.relative, metadata, &batch)?);
         }
         #[cfg(not(unix))]
         let mut visited = 0usize;
         #[cfg(not(unix))]
+        let mut path_bytes = 0usize;
+        #[cfg(not(unix))]
         for item in WalkDir::new(&self.root)
-            .max_depth(max_depth)
+            .max_depth(max_depth + 1)
             .follow_links(false)
         {
             let item = item.map_err(|error| StoreError::Read {
@@ -912,6 +944,9 @@ impl Store {
             })?;
             if item.path() == self.root {
                 continue;
+            }
+            if item.depth() > max_depth {
+                return Err(StoreError::ResourceLimit);
             }
             visited += 1;
             if visited > max_entries {
@@ -923,12 +958,16 @@ impl Store {
                 .path()
                 .strip_prefix(&self.root)
                 .map_err(|_| StoreError::UnsafePath(item.path().display().to_string()))?;
+            path_bytes = path_bytes
+                .checked_add(relative.to_string_lossy().len())
+                .filter(|total| *total <= read_admission::MAX_PATH_BYTES)
+                .ok_or(StoreError::ResourceLimit)?;
             let metadata =
                 fs::symlink_metadata(item.path()).map_err(|source| StoreError::Read {
                     path: self.root.join(relative),
                     source,
                 })?;
-            result.push(self.file_info(relative, metadata)?);
+            result.push(self.file_info(relative, metadata, &batch)?);
         }
         result.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(result)
@@ -938,6 +977,7 @@ impl Store {
         &self,
         relative: &Path,
         mut metadata: fs::Metadata,
+        batch: &read_admission::Batch,
     ) -> Result<FileInfo, StoreError> {
         let display = self.root.join(relative);
         if metadata.file_type().is_symlink() {
@@ -950,18 +990,23 @@ impl Store {
         } else {
             return Err(StoreError::NotRegularFile(display));
         };
-        let bytes = if kind == FileKind::Regular {
-            // The path may have been replaced since traversal. Publish the
-            // metadata of the same opened regular file that supplied the bytes.
-            #[cfg(unix)]
-            let (bytes, opened_metadata) =
-                rooted::read_with_metadata(&self.root_cap, relative, &display)?;
-            #[cfg(not(unix))]
-            let (bytes, opened_metadata) = read_regular_with_metadata(&display)?;
+        let digest = if kind == FileKind::Regular {
+            let limit = if relative
+                .extension()
+                .is_some_and(|extension| extension == "age")
+                && !matches!(
+                    relative.file_name().and_then(|name| name.to_str()),
+                    Some(IDENTITY_FILE | MANIFEST_FILE)
+                ) {
+                MAX_ENTRY_CIPHERTEXT_BYTES_V1
+            } else {
+                MAX_FILE_BYTES
+            };
+            let (digest, _, opened_metadata) = self.hash_file(relative, limit, Some(batch))?;
             metadata = opened_metadata;
-            bytes
+            digest
         } else {
-            Vec::new()
+            sha256_hex(&[])
         };
         Ok(FileInfo {
             path: relative
@@ -970,7 +1015,7 @@ impl Store {
             kind,
             mode: mode_bits(&metadata),
             size: metadata.len(),
-            sha256: sha256_hex(&bytes),
+            sha256: digest,
         })
     }
 
@@ -1012,12 +1057,17 @@ impl Store {
         Ok(result)
     }
 
-    fn read_candidate(
+    fn read_candidate_with_budget(
         &self,
         candidate: &Candidate,
         identity: &Identity,
+        batch: Option<&read_admission::Batch>,
     ) -> Result<Entry, StoreError> {
-        let mut raw = self.read_candidate_bytes(candidate)?;
+        let _lease = read_admission::acquire()?;
+        if let Some(batch) = batch {
+            batch.consume(0)?;
+        }
+        let mut raw = self.read_candidate_bytes(candidate, batch)?;
         let decrypted =
             symvault_crypto::decrypt_bounded(&raw, identity, MAX_ENTRY_PLAINTEXT_BYTES_V1);
         raw.zeroize();
@@ -1031,38 +1081,83 @@ impl Store {
             }
             Err(error) => return Err(StoreError::Decryption(error.to_string())),
         };
-        let result = entry_budget::validate(&plaintext, &candidate.logical).and_then(|()| {
-            serde_json::from_slice::<serde_json::Value>(&plaintext)
-                .map_err(|error| StoreError::Entry {
-                    path: candidate.logical.clone(),
-                    detail: error.to_string(),
-                })
-                .and_then(|mut value| {
-                    normalize_entry_data_key(&mut value);
-                    serde_json::from_value(value).map_err(|error| StoreError::Entry {
+        let result = entry_budget::validate_with_batch(&plaintext, &candidate.logical, batch)
+            .and_then(|()| {
+                serde_json::from_slice::<serde_json::Value>(&plaintext)
+                    .map_err(|error| StoreError::Entry {
                         path: candidate.logical.clone(),
                         detail: error.to_string(),
                     })
-                })
-        });
+                    .and_then(|mut value| {
+                        normalize_entry_data_key(&mut value);
+                        serde_json::from_value(value).map_err(|error| StoreError::Entry {
+                            path: candidate.logical.clone(),
+                            detail: error.to_string(),
+                        })
+                    })
+            });
         plaintext.zeroize();
+        if result
+            .as_ref()
+            .is_err_and(|error| error.is_resource_failure())
+            && let Some(batch) = batch
+        {
+            batch.fail();
+        }
         result
     }
 
-    fn read_candidate_bytes(&self, candidate: &Candidate) -> Result<Vec<u8>, StoreError> {
+    fn hash_file(
+        &self,
+        relative: &Path,
+        limit: u64,
+        batch: Option<&read_admission::Batch>,
+    ) -> Result<(String, u64, fs::Metadata), StoreError> {
+        if let Some(batch) = batch {
+            batch.consume(0)?;
+        }
+        let path = self.root.join(relative);
+        #[cfg(unix)]
+        let file = rooted::open_regular(&self.root_cap, relative, &path)?;
+        #[cfg(not(unix))]
+        let file = open_nofollow(&path).map_err(|source| StoreError::Read {
+            path: path.clone(),
+            source,
+        })?;
+        file_digest::opened(file, &path, limit, batch)
+    }
+
+    fn read_index_bytes(&self, path: &Path) -> Result<Vec<u8>, StoreError> {
+        let limit = (read_admission::MAX_INDEX_BYTES + 28 + 17) as u64;
         #[cfg(unix)]
         {
-            rooted::read_limited(
-                &self.root_cap,
-                &candidate.relative,
-                &candidate.path,
-                MAX_ENTRY_CIPHERTEXT_BYTES_V1,
-            )
+            rooted::read_limited(&self.root_cap, Path::new(".search-index"), path, limit)
         }
         #[cfg(not(unix))]
         {
-            read_regular_limited(&candidate.path, MAX_ENTRY_CIPHERTEXT_BYTES_V1)
+            read_regular_limited(path, limit)
         }
+    }
+
+    fn read_candidate_bytes(
+        &self,
+        candidate: &Candidate,
+        batch: Option<&read_admission::Batch>,
+    ) -> Result<Vec<u8>, StoreError> {
+        #[cfg(unix)]
+        let file = rooted::open_regular(&self.root_cap, &candidate.relative, &candidate.path)?;
+        #[cfg(not(unix))]
+        let file = open_nofollow(&candidate.path).map_err(|source| StoreError::Read {
+            path: candidate.path.clone(),
+            source,
+        })?;
+        read_open_regular_with_metadata_budget(
+            file,
+            &candidate.path,
+            MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+            batch,
+        )
+        .map(|(bytes, _)| bytes)
     }
 }
 
@@ -1199,6 +1294,12 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
         Some(MAX_VAULT_ENTRY_PATH_DEPTH + 1),
         Some(MAX_VAULT_ENTRY_COUNT),
     )?;
+    for item in &legacy_entries {
+        let fresh = item.relative.starts_with(Path::new(ENTRIES_DIR));
+        if item.relative.components().count() - usize::from(fresh) > MAX_VAULT_ENTRY_PATH_DEPTH {
+            return Err(StoreError::ResourceLimit);
+        }
+    }
     let fresh = fresh_entries.iter().any(|item| {
         item.regular
             && item.relative.starts_with(Path::new(ENTRIES_DIR))
@@ -1243,117 +1344,65 @@ fn detect_layout(root: &Path) -> Result<Layout, StoreError> {
 #[cfg(not(unix))]
 fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let mut result = Vec::new();
-    let entries_root = root.join(ENTRIES_DIR);
-    if entries_root.is_dir() {
-        let mut visited = 0usize;
-        for item in WalkDir::new(&entries_root)
-            .max_depth(MAX_VAULT_ENTRY_PATH_DEPTH + 1)
-            .follow_links(false)
-        {
-            let item = match item {
-                Ok(item) => item,
-                Err(error)
-                    if error
-                        .io_error()
-                        .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
-                {
-                    continue;
-                }
-                Err(error) => {
-                    return Err(StoreError::Read {
-                        path: entries_root.clone(),
-                        source: io::Error::other(error.to_string()),
-                    });
-                }
-            };
-            visited += 1;
-            if visited > MAX_VAULT_ENTRY_COUNT {
-                return Err(StoreError::ValueLimit(
-                    "vault entry enumeration limit exceeded".into(),
-                ));
-            }
-            if item.file_type().is_symlink() {
-                return Err(StoreError::Symlink(item.path().to_path_buf()));
-            }
-            if item.file_type().is_file()
-                && item
-                    .path()
-                    .extension()
-                    .is_some_and(|extension| extension == "age")
-            {
-                let rel = item
-                    .path()
-                    .strip_prefix(&entries_root)
-                    .map_err(|_| StoreError::UnsafePath(item.path().display().to_string()))?;
-                let logical = rel
-                    .to_string_lossy()
-                    .replace(std::path::MAIN_SEPARATOR, "/")
-                    .trim_end_matches(ENTRY_EXTENSION)
-                    .to_owned();
-                result.push(Candidate {
-                    path: item.path().to_path_buf(),
-                    relative: PathBuf::from(ENTRIES_DIR).join(rel),
-                    logical,
-                    fresh: true,
-                });
-            }
-        }
-    }
-    let mut visited = 0usize;
+    let mut visited = 0;
+    let mut path_bytes = 0;
     for item in WalkDir::new(root)
-        .max_depth(MAX_VAULT_ENTRY_PATH_DEPTH + 1)
+        .max_depth(MAX_VAULT_ENTRY_PATH_DEPTH + 2)
         .follow_links(false)
     {
-        let item = match item {
-            Ok(item) => item,
-            Err(error)
-                if error
-                    .io_error()
-                    .is_some_and(|source| source.kind() == io::ErrorKind::NotFound) =>
-            {
-                continue;
-            }
-            Err(error) => {
-                return Err(StoreError::Read {
-                    path: root.to_path_buf(),
-                    source: io::Error::other(error.to_string()),
-                });
-            }
-        };
+        let item = item.map_err(|error| StoreError::Read {
+            path: root.to_owned(),
+            source: io::Error::other(error.to_string()),
+        })?;
+        if item.depth() == 0 {
+            continue;
+        }
         visited += 1;
         if visited > MAX_VAULT_ENTRY_COUNT {
             return Err(StoreError::ValueLimit(
                 "vault entry enumeration limit exceeded".into(),
             ));
         }
-        if item.path() == root || item.path().starts_with(&entries_root) {
+        if item.file_type().is_symlink() {
+            return Err(StoreError::Symlink(item.path().to_owned()));
+        }
+        let relative = item
+            .path()
+            .strip_prefix(root)
+            .map_err(|_| StoreError::UnsafePath(item.path().display().to_string()))?;
+        let fresh = relative.starts_with(ENTRIES_DIR);
+        let logical_depth = item.depth() - usize::from(fresh);
+        if logical_depth > MAX_VAULT_ENTRY_PATH_DEPTH {
+            return Err(StoreError::ResourceLimit);
+        }
+        let path = relative.to_string_lossy();
+        read_admission::add_path_bytes(&mut path_bytes, &path)?;
+        if !item.file_type().is_file() || !relative.extension().is_some_and(|ext| ext == "age") {
             continue;
         }
-        if item.file_type().is_symlink() {
-            return Err(StoreError::Symlink(item.path().to_path_buf()));
-        }
-        let name = item.file_name().to_string_lossy();
-        if item.file_type().is_file()
-            && name.ends_with(ENTRY_EXTENSION)
-            && name != IDENTITY_FILE
-            && name != MANIFEST_FILE
+        if !fresh
+            && matches!(
+                relative.file_name().and_then(|name| name.to_str()),
+                Some(IDENTITY_FILE | MANIFEST_FILE)
+            )
         {
-            let rel = item
-                .path()
-                .strip_prefix(root)
-                .map_err(|_| StoreError::UnsafePath(item.path().display().to_string()))?;
-            let logical = rel
+            continue;
+        }
+        let logical = if fresh {
+            relative.strip_prefix(ENTRIES_DIR).unwrap()
+        } else {
+            relative
+        };
+        result.push(Candidate {
+            path: item.path().to_owned(),
+            relative: relative.to_owned(),
+            logical: logical
                 .to_string_lossy()
                 .replace(std::path::MAIN_SEPARATOR, "/")
                 .trim_end_matches(ENTRY_EXTENSION)
-                .to_owned();
-            result.push(Candidate {
-                path: item.path().to_path_buf(),
-                relative: rel.to_path_buf(),
-                logical,
-                fresh: false,
-            });
-        }
+                .to_owned(),
+            fresh,
+        });
     }
     result.sort_by(|a, b| a.logical.cmp(&b.logical).then_with(|| a.path.cmp(&b.path)));
     Ok(result)
@@ -1374,7 +1423,7 @@ fn validate_entry_path(path: &str) -> Result<(), StoreError> {
         }
     }
     if normalized.split('/').count() > MAX_VAULT_ENTRY_PATH_DEPTH {
-        return Err(StoreError::InvalidEntryPath(path.to_owned()));
+        return Err(StoreError::ResourceLimit);
     }
     if Path::new(path).components().any(|component| {
         matches!(
@@ -1755,6 +1804,15 @@ fn read_open_regular_with_metadata_limit(
     path: &Path,
     limit: u64,
 ) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
+    read_open_regular_with_metadata_budget(file, path, limit, None)
+}
+
+fn read_open_regular_with_metadata_budget(
+    file: fs::File,
+    path: &Path,
+    limit: u64,
+    batch: Option<&read_admission::Batch>,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -1764,19 +1822,30 @@ fn read_open_regular_with_metadata_limit(
     }
     let size = metadata.len();
     if size > limit {
+        if let Some(batch) = batch {
+            batch.fail();
+            return Err(StoreError::ResourceLimit);
+        }
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
             limit,
         });
     }
+    if let Some(batch) = batch {
+        batch.consume(size as usize)?;
+    }
+    let read_limit = if batch.is_some() { size } else { limit };
     let mut bytes = Vec::with_capacity(size as usize);
-    file.take(limit.saturating_add(1))
+    file.take(read_limit.saturating_add(1))
         .read_to_end(&mut bytes)
         .map_err(|source| StoreError::Read {
             path: path.to_path_buf(),
             source,
         })?;
-    if bytes.len() as u64 > limit {
+    if bytes.len() as u64 > read_limit {
+        if let Some(batch) = batch {
+            batch.fail();
+        }
         return Err(StoreError::Limit {
             path: path.to_path_buf(),
             limit,
@@ -2134,7 +2203,9 @@ where
         {
             let mut entries = BTreeMap::new();
             let mut count = 0;
+            let mut path_bytes = 0;
             while let Some(key) = map.next_key::<String>()? {
+                read_admission::add_path_bytes(&mut path_bytes, &key).map_err(M::Error::custom)?;
                 count += 1;
                 if count > MAX_VAULT_ENTRY_COUNT {
                     return Err(M::Error::custom("manifest entry count exceeds limit"));
@@ -2301,8 +2372,12 @@ impl Store {
                     detail: error.to_string(),
                 })?,
             );
+        entry_budget::validate(&plaintext, path)?;
         let encrypted = encrypt(&plaintext, recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        if encrypted.len() as u64 > MAX_ENTRY_CIPHERTEXT_BYTES_V1 {
+            return Err(StoreError::ResourceLimit);
+        }
         let target = self.configured_entry_path(path, identity)?;
         let parent_cap = self.entry_parent_cap(&target)?;
         publication::replace_entry(&target, &encrypted, &parent_cap)?;
@@ -2354,6 +2429,7 @@ impl Store {
         }
         let mut migrated = 0usize;
         let mut scanned = 0usize;
+        let read_batch = read_admission::Batch::default();
         for candidate in self.entry_candidates()? {
             // The Go command walks `entries/` only; legacy root-level entries
             // are out of scope for this migration.
@@ -2364,7 +2440,7 @@ impl Store {
                 continue;
             }
             scanned += 1;
-            let entry = self.read_candidate(&candidate, identity)?;
+            let entry = self.read_candidate_with_budget(&candidate, identity, Some(&read_batch))?;
             let plain = if entry.path.is_empty() {
                 candidate.logical.clone()
             } else {
@@ -2538,9 +2614,17 @@ impl Store {
     /// Loads and decrypts the manifest. A missing manifest is distinguished
     /// from malformed or unauthentic ciphertext.
     pub fn load_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+        let _lease = read_admission::acquire()?;
         let mut raw = self.read_root_file(MANIFEST_FILE)?;
         let mut plaintext =
-            decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
+            symvault_crypto::decrypt_bounded(&raw, identity, MAX_ENTRY_PLAINTEXT_BYTES_V1)
+                .map_err(|error| {
+                    if error.class() == symvault_crypto::FailureClass::SizeLimit {
+                        StoreError::ResourceLimit
+                    } else {
+                        StoreError::Decryption(error.to_string())
+                    }
+                })?;
         raw.zeroize();
         let result = serde_json::from_slice::<Manifest>(&plaintext)
             .map_err(|error| StoreError::Config(error.to_string()));
@@ -2557,6 +2641,7 @@ impl Store {
     pub fn verify_manifest(&self, identity: &Identity) -> Result<ManifestVerifyResult, StoreError> {
         let manifest = self.load_manifest(identity)?;
         let mut result = ManifestVerifyResult::default();
+        let batch = read_admission::Batch::default();
         let mut expected = BTreeSet::new();
         for (logical, metadata) in &manifest.entries {
             let target = self.configured_entry_path(logical, identity)?;
@@ -2568,9 +2653,13 @@ impl Store {
                     .to_string_lossy()
                     .into_owned(),
             );
-            match self.read_path(&target) {
-                Ok(bytes) => {
-                    if sha256_hex(&bytes) == metadata.sha256 {
+            match self.hash_file(
+                &target_relative,
+                MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+                Some(&batch),
+            ) {
+                Ok((digest, _, _)) => {
+                    if digest == metadata.sha256 {
                         result.ok += 1;
                     } else {
                         result.tampered.push(logical.clone());
@@ -2611,6 +2700,14 @@ impl Store {
 
     /// Rebuilds the manifest while the caller already holds `with_write_lock`.
     pub fn rebuild_manifest_locked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+        self.rebuild_manifest_with_budget(identity, &read_admission::Batch::default())
+    }
+
+    fn rebuild_manifest_with_budget(
+        &self,
+        identity: &Identity,
+        batch: &read_admission::Batch,
+    ) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
             // Go's writeManifest increments a newly rebuilt manifest before
@@ -2624,19 +2721,16 @@ impl Store {
             if !candidate.fresh {
                 continue;
             }
-            let bytes = self.read_candidate_bytes(&candidate)?;
-            #[cfg(unix)]
-            let metadata = rooted::metadata(&self.root_cap, &candidate.relative, &candidate.path)?;
-            #[cfg(not(unix))]
-            let metadata = fs::metadata(&candidate.path).map_err(|source| StoreError::Read {
-                path: candidate.path.clone(),
-                source,
-            })?;
+            let (digest, size, metadata) = self.hash_file(
+                &candidate.relative,
+                MAX_ENTRY_CIPHERTEXT_BYTES_V1,
+                Some(batch),
+            )?;
             manifest.entries.insert(
                 candidate.logical.clone(),
                 ManifestEntry {
-                    sha256: sha256_hex(&bytes),
-                    size: bytes.len() as i64,
+                    sha256: digest,
+                    size: size as i64,
                     mtime: system_time_string(
                         &candidate.path,
                         metadata.modified().map_err(|source| StoreError::Read {
@@ -2956,17 +3050,27 @@ impl SearchIndex {
     /// Rejects a nonempty vault with no searchable values, preserving any
     /// existing index. An empty vault can still produce a valid empty index.
     pub fn build(store: &Store, identity: &Identity) -> Result<Self, StoreError> {
-        let paths = store.list(identity)?;
+        let batch = read_admission::Batch::default();
+        let paths = store.list_with_budget(identity, &batch)?;
+        let mut remaining = read_admission::MAX_INDEX_BYTES - 16 * 1024;
         let mut document = IndexDocument {
             entry_count: paths.len(),
             ..Default::default()
         };
         for path in &paths {
+            index_consume(&mut remaining, 1024 + 12 * path.len())?;
             document.paths.insert(path.clone(), EmptyIndexValue {});
-            if let Ok(entry) = store.get(path, identity) {
+            let result = store.get_with_budget(path, identity, Some(&batch));
+            if result
+                .as_ref()
+                .is_err_and(|error| error.is_resource_failure())
+            {
+                return result.map(|_| unreachable!());
+            }
+            if let Ok(entry) = result {
                 let mut values = Vec::new();
                 for (field, value) in &entry.data {
-                    collect_index_strings(&mut values, field, value);
+                    collect_index_strings(&mut values, field, value, &mut remaining)?;
                 }
                 values.sort();
                 if !values.is_empty() {
@@ -2985,8 +3089,10 @@ impl SearchIndex {
             source: io::Error::other(source.to_string()),
         })?;
         document.salt = salt.clone();
-        let plaintext =
-            serde_json::to_vec(&document).map_err(|error| StoreError::Config(error.to_string()))?;
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(&document).map_err(|error| StoreError::Config(error.to_string()))?,
+        );
+        entry_resources::validate_index(&plaintext, ".search-index")?;
         let encrypted = symvault_crypto::encrypt_index(&plaintext, identity, &salt)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
         let mut bytes = vec![1u8];
@@ -3009,7 +3115,8 @@ impl SearchIndex {
     /// distinguish an absent optimization from a failed integrity check.
     pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
         let path = store.root.join(".search-index");
-        let raw = match store.read_path(&path) {
+        let lease = read_admission::acquire()?;
+        let raw = match store.read_index_bytes(&path) {
             Ok(value) => value,
             Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
                 return Ok(None);
@@ -3025,6 +3132,9 @@ impl SearchIndex {
         } else {
             (Vec::new(), raw)
         };
+        if ciphertext.len() > read_admission::MAX_INDEX_BYTES + 28 {
+            return Err(StoreError::ResourceLimit);
+        }
         let mut plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
             Ok(value) => value,
             Err(error) => {
@@ -3032,6 +3142,10 @@ impl SearchIndex {
                 return Err(StoreError::Decryption(error.to_string()));
             }
         };
+        if let Err(error) = entry_resources::validate_index(&plaintext, ".search-index") {
+            plaintext.zeroize();
+            return Err(error);
+        }
         let document: IndexDocument = match serde_json::from_slice(&plaintext) {
             Ok(value) => value,
             Err(error) => {
@@ -3041,6 +3155,7 @@ impl SearchIndex {
             }
         };
         plaintext.zeroize();
+        drop(lease); // listing can acquire entry leases; do not hold a nested read reservation
         let paths = match store.list(identity) {
             Ok(paths) => paths,
             Err(error) => {
@@ -3229,25 +3344,52 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     }
 }
 
-fn collect_index_strings(values: &mut Vec<String>, field: &str, value: &serde_json::Value) {
+fn index_consume(remaining: &mut usize, cost: usize) -> Result<(), StoreError> {
+    if cost > *remaining {
+        return Err(StoreError::ResourceLimit);
+    }
+    *remaining -= cost;
+    Ok(())
+}
+
+fn collect_index_strings(
+    values: &mut Vec<String>,
+    field: &str,
+    value: &serde_json::Value,
+    remaining: &mut usize,
+) -> Result<(), StoreError> {
     match value {
-        serde_json::Value::String(value) if field == "backup_codes" => value
-            .split('\n')
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .for_each(|value| values.push(symvault_core::go_to_lower(value))),
-        serde_json::Value::String(value) if !value.is_empty() => {
-            values.push(symvault_core::go_to_lower(value))
+        serde_json::Value::String(value) if field == "backup_codes" => {
+            for code in value
+                .split('\n')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                index_consume(remaining, 256 + 12 * code.len())?;
+                values.push(symvault_core::go_to_lower(code));
+            }
         }
-        serde_json::Value::Array(values_array) => values_array
-            .iter()
-            .for_each(|value| collect_index_strings(values, "", value)),
-        serde_json::Value::Object(object) => object
-            .values()
-            .for_each(|value| collect_index_strings(values, "", value)),
+        serde_json::Value::String(value) if !value.is_empty() => {
+            index_consume(remaining, 256 + 12 * value.len())?;
+            values.push(symvault_core::go_to_lower(value));
+        }
+        serde_json::Value::Array(children) => {
+            for child in children {
+                collect_index_strings(values, "", child, remaining)?;
+            }
+        }
+        serde_json::Value::Object(children) => {
+            for child in children.values() {
+                collect_index_strings(values, "", child, remaining)?;
+            }
+        }
         _ => {}
     }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod resource_policy_fixture;

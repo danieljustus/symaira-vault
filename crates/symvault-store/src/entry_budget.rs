@@ -9,6 +9,7 @@ struct Budget {
     violation: Option<&'static str>,
     top_level_fields: usize,
     nested_fields: usize,
+    normalization_cost: usize,
 }
 
 impl Budget {
@@ -22,10 +23,20 @@ impl Budget {
 /// Validates `data` while traversing JSON tokens, before an entry `Value` is
 /// materialized. Duplicate keys are counted as Go's token decoder counts them.
 pub(crate) fn validate(bytes: &[u8], path: &str) -> Result<(), StoreError> {
+    validate_with_batch(bytes, path, None)
+}
+
+pub(crate) fn validate_with_batch(
+    bytes: &[u8],
+    path: &str,
+    batch: Option<&crate::read_admission::Batch>,
+) -> Result<(), StoreError> {
+    crate::entry_resources::validate_with_batch(bytes, path, batch)?;
     let mut budget = Budget {
         violation: None,
         top_level_fields: 0,
         nested_fields: 0,
+        normalization_cost: 0,
     };
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let parsed = RootSeed(&mut budget)
@@ -33,6 +44,9 @@ pub(crate) fn validate(bytes: &[u8], path: &str) -> Result<(), StoreError> {
         .and_then(|()| deserializer.end());
     if let Some(reason) = budget.violation {
         return Err(StoreError::ValueLimit(reason.into()));
+    }
+    if let Some(batch) = batch {
+        batch.consume_decoded(budget.normalization_cost)?;
     }
     parsed.map_err(|error| StoreError::Entry {
         path: path.to_owned(),
@@ -136,6 +150,7 @@ impl<'de> Visitor<'de> for DataVisitor<'_> {
             map.next_value_seed(ValueSeed {
                 budget: self.0,
                 depth: 1,
+                backup_codes: key == "backup_codes",
             })?;
         }
         Ok(())
@@ -179,6 +194,7 @@ impl<'de> Visitor<'de> for DataVisitor<'_> {
 struct ValueSeed<'a> {
     budget: &'a mut Budget,
     depth: usize,
+    backup_codes: bool,
 }
 
 impl<'de> DeserializeSeed<'de> for ValueSeed<'_> {
@@ -192,6 +208,7 @@ impl<'de> DeserializeSeed<'de> for ValueSeed<'_> {
         deserializer.deserialize_any(ValueVisitor {
             budget: self.budget,
             depth: self.depth,
+            backup_codes: self.backup_codes,
         })
     }
 }
@@ -199,6 +216,7 @@ impl<'de> DeserializeSeed<'de> for ValueSeed<'_> {
 struct ValueVisitor<'a> {
     budget: &'a mut Budget,
     depth: usize,
+    backup_codes: bool,
 }
 
 impl<'de> Visitor<'de> for ValueVisitor<'_> {
@@ -209,6 +227,20 @@ impl<'de> Visitor<'de> for ValueVisitor<'_> {
     }
 
     fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<(), E> {
+        if self.backup_codes {
+            let count = value
+                .split('\n')
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .take(MAX_ARRAY_ITEMS + 1)
+                .count();
+            if count > MAX_ARRAY_ITEMS {
+                self.budget.fail("legacy backup codes exceed array limit");
+            }
+            if !value.is_empty() {
+                self.budget.normalization_cost += 1024 + 256 * count + 6 * value.len();
+            }
+        }
         if value.len() > MAX_VALUE_BYTES {
             self.budget.fail("string value too large");
         }
@@ -228,6 +260,7 @@ impl<'de> Visitor<'de> for ValueVisitor<'_> {
         while let Some(()) = seq.next_element_seed(ValueSeed {
             budget: self.budget,
             depth: self.depth + 1,
+            backup_codes: false,
         })? {
             items = items.saturating_add(1);
             if items > MAX_ARRAY_ITEMS {
@@ -249,6 +282,7 @@ impl<'de> Visitor<'de> for ValueVisitor<'_> {
             map.next_value_seed(ValueSeed {
                 budget: self.budget,
                 depth: self.depth + 1,
+                backup_codes: false,
             })?;
         }
         Ok(())

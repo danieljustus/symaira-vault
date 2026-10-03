@@ -32,9 +32,9 @@ const (
 	maxVaultEntryPathDepth    = 64
 )
 
-var errEntryReadLimit = errors.New("entry exceeds read size limit")
-var errEntryEnumerationLimit = errors.New("vault entry enumeration exceeds limit")
-var errManifestEntryLimit = errors.New("manifest entry count exceeds limit")
+var errEntryReadLimit = ErrVaultResourceLimit
+var errEntryEnumerationLimit = ErrVaultResourceLimit
+var errManifestEntryLimit = ErrVaultResourceLimit
 
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	cache := listCacheFor(vaultDir)
@@ -69,57 +69,28 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 
 // ReadEntry reads and decrypts an entry from the vault
 func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, error) {
-	if identity == nil {
-		return nil, errors.New("nil identity")
-	}
-	if err := validateEntryPath(vaultDir, path); err != nil {
-		return nil, err
-	}
-	cfg, err := loadVaultConfig(vaultDir)
-	if err != nil {
-		return nil, err
-	}
-	filePath := entryStoragePath(vaultDir, path, identity, cfg)
-	raw, err := readVaultEntryBounded(vaultDir, filePath)
-	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
-		// A vault may still hold entries under their plaintext names while
-		// pseudonymize_paths is already enabled — an interrupted or previously
-		// buggy migration leaves exactly that state. Reading must fall back to
-		// the entries/<plain>.age layout, not only to the pre-entries/ legacy
-		// root, or the entries become unreachable even though they exist.
-		raw, err = readVaultEntryBounded(vaultDir, entryFilePath(vaultDir, path))
-	}
-	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
-		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			return nil, legacyErr
-		}
-		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
-	}
-	if err != nil {
-		return nil, err
-	}
-	start := time.Now()
-	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
-	recordDuration("decrypt", time.Since(start))
-	if err != nil {
-		return nil, err
-	}
-	entry, err := decodeEntryBounded(plaintext)
-	vaultcrypto.Wipe(plaintext)
-	if err != nil {
-		return nil, err
-	}
-	MigrateBackupCodes(entry)
-	return entry, nil
+	return readEntryInner(vaultDir, path, identity, nil)
 }
 
-func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoKey []byte) (*Entry, error) {
+func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoKey []byte, budgets ...*vaultReadBatch) (*Entry, error) {
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
 
-	if err := validateEntryPath(vaultDir, path); err != nil {
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
 		return nil, err
+	}
+	defer release()
+	var batch *vaultReadBatch
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
+	if budgetErr := batch.consume(0); budgetErr != nil {
+		return nil, budgetErr
+	}
+	if pathErr := validateEntryPath(vaultDir, path); pathErr != nil {
+		return nil, pathErr
 	}
 
 	cfg, err := loadVaultConfig(vaultDir)
@@ -133,17 +104,17 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	} else {
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}
-	raw, err := readVaultEntryBounded(vaultDir, filePath)
+	raw, err := readVaultEntryBounded(vaultDir, filePath, batch)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		// See ReadEntry: an entry may still live under its plaintext name in
 		// entries/ while pseudonymize_paths is enabled.
-		raw, err = readVaultEntryBounded(vaultDir, entryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, entryFilePath(vaultDir, path), batch)
 	}
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
+		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path), batch)
 	}
 	if err != nil {
 		return nil, err
@@ -155,7 +126,7 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	if err != nil {
 		return nil, err
 	}
-	entry, err := decodeEntryBounded(plaintext)
+	entry, err := decodeEntryBounded(plaintext, batch)
 	vaultcrypto.Wipe(plaintext)
 	if err != nil {
 		return nil, err
@@ -182,13 +153,13 @@ func decryptEntryBounded(ciphertext []byte, identity *age.X25519Identity, limit 
 	}
 	if int64(len(plaintext)) > limit {
 		vaultcrypto.Wipe(plaintext)
-		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
+		return nil, errEntryReadLimit
 	}
 	return plaintext, nil
 }
 
-func decodeEntryBounded(plaintext []byte) (*Entry, error) {
-	if err := validateEntryPlaintext(plaintext); err != nil {
+func decodeEntryBounded(plaintext []byte, budgets ...*vaultReadBatch) (*Entry, error) {
+	if err := validateEntryPlaintext(plaintext, budgets...); err != nil {
 		return nil, err
 	}
 	var entry Entry
@@ -201,7 +172,10 @@ func decodeEntryBounded(plaintext []byte) (*Entry, error) {
 	return &entry, nil
 }
 
-func validateEntryPlaintext(plaintext []byte) error {
+func validateEntryPlaintext(plaintext []byte, budgets ...*vaultReadBatch) error {
+	if err := validateEntryEnvelope(plaintext, budgets...); err != nil {
+		return err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(plaintext))
 	start, err := decoder.Token()
 	if err != nil {
@@ -236,7 +210,7 @@ func validateEntryPlaintext(plaintext []byte) error {
 		// encoding/json matches struct fields case-insensitively and merges
 		// duplicate map fields. Reject duplicates so each port has one value.
 		if isData {
-			if err := validateEntryDataJSON(raw); err != nil {
+			if err := validateEntryDataJSON(raw, budgets...); err != nil {
 				return err
 			}
 		}
@@ -253,7 +227,11 @@ func validateEntryPlaintext(plaintext []byte) error {
 	return nil
 }
 
-func validateEntryDataJSON(raw []byte) error {
+func validateEntryDataJSON(raw []byte, budgets ...*vaultReadBatch) error {
+	var batch *vaultReadBatch
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	start, err := decoder.Token()
@@ -280,12 +258,12 @@ func validateEntryDataJSON(raw []byte) error {
 		}
 		topLevelFields++
 		if topLevelFields > maxEntryFields {
-			return fmt.Errorf("entry has too many top-level fields (limit %d)", maxEntryFields)
+			return ErrVaultResourceLimit
 		}
 		if len(key) > maxEntryValueBytes {
-			return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+			return ErrVaultResourceLimit
 		}
-		if err := validateEntryJSONValue(decoder, 1, &nestedFields); err != nil {
+		if err := validateEntryJSONValue(decoder, 1, &nestedFields, key, batch); err != nil {
 			return err
 		}
 	}
@@ -301,9 +279,9 @@ func validateEntryDataJSON(raw []byte) error {
 	return nil
 }
 
-func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error {
+func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int, fieldKey string, batch *vaultReadBatch) error {
 	if depth > maxEntryDepth {
-		return fmt.Errorf("entry nesting depth exceeds %d", maxEntryDepth)
+		return ErrVaultResourceLimit
 	}
 	token, err := decoder.Token()
 	if err != nil {
@@ -311,8 +289,25 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 	}
 	switch value := token.(type) {
 	case string:
+		if fieldKey == BackupCodesField {
+			count := 0
+			for line := range strings.SplitSeq(value, "\n") {
+				if strings.TrimSpace(line) != "" {
+					count++
+				}
+				if count > maxEntryArrayItems {
+					return ErrVaultResourceLimit
+				}
+			}
+			if value != "" {
+				if budgetErr := batch.consumeDecoded(1024 + 256*count + 6*len(value)); budgetErr != nil {
+					return budgetErr
+				}
+			}
+		}
+
 		if len(value) > maxEntryValueBytes {
-			return fmt.Errorf("entry string exceeds %d bytes", maxEntryValueBytes)
+			return ErrVaultResourceLimit
 		}
 	case json.Delim:
 		switch value {
@@ -321,9 +316,9 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 			for decoder.More() {
 				items++
 				if items > maxEntryArrayItems {
-					return fmt.Errorf("entry array exceeds %d items", maxEntryArrayItems)
+					return ErrVaultResourceLimit
 				}
-				if validateErr := validateEntryJSONValue(decoder, depth+1, fields); validateErr != nil {
+				if validateErr := validateEntryJSONValue(decoder, depth+1, fields, "", batch); validateErr != nil {
 					return validateErr
 				}
 			}
@@ -339,13 +334,13 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 					return errors.New("entry object key is not a string")
 				}
 				if len(key) > maxEntryValueBytes {
-					return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+					return ErrVaultResourceLimit
 				}
 				(*fields)++
 				if *fields > maxEntryFields {
-					return fmt.Errorf("entry has too many nested fields (limit %d)", maxEntryFields)
+					return ErrVaultResourceLimit
 				}
-				if validateErr := validateEntryJSONValue(decoder, depth+1, fields); validateErr != nil {
+				if validateErr := validateEntryJSONValue(decoder, depth+1, fields, "", batch); validateErr != nil {
 					return validateErr
 				}
 			}
@@ -360,12 +355,12 @@ func validateEntryJSONValue(decoder *json.Decoder, depth int, fields *int) error
 
 func validateEntryData(data map[string]any) error {
 	if len(data) > maxEntryFields {
-		return fmt.Errorf("entry has too many top-level fields (limit %d)", maxEntryFields)
+		return ErrVaultResourceLimit
 	}
 	fields := 0
 	for key, value := range data {
 		if len(key) > maxEntryValueBytes {
-			return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+			return ErrVaultResourceLimit
 		}
 		if err := validateEntryValue(value, 1, &fields); err != nil {
 			return err
@@ -376,16 +371,16 @@ func validateEntryData(data map[string]any) error {
 
 func validateEntryValue(value any, depth int, fields *int) error {
 	if depth > maxEntryDepth {
-		return fmt.Errorf("entry nesting depth exceeds %d", maxEntryDepth)
+		return ErrVaultResourceLimit
 	}
 	switch value := value.(type) {
 	case string:
 		if len(value) > maxEntryValueBytes {
-			return fmt.Errorf("entry string exceeds %d bytes", maxEntryValueBytes)
+			return ErrVaultResourceLimit
 		}
 	case []any:
 		if len(value) > maxEntryArrayItems {
-			return fmt.Errorf("entry array exceeds %d items", maxEntryArrayItems)
+			return ErrVaultResourceLimit
 		}
 		for _, item := range value {
 			if err := validateEntryValue(item, depth+1, fields); err != nil {
@@ -395,11 +390,11 @@ func validateEntryValue(value any, depth int, fields *int) error {
 	case map[string]any:
 		*fields += len(value)
 		if *fields > maxEntryFields {
-			return fmt.Errorf("entry has too many nested fields (limit %d)", maxEntryFields)
+			return ErrVaultResourceLimit
 		}
 		for key, item := range value {
 			if len(key) > maxEntryValueBytes {
-				return fmt.Errorf("entry field name exceeds %d bytes", maxEntryValueBytes)
+				return ErrVaultResourceLimit
 			}
 			if err := validateEntryValue(item, depth+1, fields); err != nil {
 				return err
@@ -409,12 +404,12 @@ func validateEntryValue(value any, depth int, fields *int) error {
 	return nil
 }
 
-func readVaultEntryBounded(vaultDir, filePath string) ([]byte, error) {
+func readVaultEntryBounded(vaultDir, filePath string, budgets ...*vaultReadBatch) ([]byte, error) {
 	relative, err := filepath.Rel(vaultDir, filePath)
 	if err != nil || filepath.IsAbs(relative) || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("entry path escapes vault root: %q", filePath)
 	}
-	return readEntryRootedBounded(vaultDir, relative)
+	return readRootedFileLimited(vaultDir, relative, maxEntryCiphertextBytesV1, budgets...)
 }
 
 // InferClassification scans all string values in entry.Data.
@@ -463,7 +458,7 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	}
 	defer vaultcrypto.Wipe(plaintext)
 	if len(plaintext) > maxEntryPlaintextBytesV1 {
-		return nil, fmt.Errorf("%w: plaintext", errEntryReadLimit)
+		return nil, errEntryReadLimit
 	}
 	if validationErr := validateEntryPlaintext(plaintext); validationErr != nil {
 		return nil, validationErr
@@ -476,7 +471,7 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	}
 	if len(ciphertext) > maxEntryCiphertextBytesV1 {
 		vaultcrypto.Wipe(ciphertext)
-		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+		return nil, errEntryReadLimit
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	if err := SafeMkdirAll(filepath.Dir(filePath), 0o700); err != nil {
@@ -546,10 +541,22 @@ func ReadEntryFile(vaultDir, filePath string, identity *age.X25519Identity) (*En
 }
 
 func readEntryFileWith(identity *age.X25519Identity, read func() ([]byte, error)) (*Entry, error) {
+	return readEntryFileWithBudget(identity, func(_ *vaultReadBatch) ([]byte, error) { return read() }, nil)
+}
+
+func readEntryFileWithBudget(identity *age.X25519Identity, read func(*vaultReadBatch) ([]byte, error), budget *vaultReadBatch) (*Entry, error) {
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
-	raw, err := read()
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if budgetErr := budget.consume(0); budgetErr != nil {
+		return nil, budgetErr
+	}
+	raw, err := read(budget)
 	if err != nil {
 		return nil, err
 	}
@@ -559,7 +566,7 @@ func readEntryFileWith(identity *age.X25519Identity, read func() ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	entry, err := decodeEntryBounded(plaintext)
+	entry, err := decodeEntryBounded(plaintext, budget)
 	vaultcrypto.Wipe(plaintext)
 	if err != nil {
 		return nil, err
@@ -671,40 +678,8 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 
 // GetEntryMetadata reads only the metadata from an entry.
 func GetEntryMetadata(vaultDir, path string, identity *age.X25519Identity) (*EntryMetadata, error) {
-	if identity == nil {
-		return nil, errors.New("nil identity")
-	}
-	if err := validateEntryPath(vaultDir, path); err != nil {
-		return nil, err
-	}
-	cfg, err := loadVaultConfig(vaultDir)
+	entry, err := readEntryInner(vaultDir, path, identity, nil)
 	if err != nil {
-		return nil, err
-	}
-	raw, err := readVaultEntryBounded(vaultDir, entryStoragePath(vaultDir, path, identity, cfg))
-	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
-		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			return nil, legacyErr
-		}
-		raw, err = readVaultEntryBounded(vaultDir, legacyEntryFilePath(vaultDir, path))
-	}
-	if err != nil {
-		return nil, err
-	}
-	start := time.Now()
-	plaintext, err := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
-	recordDuration("decrypt", time.Since(start))
-	if err != nil {
-		return nil, err
-	}
-	defer vaultcrypto.Wipe(plaintext)
-	if err := validateEntryPlaintext(plaintext); err != nil {
-		return nil, err
-	}
-	var entry struct {
-		Metadata EntryMetadata `json:"meta"`
-	}
-	if err := json.Unmarshal(plaintext, &entry); err != nil {
 		return nil, err
 	}
 	return &entry.Metadata, nil

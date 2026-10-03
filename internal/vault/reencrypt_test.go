@@ -347,7 +347,7 @@ func TestReencryptAll_RollsBackOnManifestFailure(t *testing.T) {
 	writeReencryptTestEntries(t, vaultDir, identity)
 	before := snapshotReencryptTestFiles(t, vaultDir)
 	restoreReencryptHooks(t)
-	reencryptRebuildManifest = func(string, *age.X25519Identity) error {
+	reencryptRebuildManifest = func(string, *age.X25519Identity, ...*vaultReadBatch) error {
 		return errors.New("injected manifest failure")
 	}
 	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {

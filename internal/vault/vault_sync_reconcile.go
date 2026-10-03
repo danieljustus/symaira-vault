@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,16 +54,20 @@ func versionAfter(a EntryMetadata, aPath string, b EntryMetadata, bPath string) 
 // data is ever lost.
 func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) error {
 	entriesDir := filepath.Join(vaultDir, entriesDirName)
-	matches, err := filepath.Glob(filepath.Join(entriesDir, "*.age"))
+	reader := NewReadSession(vaultDir, identity)
+	matches, err := reader.EntryFiles()
 	if err != nil {
 		return err
 	}
 	groups := map[string][]string{}
 	for _, path := range matches {
+		if filepath.Dir(path) != entriesDir {
+			continue
+		}
 		groups[entryFileStem(filepath.Base(path))] = append(groups[entryFileStem(filepath.Base(path))], path)
 	}
 
-	for stem, files := range groups {
+	for _, files := range groups {
 		if len(files) < 2 {
 			continue
 		}
@@ -72,19 +77,22 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 		}
 		var cands []cand
 		for _, f := range files {
-			m, merr := GetEntryMetadata(vaultDir, stem, identity)
+			entry, merr := reader.GetFile(f)
 			if merr != nil {
+				if errors.Is(merr, ErrVaultResourceLimit) || errors.Is(merr, ErrVaultResourceBusy) {
+					return merr
+				}
 				// Cannot read this candidate; leave it in place.
 				continue
 			}
-			cands = append(cands, cand{path: f, meta: *m})
+			cands = append(cands, cand{path: f, meta: entry.Metadata})
 		}
 		if len(cands) < 2 {
 			continue
 		}
 		winner := cands[0]
-		losers := []cand{cands[1]}
-		for _, l := range cands[2:] {
+		losers := make([]cand, 0, len(cands)-1)
+		for _, l := range cands[1:] {
 			if versionAfter(l.meta, l.path, winner.meta, winner.path) {
 				// l beats the current winner: demote the winner to a loser.
 				losers = append(losers, winner)
@@ -97,7 +105,7 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 			if l.path == winner.path {
 				continue
 			}
-			if _, perr := preserveConflictCopy(vaultDir, l.path); perr != nil {
+			if _, perr := preserveConflictCopy(vaultDir, l.path, &reader.batch); perr != nil {
 				if !os.IsNotExist(perr) {
 					return perr
 				}
@@ -111,7 +119,12 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 // "<name>.conflict-<utc-timestamp>.age" file (with an incrementing suffix on
 // collision) and returns its path. It never deletes or mutates the source, so
 // the losing side of a sync conflict is always retained losslessly.
-func preserveConflictCopy(vaultDir, srcPath string) (string, error) {
+func preserveConflictCopy(vaultDir, srcPath string, budgets ...*vaultReadBatch) (string, error) {
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	info, err := os.Lstat(srcPath)
 	if err != nil {
 		return "", err
@@ -119,7 +132,7 @@ func preserveConflictCopy(vaultDir, srcPath string) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("cannot preserve conflict copy of a directory: %s", srcPath)
 	}
-	data, err := readVaultEntryBounded(vaultDir, srcPath)
+	data, err := readVaultEntryBounded(vaultDir, srcPath, budgets...)
 	if err != nil {
 		return "", err
 	}

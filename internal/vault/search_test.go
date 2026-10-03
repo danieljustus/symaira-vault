@@ -30,22 +30,23 @@ func TestListEntriesFastHonorsSharedDepthLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
+	if err := listEntriesFast(root, root, "", make(map[string]struct{}), false); !errors.Is(err, ErrVaultResourceLimit) {
+		t.Fatalf("over-depth tree produced a misleading complete list: %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, filepath.FromSlash(path65))); err != nil {
+		t.Fatal(err)
+	}
 	seen := make(map[string]struct{})
 	if err := listEntriesFast(root, root, "", seen, false); err != nil {
-		t.Fatalf("listEntriesFast: %v", err)
+		t.Fatal(err)
 	}
 	if _, ok := seen[strings.TrimSuffix(path64, ".age")]; !ok {
-		t.Fatalf("entry at depth %d was skipped", maxVaultEntryPathDepth)
-	}
-	if _, ok := seen[strings.TrimSuffix(path65, ".age")]; ok {
-		t.Fatalf("entry deeper than %d was listed", maxVaultEntryPathDepth)
+		t.Fatal("entry at the supported depth was skipped")
 	}
 }
 
 func TestEntryScansRejectSharedEnumerationLimit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows: manifest uses cgo age crypto")
-	}
 	vaultDir := t.TempDir()
 	entriesRoot := entriesDir(vaultDir)
 	if err := os.MkdirAll(entriesRoot, 0o700); err != nil {
@@ -761,28 +762,28 @@ func TestIsRedactedField(t *testing.T) {
 func TestSearchWorkerCount_AutoScale(t *testing.T) {
 	workers := SearchWorkerCount(0)
 	cpus := runtime.NumCPU()
-	if cpus > 8 {
-		if workers != 8 {
-			t.Errorf("SearchWorkerCount(0) = %d, want 8 (capped at 8 with %d CPUs)", workers, cpus)
+	if cpus > 4 {
+		if workers != 4 {
+			t.Errorf("SearchWorkerCount(0) = %d, want 4 (capped at 4 with %d CPUs)", workers, cpus)
 		}
 	} else {
-		if workers < 1 || workers > 8 {
-			t.Errorf("SearchWorkerCount(0) = %d, want between 1 and 8", workers)
+		if workers < 1 || workers > 4 {
+			t.Errorf("SearchWorkerCount(0) = %d, want between 1 and 4", workers)
 		}
 	}
 }
 
 func TestSearchWorkerCount_ConfiguredValue(t *testing.T) {
 	workers := SearchWorkerCount(12)
-	if workers != 12 {
-		t.Errorf("SearchWorkerCount(12) = %d, want 12", workers)
+	if workers != 4 {
+		t.Errorf("SearchWorkerCount(12) = %d, want 4", workers)
 	}
 }
 
 func TestSearchWorkerCount_CappedAtMaximum(t *testing.T) {
 	workers := SearchWorkerCount(99999)
-	if workers != 64 {
-		t.Errorf("SearchWorkerCount(99999) = %d, want 64 (capped)", workers)
+	if workers != 4 {
+		t.Errorf("SearchWorkerCount(99999) = %d, want 4 (capped)", workers)
 	}
 }
 
@@ -790,11 +791,11 @@ func TestSearchWorkerCount_BoundaryValues(t *testing.T) {
 	if w := SearchWorkerCount(1); w != 1 {
 		t.Errorf("SearchWorkerCount(1) = %d, want 1", w)
 	}
-	if w := SearchWorkerCount(64); w != 64 {
-		t.Errorf("SearchWorkerCount(64) = %d, want 64", w)
+	if w := SearchWorkerCount(64); w != 4 {
+		t.Errorf("SearchWorkerCount(64) = %d, want 4", w)
 	}
-	if w := SearchWorkerCount(65); w != 64 {
-		t.Errorf("SearchWorkerCount(65) = %d, want 64 (capped)", w)
+	if w := SearchWorkerCount(65); w != 4 {
+		t.Errorf("SearchWorkerCount(65) = %d, want 4 (capped)", w)
 	}
 }
 

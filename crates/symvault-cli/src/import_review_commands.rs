@@ -64,8 +64,9 @@ pub(crate) fn promote(
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| error.to_string())?;
     let prefix = format!("quarantine/{import_id}/");
-    let entries: Vec<String> = store
-        .list(identity)
+    let reader = store.read_session(identity);
+    let entries: Vec<String> = reader
+        .list()
         .map_err(|error| format!("list quarantine batch: {error}"))?
         .into_iter()
         .filter(|path| path.starts_with(&prefix))
@@ -87,7 +88,7 @@ pub(crate) fn promote(
             continue;
         }
 
-        match store.get(dest_path, identity) {
+        match reader.get(dest_path) {
             Ok(_) => {
                 if !overwrite {
                     if !quiet {
@@ -100,6 +101,7 @@ pub(crate) fn promote(
                 }
             }
             Err(StoreError::EntryNotFound(_)) => {}
+            Err(error) if error.is_resource_failure() => return Err(error.to_string()),
             Err(error) => {
                 if !quiet {
                     println!("Warning: cannot check destination {dest_path}: {error}");
@@ -109,8 +111,9 @@ pub(crate) fn promote(
             }
         }
 
-        let entry = match store.get(&entry_path, identity) {
+        let entry = match reader.get(&entry_path) {
             Ok(entry) => entry,
+            Err(error) if error.is_resource_failure() => return Err(error.to_string()),
             Err(error) => {
                 if !quiet {
                     println!("Warning: failed to read {entry_path}: {error}");

@@ -95,9 +95,8 @@ func MarkBackupCodeUsed(entry *Entry, code string, usedAt time.Time) bool {
 }
 
 func splitBackupCodes(value string) []any {
-	lines := strings.Split(value, "\n")
-	codes := make([]any, 0, len(lines))
-	for _, line := range lines {
+	codes := make([]any, 0)
+	for line := range strings.SplitSeq(value, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

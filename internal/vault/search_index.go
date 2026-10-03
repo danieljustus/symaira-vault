@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -326,7 +325,7 @@ func (idx *EncryptedIndex) BuildMemoryOnly(vaultDir string, identity *age.X25519
 // buildIndex is the shared implementation behind Build and BuildMemoryOnly.
 // When persist is true the encrypted index is saved to disk; when false only
 // the in-memory state is updated.
-func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Identity, persist bool) error {
+func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Identity, persist bool, budgets ...*vaultReadBatch) error {
 	idx.mu.RLock()
 	buildGeneration := idx.generation
 	idx.mu.RUnlock()
@@ -337,11 +336,24 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	// would miss them.
 	listCacheFor(vaultDir).Invalidate()
 
-	paths, err := List(vaultDir, "", identity)
+	batch := &vaultReadBatch{}
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
+	paths, err := listWithBudget(vaultDir, "", identity, batch)
 	if err != nil {
 		return err
 	}
 
+	// Reserve the path dictionary before creating its maps.
+	pathCost := 0
+	for _, path := range paths {
+		cost := 512 + 6*len(path)
+		if cost > maxSearchIndexPlaintextBytes-pathCost {
+			return ErrVaultResourceLimit
+		}
+		pathCost += cost
+	}
 	doc := indexDoc{
 		Values:     make(map[string][]string, len(paths)),
 		TokenIndex: make(map[string]map[string]struct{}),
@@ -361,74 +373,38 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	}
 	doc.Salt = salt
 
-	type indexJob struct {
-		i    int
-		path string
-	}
-	type indexResult struct {
-		i      int
-		path   string
-		values []string
-		hosts  []string
-	}
-
-	jobs := make(chan indexJob, len(paths))
-	results := make(chan indexResult, len(paths))
-
-	maxWorkers := SearchWorkerCount(0)
-	if len(paths) < maxWorkers {
-		maxWorkers = len(paths)
-	}
-
 	var pseudoKey []byte
 	cfg, cfgErr := loadVaultConfig(vaultDir)
 	if cfgErr == nil && identity != nil && isPseudonymizeEnabled(cfg) {
 		pseudoKey = derivePseudonymizationKey(identity)
 	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < maxWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				entry, readErr := readEntryInner(vaultDir, job.path, identity, pseudoKey)
-				if readErr != nil {
-					results <- indexResult{i: job.i, path: job.path}
-					continue
-				}
-
-				var values []string
-				collectStringValues(&values, entry.Data)
-				sort.Strings(values)
-				hosts := ExtractHostsFromData(entry.Data)
-				results <- indexResult{i: job.i, path: job.path, values: values, hosts: hosts}
+	// Stream entries into the bounded document. Parallel full-result queues
+	// retain a second copy of the whole vault before any budget can reject it.
+	for _, path := range paths {
+		entry, readErr := readEntryInner(vaultDir, path, identity, pseudoKey, batch)
+		if readErr != nil {
+			if errors.Is(readErr, ErrVaultResourceLimit) || errors.Is(readErr, ErrVaultResourceBusy) {
+				return readErr
 			}
-		}()
-	}
-
-	for i, entryPath := range paths {
-		jobs <- indexJob{i: i, path: entryPath}
-	}
-	close(jobs)
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	collected := make([]indexResult, len(paths))
-	for result := range results {
-		collected[result.i] = result
-	}
-
-	for _, result := range collected {
-		if len(result.values) > 0 {
-			doc.Values[result.path] = result.values
-			addToTokenIndex(doc.TokenIndex, doc.PathTokens, result.values, result.path)
+			continue
 		}
-		if len(result.hosts) > 0 {
-			addToHostIndex(doc.HostIndex, doc.PathHosts, result.hosts, result.path)
+		if _, fits := retainedDataCost(entry.Data, maxSearchIndexPlaintextBytes); !fits {
+			return ErrVaultResourceLimit
+		}
+		var values []string
+		collectStringValues(&values, entry.Data)
+		sort.Strings(values)
+		if len(values) > 0 {
+			doc.Values[path] = values
+			if policyErr := addToTokenIndexBounded(&doc, values, path); policyErr != nil {
+				return policyErr
+			}
+		}
+		hosts := ExtractHostsFromData(entry.Data)
+		if len(hosts) > 0 {
+			if policyErr := addToHostIndexBounded(&doc, hosts, path); policyErr != nil {
+				return policyErr
+			}
 		}
 	}
 
@@ -442,7 +418,7 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 		return ErrIndexBuildEmpty
 	}
 
-	plaintext, err := json.Marshal(doc)
+	plaintext, err := marshalIndexBounded(&doc)
 	if err != nil {
 		return err
 	}
@@ -542,14 +518,8 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
-	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	docParsed, err := decodeIndexCiphertext(ct, key)
 	if err != nil {
-		return nil, err
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	var docParsed indexDoc
-	if err := json.Unmarshal(plaintext, &docParsed); err != nil {
 		return nil, err
 	}
 
@@ -617,14 +587,8 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
-	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	docParsed, err := decodeIndexCiphertext(ct, key)
 	if err != nil {
-		return nil, err
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	var docParsed indexDoc
-	if err := json.Unmarshal(plaintext, &docParsed); err != nil {
 		return nil, err
 	}
 
@@ -709,7 +673,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	} else {
 		storedSalt := idx.salt
 		key := deriveIndexKey(identity, storedSalt)
-		plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+		parsed, err := decodeIndexCiphertext(idx.ciphertext, key)
 		vaultcrypto.Wipe(key)
 		if err != nil {
 			idx.clearLocked()
@@ -717,15 +681,6 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 			idx.mu.Unlock()
 			return nil
 		}
-		var parsed indexDoc
-		if err = json.Unmarshal(plaintext, &parsed); err != nil {
-			vaultcrypto.Wipe(plaintext)
-			idx.clearLocked()
-			_ = os.Remove(indexFilePath(vaultDir))
-			idx.mu.Unlock()
-			return nil
-		}
-		vaultcrypto.Wipe(plaintext)
 		doc = &parsed
 	}
 
@@ -743,7 +698,12 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.HostIndex == nil {
 		doc.HostIndex = make(map[string]map[string]struct{})
 	}
-	ensurePathTokens(doc)
+	if err := ensurePathTokensBounded(doc); err != nil {
+		idx.clearLocked()
+		_ = os.Remove(indexFilePath(vaultDir))
+		idx.mu.Unlock()
+		return err
+	}
 	ensurePathHosts(doc)
 
 	removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
@@ -751,21 +711,39 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	delete(doc.Values, path)
 
 	entry, readErr := ReadEntry(vaultDir, path, identity)
+	if errors.Is(readErr, ErrVaultResourceLimit) || errors.Is(readErr, ErrVaultResourceBusy) {
+		idx.clearLocked()
+		_ = os.Remove(indexFilePath(vaultDir))
+		idx.mu.Unlock()
+		return readErr
+	}
 	if readErr == nil {
 		var values []string
 		collectStringValues(&values, entry.Data)
 		if len(values) > 0 {
 			doc.Values[path] = values
-			addToTokenIndex(doc.TokenIndex, doc.PathTokens, values, path)
+			if err := addToTokenIndexBounded(doc, values, path); err != nil {
+				idx.clearLocked()
+				_ = os.Remove(indexFilePath(vaultDir))
+				idx.mu.Unlock()
+				return err
+			}
 		}
 		hosts := ExtractHostsFromData(entry.Data)
 		if len(hosts) > 0 {
-			addToHostIndex(doc.HostIndex, doc.PathHosts, hosts, path)
+			if err := addToHostIndexBounded(doc, hosts, path); err != nil {
+				idx.clearLocked()
+				_ = os.Remove(indexFilePath(vaultDir))
+				idx.mu.Unlock()
+				return err
+			}
 		}
 	}
 
-	newPlaintext, err := json.Marshal(doc)
+	newPlaintext, err := marshalIndexBounded(doc)
 	if err != nil {
+		idx.clearLocked()
+		_ = os.Remove(indexFilePath(vaultDir))
 		idx.mu.Unlock()
 		return err
 	}
@@ -843,21 +821,13 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	} else {
 		storedSalt := idx.salt
 		key := deriveIndexKey(identity, storedSalt)
-		plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+		parsed, err := decodeIndexCiphertext(idx.ciphertext, key)
 		vaultcrypto.Wipe(key)
 		if err != nil {
 			dropDisk()
 			idx.mu.Unlock()
 			return
 		}
-		var parsed indexDoc
-		if err = json.Unmarshal(plaintext, &parsed); err != nil {
-			vaultcrypto.Wipe(plaintext)
-			dropDisk()
-			idx.mu.Unlock()
-			return
-		}
-		vaultcrypto.Wipe(plaintext)
 		doc = &parsed
 	}
 
@@ -870,14 +840,18 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	}
 	delete(doc.Values, path)
 	if doc.TokenIndex != nil {
-		ensurePathTokens(doc)
+		if err := ensurePathTokensBounded(doc); err != nil {
+			dropDisk()
+			idx.mu.Unlock()
+			return
+		}
 		removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
 	}
 	if doc.HostIndex != nil {
 		ensurePathHosts(doc)
 		removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
 	}
-	newPlaintext, err := json.Marshal(doc)
+	newPlaintext, err := marshalIndexBounded(doc)
 	if err != nil {
 		dropDisk()
 		idx.mu.Unlock()
@@ -923,6 +897,9 @@ const indexFormatVersion = byte(0x01)
 // partway through can never leave a truncated or half-written index file
 // that a later loadFromDisk would accept as valid.
 func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
+	if len(ciphertext) > maxSearchIndexPlaintextBytes+28 {
+		return ErrVaultResourceLimit
+	}
 	if ciphertext == nil {
 		return nil
 	}
@@ -1012,44 +989,14 @@ func ensureDocPathsFromList(doc *indexDoc, paths []string) {
 
 func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {
 	indexPath := indexFilePath(vaultDir)
-	raw, err := os.ReadFile(indexPath) // #nosec G304 — indexPath is filepath.Join(vaultDir, ".search-index"). Callers pass Vault.Dir from Open, which validates the directory via validateVaultDir(), and the filename is hardcoded.
+	doc, salt, ct, err := readIndexSnapshot(vaultDir, identity)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		return err
-	}
-
-	var salt []byte
-	var ct []byte
-
-	if len(raw) > 1 && raw[0] == indexFormatVersion {
-		if len(raw) < 1+indexSaltLen+1 {
+		if !errors.Is(err, ErrVaultResourceLimit) && !errors.Is(err, ErrVaultResourceBusy) {
 			_ = os.Remove(indexPath)
-			return errors.New("truncated search index")
 		}
-		salt = raw[1 : 1+indexSaltLen]
-		ct = raw[1+indexSaltLen:]
-	} else {
-		ct = raw
-	}
-
-	key := deriveIndexKey(identity, salt)
-	defer vaultcrypto.Wipe(key)
-
-	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
-	if err != nil && len(salt) == 0 {
-		_ = os.Remove(indexPath)
-		return err
-	} else if err != nil {
-		_ = os.Remove(indexPath)
-		return err
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	var doc indexDoc
-	if err := json.Unmarshal(plaintext, &doc); err != nil {
-		_ = os.Remove(indexPath)
 		return err
 	}
 
@@ -1156,22 +1103,6 @@ const indexSaltLen = 16
 
 // tokenize splits a lowercased string into individual tokens on whitespace and
 // punctuation boundaries. Consecutive delimiters produce no empty tokens.
-func tokenize(s string) []string {
-	var tokens []string
-	current := strings.Builder{}
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' {
-			current.WriteRune(r)
-		} else if current.Len() > 0 {
-			tokens = append(tokens, current.String())
-			current.Reset()
-		}
-	}
-	if current.Len() > 0 {
-		tokens = append(tokens, current.String())
-	}
-	return tokens
-}
 
 // isSingleToken returns true if the needle contains no whitespace or
 // punctuation that would split it into multiple tokens.
@@ -1187,46 +1118,33 @@ func isSingleToken(needle string) bool {
 // addToTokenIndex adds all tokens from a set of values to the token index,
 // associating them with the given entry path, and records the deduplicated
 // token set in the reverse path→tokens map.
-func addToTokenIndex(ti map[string]map[string]struct{}, pt map[string][]string, values []string, path string) {
-	tokens := uniqueTokens(values)
-	for _, token := range tokens {
-		if ti[token] == nil {
-			ti[token] = make(map[string]struct{})
-		}
-		ti[token][path] = struct{}{}
-	}
-	if pt != nil {
-		pt[path] = tokens
-	}
-}
 
 // uniqueTokens returns the deduplicated set of tokens across all values.
-func uniqueTokens(values []string) []string {
-	seen := make(map[string]struct{})
-	var tokens []string
-	for _, val := range values {
-		for _, token := range tokenize(val) {
-			if _, ok := seen[token]; ok {
-				continue
-			}
-			seen[token] = struct{}{}
-			tokens = append(tokens, token)
-		}
-	}
-	return tokens
-}
 
 // ensurePathTokens lazily rebuilds the reverse path→tokens map from Values
 // for index documents written before PathTokens existed. This runs at most
 // once per legacy document; afterwards removals are O(tokens of the path).
 func ensurePathTokens(doc *indexDoc) {
+	_ = ensurePathTokensBounded(doc)
+}
+
+func ensurePathTokensBounded(doc *indexDoc) error {
 	if doc.PathTokens != nil {
-		return
+		return nil
 	}
-	doc.PathTokens = make(map[string][]string, len(doc.Values))
+	doc.PathTokens = make(map[string][]string)
 	for path, values := range doc.Values {
-		doc.PathTokens[path] = uniqueTokens(values)
+		used, fits := retainedDataCost(doc, maxSearchIndexPlaintextBytes)
+		if !fits {
+			return ErrVaultResourceLimit
+		}
+		tokens, err := uniqueTokensBounded(values, path, maxSearchIndexPlaintextBytes-used)
+		if err != nil {
+			return err
+		}
+		doc.PathTokens[path] = tokens
 	}
+	return nil
 }
 
 // removeFromTokenIndex removes all references to a path from the token index

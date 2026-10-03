@@ -25,7 +25,11 @@ type HandleResolver interface {
 // entry data, or a path.field reference (e.g. "work/aws.password") which
 // returns a specific field value. The path.field syntax is only used if the
 // candidate path and field actually exist in the vault.
-func ResolveSecretRef(vault *vaultpkg.Vault, ref string) (string, error) {
+func ResolveSecretRef(vault *vaultpkg.Vault, ref string, scopes ...*vaultpkg.ReadSession) (string, error) {
+	reader := vaultpkg.NewReadSession(vault.Dir, vault.Identity)
+	if len(scopes) != 0 {
+		reader = scopes[0]
+	}
 	path := ref
 	field := ""
 
@@ -33,7 +37,10 @@ func ResolveSecretRef(vault *vaultpkg.Vault, ref string) (string, error) {
 		candidatePath := ref[:idx]
 		candidateField := ref[idx+1:]
 
-		entry, readErr := vaultpkg.ReadEntry(vault.Dir, candidatePath, vault.Identity)
+		entry, readErr := reader.Get(candidatePath)
+		if errors.Is(readErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(readErr, vaultpkg.ErrVaultResourceBusy) {
+			return "", readErr
+		}
 		if readErr == nil {
 			if _, ok := entry.Data[candidateField]; ok {
 				path = candidatePath
@@ -42,7 +49,7 @@ func ResolveSecretRef(vault *vaultpkg.Vault, ref string) (string, error) {
 		}
 	}
 
-	entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
+	entry, err := reader.Get(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", fmt.Errorf("secret ref not found: %s", path)

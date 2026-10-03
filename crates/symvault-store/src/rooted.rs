@@ -2,7 +2,6 @@
 //! diagnostic only; they are never used for Unix filesystem access here.
 
 use std::{
-    ffi::OsString,
     fs, io,
     path::{Component, Path},
 };
@@ -106,14 +105,15 @@ pub(super) fn walk_from_with_limits(
 ) -> Result<Vec<RootedEntry>, StoreError> {
     let directory = directory(root, relative, display, false)?;
     let mut entries = Vec::new();
+    let mut path_bytes = 0;
     walk_directory(
         &directory,
         relative,
         display,
         &mut entries,
+        &mut path_bytes,
         relative.components().count(),
-        max_depth,
-        max_entries,
+        (max_depth, max_entries),
     )?;
     Ok(entries)
 }
@@ -125,14 +125,15 @@ pub(super) fn walk_with_limits(
     max_entries: Option<usize>,
 ) -> Result<Vec<RootedEntry>, StoreError> {
     let mut entries = Vec::new();
+    let mut path_bytes = 0;
     walk_directory(
         root,
         Path::new(""),
         display,
         &mut entries,
+        &mut path_bytes,
         0,
-        max_depth,
-        max_entries,
+        (max_depth, max_entries),
     )?;
     Ok(entries)
 }
@@ -142,24 +143,44 @@ fn walk_directory(
     prefix: &Path,
     display: &Path,
     entries: &mut Vec<RootedEntry>,
+    path_bytes: &mut usize,
     depth: usize,
-    max_depth: Option<usize>,
-    max_entries: Option<usize>,
+    limits: (Option<usize>, Option<usize>),
 ) -> Result<(), StoreError> {
-    if max_depth.is_some_and(|limit| depth >= limit) {
-        return Ok(());
-    }
-    let remaining = max_entries.map(|limit| limit.saturating_sub(entries.len()));
-    for name in read_directory_names(directory, display, remaining)? {
+    let (max_depth, max_entries) = limits;
+    use rustix::fs::Dir;
+    use std::os::unix::ffi::OsStrExt;
+    let mut stream = Dir::read_from(directory).map_err(|source| StoreError::Read {
+        path: display.to_path_buf(),
+        source: source.into(),
+    })?;
+    while let Some(entry) = stream.read() {
+        let entry = entry.map_err(|source| StoreError::Read {
+            path: display.to_path_buf(),
+            source: source.into(),
+        })?;
+        let raw_name = entry.file_name().to_bytes();
+        if raw_name == b"." || raw_name == b".." {
+            continue;
+        }
+        if max_depth.is_some_and(|limit| depth >= limit) {
+            return Err(StoreError::ResourceLimit);
+        }
+        let name = std::ffi::OsStr::from_bytes(raw_name);
         if max_entries.is_some_and(|limit| entries.len() >= limit) {
             return Err(StoreError::ValueLimit(
                 "vault entry enumeration limit exceeded".into(),
             ));
         }
-        let relative = prefix.join(&name);
+        let relative = prefix.join(name);
+        let bytes = relative.as_os_str().as_encoded_bytes().len();
+        if bytes > super::read_admission::MAX_PATH_BYTES - *path_bytes {
+            return Err(StoreError::ResourceLimit);
+        }
+        *path_bytes += bytes;
         let entry_display = display.join(&relative);
         use rustix::fs::{AtFlags, FileType, statat};
-        let metadata = statat(directory, &name, AtFlags::SYMLINK_NOFOLLOW).map_err(|source| {
+        let metadata = statat(directory, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|source| {
             StoreError::Read {
                 path: entry_display.clone(),
                 source: source.into(),
@@ -171,12 +192,9 @@ fn walk_directory(
                     relative: relative.clone(),
                     regular: false,
                 });
-                if max_depth.is_some_and(|limit| depth + 1 >= limit) {
-                    continue;
-                }
                 let child = rustix::fs::openat(
                     directory,
-                    &name,
+                    name,
                     rustix::fs::OFlags::RDONLY
                         | rustix::fs::OFlags::DIRECTORY
                         | rustix::fs::OFlags::NOFOLLOW,
@@ -191,9 +209,9 @@ fn walk_directory(
                     &relative,
                     display,
                     entries,
+                    path_bytes,
                     depth + 1,
-                    max_depth,
-                    max_entries,
+                    limits,
                 )?;
             }
             FileType::RegularFile => entries.push(RootedEntry {
@@ -208,38 +226,6 @@ fn walk_directory(
         }
     }
     Ok(())
-}
-
-fn read_directory_names(
-    directory: &fs::File,
-    display: &Path,
-    max_names: Option<usize>,
-) -> Result<Vec<OsString>, StoreError> {
-    use rustix::fs::Dir;
-    use std::os::unix::ffi::OsStringExt;
-
-    let mut stream = Dir::read_from(directory).map_err(|source| StoreError::Read {
-        path: display.to_path_buf(),
-        source: source.into(),
-    })?;
-    let mut names = Vec::new();
-    while let Some(entry) = stream.read() {
-        let entry = entry.map_err(|source| StoreError::Read {
-            path: display.to_path_buf(),
-            source: source.into(),
-        })?;
-        let name = entry.file_name().to_bytes();
-        if name == b"." || name == b".." {
-            continue;
-        }
-        if max_names.is_some_and(|limit| names.len() >= limit) {
-            return Err(StoreError::ValueLimit(
-                "vault entry enumeration limit exceeded".into(),
-            ));
-        }
-        names.push(OsString::from_vec(name.to_vec()));
-    }
-    Ok(names)
 }
 
 pub(super) fn metadata(
@@ -442,6 +428,15 @@ fn read_with_metadata_limited(
     display: &Path,
     limit: u64,
 ) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
+    let file = open_regular(root, relative, display)?;
+    super::read_open_regular_with_metadata_limit(file, display, limit)
+}
+
+pub(super) fn open_regular(
+    root: &fs::File,
+    relative: &Path,
+    display: &Path,
+) -> Result<fs::File, StoreError> {
     use rustix::fs::{Mode, OFlags, openat};
     validate_relative(relative)?;
     let name = relative
@@ -463,5 +458,5 @@ fn read_with_metadata_limited(
         path: display.to_path_buf(),
         source: source.into(),
     })?;
-    super::read_open_regular_with_metadata_limit(fs::File::from(file), display, limit)
+    Ok(fs::File::from(file))
 }

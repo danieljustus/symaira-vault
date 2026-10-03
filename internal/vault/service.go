@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
@@ -45,8 +44,9 @@ type OperationService interface {
 type DefaultOperationService struct{}
 
 type VaultService struct {
-	Vault *Vault
-	Ops   OperationService
+	Vault       *Vault
+	Ops         OperationService
+	readSession *ReadSession
 }
 
 func NewVaultService(v *Vault, ops OperationService) *VaultService {
@@ -65,6 +65,10 @@ func (s *VaultService) UpsertEntry(path string, data map[string]any, action stri
 }
 
 func (s *VaultService) GetEntry(path string) (*Entry, error) {
+	if s.readSession != nil {
+		entry, err := s.readSession.Get(path)
+		return entryReadResult(path, entry, err)
+	}
 	return s.Ops.GetEntry(s.Vault, path)
 }
 
@@ -77,6 +81,9 @@ func (s *VaultService) DeleteEntry(path string) error {
 }
 
 func (s *VaultService) ListEntries(prefix string) ([]string, error) {
+	if s.readSession != nil {
+		return s.readSession.List(prefix)
+	}
 	return s.Ops.ListEntries(s.Vault, prefix)
 }
 
@@ -198,6 +205,10 @@ func (DefaultOperationService) UpsertEntry(v *Vault, path string, data map[strin
 
 func (DefaultOperationService) GetEntry(v *Vault, path string) (*Entry, error) {
 	entry, err := ReadEntry(v.Dir, path, v.Identity)
+	return entryReadResult(path, entry, err)
+}
+
+func entryReadResult(path string, entry *Entry, err error) (*Entry, error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, errorspkg.NotFound("entry not found: %s", path)
@@ -245,7 +256,8 @@ func (DefaultOperationService) ListEntries(v *Vault, prefix string) ([]string, e
 // ListEntryInfos returns entry metadata concurrently using a bounded worker pool.
 // This is significantly faster than sequential GetEntry calls for large vaults.
 func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configuredWorkers int) ([]ListEntryInfo, error) {
-	paths, err := List(v.Dir, prefix, v.Identity)
+	batch := &vaultReadBatch{}
+	paths, err := listWithBudget(v.Dir, prefix, v.Identity, batch)
 	if err != nil {
 		return nil, errorspkg.ReadFailed(err, "cannot list entries: %v", err)
 	}
@@ -254,13 +266,7 @@ func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configure
 		return nil, nil
 	}
 
-	maxWorkers := configuredWorkers
-	if maxWorkers <= 0 {
-		maxWorkers = min(runtime.NumCPU(), 8)
-	}
-	if maxWorkers < 1 {
-		maxWorkers = 1
-	}
+	maxWorkers := SearchWorkerCount(configuredWorkers)
 	if maxWorkers > len(paths) {
 		maxWorkers = len(paths)
 	}
@@ -268,13 +274,14 @@ func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configure
 	type entryResult struct {
 		index int
 		info  ListEntryInfo
+		err   error
 	}
 
 	pathChan := make(chan struct {
 		index int
 		path  string
-	}, len(paths))
-	resultChan := make(chan entryResult, len(paths))
+	}, maxWorkers)
+	resultChan := make(chan entryResult, maxWorkers)
 
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
@@ -283,7 +290,7 @@ func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configure
 			defer wg.Done()
 			for item := range pathChan {
 				info := ListEntryInfo{Path: item.path}
-				entry, readErr := ReadEntry(v.Dir, item.path, v.Identity)
+				entry, readErr := readEntryInner(v.Dir, item.path, v.Identity, nil, batch)
 				if readErr == nil && entry != nil {
 					info.Type = string(entry.SecretMetadata.Type)
 					info.UsageHint = entry.SecretMetadata.UsageHint
@@ -293,7 +300,7 @@ func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configure
 						info.HasValue = entry.Data["password"] != nil || entry.Data["secret"] != nil
 					}
 				}
-				resultChan <- entryResult{index: item.index, info: info}
+				resultChan <- entryResult{index: item.index, info: info, err: readErr}
 			}
 		}()
 	}
@@ -314,10 +321,18 @@ func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configure
 	}()
 
 	infos := make([]ListEntryInfo, len(paths))
+	var firstErr error
 	for result := range resultChan {
+		if errors.Is(result.err, ErrVaultResourceLimit) || errors.Is(result.err, ErrVaultResourceBusy) {
+			if firstErr == nil {
+				firstErr = result.err
+			}
+		}
 		infos[result.index] = result.info
 	}
-
+	if firstErr != nil {
+		return nil, firstErr
+	}
 	return infos, nil
 }
 
@@ -346,4 +361,15 @@ func vaultDeleteHelper(vaultDir, path string, identity *age.X25519Identity) erro
 		return err
 	}
 	return nil
+}
+
+// ForReadOperation preserves the service's injected backend while sharing the
+// production filesystem reader's budget across one command or request.
+func (s *VaultService) ForReadOperation() *VaultService {
+	copyService := *s
+	switch s.Ops.(type) {
+	case DefaultOperationService, *DefaultOperationService:
+		copyService.readSession = NewReadSession(s.VaultDir(), s.VaultIdentity())
+	}
+	return &copyService
 }

@@ -1,7 +1,7 @@
 //! Built-in template CLI; custom Go text/template execution remains unavailable.
 use std::{collections::BTreeMap, path::Path};
 use symvault_crypto::Identity;
-use symvault_store::Store;
+use symvault_store::ReadSession;
 
 pub fn generate(
     root: &Path,
@@ -14,14 +14,15 @@ pub fn generate(
 ) -> Result<String, String> {
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| error.to_string())?;
+    let reader = store.read_session(identity);
     let mut refs = BTreeMap::new();
     if !prefix.is_empty() {
-        for path in store.list(identity).map_err(|error| error.to_string())? {
+        for path in reader.list().map_err(|error| error.to_string())? {
             if !path.starts_with(prefix) {
                 continue;
             }
-            let entry = store
-                .get(&path, identity)
+            let entry = reader
+                .get(&path)
                 .map_err(|error| format!("read entry {path:?}: {error}"))?;
             for field in entry.data.keys() {
                 let basename = path.rsplit('/').next().unwrap_or(&path);
@@ -63,7 +64,7 @@ pub fn generate(
         let value = if dry_run {
             "***".to_owned()
         } else {
-            resolve(&store, identity, &reference)
+            resolve(&reader, &reference)
                 .map_err(|error| format!("render template: resolve ref {alias:?}: {error}"))?
         };
         values.insert(alias, value);
@@ -72,7 +73,7 @@ pub fn generate(
         .map_err(|error| format!("render template: {error}"))
 }
 
-fn resolve(store: &Store, identity: &Identity, reference: &str) -> Result<String, String> {
+fn resolve(reader: &ReadSession<'_>, reference: &str) -> Result<String, String> {
     let (path, field) = if reference.is_empty() {
         return Err("invalid secret reference: empty reference".to_owned());
     } else if let Some(rest) = reference.strip_prefix("op://") {
@@ -84,8 +85,8 @@ fn resolve(store: &Store, identity: &Identity, reference: &str) -> Result<String
     } else {
         reference.rsplit_once('.').filter(|(path, field)| !path.is_empty() && !field.is_empty()).ok_or_else(|| format!("invalid secret reference: expected path.field or op://path/field syntax, got: {reference}"))?
     };
-    let entry = store
-        .get(path, identity)
+    let entry = reader
+        .get(path)
         .map_err(|error| format!("resolve ref {reference:?}: {error}"))?;
     let value = entry
         .data
@@ -98,5 +99,48 @@ fn resolve(store: &Store, identity: &Identity, reference: &str) -> Result<String
         _ => Err(
             "non-string template references are not yet supported by the Rust runtime".to_owned(),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn template_resolutions_share_the_operation_allowance() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::create_dir(temp.path().join("entries")).unwrap();
+        std::fs::write(
+            temp.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .unwrap();
+        std::fs::write(
+            temp.path().join("identity.age"),
+            b"synthetic identity marker",
+        )
+        .unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let store = symvault_store::Store::open(temp.path(), &identity).unwrap();
+        let data = ["one", "two", "three", "four"].map(|key| {
+            (
+                key.into(),
+                serde_json::Value::String("public-fixture".repeat((1024 * 1024) / 14)),
+            )
+        });
+        store
+            .write_new_entry(
+                "control",
+                &symvault_store::Entry {
+                    data: BTreeMap::from(data),
+                    ..Default::default()
+                },
+                &identity,
+            )
+            .unwrap();
+        let args: Vec<_> = (0..14).map(|i| format!("KEY_{i:02}=control.one")).collect();
+        let error =
+            generate(temp.path(), &identity, "env", "fixture", "", &args, false).unwrap_err();
+        assert!(error.contains("vault resource limit exceeded"), "{error}");
+        generate(temp.path(), &identity, "env", "fixture", "", &args, true).unwrap();
     }
 }
