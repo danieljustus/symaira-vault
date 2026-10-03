@@ -398,6 +398,7 @@ func runOracleCases(root string, selected []string) ([]Case, error) {
 		return nil, e
 	}
 	args := append([]string{"run", "./cmd/syncoracle"}, selected...)
+	// #nosec G204 -- executable/subcommand are fixed; selected contains only the case IDs validated against the allowlist above.
 	cmd := exec.Command("go", args...)
 	cmd.Dir = tree
 	// Capture stdout separately: `go run` writes progress ("go: downloading …")
