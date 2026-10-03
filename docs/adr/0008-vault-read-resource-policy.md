@@ -231,3 +231,15 @@ its ten-minute timeout in legitimate scrypt computation; the complete normal
 CRUD package and the focused changed worker race test passed. This does not
 claim a passing full CRUD race run. Native policy acceptance on all three
 supported hosts and the final combined repository gates remain pending.
+
+The first native Windows policy job correctly failed its named-test receipt:
+MCP's separate historical `TestMain` also returned without executing tests.
+Use the existing cross-language opt-in for that package as well, retaining
+the required named-pass assertions. A zero package exit code is not native
+command-reference coverage. Linux's actual policy job passed on `f95fae88`.
+
+SAST findings retain their original failure status and SARIF artifact, and also
+print rule, path, line and diagnostic in the CI log. This makes a red scanner
+gate directly reviewable without printing source snippets or entry values.
+Local installation of the pinned scanner was blocked by its uncached Google
+API dependency; native CI remains the authority for that required gate.
