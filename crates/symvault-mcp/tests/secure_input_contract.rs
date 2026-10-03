@@ -104,7 +104,7 @@ fn secure_input_contract_replays_source_bound_go_handlers() {
             .expect("decode actual Go secure input fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "8088c38fc86535d82950c27d2fb3e169fef1e1c1"
+        "1add155a1ab213cbe8bb42a24254f972cda0ffc1"
     );
     assert!(!fixture.oracle.source_hash.is_empty());
     assert!(!fixture.oracle.generator_hash.is_empty());

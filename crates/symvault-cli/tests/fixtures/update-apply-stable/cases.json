@@ -1,9 +1,9 @@
 {
   "oracle": {
-    "commit": "147e2771a43d2e223c0ff1fb598e077183b05776",
+    "commit": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
     "binary": "go build with main.version set by ldflags",
-    "go_version": "go1.27.1",
-    "captured": "2026-09-27",
+    "go_version": "go1.26.6",
+    "captured": "2026-10-03",
     "source_files": [
       "main.go",
       "cmd/admin/update.go",
@@ -12,9 +12,14 @@
       "internal/config/schema.go",
       "go.mod"
     ],
-    "source_digest": "fb3fb0de5c29586e6833dc593601036ca2c324a021f4bc68d1ccb9c63315ee1b",
+    "source_digest": "c6fa02763d816df7fc7d69f1799fc589c95aae51943677c6aa5a0d297254369c",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
-    "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache"
+    "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache",
+    "generator_files": [
+      "scripts/rust-port/refresh-update-fixtures.py"
+    ],
+    "generator_digest": "f5a39f43d363ee447e6d9f10eb1423aeff32788f0df7b00ff76433d808aea866",
+    "generated_on": "linux"
   },
   "cases": [
     {
