@@ -179,7 +179,7 @@ fn execute_http_inner(
     let mut target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
     if let Some(request_url) = request_url_override {
         if request_url.scheme() != target.url.scheme()
-            || request_url.host_str() != Some(target.host.as_str())
+            || request_url.host() != target.url.host()
             || request_url.port_or_known_default() != target.url.port_or_known_default()
             || !request_url.username().is_empty()
             || request_url.password().is_some()
