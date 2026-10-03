@@ -1,0 +1,28 @@
+Check for Symaira Vault updates
+
+Usage:
+  symvault update [flags]
+  symvault update [command]
+
+Examples:
+  symvault update check
+
+Available Commands:
+  apply       Apply the latest Symaira Vault self-update
+  check       Check GitHub for a newer Symaira Vault release
+  info        Show Symaira Vault installation method info
+
+Flags:
+  -h, --help   help for update
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --json              Output format shorthand for --output json; overrides --output when both are specified
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")
+
+Use "symvault update [command] --help" for more information about a command.
