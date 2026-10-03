@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -65,4 +67,72 @@ func TestVerifyRejectsOmittedOrTamperedVectors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRefreshProvenanceOnlyPreservesPayloadAndRejectsEscape(t *testing.T) {
+	root := rootDir()
+	data, err := os.ReadFile(filepath.Join(root, "testdata", "port", "store", "store.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original fixture
+	if err := json.Unmarshal(data, &original); err != nil {
+		t.Fatal(err)
+	}
+	t.Run("payload", func(t *testing.T) {
+		path := writeFixture(t, original)
+		if err := refreshProvenanceOnly(root, path); err != nil {
+			t.Fatal(err)
+		}
+		after, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var refreshed fixture
+		if err := json.Unmarshal(after, &refreshed); err != nil {
+			t.Fatal(err)
+		}
+		if err := verify(root, path); err != nil {
+			t.Fatal(err)
+		}
+		refreshed.Oracle.GeneratorFiles = original.Oracle.GeneratorFiles
+		refreshed.Oracle.GeneratorDigest = original.Oracle.GeneratorDigest
+		if !reflect.DeepEqual(refreshed, original) {
+			t.Fatal("provenance refresh changed payload or source provenance")
+		}
+	})
+	t.Run("source-drift", func(t *testing.T) {
+		mutated := original
+		mutated.Oracle.SourceDigest = "invalid-source-digest"
+		path := writeFixture(t, mutated)
+		before, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := refreshProvenanceOnly(root, path); err == nil {
+			t.Fatal("refresh accepted changed source provenance")
+		}
+		after, err := os.ReadFile(path)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatal("rejected refresh modified the fixture")
+		}
+	})
+	t.Run("symlink-escape", func(t *testing.T) {
+		outside := writeFixture(t, original)
+		before, err := os.ReadFile(outside)
+		if err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(t.TempDir(), "store.json")
+		if err := os.Symlink(outside, link); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		if err := refreshProvenanceOnly(root, link); err == nil {
+			t.Fatal("refresh followed a symlink outside the fixture root")
+		}
+		after, err := os.ReadFile(outside)
+		if err != nil || !bytes.Equal(before, after) {
+			t.Fatal("rejected refresh changed the outside fixture")
+		}
+	})
 }

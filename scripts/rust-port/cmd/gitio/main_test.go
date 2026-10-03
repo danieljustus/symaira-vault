@@ -1,9 +1,65 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestFixtureDifferenceIdentifiesProjectionWithoutLeakingOrMutating(t *testing.T) {
+	frozen, err := os.ReadFile(filepath.Join(rootDir(), "testdata/port/sync/git-io.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual Fixture
+	if err := json.Unmarshal(frozen, &actual); err != nil {
+		t.Fatal(err)
+	}
+	for i := range actual.Cases {
+		switch actual.Cases[i].ID {
+		case "GIT-002-go-timeout":
+			actual.Cases[i].Expected["descendant_cleanup"] = false
+		case "GIT-002-go-auth":
+			actual.Cases[i].Expected["error_class"] = "offline"
+		case "GIT-002-go-askpass":
+			actual.Cases[i].Expected["observed"] = "private-diagnostic-test-value"
+		}
+	}
+	before, err := json.Marshal(actual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail := fixtureDifference(frozen, actual)
+	for _, want := range []string{
+		"GIT-002-go-timeout.expected.descendant_cleanup: expected=true actual=false",
+		"GIT-002-go-auth.expected.error_class: expected=authentication actual=offline",
+		"GIT-002-go-askpass.expected.observed: expected=<value omitted> actual=<value omitted>",
+	} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("diagnostic %q missing %q", detail, want)
+		}
+	}
+	if strings.Contains(detail, "private-diagnostic-test-value") {
+		t.Fatal("diagnostic leaked arbitrary helper output")
+	}
+	after, err := json.Marshal(actual)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("diagnostics changed the generated projection")
+	}
+	if err := json.Unmarshal(frozen, &actual); err != nil {
+		t.Fatal(err)
+	}
+	actual.Oracle.GeneratorDigest = "changed-generator-digest"
+	if got := fixtureDifference(frozen, actual); !strings.Contains(got, "inspect provenance") {
+		t.Fatalf("metadata-only mismatch misclassified: %q", got)
+	}
+	if got := fixtureDifference([]byte("not JSON"), actual); got != "committed fixture is not valid JSON" {
+		t.Fatalf("invalid fixture not diagnosed: %q", got)
+	}
+}
 
 func TestValidationHelpers(t *testing.T) {
 	t.Run("parsePID", func(t *testing.T) {

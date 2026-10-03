@@ -59,3 +59,30 @@ impl Deref for TempRoot {
         &self.path
     }
 }
+
+#[test]
+fn temporary_root_modes_uniqueness_and_clone_ownership() {
+    let roots = std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..16)
+            .map(|_| scope.spawn(|| TempRoot::missing("symvault-root-contract-")))
+            .collect();
+        workers
+            .into_iter()
+            .map(|worker| worker.join().expect("allocate concurrent root"))
+            .collect::<Vec<_>>()
+    });
+    let paths: std::collections::BTreeSet<_> =
+        roots.iter().map(|root| root.to_path_buf()).collect();
+    assert_eq!(paths.len(), roots.len());
+    assert!(roots.iter().all(|root| !root.exists()));
+
+    let existing = TempRoot::existing("symvault-root-contract-");
+    let path = existing.to_path_buf();
+    let parent = path.parent().expect("owned parent").to_path_buf();
+    assert!(path.is_dir());
+    let clone = existing.clone();
+    drop(existing);
+    assert!(path.is_dir(), "a clone retains the parent guard");
+    drop(clone);
+    assert!(!parent.exists(), "the final owner cleans the parent");
+}

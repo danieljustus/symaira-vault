@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "1605b180010782eb636e8af9b65e064741837065",
-    "commit_sha": "1605b180010782eb636e8af9b65e064741837065",
+    "commit": "9acbc5c5d0f7f78cdb386da3d7117624f68e7844",
+    "commit_sha": "9acbc5c5d0f7f78cdb386da3d7117624f68e7844",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -94,11 +94,13 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_digest": "662b575d6c3d6459ed4406d775fda674860472d36a297f447417b9f51e5db479",
+    "source_digest": "61095fe087f104ee0bca1de0582e1b0fb72bba4979aac84b0a5ef06dc4830a55",
     "generator_files": [
+      "scripts/rust-port/cmd/cxfgen/archive_extract.go",
+      "scripts/rust-port/cmd/cxfgen/archive_extract_test.go",
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "bfbe0d350eb1281ac5675f8d97c2fd8bb0e4aca09bfe7f147d161e1829321fec"
+    "generator_digest": "15efc37c229b14b2e614a3888e845f1eee69311c6f3c0669234fa8b48cb66a50"
   },
   "cases": [
     {

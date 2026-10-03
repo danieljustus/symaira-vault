@@ -286,7 +286,7 @@ func PrimaryFieldForType(t SecretType) string {
 	case SecretTypeBasicAuth:
 		return string(SecretTypeBasicAuth)
 	default:
-		return "password"
+		return string(SecretTypePassword)
 	}
 }
 

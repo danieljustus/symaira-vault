@@ -4,7 +4,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,7 +11,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,7 +83,7 @@ func run() (err error) {
 		fatal("generation requires --oracle-commit=%s and --oracle-release=%s", pinnedOracleCommit, pinnedOracleRelease)
 	}
 	root := repositoryRoot()
-	generatorFiles := []string{"scripts/rust-port/cmd/configprofilegen/main.go", "scripts/rust-port/cmd/configprofilegen/main_test.go"}
+	generatorFiles := []string{"scripts/rust-port/cmd/configprofilegen/archive_extract.go", "scripts/rust-port/cmd/configprofilegen/archive_extract_test.go", "scripts/rust-port/cmd/configprofilegen/main.go", "scripts/rust-port/cmd/configprofilegen/main_test.go"}
 	entries, listErr := os.ReadDir(filepath.Join(root, "scripts/rust-port/internal/diff"))
 	if listErr != nil {
 		return listErr
@@ -185,48 +183,8 @@ func archiveOracle(repo, destination string) {
 			fatal("close archive: %v", err)
 		}
 	}()
-	tr := tar.NewReader(file)
-	for {
-		header, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			fatal("read oracle archive: %v", err)
-		}
-		name, err := safeArchivePath(header.Name)
-		if err != nil {
-			fatal("oracle archive path: %v", err)
-		}
-		path := filepath.Join(destination, name)
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(path, 0o750); err != nil {
-				fatal("extract oracle: %v", err)
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-				fatal("extract oracle: %v", err)
-			}
-			// #nosec G304 -- path is validated by safeArchivePath and rooted in our temp directory
-			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-			if err != nil {
-				fatal("extract oracle: %v", err)
-			}
-			// The archive comes from git archive over this repository's own
-			// pinned commit, but the extraction is bounded anyway: an
-			// unbounded io.Copy from a tar reader is a decompression-bomb
-			// sink. Reading one byte past the cap detects truncation instead
-			// of silently writing a short file.
-			written, copyErr := io.Copy(file, io.LimitReader(tr, maxOracleFileBytes+1))
-			if copyErr == nil && written > maxOracleFileBytes {
-				copyErr = fmt.Errorf("oracle archive member %q exceeds %d bytes", name, int64(maxOracleFileBytes))
-			}
-			closeErr := file.Close()
-			if copyErr != nil || closeErr != nil {
-				fatal("extract oracle: %v %v", copyErr, closeErr)
-			}
-		}
+	if err := extractArchive(file, destination, maxOracleFileBytes, false); err != nil {
+		fatal("extract oracle: %v", err)
 	}
 }
 
