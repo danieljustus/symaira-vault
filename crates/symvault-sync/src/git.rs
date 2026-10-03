@@ -1058,7 +1058,7 @@ fn run_process_with_timeout(
 
 fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Error> {
     // Do not recycle names while another command still holds a deleted file.
-    // Windows returns AccessDenied, not AlreadyExists, for delete-pending names.
+    // Legacy Windows deletion can leave names pending with AccessDenied.
     static NEXT_OUTPUT_ID: AtomicU64 = AtomicU64::new(0);
     let base = std::env::temp_dir();
     for _ in 0..100 {
@@ -1392,17 +1392,24 @@ mod tests {
         let label = "delete-pending-regression";
         let (first_path, first_file) = temporary_output_file(label).unwrap();
         fs::remove_file(&first_path).unwrap();
-        // Windows retains the deleted name until every handle closes. On Unix
-        // the name disappears immediately, but must still not be reused.
+        // Windows may use legacy delete-pending or immediate POSIX unlink.
+        // Neither mode permits the allocator to recycle a still-owned name.
         #[cfg(windows)]
         {
-            let blocked = OpenOptions::new()
+            match OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&first_path)
-                .expect_err("reopening a delete-pending name must fail");
-            assert_eq!(blocked.kind(), io::ErrorKind::PermissionDenied);
-            assert_eq!(blocked.raw_os_error(), Some(5));
+            {
+                Ok(recreated) => {
+                    drop(recreated);
+                    fs::remove_file(&first_path).expect("remove own POSIX-unlinked control");
+                }
+                Err(error) => {
+                    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+                    assert_eq!(error.raw_os_error(), Some(5));
+                }
+            }
         }
         let second = temporary_output_file(label);
         drop(first_file);
