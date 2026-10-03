@@ -713,3 +713,9 @@ budget evidence is recorded before cutover.
 
 **Expected:** Rust is the sole backend source; the final dual release remains a
 verified external rollback point.
+
+API policy follow-up (2026-10-03): re-captured the production Go tool-list oracle
+from retained source `34fb21a0` after the API handler change. The complete catalog
+and all 11 list/profile observations are unchanged; source and generator hashes
+are recalculated from the actual pinned files. Go freshness and the four Rust
+tool-list contract tests pass locally; native CI remains required.
