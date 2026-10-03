@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/policy"

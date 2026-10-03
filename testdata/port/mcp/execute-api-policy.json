@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "go_version": "go1.26.6",
+  "oracle": {
+    "commit": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
+    "commit_sha": "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434",
+    "source_files": [
+      "internal/mcp/server/approval.go",
+      "internal/mcp/server/approval_helper.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/server.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_execute_api_request.go",
+      "internal/mcp/apitemplates/auth.go",
+      "internal/mcp/apitemplates/template.go",
+      "internal/mcp/masking/sanitizer.go",
+      "internal/mcp/masking/validator.go",
+      "internal/ssrf/ssrf.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/policy/context.go",
+      "internal/policy/engine.go",
+      "internal/policy/types.go"
+    ],
+    "source_digest": "9e70a3d07782ba5c5d65f6ae2015b1e81e9145d471b354f1727f21ed5866b3fb",
+    "generator_files": [
+      "internal/mcp/server/mcp_execute_api_policy_fixture_generator_test.go",
+      "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
+      "internal/mcp/server/tools_execute_api_policy_test.go",
+      "internal/mcp/server/tools_execute_api_request_test.go",
+      "internal/mcp/server/tools_test_helpers.go"
+    ],
+    "generator_hash": "3c32fe3360ca6a9c3e9e6e659ab0f8c5a50a9f66fa0a04176f39f026f5f403be"
+  },
+  "cases": [
+    {
+      "name": "deny_bare_entry",
+      "entry_ref": "api-policy",
+      "policy_action": "deny",
+      "policy_operation": "run",
+      "error": "policy denied by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "deny_op_entry",
+      "entry_ref": "op:///api-policy",
+      "policy_action": "deny",
+      "policy_operation": "run",
+      "error": "policy denied by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "deny_op_vault_alias",
+      "entry_ref": "op://synthetic/api-policy",
+      "policy_action": "deny",
+      "policy_operation": "run",
+      "error": "policy denied by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "deny_trimmed_entry",
+      "entry_ref": "  api-policy  ",
+      "policy_action": "deny",
+      "policy_operation": "run",
+      "error": "policy denied by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "read_allow_does_not_authorize_run",
+      "entry_ref": "api-policy",
+      "policy_action": "allow",
+      "policy_operation": "read",
+      "error": "policy: no matching rule (default deny)",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "prompt_blocks_credential_read",
+      "entry_ref": "api-policy",
+      "policy_action": "prompt",
+      "policy_operation": "run",
+      "error": "policy requires approval by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "biometry_blocks_credential_read",
+      "entry_ref": "api-policy",
+      "policy_action": "require_biometry",
+      "policy_operation": "run",
+      "error": "biometric verification required by policy by rule \"entry-policy\"",
+      "credential_reads": 0,
+      "requests": 0
+    },
+    {
+      "name": "allow_run",
+      "entry_ref": "api-policy",
+      "policy_action": "allow",
+      "policy_operation": "run",
+      "error": "",
+      "credential_reads": 1,
+      "requests": 1
+    },
+    {
+      "name": "no_policy",
+      "entry_ref": "api-policy",
+      "policy_action": "",
+      "policy_operation": "",
+      "error": "",
+      "credential_reads": 1,
+      "requests": 1
+    }
+  ]
+}

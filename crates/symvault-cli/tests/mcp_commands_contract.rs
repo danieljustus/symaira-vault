@@ -721,7 +721,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     .expect("decode source-bound production Go fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "864f1ad11877bc774616fde43e4a0d3ea928a370"
+        "2269b3e4b92d2e3c8fbae41d71edd0dec3a67434"
     );
     assert!(!fixture.oracle.source_digest.is_empty());
     let go_success = fixture

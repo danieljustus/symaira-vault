@@ -927,8 +927,15 @@ api-templates-differential: api-templates-fixtures-check
 mcp-execute-api-request-fixtures-check:
 	SYMAIRA_CHECK_MCP_EXECUTE_API_REQUEST_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteAPIRequestFixture$$' -count=1
 
-mcp-execute-api-request-differential: mcp-execute-api-request-fixtures-check
+mcp-execute-api-request-differential: mcp-execute-api-request-fixtures-check mcp-execute-api-policy-differential
 	$(CARGO) test -p symvault-cli --test mcp_commands_contract --locked -- cli_runtime_executes_source_bound_api_template_fixture --exact
+
+.PHONY: mcp-execute-api-policy-fixtures-check mcp-execute-api-policy-differential
+mcp-execute-api-policy-fixtures-check:
+	SYMAIRA_CHECK_MCP_EXECUTE_API_POLICY_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteAPIPolicyFixture$$' -count=1
+
+mcp-execute-api-policy-differential: mcp-execute-api-policy-fixtures-check
+	$(CARGO) test -p symvault-mcp --lib --locked -- api_review_entry_policy_matches_corrected_go_observations
 
 .PHONY: mcp-execute-api-https-fixtures-check mcp-execute-api-https-differential
 mcp-execute-api-https-fixtures-check:

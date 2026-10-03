@@ -115,6 +115,28 @@ through that dedicated PTY gate. Strict all-target Clippy and fmt pass on both.
 fixture/log hashes. MCP-003/BROKER-002 remain open for public DNS/redirects,
 other tools and remaining native targets. No publication, cutover or Go removal.
 
+## Resolved API entry policy alignment — 2026-10-03
+
+Issue #1274 adds the Go handler's existing `run` policy evaluation after
+template entry resolution, approval and scope, and before credential reads.
+The original trigger reached a synthetic loopback upstream despite deny,
+read-only allowance, prompt and biometry rules. Nine corrected real-handler
+observations in `testdata/port/mcp/execute-api-policy.json` record zero reads
+and requests for rejection and one of each for run allowance/no policy.
+Rust replays the same references, rule actions and side-effect counts.
+
+The immutable Go source is `2269b3e4b92d2e3c8fbae41d71edd0dec3a67434`, retained
+on `oracle/api-policy-20261003`. The fixture records Go 1.26.6, production
+source digests and generator digests. The HTTP, HTTPS and template corpora
+are regenerated against this source; their existing behavioral vectors stay
+unchanged. `make mcp-execute-api-policy-differential` checks freshness and the
+Rust replay and participates in the API-request differential target.
+
+This evidence concerns entry/action authorization. Go's shared policy helper
+still supplies an empty tool name; tool-name conditions and prompt/biometry
+diagnostic equivalence are not claimed. Public DNS, native platform gates,
+MCP-003/BROKER-002 promotion, releases and cutover remain separate work.
+
 
 ## Integrated embedded API template catalog — 2026-09-29
 
