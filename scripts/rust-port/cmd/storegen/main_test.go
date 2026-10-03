@@ -53,6 +53,14 @@ func TestVerifyRejectsOmittedOrTamperedVectors(t *testing.T) {
 		{"entry", func(v *fixture) { v.Vaults[0].Entries = v.Vaults[0].Entries[:2] }},
 		{"file", func(v *fixture) { v.Vaults[0].Files = v.Vaults[0].Files[:5] }},
 		{"metadata", func(v *fixture) { v.Oracle.SourceDigest = "0" + v.Oracle.SourceDigest[1:] }},
+		{"source inventory", func(v *fixture) {
+			v.Oracle.SourceFiles = append([]string(nil), v.Oracle.SourceFiles...)
+			v.Oracle.SourceFiles[0] = "changed.go"
+		}},
+		{"generator inventory", func(v *fixture) {
+			v.Oracle.GeneratorFiles = append([]string(nil), v.Oracle.GeneratorFiles...)
+			v.Oracle.GeneratorFiles[0] = "changed.go"
+		}},
 		{"malformed", func(v *fixture) { v.Malformed = v.Malformed[:2] }},
 	}
 	for _, tc := range cases {

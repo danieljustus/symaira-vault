@@ -66,7 +66,7 @@
     {
       "id": "RUST-008",
       "title": "Port git, reconciliation, import/export, intake, and device pairing",
-      "note": "2026-09-17: Windows Rust Job Object adapter and native keyring interop probe integrated; final native gate fixes ongoing. CSV/browser/Bitwarden/TOTP and 1Password/pass source-bound slices implemented; CXF review/integration remains open. Narrow importer fixture PASS is not whole importer/CLI completion.",
+      "note": "2026-10-03: GIT-002 and GIT-003 PASS with actual native Linux/Windows/macOS Go observations and Rust transport/reconciliation tests at merge revision c37d7d5e8c0bbf21494dbfa90f5d1fb3a460ee39 (PR #1286); see native-git-acceptance.md. Issues #1073, #1099 and #1026 are closed. RUST-008 remains in_progress for its separate import/export, intake and pairing gates. Narrow importer fixture PASS is not whole importer/CLI completion.",
       "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003", "PAIRING-001"],
