@@ -34,6 +34,22 @@ pub enum GitError {
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 
+fn retry_init_operation<T>(
+    windows: bool,
+    mut operation: impl FnMut() -> Result<T, GitError>,
+) -> Result<T, GitError> {
+    match operation() {
+        Err(GitError::Io(error)) if windows && error.raw_os_error() == Some(5) => {
+            // Retry this idempotent init step, not the entire constructor: a
+            // previous step may already have created .git while configuration
+            // still needs to run. Keep persistent denials and other failures.
+            std::thread::sleep(Duration::from_millis(100));
+            operation()
+        }
+        result => result,
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommitOptions {
     pub message: String,
@@ -77,8 +93,14 @@ pub struct GitRepository {
 impl GitRepository {
     pub fn init(root: impl AsRef<Path>) -> Result<Self, GitError> {
         let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(&root)
-            .inspect_err(|error| report_process_io_error("init create directory", error))?;
+        retry_init_operation(cfg!(windows), || {
+            fs::create_dir_all(&root).map_err(GitError::Io)
+        })
+        .inspect_err(|error| {
+            if let GitError::Io(error) = error {
+                report_process_io_error("init create directory", error);
+            }
+        })?;
         if !root.is_dir() {
             return Err(GitError::InvalidPath(root));
         }
@@ -99,11 +121,13 @@ impl GitRepository {
                     ["config", "user.email", "symvault@example.com"].as_slice(),
                 ),
             ] {
-                repo.command(args).inspect_err(|error| {
-                    if let GitError::Io(error) = error {
-                        report_process_io_error(operation, error);
-                    }
-                })?;
+                retry_init_operation(cfg!(windows), || repo.command(args)).inspect_err(
+                    |error| {
+                        if let GitError::Io(error) = error {
+                            report_process_io_error(operation, error);
+                        }
+                    },
+                )?;
             }
         }
         Ok(repo)
@@ -1386,6 +1410,79 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn init_retry_finishes_configuration_after_git_directory_exists() {
+        let root = tempfile::tempdir().expect("isolated repository");
+        let repo = GitRepository::init(root.path()).expect("initialize real Git repository");
+        repo.command(&["config", "--unset", "user.email"])
+            .expect("remove final configuration step");
+        assert!(root.path().join(".git").is_dir());
+        let mut attempts = 0;
+        retry_init_operation(true, || {
+            attempts += 1;
+            if attempts == 1 {
+                return Err(GitError::Io(io::Error::from_raw_os_error(5)));
+            }
+            repo.command(&["config", "user.email", "symvault@example.com"])
+        })
+        .expect("recover one Windows init operation");
+        assert_eq!(attempts, 2);
+        let output = repo
+            .command(&["config", "user.email"])
+            .expect("read real config");
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            "symvault@example.com"
+        );
+    }
+
+    #[test]
+    fn init_retry_keeps_persistent_denials_and_does_not_retry_other_failures() {
+        let mut attempts = 0;
+        let error: GitError = retry_init_operation::<()>(true, || {
+            attempts += 1;
+            Err(GitError::Io(io::Error::from_raw_os_error(5)))
+        })
+        .expect_err("persistent denial must fail");
+        assert_eq!(attempts, 2);
+        assert!(matches!(error, GitError::Io(error) if error.raw_os_error() == Some(5)));
+
+        for (windows, failure) in [
+            (false, GitError::Io(io::Error::from_raw_os_error(5))),
+            (true, GitError::Io(io::Error::from_raw_os_error(32))),
+            (
+                true,
+                GitError::Io(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "no native code",
+                )),
+            ),
+            (
+                true,
+                GitError::Command {
+                    status: "5".into(),
+                    stderr: "denied".into(),
+                },
+            ),
+            (
+                true,
+                GitError::Timeout {
+                    operation: "init".into(),
+                    timeout: GIT_COMMAND_TIMEOUT,
+                },
+            ),
+        ] {
+            let mut failure = Some(failure);
+            let mut attempts = 0;
+            let result = retry_init_operation::<()>(windows, || {
+                attempts += 1;
+                Err(failure.take().expect("non-retryable failure was retried"))
+            });
+            assert!(result.is_err());
+            assert_eq!(attempts, 1);
+        }
+    }
 
     #[test]
     fn temporary_output_names_are_not_reused_while_deleted_handles_are_open() {
