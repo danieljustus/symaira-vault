@@ -115,6 +115,11 @@ pub(crate) fn run_native_process(
         let mut diagnostic = Vec::new();
         let (mut stdout_done, mut stderr_done) = (false, false);
         let mut status = None;
+        // Darwin can return EPIPE even for a zero-byte write after the reader
+        // exits. Empty input is already complete, so close it without writing.
+        if input.is_empty() {
+            stdin.take();
+        }
         loop {
             if let Some(pipe) = stdin.as_mut() {
                 match pipe.write(&input[written..]) {
@@ -514,9 +519,56 @@ mod tests {
                 Duration::from_millis(100),
             )
             .expect_err("blocked helper fails");
-            assert_eq!(error.kind, PlatformErrorKind::TimedOut);
+            assert_eq!(
+                error.kind,
+                PlatformErrorKind::TimedOut,
+                "script={script:?}, input_bytes={}, error={error:?}",
+                bytes.len()
+            );
+            assert!(
+                start.elapsed() < Duration::from_secs(3),
+                "script={script:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn native_helper_empty_input_closes_without_masking_real_write_failures() {
+        let output = run_stdin_command(
+            "/bin/sh",
+            &["-c", "cat >/dev/null; printf eof"],
+            b"",
+            Duration::from_secs(3),
+        )
+        .expect("empty input delivers EOF");
+        assert_eq!(output, b"eof");
+
+        for attempt in 0..16 {
+            let start = Instant::now();
+            let error = run_stdin_command(
+                "/bin/sh",
+                &["-c", "exec 0<&-; sleep 30 & exit 0"],
+                b"",
+                Duration::from_millis(100),
+            )
+            .expect_err("inherited output pipes remain deadline-bound");
+            assert_eq!(
+                error.kind,
+                PlatformErrorKind::TimedOut,
+                "attempt={attempt}: {error:?}"
+            );
             assert!(start.elapsed() < Duration::from_secs(3));
         }
+
+        let error = run_stdin_command(
+            "/bin/sh",
+            &["-c", "exec 0<&-; sleep 30"],
+            &vec![b'x'; 256 * 1024],
+            Duration::from_secs(3),
+        )
+        .expect_err("a real nonempty write failure remains an error");
+        assert_eq!(error.kind, PlatformErrorKind::Failed);
+        assert_eq!(error.message, "native macOS helper input failed");
     }
 
     #[test]
