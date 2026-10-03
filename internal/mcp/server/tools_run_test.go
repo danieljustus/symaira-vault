@@ -1182,6 +1182,7 @@ func TestResourcePolicyCommandRefsShareOneAllowance(t *testing.T) {
 	}
 	vaultDir, identity := mockVaultWithEntry(t, "control", data)
 	srv := newTestServerWithVault(t, config.AgentProfile{Name: "test", AllowedPaths: []string{"*"}, CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")}, "stdio", vaultDir)
+	t.Cleanup(func() { _ = srv.Close() })
 	srv.vault.Identity = identity
 	environment := make(map[string]any)
 	for i := 0; i < 8; i++ {

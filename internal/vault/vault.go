@@ -696,7 +696,7 @@ func detectLegacyMode(cfg *vaultconfig.Config, vaultDir string) error {
 }
 
 func hasLegacyTopLevelAgeFiles(vaultDir string) (bool, error) {
-	directory, err := os.Open(vaultDir)
+	directory, err := os.Open(vaultDir) // #nosec G304 -- caller-selected vault root; bounded top-level enumeration is the intended operation
 	if err != nil {
 		return false, err
 	}

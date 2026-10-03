@@ -126,7 +126,7 @@ func observe(r recipe, identity *age.X25519Identity) observation {
 		panic(err)
 	}
 	if r.Kind == "ciphertext" || r.Kind == "listing" {
-		file, err := os.Create(filePath)
+		file, err := os.Create(filePath) // #nosec G304 -- validated fixed recipes write only inside a newly created disposable vault
 		if err != nil {
 			panic(err)
 		}

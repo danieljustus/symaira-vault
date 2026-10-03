@@ -243,3 +243,29 @@ print rule, path, line and diagnostic in the CI log. This makes a red scanner
 gate directly reviewable without printing source snippets or entry values.
 Local installation of the pinned scanner was blocked by its uncached Google
 API dependency; native CI remains the authority for that required gate.
+
+## Corpus maintenance decision
+
+Every source-bound corpus affected by the shared read implementation must be
+recaptured by its actual Go generator. Preserve each previously recorded case,
+output, count and side effect; advance provenance only after the comparison
+passes. Include all production files of the vault, crypto, config, filesystem
+and template packages in MCP read captures so newly added read-policy helpers
+are part of the claimed source closure. The existing strict source comparisons
+remain active. Synthetic harness tests exercise their subprocess helpers
+directly; invoking a historical production oracle's main function would wrongly
+require today's unrelated production sources to equal that older oracle.
+
+The native policy receipt must also execute the current immutable candidate,
+not merely the historical oracle. Check both resource observations and all
+import-review outputs, then record the candidate commit, source/generator
+digests and actual binary hashes. This detects behavior regressions introduced
+after the corpus pin without requiring metadata-only churn at every commit.
+
+Windows now executes the required MCP test. Its next failure was an open audit
+file left by the new command-reference test: explicitly close that test server
+before temporary-directory removal. This was a cleanup failure, not a resource
+policy mismatch. The two G304 diagnostics describe intended accesses to the
+caller-selected vault directory and a fixed synthetic recipe's disposable file;
+the narrow inline annotations explain those boundaries without excluding a
+package or rule from scanning.

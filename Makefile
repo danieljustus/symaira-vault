@@ -298,7 +298,7 @@ core-fixtures-check: quota-fixtures-check
 # (1605b180, "unreleased"), same pattern as AUDIT-001/002 and APPROVAL-001;
 # storemetagen has no built-in default, unlike sibling *gen tools, so the
 # pin lives here rather than as a Go constant.
-STORE_METADATA_ORACLE_COMMIT := 1605b180010782eb636e8af9b65e064741837065
+STORE_METADATA_ORACLE_COMMIT := b13189220519de245d8972d7af2e2d81618f0432
 STORE_METADATA_ORACLE_RELEASE := unreleased
 
 store-metadata-fixtures-check:

@@ -39,6 +39,41 @@ def digest(base, names):
     return value.hexdigest()
 
 
+def production_sources(commit):
+    names = run(["git", "ls-tree", "-r", "--name-only", commit]).decode().splitlines()
+    return sorted(name for name in names
+                  if name in {"go.mod", "go.sum"}
+                  or (name.endswith(".go") and not name.endswith("_test.go")))
+
+
+def observe_candidate(commit, base, expected, review):
+    """Execute the candidate, including source changes newer than the oracle."""
+    sources = production_sources(commit)
+    # A receipt for HEAD must not silently describe uncommitted capture code.
+    run(["git", "diff", "--quiet", commit, "--", *sources, *GENERATORS])
+    tree = base / "candidate"
+    run(["git", "worktree", "add", "--detach", str(tree), commit])
+    try:
+        capture = base / ("candidate-capture.exe" if os.name == "nt" else "candidate-capture")
+        cli = base / ("candidate-cli.exe" if os.name == "nt" else "candidate-cli")
+        run(["go", "build", "-trimpath", "-buildvcs=false", "-o", str(capture),
+             "./scripts/rust-port/cmd/entrypolicygen"], cwd=tree)
+        home = base / "candidate-home"
+        home.mkdir(mode=0o700)
+        observations = json.loads(run([str(capture)], cwd=home, env=isolated_env(home)))
+        if observations != expected:
+            raise RuntimeError("current candidate Go resource observations changed")
+        run(["go", "build", "-trimpath", "-buildvcs=false", "-o", str(cli), "."], cwd=tree)
+        cases = import_observations(cli, base, review)
+        return {"commit_sha": commit, "source_digest": digest(tree, sources),
+                "generator_digest": digest(tree, GENERATORS),
+                "capture_binary_sha256": hashlib.sha256(capture.read_bytes()).hexdigest(),
+                "cli_binary_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(),
+                "resource_cases": len(observations), "import_review_cases": len(cases)}
+    finally:
+        run(["git", "worktree", "remove", str(tree)])
+
+
 def isolated_env(home, vault=None):
     env = {key: value for key, value in os.environ.items()
            if not key.startswith("SYMVAULT_")}
@@ -100,10 +135,7 @@ def main():
         parser.error("initial generation requires --oracle-commit")
     commit = run(["git", "rev-parse", "--verify", "--end-of-options",
                   label + "^{commit}"]).decode().strip()
-    names = run(["git", "ls-tree", "-r", "--name-only", commit]).decode().splitlines()
-    sources = sorted(name for name in names
-                     if name in {"go.mod", "go.sum"}
-                     or (name.endswith(".go") and not name.endswith("_test.go")))
+    sources = production_sources(commit)
     original_review = json.loads(REVIEW.read_text())
     with tempfile.TemporaryDirectory(prefix="symvault-read-policy-") as name:
         base = Path(name)
@@ -156,10 +188,15 @@ def main():
                        "capture_binary_sha256": hashlib.sha256(capture.read_bytes()).hexdigest(),
                        "cli_binary_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(),
                        "resource_cases": len(observations), "import_review_cases": len(cases)}
+            if args.check:
+                candidate_commit = run(["git", "rev-parse", "HEAD^{commit}"]).decode().strip()
+                receipt["candidate"] = observe_candidate(candidate_commit, base, observations, original_review)
             if args.receipt:
                 args.receipt.write_text(json.dumps(receipt, indent=2) + "\n")
             print(f"PASS actual immutable Go: {len(observations)} resource cases, "
                   f"{len(cases)} unchanged import-review cases; {commit}")
+            if args.check:
+                print(f"PASS current immutable Go candidate: {candidate_commit}")
         finally:
             run(["git", "worktree", "remove", str(tree)])
 
