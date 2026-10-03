@@ -63,7 +63,7 @@ jobs:
           import json, platform
           from pathlib import Path
           rows = [json.loads(line) for line in Path('native-http-shutdown.jsonl').read_text().splitlines() if line.startswith('{')]
-          required = {'TestHTTPShutdownActiveFactoryContract/drain', 'TestHTTPShutdownActiveFactoryContract/deadline', 'TestHTTPShutdownIdleTransportContract', 'TestHTTPShutdownPartialRequestDoesNotReachFactory', 'TestHTTPShutdownCleanupRetainsActiveOwnership', 'TestApprovalCancellationDeniesPendingAndLateReply/blocked-read', 'TestApprovalCancellationDeniesPendingAndLateReply/late-yes', 'TestSecurePromptContextCancelsActualProcess', 'TestSecurePromptContextRejectsLateAffirmative'}
+          required = {'TestHTTPShutdownActiveFactoryContract/drain', 'TestHTTPShutdownActiveFactoryContract/deadline', 'TestHTTPShutdownIdleTransportContract', 'TestHTTPShutdownPartialRequestDoesNotReachFactory', 'TestHTTPShutdownCleanupRetainsActiveOwnership', 'TestApprovalCancellationDeniesPendingAndLateReply/blocked-read', 'TestApprovalCancellationDeniesPendingAndLateReply/late-yes', 'TestSecurePromptContextCancelsActualProcess', 'TestSecurePromptContextRejectsLateAffirmative', 'TestAuthorizationCancellationRetiresOwnPendingConsent/ordinary-approval', 'TestAuthorizationCancellationRetiresOwnPendingConsent/late-approval-after-cancel'}
           passed = {row.get('Test') for row in rows if row.get('Action') == 'pass'}
           assert required <= passed, required-passed
           assert not any(row.get('Action') == 'skip' and row.get('Test') in required for row in rows)

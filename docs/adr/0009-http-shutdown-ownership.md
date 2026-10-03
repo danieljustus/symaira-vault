@@ -62,3 +62,10 @@ actually passed. The owning portable packages run completely; the MCP package
 runs the named cancellation and authorization/scope contracts on every host,
 avoiding unrelated POSIX-shell-only command cases. General CI and the local
 complete owning suite retain the broader Linux/macOS coverage.
+
+Device-consent cancellation is checked in the shared policy authorizer, before
+authorization and again after queue wait. A reply racing cancellation cannot
+grant access. Retire only that authorization call's still-pending request; other
+requests in a shared queue remain pending. The real queue/authorizer test covers
+ordinary approval and a late affirmative after cancellation. The server's
+private forwarding method remains unchanged.
