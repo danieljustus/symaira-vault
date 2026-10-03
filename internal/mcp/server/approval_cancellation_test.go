@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,9 @@ func (t *cancellationApprovalTTY) ReadString() (string, error) {
 }
 
 func TestApprovalCancellationDeniesPendingAndLateReply(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows anonymous pipes do not support read deadlines; the separate fail-closed contract covers this terminal")
+	}
 	for _, late := range []bool{false, true} {
 		name := "blocked-read"
 		if late {
@@ -77,5 +81,39 @@ func TestApprovalCancellationDeniesPendingAndLateReply(t *testing.T) {
 				t.Fatal("cancellation did not interrupt and join the approval read")
 			}
 		})
+	}
+}
+
+func TestApprovalUninterruptibleTerminalFailsClosed(t *testing.T) {
+	input, err := os.CreateTemp(t.TempDir(), "uninterruptible-terminal-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = input.Close() }()
+	output, err := os.CreateTemp(t.TempDir(), "approval-output-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = output.Close() }()
+	terminal := &cancellationApprovalTTY{input: input, output: output, entered: make(chan struct{})}
+	oldOpen := openTTYDevice
+	openTTYDevice = func() (ttyDevice, error) { return terminal, nil }
+	defer func() { openTTYDevice = oldOpen }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan ApprovalResult, 1)
+	go func() { done <- RequestApprovalContext(ctx, ApprovalRequest{Operation: "synthetic-control"}) }()
+	select {
+	case result := <-done:
+		if result.Approved || result.Remembered || !errors.Is(result.Error, os.ErrNoDeadline) {
+			t.Fatalf("uninterruptible terminal did not fail closed: %+v", result)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("uninterruptible terminal blocked the approval")
+	}
+	select {
+	case <-terminal.entered:
+		t.Fatal("uninterruptible terminal entered its blocking read")
+	default:
 	}
 }

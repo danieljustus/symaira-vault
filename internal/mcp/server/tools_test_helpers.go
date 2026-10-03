@@ -21,6 +21,7 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 	if err != nil {
 		t.Fatalf("audit.New() error = %v", err)
 	}
+	t.Cleanup(func() { _ = auditLog.Close() })
 
 	var identity *age.X25519Identity
 	if vaultDir != "" {

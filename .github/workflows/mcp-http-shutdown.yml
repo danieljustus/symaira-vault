@@ -58,12 +58,14 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/serverbootstrap ./internal/secureui ./internal/approval ./internal/policy -count=1 > native-http-shutdown.jsonl
-          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/server -run "TestApprovalCancellation|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope" -count=1 >> native-http-shutdown.jsonl
+          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/server -run "TestApprovalCancellation|TestApprovalUninterruptible|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope" -count=1 >> native-http-shutdown.jsonl
           python3 - <<'PY'
           import json, platform
           from pathlib import Path
           rows = [json.loads(line) for line in Path('native-http-shutdown.jsonl').read_text().splitlines() if line.startswith('{')]
-          required = {'TestHTTPShutdownActiveFactoryContract/drain', 'TestHTTPShutdownActiveFactoryContract/deadline', 'TestHTTPShutdownIdleTransportContract', 'TestHTTPShutdownPartialRequestDoesNotReachFactory', 'TestHTTPShutdownCleanupRetainsActiveOwnership', 'TestApprovalCancellationDeniesPendingAndLateReply/blocked-read', 'TestApprovalCancellationDeniesPendingAndLateReply/late-yes', 'TestSecurePromptContextCancelsActualProcess', 'TestSecurePromptContextRejectsLateAffirmative', 'TestAuthorizationCancellationRetiresOwnPendingConsent/ordinary-approval', 'TestAuthorizationCancellationRetiresOwnPendingConsent/late-approval-after-cancel'}
+          required = {'TestHTTPShutdownActiveFactoryContract/drain', 'TestHTTPShutdownActiveFactoryContract/deadline', 'TestHTTPShutdownIdleTransportContract', 'TestHTTPShutdownPartialRequestDoesNotReachFactory', 'TestHTTPShutdownCleanupRetainsActiveOwnership', 'TestApprovalUninterruptibleTerminalFailsClosed', 'TestSecurePromptContextCancelsActualProcess', 'TestSecurePromptContextRejectsLateAffirmative', 'TestAuthorizationCancellationRetiresOwnPendingConsent/ordinary-approval', 'TestAuthorizationCancellationRetiresOwnPendingConsent/late-approval-after-cancel'}
+          if platform.system() != 'Windows':
+              required.update({'TestApprovalCancellationDeniesPendingAndLateReply/blocked-read', 'TestApprovalCancellationDeniesPendingAndLateReply/late-yes'})
           passed = {row.get('Test') for row in rows if row.get('Action') == 'pass'}
           assert required <= passed, required-passed
           assert not any(row.get('Action') == 'skip' and row.get('Test') in required for row in rows)

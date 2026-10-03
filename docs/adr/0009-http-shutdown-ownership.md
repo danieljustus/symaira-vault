@@ -69,3 +69,20 @@ grant access. Retire only that authorization call's still-pending request; other
 requests in a shared queue remain pending. The real queue/authorizer test covers
 ordinary approval and a late affirmative after cancellation. The server's
 private forwarding method remains unchanged.
+
+The first executed Windows MCP lifecycle run exposed leaked audit handles in
+existing authorization tests. Register audit-log cleanup in the shared fixture
+helper, before temporary-directory removal; its existing close method is
+idempotent. The Rust twenty-request/idle-socket regression continues to test
+real behavior; remove its obsolete assertion about the Go local variable name
+now that the owning listener is wrapped for lifecycle admission.
+
+Windows anonymous pipe handles cannot set read deadlines. Retain fail-closed
+behavior for an uninterruptible terminal: deny before entering its read, rather
+than retain an unjoinable goroutine during shutdown. The native receipt requires
+that actual denial on every host. Linux/macOS also require the actual blocked
+pipe interruption and canceled late affirmative reply; Windows does not claim
+those unsupported pipe observations. All hosts still require portable queue and
+GUI/process cancellation tests. Windows HTTP TTY consent remains unavailable
+when the underlying terminal cannot support deadlines; other approval adapters
+retain their cancellation contracts.
