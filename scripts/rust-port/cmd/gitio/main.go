@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/git"
 )
@@ -195,7 +196,10 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 		pidInt, err := parsePID(pidText)
 		fail(err)
 		validPID := strconv.Itoa(pidInt)
-		cleaned := !processAlive(validPID)
+		// Group termination and orphan reaping are asynchronous. An immediate
+		// kill -0 can see an already terminated zombie; observe cleanup within
+		// the same two-second allowance used by the native Rust contract.
+		cleaned := waitForProcessExit(validPID, 2*time.Second)
 		projection["timed_out"] = errorClass(result.Error) == "timeout"
 		projection["descendant_cleanup"] = cleaned
 		if !cleaned {
@@ -239,6 +243,19 @@ func parsePID(raw string) (int, error) {
 
 func processAlive(pid string) bool {
 	return exec.Command("kill", "-0", pid).Run() == nil
+}
+
+func waitForProcessExit(pid string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if !processAlive(pid) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func transportCases() []Case {
