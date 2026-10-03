@@ -678,3 +678,8 @@ budget evidence is recorded before cutover.
 
 **Expected:** Rust is the sole backend source; the final dual release remains a
 verified external rollback point.
+
+Passthrough follow-up (2026-10-03): the CXF importer source closure includes
+`internal/secrets/runner.go`. Re-freeze against retained actual Go source
+`98c786e1` and execute all 20 synthetic import cases again. The behavior corpus
+is identical; only source/generator provenance follows the shared runner fix.
