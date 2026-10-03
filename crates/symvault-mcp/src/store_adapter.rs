@@ -1497,8 +1497,14 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        // Resolve only after scope and approval. The accessor returns only the
-        // already-scoped entry projection and response-redaction strings.
+        // Security hardening pending Go alignment: path-less Go API arguments
+        // bypass entry policy. Reuse the command secret-use authorization boundary
+        // before resolving the template entry's credentials.
+        self.authorize_run_secret_path(&entry_path, "execute_api_request")
+            .map_err(run_files_error)?;
+
+        // Resolve only after scope, policy and approval. The accessor returns
+        // the authorized entry projection and response-redaction strings.
         let (entry_fields, mut known_values) = self
             .inner
             .resolve_api_entry_at_path(&entry_path)
@@ -1587,9 +1593,7 @@ impl StoreReadOnlyRuntime {
             known_values.push(api_query_escape(&value));
         }
         for value in substitutions.values() {
-            known_values.push(api_query_escape(value));
-            known_values.push(api_path_escape(value));
-            known_values.push(api_escaped_path(value));
+            known_values.extend(api_substitution_redaction_values(value));
         }
         if definition.auth_type == "basic"
             && let (Some(user), Some(password)) = (
@@ -3483,39 +3487,77 @@ fn api_query_escape(value: &str) -> String {
         .collect()
 }
 
+// Go net/url.PathEscape preserves these reserved path-segment bytes.
 fn api_path_escape(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                (byte as char).to_string()
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'$'
+            | b'&'
+            | b'+'
+            | b':'
+            | b'='
+            | b'@' => (byte as char).to_string(),
             _ => format!("%{byte:02X}"),
         })
         .collect()
 }
 
+// Go URL.EscapedPath additionally preserves slash, comma and semicolon.
 fn api_escaped_path(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                (byte as char).to_string()
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'~'
+            | b'$'
+            | b'&'
+            | b'+'
+            | b':'
+            | b'='
+            | b'@'
+            | b'/'
+            | b','
+            | b';' => (byte as char).to_string(),
             _ => format!("%{byte:02X}"),
         })
         .collect()
 }
 
-// ponytail: baseline-only test bridge for the current inline collection; replace
-// with the production collector when the redaction repair is implemented.
-#[cfg(test)]
 fn api_substitution_redaction_values(value: &str) -> Vec<String> {
+    // Preserve Go escaping while covering the URL serializer used by the request.
+    let mut url = reqwest::Url::parse("http://localhost/").expect("static URL");
+    url.set_path(&format!("/{value}"));
+    let path = url
+        .path()
+        .strip_prefix('/')
+        .unwrap_or(url.path())
+        .to_owned();
+    url.set_query(Some(value));
+    // Keep earlier, more aggressively escaped forms for upstream re-encoding.
+    let query = api_query_escape(value);
+    let percent_encoded = query.replace('+', "%20");
     vec![
         value.to_owned(),
-        api_query_escape(value),
+        percent_encoded.replace("%2F", "/"),
+        percent_encoded,
+        query,
         api_path_escape(value),
         api_escaped_path(value),
+        path,
+        url.query().unwrap_or_default().to_owned(),
     ]
 }
 
