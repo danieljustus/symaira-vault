@@ -1,16 +1,14 @@
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-fn temporary_root(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    env::temp_dir().join(format!("symvault-sync-differential-{name}-{suffix}"))
+fn temporary_root(name: &str) -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::missing(&format!("symvault-sync-differential-{name}-"))
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
