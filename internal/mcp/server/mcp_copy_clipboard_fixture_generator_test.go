@@ -19,7 +19,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-const copyClipboardOracleCommit = "00d1187cc27abb782acfadf4462708c38d66fb25"
+const copyClipboardOracleCommit = "1add155a1ab213cbe8bb42a24254f972cda0ffc1"
 
 type copyClipboardFixture struct {
 	SchemaVersion int                        `json:"schema_version"`
@@ -141,7 +141,7 @@ func TestGenerateMCPCopyClipboardFixture(t *testing.T) {
 	fixture := copyClipboardFixture{
 		SchemaVersion: 1,
 		Oracle: copyClipboardOracle{
-			Commit:         "00d1187c",
+			Commit:         "1add155a",
 			CommitSHA:      copyClipboardOracleCommit,
 			SourceFiles:    copyClipboardSourceFiles,
 			SourceHash:     sourceHash,
