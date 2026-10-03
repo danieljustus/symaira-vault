@@ -93,7 +93,7 @@ func symlinkRootBackupIsEmpty() bool { if runtime.GOOS=="windows" { return false
 func excludedGitArchiveMembers() []File { root,e:=os.MkdirTemp("","sync-archive-exclude-git-");fail(e);defer os.RemoveAll(root); source:=filepath.Join(root,"source"); fail(os.MkdirAll(filepath.Join(source,"entries"),0700)); fail(os.MkdirAll(filepath.Join(source,".git","objects"),0700)); for p,d:=range map[string][]byte{"identity.age":[]byte("identity"),"config.yaml":[]byte("vault_dir: fixture\n"),"entries/item.age":[]byte("ciphertext"),".git/config":[]byte("[core]\n"),".git/objects/fixture":[]byte("git-object")} { fail(os.WriteFile(filepath.Join(source,filepath.FromSlash(p)),d,0600)) }; arc:=filepath.Join(root,"backup.tar.gz"); fail(admin.CreateBackup(source,arc,true)); return archiveSnapshot(arc) }
 func caseArchive() Case { root,e:=os.MkdirTemp("","sync-archive-");fail(e);defer os.RemoveAll(root); output,e:=os.MkdirTemp("","sync-archive-output-");fail(e);defer os.RemoveAll(output); dst:=filepath.Join(output,"restored"); arc:=filepath.Join(output,"backup.tar.gz"); fail(os.Mkdir(filepath.Join(root,"entries"),0700)); for p,d:=range map[string][]byte{"identity.age":[]byte("identity"),"config.yaml":[]byte("vault_dir: fixture\n"),"entries/item.age":[]byte("ciphertext")} { fail(os.WriteFile(filepath.Join(root,filepath.FromSlash(p)),d,0600)) }; fail(admin.CreateBackup(root,arc,false)); members:=archiveSnapshot(arc); fail(admin.RestoreBackup(arc,dst)); rejected:=map[string]bool{}; for _,name:=range []string{"..\\outside","a//b","a/./b","C:drive-relative"} { rejected[name]=archiveMemberRejected(name) }; return Case{"IO-002-archive","IO-002",map[string]any{"exclude_git":false},map[string]any{"archive_members":members,"restored_files":snapshot(dst),"backslash_member_rejected":backslashArchiveMemberRejected(),"restore_path_rejections":rejected,"existing_directory_mode_preserved":existingArchiveDirectoryModePreserved(),"existing_file_mode_preserved":existingArchiveFileModePreserved(),"readonly_file_write_denied":readonlyArchiveFileBlocksRestore(),"exclude_git_archive_members":excludedGitArchiveMembers(),"restore_symlinked_parent_rejected":restoreRejectsSymlinkedParent(),"symlink_root_backup_empty":symlinkRootBackupIsEmpty()}} }
 func caseIntake() Case { root,e:=os.MkdirTemp("","sync-intake-");fail(e);defer os.RemoveAll(root); p:=filepath.Join(root,"credentials.env"); data:=[]byte("USERNAME=fixture-user\nPASSWORD=fixture-pass\n");fail(os.WriteFile(p,data,0600)); old:=time.Unix(1700000000,0);fail(os.Chtimes(p,old,old)); spool,e:=intake.NewSpool();fail(e);defer spool.Remove(); r,e:=intake.ProcessFile(spool,p,intake.DefaultOptions());fail(e); prov:=Provenance{r.Provenance.SourceName,string(r.Provenance.SourceType),r.Provenance.Size,r.Provenance.SHA256}; var sug []map[string]any; for _,s:=range r.Suggestions {sug=append(sug,map[string]any{"path":s.Path,"field":s.Field,"confidence":s.Confidence,"attachment":s.Attachment})}; return Case{"IO-003-portable-intake","IO-003",map[string]any{"name":"credentials.env","data_b64":b64(data),"mtime_unix":old.Unix()},map[string]any{"status":r.Status,"provenance":prov,"suggestions":sug,"source_unchanged":string(mustRead(p))==string(data),"native_watcher":"unproven"}} }
-func main(){ f:=Fixture{SchemaVersion:1,Scope:map[string]string{"native_watcher":"unproven; polling/process evidence is portable only","pass_import":"unproven; production path requires external gpg","archive_bytes":"not a byte contract; compare member manifest and restore result","candidate_gaps":"GIT-002 divergent-pull parity and IO-003 native watcher remain unproven"}}; f.Cases=[]Case{caseGit(),caseRemote(),caseReconcile(),caseImports(),caseExport(),caseArchive(),caseIntake()}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(f)) }
+func main(){ f:=Fixture{SchemaVersion:1,Scope:map[string]string{"native_watcher":"unproven; polling/process evidence is portable only","pass_import":"unproven; production path requires external gpg","archive_bytes":"not a byte contract; compare member manifest and restore result","candidate_gaps":"GIT-002 divergent-pull parity and IO-003 native watcher remain unproven"}}; all:=[]struct{id string; capture func() Case}{{"GIT-001-local",caseGit},{"GIT-002-local-bare",caseRemote},{"GIT-003-conflict",caseReconcile},{"IO-001-imports",caseImports},{"IO-002-export",caseExport},{"IO-002-archive",caseArchive},{"IO-003-portable-intake",caseIntake}}; wanted:=map[string]bool{}; for _,id:=range os.Args[1:] {wanted[id]=true}; for _,item:=range all {if len(wanted)==0 || wanted[item.id] {f.Cases=append(f.Cases,item.capture())}}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(f)) }
 `
 
 type OracleMeta struct {
@@ -373,7 +373,18 @@ func extract(root string) (string, error) {
 	keep = true
 	return dir, nil
 }
-func runOracle(root string) ([]Case, error) {
+
+// Selection happens before invoking any case, so the known historical Windows
+// archive failure cannot hide the six independently executable observations.
+func runOracleCases(root string, selected []string) ([]Case, error) {
+	known := map[string]bool{"GIT-001-local": true, "GIT-002-local-bare": true, "GIT-003-conflict": true, "IO-001-imports": true, "IO-002-export": true, "IO-002-archive": true, "IO-003-portable-intake": true}
+	seen := make(map[string]bool)
+	for _, id := range selected {
+		if !known[id] || seen[id] {
+			return nil, fmt.Errorf("unknown or duplicate sync observation: %q", id)
+		}
+		seen[id] = true
+	}
 	tree, e := extract(root)
 	if e != nil {
 		return nil, e
@@ -386,7 +397,8 @@ func runOracle(root string) ([]Case, error) {
 	if e = os.WriteFile(p, []byte(strings.ReplaceAll(oracleProgram, "~BT~", "`")), 0600); e != nil {
 		return nil, e
 	}
-	cmd := exec.Command("go", "run", "./cmd/syncoracle")
+	args := append([]string{"run", "./cmd/syncoracle"}, selected...)
+	cmd := exec.Command("go", args...)
 	cmd.Dir = tree
 	// Capture stdout separately: `go run` writes progress ("go: downloading …")
 	// to stderr, and with a cold module cache that text arrives ahead of the
@@ -455,7 +467,7 @@ func sameJSON(a, b json.RawMessage) bool {
 	}
 	return bytes.Equal(ax, by)
 }
-func validate(root string, fixtures *os.Root, path string) error {
+func validate(root string, fixtures *os.Root, path string, selected []string) error {
 	f, e := load(fixtures, path)
 	if e != nil {
 		return e
@@ -469,7 +481,7 @@ func validate(root string, fixtures *os.Root, path string) error {
 		!sameStrings(f.Oracle.SourceFiles, meta.SourceFiles) || !sameStrings(f.Oracle.GeneratorFiles, meta.GeneratorFiles) {
 		return errors.New("sync fixture provenance changed; regenerate from the pinned Go oracle")
 	}
-	got, e := runOracle(root)
+	got, e := runOracleCases(root, selected)
 	if e != nil {
 		return e
 	}
@@ -511,7 +523,16 @@ func writeFixture(fixtures *os.Root, path string, data []byte, check bool) error
 func main() {
 	output := flag.String("output", "testdata/port/sync/sync.json", "fixture path")
 	check := flag.Bool("check", false, "verify provenance and execute the detached oracle")
+	portable := flag.Bool("portable", false, "capture/check the six platform-neutral cases; historical archive is a separately tested exception")
 	flag.Parse()
+	var selected []string
+	if *portable {
+		if *output == "testdata/port/sync/sync.json" {
+			fmt.Fprintln(os.Stderr, "FAIL sync fixture: portable mode requires a distinct --output path; preserve the complete corpus")
+			os.Exit(1)
+		}
+		selected = []string{"GIT-001-local", "GIT-002-local-bare", "GIT-003-conflict", "IO-001-imports", "IO-002-export", "IO-003-portable-intake"}
+	}
 	root := rootDir()
 	fixtures, err := openFixtureRoot(root)
 	if err != nil {
@@ -523,12 +544,16 @@ func main() {
 		os.Exit(1)
 	}
 	if *check {
-		if e := validate(root, fixtures, outputPath); e != nil {
+		if e := validate(root, fixtures, outputPath, selected); e != nil {
 			fmt.Fprintln(os.Stderr, "FAIL sync fixture:", e)
 			_ = fixtures.Close()
 			os.Exit(1)
 		}
-		fmt.Println("PASS Go sync oracle fixture (7 cases; candidate gaps remain explicitly unproven)")
+		count := 7
+		if *portable {
+			count = len(selected)
+		}
+		fmt.Printf("PASS Go sync oracle fixture (%d cases; candidate gaps remain explicitly unproven)\n", count)
 		_ = fixtures.Close()
 		return
 	}
@@ -536,11 +561,14 @@ func main() {
 	if e != nil {
 		panic(e)
 	}
-	cases, e := runOracle(root)
+	cases, e := runOracleCases(root, selected)
 	if e != nil {
 		panic(e)
 	}
 	f := Fixture{1, meta, cases, map[string]string{"native_watcher": "unproven; pinned Go production Watcher is polling-only; no native event backend to execute", "pass_import": "unproven; production path requires external gpg", "archive_bytes": "not a byte contract; compare member manifest and restore result", "candidate_gaps": "IO-003 native watcher remains unproven; pinned Go production Watcher is polling-only"}}
+	if *portable {
+		f.Scope["archive_bytes"] = "excluded; sync-windows-archive-exception-v1 executes the historical rejection separately; original seven-case corpus retains Unix archive vectors"
+	}
 	data, e := json.MarshalIndent(f, "", "  ")
 	if e != nil {
 		panic(e)

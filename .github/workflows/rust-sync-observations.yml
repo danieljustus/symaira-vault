@@ -1,0 +1,69 @@
+name: Sync oracle observations
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-sync-observations.yml'
+      - 'scripts/rust-port/cmd/syncgen/**'
+      - 'testdata/port/sync/*.json'
+      - 'docs/rust-port/windows-sync-oracle.md'
+      - 'cmd/admin/backup*.go'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-sync-observations.yml'
+      - 'scripts/rust-port/cmd/syncgen/**'
+      - 'testdata/port/sync/*.json'
+      - 'docs/rust-port/windows-sync-oracle.md'
+      - 'cmd/admin/backup*.go'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observations:
+    name: Sync observations (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+    steps:
+      - name: Checkout immutable oracle history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+      - name: Repeat real captures and reject semantic drift
+        run: |
+          set -euo pipefail
+          go test -race ./scripts/rust-port/cmd/syncgen -count=1 -json > sync-observations.jsonl
+          go test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$' -count=1 -json >> sync-observations.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("sync-observations.jsonl")]; required={"TestPinnedSyncOracleIsRepeatable","TestPinnedSyncArchiveContract","TestCreateBackup_NormalizesTarMemberSeparators"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert required <= passed, required-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in required for r in rows); print("Verified six real repeated cases, explicit archive contract and current backup roundtrip executed")'
+          go run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json
+      - name: Upload native observation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sync-observations-${{ matrix.os }}
+          path: sync-observations.jsonl
+          if-no-files-found: error
+          retention-days: 14

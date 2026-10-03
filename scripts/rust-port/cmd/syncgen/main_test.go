@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -21,20 +22,52 @@ func TestFixturePathIsBounded(t *testing.T) {
 }
 
 func TestPinnedSyncOracleIsRepeatable(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// The frozen v0.22.1 Go oracle writes filepath-native tar member names
-		// and its restore path rejects those backslashes. Current backup output
-		// is covered by TestCreateBackup_NormalizesTarMemberSeparators; do not
-		// pretend the historical oracle has Windows parity it never had.
-		t.Skip("frozen Go oracle archive case is not portable on Windows")
+	assertRepeatableCases(t, []string{"GIT-001-local", "GIT-002-local-bare", "GIT-003-conflict", "IO-001-imports", "IO-002-export", "IO-003-portable-intake"})
+}
+
+func TestPinnedSyncArchiveContract(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		assertRepeatableCases(t, []string{"IO-002-archive"})
+		return
 	}
-	first, err := runOracle(rootDir())
+	// sync-windows-archive-exception-v1: execute the real detached historical
+	// writer/reader pair and require its precise nested-member rejection.
+	_, err := runOracleCases(rootDir(), []string{"IO-002-archive"})
+	if err == nil || !strings.Contains(err.Error(), `panic: archive contains unsafe path: entries\item.age`) {
+		t.Fatalf("historical Windows archive exception changed: %v", err)
+	}
+	t.Log("sync-windows-archive-exception-v1: actual v0.22.1 nested-member rejection observed; successful historical archive parity remains unproven")
+}
+
+func TestObservationSelectionRejectsUnknownAndDuplicateCases(t *testing.T) {
+	for _, ids := range [][]string{{"unknown"}, {"IO-002-archive", "IO-002-archive"}} {
+		if _, err := runOracleCases("not-a-checkout", ids); err == nil || !strings.Contains(err.Error(), "unknown or duplicate") {
+			t.Fatalf("selection %v did not fail before opening a checkout: %v", ids, err)
+		}
+	}
+}
+
+func assertRepeatableCases(t *testing.T, selected []string) {
+	t.Helper()
+	first, err := runOracleCases(rootDir(), selected)
 	if err != nil {
 		t.Fatalf("first pinned oracle run: %v", err)
 	}
-	second, err := runOracle(rootDir())
+	second, err := runOracleCases(rootDir(), selected)
 	if err != nil {
 		t.Fatalf("second pinned oracle run: %v", err)
+	}
+	if len(first) != len(selected) {
+		t.Fatalf("selected %d observations but executed %d", len(selected), len(first))
+	}
+	seen := make(map[string]bool)
+	for _, c := range first {
+		seen[c.ID] = true
+	}
+	for _, id := range selected {
+		if !seen[id] {
+			t.Fatalf("selected observation %s did not execute", id)
+		}
 	}
 	if len(first) != len(second) {
 		t.Fatalf("oracle case count changed between runs: %d vs %d", len(first), len(second))

@@ -1,5 +1,12 @@
 # Rust port contract matrix
 
+The frozen sync oracle's native execution is split into six genuinely captured
+platform-neutral cases and `sync-windows-archive-exception-v1`; see
+[the Windows sync-oracle contract](windows-sync-oracle.md). The original
+seven-case corpus and Go pin remain intact. The exception proves the historical
+Windows rejection rather than successful archive parity; it does not promote
+GIT-002/003 or IO-002/003.
+
 > **Read this matrix together with
 > [`port-coverage-20260916.md`](port-coverage-20260916.md).** Counting `PASS`
 > rows overstates how close a cutover is: the rows are concentrated in the
