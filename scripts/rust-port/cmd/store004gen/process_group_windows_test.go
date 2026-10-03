@@ -69,7 +69,14 @@ func TestWindowsProcessGroupHelper(t *testing.T) {
 	if err := child.Start(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(os.Getenv("STORE004_READY"), []byte(fmt.Sprint(child.Process.Pid)), 0600); err != nil {
+	// Publish only a complete PID. A reader can observe the empty file between
+	// WriteFile's create/truncate and write, even though the helper is healthy.
+	ready := os.Getenv("STORE004_READY")
+	temporary := ready + ".tmp"
+	if err := os.WriteFile(temporary, []byte(fmt.Sprint(child.Process.Pid)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(temporary, ready); err != nil {
 		t.Fatal(err)
 	}
 	if err := child.Wait(); err != nil {
