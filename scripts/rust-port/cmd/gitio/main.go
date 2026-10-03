@@ -4,10 +4,12 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -141,10 +143,7 @@ func setGitConfig(dir, key, value string) {
 	fail(cmd.Run())
 }
 
-func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
-	if runtime.GOOS == "windows" {
-		panic("gitio SSH oracle requires a native Unix runner")
-	}
+func sshFailureCase(id, helper string) Case {
 	dir := setupRemote("ssh://git@example.invalid/repo.git")
 	defer func() {
 		if err := os.RemoveAll(dir); err != nil {
@@ -152,9 +151,10 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 		}
 	}()
 	marker := filepath.Join(dir, id+".marker")
-	setup(dir, marker)
+	command := shellQuote(filepath.ToSlash(helper)) + " " + shellQuote(id) + " " + shellQuote(filepath.ToSlash(marker))
+	setGitConfig(dir, "core.sshCommand", command)
 	oldSSH, hadSSH := os.LookupEnv("GIT_SSH_COMMAND")
-	fail(os.Setenv("GIT_SSH_COMMAND", marker+".sh"))
+	fail(os.Setenv("GIT_SSH_COMMAND", command))
 	defer func() {
 		if hadSSH {
 			_ = os.Setenv("GIT_SSH_COMMAND", oldSSH)
@@ -203,7 +203,7 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 		projection["timed_out"] = errorClass(result.Error) == "timeout"
 		projection["descendant_cleanup"] = cleaned
 		if !cleaned {
-			_ = exec.Command("kill", "-KILL", validPID).Run() // #nosec G204 -- validPID is a strictly validated positive integer PID from the isolated test process
+			killFixtureProcess(validPID)
 		}
 	}
 	input := map[string]any{"remote": "ssh://git@example.invalid/repo.git"}
@@ -242,7 +242,73 @@ func parsePID(raw string) (int, error) {
 }
 
 func processAlive(pid string) bool {
-	return exec.Command("kill", "-0", pid).Run() == nil
+	if runtime.GOOS != "windows" {
+		return exec.Command("kill", "-0", pid).Run() == nil
+	}
+	// Native tasklist queries the actual process; absence of the executable
+	// or a failed query is never interpreted as successful child cleanup.
+	out, err := exec.Command("tasklist", "/fi", "PID eq "+pid, "/fo", "csv", "/nh").Output() // #nosec G204 -- PID was parsed as a positive decimal integer from the isolated helper's marker.
+	fail(err)
+	r := csv.NewReader(bytes.NewReader(out))
+	r.FieldsPerRecord = -1
+	for {
+		row, err := r.Read()
+		if err == io.EOF {
+			return false
+		}
+		fail(err)
+		if len(row) >= 2 && row[1] == pid {
+			return true
+		}
+	}
+}
+
+func killFixtureProcess(pid string) {
+	if runtime.GOOS == "windows" {
+		_ = exec.Command("taskkill", "/PID", pid, "/T", "/F").Run() // #nosec G204 -- validated synthetic child PID; cleanup after a failed observation.
+	} else {
+		_ = exec.Command("kill", "-KILL", pid).Run() // #nosec G204 -- validated synthetic child PID; cleanup after a failed observation.
+	}
+}
+
+func shellQuote(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'" }
+
+// A real native executable avoids POSIX shell emulation on Windows. Neither
+// helper connects to an SSH server; only public failure/marker observations
+// are emitted, and askpass values are reduced to presence.
+const sshHelperProgram = `package main
+import("fmt";"os";"os/exec";"strconv";"time")
+func fail(err error){if err!=nil{fmt.Fprintln(os.Stderr,err);os.Exit(2)}}
+func main(){
+ if len(os.Args)>1 && os.Args[1]=="sleep" {time.Sleep(time.Minute);return}
+ if len(os.Args)<3 {os.Exit(2)}
+ mode,marker:=os.Args[1],os.Args[2]
+ switch mode {
+ case "GIT-002-go-ssh-precedence":fmt.Fprintln(os.Stderr,"known_hosts: authentication failed: connection refused")
+ case "GIT-002-go-askpass":present:="";if os.Getenv("GIT_ASKPASS")!=""{present="inherited"};fail(os.WriteFile(marker,[]byte("askpass="+present+"\nterminal_prompt="+os.Getenv("GIT_TERMINAL_PROMPT")+"\n"),0600))
+ case "GIT-002-go-timeout":exe,err:=os.Executable();fail(err);child:=exec.Command(exe,"sleep");fail(child.Start());fail(os.WriteFile(marker+".tmp",[]byte(strconv.Itoa(child.Process.Pid)+"\n"),0600));fail(os.Rename(marker+".tmp",marker));fail(child.Wait());return
+ default:os.Exit(2)
+ }
+ os.Exit(1)
+}
+`
+
+func buildSSHHelper() (string, func()) {
+	dir, err := os.MkdirTemp("", "gitio-native 'ssh-")
+	fail(err)
+	cleanup := func() { fail(os.RemoveAll(dir)) }
+	source := filepath.Join(dir, "ssh.go")
+	fail(os.WriteFile(source, []byte(sshHelperProgram), 0600))
+	helper := filepath.Join(dir, "ssh-helper")
+	if runtime.GOOS == "windows" {
+		helper += ".exe"
+	}
+	cmd := exec.Command("go", "build", "-o", helper, source) // #nosec G204 -- fixed go build command; source is the fixed synthetic program in the newly created private fixture directory.
+	if out, err := cmd.CombinedOutput(); err != nil {
+		cleanup()
+		panic(fmt.Errorf("build native SSH helper: %w: %s", err, out))
+	}
+	return helper, cleanup
 }
 
 func waitForProcessExit(pid string, timeout time.Duration) bool {
@@ -295,25 +361,12 @@ func transportCases() []Case {
 			Expected: pullProjection(auth),
 		},
 	)
-	cases = append(cases,
-		unixSSHFailureCase("GIT-002-go-ssh-precedence", func(dir, marker string) {
-			helper := marker + ".sh"
-			fail(os.WriteFile(helper, []byte("#!/bin/sh\nprintf '%s\\n' 'known_hosts: authentication failed: connection refused' >&2\nexit 1\n"), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
-			setGitConfig(dir, "core.sshCommand", helper)
-		}),
-		unixSSHFailureCase("GIT-002-go-askpass", func(dir, marker string) {
-			helper := marker + ".sh"
-			body := fmt.Sprintf("#!/bin/sh\nprintf 'askpass=%%s\\nterminal_prompt=%%s\\n' \"${GIT_ASKPASS:+inherited}\" \"$GIT_TERMINAL_PROMPT\" > %s\nexit 1\n", marker)
-			fail(os.WriteFile(helper, []byte(body), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
-			setGitConfig(dir, "core.sshCommand", helper)
-		}),
-		unixSSHFailureCase("GIT-002-go-timeout", func(dir, marker string) {
-			helper := marker + ".sh"
-			body := fmt.Sprintf("#!/bin/sh\n(sleep 60) &\nprintf '%%s\\n' \"$!\" > %s\nwait\n", marker)
-			fail(os.WriteFile(helper, []byte(body), 0o700)) // #nosec G306 -- owner-only executable permissions required for temporary Git SSH helper script
-			setGitConfig(dir, "core.sshCommand", helper)
-		}),
-	)
+	helper, cleanup := buildSSHHelper()
+	defer cleanup()
+	for _, id := range []string{"GIT-002-go-ssh-precedence", "GIT-002-go-askpass", "GIT-002-go-timeout"} {
+		cases = append(cases, sshFailureCase(id, helper))
+	}
+
 	return cases
 }
 

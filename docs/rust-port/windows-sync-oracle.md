@@ -62,3 +62,14 @@ askpass/prompt and timeout/descendant cleanup) to their retained source-bound
 fixture. The CI Rust Sync/Git suites run at that same candidate SHA. This is the
 native evidence gate for #1246; its GIT-002/003 status still requires completed
 three-OS results and the prerequisite fixes, not merely the presence of this step.
+
+SSH fixtures use compiled native Go and Rust helper programs on every OS,
+including paths containing spaces and an apostrophe. They invoke the real Git
+transport, publish the real descendant PID atomically and observe that process
+with native `tasklist` on Windows or `kill -0` on Unix. Query errors do not count
+as successful Windows cleanup; forced cleanup after a failed observation cannot
+change the recorded result. Rust replay needs Rust and Git, independently of Go.
+All eleven Rust Git-I/O tests execute on Windows, including direct askpass
+invocation, SSH error precedence, inherited prompt settings and real timeout
+cleanup. The cleanup observer also rejects a genuinely live process before
+accepting that same process after termination and reaping on every OS.
