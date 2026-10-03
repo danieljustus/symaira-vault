@@ -142,3 +142,10 @@ and each source inventory; the only command-tree behavior change is the new
 `migrate kdf` flag and its operational help. These are generated observations,
 not manually rewritten source digests. The historical KDF oracle remains the
 released `caadd5e` source and still authenticates its original envelopes.
+
+The CXF generator records the importer's complete Go dependency closure, which
+also includes config, crypto and vault. Recapture its twenty synthetic cases
+against the same immutable source after the KDF changes. Every observation is
+unchanged; its source inventory gains the two new resource-policy/migration
+files, so retaining the old closure or merely replacing a digest would be
+incorrect. The actual detached Go run and Rust replay both pass.
