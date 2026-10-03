@@ -271,6 +271,8 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
     }
 
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String> {
+        #[cfg(test)]
+        tests::API_REVIEW_READS.with(|count| count.set(count.get() + 1));
         match self.store.get(path, &self.identity) {
             Ok(entry) => Ok(Some(Self::project(path, entry))),
             Err(StoreError::EntryNotFound(_)) => Ok(None),
@@ -1612,6 +1614,8 @@ impl StoreReadOnlyRuntime {
             ..runtime_template.clone()
         };
 
+        #[cfg(test)]
+        tests::API_REVIEW_REQUESTS.with(|count| count.set(count.get() + 1));
         let response = match broker::execute_http_for_api(
             &transport_template,
             &method,
@@ -3503,6 +3507,18 @@ fn api_escaped_path(value: &str) -> String {
         .collect()
 }
 
+// ponytail: baseline-only test bridge for the current inline collection; replace
+// with the production collector when the redaction repair is implemented.
+#[cfg(test)]
+fn api_substitution_redaction_values(value: &str) -> Vec<String> {
+    vec![
+        value.to_owned(),
+        api_query_escape(value),
+        api_path_escape(value),
+        api_escaped_path(value),
+    ]
+}
+
 fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
     let (known_sanitized, exact_count) =
         symvault_core::redact::redact_known_values(text, known_values, "***");
@@ -4935,4 +4951,5 @@ mod tests {
             .expect_err("run policy denies before resolving the missing entry");
         assert_eq!(error, "policy denied by rule \"deny command use\"");
     }
+    include!("api_review_tests.rs");
 }
