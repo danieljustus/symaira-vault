@@ -156,6 +156,28 @@ fn api_review_query_untainted_field_remains_public() {
     );
 }
 
+#[test]
+fn api_review_path_dot_suffix_masks_surviving_credential_fragment() {
+    review_assert_substitution_echo(
+        "alpha!? beta/path/.",
+        "none",
+        "/v1/__TOKEN__.",
+        "/v1/alpha!%3F%20beta/",
+        "/v1/***",
+    );
+}
+
+#[test]
+fn api_review_path_multiple_substitutions_mask_surviving_fragment() {
+    review_assert_substitution_echo(
+        "alpha!? beta/path",
+        "none",
+        "/v1/__TOKEN__/__TAIL__",
+        "/v1/alpha!%3F%20beta/",
+        "/v1/***",
+    );
+}
+
 fn review_assert_substitution_echo(
     credential: &str,
     auth_type: &str,
@@ -173,22 +195,31 @@ fn review_assert_substitution_echo(
     .unwrap();
     fs::write(root.path().join("identity.age"), b"fixture marker").unwrap();
     fs::create_dir_all(root.path().join("templates")).unwrap();
+    let tail_substitution = if endpoint.contains("__TAIL__") {
+        "  - placeholder: __TAIL__\n    field: tail\n    in: [path]\n"
+    } else {
+        ""
+    };
     fs::write(root.path().join("templates/fixture.yaml"), format!(
-        "base_url: http://{}\nauth_type: {auth_type}\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\nsubstitutions:\n  - placeholder: __TOKEN__\n    field: credential\n    in: [path, query]\n",
+        "base_url: http://{}\nauth_type: {auth_type}\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\nsubstitutions:\n  - placeholder: __TOKEN__\n    field: credential\n    in: [path, query]\n{tail_substitution}",
         listener.local_addr().unwrap()
     )).unwrap();
     let identity = symvault_crypto::generate_identity();
     let store = Store::open(root.path(), &identity).unwrap();
+    let mut data = BTreeMap::from([
+        ("credential".into(), json!(credential)),
+        ("param_name".into(), json!("auth_token")),
+        ("param_value".into(), json!("separate-auth")),
+    ]);
+    if endpoint.contains("__TAIL__") {
+        data.insert("tail".into(), json!(".."));
+    }
     store
         .write_entry(
             "api-fixture",
             &Entry {
                 path: "api-fixture".into(),
-                data: BTreeMap::from([
-                    ("credential".into(), json!(credential)),
-                    ("param_name".into(), json!("auth_token")),
-                    ("param_value".into(), json!("separate-auth")),
-                ]),
+                data,
                 ..Entry::default()
             },
             &identity,

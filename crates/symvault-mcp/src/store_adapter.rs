@@ -1537,6 +1537,13 @@ impl StoreReadOnlyRuntime {
             &definition.substitutions,
             &substitutions,
         )?;
+        known_values.extend(api_path_substitution_redaction_values(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+            &request_url,
+        )?);
         let request_body =
             apply_api_body_substitutions(&body, &definition.substitutions, &substitutions);
         let mut request_headers = runtime_template.default_headers.clone();
@@ -3576,6 +3583,52 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
         suffixed_path,
         url.query().unwrap_or_default().to_owned(),
     ]
+}
+
+fn api_path_substitution_redaction_values(
+    base_url: &str,
+    endpoint: &str,
+    substitutions: &[ApiSubstitution],
+    values: &BTreeMap<String, String>,
+    request_url: &str,
+) -> Result<Vec<String>, String> {
+    let template =
+        reqwest::Url::parse(&api_request_url(base_url, endpoint, &[], &BTreeMap::new())?)
+            .map_err(|_| "invalid template URL")?;
+    let path = template.path();
+    let mut first = path.len();
+    let mut last = 0;
+    for substitution in substitutions {
+        if substitution_applies(substitution, "path")
+            && values.contains_key(&substitution.placeholder)
+            && let Some(start) = path.find(&substitution.placeholder)
+        {
+            first = first.min(start);
+            last = last.max(
+                path.rfind(&substitution.placeholder).unwrap() + substitution.placeholder.len(),
+            );
+        }
+    }
+    if last == 0 {
+        return Ok(Vec::new());
+    }
+    // Use the actual complete renderer result: literal suffixes and other
+    // placeholders can normalize away only part of a credential. Keep static
+    // outer context where it survives and mask both the remaining span and
+    // individual surviving path segments echoed without their surrounding URI.
+    let rendered = reqwest::Url::parse(request_url).map_err(|_| "invalid template URL")?;
+    let span = rendered
+        .path()
+        .strip_prefix(&path[..first])
+        .unwrap_or(rendered.path());
+    let span = span.strip_suffix(&path[last..]).unwrap_or(span);
+    let mut known = vec![span.to_owned()];
+    known.extend(
+        span.split('/')
+            .filter(|part| !part.is_empty())
+            .map(str::to_owned),
+    );
+    Ok(known)
 }
 
 fn api_query_substitution_redaction_values(
