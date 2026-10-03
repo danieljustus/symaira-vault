@@ -62,16 +62,23 @@ type oracle struct {
 // text is deliberately not part of the contract: Go's yaml.v3 and Rust's
 // serde_yaml_ng word their failures differently, so the contract pins whether
 // an input is rejected, not how the rejection reads.
+// Raw legacy pointers remain observable in the fixture. Rust stores a bool,
+// so cross-language comparison uses RequireApprovalEffective; mode nil versus
+// explicit empty remains exact.
+type approvalSnapshot struct {
+	ApprovalMode             *string `json:"approval_mode"`
+	RequireApprovalRaw       *bool   `json:"require_approval_raw"`
+	RequireApprovalEffective bool    `json:"require_approval_effective"`
+}
+
 type snapshot struct {
-	DefaultAgent       string   `json:"default_agent"`
-	SessionTimeout     string   `json:"session_timeout"`
-	SessionMaxLifetime string   `json:"session_max_lifetime"`
-	AuthMethod         string   `json:"auth_method"`
-	VaultDir           string   `json:"vault_dir"`
-	AgentNames         []string `json:"agent_names"`
-	ApprovalMode       *string  `json:"approval_mode"`
-	RequireApprovalRaw *bool    `json:"require_approval_raw"`
-	RequireApproval    bool     `json:"require_approval"`
+	Approvals          map[string]approvalSnapshot `json:"approvals"`
+	DefaultAgent       string                      `json:"default_agent"`
+	SessionTimeout     string                      `json:"session_timeout"`
+	SessionMaxLifetime string                      `json:"session_max_lifetime"`
+	AuthMethod         string                      `json:"auth_method"`
+	VaultDir           string                      `json:"vault_dir"`
+	AgentNames         []string                    `json:"agent_names"`
 }
 
 type bytesCase struct {
@@ -165,7 +172,7 @@ type fixture struct {
 }
 
 func inputs() []struct{ name, description, input string } {
-	return []struct{ name, description, input string }{
+	cases := []struct{ name, description, input string }{
 		{"empty", "an empty document yields the defaults", ""},
 		{"whitespace_only", "whitespace is treated as empty", "   \n\t\n"},
 		{"canonical_minimal", "a minimal canonical document", "defaultAgent: custom\n"},
@@ -205,7 +212,34 @@ func inputs() []struct{ name, description, input string } {
 		{"approval_mode_null_legacy", "a null legacy boolean does not override the default mode", "agents:\n  default:\n    requireApproval: null\n"},
 		{"custom_agent_mode_omitted", "a defined custom selected agent keeps its unset mode", "defaultAgent: custom\nagents:\n  custom:\n    canWrite: true\n"},
 	}
+	// Paired custom/default profiles exercise the merge boundary, including
+	// explicit modes taking precedence over legacy requireApproval.
+	for _, agent := range []string{"custom", "default"} {
+		for modeIndex, mode := range []*string{nil, stringValue(""), stringValue("none"), stringValue("deny"), stringValue("prompt"), stringValue("auto"), stringValue("bogus"), stringValue("bad\t\u0085\u2028\u2029")} {
+			for legacyIndex, legacy := range []*bool{nil, boolValue(false), boolValue(true)} {
+				fields := map[string]any{}
+				if mode != nil {
+					fields["approvalMode"] = *mode
+				}
+				if legacy != nil {
+					fields["requireApproval"] = *legacy
+				}
+				// JSON is YAML; JSON escaping keeps control characters unambiguous.
+				input, err := json.Marshal(map[string]any{"agents": map[string]any{agent: fields}})
+				if err != nil {
+					panic(err)
+				}
+				cases = append(cases, struct{ name, description, input string }{
+					fmt.Sprintf("approval_%s_%d_%d", agent, modeIndex, legacyIndex),
+					"ordinary approval mode and legacy merge precedence", string(input) + "\n",
+				})
+			}
+		}
+	}
+	return cases
 }
+
+func stringValue(value string) *string { return &value }
 
 func boolValue(value bool) *bool { return &value }
 
@@ -304,16 +338,19 @@ func snapshotOf(cfg *configpkg.Config) *snapshot {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	selected := cfg.Agents[cfg.DefaultAgent]
+	approvals := make(map[string]approvalSnapshot, len(cfg.Agents))
+	for name, agent := range cfg.Agents {
+		approvals[name] = approvalSnapshot{ApprovalMode: agent.ApprovalMode,
+			RequireApprovalRaw:       agent.RequireApproval,
+			RequireApprovalEffective: agent.RequireApproval != nil && *agent.RequireApproval}
+	}
 	return &snapshot{
+		Approvals:          approvals,
 		DefaultAgent:       cfg.DefaultAgent,
 		SessionTimeout:     cfg.SessionTimeout.String(),
 		SessionMaxLifetime: cfg.SessionMaxLifetime.String(),
 		AuthMethod:         cfg.EffectiveAuthMethod(),
 		AgentNames:         names,
-		ApprovalMode:       selected.ApprovalMode,
-		RequireApprovalRaw: selected.RequireApproval,
-		RequireApproval:    selected.RequireApprovalValue(),
 	}
 }
 
@@ -357,28 +394,30 @@ func buildCases(workDir string) ([]bytesCase, error) {
 		}
 		again := snapshotOf(reloaded)
 		if !reflect.DeepEqual(again, item.Snapshot) {
-			// SaveTo omits a nil approvalMode pointer. On reload, the built-in
-			// default is restored, or requireApproval derives a mode again. Record
-			// those source-observed null round trips explicitly rather than calling
-			// them identical or weakening the general round-trip gate.
-			var expectedMode string
-			var roundTripsTo string
+			// SaveTo omits a nil mode. Pin the two observed default-profile
+			// reloads without relaxing the remaining agents or legacy state.
+			expected := *item.Snapshot
+			expected.Approvals = make(map[string]approvalSnapshot, len(item.Snapshot.Approvals))
+			for name, approval := range item.Snapshot.Approvals {
+				expected.Approvals[name] = approval
+			}
+			var mode string
 			switch input.name {
 			case "approval_mode_null":
-				expectedMode = "deny"
-				roundTripsTo = "null_approval_mode_defaults_to_deny"
+				mode = "deny"
+				item.RoundTripsTo = "null_approval_mode_defaults_to_deny"
 			case "approval_mode_null_precedence":
-				expectedMode = "prompt"
-				roundTripsTo = "null_approval_mode_rederived_from_legacy"
+				mode = "prompt"
+				item.RoundTripsTo = "null_approval_mode_rederived_from_legacy"
 			default:
 				return nil, fmt.Errorf("case %s does not round-trip: %+v vs %+v", input.name, again, item.Snapshot)
 			}
-			expected := *item.Snapshot
-			expected.ApprovalMode = &expectedMode
+			approval := expected.Approvals["default"]
+			approval.ApprovalMode = &mode
+			expected.Approvals["default"] = approval
 			if !reflect.DeepEqual(again, &expected) {
-				return nil, fmt.Errorf("case %s has an unexpected null-mode round trip: %+v vs %+v", input.name, again, &expected)
+				return nil, fmt.Errorf("case %s has unexpected null-mode reload: %+v vs %+v", input.name, again, &expected)
 			}
-			item.RoundTripsTo = roundTripsTo
 		} else {
 			item.RoundTripsTo = "identical_snapshot"
 		}

@@ -683,19 +683,31 @@ impl Config {
         } else if config.use_touch_id.is_none() {
             config.use_touch_id = Some(false);
         }
-        if config.default_agent.is_empty() {
-            config.default_agent = DEFAULT_AGENT.into();
-        }
         if let Some(v) = root.get(key("agents")) {
             merge_agents(&mut config, v)?;
         }
-        // Go inserts the selected profile before validating loaded modes. Use
-        // the same deny preset so a missing selected profile stays fail-closed.
+        if config.default_agent.is_empty() {
+            config.default_agent = DEFAULT_AGENT.into();
+        }
         config
             .agents
             .entry(config.default_agent.clone())
-            .or_insert_with(AgentProfile::deny_all);
-        validate_loaded_approval_modes(&config.agents)?;
+            .or_insert_with(|| AgentProfile {
+                // Go ensureAgentDefaults gives an absent selected profile deny.
+                approval_mode: Some("deny".into()),
+                ..AgentProfile::default()
+            });
+        // Go Load checks ordinary approval modes after agent merge and before
+        // section merge. This is deliberately narrower than Config::validate,
+        // which also permits `auto` for directly constructed configurations.
+        for (name, agent) in &config.agents {
+            let mode = agent.approval_mode.as_deref().unwrap_or("");
+            if !matches!(mode, "" | "none" | "deny" | "prompt") {
+                return Err(ConfigError::Invalid(format!(
+                    "agent {name:?}: invalid approvalMode {mode:?} (valid: none, deny, prompt)"
+                )));
+            }
+        }
         if let Some(v) = root.get(key("vault")).filter(|v| !v.is_null()) {
             config.vault = Some(parse_vault(v, config.auth_method)?);
         }
@@ -1325,20 +1337,6 @@ pub fn apply_tier_preset_to_profile(profile: &mut AgentProfile, tier: &str) -> b
         profile.allowed_executables = executables;
     }
     true
-}
-
-fn validate_loaded_approval_modes(
-    agents: &BTreeMap<String, AgentProfile>,
-) -> Result<(), ConfigError> {
-    for (name, agent) in agents {
-        let mode = agent.approval_mode.as_deref().unwrap_or("");
-        if !matches!(mode, "" | "none" | "deny" | "prompt") {
-            return Err(ConfigError::Invalid(format!(
-                "agents.{name}.approvalMode: invalid value {mode:?} (valid: none, deny, prompt)"
-            )));
-        }
-    }
-    Ok(())
 }
 
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {

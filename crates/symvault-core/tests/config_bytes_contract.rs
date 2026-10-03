@@ -30,14 +30,21 @@ struct Oracle {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 struct Snapshot {
+    approvals: std::collections::BTreeMap<String, ApprovalSnapshot>,
     default_agent: String,
     session_timeout: String,
     session_max_lifetime: String,
     auth_method: String,
     agent_names: Vec<String>,
+}
+
+/// Go's raw nullable requireApproval is retained in the JSON evidence. Rust
+/// cannot represent nil, so only its effective boolean is compared here.
+/// Approval mode remains Option<String>: null and explicit empty are distinct.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+struct ApprovalSnapshot {
     approval_mode: Option<String>,
-    require_approval_raw: Option<bool>,
-    require_approval: bool,
+    require_approval_effective: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -143,26 +150,21 @@ fn fixture() -> Fixture {
     serde_json::from_slice(CONTENT).expect("CFG-003 fixture parses")
 }
 
-fn raw_require_approval(input: &str, agent: &str) -> Option<bool> {
-    use serde_yaml_ng::Value;
-
-    let root: Value = serde_yaml_ng::from_slice(input.as_bytes()).ok()?;
-    let agents = root
-        .as_mapping()?
-        .get(Value::String("agents".to_owned()))?
-        .as_mapping()?;
-    let profile = agents.get(Value::String(agent.to_owned()))?.as_mapping()?;
-    profile
-        .get(Value::String("requireApproval".to_owned()))?
-        .as_bool()
-}
-
-fn snapshot_of(config: &Config, input: &str) -> Snapshot {
-    let selected = config
-        .agents
-        .get(&config.default_agent)
-        .expect("loaded config contains selected agent");
+fn snapshot_of(config: &Config) -> Snapshot {
     Snapshot {
+        approvals: config
+            .agents
+            .iter()
+            .map(|(name, agent)| {
+                (
+                    name.clone(),
+                    ApprovalSnapshot {
+                        approval_mode: agent.approval_mode.clone(),
+                        require_approval_effective: agent.require_approval,
+                    },
+                )
+            })
+            .collect(),
         default_agent: config.default_agent.clone(),
         session_timeout: go_duration(config.session_timeout.as_secs()),
         session_max_lifetime: go_duration(config.session_max_lifetime.as_secs()),
@@ -172,11 +174,6 @@ fn snapshot_of(config: &Config, input: &str) -> Snapshot {
             names.sort();
             names
         },
-        approval_mode: selected.approval_mode.clone(),
-        // Rust stores the effective bool. The raw Go pointer is checked against
-        // the source YAML so explicit false remains distinct from absence.
-        require_approval_raw: raw_require_approval(input, &config.default_agent),
-        require_approval: selected.require_approval,
     }
 }
 
@@ -240,6 +237,12 @@ fn acceptance_matches_go_oracle() {
     for case in &cases_for_run() {
         let result = Config::load_from_bytes(case.input.as_bytes());
         let rejected = result.is_err();
+        assert_eq!(
+            Config::load_from_bytes_with_warnings(case.input.as_bytes()).is_err(),
+            rejected,
+            "warning loader acceptance for {}",
+            case.name
+        );
         if rejected == case.rejected {
             continue;
         }
@@ -288,7 +291,7 @@ fn accepted_inputs_resolve_to_the_go_snapshot() {
             )
         });
         assert_eq!(
-            &snapshot_of(&config, &case.input),
+            &snapshot_of(&config),
             expected,
             "snapshot for {}",
             case.name
@@ -303,17 +306,25 @@ fn canonical_output_round_trips() {
         let Some(expected) = &case.snapshot else {
             continue;
         };
-        assert!(
-            matches!(
-                case.round_trips_to.as_str(),
-                "identical_snapshot"
-                    | "null_approval_mode_defaults_to_deny"
-                    | "null_approval_mode_rederived_from_legacy"
-            ),
-            "unknown round-trip observation for {}: {}",
-            case.name,
-            case.round_trips_to
-        );
+        let mut round_trip_expected = expected.clone();
+        match (case.name.as_str(), case.round_trips_to.as_str()) {
+            (_, "identical_snapshot") => {}
+            ("approval_mode_null", "null_approval_mode_defaults_to_deny") => {
+                round_trip_expected
+                    .approvals
+                    .get_mut("default")
+                    .unwrap()
+                    .approval_mode = Some("deny".to_owned());
+            }
+            ("approval_mode_null_precedence", "null_approval_mode_rederived_from_legacy") => {
+                round_trip_expected
+                    .approvals
+                    .get_mut("default")
+                    .unwrap()
+                    .approval_mode = Some("prompt".to_owned());
+            }
+            _ => panic!("unknown round-trip observation for {}", case.name),
+        }
         if ACCEPTANCE_PENDING_ADJUDICATION.contains(&case.name.as_str()) {
             continue;
         }
@@ -329,20 +340,9 @@ fn canonical_output_round_trips() {
                     case.name
                 )
             });
-        let mut round_trip_expected = expected.clone();
-        match case.round_trips_to.as_str() {
-            "identical_snapshot" => {}
-            "null_approval_mode_defaults_to_deny" => {
-                round_trip_expected.approval_mode = Some("deny".to_owned());
-            }
-            "null_approval_mode_rederived_from_legacy" => {
-                round_trip_expected.approval_mode = Some("prompt".to_owned());
-            }
-            observation => panic!("unknown round-trip observation {observation:?}"),
-        }
         assert_eq!(
-            snapshot_of(&reloaded, &case.saved_yaml),
-            round_trip_expected,
+            &snapshot_of(&reloaded),
+            &round_trip_expected,
             "round-trip snapshot for {}",
             case.name
         );
@@ -637,87 +637,6 @@ fn writer_modes_match_go_oracle() {
     assert_eq!(file_mode, fixture.modes.file, "config file mode");
 }
 
-/// Approval modes have a narrower load-time set than standalone Validate:
-/// `auto` remains valid for a Config value, but the Go loader rejects it.
-#[test]
-fn approval_mode_load_cases_pin_rejection_empty_null_and_precedence() {
-    let cases = fixture().cases;
-    let case = |name: &str| {
-        cases
-            .iter()
-            .find(|case| case.name == name)
-            .unwrap_or_else(|| panic!("fixture lost approval-mode case {name}"))
-    };
-
-    for name in [
-        "approval_mode_auto",
-        "approval_mode_bogus",
-        "approval_mode_control_character",
-        "approval_mode_unicode_unrecognized",
-    ] {
-        let item = case(name);
-        assert!(item.rejected, "Go must reject {name}");
-        assert!(
-            item.snapshot.is_none(),
-            "rejected case {name} has no snapshot"
-        );
-    }
-
-    let empty = case("approval_mode_empty").snapshot.as_ref().unwrap();
-    assert_eq!(empty.approval_mode.as_deref(), Some(""));
-    assert_eq!(empty.require_approval_raw, None);
-    assert!(!empty.require_approval);
-
-    let null = case("approval_mode_null").snapshot.as_ref().unwrap();
-    assert_eq!(null.approval_mode, None);
-    assert_eq!(null.require_approval_raw, None);
-
-    let require_true = case("approval_mode_require_true")
-        .snapshot
-        .as_ref()
-        .unwrap();
-    assert_eq!(require_true.approval_mode.as_deref(), Some("prompt"));
-    assert_eq!(require_true.require_approval_raw, Some(true));
-    assert!(require_true.require_approval);
-
-    let require_false = case("approval_mode_require_false")
-        .snapshot
-        .as_ref()
-        .unwrap();
-    assert_eq!(require_false.approval_mode.as_deref(), Some("none"));
-    assert_eq!(require_false.require_approval_raw, Some(false));
-    assert!(!require_false.require_approval);
-
-    let explicit = case("approval_mode_explicit_precedence")
-        .snapshot
-        .as_ref()
-        .unwrap();
-    assert_eq!(explicit.approval_mode.as_deref(), Some("deny"));
-    assert_eq!(explicit.require_approval_raw, Some(true));
-    assert!(explicit.require_approval);
-
-    let explicit_null = case("approval_mode_null_precedence")
-        .snapshot
-        .as_ref()
-        .unwrap();
-    assert_eq!(explicit_null.approval_mode, None);
-    assert_eq!(explicit_null.require_approval_raw, Some(true));
-    assert!(explicit_null.require_approval);
-
-    let null_legacy = case("approval_mode_null_legacy").snapshot.as_ref().unwrap();
-    assert_eq!(null_legacy.approval_mode.as_deref(), Some("deny"));
-    assert_eq!(null_legacy.require_approval_raw, None);
-    assert!(!null_legacy.require_approval);
-
-    let missing_selected = case("canonical_minimal").snapshot.as_ref().unwrap();
-    assert_eq!(missing_selected.default_agent, "custom");
-    assert_eq!(missing_selected.approval_mode.as_deref(), Some("deny"));
-
-    let custom = case("custom_agent_mode_omitted").snapshot.as_ref().unwrap();
-    assert_eq!(custom.default_agent, "custom");
-    assert_eq!(custom.approval_mode, None);
-}
-
 /// The warning texts are ours on both sides, so unlike error messages they are
 /// part of the contract. A warning that stops being emitted would otherwise
 /// return the loader to silently discarding what the operator wrote.
@@ -736,40 +655,6 @@ fn warnings_match_go_oracle() {
             });
         assert_eq!(warnings, case.warnings, "warnings for {}", case.name);
     }
-}
-
-/// Invalid modes must be rejected by byte loading, the warning seam, and
-/// file loading; error wording is intentionally not compared to Go.
-#[test]
-fn invalid_approval_modes_are_rejected_by_all_rust_loaders() {
-    let cases = fixture().cases;
-    let root = std::env::temp_dir().join(format!("sv-cfg003-approval-mode-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(&root).expect("create config test directory");
-    for name in [
-        "approval_mode_auto",
-        "approval_mode_bogus",
-        "approval_mode_control_character",
-        "approval_mode_unicode_unrecognized",
-    ] {
-        let case = cases
-            .iter()
-            .find(|case| case.name == name)
-            .unwrap_or_else(|| panic!("fixture lost case {name}"));
-        assert!(case.rejected, "Go must reject {name}");
-        assert!(
-            Config::load_from_bytes(case.input.as_bytes()).is_err(),
-            "{name}"
-        );
-        assert!(
-            Config::load_from_bytes_with_warnings(case.input.as_bytes()).is_err(),
-            "warning loader accepted {name}"
-        );
-        let path = root.join(format!("{name}.yaml"));
-        std::fs::write(&path, case.input.as_bytes()).expect("write invalid config");
-        assert!(Config::load(&path).is_err(), "file loader accepted {name}");
-    }
-    let _ = std::fs::remove_dir_all(root);
 }
 
 /// CFG-003 step two turned the loader's two warnings into rejections, in both
@@ -794,6 +679,84 @@ fn the_fixture_pins_the_step_two_rejections() {
         assert!(
             Config::load_from_bytes(case.input.as_bytes()).is_err(),
             "{name} must be rejected here too"
+        );
+    }
+}
+
+#[test]
+fn file_loader_matches_go_oracle() {
+    let root = std::env::temp_dir().join(format!("cfg003-load-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let path = root.join("config.yaml");
+    for case in &cases_for_run() {
+        std::fs::write(&path, &case.input).unwrap();
+        let result = Config::load(&path);
+        assert_eq!(result.is_err(), case.rejected, "file loader: {}", case.name);
+        if let Some(expected) = &case.snapshot {
+            assert_eq!(
+                &snapshot_of(&result.unwrap()),
+                expected,
+                "file snapshot: {}",
+                case.name
+            );
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn load_guard_precedes_section_merge_and_is_not_full_validation() {
+    let error =
+        Config::load_from_bytes(b"agents: {custom: {approvalMode: auto}}\nmcp: {bind: ''}\n")
+            .unwrap_err();
+    assert!(error.to_string().contains("approvalMode"));
+    // Full validation still reports invalid globs, but loading does not invoke it.
+    let config = Config::load_from_bytes(b"agents: {custom: {allowedPaths: ['[']}}\n").unwrap();
+    assert!(config.validate().iter().any(|error| error.contains("glob")));
+    let mut direct = Config::default();
+    direct.agents.get_mut("default").unwrap().approval_mode = Some("auto".into());
+    assert!(
+        !direct
+            .validate()
+            .iter()
+            .any(|error| error.contains("approvalMode"))
+    );
+}
+
+#[test]
+fn approval_mode_cases_pin_null_empty_and_legacy_precedence() {
+    let cases = fixture().cases;
+    for (name, mode, require_approval) in [
+        ("approval_mode_empty", Some(""), false),
+        ("approval_mode_null", None, false),
+        ("approval_mode_require_true", Some("prompt"), true),
+        ("approval_mode_require_false", Some("none"), false),
+        ("approval_mode_explicit_precedence", Some("deny"), true),
+        ("approval_mode_null_precedence", None, true),
+        ("approval_mode_null_legacy", Some("deny"), false),
+    ] {
+        let case = cases.iter().find(|case| case.name == name).unwrap();
+        assert!(!case.rejected, "{name}");
+        let approval = &case.snapshot.as_ref().unwrap().approvals["default"];
+        assert_eq!(approval.approval_mode.as_deref(), mode, "{name}");
+        assert_eq!(
+            approval.require_approval_effective, require_approval,
+            "{name}"
+        );
+    }
+    for name in [
+        "approval_mode_auto",
+        "approval_mode_bogus",
+        "approval_mode_control_character",
+        "approval_mode_unicode_unrecognized",
+    ] {
+        assert!(
+            cases
+                .iter()
+                .find(|case| case.name == name)
+                .unwrap()
+                .rejected,
+            "{name}"
         );
     }
 }
