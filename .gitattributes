@@ -30,5 +30,7 @@ crates/symvault-cli/tests/fixtures/** text eol=lf
 # parsed by the CLI, so keep their checkout bytes stable on Windows.
 crates/symvault-cli/src/help-*.txt text eol=lf
 
+# Store observation provenance hashes the committed normalization contract.
+docs/rust-port/store-normalization.md text eol=lf
 # Keep the embedded native Git test helper identical across checkouts.
 crates/symvault-sync/tests/fixtures/** text eol=lf
