@@ -22,7 +22,7 @@ func TestAuthorizationCancellationRetiresOwnPendingConsent(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			auth := NewAuthorizer(AuthorizerConfig{AgentName: "test", AllowedPaths: []string{"work/*"}, CanWrite: true, ApprovalMode: "prompt"}, WithApprovalQueue(queue))
+			auth := NewAuthorizer(AuthorizerConfig{AgentName: "test", AllowedPaths: []string{"work"}, CanWrite: true, ApprovalMode: "prompt"}, WithApprovalQueue(queue))
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			done := make(chan error, 1)
