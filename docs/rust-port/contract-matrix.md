@@ -85,6 +85,12 @@ the oracle block for those rows too; previously `error_contract.rs`,
 `secret_ref_contract.rs` and `redact_contract.rs` read the fixtures without
 checking which oracle they carried.
 
+Store fixture hygiene (#1015): [store-observation-v1](store-normalization.md) defines
+the live authenticated comparison of raw detached `caadd5e` captures. Source and
+generator inventories/digests stay strict; repeated-generation and corruption/
+semantic-drift controls are required. This does not change any row's promotion
+status or claim Windows ACL/device acceptance.
+
 ## POLICY-001 path-matching adjudication
 
 The previously claimed `POLICY-001` `PASS` was disproven: the generator claimed

@@ -30,7 +30,7 @@ var sourceFiles = []string{
 	"internal/vault/entry.go", "internal/vault/entry_readwrite.go", "internal/vault/entry_validate.go",
 	"internal/vault/recipients.go", "internal/vault/types.go", "internal/vault/vault.go",
 }
-var generatorFiles = []string{"scripts/rust-port/cmd/storegen/main.go", "scripts/rust-port/cmd/storegen/main_test.go", "scripts/rust-port/cmd/storegen/archive_extract.go", "scripts/rust-port/cmd/storegen/archive_extract_test.go"}
+var generatorFiles = []string{"scripts/rust-port/cmd/storegen/main.go", "scripts/rust-port/cmd/storegen/main_test.go", "scripts/rust-port/cmd/storegen/archive_extract.go", "scripts/rust-port/cmd/storegen/archive_extract_test.go", "scripts/rust-port/cmd/storegen/projection.go", "scripts/rust-port/cmd/storegen/projection_test.go", "docs/rust-port/store-normalization.md"}
 var requiredVaults = []string{"fresh", "legacy"}
 var requiredEntries = []string{"minimal", "full", "nested/large"}
 var requiredTypeVectors = []string{"empty", "ssh", "certificate", "database", "github_pat", "github_fine_grained", "github_malformed", "aws", "aws_malformed", "totp", "totp_malformed", "jwt", "jwt_malformed", "basic", "basic_malformed", "generic_api_key", "generic_malformed", "password", "explicit_custom", "explicit_payment", "unknown_explicit", "path_seed", "field_certificate", "field_connection_string", "path_api_key"}
@@ -125,6 +125,7 @@ type fixture struct {
 	Malformed     []malformedCase `json:"malformed_cases"`
 }
 type oracle struct {
+	CaptureOS       string   `json:"capture_os"`
 	Commit          string   `json:"commit"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files"`
@@ -230,7 +231,7 @@ func authoritative(root string) (oracle, error) {
 	if err != nil {
 		return oracle{}, err
 	}
-	return oracle{oracleCommit, oracleRelease, append([]string(nil), sourceFiles...), sd, append([]string(nil), generatorFiles...), gd}, nil
+	return oracle{runtime.GOOS, oracleCommit, oracleRelease, append([]string(nil), sourceFiles...), sd, append([]string(nil), generatorFiles...), gd}, nil
 }
 func extractOracleTree(root string) (string, error) {
 	dir, err := os.MkdirTemp("", "symvault-store-detached-")
@@ -365,7 +366,10 @@ func validate(v fixture, expected oracle) error {
 }
 
 func validateProvenance(v fixture, expected oracle) error {
-	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release || v.Oracle.SourceDigest != expected.SourceDigest || v.Oracle.GeneratorDigest != expected.GeneratorDigest || len(v.Oracle.SourceFiles) != len(sourceFiles) || len(v.Oracle.GeneratorFiles) != len(generatorFiles) {
+	if v.Oracle.CaptureOS != "linux" && v.Oracle.CaptureOS != "darwin" && v.Oracle.CaptureOS != "windows" {
+		return errors.New("unsupported store capture platform")
+	}
+	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release || v.Oracle.SourceDigest != expected.SourceDigest || v.Oracle.GeneratorDigest != expected.GeneratorDigest || !reflect.DeepEqual(v.Oracle.SourceFiles, expected.SourceFiles) || !reflect.DeepEqual(v.Oracle.GeneratorFiles, expected.GeneratorFiles) {
 		return errors.New("store fixture provenance changed")
 	}
 	return nil
@@ -471,7 +475,29 @@ func verify(root, path string) error {
 	if err != nil {
 		return err
 	}
-	return validate(v, expected)
+	if err := validate(v, expected); err != nil {
+		return err
+	}
+	return compareLiveObservations(root, v)
+}
+
+func compareLiveObservations(root string, v fixture) error {
+	fresh, err := build(root)
+	if err != nil {
+		return fmt.Errorf("live store oracle unavailable: %w", err)
+	}
+	want, err := comparisonProjection(v)
+	if err != nil {
+		return err
+	}
+	got, err := comparisonProjection(fresh)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(want, got) {
+		return errors.New("store observation projection differs from live pinned Go; inspect semantic drift before regenerating")
+	}
+	return nil
 }
 
 func refreshProvenanceOnly(root, path string) error {
@@ -511,6 +537,9 @@ func refreshProvenanceOnly(root, path string) error {
 	if err = validate(v, expected); err != nil {
 		return err
 	}
+	if err = compareLiveObservations(root, v); err != nil {
+		return err
+	}
 	updated, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
@@ -521,7 +550,7 @@ func refreshProvenanceOnly(root, path string) error {
 
 func main() {
 	output := flag.String("output", "testdata/port/store/store.json", "fixture path")
-	check := flag.Bool("check", false, "verify fixture provenance and cardinalities")
+	check := flag.Bool("check", false, "verify provenance and compare normalized live pinned Go observations")
 	refresh := flag.Bool("refresh-provenance-only", false, "refresh generator provenance without regenerating fixture observations")
 	flag.Parse()
 	root := rootDir()
@@ -549,6 +578,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "FAIL generate store fixture:", err)
 		os.Exit(1)
+	}
+	if err = validate(v, v.Oracle); err != nil {
+		panic(err)
+	}
+	if _, err = comparisonProjection(v); err != nil {
+		panic(err)
 	}
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {

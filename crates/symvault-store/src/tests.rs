@@ -149,6 +149,9 @@ fn validate_fixture(value: &Fixture) -> Result<(), String> {
                 "scripts/rust-port/cmd/storegen/main_test.go",
                 "scripts/rust-port/cmd/storegen/archive_extract.go",
                 "scripts/rust-port/cmd/storegen/archive_extract_test.go",
+                "scripts/rust-port/cmd/storegen/projection.go",
+                "scripts/rust-port/cmd/storegen/projection_test.go",
+                "docs/rust-port/store-normalization.md",
             ]
         || value.oracle.source_digest.len() != 64
         || value.oracle.generator_digest.len() != 64
