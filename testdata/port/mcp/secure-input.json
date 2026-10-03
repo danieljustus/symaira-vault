@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "8088c38f",
-    "commit_sha": "8088c38fc86535d82950c27d2fb3e169fef1e1c1",
+    "commit": "1add155a",
+    "commit_sha": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -23,7 +23,7 @@
       "internal/vault/service.go",
       "internal/vault/entry_readwrite.go"
     ],
-    "source_hash": "85e076d44791b951dd337d2096a4fc8e786ccf937d9314cf3505a7bcc75f920f",
+    "source_hash": "04fec13d2c5a7b7764248c06700e2e78c7090beaacda811f6e18970e100c747d",
     "generator_files": [
       "internal/mcp/server/mcp_secure_input_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
@@ -33,7 +33,7 @@
       "internal/secureui/pty_test.go",
       "scripts/rust-port/cmd/secure_input_unicode/main.go"
     ],
-    "generator_hash": "cb402e7cb328e7c47b9ae78694c639ff785acf391b7cc6e995edecc2b0798897"
+    "generator_hash": "597187a28f97640e03240d2d2fa20ff20895c9df7b68f45fe8fe6212dca36699"
   },
   "normalizations": [
     "Rust deliberately suppresses terminal echo for secure input; Go's go-tty ReadString echoes printable runes despite the hidden-input prompt."

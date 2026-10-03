@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "00d1187c",
-    "commit_sha": "00d1187cc27abb782acfadf4462708c38d66fb25",
+    "commit": "1add155a",
+    "commit_sha": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -28,7 +28,7 @@
       "internal/clipboard/system_clipboard.go",
       "internal/clipboard/null_clipboard.go"
     ],
-    "source_hash": "e69aa0e3448427440f7f60fa29c882d291269154944b732edbf57d3f501324d7",
+    "source_hash": "eca2cba4a1251632e8862786e0a16c4fda2522a21e46a49c8a1afb110abf41bd",
     "generator_files": [
       "internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
       "internal/mcp/server/tools_test_helpers.go",
@@ -36,7 +36,7 @@
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "4a0ff17cbbff3894e9e1e48bb10537266ba85946b3a1868412f04b34e2bdb148"
+    "generator_hash": "07f229bc4ab76bf639fcab44aad3c6b6814a8f5da4d58a23ed0c667a473e62a7"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-copy-clipboard-fixture",

@@ -11,7 +11,7 @@ import (
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
-const pinnedOracleCommit = "12d8c616ae98b954a9b906e0984af1613ca05fde"
+const pinnedOracleCommit = "98c786e1bf97fee2b93b79ec391f14c97bfd8694"
 
 var sources = []string{
 	"internal/audit/audit.go",
