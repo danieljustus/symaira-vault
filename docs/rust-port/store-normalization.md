@@ -9,7 +9,8 @@ not a requirement that two randomized encryptions produce identical output.
 The fixed identity is public, synthetic fixture material. Production encryption,
 clocks and vault code are unchanged.
 
-`storegen --check` validates complete source/generator provenance, executes both
+`storegen --check` rejects unknown JSON fields, validates complete source/generator
+provenance, executes both
 fresh and legacy layouts again and compares the following projection. This is
 also required before a provenance-only refresh writes a file. Generation still
 records genuine raw observations; it does not rewrite encrypted payloads or

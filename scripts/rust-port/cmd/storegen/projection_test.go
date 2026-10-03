@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -82,6 +84,25 @@ func TestRepeatedPinnedStoreObservationsHaveStableProjection(t *testing.T) {
 		modified.Vaults[0].TypeVectors[0].Expected = "changed"
 		if err := verify(rootDir(), writeFixture(t, modified)); err == nil {
 			t.Fatal("live freshness check accepted changed type semantics")
+		}
+	})
+
+	t.Run("unknown observation fields", func(t *testing.T) {
+		var capture map[string]any
+		if err := json.Unmarshal(rawFirst, &capture); err != nil {
+			t.Fatal(err)
+		}
+		capture["unrecognized_observation"] = "must not disappear in the projection"
+		data, err := json.Marshal(capture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output := filepath.Join(t.TempDir(), "unknown.json")
+		if err = os.WriteFile(output, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err = verify(rootDir(), output); err == nil {
+			t.Fatal("freshness check ignored an unknown observation field")
 		}
 	})
 

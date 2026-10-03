@@ -29,3 +29,6 @@ crates/symvault-cli/tests/fixtures/** text eol=lf
 # These embedded Cobra help pages are byte-for-byte golden output and are also
 # parsed by the CLI, so keep their checkout bytes stable on Windows.
 crates/symvault-cli/src/help-*.txt text eol=lf
+
+# Store observation provenance hashes the committed normalization contract.
+docs/rust-port/store-normalization.md text eol=lf

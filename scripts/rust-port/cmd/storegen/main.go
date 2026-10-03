@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -193,6 +194,18 @@ type malformedCase struct {
 	Path  string `json:"path"`
 }
 
+func decodeCaptureJSON(data []byte, value any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(value); err != nil {
+		return err
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		return errors.New("trailing store capture JSON data")
+	}
+	return nil
+}
+
 func rootDir() string {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -315,7 +328,7 @@ func runOracle(root string, legacy bool) (vaultFixture, error) {
 		return vaultFixture{}, fmt.Errorf("detached oracle: %w: %s", err, stderr.String())
 	}
 	var v vaultFixture
-	if err = json.Unmarshal(out, &v); err != nil {
+	if err = decodeCaptureJSON(out, &v); err != nil {
 		return vaultFixture{}, fmt.Errorf("detached oracle output: %w", err)
 	}
 	return v, nil
@@ -369,9 +382,22 @@ func validateProvenance(v fixture, expected oracle) error {
 	if v.Oracle.CaptureOS != "linux" && v.Oracle.CaptureOS != "darwin" && v.Oracle.CaptureOS != "windows" {
 		return errors.New("unsupported store capture platform")
 	}
-	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release || v.Oracle.SourceDigest != expected.SourceDigest || v.Oracle.GeneratorDigest != expected.GeneratorDigest || !reflect.DeepEqual(v.Oracle.SourceFiles, expected.SourceFiles) || !reflect.DeepEqual(v.Oracle.GeneratorFiles, expected.GeneratorFiles) {
-		return errors.New("store fixture provenance changed")
+	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release {
+		return errors.New("store fixture schema/oracle identity changed")
 	}
+	if v.Oracle.SourceDigest != expected.SourceDigest {
+		return errors.New("store fixture source_digest changed")
+	}
+	if v.Oracle.GeneratorDigest != expected.GeneratorDigest {
+		return errors.New("store fixture generator_digest changed; inspect generator bytes and checkout line endings")
+	}
+	if !reflect.DeepEqual(v.Oracle.SourceFiles, expected.SourceFiles) {
+		return errors.New("store fixture source_files changed")
+	}
+	if !reflect.DeepEqual(v.Oracle.GeneratorFiles, expected.GeneratorFiles) {
+		return errors.New("store fixture generator_files changed")
+	}
+
 	return nil
 }
 
@@ -468,7 +494,7 @@ func verify(root, path string) error {
 		return err
 	}
 	var v fixture
-	if err = json.Unmarshal(data, &v); err != nil {
+	if err = decodeCaptureJSON(data, &v); err != nil {
 		return err
 	}
 	expected, err := authoritative(root)
@@ -512,7 +538,7 @@ func refreshProvenanceOnly(root, path string) error {
 		return err
 	}
 	var v fixture
-	if err = json.Unmarshal(data, &v); err != nil {
+	if err = decodeCaptureJSON(data, &v); err != nil {
 		return err
 	}
 	expected, err := authoritative(root)
