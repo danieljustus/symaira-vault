@@ -57,7 +57,7 @@ type executeAPIRequestWire struct {
 	Body       string            `json:"body"`
 }
 
-const executeAPIRequestOracleCommit = "864f1ad11877bc774616fde43e4a0d3ea928a370"
+const executeAPIRequestOracleCommit = "34fb21a0601d6f74e4908639d9b339125a8cf230"
 
 var executeAPIRequestSourceFiles = []string{
 	"internal/mcp/server/approval.go",
@@ -74,6 +74,9 @@ var executeAPIRequestSourceFiles = []string{
 	"internal/ssrf/ssrf.go",
 	"internal/vault/entry.go",
 	"internal/vault/entry_readwrite.go",
+	"internal/policy/context.go",
+	"internal/policy/engine.go",
+	"internal/policy/types.go",
 }
 
 func TestGenerateMCPExecuteAPIRequestFixture(t *testing.T) {

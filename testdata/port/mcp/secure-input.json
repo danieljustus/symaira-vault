@@ -33,7 +33,7 @@
       "internal/secureui/pty_test.go",
       "scripts/rust-port/cmd/secure_input_unicode/main.go"
     ],
-    "generator_hash": "baab89455929e453ac11b26b9a59f5bbfce118b166abbffa3c7fbe15324b1a47"
+    "generator_hash": "597187a28f97640e03240d2d2fa20ff20895c9df7b68f45fe8fe6212dca36699"
   },
   "normalizations": [
     "Rust deliberately suppresses terminal echo for secure input; Go's go-tty ReadString echoes printable runes despite the hidden-input prompt."
