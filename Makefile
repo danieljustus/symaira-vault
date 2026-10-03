@@ -600,7 +600,7 @@ manpages-differential:
 
 .PHONY: cli-help-differential
 cli-help-differential: manpages-differential
-	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --locked
+	SYMVAULT_GO_BINARY="$(abspath $(MANPAGES_GO_BINARY))" SYMVAULT_HELP_REQUIRE_GO_ORACLE=1 $(CARGO) test -p symvault-cli --test cli_help --test cli_get_list_help_differential --test cli_dynamic_setup_help --test cli_update_help --locked
 
 .PHONY: store004-isolation-check
 store004-isolation-check:

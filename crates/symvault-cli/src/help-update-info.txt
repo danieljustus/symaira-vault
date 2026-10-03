@@ -1,0 +1,18 @@
+Detects how Symaira Vault was installed and shows whether self-update
+is supported, along with upgrade guidance for the detected method.
+
+Usage:
+  symvault update info [flags]
+
+Flags:
+  -h, --help   help for info
+      --json   output info as JSON (deprecated: use --output=json)
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")

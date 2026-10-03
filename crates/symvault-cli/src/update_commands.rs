@@ -57,9 +57,16 @@ pub(crate) fn run(
         // an unknown word reports the command error without the gate; a bare
         // `update` hits the gate first and only then falls through to help.
         None => {
-            // The oracle prints the cobra help here; help rendering is a
-            // documented non-goal (same class as `symvault help`).
-            output_gate(output_format, json_flag).unwrap_or(ExitCode::SUCCESS)
+            if let Some(code) = output_gate(output_format, json_flag) {
+                return code;
+            }
+            match crate::help_commands::write_nested("update", &mut std::io::stdout().lock()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("Error: help: {error}");
+                    ExitCode::from(1)
+                }
+            }
         }
         Some(word) => {
             let word = word.to_string_lossy();

@@ -1,0 +1,18 @@
+Check GitHub for a newer Symaira Vault release
+
+Usage:
+  symvault update check [flags]
+
+Flags:
+      --force   bypass cache and force a fresh check
+  -h, --help    help for check
+      --json    output update check result as JSON (deprecated: use --output=json)
+      --quiet   suppress non-essential output (exit code 1 if update available)
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")

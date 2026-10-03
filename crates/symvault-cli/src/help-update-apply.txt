@@ -1,0 +1,22 @@
+Downloads, verifies, and applies the latest Symaira Vault release.
+
+Supports direct-download installations only. When run via Homebrew, go install,
+or a package manager, self-update is disabled and guidance is shown instead.
+
+Usage:
+  symvault update apply [flags]
+
+Flags:
+      --dry-run   preview update without applying
+      --force     bypass cache and force a fresh check
+  -h, --help      help for apply
+      --json      output apply result as JSON (deprecated: use --output=json)
+
+Global Flags:
+      --color string      When to emit ANSI color: auto, always, never (default "auto")
+      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets
+      --output string     Output format (text, json, yaml) (default "text")
+      --profile string    use a named vault profile
+      --quiet             suppress non-error output
+      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+      --vault string      path to the password vault (default "~/.symvault")
