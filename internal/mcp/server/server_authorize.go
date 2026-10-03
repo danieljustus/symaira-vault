@@ -41,10 +41,16 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 func (s *Server) authorize(ctx context.Context, path string, write bool, approved bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if s == nil || s.authorizer == nil {
 		return errors.New("server not initialized")
 	}
-	return s.authorizer.Authorize(ctx, path, write, approved)
+	if err := s.authorizer.Authorize(ctx, path, write, approved); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (s *Server) checkPolicy(ctx context.Context, path, actionType string) error {

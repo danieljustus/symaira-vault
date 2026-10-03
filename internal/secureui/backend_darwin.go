@@ -36,7 +36,7 @@ func (b *osascriptBackend) prompt(req PromptRequest) (string, error) {
 		"set v to text returned of (display dialog %s with title %s default answer \"\"%s)\nreturn v",
 		osaQuote(body), osaQuote(title), hidden,
 	)
-	out, err := b.r.run("osascript", []string{"-e", script}, req.Timeout)
+	out, err := runPrompt(b.r, req, "osascript", []string{"-e", script})
 	if err != nil {
 		canceled, osaErr := isOsaCancel(err)
 		if canceled {

@@ -1,0 +1,80 @@
+name: MCP HTTP shutdown
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mcp-http-shutdown.yml'
+      - 'internal/mcp/**'
+      - 'internal/secureui/**'
+      - 'internal/approval/**'
+      - 'internal/policy/**'
+      - 'internal/vault/**'
+      - 'docs/adr/0009-http-shutdown-ownership.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lifecycle:
+    name: HTTP lifecycle (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
+      SYMVAULT_TEST_KEYRING: memory
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust for existing production-handler interop
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - name: Execute owning race tests and existing auth/OAuth/mTLS contracts
+        run: |
+          set -euo pipefail
+          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/serverbootstrap ./internal/mcp/server ./internal/secureui ./internal/approval ./internal/policy -count=1 > native-http-shutdown.jsonl
+          python3 - <<'PY'
+          import json, platform
+          from pathlib import Path
+          rows = [json.loads(line) for line in Path('native-http-shutdown.jsonl').read_text().splitlines() if line.startswith('{')]
+          required = {'TestHTTPShutdownActiveFactoryContract/drain', 'TestHTTPShutdownActiveFactoryContract/deadline', 'TestHTTPShutdownIdleTransportContract', 'TestHTTPShutdownPartialRequestDoesNotReachFactory', 'TestHTTPShutdownCleanupRetainsActiveOwnership', 'TestApprovalCancellationDeniesPendingAndLateReply/blocked-read', 'TestApprovalCancellationDeniesPendingAndLateReply/late-yes', 'TestSecurePromptContextCancelsActualProcess', 'TestSecurePromptContextRejectsLateAffirmative'}
+          passed = {row.get('Test') for row in rows if row.get('Action') == 'pass'}
+          assert required <= passed, required-passed
+          assert not any(row.get('Action') == 'skip' and row.get('Test') in required for row in rows)
+          Path('native-http-shutdown-receipt.json').write_text(json.dumps({'native_os': platform.system(), 'architecture': platform.machine(), 'required_tests': sorted(required), 'passed': True}, indent=2)+'\n')
+          PY
+      - name: Upload native lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: http-shutdown-${{ matrix.os }}
+          path: |
+            native-http-shutdown.jsonl
+            native-http-shutdown-receipt.json
+          if-no-files-found: error
+          retention-days: 14
