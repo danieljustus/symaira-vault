@@ -71,6 +71,14 @@ func resolveArgon2idParams(params Argon2idParams) Argon2idParams {
 }
 
 func Argon2idDeriveKey(password, salt []byte, params Argon2idParams) ([]byte, error) {
+	return deriveArgon2idKey(password, salt, params, false)
+}
+
+func deriveArgon2idKey(password, salt []byte, params Argon2idParams, legacy bool) ([]byte, error) {
+	return deriveArgon2idKeyAdmitted(password, salt, params, legacy, &processArgon2Admission)
+}
+
+func deriveArgon2idKeyAdmitted(password, salt []byte, params Argon2idParams, legacy bool, admission *argon2Admission) ([]byte, error) {
 	if len(password) == 0 {
 		return nil, errors.New("password is empty")
 	}
@@ -79,8 +87,18 @@ func Argon2idDeriveKey(password, salt []byte, params Argon2idParams) ([]byte, er
 	}
 	params = resolveArgon2idParams(params)
 	if err := validateArgon2idParams(params); err != nil {
-		return nil, fmt.Errorf("invalid argon2id params: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrArgon2Bounds, err)
 	}
+	if !legacy {
+		if err := validateAutomaticArgon2(params); err != nil {
+			return nil, err
+		}
+	}
+	release, err := admission.acquire(argon2EffectiveMemory(params), legacy)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	return argon2.IDKey(password, salt, params.Time, params.Memory, params.Parallelism(), Argon2idKeyLen), nil
 }
 

@@ -1,0 +1,58 @@
+package main
+
+import (
+ "crypto/sha256"
+ "encoding/base64"
+ "encoding/hex"
+ "encoding/json"
+ "fmt"
+ "os"
+ "runtime"
+ "strings"
+
+ cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+)
+
+const identity = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL"
+const passphrase = "public-kdf-policy-fixture-passphrase"
+
+type spec struct { Name string `json:"name"`; Time uint32 `json:"time"`; Memory uint32 `json:"memory_kib"`; Threads uint8 `json:"threads"` }
+type vector struct { spec; Ciphertext string `json:"ciphertext"`; SHA256 string `json:"sha256"` }
+type output struct { GoVersion string `json:"go_version"`; Identity string `json:"identity"`; Passphrase string `json:"passphrase"`; Cases []vector `json:"cases"` }
+var specs = []spec{
+ {"historical_time", 5, 32, 1},
+ {"historical_memory", 1, 129*1024, 1},
+ {"historical_threads", 1, 64, 5},
+ {"minimum_read", 1, 4, 1},
+}
+
+func verify(v vector, want spec) error {
+ if v.spec != want { return fmt.Errorf("case specification changed") }
+ raw, err := base64.StdEncoding.DecodeString(v.Ciphertext); if err != nil { return err }
+ sum := sha256.Sum256(raw); if hex.EncodeToString(sum[:]) != v.SHA256 { return fmt.Errorf("ciphertext hash changed") }
+ if !strings.Contains(string(raw), fmt.Sprintf("t=%d,m=%d,p=%d", v.Time, v.Memory, v.Threads)) { return fmt.Errorf("actual envelope parameters changed") }
+ plain, err := cryptopkg.DecryptWithPassphraseArgon2id(raw, []byte(passphrase)); if err != nil { return err }
+ defer cryptopkg.Wipe(plain)
+ if string(plain) != identity { return fmt.Errorf("historical identity changed") }
+ if _, err := cryptopkg.DecryptWithPassphraseArgon2id(raw, []byte("wrong public passphrase")); err == nil { return fmt.Errorf("wrong passphrase accepted") }
+ return nil
+}
+
+func run() error {
+ if len(os.Args) == 2 {
+  raw, err := os.ReadFile(os.Args[1]); if err != nil { return err }
+  var stored output; if err := json.Unmarshal(raw, &stored); err != nil { return err }
+  if stored.GoVersion != runtime.Version() || stored.Identity != identity || stored.Passphrase != passphrase || len(stored.Cases) != len(specs) { return fmt.Errorf("fixture inventory changed") }
+  for i, v := range stored.Cases { if err := verify(v, specs[i]); err != nil { return fmt.Errorf("%s: %w", v.Name, err) } }
+ }
+ result := output{GoVersion: runtime.Version(), Identity: identity, Passphrase: passphrase}
+ for _, s := range specs {
+  raw, err := cryptopkg.EncryptWithPassphraseArgon2id([]byte(identity), []byte(passphrase), cryptopkg.Argon2idParams{Time:s.Time, Memory:s.Memory, Threads:s.Threads}); if err != nil { return err }
+  sum := sha256.Sum256(raw)
+  v := vector{spec:s, Ciphertext:base64.StdEncoding.EncodeToString(raw), SHA256:hex.EncodeToString(sum[:])}
+  if err := verify(v, s); err != nil { return err }
+  result.Cases = append(result.Cases, v)
+ }
+ return json.NewEncoder(os.Stdout).Encode(result)
+}
+func main() { if err := run(); err != nil { fmt.Fprintln(os.Stderr, err); os.Exit(1) } }

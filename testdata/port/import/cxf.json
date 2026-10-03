@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "98c786e1bf97fee2b93b79ec391f14c97bfd8694",
-    "commit_sha": "98c786e1bf97fee2b93b79ec391f14c97bfd8694",
+    "commit": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
+    "commit_sha": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -21,6 +21,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -69,6 +70,7 @@
       "internal/vault/entry_readwrite.go",
       "internal/vault/entry_validate.go",
       "internal/vault/git.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -94,13 +96,13 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_digest": "31f59faafa988023a49e73d963aa9def1cd856697b4b909c5b5087083343adb1",
+    "source_digest": "da7d553466b4912ccada0a9b8be6512f5c698bb4ee5146402b8ea75b3870c6b6",
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/archive_extract.go",
       "scripts/rust-port/cmd/cxfgen/archive_extract_test.go",
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "dc39d510daca147c6d090ef7338442c9c73d34899a9b23bb683656feda3d87c0"
+    "generator_digest": "b63929f31d4d5eb6bb9608a93cefc907d5c1516e6d1c925253a1b35930b7fa1b"
   },
   "cases": [
     {

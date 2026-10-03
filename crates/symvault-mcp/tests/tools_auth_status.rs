@@ -69,15 +69,15 @@ fn auth_status_matches_source_bound_go_fixture() {
         "../../../testdata/port/mcp/tools-auth-status.json"
     ))
     .expect("valid Go auth-status fixture");
-    assert_eq!(fixture.oracle.commit, "2b703647");
+    assert_eq!(fixture.oracle.commit, "21f849ee");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "2b703647a821d7236aa8a66032852ab3ee606701"
+        "21f849ee971ba60ca3a85eaf4e61e6e520b41034"
     );
     assert_eq!(fixture.oracle.source_files.len(), 12);
     assert_eq!(
         fixture.oracle.source_hash,
-        "63fcc17d6c64eea63722d4aa31faf45ef366da36ce42ece563ac3c6c81fbfd6c"
+        "821c47fce3ed97979ad4c54948dd76baf2ebe795247ec7e0b9264610e1e664fb"
     );
 
     for case in fixture.cases {

@@ -74,6 +74,18 @@ The Go handler still needs resolved-entry policy alignment, now tracked separate
 | #870, #938, #1243, #1251 | Real device, biometric, Swift/native or iOS evidence is unavailable locally; macOS compilation is not substitution |
 | #1236 through #1257 | Respect existing migration/dependency/release gates. No ledger promotion from a compiled crate, fixture, or historical CI alone |
 
+## Delegated decisions, 2026-10-03
+
+The maintainer delegated the remaining product and compatibility decisions on
+2026-10-03 and requested their rationale in repository docs. The earlier table
+is a historical checkpoint; product choices no longer require another
+maintainer confirmation. [ADR 0007](../adr/0007-argon2-resource-policy.md) selects
+versioned Argon2 execution budgets, explicit local legacy migration and rollback.
+Its implementation/verification gates remain required before closing #1002.
+Further decisions are recorded with their owning implementation as the relevant
+boundaries are inspected. Device, biometric, signing and release observation
+evidence still requires actual execution; delegation cannot replace it.
+
 ## Remote inputs and local inventory decisions
 
 No local untracked source, stash or private service is an input to the continuation branch. Intake checked all registered worktrees, branch tips, stashes, tracked/untracked state and ignored-file inventories. No stashes were present. The active API and Dependabot verification worktrees were clean.

@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto", "crates/symvault-gojson", "crates/symvault-mcp", "crates/symvault-platform", "crates/symvault-store", "crates/symvault-sync"]
+exclude = ["third_party/argon2"]
 resolver = "3"
 
 [workspace.package]
@@ -34,3 +35,7 @@ opt-level = 3
 
 [profile.test.package.blake2]
 opt-level = 3
+
+# Preserve encoded Go legacy memory while retaining upstream block filling.
+[patch.crates-io]
+argon2 = { path = "third_party/argon2" }

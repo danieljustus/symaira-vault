@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,28 +43,25 @@ func TestHarnessIsolatesHomeAndPreservesFailureAndBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Generate only into a disposable test directory; committed oracle
-	// fixtures must never be replaced by this subprocess probe.
-	fixturePath := filepath.Join(t.TempDir(), "session.json")
-	oldFlags, oldArgs := flag.CommandLine, os.Args
-	t.Cleanup(func() { flag.CommandLine, os.Args = oldFlags, oldArgs })
-	for _, check := range []bool{false, true} {
-		flag.CommandLine = flag.NewFlagSet("probe", flag.ExitOnError)
-		os.Args = []string{"probe", "-go-binary", binary, "-output", fixturePath}
-		if check {
-			os.Args = append(os.Args, "-check")
-		}
-		main()
-	}
-	content, err := os.ReadFile(fixturePath)
+	// Exercise the synthetic subprocess probe directly. Its isolation and byte
+	// normalization do not depend on the production source matching the frozen
+	// CLI oracle. The generator's main still verifies that source provenance.
+	cases, err := buildCases(binary, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var generated fixture
-	if err := json.Unmarshal(content, &generated); err != nil {
+	first, err := json.Marshal(cases)
+	if err != nil {
 		t.Fatal(err)
 	}
-	cases := generated.Cases
+	again, err := buildCases(binary, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := json.Marshal(again)
+	if err != nil || !bytes.Equal(first, second) {
+		t.Fatalf("subprocess observations are not deterministic: %v", err)
+	}
 	if len(cases) != len(inputs()) {
 		t.Fatalf("lost cases: %d", len(cases))
 	}
