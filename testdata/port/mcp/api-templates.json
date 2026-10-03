@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "internal/mcp/apitemplates/template.go",
       "internal/mcp/apitemplates/auth.go",
@@ -29,7 +29,7 @@
       "internal/mcp/server/api_templates_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "9a5de3978509f18929cbe75404a8f9fa1d1cc999aee54f495183d9d2b5b99abc"
+    "generator_hash": "2125079ac69d601030fbb704d889da665ad901b14b99d0426c37fa52259ba3e4"
   },
   "cases": [
     {

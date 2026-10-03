@@ -65,6 +65,7 @@ var mcpCallSourceFiles = []string{
 	"internal/config/schema.go",
 	"internal/config/warn.go",
 	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
 	"internal/crypto/argon2id.go",
 	"internal/crypto/diceware.go",
 	"internal/crypto/hmac.go",
@@ -109,6 +110,7 @@ var mcpCallSourceFiles = []string{
 	"internal/vault/file_digest.go",
 	"internal/vault/git.go",
 	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
 	"internal/vault/lock_unix.go",
 	"internal/vault/lock_windows.go",
 	"internal/vault/manifest.go",
@@ -137,7 +139,7 @@ var mcpCallSourceFiles = []string{
 	"internal/vault/vault_sync_reconcile.go",
 }
 
-const mcpCallPinnedSourceHash = "c3fb517544755bd590ac74e205475b75554e2443544a2c66b18b03723e292df6"
+const mcpCallPinnedSourceHash = "ae83aab06ba6c2f06e521e8bbfd8d9e852eb62435c6d013750d807a843b1e7d7"
 
 func TestGenerateMCPCallFixture(t *testing.T) {
 	g := os.Getenv("SYMAIRA_GENERATE_MCP_CALL_FIXTURE") == "1"
@@ -214,14 +216,14 @@ func TestGenerateMCPCallFixture(t *testing.T) {
 		t.Fatalf("Go MCP call sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpCallPinnedSourceHash)
 	}
 	if pinnedHash := mcpCallGitSourceHash(t, mcpCallSourceFiles); pinnedHash != sourceHash {
-		t.Fatalf("working Go MCP call sources differ from a581df7b: got %s, want %s", sourceHash, pinnedHash)
+		t.Fatalf("working Go MCP call sources differ from 55da4ca1: got %s, want %s", sourceHash, pinnedHash)
 	}
 
 	fixture := mcpCallFixture{
 		SchemaVersion: 1,
 		Oracle: mcpCallOracle{
-			Commit:        "a581df7b",
-			CommitSHA:     "a581df7b09630a0d8c572af727b7cf096d2557ad",
+			Commit:        "55da4ca1",
+			CommitSHA:     "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
 			SourceFiles:   mcpCallSourceFiles,
 			SourceHash:    sourceHash,
 			GeneratorHash: mcpCallGeneratorHash(t),
@@ -345,7 +347,7 @@ func mcpCallGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "a581df7b:"+name)
+		cmd := exec.Command("git", "show", "55da4ca1:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

@@ -62,6 +62,7 @@ var mcpGenerateTOTPSourceFiles = []string{
 	"internal/config/schema.go",
 	"internal/config/warn.go",
 	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
 	"internal/crypto/argon2id.go",
 	"internal/crypto/diceware.go",
 	"internal/crypto/hmac.go",
@@ -105,6 +106,7 @@ var mcpGenerateTOTPSourceFiles = []string{
 	"internal/vault/file_digest.go",
 	"internal/vault/git.go",
 	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
 	"internal/vault/lock_unix.go",
 	"internal/vault/lock_windows.go",
 	"internal/vault/manifest.go",
@@ -208,12 +210,12 @@ func TestGenerateMCPGenerateTOTPFixture(t *testing.T) {
 	sourceHash := mcpCallSourceHash(t, mcpGenerateTOTPSourceFiles)
 	pinned := mcpGenerateTOTPGitSourceHash(t)
 	if sourceHash != pinned {
-		t.Fatalf("Go generate_totp sources differ from a581df7b: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("Go generate_totp sources differ from 55da4ca1: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpGenerateTOTPFixture{
 		SchemaVersion: 1,
 		Oracle: mcpGenerateTOTPOracle{
-			Commit: "a581df7b", CommitSHA: "a581df7b09630a0d8c572af727b7cf096d2557ad",
+			Commit: "55da4ca1", CommitSHA: "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
 			SourceFiles: mcpGenerateTOTPSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpGenerateTOTPGeneratorHash(t),
 		},
@@ -268,7 +270,7 @@ func mcpGenerateTOTPGitSourceHash(t *testing.T) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range mcpGenerateTOTPSourceFiles {
-		cmd := exec.Command("git", "show", "a581df7b:"+name)
+		cmd := exec.Command("git", "show", "55da4ca1:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {

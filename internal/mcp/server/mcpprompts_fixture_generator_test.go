@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	mcpPromptsOracleCommit     = "a581df7b"
-	mcpPromptsOracleCommitSHA  = "a581df7b09630a0d8c572af727b7cf096d2557ad"
-	mcpPromptsPinnedSourceHash = "388bde9d9be4677fc69d043b9c99ebb1de062827635c0492e6208e237ee54305"
+	mcpPromptsOracleCommit     = "55da4ca1"
+	mcpPromptsOracleCommitSHA  = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+	mcpPromptsPinnedSourceHash = "185cfb6b01fb32a8c0c93922847b1ec2d5b47590d2e63b40f14a4f460440c855"
 	mcpPromptRuntimeData       = "<runtime-error-text>"
 )
 
@@ -47,6 +47,7 @@ var mcpPromptsSourceFiles = []string{
 	"internal/config/schema.go",
 	"internal/config/warn.go",
 	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
 	"internal/crypto/argon2id.go",
 	"internal/crypto/diceware.go",
 	"internal/crypto/hmac.go",
@@ -87,6 +88,7 @@ var mcpPromptsSourceFiles = []string{
 	"internal/vault/file_digest.go",
 	"internal/vault/git.go",
 	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
 	"internal/vault/lock_unix.go",
 	"internal/vault/lock_windows.go",
 	"internal/vault/manifest.go",

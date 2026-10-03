@@ -80,6 +80,7 @@ var writeApprovalSourceFiles = []string{
 	"internal/config/schema.go",
 	"internal/config/warn.go",
 	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
 	"internal/crypto/argon2id.go",
 	"internal/crypto/diceware.go",
 	"internal/crypto/hmac.go",
@@ -125,6 +126,7 @@ var writeApprovalSourceFiles = []string{
 	"internal/vault/file_digest.go",
 	"internal/vault/git.go",
 	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
 	"internal/vault/lock_unix.go",
 	"internal/vault/lock_windows.go",
 	"internal/vault/manifest.go",
@@ -160,7 +162,7 @@ var writeApprovalGeneratorFiles = []string{
 	"internal/mcp/server/mcpsetentry_fixture_generator_test.go",
 }
 
-const writeApprovalOracleCommit = "a581df7b09630a0d8c572af727b7cf096d2557ad"
+const writeApprovalOracleCommit = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
 
 func TestGenerateMCPWriteApprovalFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_WRITE_APPROVAL_FIXTURE") == "1"

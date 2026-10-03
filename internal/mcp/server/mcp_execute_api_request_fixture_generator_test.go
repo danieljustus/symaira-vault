@@ -57,7 +57,7 @@ type executeAPIRequestWire struct {
 	Body       string            `json:"body"`
 }
 
-const executeAPIRequestOracleCommit = "a581df7b09630a0d8c572af727b7cf096d2557ad"
+const executeAPIRequestOracleCommit = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
 
 var executeAPIRequestSourceFiles = []string{
 	"internal/config/config.go",
@@ -76,6 +76,7 @@ var executeAPIRequestSourceFiles = []string{
 	"internal/config/schema.go",
 	"internal/config/warn.go",
 	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
 	"internal/crypto/argon2id.go",
 	"internal/crypto/diceware.go",
 	"internal/crypto/hmac.go",
@@ -126,6 +127,7 @@ var executeAPIRequestSourceFiles = []string{
 	"internal/vault/file_digest.go",
 	"internal/vault/git.go",
 	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
 	"internal/vault/lock_unix.go",
 	"internal/vault/lock_windows.go",
 	"internal/vault/manifest.go",

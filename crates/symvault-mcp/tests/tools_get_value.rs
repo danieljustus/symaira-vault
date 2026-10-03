@@ -213,15 +213,15 @@ fn get_entry_value_matches_source_bound_go_fixture() {
         "../../../testdata/port/mcp/tools-get-value.json"
     ))
     .expect("valid Go get_entry_value fixture");
-    assert_eq!(fixture.oracle.commit, "a581df7b");
+    assert_eq!(fixture.oracle.commit, "55da4ca1");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "a581df7b09630a0d8c572af727b7cf096d2557ad"
+        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 85);
+    assert_eq!(fixture.oracle.source_files.len(), 87);
     assert_eq!(
         fixture.oracle.source_hash,
-        "c9739257070270e69826dfc5a524ac85916bd99a7fea0463f6f0b8e3a1861eca"
+        "ad8c8e6eb224470bc22bb2a68742db5759c2e3d9ba9ac2d5a15a672318363e11"
     );
 
     for case in fixture.cases {

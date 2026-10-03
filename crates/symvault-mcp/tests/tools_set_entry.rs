@@ -231,15 +231,15 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
         "../../../testdata/port/mcp/tools-set-entry.json"
     ))
     .expect("valid Go set_entry fixture");
-    assert_eq!(fixture.oracle.commit, "a581df7b");
+    assert_eq!(fixture.oracle.commit, "55da4ca1");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "a581df7b09630a0d8c572af727b7cf096d2557ad"
+        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 83);
+    assert_eq!(fixture.oracle.source_files.len(), 85);
     assert_eq!(
         fixture.oracle.source_hash,
-        "d4c40a676f7e61bdae39c86b9edeed07d66c387ce3d656a1f9818eabe78f0690"
+        "6320c1f6163c81f1a42d999e8dfd5af4bf4e6db9e5c3d18927f104619f6fc200"
     );
 
     for case in fixture.cases {

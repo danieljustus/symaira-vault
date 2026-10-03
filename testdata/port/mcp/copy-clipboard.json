@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a581df7b",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca1",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -29,6 +29,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -74,6 +75,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -101,7 +103,7 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "2455483fb07543542efe4a36857096bbc412059fc28e8a04206a66323f5b8ed1",
+    "source_hash": "5ecc064e32113f321ef7be98dc4d49acf5981053ff7362c401771aa58c463525",
     "generator_files": [
       "internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
       "internal/mcp/server/tools_test_helpers.go",
@@ -109,7 +111,7 @@
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "3324fffbbecd05950a163710d25300630dd2272b36423c65d4392b8d641c6d18"
+    "generator_hash": "56ae550ba386aebe7c52aa265fbebe7b9b01e337e5af02cb9864138a9e0b7007"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-copy-clipboard-fixture",

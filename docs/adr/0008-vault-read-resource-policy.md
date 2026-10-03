@@ -300,3 +300,16 @@ Go files in the shared read packages. An isolated actual generator invocation
 with a newly compiled, undeclared helper failed before rewriting its fixture.
 Keep independent per-corpus commit parameters even when a coordinated recapture
 uses one revision; future corpora can advance their pins independently.
+
+## Integration with the accepted KDF policy
+
+PR #1289 integrated the KDF policy on main at `0c03dd71`. The combined
+immutable source is `55da4ca13ead39d4000cf6f866ac8671ca86d8f2`, retained by
+`oracle/read-combined-source-20261003`. Genuine recapture keeps all 19 resource
+observations, 17 import-review cases, 25 MCP corpora, 20 CXF cases and 16 manifest
+vectors unchanged. The 135-command shape preserves the newly accepted explicit
+legacy-KDF migration flag from main. The shared MCP read closure contains all
+79 current production files, including both new KDF helpers; strict inventory
+validation rejects omitted new helpers. Repeat combined repository/native
+gates before integration; earlier independent green heads do not validate this
+combined source.

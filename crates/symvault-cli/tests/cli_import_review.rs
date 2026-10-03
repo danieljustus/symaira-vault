@@ -1,5 +1,5 @@
 //! Byte-differential replay of the frozen Go-oracle fixture for
-//! `symvault import review list|promote` (oracle commit a581df7b,
+//! `symvault import review list|promote` (oracle commit 55da4ca1,
 //! fixture `tests/fixtures/import-review/cases.json`, captured 2026-10-03).
 //!
 //! Documented non-goal (CLI-help class): bare `import review` prints the

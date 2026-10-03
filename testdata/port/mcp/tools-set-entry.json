@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a581df7b",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca1",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "internal/config/config.go",
       "internal/config/config_load.go",
@@ -20,6 +20,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -61,6 +62,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -88,8 +90,8 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "d4c40a676f7e61bdae39c86b9edeed07d66c387ce3d656a1f9818eabe78f0690",
-    "generator_hash": "16d14f3cd8fc1f56ea9da8c44ae86348f1a072cff4e4b1c3720eadced40649a8"
+    "source_hash": "6320c1f6163c81f1a42d999e8dfd5af4bf4e6db9e5c3d18927f104619f6fc200",
+    "generator_hash": "bad9e469658e0b7fa159612b253e5a2bde0b09b20961a3dbc542a29498307a3c"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-set-entry-fixture",

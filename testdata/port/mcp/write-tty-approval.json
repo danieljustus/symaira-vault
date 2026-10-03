@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a581df7b",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca1",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "internal/audit/audit.go",
       "internal/audit/export.go",
@@ -22,6 +22,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -67,6 +68,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -94,14 +96,14 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "04b595dcf89bb40db57e6de6b6919a518fd076e15e8c78fbfccbab82d0011fc7",
+    "source_hash": "559984a34f699e0e526a464fdaf2afac811c639a1be8ca107eb7c29de2e40ffc",
     "generator_files": [
       "internal/mcp/server/mcp_write_approval_fixture_generator_test.go",
       "internal/mcp/server/approval_test.go",
       "internal/mcp/server/tools_test_helpers.go",
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go"
     ],
-    "generator_hash": "b70ad2c27469d7f4e8c4d11e76f9ad2418fd1f236233a8dcc902e4e6cc8ec931"
+    "generator_hash": "9e68e08350d1a0b2ffdf2fedca406f8e002490941c792ebaba4c8ba26d1a2242"
   },
   "normalizations": [
     "terminal read/raw error wording is compared by approval failure class; Go and Rust terminal backends expose different low-level messages",

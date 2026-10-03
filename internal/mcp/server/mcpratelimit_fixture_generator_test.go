@@ -155,12 +155,12 @@ func TestGenerateMCPRateLimitFixture(t *testing.T) {
 		t.Fatalf("Go MCP rate-limit sources drifted from pinned oracle: got %s, want %s", sourceHash, mcpRateLimitPinnedSourceHash)
 	}
 	if pinned := mcpRateLimitGitSourceHash(t, mcpRateLimitSourceFiles); pinned != sourceHash {
-		t.Fatalf("working Go MCP rate-limit sources differ from a581df7b: got %s, want %s", sourceHash, pinned)
+		t.Fatalf("working Go MCP rate-limit sources differ from 55da4ca1: got %s, want %s", sourceHash, pinned)
 	}
 	fixture := mcpRateLimitFixture{
 		SchemaVersion: 1,
 		Oracle: mcpRateLimitOracle{
-			Commit: "a581df7b", CommitSHA: "a581df7b09630a0d8c572af727b7cf096d2557ad",
+			Commit: "55da4ca1", CommitSHA: "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
 			SourceFiles: mcpRateLimitSourceFiles, SourceHash: sourceHash,
 			GeneratorHash: mcpRateLimitGeneratorHash(t),
 		},
@@ -208,7 +208,7 @@ func mcpRateLimitGitSourceHash(t *testing.T, files []string) string {
 	t.Helper()
 	h := sha256.New()
 	for _, name := range files {
-		data, err := exec.Command("git", "show", "a581df7b:"+name).Output()
+		data, err := exec.Command("git", "show", "55da4ca1:"+name).Output()
 		if err != nil {
 			t.Fatalf("read pinned source %s: %v", name, err)
 		}

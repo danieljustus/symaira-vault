@@ -2,8 +2,8 @@
   "schema_version": 1,
   "policy": "vault-read-resources-v2",
   "oracle": {
-    "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "release": "unreleased-vault-read-resources-v2",
     "source_files": [
       "cmd/admin/audit.go",
@@ -168,6 +168,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -426,6 +427,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -527,7 +529,7 @@
       "scripts/rust-port/internal/diff/wait_error_windows.go",
       "scripts/rust-port/internal/provenance/provenance.go"
     ],
-    "source_digest": "1893704a9e463164d7b8ff3e9cdd226259a9f4d0f44d4f8cd6332465ca347f52",
+    "source_digest": "1dc9e67b6ff55261e8ab19827a4170acf3bb3d2b775093f84007808aa6b32f44",
     "generator_files": [
       "scripts/rust-port/cmd/entrypolicygen/main.go",
       "scripts/rust-port/refresh-read-policy-fixtures.py"

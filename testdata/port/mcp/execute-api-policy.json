@@ -2,8 +2,8 @@
   "schema_version": 1,
   "go_version": "go1.26.6",
   "oracle": {
-    "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "internal/config/config.go",
       "internal/config/config_load.go",
@@ -21,6 +21,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -71,6 +72,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -98,7 +100,7 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_digest": "9c902934b9d02a7808186a2fd308d4ad76917236ad7d11c75a238e8c3b159666",
+    "source_digest": "b8a8cfe56a43ccd09e33005140f462ad0c7759cfc9d0f35014d50519a1bea787",
     "generator_files": [
       "internal/mcp/server/mcp_execute_api_policy_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
@@ -106,7 +108,7 @@
       "internal/mcp/server/tools_execute_api_request_test.go",
       "internal/mcp/server/tools_test_helpers.go"
     ],
-    "generator_hash": "b97fdd53aa58f942a0ef30f570761cb071287c4b656aa0488fa87ca723224594"
+    "generator_hash": "8f93e1af70e69e1a8416b9fadb5cc4d8383dbe81e3b296fa633f5e4a5f8ee7df"
   },
   "cases": [
     {

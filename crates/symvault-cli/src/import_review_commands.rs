@@ -2,7 +2,7 @@
 //!
 //! Go reference: `cmd/admin/import.go` `newImportReviewListCmd` /
 //! `newImportReviewPromoteCmd` (lines ~370-478). The byte contract lives in
-//! `tests/fixtures/import-review/cases.json` (immutable oracle `a581df7b`);
+//! `tests/fixtures/import-review/cases.json` (immutable oracle `55da4ca1`);
 //! `tests/cli_import_review.rs` replays every case against this code.
 
 use std::collections::BTreeMap;

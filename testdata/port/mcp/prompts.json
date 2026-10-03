@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "a581df7b",
-    "commit_sha": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+    "commit": "55da4ca1",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -22,6 +22,7 @@
       "internal/config/schema.go",
       "internal/config/warn.go",
       "internal/crypto/age.go",
+      "internal/crypto/argon2_resources.go",
       "internal/crypto/argon2id.go",
       "internal/crypto/diceware.go",
       "internal/crypto/hmac.go",
@@ -62,6 +63,7 @@
       "internal/vault/file_digest.go",
       "internal/vault/git.go",
       "internal/vault/index_resources.go",
+      "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
       "internal/vault/manifest.go",
@@ -89,8 +91,8 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "388bde9d9be4677fc69d043b9c99ebb1de062827635c0492e6208e237ee54305",
-    "generator_hash": "50c2d0333b4e6bd0846f3d0982fbcc64416c74f9770b440790527606242b6540"
+    "source_hash": "185cfb6b01fb32a8c0c93922847b1ec2d5b47590d2e63b40f14a4f460440c855",
+    "generator_hash": "a70537728e6d65359f2100a91acddd500d31f41a5d123abe5b9b3fc471eb33a8"
   },
   "cases": [
     {

@@ -2,9 +2,9 @@
  "schema": 1,
  "slice": "import-review",
  "oracle": {
-  "commit": "a581df7b09630a0d8c572af727b7cf096d2557ad",
+  "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
   "binary": "actual detached Go build (-trimpath -buildvcs=false)",
-  "sha256": "a8634e29d3cd7f761b5fad7637bb0b98380218f12791b5c8cdeb7f469c1a9fb9",
+  "sha256": "8f1b8439815ea36d5212c3830dfb49afbdff1b27a2b985ed0be6cd9b808e8fcc",
   "captured": "2026-10-03",
   "source_files": [
    "cmd/admin/import.go",
