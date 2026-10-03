@@ -136,34 +136,39 @@ fn actual_go_resource_policy_observations_match_rust() {
         format!("{:x}", generator_digest.finalize()),
         fixture.oracle.generator_digest
     );
-    let expected_ids = [
-        "ordinary",
-        "metadata-array-exact",
-        "metadata-array-over",
-        "unknown-duplicates-exact",
-        "unknown-duplicates-over",
-        "unknown-depth-exact",
-        "unknown-depth-over",
-        "unknown-string-exact",
-        "unknown-string-over",
-        "raw-values-below",
-        "raw-values-over",
-        "backup-codes-exact",
-        "backup-codes-over",
-        "plaintext-exact",
-        "plaintext-over",
-        "ciphertext-over",
-        "shared-read-session",
-        "logical-depth-over",
-        "physical-list-depth-over",
+    // Validate sizes before reconstructing any potentially large fixture input.
+    let expected_recipes = [
+        ("ordinary", "ordinary", 0),
+        ("metadata-array-exact", "metadata", 1024),
+        ("metadata-array-over", "metadata", 1025),
+        ("unknown-duplicates-exact", "duplicates", 4094),
+        ("unknown-duplicates-over", "duplicates", 4095),
+        ("unknown-depth-exact", "depth", 33),
+        ("unknown-depth-over", "depth", 34),
+        ("unknown-string-exact", "string", 1048576),
+        ("unknown-string-over", "string", 1048577),
+        ("raw-values-below", "values", 63),
+        ("raw-values-over", "values", 64),
+        ("backup-codes-exact", "backup", 1024),
+        ("backup-codes-over", "backup", 1025),
+        ("plaintext-exact", "plaintext", 16777216),
+        ("plaintext-over", "plaintext", 16777217),
+        ("ciphertext-over", "ciphertext", 25165825),
+        ("shared-read-session", "batch", 14),
+        ("logical-depth-over", "logical", 65),
+        ("physical-list-depth-over", "listing", 65),
     ];
     assert_eq!(
         fixture
             .cases
             .iter()
-            .map(|case| case.recipe.id.as_str())
+            .map(|case| (
+                case.recipe.id.as_str(),
+                case.recipe.kind.as_str(),
+                case.recipe.count
+            ))
             .collect::<Vec<_>>(),
-        expected_ids
+        expected_recipes
     );
     let identity = symvault_crypto::parse_identity(
         "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",

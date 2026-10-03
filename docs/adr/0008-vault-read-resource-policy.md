@@ -215,3 +215,19 @@ test backend as well as disposable HOME/XDG roots. Environment isolation alone
 does not disable a native OS credential service. This keeps these resource and
 CLI observations independent of credential-service availability and prevents a
 fallback warning from masquerading as a resource-policy semantic difference.
+
+## Local evidence and pending native acceptance
+
+The immutable Go capture at `b13189220519de245d8972d7af2e2d81618f0432`
+executed all 19 resource cases and re-executed all 17 import-review cases with
+unchanged output and side effects. Rust replayed all 19 resource outcomes and
+successful read counts. Source hashes bind all 520 tracked production Go files
+and module files; generator hashes bind both capture programs. The Rust replay
+checks every recipe kind and count before constructing potentially large input.
+
+Owning Go race checks passed, including the real four-reader/32-waiter admission
+case, templates and MCP command references. The old full CRUD race run reached
+its ten-minute timeout in legitimate scrypt computation; the complete normal
+CRUD package and the focused changed worker race test passed. This does not
+claim a passing full CRUD race run. Native policy acceptance on all three
+supported hosts and the final combined repository gates remain pending.
