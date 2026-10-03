@@ -91,6 +91,7 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 
 type argon2idIdentity struct {
 	passphrase []byte
+	legacy     bool
 }
 
 // NewArgon2idIdentity builds an age.Identity that derives its unwrapping key
@@ -104,55 +105,119 @@ func NewArgon2idIdentity(passphrase string) age.Identity {
 }
 
 func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	return unwrapArgon2idStanzas(stanzas, id.passphrase, id.legacy)
+}
+
+// preflightArgon2id validates the entire matching stanza set before any KDF.
+func preflightArgon2id(stanzas []*age.Stanza, legacy bool) error {
+	count := 0
+	var work uint64
+	limit := uint64(AutomaticArgon2MaxMemory * AutomaticArgon2MaxTime)
+	if legacy {
+		limit = uint64(MaxArgon2idMemory * MaxArgon2idTime)
+	}
 	for _, s := range stanzas {
 		if s.Type != Argon2idStanzaType {
 			continue
 		}
-		if len(s.Args) < 2 {
-			continue
+		count++
+		if count > argon2MaxStanzas {
+			return ErrArgon2Policy
 		}
-
-		salt, err := base64.RawStdEncoding.DecodeString(s.Args[0])
-		if err != nil {
-			continue
+		if len(s.Args) != 2 || len(s.Args[0]) != 22 || len(s.Body) != 44 {
+			return ErrArgon2Malformed
 		}
-
+		salt, err := base64.RawStdEncoding.Strict().DecodeString(s.Args[0])
+		if err != nil || len(salt) != SaltLen {
+			return ErrArgon2Malformed
+		}
 		params, err := parseArgon2idParams(s.Args[1])
 		if err != nil {
+			return err
+		}
+		if !legacy {
+			if err := validateAutomaticArgon2(params); err != nil {
+				return err
+			}
+		}
+		work += uint64(argon2EffectiveMemory(params)) * uint64(params.Time)
+		if work > limit {
+			return ErrArgon2Policy
+		}
+	}
+	return nil
+}
+
+func unwrapArgon2idStanzas(stanzas []*age.Stanza, passphrase []byte, legacy bool) ([]byte, error) {
+	if err := preflightArgon2id(stanzas, legacy); err != nil {
+		return nil, err
+	}
+	for _, s := range stanzas {
+		if s.Type != Argon2idStanzaType {
 			continue
 		}
-
-		l, kdfErr := Argon2idDeriveKey(id.passphrase, salt, params)
-		if kdfErr != nil {
-			continue
+		salt, _ := base64.RawStdEncoding.Strict().DecodeString(s.Args[0])
+		params, _ := parseArgon2idParams(s.Args[1])
+		l, err := deriveArgon2idKey(passphrase, salt, params, legacy)
+		if err != nil {
+			return nil, err
 		}
-
 		kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
 		wrapKey := make([]byte, Argon2idKeyLen)
-		if _, readErr := io.ReadFull(kdf, wrapKey); readErr != nil {
-			continue
+		_, err = io.ReadFull(kdf, wrapKey)
+		Wipe(l)
+		if err != nil {
+			return nil, err
 		}
-
 		aead, err := chacha20poly1305.New(wrapKey)
+		Wipe(wrapKey)
 		if err != nil {
-			continue
+			return nil, err
 		}
-
-		nonceSize := aead.NonceSize()
-		if len(s.Body) < nonceSize {
-			continue
+		fileKey, err := aead.Open(nil, s.Body[:12], s.Body[12:], nil)
+		if err == nil && len(fileKey) == 16 {
+			return fileKey, nil
 		}
-
-		nonce, ciphertext := s.Body[:nonceSize], s.Body[nonceSize:]
-		fileKey, err := aead.Open(nil, nonce, ciphertext, nil)
-		if err != nil {
-			continue
-		}
-
-		return fileKey, nil
+		Wipe(fileKey)
 	}
+	return nil, age.ErrIncorrectIdentity
+}
 
-	return nil, errors.New("argon2id: no matching stanza found")
+// InspectArgon2idPolicy classifies header budgets without allocating a KDF.
+// Header classification alone does not authenticate the encrypted identity.
+func InspectArgon2idPolicy(raw []byte) (bool, error) {
+	inspector := &argon2PolicyInspector{}
+	_, err := age.Decrypt(bytes.NewReader(raw), inspector)
+	if !inspector.called {
+		return false, ErrArgon2Malformed
+	}
+	if inspector.err != nil {
+		return false, inspector.err
+	}
+	_ = err // The inspector intentionally supplies no file key.
+	return inspector.needsMigration, nil
+}
+
+type argon2PolicyInspector struct {
+	called, needsMigration bool
+	err                    error
+}
+
+func (i *argon2PolicyInspector) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	i.called = true
+	matching := false
+	for _, stanza := range stanzas {
+		matching = matching || stanza.Type == Argon2idStanzaType
+	}
+	if !matching {
+		i.err = ErrArgon2Malformed
+		return nil, age.ErrIncorrectIdentity
+	}
+	i.err = preflightArgon2id(stanzas, true)
+	if i.err == nil {
+		i.needsMigration = errors.Is(preflightArgon2id(stanzas, false), ErrArgon2Policy)
+	}
+	return nil, age.ErrIncorrectIdentity
 }
 
 // MaxZeroKeyPassphraseLen bounds the historical zero-key recovery hint before
@@ -274,46 +339,7 @@ func (z *zeroKeyArgon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) 
 	}
 	zeros := make([]byte, z.n)
 	defer Wipe(zeros)
-	for _, s := range stanzas {
-		if s.Type != Argon2idStanzaType {
-			continue
-		}
-		if len(s.Args) < 2 {
-			continue
-		}
-		salt, err := base64.RawStdEncoding.DecodeString(s.Args[0])
-		if err != nil {
-			continue
-		}
-		params, err := parseArgon2idParams(s.Args[1])
-		if err != nil {
-			continue
-		}
-		l, kdfErr := Argon2idDeriveKey(zeros, salt, params)
-		if kdfErr != nil {
-			continue
-		}
-		kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
-		wrapKey := make([]byte, Argon2idKeyLen)
-		if _, readErr := io.ReadFull(kdf, wrapKey); readErr != nil {
-			continue
-		}
-		aead, err := chacha20poly1305.New(wrapKey)
-		if err != nil {
-			continue
-		}
-		nonceSize := aead.NonceSize()
-		if len(s.Body) < nonceSize {
-			continue
-		}
-		nonce, ciphertext := s.Body[:nonceSize], s.Body[nonceSize:]
-		fileKey, err := aead.Open(nil, nonce, ciphertext, nil)
-		if err != nil {
-			continue
-		}
-		return fileKey, nil
-	}
-	return nil, errors.New("argon2id zero-key: no matching stanza found")
+	return unwrapArgon2idStanzas(stanzas, zeros, false)
 }
 
 // RecoverZeroKeyIdentity attempts to decrypt an age file (typically
@@ -322,14 +348,28 @@ func (z *zeroKeyArgon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) 
 // independent public authority and the recovered recipient must match it.
 // Authority and length are validated before the zero-filled allocation or KDF.
 func RecoverZeroKeyIdentity(raw []byte, n int, authority ZeroKeyAuthority) (*age.X25519Identity, error) {
-	if err := validateZeroKeyAuthority(authority); err != nil {
-		return nil, err
+	return RecoverZeroKeyIdentityWithAuthorities(raw, n, []ZeroKeyAuthority{authority})
+}
+
+// RecoverZeroKeyIdentityWithAuthorities derives once and checks the recovered
+// identity against all independently trusted public authorities afterwards.
+func RecoverZeroKeyIdentityWithAuthorities(raw []byte, n int, authorities []ZeroKeyAuthority) (*age.X25519Identity, error) {
+	if len(authorities) == 0 {
+		return nil, ErrZeroKeyAuthority
+	}
+	for _, authority := range authorities {
+		if err := validateZeroKeyAuthority(authority); err != nil {
+			return nil, err
+		}
 	}
 	if n <= 0 || n > MaxZeroKeyPassphraseLen {
 		return nil, ErrZeroKeyPassphraseLen
 	}
 	r, err := age.Decrypt(bytes.NewReader(raw), &zeroKeyArgon2idIdentity{n: n})
 	if err != nil {
+		if IsArgon2ResourceError(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %w", ErrZeroKeyRecovery, ErrDecryptionFailed)
 	}
 	plaintext, err := io.ReadAll(r)
@@ -341,47 +381,61 @@ func RecoverZeroKeyIdentity(raw []byte, n int, authority ZeroKeyAuthority) (*age
 	if err != nil {
 		return nil, ErrZeroKeyRecovery
 	}
-	if err := validateRecoveredZeroKeyIdentity(parsed, authority); err != nil {
-		return nil, err
+	for _, authority := range authorities {
+		if validateRecoveredZeroKeyIdentity(parsed, authority) == nil {
+			return parsed, nil
+		}
 	}
-	return parsed, nil
+	return nil, ErrZeroKeyRecovery
 }
 
 func parseArgon2idParams(s string) (Argon2idParams, error) {
 	var params Argon2idParams
+	if len(s) > 64 {
+		return params, ErrArgon2Malformed
+	}
 	parts := strings.Split(s, ",")
+	if len(parts) != 3 {
+		return params, ErrArgon2Malformed
+	}
+	seen := byte(0)
 	for _, part := range parts {
-		part = strings.TrimSpace(part)
 		if len(part) < 3 || part[1] != '=' {
-			return params, fmt.Errorf("invalid params format: %q", s)
+			return params, ErrArgon2Malformed
 		}
-		key := part[0]
-		val := part[2:]
-		var err error
-		switch key {
-		case 't':
-			params.Time, err = parseUint32(val)
-		case 'm':
-			params.Memory, err = parseUint32(val)
-		case 'p':
-			var tp uint32
-			tp, err = parseUint32(val)
-			if err == nil {
-				if tp > math.MaxUint8 {
-					err = fmt.Errorf("threads value %d exceeds maximum %d", tp, math.MaxUint8)
-				} else {
-					params.Threads = uint8(tp) // #nosec G115 — bounds-checked above
-				}
+		for _, c := range part[2:] {
+			if c < '0' || c > '9' {
+				return params, ErrArgon2Malformed
 			}
-		default:
-			err = fmt.Errorf("unknown param key: %c", key)
 		}
+		val, err := parseUint32(part[2:])
 		if err != nil {
-			return params, fmt.Errorf("invalid params: %w", err)
+			return params, ErrArgon2Malformed
 		}
+		var bit byte
+		switch part[0] {
+		case 't':
+			bit = 1
+			params.Time = val
+		case 'm':
+			bit = 2
+			params.Memory = val
+		case 'p':
+			bit = 4
+			if val > math.MaxUint8 {
+				return params, ErrArgon2Bounds
+			}
+			params.Threads = uint8(val) // #nosec G115 -- checked above
+		default:
+			return params, ErrArgon2Malformed
+		}
+		if seen&bit != 0 {
+			return params, ErrArgon2Malformed
+		}
+		seen |= bit
 	}
 	if err := validateArgon2idParams(params); err != nil {
-		return params, err
+		return params, fmt.Errorf("%w: %w", ErrArgon2Bounds, err)
 	}
 	return params, nil
 }
@@ -490,6 +544,9 @@ func DecryptWithPassphraseArgon2id(ciphertext []byte, passphrase []byte) ([]byte
 
 	r, err := age.Decrypt(bytes.NewReader(ciphertext), identity)
 	if err != nil {
+		if IsArgon2ResourceError(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 	}
 

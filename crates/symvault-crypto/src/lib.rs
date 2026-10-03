@@ -6,7 +6,12 @@
 //! reference `age` implementation for X25519 and scrypt, and implements the
 //! Symaira Vault Argon2id recipient stanza exactly as the Go oracle does.
 
+mod argon2_resources;
+pub use argon2_resources::POLICY_VERSION as ARGON2_RESOURCE_POLICY_VERSION;
+use argon2_resources::ReadMode;
+
 use std::{
+    cell::Cell,
     collections::HashSet,
     fmt,
     io::{Read, Write},
@@ -59,6 +64,10 @@ pub enum FailureClass {
     WrongPassphraseOrKey,
     /// A supplied KDF parameter exceeds the resource policy.
     ParameterBounds,
+    /// Historical parameters require an explicitly authorized local migration.
+    ResourcePolicy,
+    /// The bounded KDF admission queue is exhausted or its deadline elapsed.
+    ResourceBusy,
     /// Decrypted output exceeds the caller's explicit resource budget.
     SizeLimit,
     /// The envelope may have been written by the historical zero-key bug.
@@ -202,6 +211,21 @@ pub fn encrypt_identity_argon2id(
 ) -> Result<Vec<u8>, CryptoError> {
     let secret = identity.0.to_string();
     encrypt_argon2id(secret.expose_secret().as_bytes(), passphrase, params)
+}
+
+/// Reads historical Argon2 budgets solely for an explicit local KDF migration.
+/// The override is scoped to this call and never changes automatic admission.
+pub fn decrypt_identity_for_legacy_kdf_migration(
+    ciphertext: &[u8],
+    passphrase: &SecretBytes,
+) -> Result<Identity, CryptoError> {
+    let mut plaintext =
+        decrypt_argon2id_with_mode(ciphertext, passphrase, ReadMode::LegacyMigration)?;
+    let result = std::str::from_utf8(&plaintext)
+        .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "invalid utf-8 identity"))
+        .and_then(|text| parse_identity(text.trim()));
+    plaintext.zeroize();
+    result
 }
 
 /// Decrypts an identity from an age envelope with a passphrase.
@@ -445,6 +469,17 @@ fn derive(
     passphrase: &[u8],
     salt: &[u8],
     params: Argon2idParams,
+    mode: ReadMode,
+) -> Result<SecretBytes, CryptoError> {
+    derive_admitted(passphrase, salt, params, mode, &argon2_resources::PROCESS)
+}
+
+fn derive_admitted(
+    passphrase: &[u8],
+    salt: &[u8],
+    params: Argon2idParams,
+    mode: ReadMode,
+    admission: &argon2_resources::Admission,
 ) -> Result<SecretBytes, CryptoError> {
     let params = params.validate()?;
     if passphrase.is_empty() || salt.len() != ARGON2ID_SALT_BYTES {
@@ -453,12 +488,24 @@ fn derive(
             "invalid argon2id input",
         ));
     }
-    let p = Params::new(
-        params.memory_kib,
-        params.time,
-        params.threads,
-        Some(KEY_BYTES),
-    )
+    argon2_resources::validate(params, mode)?;
+    let memory = params.memory_kib.max(8 * params.threads);
+    let _reservation = admission.acquire(memory, mode)?;
+    let p = if params.memory_kib < 8 * params.threads {
+        Params::new_go_legacy_memory(
+            params.memory_kib,
+            params.time,
+            params.threads,
+            Some(KEY_BYTES),
+        )
+    } else {
+        Params::new(
+            params.memory_kib,
+            params.time,
+            params.threads,
+            Some(KEY_BYTES),
+        )
+    }
     .map_err(|_| {
         CryptoError::new(
             FailureClass::ParameterBounds,
@@ -478,8 +525,9 @@ fn wrap_key(
     passphrase: &[u8],
     salt: &[u8],
     params: Argon2idParams,
+    mode: ReadMode,
 ) -> Result<SecretBytes, CryptoError> {
-    let derived = derive(passphrase, salt, params)?;
+    let derived = derive(passphrase, salt, params, mode)?;
     let hk = Hkdf::<Sha256>::new(Some(salt), derived.as_bytes());
     let mut key = vec![0u8; KEY_BYTES];
     hk.expand(ARGON2ID_LABEL, &mut key)
@@ -488,7 +536,8 @@ fn wrap_key(
 }
 
 struct ArgonRecipient {
-    passphrase: SecretBytes,
+    key: SecretBytes,
+    salt: [u8; ARGON2ID_SALT_BYTES],
     params: Argon2idParams,
 }
 impl age::Recipient for ArgonRecipient {
@@ -496,11 +545,7 @@ impl age::Recipient for ArgonRecipient {
         &self,
         file_key: &FileKey,
     ) -> Result<(Vec<Stanza>, HashSet<String>), age::EncryptError> {
-        let mut salt = [0u8; ARGON2ID_SALT_BYTES];
-        getrandom::fill(&mut salt).map_err(|_| age::EncryptError::MissingRecipients)?;
-        let key = wrap_key(self.passphrase.as_bytes(), &salt, self.params)
-            .map_err(|_| age::EncryptError::MissingRecipients)?;
-        let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes())
+        let cipher = ChaCha20Poly1305::new_from_slice(self.key.as_bytes())
             .map_err(|_| age::EncryptError::MissingRecipients)?;
         let mut nonce = [0u8; 12];
         getrandom::fill(&mut nonce).map_err(|_| age::EncryptError::MissingRecipients)?;
@@ -517,7 +562,7 @@ impl age::Recipient for ArgonRecipient {
             vec![Stanza {
                 tag: ARGON2ID_TAG.to_owned(),
                 args: vec![
-                    STANDARD_NO_PAD.encode(salt),
+                    STANDARD_NO_PAD.encode(self.salt),
                     format!(
                         "t={},m={},p={}",
                         self.params.time, self.params.memory_kib, self.params.threads
@@ -532,33 +577,86 @@ impl age::Recipient for ArgonRecipient {
 
 struct ArgonIdentity {
     passphrase: SecretBytes,
+    mode: ReadMode,
+    error: Cell<Option<CryptoError>>,
 }
+
+fn malformed_argon2id() -> CryptoError {
+    CryptoError::new(FailureClass::MalformedEnvelope, "malformed argon2id stanza")
+}
+
+fn preflight_argon2id(stanzas: &[Stanza], mode: ReadMode) -> Result<(), CryptoError> {
+    let mut count = 0;
+    let mut work = 0u64;
+    let limit = if mode == ReadMode::LegacyMigration {
+        u64::from(MAX_ARGON2_MEMORY) * u64::from(MAX_ARGON2_TIME)
+    } else {
+        u64::from(argon2_resources::MAX_MEMORY_KIB) * u64::from(argon2_resources::MAX_TIME)
+    };
+    for stanza in stanzas.iter().filter(|s| s.tag == ARGON2ID_TAG) {
+        count += 1;
+        if count > 4 {
+            return Err(argon2_resources::policy_error());
+        }
+        let [salt, encoded] = stanza.args.as_slice() else {
+            return Err(malformed_argon2id());
+        };
+        if salt.len() != ARGON2ID_SALT_B64_BYTES || stanza.body.len() != 44 {
+            return Err(malformed_argon2id());
+        }
+        let decoded = STANDARD_NO_PAD
+            .decode(salt)
+            .map_err(|_| malformed_argon2id())?;
+        if decoded.len() != ARGON2ID_SALT_BYTES {
+            return Err(malformed_argon2id());
+        }
+        let params = parse_params(encoded)?;
+        argon2_resources::validate(params, mode)?;
+        work += u64::from(params.memory_kib.max(8 * params.threads)) * u64::from(params.time);
+        if work > limit {
+            return Err(argon2_resources::policy_error());
+        }
+    }
+    Ok(())
+}
+
 impl age::Identity for ArgonIdentity {
+    fn unwrap_stanzas(&self, stanzas: &[Stanza]) -> Option<Result<FileKey, age::DecryptError>> {
+        if !stanzas.iter().any(|s| s.tag == ARGON2ID_TAG) {
+            return None;
+        }
+        if let Err(error) = preflight_argon2id(stanzas, self.mode) {
+            self.error.set(Some(error));
+            return Some(Err(age::DecryptError::InvalidHeader));
+        }
+        for stanza in stanzas {
+            match self.unwrap_stanza(stanza) {
+                Some(Ok(key)) => return Some(Ok(key)),
+                Some(Err(error)) if self.error.get().is_some() => return Some(Err(error)),
+                _ => {}
+            }
+        }
+        Some(Err(age::DecryptError::DecryptionFailed))
+    }
+
     fn unwrap_stanza(&self, stanza: &Stanza) -> Option<Result<FileKey, age::DecryptError>> {
         if stanza.tag != ARGON2ID_TAG {
             return None;
         }
-        let [salt, encoded] = stanza.args.as_slice() else {
-            return Some(Err(age::DecryptError::InvalidHeader));
-        };
-        if salt.len() != ARGON2ID_SALT_B64_BYTES {
+        if let Err(error) = preflight_argon2id(std::slice::from_ref(stanza), self.mode) {
+            self.error.set(Some(error));
             return Some(Err(age::DecryptError::InvalidHeader));
         }
-        let Ok(salt) = STANDARD_NO_PAD.decode(salt) else {
-            return Some(Err(age::DecryptError::InvalidHeader));
+        let salt = STANDARD_NO_PAD.decode(&stanza.args[0]).ok()?;
+        let params = parse_params(&stanza.args[1]).ok()?;
+        let key = match wrap_key(self.passphrase.as_bytes(), &salt, params, self.mode) {
+            Ok(key) => key,
+            Err(error) => {
+                self.error.set(Some(error));
+                return Some(Err(age::DecryptError::InvalidHeader));
+            }
         };
-        let Ok(params) = parse_params(encoded) else {
-            return Some(Err(age::DecryptError::InvalidHeader));
-        };
-        if stanza.body.len() < 12 {
-            return Some(Err(age::DecryptError::InvalidHeader));
-        }
-        let Ok(key) = wrap_key(self.passphrase.as_bytes(), &salt, params) else {
-            return Some(Err(age::DecryptError::InvalidHeader));
-        };
-        let Ok(cipher) = ChaCha20Poly1305::new_from_slice(key.as_bytes()) else {
-            return Some(Err(age::DecryptError::InvalidHeader));
-        };
+        let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes()).ok()?;
         let Ok(mut plain) =
             cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
         else {
@@ -573,6 +671,35 @@ impl age::Identity for ArgonIdentity {
         plain.zeroize();
         Some(Ok(FileKey::new(Box::new(file_key))))
     }
+}
+
+struct ArgonPolicyInspector {
+    status: Cell<Option<Result<bool, CryptoError>>>,
+}
+impl age::Identity for ArgonPolicyInspector {
+    fn unwrap_stanza(&self, _: &Stanza) -> Option<Result<FileKey, age::DecryptError>> {
+        None
+    }
+    fn unwrap_stanzas(&self, stanzas: &[Stanza]) -> Option<Result<FileKey, age::DecryptError>> {
+        let result = if stanzas.iter().any(|s| s.tag == ARGON2ID_TAG) {
+            preflight_argon2id(stanzas, ReadMode::LegacyMigration)
+                .map(|()| preflight_argon2id(stanzas, ReadMode::Automatic).is_err())
+        } else {
+            Err(malformed_argon2id())
+        };
+        self.status.set(Some(result));
+        Some(Err(age::DecryptError::InvalidHeader))
+    }
+}
+
+/// Inspects historical header budgets without a KDF or authenticating its key.
+pub fn inspect_argon2id_policy(raw: &[u8]) -> Result<bool, CryptoError> {
+    let decryptor = age::Decryptor::new(raw).map_err(|_| malformed_argon2id())?;
+    let inspector = ArgonPolicyInspector {
+        status: Cell::new(None),
+    };
+    let _ = decryptor.decrypt(iter::once(&inspector as &dyn age::Identity));
+    inspector.status.get().unwrap_or(Err(malformed_argon2id()))
 }
 
 /// Parses the bounded `t=<time>,m=<memory>,p=<threads>` Argon2id stanza value.
@@ -616,6 +743,12 @@ pub fn parse_argon2id_params(value: &str) -> Result<Argon2idParams, CryptoError>
             }
         };
         if seen & bit != 0 {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            ));
+        }
+        if number.is_empty() || !number.bytes().all(|c| c.is_ascii_digit()) {
             return Err(CryptoError::new(
                 FailureClass::MalformedEnvelope,
                 "malformed argon2id parameters",
@@ -728,12 +861,20 @@ pub fn encrypt_argon2id(
     params: Argon2idParams,
 ) -> Result<Vec<u8>, CryptoError> {
     let params = params.validate()?;
+    if plaintext.is_empty() {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "plaintext is empty",
+        ));
+    }
+    let mut salt = [0u8; ARGON2ID_SALT_BYTES];
+    getrandom::fill(&mut salt).map_err(|_| {
+        CryptoError::new(FailureClass::InvalidInput, "cannot generate argon2id salt")
+    })?;
+    let key = wrap_key(passphrase.as_bytes(), &salt, params, ReadMode::Automatic)?;
     encrypt_to_recipients(
         plaintext,
-        vec![Box::new(ArgonRecipient {
-            passphrase: SecretBytes::new(passphrase.as_bytes()),
-            params,
-        })],
+        vec![Box::new(ArgonRecipient { key, salt, params })],
     )
 }
 /// Decrypts a Symaira Vault Argon2id age envelope.
@@ -741,18 +882,47 @@ pub fn decrypt_argon2id(
     ciphertext: &[u8],
     passphrase: &SecretBytes,
 ) -> Result<Vec<u8>, CryptoError> {
+    decrypt_argon2id_with_mode(ciphertext, passphrase, ReadMode::Automatic)
+}
+
+fn decrypt_argon2id_with_mode(
+    ciphertext: &[u8],
+    passphrase: &SecretBytes,
+    mode: ReadMode,
+) -> Result<Vec<u8>, CryptoError> {
     let decryptor = age::Decryptor::new(ciphertext)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
     let identity = ArgonIdentity {
         passphrase: SecretBytes::new(passphrase.as_bytes()),
+        mode,
+        error: Cell::new(None),
     };
     let mut reader = decryptor
         .decrypt(iter::once(&identity as &dyn age::Identity))
-        .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
+        .map_err(|_| {
+            identity.error.get().unwrap_or(CryptoError::new(
+                FailureClass::WrongPassphraseOrKey,
+                "decryption failed",
+            ))
+        })?;
     let mut plaintext = Vec::new();
-    reader
-        .read_to_end(&mut plaintext)
-        .map_err(|_| CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed"))?;
+    if mode == ReadMode::LegacyMigration {
+        reader
+            .take(1025)
+            .read_to_end(&mut plaintext)
+            .map_err(|_| malformed_argon2id())?;
+        if plaintext.len() > 1024 {
+            plaintext.zeroize();
+            return Err(CryptoError::new(
+                FailureClass::SizeLimit,
+                "historical identity exceeds size limit",
+            ));
+        }
+    } else {
+        reader.read_to_end(&mut plaintext).map_err(|_| {
+            CryptoError::new(FailureClass::WrongPassphraseOrKey, "decryption failed")
+        })?;
+    }
     Ok(plaintext)
 }
 
@@ -957,11 +1127,18 @@ pub fn recover_zero_key_identity(
     let zeros = SecretBytes(vec![0; passphrase_len]);
     let decryptor = age::Decryptor::new(raw)
         .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "malformed age envelope"))?;
-    let identity = ArgonIdentity { passphrase: zeros };
+    let identity = ArgonIdentity {
+        passphrase: zeros,
+        mode: ReadMode::Automatic,
+        error: Cell::new(None),
+    };
     let mut reader = decryptor
         .decrypt(iter::once(&identity as &dyn age::Identity))
         .map_err(|_| {
-            CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
+            identity.error.get().unwrap_or(CryptoError::new(
+                FailureClass::ZeroKeyCandidate,
+                "zero-key recovery failed",
+            ))
         })?;
     let mut plaintext = Vec::new();
     if reader.read_to_end(&mut plaintext).is_err() {
@@ -1915,3 +2092,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod kdf_policy_tests;

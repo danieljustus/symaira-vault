@@ -197,13 +197,14 @@ The shared preflight also reserves the extra array nodes and strings introduced
 by Go's legacy backup-code migration. This prevents a small newline-separated
 string from escaping decoded-data accounting through post-decode normalization.
 Rust reserves that same conservative cost; its existing value representation
-is covered by the separate value-compatibility work in issue #1254.
+remains a distinct importer/output-mode/MCP parity concern in #1247, #1241
+and #1248. Issue #1254 is the separate release-candidate performance gate.
 
 The new policy corpus records actual resource outcomes, successful read counts,
 and Go diagnostic field/code counts from an immutable checkout. Rust replays
 the resource outcomes and read counts from the same deterministic byte recipes.
 The diagnostic Go field representation is retained as observed; this corpus does
-not promote the broader value-normalization migration row. Filesystem recipes
+not promote those broader semantic-parity rows. Filesystem recipes
 hash their kind marker and derive the complete synthetic tree/file state from
 the recorded count; byte recipes hash their generated plaintext. Existing
 import-review CLI cases must re-execute with identical output and side effects

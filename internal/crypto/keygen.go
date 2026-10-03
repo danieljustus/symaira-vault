@@ -259,6 +259,38 @@ func SaveIdentityWithArgon2id(id *age.X25519Identity, path string, passphrase []
 
 // LoadIdentityWithArgon2id loads and decrypts an identity using Argon2id KDF.
 func LoadIdentityWithArgon2id(path string, passphrase []byte) (*age.X25519Identity, error) {
+	return loadIdentityArgon2id(path, passphrase, false)
+}
+
+// DecryptIdentityForLegacyKDFMigration binds explicit migration to a snapshot
+// rather than reopening a mutable identity path after it was inspected.
+func DecryptIdentityForLegacyKDFMigration(raw, passphrase []byte) (*age.X25519Identity, error) {
+	identity := &argon2idIdentity{passphrase: append([]byte(nil), passphrase...), legacy: true}
+	defer Wipe(identity.passphrase)
+	var decryptor age.Identity = identity
+	if DetectEncryptedIdentityFormat(raw) == "scrypt" {
+		scrypt, err := age.NewScryptIdentity(string(identity.passphrase))
+		if err != nil {
+			return nil, err
+		}
+		decryptor = scrypt
+	}
+	r, err := age.Decrypt(bytes.NewReader(raw), decryptor)
+	if err != nil {
+		if IsArgon2ResourceError(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
+	}
+	plaintext, err := io.ReadAll(io.LimitReader(r, 1025))
+	defer Wipe(plaintext)
+	if err != nil || len(plaintext) > 1024 {
+		return nil, ErrArgon2Malformed
+	}
+	return age.ParseX25519Identity(strings.TrimSpace(string(plaintext)))
+}
+
+func loadIdentityArgon2id(path string, passphrase []byte, legacy bool) (*age.X25519Identity, error) {
 	if len(passphrase) == 0 {
 		return nil, errors.New("passphrase is empty")
 	}
@@ -271,10 +303,14 @@ func LoadIdentityWithArgon2id(path string, passphrase []byte) (*age.X25519Identi
 	}
 	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
 	// so that the subsequent Wipe() clears the only copy in memory.
-	identity := NewArgon2idIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
+	identity := &argon2idIdentity{passphrase: append([]byte(nil), passphrase...), legacy: legacy}
+	defer Wipe(identity.passphrase)
 	Wipe(passphrase)
 	r, err := age.Decrypt(bytes.NewReader(raw), identity)
 	if err != nil {
+		if IsArgon2ResourceError(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
 	}
 	plaintext, err := io.ReadAll(r)
