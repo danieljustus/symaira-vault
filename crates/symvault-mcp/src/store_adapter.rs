@@ -1598,13 +1598,13 @@ impl StoreReadOnlyRuntime {
         if let Some((key, value)) = auth_query {
             request_url = set_api_query_parameter(&request_url, &key, &value)?;
             known_values.push(api_query_escape(&value));
-            known_values.extend(api_query_substitution_redaction_values(
-                &runtime_template.base_url,
-                &endpoint,
-                &definition.substitutions,
-                &substitutions,
-            )?);
         }
+        known_values.extend(api_query_substitution_redaction_values(
+            &runtime_template.base_url,
+            &endpoint,
+            &definition.substitutions,
+            &substitutions,
+        )?);
         for value in substitutions.values() {
             known_values.extend(api_substitution_redaction_values(value));
         }
@@ -3634,7 +3634,14 @@ fn api_path_substitution_redaction_values(
     );
     // Decode the complete path before trimming context, so percent/UTF-8 bytes
     // spanning a placeholder boundary are not replaced or decoded in isolation.
-    if let Ok(decoded) = api_path_unescape(rendered.path()) {
+    {
+        // Response masking must also cover tolerant upstream decoders: a
+        // malformed escape introduced by a credential does not stop decoding
+        // the remaining valid escapes. Endpoint validation stays strict.
+        let mut decoder = rendered.clone();
+        let encoded_path = rendered.path().replace('+', "%2B").replace('&', "%26");
+        decoder.set_query(Some(&format!("path={encoded_path}")));
+        let decoded = decoder.query_pairs().next().expect("path field").1;
         let prefix = api_path_unescape(&path[..first]).unwrap_or_default();
         let suffix = api_path_unescape(&path[last..]).unwrap_or_default();
         let span = decoded.strip_prefix(&prefix).unwrap_or(&decoded);
