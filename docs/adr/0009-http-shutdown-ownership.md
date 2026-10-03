@@ -55,3 +55,10 @@ tests distinguish clean drain from deadline/forced close; idle discovery and
 restart, incomplete-body transport, retained cleanup ownership, and canceled
 terminal replies pass. Strict owning-package lint reports zero issues. Native
 Linux/macOS/Windows acceptance and final combined repository gates are pending.
+
+MCP's historical Windows `TestMain` skips its suite by default. Contract jobs
+explicitly enable the existing cross-language opt-in and assert named tests
+actually passed. The owning portable packages run completely; the MCP package
+runs the named cancellation and authorization/scope contracts on every host,
+avoiding unrelated POSIX-shell-only command cases. General CI and the local
+complete owning suite retain the broader Linux/macOS coverage.

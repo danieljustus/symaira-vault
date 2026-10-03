@@ -57,7 +57,8 @@ jobs:
       - name: Execute owning race tests and existing auth/OAuth/mTLS contracts
         run: |
           set -euo pipefail
-          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/serverbootstrap ./internal/mcp/server ./internal/secureui ./internal/approval ./internal/policy -count=1 > native-http-shutdown.jsonl
+          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/serverbootstrap ./internal/secureui ./internal/approval ./internal/policy -count=1 > native-http-shutdown.jsonl
+          python3 scripts/run_go_tests.py cargo -- go test -race -json ./internal/mcp/server -run "TestApprovalCancellation|^TestAuthorize|TestScopeCheckHook|TestHandleGet_OutsideScope|TestHandleDelete_OutsideScope|TestHandleGetMetadata_OutsideScope" -count=1 >> native-http-shutdown.jsonl
           python3 - <<'PY'
           import json, platform
           from pathlib import Path
