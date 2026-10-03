@@ -51,6 +51,11 @@ const manifestFileName = "manifest.age"
 // provided identity, and unmarshals the JSON content. Returns nil + os.IsNotExist
 // error if the file does not exist.
 func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, error) {
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	manifestPath := filepath.Join(vaultDir, manifestFileName)
 	raw, err := readVaultEntryBounded(vaultDir, manifestPath)
 	if err != nil {
@@ -83,48 +88,78 @@ func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, err
 }
 
 func validateManifestEntryCount(plaintext []byte) error {
-	var envelope struct {
-		Entries json.RawMessage `json:"entries"`
+	decoder := json.NewDecoder(bytes.NewReader(plaintext))
+	start, parseErr := decoder.Token()
+	if parseErr != nil {
+		return parseErr
 	}
-	if err := json.Unmarshal(plaintext, &envelope); err != nil {
-		return err
-	}
-	if len(envelope.Entries) == 0 || string(envelope.Entries) == "null" {
+	if start != json.Delim('{') {
 		return nil
 	}
-	decoder := json.NewDecoder(bytes.NewReader(envelope.Entries))
-	start, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delim, ok := start.(json.Delim)
-	if !ok || delim != '{' {
-		return nil // Manifest decoding reports the authoritative type error.
-	}
-	entries := 0
+	seen, entries, pathBytes := false, 0, 0
 	for decoder.More() {
-		if _, err := decoder.Token(); err != nil { // key
-			return err
+		token, keyErr := decoder.Token()
+		if keyErr != nil {
+			return keyErr
 		}
-		entries++
-		if entries > maxVaultEntryCount {
-			return errManifestEntryLimit
+		key, ok := token.(string)
+		if !ok {
+			return errors.New("manifest object key is not a string")
 		}
-		var ignored json.RawMessage
-		if err := decoder.Decode(&ignored); err != nil {
-			return err
+		if !strings.EqualFold(key, "entries") {
+			var ignored json.RawMessage
+			if ignoredErr := decoder.Decode(&ignored); ignoredErr != nil {
+				return ignoredErr
+			}
+			continue
+		}
+		if seen {
+			return errors.New("manifest has duplicate entries fields")
+		}
+		seen = true
+		mapStart, mapErr := decoder.Token()
+		if mapErr != nil {
+			return mapErr
+		}
+		if mapStart == nil {
+			continue
+		}
+		if mapStart != json.Delim('{') {
+			return errors.New("manifest entries must be an object or null")
+		}
+		for decoder.More() {
+			entryToken, entryErr := decoder.Token()
+			if entryErr != nil {
+				return entryErr
+			}
+			entryKey, ok := entryToken.(string)
+			if !ok {
+				return errors.New("manifest entry key is not a string")
+			}
+			entries++
+			if entries > maxVaultEntryCount {
+				return errManifestEntryLimit
+			}
+			if budgetErr := addVaultPathBytes(&pathBytes, entryKey); budgetErr != nil {
+				return budgetErr
+			}
+			var ignored json.RawMessage
+			if valueErr := decoder.Decode(&ignored); valueErr != nil {
+				return valueErr
+			}
+		}
+		if _, endErr := decoder.Token(); endErr != nil {
+			return endErr
 		}
 	}
-	if _, err := decoder.Token(); err != nil {
-		return err
-	}
-	return nil
+	_, parseErr = decoder.Token()
+	return parseErr
 }
 
 // walkVaultEntriesBounded applies the same traversal limits as Rust's
 // entry_candidates: count every descendant filesystem item, and do not enter
 // paths deeper than the shared logical-path limit.
-func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry) error) error {
+func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry) error, counters ...*int) error {
 	rootCap, err := os.OpenRoot(root)
 	if err != nil {
 		return err
@@ -132,6 +167,10 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 	defer func() { _ = rootCap.Close() }()
 
 	visited := 0
+	visitedCount := &visited
+	if len(counters) != 0 {
+		visitedCount = counters[0]
+	}
 	var walk func(relative string, depth int) error
 	walk = func(relative string, depth int) error {
 		directory, err := rootCap.Open(relative)
@@ -146,39 +185,42 @@ func walkVaultEntriesBounded(root string, visit func(path string, d os.DirEntry)
 		if !info.IsDir() {
 			return fmt.Errorf("vault scan expected directory: %q", relative)
 		}
-		// ReadDir(n) bounds a single directory's temporary allocation too;
-		// requesting all children first would bypass the item budget.
-		entries, err := directory.ReadDir(maxVaultEntryCount - visited + 1)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return err
-		}
-		for _, d := range entries {
-			visited++
-			if visited > maxVaultEntryCount {
-				return errEntryEnumerationLimit
+		for {
+			// Fixed-size chunks also bound retained directory names at each
+			// recursion level, including wide trees whose first child is deep.
+			entries, readErr := directory.ReadDir(128)
+			if readErr != nil && !errors.Is(readErr, io.EOF) {
+				return readErr
 			}
-			childDepth := depth + 1
-			if childDepth > maxVaultEntryPathDepth {
-				continue
-			}
-			child := filepath.Join(relative, d.Name())
-			path := filepath.Join(root, child)
-			if d.IsDir() {
-				if err := visit(path, d); err != nil {
-					if errors.Is(err, filepath.SkipDir) {
-						continue
-					}
-					return err
+			for _, d := range entries {
+				*visitedCount++
+				if *visitedCount > maxVaultEntryCount {
+					return errEntryEnumerationLimit
 				}
-				if childDepth < maxVaultEntryPathDepth {
-					if err := walk(child, childDepth); err != nil {
-						return err
-					}
+				childDepth := depth + 1
+				if childDepth > maxVaultEntryPathDepth {
+					return ErrVaultResourceLimit
 				}
-				continue
+				child := filepath.Join(relative, d.Name())
+				path := filepath.Join(root, child)
+				if d.IsDir() {
+					if visitErr := visit(path, d); visitErr != nil {
+						if errors.Is(visitErr, filepath.SkipDir) {
+							continue
+						}
+						return visitErr
+					}
+					if walkErr := walk(child, childDepth); walkErr != nil {
+						return walkErr
+					}
+					continue
+				}
+				if visitErr := visit(path, d); visitErr != nil {
+					return visitErr
+				}
 			}
-			if err := visit(path, d); err != nil {
-				return err
+			if errors.Is(readErr, io.EOF) {
+				break
 			}
 		}
 		return nil
@@ -303,11 +345,12 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 		pseudoKey = derivePseudonymizationKey(identity)
 	}
 
+	batch := &vaultReadBatch{}
 	for logicalPath, manifestEntry := range m.Entries {
 		filePath := entryStoragePathCached(vaultDir, logicalPath, pseudoKey)
 		storagePaths[filePath] = true
 
-		data, err := readVaultEntryBounded(vaultDir, filePath)
+		hashStr, _, _, err := hashVaultEntry(vaultDir, filePath, batch)
 		if os.IsNotExist(err) {
 			result.Missing = append(result.Missing, logicalPath)
 			continue
@@ -315,9 +358,6 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", filePath, err)
 		}
-
-		hash := sha256.Sum256(data)
-		hashStr := hex.EncodeToString(hash[:])
 
 		if hashStr != manifestEntry.SHA256 {
 			result.Tampered = append(result.Tampered, logicalPath)
@@ -403,35 +443,9 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 
 	entriesPath := entriesDir(vaultDir)
 
-	// First pass: collect all .age file paths.
-	var paths []string
-	visited := 0
-	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // skip inaccessible files
-		}
-		if filepath.Clean(path) != filepath.Clean(entriesPath) {
-			visited++
-		}
-		if visited > maxVaultEntryCount {
-			return errEntryEnumerationLimit
-		}
-		rel, relErr := filepath.Rel(entriesPath, path)
-		if relErr != nil {
-			return relErr
-		}
-		if pathDepth(rel) > maxVaultEntryPathDepth {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
-			return nil
-		}
-		paths = append(paths, path)
-		return nil
-	})
+	// Reuse the capability-rooted, chunked traversal rather than asking
+	// filepath.Walk to allocate and sort an entire directory first.
+	paths, err := pseudonymizedEntryFiles(vaultDir)
 	if err != nil {
 		return fmt.Errorf("walk entries for manifest rebuild: %w", err)
 	}
@@ -440,15 +454,12 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 	type result struct {
 		logicalPath string
 		entry       ManifestEntry
+		err         error
 	}
 
-	pathCh := make(chan string, len(paths))
-	for _, p := range paths {
-		pathCh <- p
-	}
-	close(pathCh)
-
-	resultCh := make(chan result, len(paths))
+	pathCh := make(chan string, maxActiveVaultReads)
+	resultCh := make(chan result, maxActiveVaultReads)
+	batch := &vaultReadBatch{}
 	var wg sync.WaitGroup
 	numWorkers := SearchWorkerCount(0)
 	if len(paths) < numWorkers {
@@ -460,29 +471,23 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 		go func() {
 			defer wg.Done()
 			for path := range pathCh {
-				data, err := readVaultEntryBounded(vaultDir, path)
+				digest, size, mtime, err := hashVaultEntry(vaultDir, path, batch)
 				if err != nil {
-					continue // skip unreadable files
-				}
-
-				info, err := os.Stat(path)
-				if err != nil {
+					resultCh <- result{err: err}
 					continue
 				}
-
 				rel, err := filepath.Rel(entriesPath, path)
 				if err != nil {
 					continue
 				}
 				logicalPath := strings.TrimSuffix(filepath.ToSlash(rel), ".age")
 
-				hash := sha256.Sum256(data)
 				resultCh <- result{
 					logicalPath: logicalPath,
 					entry: ManifestEntry{
-						SHA256: hex.EncodeToString(hash[:]),
-						Size:   int64(len(data)),
-						MTime:  info.ModTime(),
+						SHA256: digest,
+						Size:   size,
+						MTime:  mtime,
 					},
 				}
 			}
@@ -490,15 +495,28 @@ func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) erro
 	}
 
 	go func() {
+		for _, path := range paths {
+			pathCh <- path
+		}
+		close(pathCh)
 		wg.Wait()
 		close(resultCh)
 	}()
 
-	var mu sync.Mutex
+	var firstErr error
 	for r := range resultCh {
-		mu.Lock()
+		if r.err != nil {
+			if errors.Is(r.err, ErrVaultResourceLimit) || errors.Is(r.err, ErrVaultResourceBusy) {
+				if firstErr == nil {
+					firstErr = r.err
+				}
+			}
+			continue
+		}
 		m.Entries[r.logicalPath] = r.entry
-		mu.Unlock()
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 
 	return writeManifest(vaultDir, m, identity)

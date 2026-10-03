@@ -390,23 +390,8 @@ impl<S> ReadOnlyRuntime<S> {
         }
     }
 
-    pub(crate) fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String>
-    where
-        S: ReadOnlyStore,
-    {
-        self.store.resolve_secret_ref_path(reference)
-    }
-
-    pub(crate) fn resolve_secret_ref_at_path(
-        &self,
-        reference: &str,
-        expected_path: &str,
-    ) -> Result<String, String>
-    where
-        S: ReadOnlyStore,
-    {
-        self.store
-            .resolve_secret_ref_at_path(reference, expected_path)
+    pub(crate) fn store(&self) -> &S {
+        &self.store
     }
 
     /// Returns the fields and response-redaction strings for one already-scoped

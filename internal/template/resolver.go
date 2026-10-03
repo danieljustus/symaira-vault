@@ -59,13 +59,17 @@ func ParseRef(ref string) (*ParsedRef, error) {
 
 // ResolveRef resolves a secret reference against the given vault.
 // It parses the reference, looks up the entry in the vault, and returns the field value as a string.
-func ResolveRef(ctx context.Context, v *vaultpkg.Vault, ref string) (string, error) {
+func ResolveRef(ctx context.Context, v *vaultpkg.Vault, ref string, sessions ...*vaultpkg.ReadSession) (string, error) {
 	parsed, err := ParseRef(ref)
 	if err != nil {
 		return "", err
 	}
 
-	entry, err := vaultpkg.ReadEntry(v.Dir, parsed.Path, v.Identity)
+	reader := vaultpkg.NewReadSession(v.Dir, v.Identity)
+	if len(sessions) != 0 && sessions[0] != nil {
+		reader = sessions[0]
+	}
+	entry, err := reader.Get(parsed.Path)
 	if err != nil {
 		return "", fmt.Errorf("resolve ref %q: %w", ref, err)
 	}

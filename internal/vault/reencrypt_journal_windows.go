@@ -4,7 +4,6 @@ package vault
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
@@ -15,22 +14,6 @@ import (
 // operations.
 func syncReencryptDirectory(_ string) error { return nil }
 
-func readReencryptArtifactNoFollow(path string) ([]byte, error) {
-	file, _, err := openWindowsRegular(path)
-	if err != nil {
-		return nil, err
-	}
-	data, readErr := io.ReadAll(file)
-	closeErr := file.Close()
-	if readErr != nil {
-		return nil, readErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
-	}
-	return data, nil
-}
-
 func reencryptArtifactPaths(item *reencryptStaged) (string, string) {
 	staged, ok := item.platform.(*windowsReencryptStaged)
 	if !ok {
@@ -39,7 +22,7 @@ func reencryptArtifactPaths(item *reencryptStaged) (string, string) {
 	return staged.tempPath, staged.backupPath
 }
 
-func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error {
+func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal, batch *vaultReadBatch) error {
 	for _, entry := range journal.Entries {
 		if entry.Digest == "" {
 			continue
@@ -57,7 +40,7 @@ func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error
 				return err
 			}
 		}
-		targetMatches, err := verifyReencryptDigest(entry.Path, entry.Digest)
+		targetMatches, err := verifyReencryptDigestAtRoot(vaultDir, entry.Path, entry.Digest, batch)
 		if err != nil {
 			return fmt.Errorf("verify target %q: %w", entry.Path, err)
 		}
@@ -73,11 +56,7 @@ func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error
 			return fmt.Errorf("target and original backup are both missing for %q", entry.Path)
 		}
 		if targetMatches {
-			if backupExists {
-				if err := os.Remove(entry.Backup); err != nil {
-					return fmt.Errorf("remove old ciphertext backup: %w", err)
-				}
-			}
+			// Preserve the original until manifest publication succeeds.
 		} else if backupExists {
 			if _, err := os.Lstat(entry.Path); err == nil {
 				return fmt.Errorf("refusing to replace changed target %q during recovery", entry.Path)
@@ -145,4 +124,12 @@ func removeReencryptArtifact(path string) error {
 		return fmt.Errorf("remove re-encryption artifact: %w", err)
 	}
 	return nil
+}
+
+func verifyReencryptDigest(path, want string, budgets ...*vaultReadBatch) (bool, error) {
+	var batch *vaultReadBatch
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
+	return verifyReencryptDigestAtRoot(filepath.Dir(path), path, want, batch)
 }

@@ -1,6 +1,6 @@
 //! Byte-differential replay of the frozen Go-oracle fixture for
-//! `symvault import review list|promote` (oracle commit a226a6f7,
-//! fixture `tests/fixtures/import-review/cases.json`, captured 2026-09-22).
+//! `symvault import review list|promote` (oracle commit b1318922,
+//! fixture `tests/fixtures/import-review/cases.json`, captured 2026-10-03).
 //!
 //! Documented non-goal (CLI-help class): bare `import review` prints the
 //! cobra group help in the oracle — Rust matches exit status 0 and stays

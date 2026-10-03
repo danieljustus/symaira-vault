@@ -3,6 +3,7 @@ package template
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -356,5 +357,24 @@ func TestRenderDataStructure(t *testing.T) {
 	}
 	if data.Values["A"] != "val" {
 		t.Error("Values mismatch")
+	}
+}
+
+func TestResourcePolicyTemplateResolutionsShareOneAllowance(t *testing.T) {
+	data := make(map[string]any)
+	for _, field := range []string{"one", "two", "three", "four"} {
+		data[field] = strings.Repeat("public-fixture", (1024*1024)/len("public-fixture"))
+	}
+	v := newTestVault(t, map[string]map[string]any{"control": data})
+	refs := make(map[string]string)
+	for i := 0; i < 14; i++ {
+		refs[fmt.Sprintf("KEY_%02d", i)] = "control.one"
+	}
+	engine := NewEngine(v)
+	if _, err := engine.Render(context.Background(), "env", "fixture", refs, false); !errors.Is(err, vaultpkg.ErrVaultResourceLimit) {
+		t.Fatalf("template reset its read allowance: %v", err)
+	}
+	if _, err := engine.Render(context.Background(), "env", "fixture", refs, true); err != nil {
+		t.Fatalf("masked control: %v", err)
 	}
 }

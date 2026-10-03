@@ -1,13 +1,11 @@
 package vault
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"filippo.io/age"
@@ -83,7 +81,8 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		return fmt.Errorf("recover prior re-encryption: %w", recoveryErr)
 	}
 
-	candidates, err := collectReencryptCandidates(entriesDir(vaultDir))
+	batch := &vaultReadBatch{}
+	candidates, err := collectReencryptCandidates(entriesDir(vaultDir), batch)
 	if err != nil {
 		return fmt.Errorf("preflight entries: %w", err)
 	}
@@ -92,7 +91,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	}
 	defer closeReencryptCandidates(candidates)
 
-	manifestBackup, err := snapshotReencryptManifest(vaultDir)
+	manifestBackup, err := snapshotReencryptManifest(vaultDir, batch)
 	if err != nil {
 		return fmt.Errorf("snapshot manifest: %w", err)
 	}
@@ -114,10 +113,11 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		return firstErr
 	}
 	fail := func(operationErr error) error {
+		rollbackBatch := &vaultReadBatch{}
 		var rollbackErr error
 		for i := len(staged) - 1; i >= 0; i-- {
 			if staged[i].committed {
-				if err := reencryptRollback(staged[i]); err != nil && rollbackErr == nil {
+				if err := reencryptRollback(staged[i], rollbackBatch); err != nil && rollbackErr == nil {
 					rollbackErr = err
 				}
 			}
@@ -166,7 +166,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		item.committed = true
 	}
 
-	if err := reencryptRebuildManifest(vaultDir, identity); err != nil {
+	if err := reencryptRebuildManifest(vaultDir, identity, batch); err != nil {
 		return fail(fmt.Errorf("rebuild manifest: %w", err))
 	}
 
@@ -185,6 +185,11 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 // ReencryptBytes decrypts one age envelope and encrypts its plaintext for the
 // supplied recipients. It never writes a vault file or updates a manifest.
 func ReencryptBytes(raw []byte, identity *age.X25519Identity, recipients []*age.X25519Recipient) ([]byte, error) {
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	if identity == nil {
 		return nil, vaultcrypto.ErrNilIdentity
 	}
@@ -208,11 +213,17 @@ func ReencryptBytes(raw []byte, identity *age.X25519Identity, recipients []*age.
 	return ciphertext, nil
 }
 
-func collectReencryptCandidates(entriesPath string) ([]*reencryptCandidate, error) {
+func collectReencryptCandidates(entriesPath string, budgets ...*vaultReadBatch) ([]*reencryptCandidate, error) {
 	var candidates []*reencryptCandidate
-	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	batch := &vaultReadBatch{}
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
+	pathBytes := 0
+	err := walkVaultEntriesBounded(entriesPath, func(path string, d os.DirEntry) error {
+		info, err := d.Info()
+		if err != nil {
+			return err
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("unsafe symlink entry %q", path)
@@ -227,7 +238,15 @@ func collectReencryptCandidates(entriesPath string) ([]*reencryptCandidate, erro
 		if filepath.Ext(info.Name()) != entryExtAge {
 			return nil
 		}
-		candidate, err := prepareReencryptCandidate(entriesPath, path, info)
+		if validationErr := addVaultPathBytes(&pathBytes, path); validationErr != nil {
+			return validationErr
+		}
+		release, err := vaultReadAdmission.acquire()
+		if err != nil {
+			return err
+		}
+		candidate, err := prepareReencryptCandidate(entriesPath, path, info, batch)
+		release()
 		if err != nil {
 			return err
 		}
@@ -238,28 +257,45 @@ func collectReencryptCandidates(entriesPath string) ([]*reencryptCandidate, erro
 		closeReencryptCandidates(candidates)
 		return nil, err
 	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].path < candidates[j].path })
 	return candidates, nil
 }
 
-func rebuildManifestStrict(vaultDir string, identity *age.X25519Identity) error {
-	candidates, err := collectReencryptCandidates(entriesDir(vaultDir))
-	if err != nil {
-		return fmt.Errorf("collect entries: %w", err)
+func rebuildManifestStrict(vaultDir string, identity *age.X25519Identity, budgets ...*vaultReadBatch) error {
+	batch := &vaultReadBatch{}
+	if len(budgets) != 0 {
+		batch = budgets[0]
 	}
-	defer closeReencryptCandidates(candidates)
-
-	manifest := &Manifest{
-		Version: 1,
-		Created: time.Now().UTC(),
-		Entries: make(map[string]ManifestEntry, len(candidates)),
-	}
-	for _, candidate := range candidates {
-		hash := sha256.Sum256(candidate.raw)
-		manifest.Entries[candidate.logical] = ManifestEntry{
-			SHA256: hex.EncodeToString(hash[:]),
-			Size:   int64(len(candidate.raw)),
-			MTime:  candidate.mtime,
+	manifest := &Manifest{Version: 1, Created: time.Now().UTC(), Entries: make(map[string]ManifestEntry)}
+	pathBytes := 0
+	err := walkVaultEntriesBounded(entriesDir(vaultDir), func(path string, d os.DirEntry) error {
+		info, err := d.Info()
+		if err != nil {
+			return err
 		}
+		if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+			return fmt.Errorf("unsafe entry file")
+		}
+		if info.IsDir() || filepath.Ext(path) != entryExtAge {
+			return nil
+		}
+		rel, err := filepath.Rel(entriesDir(vaultDir), path)
+		if err != nil {
+			return err
+		}
+		logical := filepath.ToSlash(rel[:len(rel)-len(entryExtAge)])
+		if pathErr := addVaultPathBytes(&pathBytes, logical); pathErr != nil {
+			return pathErr
+		}
+		digest, size, mtime, err := hashVaultEntry(vaultDir, path, batch)
+		if err != nil {
+			return err
+		}
+		manifest.Entries[logical] = ManifestEntry{SHA256: digest, Size: size, MTime: mtime}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	return writeManifest(vaultDir, manifest, identity)
 }
@@ -272,40 +308,32 @@ type reencryptManifestBackup struct {
 	mode   os.FileMode
 }
 
-func snapshotReencryptManifest(vaultDir string) (reencryptManifestBackup, error) {
-	path := filepath.Join(vaultDir, manifestFileName)
-	info, err := os.Lstat(path)
+func snapshotReencryptManifest(vaultDir string, budgets ...*vaultReadBatch) (reencryptManifestBackup, error) {
+	release, err := vaultReadAdmission.acquire()
+	if err != nil {
+		return reencryptManifestBackup{}, err
+	}
+	defer release()
+	var backup reencryptManifestBackup
+	err = withRootedFile(vaultDir, manifestFileName, func(file *os.File, _ string) error {
+		info, statErr := file.Stat()
+		if statErr != nil {
+			return statErr
+		}
+		if !info.Mode().IsRegular() {
+			return ErrVaultResourceLimit
+		}
+		data, readErr := readEntryStreamLimited(file, file.Name(), maxEntryPlaintextBytesV1, budgets...)
+		if readErr != nil {
+			return readErr
+		}
+		backup = reencryptManifestBackup{exists: true, data: data, mode: info.Mode().Perm()}
+		return nil
+	})
 	if os.IsNotExist(err) {
 		return reencryptManifestBackup{}, nil
 	}
-	if err != nil {
-		return reencryptManifestBackup{}, err
-	}
-	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-		return reencryptManifestBackup{}, fmt.Errorf("manifest is not a regular file")
-	}
-	f, err := os.Open(path) // #nosec G304 -- path is vaultDir plus fixed manifest name
-	if err != nil {
-		return reencryptManifestBackup{}, err
-	}
-	openedInfo, statErr := f.Stat()
-	if statErr != nil {
-		_ = f.Close()
-		return reencryptManifestBackup{}, statErr
-	}
-	if !os.SameFile(info, openedInfo) {
-		_ = f.Close()
-		return reencryptManifestBackup{}, fmt.Errorf("manifest changed during snapshot")
-	}
-	data, readErr := io.ReadAll(f)
-	closeErr := f.Close()
-	if readErr != nil {
-		return reencryptManifestBackup{}, readErr
-	}
-	if closeErr != nil {
-		return reencryptManifestBackup{}, closeErr
-	}
-	return reencryptManifestBackup{exists: true, data: data, mode: info.Mode().Perm()}, nil
+	return backup, err
 }
 
 func restoreReencryptManifest(vaultDir string, backup reencryptManifestBackup) error {

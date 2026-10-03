@@ -284,6 +284,7 @@ func newImporter(format importer.Format, options importer.ImportOptions) (import
 // import options (prefix, skip-existing, overwrite, dry-run) per entry. It
 // returns the number of imported and skipped entries.
 func importEntries(vs *cli.VaultService, entries []importer.ImportedEntry, options importer.ImportOptions) (imported, skipped int, err error) {
+	vs = vs.ForReadOperation()
 	for _, entry := range entries {
 		entryPath := importEntryPath(options.Prefix, entry.Path)
 		if entryPath == "" {
@@ -426,6 +427,7 @@ func newImportReviewPromoteCmd() *cobra.Command {
 			importID := args[0]
 			quarantinePrefix := "quarantine/" + importID + "/"
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				vs = vs.ForReadOperation()
 				entries, err := vs.ListEntries(quarantinePrefix)
 				if err != nil {
 					return fmt.Errorf("list quarantine batch: %w", err)
@@ -442,6 +444,9 @@ func newImportReviewPromoteCmd() *cobra.Command {
 					// Check if destination already exists
 					exists, existsErr := importEntryExists(vs, destPath)
 					if existsErr != nil {
+						if errors.Is(existsErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(existsErr, vaultpkg.ErrVaultResourceBusy) {
+							return existsErr
+						}
 						cli.PrintQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
 						hadError = true
 						continue
@@ -454,6 +459,9 @@ func newImportReviewPromoteCmd() *cobra.Command {
 					// Read source entry
 					entry, readErr := vs.GetEntry(entryPath)
 					if readErr != nil {
+						if errors.Is(readErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(readErr, vaultpkg.ErrVaultResourceBusy) {
+							return readErr
+						}
 						cli.PrintQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
 						hadError = true
 						continue

@@ -14,6 +14,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // handleExecuteWithSecret executes a command with secrets injected as environment
@@ -67,6 +68,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		return mcp.NewToolResultError("missing required argument \"secret_refs\""), nil
 	}
 
+	reader := vaultpkg.NewReadSession(s.vault.Dir, s.vault.Identity)
 	secretRefs := make([]string, 0)
 	resolvedEnv := make(map[string]string)
 	secretEnv := make(map[string]string)
@@ -103,14 +105,17 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 				resolverRef = entryPath + "." + field
 			}
 
-			resolvedPath := s.resolveMCPSecretRefTarget(resolverRef)
+			resolvedPath, targetErr := s.resolveMCPSecretRefTarget(resolverRef, reader)
+			if targetErr != nil {
+				return mcp.NewToolResultError(targetErr.Error()), nil
+			}
 			if !s.checkScope(resolvedPath) {
 				s.logAudit(ctx, "execute_with_secret", ref, false)
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
 			}
 
-			value, resolveErr := s.resolveMCPSecretRefAtPath(resolverRef, resolvedPath)
+			value, resolveErr := s.resolveMCPSecretRefAtPath(resolverRef, resolvedPath, reader)
 			if resolveErr != nil {
 				s.logAudit(ctx, "execute_with_secret", ref, false)
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil

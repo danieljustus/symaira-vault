@@ -54,6 +54,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				reader := vaultpkg.NewReadSession(v.Dir, v.Identity)
 				// Parse --env flags: each is "ENV_NAME=path.field"
 				envMap := make(map[string]string)
 				knownSecrets := make(map[string]string)
@@ -65,7 +66,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 					envName := parts[0]
 					secretRef := parts[1]
 
-					value, resolveErr := secrets.ResolveSecretRef(v, secretRef)
+					value, resolveErr := secrets.ResolveSecretRef(v, secretRef, reader)
 					if resolveErr != nil {
 						return resolveErr
 					}
@@ -83,7 +84,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 						if _, exists := envMap[envName]; exists {
 							return fmt.Errorf("duplicate env var %q: defined in both --env and --env-file (or in multiple --env-file)", envName)
 						}
-						value, resolveErr := secrets.ResolveSecretRef(v, secretRef)
+						value, resolveErr := secrets.ResolveSecretRef(v, secretRef, reader)
 						if resolveErr != nil {
 							return resolveErr
 						}

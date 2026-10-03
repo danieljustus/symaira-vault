@@ -4,7 +4,6 @@ package vault
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -23,32 +22,6 @@ func syncReencryptDirectory(path string) error {
 	return file.Close()
 }
 
-func readReencryptArtifactNoFollow(path string) ([]byte, error) {
-	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, err
-	}
-	file := os.NewFile(uintptr(fd), path)
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return nil, err
-	}
-	if !info.Mode().IsRegular() {
-		_ = file.Close()
-		return nil, fmt.Errorf("re-encryption artifact target is not a regular file")
-	}
-	data, readErr := io.ReadAll(file)
-	closeErr := file.Close()
-	if readErr != nil {
-		return nil, readErr
-	}
-	if closeErr != nil {
-		return nil, closeErr
-	}
-	return data, nil
-}
-
 func reencryptArtifactPaths(item *reencryptStaged) (string, string) {
 	staged, ok := item.platform.(*unixReencryptStaged)
 	if !ok {
@@ -65,7 +38,7 @@ func reencryptArtifactPaths(item *reencryptStaged) (string, string) {
 	return temp, backup
 }
 
-func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error {
+func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal, batch *vaultReadBatch) error {
 	for _, entry := range journal.Entries {
 		if entry.Digest == "" {
 			continue
@@ -83,7 +56,7 @@ func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error
 				return err
 			}
 		}
-		targetMatches, err := verifyReencryptDigest(entry.Path, entry.Digest)
+		targetMatches, err := verifyReencryptDigestAtRoot(vaultDir, entry.Path, entry.Digest, batch)
 		if err != nil {
 			return fmt.Errorf("verify target %q: %w", entry.Path, err)
 		}
@@ -99,11 +72,7 @@ func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error
 			return fmt.Errorf("target and original backup are both missing for %q", entry.Path)
 		}
 		if targetMatches {
-			if backupExists {
-				if err := os.Remove(entry.Backup); err != nil {
-					return fmt.Errorf("remove old ciphertext backup: %w", err)
-				}
-			}
+			// Preserve the original until manifest publication succeeds.
 		} else if backupExists {
 			if _, err := os.Lstat(entry.Path); err == nil {
 				return fmt.Errorf("refusing to replace changed target %q during recovery", entry.Path)

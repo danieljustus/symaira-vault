@@ -416,16 +416,27 @@ func WriteEntryWithRecipients(vaultDir, path string, entry *Entry, identity *age
 	}
 	now := time.Now().UTC()
 	copyEntry := PrepareEntryForWrite(entry, now, path, isPseudonymizeEnabled(cfg))
+	if validationErr := validateEntryData(copyEntry.Data); validationErr != nil {
+		return validationErr
+	}
 
 	plaintext, err := json.Marshal(copyEntry)
 	if err != nil {
 		return err
+	}
+	defer vaultcrypto.Wipe(plaintext)
+	if validationErr := validateEntryPlaintext(plaintext); validationErr != nil {
+		return validationErr
 	}
 
 	// Encrypt for all recipients
 	ciphertext, err := vaultcrypto.EncryptWithRecipients(plaintext, recipients...)
 	if err != nil {
 		return fmt.Errorf("encrypt: %w", err)
+	}
+	if len(ciphertext) > maxEntryCiphertextBytesV1 {
+		vaultcrypto.Wipe(ciphertext)
+		return ErrVaultResourceLimit
 	}
 
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
