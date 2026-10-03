@@ -3,9 +3,11 @@
 package secureui
 
 import (
+	"bufio"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/creack/pty"
@@ -71,6 +73,13 @@ func TestTTYReadStringRuneEditing(t *testing.T) {
 		t.Fatalf("open go-tty over synthetic pty: %v", err)
 	}
 	defer func() { _ = device.Close() }()
+	// Make input readiness synchronous; otherwise the kernel can echo or
+	// edit bytes written before ReadString's goroutine enters raw mode.
+	restore, err := device.Raw()
+	if err != nil {
+		t.Fatalf("prepare synthetic pty raw mode: %v", err)
+	}
+	defer func() { _ = restore() }()
 
 	type result struct {
 		value string
@@ -95,23 +104,30 @@ func TestTTYReadStringRuneEditing(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("go-tty ReadString did not stop at CR")
 	}
+	// The marker follows every go-tty echo write. A PTY read can stop at any
+	// byte boundary, so observe through this marker rather than one read.
+	if _, err := device.Output().Write([]byte{0}); err != nil {
+		t.Fatalf("write synthetic echo completion marker: %v", err)
+	}
 	type echoResult struct {
 		text string
 		err  error
 	}
 	echoCh := make(chan echoResult, 1)
 	go func() {
-		output := make([]byte, 128)
-		n, readErr := master.Read(output)
-		echoCh <- echoResult{text: string(output[:n]), err: readErr}
+		// Force fragmentation on the real PTY even on hosts that normally
+		// return the whole transcript at once; retain the 128-byte bound.
+		reader := bufio.NewReader(io.LimitReader(iotest.OneByteReader(master), 128))
+		text, readErr := reader.ReadString(0)
+		echoCh <- echoResult{text: text, err: readErr}
 	}()
 	var transcript string
 	select {
 	case echo := <-echoCh:
-		if echo.err != nil && echo.err != io.EOF {
+		if echo.err != nil {
 			t.Fatalf("read go-tty prompt echo: %v", echo.err)
 		}
-		transcript = echo.text
+		transcript = strings.TrimSuffix(echo.text, "\x00")
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("bounded Go prompt echo observation timed out")
 	}

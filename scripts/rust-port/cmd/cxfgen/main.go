@@ -3,7 +3,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,7 +10,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -219,7 +217,7 @@ func metadata(root string) (oracleMeta, error) {
 	if err != nil {
 		return oracleMeta{}, err
 	}
-	generatorFiles := []string{"scripts/rust-port/cmd/cxfgen/main.go"}
+	generatorFiles := []string{"scripts/rust-port/cmd/cxfgen/archive_extract.go", "scripts/rust-port/cmd/cxfgen/archive_extract_test.go", "scripts/rust-port/cmd/cxfgen/main.go"}
 	generatorDigest, err := digestCurrent(root, generatorFiles)
 	if err != nil {
 		return oracleMeta{}, err
@@ -252,36 +250,8 @@ func archiveTree(root string) (string, error) {
 			_ = os.RemoveAll(tree)
 		}
 	}()
-	tr := tar.NewReader(bytes.NewReader(out))
-	for {
-		h, err := tr.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		name := filepath.Clean(filepath.FromSlash(h.Name))
-		if name == "." || filepath.IsAbs(name) || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("unsafe oracle path %q", h.Name)
-		}
-		path := filepath.Join(tree, name)
-		if h.FileInfo().IsDir() {
-			if err = os.MkdirAll(path, 0750); err != nil {
-				return "", err
-			}
-			continue
-		}
-		if err = os.MkdirAll(filepath.Dir(path), 0750); err != nil {
-			return "", err
-		}
-		data, err := io.ReadAll(tr)
-		if err != nil {
-			return "", err
-		}
-		if err = os.WriteFile(path, data, 0600); err != nil {
-			return "", err
-		}
+	if err := extractArchive(bytes.NewReader(out), tree, 0, false); err != nil {
+		return "", err
 	}
 	keep = true
 	return tree, nil

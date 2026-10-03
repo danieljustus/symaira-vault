@@ -20,9 +20,11 @@
     "source_digest": "c5599fa7182a68c39cefd3a35ceb906af416994797f498f710099d5848c330fe",
     "generator_files": [
       "scripts/rust-port/cmd/storegen/main.go",
-      "scripts/rust-port/cmd/storegen/main_test.go"
+      "scripts/rust-port/cmd/storegen/main_test.go",
+      "scripts/rust-port/cmd/storegen/archive_extract.go",
+      "scripts/rust-port/cmd/storegen/archive_extract_test.go"
     ],
-    "generator_digest": "76f99839bce93e9591aa5addca73eaf5598f0c163dbbb79f2bd9c69352d01af9"
+    "generator_digest": "e1bedaeeb55518f67c1a49b5490ff072959f889fc304594f47d2c53621887c77"
   },
   "vaults": [
     {

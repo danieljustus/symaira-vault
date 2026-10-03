@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -366,6 +367,51 @@ func validateOutputPath(root, output string) (string, error) {
 	return path, nil
 }
 
+// fixtureDifference reports only fixed projection fields and safe scalar values.
+// Fixture bytes, fixture-internal paths, helper output and arbitrary strings are omitted.
+func fixtureDifference(existing []byte, generated Fixture) string {
+	var frozen Fixture
+	if err := json.Unmarshal(existing, &frozen); err != nil {
+		return "committed fixture is not valid JSON"
+	}
+	byID := make(map[string]Case, len(frozen.Cases))
+	for _, c := range frozen.Cases {
+		byID[c.ID] = c
+	}
+	var differences []string
+	for _, actual := range generated.Cases {
+		expected, ok := byID[actual.ID]
+		if !ok {
+			differences = append(differences, actual.ID+": missing committed case")
+			continue
+		}
+		for _, field := range []string{"success", "skipped", "has_remote", "error_class", "observed", "timed_out", "descendant_cleanup"} {
+			want, got := expected.Expected[field], actual.Expected[field]
+			if reflect.DeepEqual(want, got) {
+				continue
+			}
+			differences = append(differences, fmt.Sprintf("%s.expected.%s: expected=%s actual=%s", actual.ID, field, diagnosticValue(want), diagnosticValue(got)))
+		}
+	}
+	if len(differences) == 0 {
+		return "no projection-field differences; inspect provenance, case inventory, inputs or formatting"
+	}
+	return strings.Join(differences, "; ")
+}
+
+func diagnosticValue(value any) string {
+	if v, ok := value.(bool); ok {
+		return strconv.FormatBool(v)
+	}
+	if v, ok := value.(string); ok {
+		switch v {
+		case "success", "ssh_configuration", "authentication", "timeout", "offline", "other":
+			return v
+		}
+	}
+	return "<value omitted>"
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/sync/git-io.json", "fixture path")
 	check := flag.Bool("check", false, "verify fixture")
@@ -382,7 +428,7 @@ func main() {
 		existing, err := os.ReadFile(path) // #nosec G304 -- lexical path check in developer-controlled generator, not symlink confinement
 		fail(err)
 		if string(existing) != string(data) {
-			panic(fmt.Errorf("%s is stale; regenerate from the Go oracle", *output))
+			panic(fmt.Errorf("%s differs from the Go oracle: %s; inspect the mismatch before regenerating", *output, fixtureDifference(existing, fixture)))
 		}
 		fmt.Printf("PASS Go git IO fixture (%d cases)\n", len(fixture.Cases))
 		return

@@ -1,5 +1,13 @@
 # Code continuation: symaira-vault
 
+> Historical checkpoint from 2026-09-30, retained for reproducibility. For
+> current work, start from `main` and read
+> [the 2026-10-03 continuation](../rust-port/continuation-20261003.md).
+> PR #1228 and the later source/fixture corrections are already integrated.
+> The branch-selection and draft instructions below describe the original
+> checkpoint, not the current integration state. No release or migration
+> acceptance claim is added by preserving this record.
+
 ## Goal and immutable starting point
 
 Continue the code and integration work from the published repository, without needing a local chat, private reports or installed agent skills.

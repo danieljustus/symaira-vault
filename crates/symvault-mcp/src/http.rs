@@ -514,7 +514,8 @@ where
                     return Err(error);
                 }
                 Err(error) => {
-                    eprintln!(
+                    let _ = writeln!(
+                        std::io::stderr().lock(),
                         "HTTP listener accept failed: kind={:?}, os={:?}",
                         error.kind(),
                         error.raw_os_error()
@@ -554,12 +555,14 @@ where
                     {
                         break;
                     }
-                    eprintln!(
+                    let _ = writeln!(
+                        std::io::stderr().lock(),
                         "HTTP busy response write failed: kind={:?}, os={:?}",
                         error.kind(),
                         error.raw_os_error()
                     );
-                    return Err(error);
+                    // Like worker-owned I/O, an overflow peer write failure
+                    // belongs to that connection, not the whole listener.
                 }
                 continue;
             }

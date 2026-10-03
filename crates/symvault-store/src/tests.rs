@@ -143,7 +143,13 @@ fn validate_fixture(value: &Fixture) -> Result<(), String> {
         return Err("oracle pin changed".into());
     }
     if value.oracle.source_files.len() != 12
-        || value.oracle.generator_files.len() != 2
+        || value.oracle.generator_files
+            != [
+                "scripts/rust-port/cmd/storegen/main.go",
+                "scripts/rust-port/cmd/storegen/main_test.go",
+                "scripts/rust-port/cmd/storegen/archive_extract.go",
+                "scripts/rust-port/cmd/storegen/archive_extract_test.go",
+            ]
         || value.oracle.source_digest.len() != 64
         || value.oracle.generator_digest.len() != 64
     {
@@ -2301,6 +2307,8 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
         "internal/vault/manifest.go".into(),
     ];
     let generator_files = vec![
+        "scripts/rust-port/cmd/store004gen/archive_extract.go".into(),
+        "scripts/rust-port/cmd/store004gen/archive_extract_test.go".into(),
         "scripts/rust-port/cmd/store004gen/main.go".into(),
         "scripts/rust-port/cmd/store004gen/main_test.go".into(),
         "scripts/rust-port/cmd/store004gen/process_group_unix.go".into(),
