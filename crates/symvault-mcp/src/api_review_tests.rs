@@ -29,6 +29,13 @@ fn review_echo_server_with(
     listener: std::net::TcpListener,
     echo: fn(&str) -> String,
 ) -> std::thread::JoinHandle<Option<String>> {
+    review_echo_server_with_bytes(listener, move |target| echo(target).into_bytes())
+}
+
+fn review_echo_server_with_bytes(
+    listener: std::net::TcpListener,
+    echo: impl Fn(&str) -> Vec<u8> + Send + 'static,
+) -> std::thread::JoinHandle<Option<String>> {
     listener.set_nonblocking(true).unwrap();
     std::thread::spawn(move || {
         use std::io::{BufRead, Write};
@@ -69,12 +76,12 @@ fn review_echo_server_with(
         let body = echo(&target);
         write!(
             stream,
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nX-Echo: {}\r\nConnection: close\r\n\r\n{}",
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nX-Echo: {}\r\nConnection: close\r\n\r\n",
             body.len(),
-            body,
-            body
+            String::from_utf8_lossy(&body)
         )
         .unwrap();
+        stream.write_all(&body).unwrap();
         Some(target)
     })
 }
@@ -281,6 +288,66 @@ fn api_review_decoded_path_with_malformed_percent_masks_surviving_fragment() {
 }
 
 #[test]
+fn api_review_raw_query_fields_mask_delimiter_split_credentials() {
+    for (credential, endpoint, wire) in [
+        (
+            "alpha:beta gamma&next=ignored",
+            "/v1/status?limit=50&q=__TOKEN__",
+            "/v1/status?limit=50&q=alpha:beta%20gamma&next=ignored",
+        ),
+        (
+            "alpha:beta gamma=hidden&next=ignored",
+            "/v1/status?limit=50&__TOKEN__=public",
+            "/v1/status?limit=50&alpha:beta%20gamma=hidden&next=ignored=public",
+        ),
+    ] {
+        review_assert_substitution_echo_with(
+            credential,
+            "none",
+            endpoint,
+            wire,
+            "limit=50&***",
+            |target| {
+                let query = target.split_once('?').unwrap().1;
+                let field = query.split('&').nth(1).unwrap();
+                let (key, value) = field.split_once('=').unwrap();
+                format!("limit=50&{}", if key == "q" { value } else { key })
+            },
+        );
+    }
+}
+
+#[test]
+fn api_review_binary_decoded_path_masks_go_body_replacement() {
+    review_assert_substitution_echo_with_bytes(
+        "alpha%E2%82beta/path/.",
+        "none",
+        "/v1/__TOKEN__.",
+        "/v1/alpha%E2%82beta/",
+        "/v1/***",
+        |target| {
+            // Upstream independently decodes its received target into bytes,
+            // without converting incomplete UTF-8 into text first.
+            let mut bytes = target.as_bytes();
+            let mut decoded = Vec::new();
+            while !bytes.is_empty() {
+                if bytes[0] == b'%' && bytes.len() >= 3 {
+                    let hex = std::str::from_utf8(&bytes[1..3]).unwrap();
+                    if let Ok(byte) = u8::from_str_radix(hex, 16) {
+                        decoded.push(byte);
+                        bytes = &bytes[3..];
+                        continue;
+                    }
+                }
+                decoded.push(bytes[0]);
+                bytes = &bytes[1..];
+            }
+            decoded
+        },
+    );
+}
+
+#[test]
 fn api_review_path_utf8_boundary_is_rejected_before_reads() {
     let root = tempdir().unwrap();
     let runtime = review_api_runtime(root.path(), "http://127.0.0.1:9".into());
@@ -323,6 +390,25 @@ fn review_assert_substitution_echo_with(
     expected_masked: &str,
     echo: fn(&str) -> String,
 ) {
+    review_assert_substitution_echo_with_bytes(
+        credential,
+        auth_type,
+        endpoint,
+        expected_wire,
+        expected_masked,
+        move |target| echo(target).into_bytes(),
+    );
+}
+
+fn review_assert_substitution_echo_with_bytes(
+    credential: &str,
+    auth_type: &str,
+    endpoint: &str,
+    expected_wire: &str,
+    expected_masked: &str,
+    echo: impl Fn(&str) -> Vec<u8> + Send + 'static,
+) {
+    let echoed_is_ascii = echo(expected_wire).is_ascii();
     let root = tempdir().unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     fs::create_dir_all(root.path().join("entries")).unwrap();
@@ -378,7 +464,7 @@ fn review_assert_substitution_echo_with(
         None,
     )
     .unwrap();
-    let server = review_echo_server_with(listener, echo);
+    let server = review_echo_server_with_bytes(listener, echo);
     let result = runtime.call(
         "execute_api_request",
         &json!({"template":"fixture","endpoint":endpoint,"timeout":1}),
@@ -391,7 +477,7 @@ fn review_assert_substitution_echo_with(
     assert_eq!(payload["body"], expected_masked);
     // Existing broker projection drops non-ASCII HeaderValue::to_str failures.
     // Preserve that behavior; ASCII header echoes still require exact masking.
-    let expected_header = if echo(expected_wire).is_ascii() {
+    let expected_header = if echoed_is_ascii {
         expected_masked
     } else {
         ""
