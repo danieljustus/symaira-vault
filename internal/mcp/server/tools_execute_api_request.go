@@ -138,6 +138,13 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<vault-error:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(fmt.Sprintf("cannot load credentials for %q: %v", tmpl.Name, entryErr)), nil
 	}
+	// Pseudonymized entries carry their logical path in authenticated ciphertext.
+	// A physical storage alias must not authorize a different logical entry via
+	// the reader's legacy-layout fallback. Bind it before using any credential.
+	if entry.Path != "" && entry.Path != entryPath {
+		s.logAudit(ctx, "execute_api_request", "<entry-reference-mismatch>", false)
+		return mcp.NewToolResultError("entry reference does not match the stored logical path"), nil
+	}
 
 	// Resolve template substitutions (path/query/header/body) from the vault
 	// entry. Values never enter logs or audit entries; any error message that

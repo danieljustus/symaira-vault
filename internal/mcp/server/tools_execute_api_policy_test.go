@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -51,6 +52,10 @@ func apiEntryPolicyCases() []apiEntryPolicyCase {
 }
 
 func observeAPIEntryPolicy(t *testing.T, input apiEntryPolicyCase) apiEntryPolicyObservation {
+	return observeAPIEntryPolicyWithStorage(t, input, false, false)
+}
+
+func observeAPIEntryPolicyWithStorage(t *testing.T, input apiEntryPolicyCase, pseudonymize, physicalAlias bool) apiEntryPolicyObservation {
 	t.Helper()
 	var requests, reads atomic.Int64
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,16 +69,41 @@ func observeAPIEntryPolicy(t *testing.T, input apiEntryPolicyCase) apiEntryPolic
 	defer upstream.Close()
 
 	vaultDir, identity := mockVaultWithEntry(t, "api-policy", map[string]any{"credential": "synthetic-api-policy-credential"})
+	if pseudonymize {
+		cfg := config.Default()
+		cfg.VaultDir = vaultDir
+		cfg.Vault = &config.VaultConfig{PseudonymizePaths: true}
+		if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+			t.Fatal(err)
+		}
+		if err := vaultpkg.WriteEntry(vaultDir, "api-policy", &vaultpkg.Entry{Data: map[string]any{"credential": "synthetic-api-policy-credential"}}, identity); err != nil {
+			t.Fatal(err)
+		}
+		if physicalAlias {
+			stored := vaultpkg.EntryStoragePathForMigration(vaultDir, "api-policy", identity)
+			rel, err := filepath.Rel(filepath.Join(vaultDir, "entries"), stored)
+			if err != nil {
+				t.Fatal(err)
+			}
+			input.entryRef = strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+		}
+	}
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name: "policy-agent", AllowedPaths: []string{"*"},
 		CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	if input.action != "" {
-		srv.policyEngine = policy.NewEngine([]*policy.Policy{{Version: "1.0", Rules: []policy.Rule{{
+		rules := []policy.Rule{{
 			Name: "entry-policy", Action: input.action,
 			Conditions: policy.Conditions{AgentID: "policy-agent", Path: "api-policy", ActionType: input.operation},
-		}}}})
+		}}
+		if pseudonymize {
+			rules[0].Priority = 10
+			rules = append(rules, policy.Rule{Name: "fallback-allow", Action: policy.ActionAllow,
+				Conditions: policy.Conditions{AgentID: "policy-agent", Path: "*", ActionType: "run"}})
+		}
+		srv.policyEngine = policy.NewEngine([]*policy.Policy{{Version: "1.0", Rules: rules}})
 	}
 	writeTemplateOverride(t, vaultDir, "policy-template", fmt.Sprintf(`base_url: %s
 auth_type: bearer
@@ -101,7 +131,11 @@ allow_private: true
 	if err != nil {
 		observation.Error = err.Error()
 	}
-	if input.wantError != "" {
+	if physicalAlias {
+		if err != nil || result == nil || !result.IsError || !strings.Contains(result.Text, "entry reference does not match") || observation.CredentialReads != 1 || observation.Requests != 0 {
+			t.Errorf("physical alias exposed credential: result=%v error=%v reads=%d requests=%d", result, err, observation.CredentialReads, observation.Requests)
+		}
+	} else if input.wantError != "" {
 		if err == nil || !strings.Contains(err.Error(), input.wantError) {
 			t.Errorf("%s: expected %q; result=%v error=%v", input.name, input.wantError, result, err)
 		}
@@ -112,6 +146,18 @@ allow_private: true
 		t.Errorf("%s: legitimate control failed: result=%v error=%v reads=%d requests=%d", input.name, result, err, observation.CredentialReads, observation.Requests)
 	}
 	return observation
+}
+
+func TestHandleExecuteAPIRequest_PseudonymizedEntryBinding(t *testing.T) {
+	t.Run("logical_denied", func(t *testing.T) {
+		observeAPIEntryPolicyWithStorage(t, apiEntryPolicyCases()[0], true, false)
+	})
+	t.Run("physical_alias_rejected", func(t *testing.T) {
+		observeAPIEntryPolicyWithStorage(t, apiEntryPolicyCases()[0], true, true)
+	})
+	t.Run("logical_allowed", func(t *testing.T) {
+		observeAPIEntryPolicyWithStorage(t, apiEntryPolicyCases()[7], true, false)
+	})
 }
 
 func TestHandleExecuteAPIRequest_ResolvedEntryPolicy(t *testing.T) {
