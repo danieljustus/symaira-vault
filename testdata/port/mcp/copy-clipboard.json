@@ -36,7 +36,7 @@
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "db3380383c4d017a0227b874cff4467efa5a358d110ce2ad626cbc63c300a0ae"
+    "generator_hash": "07f229bc4ab76bf639fcab44aad3c6b6814a8f5da4d58a23ed0c667a473e62a7"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-copy-clipboard-fixture",

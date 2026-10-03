@@ -531,6 +531,114 @@ fn api_review_policy_denies_before_resolution_and_network() {
 }
 
 #[test]
+fn api_review_entry_policy_matches_corrected_go_observations() {
+    use symvault_core::policy::{Action, Conditions, Engine, Policy, Rule};
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/execute-api-policy.json"
+    ))
+    .unwrap();
+    assert_eq!(fixture["schema_version"], 1);
+    assert_eq!(fixture["go_version"], "go1.26.6");
+    assert_eq!(
+        fixture["oracle"]["commit_sha"],
+        "34fb21a0601d6f74e4908639d9b339125a8cf230"
+    );
+    assert_eq!(fixture["oracle"]["source_digest"].as_str().unwrap().len(), 64);
+    assert_eq!(fixture["oracle"]["generator_hash"].as_str().unwrap().len(), 64);
+    let cases = fixture["cases"].as_array().unwrap();
+    assert_eq!(cases.len(), 9);
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
+        let denied = !case["error"].as_str().unwrap().is_empty();
+        let root = tempdir().unwrap();
+        let listener = (!denied).then(|| std::net::TcpListener::bind("127.0.0.1:0").unwrap());
+        let base = listener.as_ref().map_or_else(
+            || "http://127.0.0.1:9".to_owned(),
+            |listener| format!("http://{}", listener.local_addr().unwrap()),
+        );
+        fs::create_dir_all(root.path().join("entries")).unwrap();
+        fs::create_dir_all(root.path().join("templates")).unwrap();
+        fs::write(root.path().join("config.yaml"), b"vault:\n  format_version: 2\n").unwrap();
+        fs::write(root.path().join("identity.age"), b"fixture marker").unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root.path(), &identity).unwrap();
+        store.write_new_entry(
+            "api-policy",
+            &Entry {
+                data: BTreeMap::from([("credential".into(), json!("synthetic-api-policy-credential"))]),
+                ..Entry::default()
+            },
+            &identity,
+        ).unwrap();
+        drop(store);
+        let mut runtime = StoreReadOnlyRuntime::open(
+            root.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                agent_name: "policy-agent".into(),
+                approval_mode: "none".into(),
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                available_tools: vec!["execute_api_request".into()],
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        ).unwrap();
+        fs::write(
+            root.path().join("templates/fixture.yaml"),
+            format!("base_url: {base}\nauth_type: bearer\nentry_ref: {:?}\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: true\n", case["entry_ref"].as_str().unwrap()),
+        ).unwrap();
+        let action = case["policy_action"].as_str().unwrap();
+        if !action.is_empty() {
+            let action = match action {
+                "allow" => Action::Allow,
+                "deny" => Action::Deny,
+                "prompt" => Action::Prompt,
+                "require_biometry" => Action::RequireBiometry,
+                value => panic!("unknown frozen policy action {value}"),
+            };
+            runtime.policy = Some(Engine::new([Policy {
+                version: "1".into(), description: String::new(),
+                rules: vec![Rule {
+                    name: "entry-policy".into(), priority: 0,
+                    conditions: Conditions {
+                        agent_id: "policy-agent".into(), path: "api-policy".into(),
+                        action: case["policy_operation"].as_str().unwrap().into(),
+                        ..Conditions::default()
+                    }, action,
+                }],
+            }]));
+        }
+        let server = listener.map(review_echo_server);
+        API_REVIEW_READS.with(|count| count.set(0));
+        API_REVIEW_REQUESTS.with(|count| count.set(0));
+        let result = runtime.call("execute_api_request", &json!({
+            "template":"fixture", "endpoint":"/v1/status", "timeout":1,
+            "path":"unrelated-allowed-entry",
+        }));
+        if let Some(server) = server {
+            assert_eq!(server.join().unwrap().as_deref(), Some("/v1/status"), "{name}");
+        }
+        assert_eq!(result.is_err(), denied, "{name}");
+        assert_eq!(API_REVIEW_READS.with(|count| count.get()) as u64, case["credential_reads"].as_u64().unwrap(), "{name}");
+        assert_eq!(API_REVIEW_REQUESTS.with(|count| count.get()) as u64, case["requests"].as_u64().unwrap(), "{name}");
+        if denied {
+            // Go retains prompt/biometry-specific diagnostics. Rust denies all
+            // non-allow actions; compare their denial and side effects above.
+            if matches!(action, "deny" | "allow") {
+                assert_eq!(result.unwrap_err(), case["error"].as_str().unwrap(), "{name}");
+            }
+        } else {
+            let result = result.unwrap();
+            assert!(!result.is_error, "{name}: {}", result.text);
+            let body: Value = serde_json::from_str(&result.text).unwrap();
+            assert_eq!(body["status_code"], 200, "{name}");
+        }
+    }
+}
+
+#[test]
 fn api_review_ipv6_handler_allows_private_and_denies_controls() {
     let root = tempdir().unwrap();
     let listener = std::net::TcpListener::bind("[::1]:0").unwrap();
