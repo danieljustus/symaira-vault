@@ -3164,28 +3164,35 @@ fn api_timeout(value: Option<&Value>) -> Result<Duration, String> {
 }
 
 fn api_path_unescape(value: &str) -> Result<String, String> {
+    let decoded = api_percent_decoded_bytes(value, false)?;
+    Ok(String::from_utf8_lossy(&decoded).into_owned())
+}
+
+fn api_percent_decoded_bytes(value: &str, tolerate_malformed: bool) -> Result<Vec<u8>, String> {
     let mut decoded = Vec::with_capacity(value.len());
     let bytes = value.as_bytes();
     let mut index = 0;
     while index < bytes.len() {
         if bytes[index] == b'%' {
-            if index + 2 >= bytes.len() {
+            let high = bytes
+                .get(index + 1)
+                .and_then(|byte| (*byte as char).to_digit(16));
+            let low = bytes
+                .get(index + 2)
+                .and_then(|byte| (*byte as char).to_digit(16));
+            if let Some((high, low)) = high.zip(low) {
+                decoded.push(((high << 4) | low) as u8);
+                index += 3;
+                continue;
+            }
+            if !tolerate_malformed {
                 return Err("invalid URL encoding".into());
             }
-            let Some(high) = (bytes[index + 1] as char).to_digit(16) else {
-                return Err("invalid URL encoding".into());
-            };
-            let Some(low) = (bytes[index + 2] as char).to_digit(16) else {
-                return Err("invalid URL encoding".into());
-            };
-            decoded.push(((high << 4) | low) as u8);
-            index += 3;
-        } else {
-            decoded.push(bytes[index]);
-            index += 1;
         }
+        decoded.push(bytes[index]);
+        index += 1;
     }
-    Ok(String::from_utf8_lossy(&decoded).into_owned())
+    Ok(decoded)
 }
 
 fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
@@ -3634,14 +3641,14 @@ fn api_path_substitution_redaction_values(
     );
     // Decode the complete path before trimming context, so percent/UTF-8 bytes
     // spanning a placeholder boundary are not replaced or decoded in isolation.
-    {
-        // Response masking must also cover tolerant upstream decoders: a
-        // malformed escape introduced by a credential does not stop decoding
-        // the remaining valid escapes. Endpoint validation stays strict.
-        let mut decoder = rendered.clone();
-        let encoded_path = rendered.path().replace('+', "%2B").replace('&', "%26");
-        decoder.set_query(Some(&format!("path={encoded_path}")));
-        let decoded = decoder.query_pairs().next().expect("path field").1;
+    // Keep bytes until applying both upstream text decoding and our actual
+    // response-body projection. They replace incomplete UTF-8 differently.
+    // Tolerant decoding is masking-only; endpoint validation remains strict.
+    let decoded_bytes = api_percent_decoded_bytes(rendered.path(), true)?;
+    for decoded in [
+        String::from_utf8_lossy(&decoded_bytes).into_owned(),
+        go_json_text(&decoded_bytes),
+    ] {
         let prefix = api_path_unescape(&path[..first]).unwrap_or_default();
         let suffix = api_path_unescape(&path[last..]).unwrap_or_default();
         let span = decoded.strip_prefix(&prefix).unwrap_or(&decoded);
@@ -3689,13 +3696,28 @@ fn api_query_substitution_redaction_values(
         // Go encoding. An injected '=' or '&' can taint both keys and values;
         // unrelated query fields and the original non-secret key stay public.
         url.set_query(Some(&rendered));
-        for (index, (key, value)) in url.query_pairs().enumerate() {
-            if tainted_key || index != 0 {
-                known.push(api_query_escape(&key));
-                known.push(key.into_owned());
+        for (index, pair) in url
+            .query()
+            .unwrap_or_default()
+            .split('&')
+            .filter(|pair| !pair.is_empty())
+            .enumerate()
+        {
+            let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+            for (field, tainted) in [(key, tainted_key || index != 0), (value, true)] {
+                if !tainted {
+                    continue;
+                }
+                // Raw fields may be echoed separately after a substituted '&'
+                // splits the credential. Keep wire, form-text, Go re-encoding,
+                // and binary-body spellings without masking public fields.
+                known.push(field.to_owned());
+                let bytes = api_percent_decoded_bytes(&field.replace('+', " "), true)?;
+                let decoded = String::from_utf8_lossy(&bytes).into_owned();
+                known.push(api_query_escape(&decoded));
+                known.push(decoded);
+                known.push(go_json_text(&bytes));
             }
-            known.push(api_query_escape(&value));
-            known.push(value.into_owned());
         }
     }
     Ok(known)
