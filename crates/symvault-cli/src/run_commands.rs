@@ -349,9 +349,14 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     }
 
     let mut rejected_env_vars = Vec::new();
-    for name in options.passthrough {
+    for name in options
+        .passthrough
+        .iter()
+        .flat_map(|names| names.split(','))
+        .filter(|name| !name.is_empty())
+    {
         if is_sensitive_env_name(name) {
-            rejected_env_vars.push(name.clone());
+            rejected_env_vars.push(name.to_owned());
             continue;
         }
         if let Some(value) = std::env::var_os(name) {
@@ -692,6 +697,7 @@ fn has_system_root_assignment(
             .any(|(name, _)| name.to_string_lossy().eq_ignore_ascii_case("SystemRoot"))
         || passthrough
             .iter()
+            .flat_map(|names| names.split(','))
             .any(|name| name.eq_ignore_ascii_case("SystemRoot"))
 }
 

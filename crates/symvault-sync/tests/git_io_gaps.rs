@@ -5,7 +5,7 @@ use std::{
     collections::BTreeSet,
     fs,
     io::{Read, Write},
-    net::TcpListener,
+    net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Command, Output},
     thread,
@@ -373,17 +373,76 @@ fn auth_server(status: &str) -> (u16, thread::JoinHandle<()>) {
                 thread::sleep(Duration::from_millis(10));
                 continue;
             };
-            let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
-            let mut request = [0u8; 1024];
-            let _ = stream.read(&mut request);
+            stream.set_nonblocking(false).expect("blocking auth socket");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("bound auth request read");
+            stream
+                .set_write_timeout(Some(Duration::from_secs(3)))
+                .expect("bound auth response write");
+            // A single read can leave part of Git's GET headers unread. Closing
+            // that socket resets the connection on Windows before curl observes
+            // the 401, incorrectly exercising a transport failure instead.
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                assert!(request.len() < 64 * 1024, "oversized auth request");
+                let mut byte = [0];
+                stream.read_exact(&mut byte).expect("complete auth headers");
+                request.push(byte[0]);
+            }
+            assert!(request.starts_with(b"GET "), "expected bodyless Git GET");
             let response = format!(
                 "HTTP/1.1 {status}\r\nWWW-Authenticate: Basic realm=fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             );
-            let _ = stream.write_all(response.as_bytes());
-            break;
+            stream
+                .write_all(response.as_bytes())
+                .expect("auth response");
+            stream
+                .shutdown(Shutdown::Write)
+                .expect("complete auth reply");
+            return;
         }
+        panic!("Git never reached the bounded auth server");
     });
     (port, handle)
+}
+
+#[test]
+fn auth_remote_waits_for_fragmented_headers_before_replying() {
+    let (port, server) = auth_server("401 Unauthorized");
+    let mut client = TcpStream::connect(("127.0.0.1", port)).expect("connect auth fixture");
+    client
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .expect("bound premature reply check");
+    let partial = format!(
+        "GET /repo.git/info/refs HTTP/1.1\r\nHost: localhost\r\nX-Padding: {}",
+        "x".repeat(4096)
+    );
+    client
+        .write_all(partial.as_bytes())
+        .expect("partial headers");
+    let error = client
+        .read(&mut [0])
+        .expect_err("no reply before header terminator");
+    assert!(matches!(
+        error.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+    ));
+    client
+        .write_all(b"\r\nConnection: close\r\n\r\n")
+        .expect("finish headers");
+    client
+        .set_read_timeout(Some(Duration::from_secs(3)))
+        .expect("bound final reply");
+    let mut response = String::new();
+    client
+        .read_to_string(&mut response)
+        .expect("complete HTTP response without reset");
+    assert_eq!(
+        response,
+        "HTTP/1.1 401 Unauthorized\r\nWWW-Authenticate: Basic realm=fixture\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    server.join().expect("auth fixture server");
 }
 
 #[test]

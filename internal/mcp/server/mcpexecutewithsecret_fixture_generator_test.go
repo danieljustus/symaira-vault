@@ -79,7 +79,7 @@ type executeWithSecretApprovalEvent struct {
 	OK     bool   `json:"ok"`
 }
 
-const executeWithSecretOracleCommit = "12d8c616ae98b954a9b906e0984af1613ca05fde"
+const executeWithSecretOracleCommit = "98c786e1bf97fee2b93b79ec391f14c97bfd8694"
 
 var executeWithSecretOracleSources = []string{
 	"internal/audit/audit.go",
