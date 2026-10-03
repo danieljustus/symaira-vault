@@ -1,24 +1,17 @@
 #![allow(dead_code)]
+
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 #[path = "../src/write_commands.rs"]
 mod write_commands;
-use std::{
-    fs,
-    process::Command,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, process::Command};
 use symvault_crypto::generate_identity;
 use symvault_store::Store;
 
 #[test]
 fn writes_preserve_other_fields_reject_corruption_and_delete() {
-    let root = std::env::temp_dir().join(format!(
-        "symvault-write-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-    fs::create_dir_all(&root).unwrap();
+    let root = test_temp_root::TempRoot::existing("symvault-write-");
     fs::write(
         root.join("config.yaml"),
         b"vaultDir: .\ngit:\n  autoPush: false\n",

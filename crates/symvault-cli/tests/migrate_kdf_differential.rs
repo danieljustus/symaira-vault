@@ -1,11 +1,13 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use symvault_crypto::{
@@ -16,15 +18,13 @@ use symvault_crypto::{
 const PASSPHRASE: &[u8] = b"fixture migrate passphrase";
 const CUSTOM_CONFIG: &[u8] = b"vault:\n  format_version: 1\n  scrypt_work_factor: 10\n  auto_migrate_kdf: false\n  argon2id_time: 2\n  argon2id_memory: 19456\n  argon2id_threads: 1\ncustom:\n  retained: true\n";
 
-fn unique_root(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    env::temp_dir().join(format!("symvault-migrate-kdf-{label}-{nanos}"))
+fn unique_root(label: &str) -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::missing(&format!("symvault-migrate-kdf-{label}-"))
 }
 
-fn make_scrypt_vaults(label: &str) -> (PathBuf, PathBuf, Vec<u8>) {
+fn make_scrypt_vaults(
+    label: &str,
+) -> (test_temp_root::TempRoot, test_temp_root::TempRoot, Vec<u8>) {
     let identity = generate_identity();
     let old = encrypt_identity_scrypt(&identity, &SecretBytes::new(PASSPHRASE), 10)
         .expect("scrypt fixture");

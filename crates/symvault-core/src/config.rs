@@ -686,6 +686,28 @@ impl Config {
         if let Some(v) = root.get(key("agents")) {
             merge_agents(&mut config, v)?;
         }
+        if config.default_agent.is_empty() {
+            config.default_agent = DEFAULT_AGENT.into();
+        }
+        config
+            .agents
+            .entry(config.default_agent.clone())
+            .or_insert_with(|| AgentProfile {
+                // Go ensureAgentDefaults gives an absent selected profile deny.
+                approval_mode: Some("deny".into()),
+                ..AgentProfile::default()
+            });
+        // Go Load checks ordinary approval modes after agent merge and before
+        // section merge. This is deliberately narrower than Config::validate,
+        // which also permits `auto` for directly constructed configurations.
+        for (name, agent) in &config.agents {
+            let mode = agent.approval_mode.as_deref().unwrap_or("");
+            if !matches!(mode, "" | "none" | "deny" | "prompt") {
+                return Err(ConfigError::Invalid(format!(
+                    "agent {name:?}: invalid approvalMode {mode:?} (valid: none, deny, prompt)"
+                )));
+            }
+        }
         if let Some(v) = root.get(key("vault")).filter(|v| !v.is_null()) {
             config.vault = Some(parse_vault(v, config.auth_method)?);
         }
@@ -705,13 +727,6 @@ impl Config {
         if let Some(v) = root.get(key("clipboard")).filter(|v| !v.is_null()) {
             config.clipboard = Some(parse_clipboard(v)?);
         }
-        if config.default_agent.is_empty() {
-            config.default_agent = DEFAULT_AGENT.into();
-        }
-        config
-            .agents
-            .entry(config.default_agent.clone())
-            .or_insert_with(AgentProfile::default);
         Ok(config)
     }
 
@@ -1331,6 +1346,9 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
             .as_str()
             .ok_or_else(|| ConfigError::Parse("agent name must be a string".into()))?;
         let fields = mapping(value)?;
+        let explicit_require_approval = fields
+            .get(key("requireApproval"))
+            .filter(|value| !value.is_null());
         let mut profile = config
             .agents
             .get(name)
@@ -1350,7 +1368,11 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
             profile.tier = Some(tier);
         }
         if let Some(v) = fields.get(key("approvalMode")) {
-            profile.approval_mode = Some(string(v, "approvalMode")?);
+            profile.approval_mode = if v.is_null() {
+                None
+            } else {
+                Some(string(v, "approvalMode")?)
+            };
         }
         if let Some(v) = fields.get(key("allowedPaths")) {
             profile.allowed_paths = string_list(v, "allowedPaths")?;
@@ -1374,7 +1396,9 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         bool_field!("exposeValueTools", expose_value_tools);
         bool_field!("exposePaymentValues", expose_payment_values);
         bool_field!("autoUnseal", auto_unseal);
-        bool_field!("requireApproval", require_approval);
+        if let Some(v) = explicit_require_approval {
+            profile.require_approval = boolean(v, "requireApproval")?;
+        }
         if let Some(v) = fields.get(key("approvalTimeout")) {
             profile.approval_timeout = duration(v, "approvalTimeout")?;
         }
@@ -1405,8 +1429,7 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         if let Some(v) = fields.get(key("skillVersion")) {
             profile.skill_version = string(v, "skillVersion")?;
         }
-        if fields.contains_key(key("requireApproval")) && !fields.contains_key(key("approvalMode"))
-        {
+        if explicit_require_approval.is_some() && !fields.contains_key(key("approvalMode")) {
             profile.approval_mode = Some(
                 if profile.require_approval {
                     "prompt"

@@ -1,35 +1,21 @@
 #![deny(unsafe_code)]
 
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-struct TempDir(PathBuf);
+struct TempDir(test_temp_root::TempRoot);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let pid = std::process::id();
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
-        let path = env::temp_dir().join(format!(
-            "symvault-config-cmd-{label}-{pid}-{suffix}-{count}"
-        ));
-        fs::create_dir_all(&path).expect("temporary directory");
-        Self(path)
-    }
-}
-
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
+        Self(test_temp_root::TempRoot::existing(&format!(
+            "symvault-config-cmd-{label}-"
+        )))
     }
 }
 
@@ -80,7 +66,7 @@ fn config_validate_invalid_schema() {
 vaultDir: ""
 agents:
   default:
-    approvalMode: invalid_mode
+    approvalMode: deny
     allowedPaths:
       - "/tmp/[unterminated"
 vault:
@@ -99,7 +85,6 @@ clipboard:
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains(&format!("Configuration is invalid ({path_str}):")));
     assert!(stdout.contains("  ✗ vaultDir: must not be empty"));
-    assert!(stdout.contains("  ✗ agents.default.approvalMode:"));
     assert!(stdout.contains("  ✗ agents.default.allowedPaths[0]:"));
     assert!(stdout.contains("  ✗ vault.argon2id_time:"));
     assert!(stdout.contains("  ✗ vault.argon2id_threads:"));
@@ -119,7 +104,44 @@ clipboard:
     let parsed: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON stdout");
     assert_eq!(parsed["valid"], false);
     let errors = parsed["errors"].as_array().expect("errors array");
-    assert_eq!(errors.len(), 7);
+    assert_eq!(errors.len(), 6);
+}
+
+#[test]
+fn config_validate_rejects_unsupported_approval_mode_during_load() {
+    let home = TempDir::new("approval-mode");
+    let path = home.0.join("invalid-mode.yaml");
+    let path_str = path.to_str().unwrap();
+    for mode in ["auto", "invalid_mode"] {
+        fs::write(
+            &path,
+            format!("agents:\n  default:\n    approvalMode: {mode}\n"),
+        )
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        let diagnostic = format!(
+            "agent \"default\": invalid approvalMode \"{mode}\" (valid: none, deny, prompt)"
+        );
+
+        let out = run_cli(&home.0, &["config", "validate", path_str]);
+        assert_eq!(out.status.code(), Some(6));
+        assert!(out.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains(&format!("Error: cannot load config from {path_str}:")));
+        assert!(stderr.contains(&diagnostic));
+
+        let out = run_cli(
+            &home.0,
+            &["config", "validate", path_str, "--output", "json"],
+        );
+        assert_eq!(out.status.code(), Some(6));
+        let parsed: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(parsed["valid"], false);
+        assert_eq!(parsed["error"], format!("invalid config: {diagnostic}"));
+        assert!(parsed.get("errors").is_none());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("Error: config load failed:"));
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
 }
 
 #[test]
