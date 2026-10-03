@@ -295,6 +295,7 @@ profiles that already have a tier field.`,
 }
 
 func newMigrateKDFCmd() *cobra.Command {
+	var allowLegacyKDF bool
 	migrateKDFCmd := &cobra.Command{
 		Use:   "kdf",
 		Short: "Migrate the vault identity from scrypt to argon2id",
@@ -314,7 +315,10 @@ identity.age is backed up to identity.age.bak before any change, and the new
 file is decrypt-verified before the migration is considered done. On any
 failure the original identity.age is restored automatically. Changing
 config.yaml's scrypt_work_factor alone does not perform this migration —
-only this command (or auto_migrate_kdf) re-encrypts identity.age.`,
+only this command (or auto_migrate_kdf) re-encrypts identity.age.
+
+Older Argon2 budgets require --allow-legacy-kdf. This local migration retains
+identity/config backups and rewrites the same identity with current defaults.`,
 		Example: `  symvault migrate kdf
   symvault migrate kdf --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -327,11 +331,34 @@ only this command (or auto_migrate_kdf) re-encrypts identity.age.`,
 
 			switch cryptopkg.DetectEncryptedIdentityFormat(raw) {
 			case "argon2id":
+				needsMigration, inspectErr := cryptopkg.InspectArgon2idPolicy(raw)
+				if inspectErr != nil {
+					return inspectErr
+				}
+				cfg, configErr := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+				if configErr != nil && !os.IsNotExist(configErr) {
+					return configErr
+				}
+				if needsMigration || vaultpkg.Argon2ConfigNeedsResourceMigration(cfg) {
+					if !allowLegacyKDF {
+						return cryptopkg.ErrArgon2Policy
+					}
+					return runLegacyKDFResourceMigration(vaultDir)
+				}
 				fmt.Println("✓ Your vault identity is already protected with argon2id.")
 				fmt.Println("No migration is needed.")
 				return nil
 			case "scrypt":
-				// handled below
+				cfg, configErr := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+				if configErr != nil && !os.IsNotExist(configErr) {
+					return configErr
+				}
+				if vaultpkg.Argon2ConfigNeedsResourceMigration(cfg) {
+					if !allowLegacyKDF {
+						return cryptopkg.ErrArgon2Policy
+					}
+					return runLegacyKDFResourceMigration(vaultDir)
+				}
 			default:
 				fmt.Println("Could not determine the vault identity's key derivation function.")
 				fmt.Println("Run 'symvault doctor' for a full diagnosis.")
@@ -395,7 +422,30 @@ only this command (or auto_migrate_kdf) re-encrypts identity.age.`,
 		},
 	}
 	migrateKDFCmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
+	migrateKDFCmd.Flags().BoolVar(&allowLegacyKDF, "allow-legacy-kdf", false, "Allow one exclusive historical-budget read for local Argon2 policy migration")
 	return migrateKDFCmd
+}
+
+func runLegacyKDFResourceMigration(vaultDir string) error {
+	passphrase, err := cli.ReadHiddenInput("Passphrase: ", nil)
+	if err != nil {
+		return fmt.Errorf("read passphrase: %w", err)
+	}
+	defer cryptopkg.Wipe(passphrase)
+	confirmed, err := cli.ConfirmInteractive("Migrate historical Argon2 parameters to the current resource policy (encrypted identity and config backups are retained)", MigrateYes)
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		fmt.Fprintln(os.Stderr, "Canceled")
+		return nil
+	}
+	if err := vaultpkg.MigrateKDFResourcePolicy(vaultDir, passphrase); err != nil {
+		return fmt.Errorf("migrate KDF resource policy: %w", err)
+	}
+	fmt.Println("✓ Migrated vault identity to the current Argon2 resource policy.")
+	fmt.Println("The original identity and config backups are retained as .bak files.")
+	return nil
 }
 
 func enablePseudonymizeConfig(vaultDir string) error {

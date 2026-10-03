@@ -148,6 +148,11 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	return LoadFromBytes(data)
+}
+
+// LoadFromBytes applies the same config parsing and defaults to an immutable snapshot.
+func LoadFromBytes(data []byte) (*Config, error) {
 	cfg := Default()
 	if len(bytes.TrimSpace(data)) == 0 {
 		return cfg, nil

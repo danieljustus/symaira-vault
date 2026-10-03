@@ -48,6 +48,9 @@ fn run_with_input(binary: &Path, args: &[&str], root: &Path, input: &[u8]) -> Ou
         .args(args)
         .env("HOME", &home)
         .env("USERPROFILE", &home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
         .env("CI", "1")
         .env("SYMVAULT_TEST_KEYRING", "memory")
         .env_remove("SYMVAULT_PASSPHRASE")
@@ -204,6 +207,94 @@ fn migrate_kdf_go_rust_integration() {
     for root in [go_root, rust_root] {
         if root.exists() {
             let _ = fs::remove_dir_all(root);
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires the current Go CLI binary for the new resource policy"]
+fn kdf_resource_policy_go_rust_integration() {
+    use base64::Engine as _;
+    let go_binary = PathBuf::from(env::var_os("SYMVAULT_GO_BINARY").expect("current Go binary"));
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+    let fixture: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../testdata/port/crypto/kdf-policy-v1.json"
+    ))
+    .expect("genuine historical Go fixture");
+    let old = base64::engine::general_purpose::STANDARD
+        .decode(fixture["cases"][0]["ciphertext"].as_str().unwrap())
+        .unwrap();
+    let passphrase = fixture["passphrase"].as_str().unwrap();
+    let config = b"vault:\n  format_version: 2\n  argon2id_time: 5\n  argon2id_memory: 65536\n  argon2id_threads: 4\n  auto_heal_zero_key: true\nunknown_root: retained\n";
+    for (label, binary) in [("go", go_binary), ("rust", rust_binary)] {
+        for scenario in ["no-flag", "decline", "wrong", "migrate", "scrypt-config"] {
+            let root = unique_root(&format!("policy-{label}-{scenario}"));
+            let original = if scenario == "scrypt-config" {
+                encrypt_identity_scrypt(
+                    &generate_identity(),
+                    &SecretBytes::new(passphrase.as_bytes()),
+                    10,
+                )
+                .unwrap()
+            } else {
+                old.clone()
+            };
+            write_vault(&root, &original, config);
+            let mut args = migrate_args(&root, scenario != "decline");
+            if scenario != "no-flag" {
+                args.push("--allow-legacy-kdf".to_owned());
+            }
+            let input = match scenario {
+                "no-flag" => String::new(),
+                "decline" => format!("{passphrase}\nn\n"),
+                "wrong" => "wrong public fixture\n".to_owned(),
+                _ => format!("{passphrase}\n"),
+            };
+            let output = run_with_input(&binary, &as_refs(&args), &root, input.as_bytes());
+            if matches!(scenario, "no-flag" | "wrong") {
+                assert!(
+                    !output.status.success(),
+                    "{label} {scenario} unexpectedly succeeded"
+                );
+                if scenario == "no-flag" {
+                    assert!(String::from_utf8_lossy(&output.stderr).contains("--allow-legacy-kdf"));
+                    assert!(!String::from_utf8_lossy(&output.stderr).contains("Passphrase:"));
+                }
+            } else {
+                assert_success(&output, &format!("{label} {scenario}"));
+            }
+            if matches!(scenario, "migrate" | "scrypt-config") {
+                assert!(
+                    String::from_utf8_lossy(&output.stdout)
+                        .contains("current Argon2 resource policy")
+                );
+                let replacement = fs::read(root.join("identity.age")).unwrap();
+                let secret = SecretBytes::new(passphrase.as_bytes());
+                let before = if scenario == "scrypt-config" {
+                    symvault_crypto::decrypt_identity(&original, &secret).unwrap()
+                } else {
+                    symvault_crypto::decrypt_identity_for_legacy_kdf_migration(&original, &secret)
+                        .unwrap()
+                };
+                let after = symvault_crypto::decrypt_identity(&replacement, &secret).unwrap();
+                assert_eq!(
+                    symvault_crypto::recipient_string(&before),
+                    symvault_crypto::recipient_string(&after)
+                );
+                assert!(!symvault_crypto::inspect_argon2id_policy(&replacement).unwrap());
+                assert_eq!(fs::read(root.join("identity.age.bak")).unwrap(), original);
+                assert_eq!(fs::read(root.join("config.yaml.bak")).unwrap(), config);
+                let rendered = fs::read_to_string(root.join("config.yaml")).unwrap();
+                assert!(
+                    rendered.contains("argon2id_time: 3")
+                        && rendered.contains("unknown_root: retained")
+                );
+                assert!(!root.join("index.age").exists());
+            } else {
+                assert_unchanged(&root, &original);
+                assert_eq!(fs::read(root.join("config.yaml")).unwrap(), config);
+                assert!(!root.join("config.yaml.bak").exists());
+            }
         }
     }
 }

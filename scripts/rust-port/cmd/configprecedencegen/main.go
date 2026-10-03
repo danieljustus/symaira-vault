@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "aa21ec4e"
+	pinnedOracleCommit  = "21f849ee"
 	pinnedOracleRelease = "unreleased"
 	agentName           = "probe"
 )
