@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
@@ -39,6 +40,7 @@ type RunOptions struct {
 	Env map[string]string
 	// Passthrough is a list of parent env var names to add to the whitelist
 	// so they pass through to the child process alongside DefaultWhitelist.
+	// Each element may contain comma-separated names, as advertised by the CLI.
 	Passthrough []string
 	// WorkingDir is the directory the command runs in. Empty means current directory.
 	WorkingDir string
@@ -137,7 +139,15 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	// env var names routinely contain KEY/SECRET/TOKEN/PASSWORD. opts.Env still
 	// goes through RejectDenied (interpreter/loader injection names) at the
 	// call site.
-	safePassthrough, rejectedPassthrough := RejectSensitiveNames(opts.Passthrough)
+	var passthrough []string
+	for _, names := range opts.Passthrough {
+		for _, name := range strings.Split(names, ",") {
+			if name != "" {
+				passthrough = append(passthrough, name)
+			}
+		}
+	}
+	safePassthrough, rejectedPassthrough := RejectSensitiveNames(passthrough)
 	whitelist := DefaultWhitelist()
 	if len(safePassthrough) > 0 {
 		whitelist = MergeWhitelist(whitelist, safePassthrough)

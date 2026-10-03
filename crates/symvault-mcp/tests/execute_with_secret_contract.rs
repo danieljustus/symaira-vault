@@ -130,7 +130,7 @@ fn source_bound_go_execute_with_secret_contract() {
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
         fixture.oracle.commit,
-        "12d8c616ae98b954a9b906e0984af1613ca05fde"
+        "98c786e1bf97fee2b93b79ec391f14c97bfd8694"
     );
     assert_eq!(fixture.oracle.commit_sha, fixture.oracle.commit);
     assert!(!fixture.oracle.source_files.is_empty());
