@@ -64,6 +64,9 @@ jobs:
       GOTOOLCHAIN: go1.26.6
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: 1.98.0
+      # vault's historical TestMain otherwise returns without running on Windows.
+      # The required named-test assertions below reject that false-green result.
+      SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
     steps:
       - name: Checkout retained oracle history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -149,3 +149,11 @@ against the same immutable source after the KDF changes. Every observation is
 unchanged; its source inventory gains the two new resource-policy/migration
 files, so retaining the old closure or merely replacing a digest would be
 incorrect. The actual detached Go run and Rust replay both pass.
+
+Native acceptance requires each named Go migration test to run. The vault
+package's historical Windows `TestMain` otherwise exits without running any
+tests; enable its existing cross-language opt-in on the disposable CI runner.
+Keep the named pass/skip assertions, so a package exit code alone cannot prove
+Windows coverage. The platform replay pins the actually regenerated immutable
+source above. Linux and macOS policy jobs passed on the initial PR head;
+Windows and the updated full candidate still require their fresh green jobs.
