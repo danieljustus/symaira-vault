@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/rust-sync-observations.yml'
       - 'scripts/rust-port/cmd/syncgen/**'
+      - 'scripts/rust-port/cmd/gitio/**'
+      - 'crates/symvault-sync/**'
       - 'testdata/port/sync/*.json'
       - 'docs/rust-port/windows-sync-oracle.md'
       - 'cmd/admin/backup*.go'
@@ -14,6 +16,8 @@ on:
     paths:
       - '.github/workflows/rust-sync-observations.yml'
       - 'scripts/rust-port/cmd/syncgen/**'
+      - 'scripts/rust-port/cmd/gitio/**'
+      - 'crates/symvault-sync/**'
       - 'testdata/port/sync/*.json'
       - 'docs/rust-port/windows-sync-oracle.md'
       - 'cmd/admin/backup*.go'
@@ -59,11 +63,17 @@ jobs:
           go test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$' -count=1 -json >> sync-observations.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("sync-observations.jsonl")]; required={"TestPinnedSyncOracleIsRepeatable","TestPinnedSyncArchiveContract","TestCreateBackup_NormalizesTarMemberSeparators"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert required <= passed, required-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in required for r in rows); print("Verified six real repeated cases, explicit archive contract and current backup roundtrip executed")'
           go run ./scripts/rust-port/cmd/syncgen --portable --check --output testdata/port/sync/portable.json
+      - name: Compare actual native Go Git I/O to the frozen production observations
+        run: |
+          set -euo pipefail
+          go run ./scripts/rust-port/cmd/gitio --check --output testdata/port/sync/git-io.json | tee git-observations.log
       - name: Upload native observation evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: sync-observations-${{ matrix.os }}
-          path: sync-observations.jsonl
+          path: |
+            sync-observations.jsonl
+            git-observations.log
           if-no-files-found: error
           retention-days: 14

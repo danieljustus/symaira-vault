@@ -55,3 +55,10 @@ The dedicated three-OS workflow requires both native historical tests and the
 current backup regression to execute and pass, rejecting missing or skipped
 required tests. Full Unix freshness and Rust replay remain in the existing port
 contract. No GIT-002/003, IO-002 or IO-003 row is promoted by these observations.
+
+The same native workflow also executes `gitio --check`, comparing all five real
+production Go Git-I/O observations (offline, authentication, SSH/known_hosts,
+askpass/prompt and timeout/descendant cleanup) to their retained source-bound
+fixture. The CI Rust Sync/Git suites run at that same candidate SHA. This is the
+native evidence gate for #1246; its GIT-002/003 status still requires completed
+three-OS results and the prerequisite fixes, not merely the presence of this step.
