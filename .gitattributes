@@ -29,3 +29,6 @@ crates/symvault-cli/tests/fixtures/** text eol=lf
 # These embedded Cobra help pages are byte-for-byte golden output and are also
 # parsed by the CLI, so keep their checkout bytes stable on Windows.
 crates/symvault-cli/src/help-*.txt text eol=lf
+
+# Keep the embedded native Git test helper identical across checkouts.
+crates/symvault-sync/tests/fixtures/** text eol=lf

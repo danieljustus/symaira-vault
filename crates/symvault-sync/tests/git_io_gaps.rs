@@ -75,8 +75,6 @@ fn assert_pull_projection(result: &symvault_sync::git::PullResult, expected: &Va
     );
 }
 
-// The POSIX-gated git-IO cases use this helper; Windows has no `#!/bin/sh`.
-#[cfg(unix)]
 fn assert_push_projection(result: &symvault_sync::git::PushResult, expected: &Value) {
     assert_eq!(result.success, expected_bool(expected, "success"));
     assert_eq!(result.skipped, expected_bool(expected, "skipped"));
@@ -115,17 +113,6 @@ fn sha256(data: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
-}
-
-#[cfg(unix)]
-fn write_executable(path: &Path, body: &str) {
-    fs::write(path, body).expect("write helper");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-            .expect("make helper executable");
-    }
 }
 
 fn pair() -> (TempDir, GitRepository, PathBuf) {
@@ -483,19 +470,85 @@ fn pull_projects_connection_failure_as_offline_from_a_real_remote() {
     assert!(error.contains(NETWORK_MESSAGE), "{error}");
 }
 
-// The remote is faked by a `#!/bin/sh` helper, which Windows cannot execute as
-// an SSH command; the Windows process-lifecycle behaviour is covered by the
-// dedicated `Process tree (Windows)` CI job instead.
-#[cfg(unix)]
+// Compile a dependency-free native helper once per test process. This keeps
+// frozen Rust replay independent of Go and avoids shell emulation on Windows.
+fn native_git_helper() -> &'static Path {
+    static ROOT: std::sync::OnceLock<(TempDir, PathBuf)> = std::sync::OnceLock::new();
+    let root = ROOT.get_or_init(|| {
+        let root = tempdir().expect("native Git fixture directory");
+        let directory = root.path().join("native helper's files");
+        fs::create_dir(&directory).expect("helper path with spaces and apostrophe");
+        let source = directory.join("helper.rs");
+        fs::write(
+            &source,
+            include_str!("fixtures/git_transport_helper.rs.txt"),
+        )
+        .expect("write fixed helper source");
+        let helper = directory.join(if cfg!(windows) {
+            "git-helper.exe"
+        } else {
+            "git-helper"
+        });
+        let output = Command::new("rustc")
+            .args(["--edition=2024", "--crate-name", "git_fixture_helper"])
+            .arg(&source)
+            .arg("-o")
+            .arg(&helper)
+            .output()
+            .expect("compile native helper");
+        assert!(
+            output.status.success(),
+            "native helper compilation failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        (root, helper)
+    });
+    root.1.as_path()
+}
+
+fn fixture_shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\\', "/").replace('\'', "'\\''"))
+}
+
+fn native_ssh_command(mode: &str, marker: &Path) -> String {
+    format!(
+        "{} {} {}",
+        fixture_shell_quote(native_git_helper().to_str().expect("UTF-8 fixture path")),
+        fixture_shell_quote(mode),
+        fixture_shell_quote(marker.to_str().expect("UTF-8 marker path"))
+    )
+}
+
+fn fixture_child_alive(pid: &str) -> bool {
+    let parsed: u32 = pid.parse().expect("fixture PID is decimal");
+    assert!(parsed > 1, "invalid synthetic PID");
+    if cfg!(windows) {
+        let output = Command::new("tasklist")
+            .args(["/fi", &format!("PID eq {parsed}"), "/fo", "csv", "/nh"])
+            .output()
+            .expect("query actual native process");
+        assert!(output.status.success(), "native process query failed");
+        let mut reader = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .flexible(true)
+            .from_reader(output.stdout.as_slice());
+        return reader.byte_records().any(|row| {
+            let row = row.expect("native tasklist CSV");
+            row.get(1).is_some_and(|value| value == pid.as_bytes())
+        });
+    }
+    Command::new("kill")
+        .args(["-0", pid])
+        .status()
+        .expect("query owned descendant")
+        .success()
+}
+
 #[test]
 fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
     let contract = git_io_case("GIT-002-go-ssh-precedence");
     let (root, repo, _remote) = pair();
-    let helper = root.path().join("ssh-known-hosts.sh");
-    write_executable(
-        &helper,
-        "#!/bin/sh\nprintf '%s\\n' 'known_hosts: authentication failed: connection refused' >&2\nexit 1\n",
-    );
+    let helper = native_ssh_command("known-hosts", &root.path().join("known-hosts.marker"));
     git(
         repo.root(),
         &[
@@ -505,10 +558,7 @@ fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
             "ssh://git@example.invalid/repo.git",
         ],
     );
-    git(
-        repo.root(),
-        &["config", "core.sshCommand", helper.to_str().unwrap()],
-    );
+    git(repo.root(), &["config", "core.sshCommand", &helper]);
     let result = repo.push("origin");
     let error = result
         .error
@@ -520,23 +570,21 @@ fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
     assert!(error.contains("SSH configuration error"), "{error}");
 }
 
-// Same POSIX `#!/bin/sh` askpass helper as the tests below.
-#[cfg(unix)]
 #[test]
 fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
     let (root, repo, _remote) = pair();
     let (port, server) = auth_server("401 Unauthorized");
     let marker = root.path().join("askpass-called");
-    let helper = root.path().join("askpass.sh");
-    write_executable(
-        &helper,
-        &format!(
-            "#!/bin/sh\nprintf '%s' called > {}\nexit 1\n",
-            marker.display()
-        ),
-    );
+    let helper = root.path().join(if cfg!(windows) {
+        "askpass-helper.exe"
+    } else {
+        "askpass-helper"
+    });
+    fs::copy(native_git_helper(), &helper).expect("copy native askpass helper");
     let remote = format!("http://127.0.0.1:{port}/repo.git");
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
+    git(repo.root(), &["config", "credential.helper", ""]);
+    // Git executes askpass directly, with its prompt as one argument.
     git(
         repo.root(),
         &["config", "core.askPass", helper.to_str().unwrap()],
@@ -551,7 +599,6 @@ fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
 }
 
 #[test]
-#[cfg(unix)]
 fn push_replays_go_askpass_environment_projection() {
     if std::env::var_os("GIT_IO_ASKPASS_CHILD").is_none() {
         let status = Command::new(std::env::current_exe().expect("current test executable"))
@@ -567,14 +614,7 @@ fn push_replays_go_askpass_environment_projection() {
     let contract = git_io_case("GIT-002-go-askpass");
     let (root, repo, _remote) = pair();
     let marker = root.path().join("askpass.marker");
-    let helper = root.path().join("ssh-askpass-env.sh");
-    write_executable(
-        &helper,
-        &format!(
-            "#!/bin/sh\nprintf 'askpass=%s\\nterminal_prompt=%s\\n' \"${{GIT_ASKPASS:+inherited}}\" \"$GIT_TERMINAL_PROMPT\" > {}\nexit 1\n",
-            marker.display()
-        ),
-    );
+    let helper = native_ssh_command("askpass-env", &marker);
     git(
         repo.root(),
         &[
@@ -584,10 +624,7 @@ fn push_replays_go_askpass_environment_projection() {
             "ssh://git@example.invalid/repo.git",
         ],
     );
-    git(
-        repo.root(),
-        &["config", "core.sshCommand", helper.to_str().unwrap()],
-    );
+    git(repo.root(), &["config", "core.sshCommand", &helper]);
 
     let result = repo.push("origin");
     let observed = fs::read_to_string(marker).expect("askpass environment marker");
@@ -600,7 +637,6 @@ fn push_replays_go_askpass_environment_projection() {
 }
 
 #[test]
-#[cfg(unix)]
 fn push_timeout_replays_go_descendant_cleanup_projection() {
     let contract = git_io_case("GIT-002-go-timeout");
     assert_eq!(contract.input["timeout_seconds"], 20);
@@ -608,14 +644,7 @@ fn push_timeout_replays_go_descendant_cleanup_projection() {
     assert_eq!(contract.expected["descendant_cleanup"], true);
     let (root, repo, _remote) = pair();
     let marker = root.path().join("ssh-descendant.pid");
-    let helper = root.path().join("ssh-hang.sh");
-    write_executable(
-        &helper,
-        &format!(
-            "#!/bin/sh\n(sleep 60) &\nprintf '%s\\n' \"$!\" > {}\nwait\n",
-            marker.display()
-        ),
-    );
+    let helper = native_ssh_command("timeout", &marker);
     git(
         repo.root(),
         &[
@@ -625,10 +654,7 @@ fn push_timeout_replays_go_descendant_cleanup_projection() {
             "ssh://git@example.invalid/repo.git",
         ],
     );
-    git(
-        repo.root(),
-        &["config", "core.sshCommand", helper.to_str().unwrap()],
-    );
+    git(repo.root(), &["config", "core.sshCommand", &helper]);
 
     let started = Instant::now();
     let result = repo.push("origin");
@@ -642,11 +668,7 @@ fn push_timeout_replays_go_descendant_cleanup_projection() {
         .trim()
         .to_owned();
     let gone = (0..80).any(|_| {
-        let alive = Command::new("kill")
-            .args(["-0", &pid])
-            .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false);
+        let alive = fixture_child_alive(&pid);
         if alive {
             thread::sleep(Duration::from_millis(25));
             false
@@ -654,5 +676,14 @@ fn push_timeout_replays_go_descendant_cleanup_projection() {
             true
         }
     });
+    if !gone {
+        let _ = if cfg!(windows) {
+            Command::new("taskkill")
+                .args(["/PID", &pid, "/T", "/F"])
+                .status()
+        } else {
+            Command::new("kill").args(["-KILL", &pid]).status()
+        };
+    }
     assert!(gone, "timed-out SSH descendant {pid} is still alive");
 }
