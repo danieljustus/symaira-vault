@@ -79,14 +79,14 @@ fn request(case: &Case) -> String {
 #[test]
 fn fixture_pins_the_go_oracle() {
     let fx = load();
-    assert_eq!(fx.oracle.commit, "864f1ad1");
+    assert_eq!(fx.oracle.commit, "34fb21a0");
     assert_eq!(
         fx.oracle.commit_sha,
-        "864f1ad11877bc774616fde43e4a0d3ea928a370"
+        "34fb21a0601d6f74e4908639d9b339125a8cf230"
     );
     assert_eq!(
         fx.oracle.source_hash,
-        "e8546c0d8c06dec722618d93ca1cbc0263bd1057024ea22b722abf29d5365fa5"
+        "a18f0599630cb5209ec48563ebca4107664e8ded47d65ea3384d4fc9edf303a5"
     );
 }
 

@@ -1,5 +1,6 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+
 ## Dependency-bound oracle refresh — 2026-10-03
 
 The AWS SDK patch update in #1233 changes `go.mod`/`go.sum`, which are explicit
@@ -160,6 +161,41 @@ through that dedicated PTY gate. Strict all-target Clippy and fmt pass on both.
 `api-https-receipt-3698d45b.json` in both build roots records source metadata and
 fixture/log hashes. MCP-003/BROKER-002 remain open for public DNS/redirects,
 other tools and remaining native targets. No publication, cutover or Go removal.
+
+## Resolved API entry policy alignment — 2026-10-03
+
+Issue #1274 adds the Go handler's existing `run` policy evaluation after
+template entry resolution, approval and scope, and before credential reads.
+The original trigger reached a synthetic loopback upstream despite deny,
+read-only allowance, prompt and biometry rules. Nine corrected real-handler
+observations in `testdata/port/mcp/execute-api-policy.json` record zero reads
+and requests for rejection and one of each for run allowance/no policy.
+Rust replays the same references, rule actions and side-effect counts.
+
+The immutable Go source is `34fb21a0601d6f74e4908639d9b339125a8cf230`, retained
+on `oracle/api-policy-20261003`. The fixture records Go 1.26.6, production
+source digests and generator digests. The HTTP, HTTPS and template corpora
+are regenerated against this source; their existing behavioral vectors stay
+unchanged. `make mcp-execute-api-policy-differential` checks freshness and the
+Rust replay and participates in the API-request differential target.
+
+The independent review also identified a pre-existing Go reader alias: a
+physical pseudonymized ciphertext name can reach a different embedded logical
+entry through its legacy fallback. A real encrypted-vault regression reproduced
+an outgoing request under a broad fallback allow rule. The handler now binds
+any nonempty authenticated `Entry.Path` to the authorized reference before
+credential substitution or dispatch. The physical-alias case decrypts once to
+check that binding and sends zero requests; logical policy denial still reads
+zero times, and an allowed logical reference still works. This is not a claim
+that the shared vault reader or other callers enforce that binding.
+
+The approval-denial regression now uses an isolated loopback template rather
+than public GitHub DNS, preserving production target validation order.
+
+This evidence concerns entry/action authorization. Go's shared policy helper
+still supplies an empty tool name; tool-name conditions and prompt/biometry
+diagnostic equivalence are not claimed. Public DNS, native platform gates,
+MCP-003/BROKER-002 promotion, releases and cutover remain separate work.
 
 
 ## Integrated embedded API template catalog — 2026-09-29
@@ -724,6 +760,12 @@ budget evidence is recorded before cutover.
 
 **Expected:** Rust is the sole backend source; the final dual release remains a
 verified external rollback point.
+
+API policy follow-up (2026-10-03): re-captured the production Go tool-list oracle
+from retained source `34fb21a0` after the API handler change. The complete catalog
+and all 11 list/profile observations are unchanged; source and generator hashes
+are recalculated from the actual pinned files. Go freshness and the four Rust
+tool-list contract tests pass locally; native CI remains required.
 
 Passthrough follow-up (2026-10-03): the CXF importer source closure includes
 `internal/secrets/runner.go`. Re-freeze against retained actual Go source

@@ -34,6 +34,10 @@ const (
 // checked-in test CA without changing system roots or the production client.
 var newExecuteAPIRequestHTTPClient = ssrf.NewHTTPClient
 
+// Keep credential reads observable at the handler boundary in isolated tests.
+// Production always uses the normal encrypted-entry reader.
+var readExecuteAPIRequestEntry = vaultpkg.ReadEntry
+
 // handleExecuteAPIRequest executes an HTTP API request using a named template.
 // Credentials are loaded from the vault and injected into the request without
 // exposing their values to the agent.
@@ -123,10 +127,23 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 		metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 		return nil, fmt.Errorf("access denied: template entry path %q outside allowed scope", entryPath)
 	}
-	entry, entryErr := vaultpkg.ReadEntry(s.vault.Dir, entryPath, s.vault.Identity)
+	// The template determines the credential entry, independently of any path
+	// argument supplied by the caller. Authorize its run action before reading
+	// credentials; the shared policy helper records denial audit and metrics.
+	if policyErr := s.checkPolicy(ctx, entryPath, toolActionType("execute_api_request")); policyErr != nil {
+		return nil, policyErr
+	}
+	entry, entryErr := readExecuteAPIRequestEntry(s.vault.Dir, entryPath, s.vault.Identity)
 	if entryErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<vault-error:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(fmt.Sprintf("cannot load credentials for %q: %v", tmpl.Name, entryErr)), nil
+	}
+	// Pseudonymized entries carry their logical path in authenticated ciphertext.
+	// A physical storage alias must not authorize a different logical entry via
+	// the reader's legacy-layout fallback. Bind it before using any credential.
+	if entry.Path != "" && entry.Path != entryPath {
+		s.logAudit(ctx, "execute_api_request", "<entry-reference-mismatch>", false)
+		return mcp.NewToolResultError("entry reference does not match the stored logical path"), nil
 	}
 
 	// Resolve template substitutions (path/query/header/body) from the vault

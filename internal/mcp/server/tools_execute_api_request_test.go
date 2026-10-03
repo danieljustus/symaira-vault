@@ -734,15 +734,26 @@ func TestHandleExecuteAPIRequest_UnknownTemplate(t *testing.T) {
 }
 
 func TestHandleExecuteAPIRequest_ApprovalDeny(t *testing.T) {
-	srv := newTestServer(t, config.AgentProfile{
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("approval-denied request reached upstream")
+	}))
+	defer upstream.Close()
+	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
 		CanRunCommands: config.BoolPtr(true),
 		ApprovalMode:   config.StrPtr("deny"),
-	}, "stdio")
+	}, "stdio", t.TempDir())
+	writeTemplateOverride(t, srv.vault.Dir, "approval-deny", fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: github
+allowed_endpoints: [/test]
+allowed_methods: [GET]
+allow_private: true
+`, upstream.URL))
 	req := mcp.CallToolRequest{
 		Arguments: map[string]any{
-			"template": "github",
+			"template": "approval-deny",
 			"endpoint": "/test",
 		},
 	}
