@@ -155,5 +155,17 @@ package's historical Windows `TestMain` otherwise exits without running any
 tests; enable its existing cross-language opt-in on the disposable CI runner.
 Keep the named pass/skip assertions, so a package exit code alone cannot prove
 Windows coverage. The platform replay pins the actually regenerated immutable
-source above. Linux and macOS policy jobs passed on the initial PR head;
-Windows and the updated full candidate still require their fresh green jobs.
+source above. All three native policy jobs passed on head `7384ae75`. Subsequent source-binding
+repairs and integration with main require fresh green jobs for the final head.
+
+The ordinary Go CI also executes generator unit tests. The manifest-key source
+inventory correctly rejected the newly added crypto files; its oracle advances
+to retained source `41d5aaeb5eaa7685c69752f02a1f8f19450c7245`. Actual regeneration
+preserves all 16 observations, and the Rust replay passes. Keep inventory and
+source-content checks strict rather than exempting changed crypto dependencies.
+
+The session generator's synthetic subprocess isolation test now invokes its
+case runner directly. A harness probe does not represent a production CLI
+oracle and must not require current production sources to match a historical
+pin. The production generator still verifies its immutable source pin, and its
+committed generator-digest test remains in place.
