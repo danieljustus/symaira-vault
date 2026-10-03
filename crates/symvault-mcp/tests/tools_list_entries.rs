@@ -138,7 +138,7 @@ fn list_entries_matches_source_bound_go_fixture() {
         fixture.oracle.commit_sha,
         "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 12);
+    assert_eq!(fixture.oracle.source_files.len(), 85);
     assert_eq!(
         fixture.oracle.source_hash,
         "9808a08693ff322b385d0ff74f287ea7e50f4d539ed337da2f6442c7e6298fe2"

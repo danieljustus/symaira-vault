@@ -106,7 +106,7 @@
       "internal/mcp/server/tools_execute_api_request_test.go",
       "internal/mcp/server/tools_test_helpers.go"
     ],
-    "generator_hash": "182598707bc0b9128989dfa86b482c2ddc780db09f8fb9b3fc9fc29b54efb050"
+    "generator_hash": "b97fdd53aa58f942a0ef30f570761cb071287c4b656aa0488fa87ca723224594"
   },
   "cases": [
     {

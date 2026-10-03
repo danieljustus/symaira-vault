@@ -541,7 +541,7 @@ fn api_review_entry_policy_matches_corrected_go_observations() {
     assert_eq!(fixture["go_version"], "go1.26.6");
     assert_eq!(
         fixture["oracle"]["commit_sha"],
-        "34fb21a0601d6f74e4908639d9b339125a8cf230"
+        "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
     assert_eq!(fixture["oracle"]["source_digest"].as_str().unwrap().len(), 64);
     assert_eq!(fixture["oracle"]["generator_hash"].as_str().unwrap().len(), 64);

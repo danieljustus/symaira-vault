@@ -17,7 +17,7 @@
       "crates/symvault-mcp/tests/fixtures/tls-server.pem",
       "crates/symvault-mcp/tests/fixtures/tls-server.key"
     ],
-    "generator_hash": "e6a6391f6c44c15be672cfb3c59f6bd2ef441272f4cc0186d58f39f67a0ad37f"
+    "generator_hash": "e00a6449f5b42b9cdcc02be4cc625397679df58f9cc0cbb1cecb62a7b41d9b6e"
   },
   "cases": [
     {

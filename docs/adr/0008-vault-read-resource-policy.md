@@ -289,3 +289,13 @@ lightweight source tags before squash merging. A feature branch or an `oracle/`
 branch alone does not satisfy the repository's post-merge reachability gate.
 The current candidate receipt at `bc4808e3` passed all 19 resource and 17
 import-review observations; the final native receipt will bind the final head.
+
+Final local repository validation passed the complete port contract and the
+full Rust workspace/all-targets/all-features suite: 153 passing result blocks,
+1,220 passed tests and five existing ignored tests. The command-tree generator
+also recaptured all 135 command specifications without changing their shape.
+Read-corpus source inventory is checked against tracked and untracked production
+Go files in the shared read packages. An isolated actual generator invocation
+with a newly compiled, undeclared helper failed before rewriting its fixture.
+Keep independent per-corpus commit parameters even when a coordinated recapture
+uses one revision; future corpora can advance their pins independently.

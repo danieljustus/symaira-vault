@@ -471,8 +471,12 @@ func executeAPIRequestWorkingDigest(t *testing.T, root string, files []string) s
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+//nolint:unparam // Each corpus owns its oracle pin and may advance independently.
 func executeAPIRequestGitDigest(t *testing.T, root, commit string, files []string) string {
 	t.Helper()
+	if err := checkMCPReadOracleSourceInventory(root, files); err != nil {
+		t.Fatal(err)
+	}
 	h := sha256.New()
 	for _, file := range files {
 		cmd := exec.Command("git", "show", commit+":"+file)
@@ -485,4 +489,29 @@ func executeAPIRequestGitDigest(t *testing.T, root, commit string, files []strin
 		_, _ = h.Write(contents)
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// A hash of an old file list cannot detect a newly compiled read-policy helper.
+// Require the declared closure to include the current production inventory.
+func checkMCPReadOracleSourceInventory(root string, files []string) error {
+	declared := make(map[string]bool, len(files))
+	for _, name := range files {
+		declared[name] = true
+	}
+	if !declared["internal/vault/entry_resources.go"] {
+		return nil // This capture does not declare the shared vault-read closure.
+	}
+	cmd := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--",
+		"internal/vault", "internal/crypto", "internal/config", "internal/fsutil", "internal/template")
+	cmd.Dir = root
+	names, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("enumerate MCP read-oracle sources: %w", err)
+	}
+	for _, name := range strings.Split(string(names), "\x00") {
+		if strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !declared[name] {
+			return fmt.Errorf("MCP read-oracle source inventory omits %s; deliberately recapture the complete source closure", name)
+		}
+	}
+	return nil
 }

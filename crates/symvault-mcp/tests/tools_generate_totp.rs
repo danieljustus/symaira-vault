@@ -148,7 +148,7 @@ fn generate_totp_matches_source_bound_go_fixture() {
         fixture.oracle.commit_sha,
         "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 11);
+    assert_eq!(fixture.oracle.source_files.len(), 85);
     assert_eq!(
         fixture.oracle.source_hash,
         "ee0eeab989981b92880c8d907b81293c3da8fd6a76e81ae341506f87c75f261d"

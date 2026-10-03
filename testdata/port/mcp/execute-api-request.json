@@ -103,7 +103,7 @@
       "internal/mcp/server/tools_execute_api_request_test.go",
       "internal/mcp/server/tools_test_helpers.go"
     ],
-    "generator_hash": "1ff3d32c032957253d15d1e5fbf404550f1371315c18720081fb880209db37bb"
+    "generator_hash": "ae1f485e0724651f48e511bcc43e3a69d0e981e85515e34c2611085ed2fd8241"
   },
   "normalizations": [
     "response.headers.Date: replace the local httptest server's wall-clock Date with \u003cfixture-date\u003e",

@@ -236,7 +236,7 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
         fixture.oracle.commit_sha,
         "a581df7b09630a0d8c572af727b7cf096d2557ad"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 11);
+    assert_eq!(fixture.oracle.source_files.len(), 83);
     assert_eq!(
         fixture.oracle.source_hash,
         "d4c40a676f7e61bdae39c86b9edeed07d66c387ce3d656a1f9818eabe78f0690"
