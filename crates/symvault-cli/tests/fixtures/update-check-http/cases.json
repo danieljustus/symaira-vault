@@ -7,7 +7,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "990f693cf5f56e020ff92168e0740393ca242c8d74fd960eb2e50beaebf253c2",
+    "source_digest": "4c7387d3b0eafd912057a609b390b31a7bdc80c3303b887c16136f16e45d081d",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
     "go_tests": [
       "TestCheckerReportsAvailableUpdate",
@@ -15,34 +15,42 @@
       "TestCheckerFiltersHistoricalVersions",
       "TestCheckerForceBypassesCache",
       "TestCheckerRejectsDraftRelease",
-      "TestCheckerRejectsPrereleaseRelease",
+      "TestCheckerRejectsPrerelease",
       "TestCheckerReturnsHTTPError",
       "TestCheckerReturnsDecodeError"
-    ]
+    ],
+    "commit": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
+    "go_version": "go1.26.6",
+    "generator_files": [
+      "scripts/rust-port/refresh-update-fixtures.py"
+    ],
+    "generator_digest": "f5a39f43d363ee447e6d9f10eb1423aeff32788f0df7b00ff76433d808aea866",
+    "generated_on": "linux",
+    "captured": "2026-10-03"
   },
   "cases": [
     {
-      "id": "newer-release",
       "current": "1.0.0",
-      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\",\"body\":\"Release notes\"}",
+      "id": "newer-release",
       "latest": "1.2.0",
       "release_url": "https://example.com/v1.2.0",
+      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\",\"body\":\"Release notes\"}",
       "update_available": true
     },
     {
-      "id": "same-version",
       "current": "1.2.0",
-      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\"}",
+      "id": "same-version",
       "latest": "1.2.0",
       "release_url": "",
+      "response": "{\"tag_name\":\"v1.2.0\",\"html_url\":\"https://example.com/v1.2.0\"}",
       "update_available": false
     },
     {
-      "id": "historical-line-is-filtered",
       "current": "0.4.0",
-      "response": "{\"tag_name\":\"v4.0.0\",\"html_url\":\"https://example.com/v4.0.0\"}",
+      "id": "historical-line-is-filtered",
       "latest": "0.4.0",
       "release_url": "",
+      "response": "{\"tag_name\":\"v4.0.0\",\"html_url\":\"https://example.com/v4.0.0\"}",
       "update_available": false
     }
   ]
