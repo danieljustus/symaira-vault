@@ -1,5 +1,12 @@
 # Rust migration handover — 2026-09-09
 
+## Current continuation checkpoint, 2026-10-03
+
+Read [continuation-20261003.md](continuation-20261003.md) for the current
+source, verified integrations, API security evidence, remaining issue gates,
+public inputs and independent setup instructions. Earlier entries below are
+preserved historical evidence, not current execution orders.
+
 ## Zwischenstand 2026-09-24, Teil 17 — Slice `agent setup` + `serve token*` gebaut
 
 - **Basis/Worktree:** Branch `feat/rust-port-deprecated-stubs2` auf `main`
