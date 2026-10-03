@@ -281,3 +281,11 @@ The shared MCP test helper closes its audit log, including existing native
 authorization fixtures. Each worktree uses a separate Cargo target directory;
 sharing one directory across these differing store implementations produced
 stale dependency metadata and is not valid evidence for either candidate.
+
+The CXF importer closure also changed through its vault dependency. Recapture
+its actual detached Go oracle at `a581df7b`; all 20 cases remain identical.
+Oracle commits used by source-bound generators are retained with dedicated
+lightweight source tags before squash merging. A feature branch or an `oracle/`
+branch alone does not satisfy the repository's post-merge reachability gate.
+The current candidate receipt at `bc4808e3` passed all 19 resource and 17
+import-review observations; the final native receipt will bind the final head.

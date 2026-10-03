@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	oracleCommit  = "98c786e1bf97fee2b93b79ec391f14c97bfd8694"
+	oracleCommit  = "a581df7b09630a0d8c572af727b7cf096d2557ad"
 	oracleRelease = "unreleased"
 )
 
