@@ -1,0 +1,26 @@
+[
+  {
+    "value": "alpha:beta gamma",
+    "query": "alpha%3Abeta+gamma",
+    "segment": "alpha:beta%20gamma",
+    "path": "alpha:beta%20gamma"
+  },
+  {
+    "value": "alpha:beta gamma/$&+=@",
+    "query": "alpha%3Abeta+gamma%2F%24%26%2B%3D%40",
+    "segment": "alpha:beta%20gamma%2F$&+=@",
+    "path": "alpha:beta%20gamma/$&+=@"
+  },
+  {
+    "value": "alpha!'()*[] gamma",
+    "query": "alpha%21%27%28%29%2A%5B%5D+gamma",
+    "segment": "alpha%21%27%28%29%2A%5B%5D%20gamma",
+    "path": "alpha%21%27%28%29%2A%5B%5D%20gamma"
+  },
+  {
+    "value": "alpha,;/?#% ü",
+    "query": "alpha%2C%3B%2F%3F%23%25+%C3%BC",
+    "segment": "alpha%2C%3B%2F%3F%23%25%20%C3%BC",
+    "path": "alpha,;/%3F%23%25%20%C3%BC"
+  }
+]

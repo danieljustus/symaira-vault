@@ -5,7 +5,6 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
 	"crypto/sha256"
 	_ "embed"
@@ -46,7 +45,10 @@ var (
 		"internal/fsutil/reexport.go",
 	}
 	generatorFiles = []string{
+		"scripts/rust-port/cmd/pairinggen/archive_extract.go",
+		"scripts/rust-port/cmd/pairinggen/archive_extract_test.go",
 		"scripts/rust-port/cmd/pairinggen/main.go",
+		"scripts/rust-port/cmd/pairinggen/main_test.go",
 		"scripts/rust-port/cmd/pairinggen/oracle.go.txt",
 	}
 )
@@ -341,35 +343,8 @@ func extract(root string) (string, error) {
 	if _, err = archive.Seek(0, io.SeekStart); err != nil {
 		return "", fmt.Errorf("rewind oracle archive: %w", err)
 	}
-	reader := tar.NewReader(archive)
-	for {
-		header, err := reader.Next()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		name, err := safeRelativePath(header.Name)
-		if err != nil {
-			return "", fmt.Errorf("unsafe oracle path %q: %w", header.Name, err)
-		}
-		out := filepath.Join(dir, name)
-		switch header.Typeflag {
-		case tar.TypeDir:
-			err = os.MkdirAll(out, 0750)
-		case tar.TypeReg:
-			err = os.MkdirAll(filepath.Dir(out), 0750)
-			if err == nil {
-				data := make([]byte, header.Size)
-				if _, err = io.ReadFull(reader, data); err == nil {
-					err = os.WriteFile(out, data, 0600)
-				}
-			}
-		}
-		if err != nil {
-			return "", err
-		}
+	if err := extractArchive(archive, dir, 0, false); err != nil {
+		return "", err
 	}
 	keep = true
 	return dir, nil

@@ -1,16 +1,14 @@
+#[path = "support/temp_root.rs"]
+mod test_temp_root;
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Command, Output},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-fn temporary_root(name: &str) -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    env::temp_dir().join(format!("symvault-remote-differential-{name}-{suffix}"))
+fn temporary_root(name: &str) -> test_temp_root::TempRoot {
+    test_temp_root::TempRoot::missing(&format!("symvault-remote-differential-{name}-"))
 }
 
 fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
@@ -212,7 +210,7 @@ fn remote_status_matches_go_for_local_repository_states() {
     let _ = fs::remove_dir_all(&bare);
 }
 
-fn initialized_remote_fixture(name: &str) -> (PathBuf, PathBuf) {
+fn initialized_remote_fixture(name: &str) -> (test_temp_root::TempRoot, test_temp_root::TempRoot) {
     let home = temporary_root(&format!("{name}-home"));
     let vault = temporary_root(&format!("{name}-vault"));
     fs::create_dir_all(home.join(".symvault")).expect("legacy config directory");
