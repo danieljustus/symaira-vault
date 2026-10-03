@@ -6,6 +6,8 @@ Resource observations are strict. Import-review cases must retain their already
 recorded exit/stdout/stderr and post-command behavior before provenance advances.
 """
 import argparse
+import datetime
+import platform
 import hashlib
 import json
 import os
@@ -143,13 +145,14 @@ def main():
                 POLICY.write_text(json.dumps(fixture, indent=2) + "\n")
                 original_review["cases"] = cases
                 original_review["oracle"].update(
-                    commit=commit, binary="actual detached Go build (-trimpath -buildvcs=false)",
+                    commit=commit, captured=datetime.datetime.now(datetime.UTC).date().isoformat(),
+                    binary="actual detached Go build (-trimpath -buildvcs=false)",
                     sha256=hashlib.sha256(cli.read_bytes()).hexdigest(),
                     source_digest=review_digest,
                     generator_files=GENERATORS,
                     generator_digest=digest(tree, GENERATORS))
                 REVIEW.write_text(json.dumps(original_review, indent=1) + "\n")
-            receipt = {"oracle_commit": commit, "native_os": os.name,
+            receipt = {"oracle_commit": commit, "native_os": platform.system(), "session_backend": "memory",
                        "capture_binary_sha256": hashlib.sha256(capture.read_bytes()).hexdigest(),
                        "cli_binary_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(),
                        "resource_cases": len(observations), "import_review_cases": len(cases)}
