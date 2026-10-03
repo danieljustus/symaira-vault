@@ -19,7 +19,7 @@
     ],
     "source_digest": "42e21b213538c1b3765506ffdd5427dfc490036cfe23da66738749b33ed2318d",
     "generator": "scripts/rust-port/cmd/gitio/main.go",
-    "generator_digest": "f62403fcdfb94414d33ca413afc4c94cfb9838b095248b8c1313e4428ce6da7c"
+    "generator_digest": "ae0bbec74f4981996650bd8f8e2d91728f395aceceeaa9387e4dafc1be439a16"
   },
   "cases": [
     {

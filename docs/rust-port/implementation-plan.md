@@ -1,5 +1,25 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## Bounded Git descendant-cleanup observation — 2026-10-03
+
+While validating #1233, the unchanged Go Git-I/O oracle reproduced the precise
+#1073 drift `GIT-002-go-timeout.expected.descendant_cleanup: expected=true
+actual=false` in a managed Linux container. An immediate `kill -0` observation
+can see a terminated descendant before the host reaps it. The generator now
+waits at most two seconds for that PID to disappear, matching the observation
+allowance in the existing native Rust test. The production twenty-second Git
+timeout, kill behavior, immutable Go source pin and all transport vectors stay
+unchanged. A real child-process negative control proves that a live descendant
+is still rejected within the bound and a killed/reaped child is accepted.
+
+Generation followed by the Go freshness check and native Rust Git differential
+passes under the container's orphan-reaping wrapper. Only the generator digest
+changes in the source-bound fixture. No classifier, production timeout or
+expected success outcome is relaxed. This fixes the reproduced observation
+race; it does not establish the exact field that drifted in the older five-case
+CI runs cited by #1073. Native protected CI and that historical comparison
+remain required before claiming the original flake completely resolved.
+
 ## Integrated Unix stdio clipboard signals — 2026-09-29
 
 Candidate `b92054f8dc6fa83f99aeaf7c37821e89cd00803d` shares one synchronized
