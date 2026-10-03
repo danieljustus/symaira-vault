@@ -6,6 +6,7 @@ use std::{
     io::{self, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
 #[cfg(not(windows))]
@@ -76,16 +77,34 @@ pub struct GitRepository {
 impl GitRepository {
     pub fn init(root: impl AsRef<Path>) -> Result<Self, GitError> {
         let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(&root)?;
+        fs::create_dir_all(&root)
+            .inspect_err(|error| report_process_io_error("init create directory", error))?;
         if !root.is_dir() {
             return Err(GitError::InvalidPath(root));
         }
         let repo = Self { root };
         if !repo.root.join(".git").exists() {
-            repo.command(&["init", "--quiet"])?;
-            repo.command(&["symbolic-ref", "HEAD", "refs/heads/master"])?;
-            repo.command(&["config", "user.name", "Symaira Vault"])?;
-            repo.command(&["config", "user.email", "symvault@example.com"])?;
+            for (operation, args) in [
+                ("init git init", ["init", "--quiet"].as_slice()),
+                (
+                    "init symbolic-ref",
+                    ["symbolic-ref", "HEAD", "refs/heads/master"].as_slice(),
+                ),
+                (
+                    "init config user.name",
+                    ["config", "user.name", "Symaira Vault"].as_slice(),
+                ),
+                (
+                    "init config user.email",
+                    ["config", "user.email", "symvault@example.com"].as_slice(),
+                ),
+            ] {
+                repo.command(args).inspect_err(|error| {
+                    if let GitError::Io(error) = error {
+                        report_process_io_error(operation, error);
+                    }
+                })?;
+            }
         }
         Ok(repo)
     }
@@ -1038,12 +1057,15 @@ fn run_process_with_timeout(
 }
 
 fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Error> {
+    // Do not recycle names while another command still holds a deleted file.
+    // Legacy Windows deletion can leave names pending with AccessDenied.
+    static NEXT_OUTPUT_ID: AtomicU64 = AtomicU64::new(0);
     let base = std::env::temp_dir();
-    for attempt in 0..100 {
+    for _ in 0..100 {
         let path = base.join(format!(
             "symvault-git-{}-{}-{label}.out",
             std::process::id(),
-            attempt
+            NEXT_OUTPUT_ID.fetch_add(1, Ordering::Relaxed)
         ));
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -1364,6 +1386,58 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn temporary_output_names_are_not_reused_while_deleted_handles_are_open() {
+        let label = "delete-pending-regression";
+        let (first_path, first_file) = temporary_output_file(label).unwrap();
+        fs::remove_file(&first_path).unwrap();
+        // Windows may use legacy delete-pending or immediate POSIX unlink.
+        // Neither mode permits the allocator to recycle a still-owned name.
+        #[cfg(windows)]
+        {
+            match OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&first_path)
+            {
+                Ok(recreated) => {
+                    drop(recreated);
+                    fs::remove_file(&first_path).expect("remove own POSIX-unlinked control");
+                }
+                Err(error) => {
+                    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+                    assert_eq!(error.raw_os_error(), Some(5));
+                }
+            }
+        }
+        let second = temporary_output_file(label);
+        drop(first_file);
+        let (second_path, second_file) = second.expect("allocate a fresh output name");
+        let distinct = first_path != second_path;
+        drop(second_file);
+        fs::remove_file(second_path).unwrap();
+        assert!(
+            distinct,
+            "allocator reused a deleted but still-open output name"
+        );
+    }
+
+    #[test]
+    fn init_directory_diagnostic_preserves_original_error() {
+        let root = tempfile::tempdir().unwrap();
+        let blocker = root.path().join("private-path-marker");
+        fs::write(&blocker, b"not a directory").unwrap();
+        let target = blocker.join("repository");
+        let expected = fs::create_dir_all(&target).unwrap_err();
+        let GitError::Io(actual) = GitRepository::init(&target).unwrap_err() else {
+            panic!("init must retain the original I/O error");
+        };
+        assert_eq!(actual.kind(), expected.kind());
+        assert_eq!(actual.raw_os_error(), expected.raw_os_error());
+        assert_eq!(actual.to_string(), expected.to_string());
+        assert_eq!(fs::read(&blocker).unwrap(), b"not a directory");
+    }
 
     #[test]
     fn output_diagnostics_preserve_missing_file_error() {
