@@ -49,6 +49,7 @@ pub struct HttpResponse {
 struct HttpStream {
     transport: HttpTransport,
     head_response: bool,
+    http10_response: bool,
 }
 
 enum HttpTransport {
@@ -69,6 +70,7 @@ impl HttpStream {
         let stream = Self {
             transport,
             head_response: false,
+            http10_response: false,
         };
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
@@ -114,6 +116,7 @@ impl From<TcpStream> for HttpStream {
         Self {
             transport: HttpTransport::Tcp(stream, None),
             head_response: false,
+            http10_response: false,
         }
     }
 }
@@ -232,6 +235,8 @@ impl LocalApprovalApi {
 }
 
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
+const MAX_HTTP_CHUNK_LINE: usize = 4096;
+const MAX_HTTP_CHUNK_OVERHEAD: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
@@ -1094,6 +1099,7 @@ fn read_wire_request(
     request_read_timeout: Duration,
 ) -> Result<Option<WireRequest>, std::io::Error> {
     reader.get_mut().head_response = false;
+    reader.get_mut().http10_response = false;
     reader
         .get_mut()
         .set_read_timeout(Some(first_byte_timeout))?;
@@ -1112,6 +1118,7 @@ fn read_wire_request(
     let path = parts.next().unwrap_or_default();
     let version = parts.next().unwrap_or_default();
     reader.get_mut().head_response = method == "HEAD";
+    reader.get_mut().http10_response = version == "HTTP/1.0";
     if method.is_empty()
         || path.is_empty()
         || !matches!(version, "HTTP/1.0" | "HTTP/1.1")
@@ -1168,35 +1175,43 @@ fn read_wire_request(
     if headers.get("host").is_none_or(String::is_empty) {
         return Err(invalid_http("missing Host header"));
     }
-    if headers.contains_key("transfer-encoding") {
-        return Err(invalid_http("transfer encoding is unsupported"));
-    }
-    let length = match headers.get("content-length") {
-        Some(value) => value
-            .parse::<usize>()
-            .map_err(|_| invalid_http("invalid Content-Length"))?,
-        None => 0,
+    let body = if let Some(encoding) = headers.get("transfer-encoding") {
+        if version != "HTTP/1.1"
+            || !encoding.eq_ignore_ascii_case("chunked")
+            || headers.contains_key("content-length")
+        {
+            return Err(invalid_http("ambiguous or unsupported transfer encoding"));
+        }
+        read_chunked_body(reader)?
+    } else {
+        let length = match headers.get("content-length") {
+            Some(value) => value
+                .parse::<usize>()
+                .map_err(|_| invalid_http("invalid Content-Length"))?,
+            None => 0,
+        };
+        if length > MAX_HTTP_BODY {
+            // Retain at most the declared bound. An already-invalid JSON prefix is
+            // Go's 400; a bounded prefix that needs more input is the actual 413.
+            let mut prefix = vec![0; MAX_HTTP_BODY];
+            reader.read_exact(&mut prefix)?;
+            // Consume one lookahead byte, like Go's MaxBytesReader. In particular,
+            // the one-byte-over-limit response must not race an unread TCP byte.
+            let mut lookahead = [0; 1];
+            reader.read_exact(&mut lookahead)?;
+            let invalid = serde_json::from_slice::<Message>(&prefix)
+                .err()
+                .is_some_and(|error| !error.is_eof());
+            return Err(invalid_http(if invalid {
+                "invalid JSON"
+            } else {
+                "request body too large"
+            }));
+        }
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body)?;
+        body
     };
-    if length > MAX_HTTP_BODY {
-        // Retain at most the declared bound. An already-invalid JSON prefix is
-        // Go's 400; a bounded prefix that needs more input is the actual 413.
-        let mut prefix = vec![0; MAX_HTTP_BODY];
-        reader.read_exact(&mut prefix)?;
-        // Consume one lookahead byte, like Go's MaxBytesReader. In particular,
-        // the one-byte-over-limit response must not race an unread TCP byte.
-        let mut lookahead = [0; 1];
-        reader.read_exact(&mut lookahead)?;
-        let invalid = serde_json::from_slice::<Message>(&prefix)
-            .err()
-            .is_some_and(|error| !error.is_eof());
-        return Err(invalid_http(if invalid {
-            "invalid JSON"
-        } else {
-            "request body too large"
-        }));
-    }
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body)?;
     let body = String::from_utf8(body).map_err(|_| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, "request body is not UTF-8")
     })?;
@@ -1217,6 +1232,133 @@ fn read_wire_request(
         connection: get("connection"),
         body,
     }))
+}
+
+fn read_chunked_body(reader: &mut BufReader<HttpStream>) -> Result<Vec<u8>, std::io::Error> {
+    let mut body = Vec::new();
+    let mut excess = 0_usize;
+    loop {
+        let line = read_bounded_line(reader, MAX_HTTP_CHUNK_LINE)
+            .map_err(chunk_read_error)?
+            .ok_or_else(|| invalid_http("incomplete chunk header"))?;
+        let line = line
+            .strip_suffix(b"\r\n")
+            .ok_or_else(|| invalid_http("invalid chunk header terminator"))?;
+        let size = line
+            .trim_ascii_end()
+            .split(|byte| *byte == b';')
+            .next()
+            .unwrap_or_default();
+        if size.is_empty() || size.len() > 16 || !size.iter().all(u8::is_ascii_hexdigit) {
+            return Err(invalid_http("invalid chunk length"));
+        }
+        let size = u64::from_str_radix(
+            std::str::from_utf8(size).map_err(|_| invalid_http("invalid chunk length"))?,
+            16,
+        )
+        .map_err(|_| invalid_http("invalid chunk length"))?;
+        let size = usize::try_from(size).unwrap_or(usize::MAX);
+        excess = excess
+            .saturating_add(line.len().saturating_add(2))
+            .saturating_sub(16_usize.saturating_add(size.saturating_mul(2)));
+        if excess > MAX_HTTP_CHUNK_OVERHEAD {
+            return Err(invalid_http("excessive chunk overhead"));
+        }
+        if size == 0 {
+            break;
+        }
+        let retained = size.min(MAX_HTTP_BODY + 1 - body.len());
+        let offset = body.len();
+        body.resize(offset + retained, 0);
+        reader
+            .read_exact(&mut body[offset..])
+            .map_err(chunk_read_error)?;
+        if body.len() > MAX_HTTP_BODY {
+            // One bounded prefetch consumes a short chunk terminator/final
+            // chunk already sent by a just-over-limit peer. Closing with
+            // those bytes unread in the TCP receive queue can erase the 413
+            // response with a reset. Never drain an arbitrary oversized body.
+            let previous_timeout = match &reader.get_ref().transport {
+                HttpTransport::Tcp(socket, _) => socket.read_timeout()?,
+                HttpTransport::Tls(stream) => stream.sock.read_timeout()?,
+            };
+            reader
+                .get_mut()
+                .set_read_timeout(Some(Duration::from_millis(10)))?;
+            let _ = reader.fill_buf();
+            reader.get_mut().set_read_timeout(previous_timeout)?;
+            let invalid = serde_json::from_slice::<Message>(&body[..MAX_HTTP_BODY])
+                .err()
+                .is_some_and(|error| !error.is_eof());
+            return Err(invalid_http(if invalid {
+                "invalid JSON"
+            } else {
+                "request body too large"
+            }));
+        }
+        let mut terminator = [0; 2];
+        reader
+            .read_exact(&mut terminator)
+            .map_err(chunk_read_error)?;
+        if terminator != *b"\r\n" {
+            return Err(invalid_http("invalid chunk data terminator"));
+        }
+    }
+    let mut trailer_bytes = 0_usize;
+    loop {
+        let line = read_bounded_line(reader, MAX_HTTP_HEADERS)
+            .map_err(chunk_read_error)?
+            .ok_or_else(|| invalid_http("incomplete chunk trailers"))?;
+        trailer_bytes = trailer_bytes.saturating_add(line.len());
+        if trailer_bytes > MAX_HTTP_HEADERS {
+            return Err(invalid_http("chunk trailers too large"));
+        }
+        if line == b"\r\n" {
+            break;
+        }
+        let (name, value) = parse_crlf_line(&line)?
+            .split_once(':')
+            .ok_or_else(|| invalid_http("invalid chunk trailer"))?;
+        if name.is_empty()
+            || !name.bytes().all(is_http_token)
+            || value
+                .bytes()
+                .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+            || [
+                "host",
+                "authorization",
+                "origin",
+                "cookie",
+                "proxy-authorization",
+                "content-type",
+                "accept",
+                "mcp-protocol-version",
+                "connection",
+                "upgrade",
+                "trailer",
+                "te",
+                "content-length",
+                "transfer-encoding",
+                "x-symaira-agent",
+                "x-enroll-timestamp",
+                "x-enroll-proof",
+            ]
+            .iter()
+            .any(|forbidden| name.eq_ignore_ascii_case(forbidden))
+        {
+            return Err(invalid_http("invalid or security-sensitive chunk trailer"));
+        }
+        // Ordinary trailers are validated and discarded; they never replace
+        // the original route, authentication or enrollment metadata.
+    }
+    Ok(body)
+}
+
+fn chunk_read_error(error: std::io::Error) -> std::io::Error {
+    match error.kind() {
+        std::io::ErrorKind::UnexpectedEof => invalid_http("incomplete chunk framing"),
+        _ => error,
+    }
 }
 
 fn read_bounded_line<R: BufRead>(
@@ -1582,11 +1724,18 @@ fn write_http_error(
         503 => "Service Unavailable",
         _ => "Internal Server Error",
     };
+    let version = if stream.http10_response {
+        "HTTP/1.0"
+    } else {
+        "HTTP/1.1"
+    };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "{version} {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\n",
         body.len()
     )?;
+    write_connection_header(stream, version, false)?;
+    stream.write_all(b"\r\n")?;
     if stream.head_response {
         Ok(())
     } else {
