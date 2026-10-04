@@ -207,14 +207,14 @@ def request(address, root, peer, method="GET", path="/v1/allowed", body=b"", pas
             connection.close()
 
 
-def template(root, peer, *, auth="bearer", port=None, scheme=None, substitutions=False, name="fixture", host="127.0.0.1"):
+def template(root, peer, *, auth="bearer", port=None, scheme=None, substitutions=False, name="fixture", host="127.0.0.1", endpoints=None):
     directory = root / "templates"
     directory.mkdir(exist_ok=True)
     for existing in directory.glob("*.yaml"):
         existing.unlink()  # Only disposable fixture templates.
     definition = {"base_url": f"{scheme or ('https' if peer.tls else 'http')}://{host}:{port or peer.port}",
                   "auth_type": auth, "entry_ref": "fixture", "allowed_methods": ["GET", "POST"],
-                  "allowed_endpoints": ["/v1/*"], "default_headers": {"X-Default": "template"}, "allow_private": True}
+                  "allowed_endpoints": endpoints if endpoints is not None else ["/v1/*"], "default_headers": {"X-Default": "template"}, "allow_private": True}
     if substitutions:
         definition["substitutions"] = [{"placeholder": "__SECRET__", "field": "credential", "in": ["path", "query", "header", "body"]}]
     # JSON is a YAML subset; no optional PyYAML dependency is used.
@@ -257,6 +257,22 @@ def runtime_cases(binary, seed, home, records):
                 result = request(address, root, peer, method=method, path=path)
             assert result["status"] == 403 and not peer.records
             records.append({"case": name, "status": 403, "upstream_requests": 0})
+    for name, pattern in [('encoded-endpoint-allowed', '/v1/allowed'), ('encoded-endpoint-denied', '/v1/%61llowed')]:
+        with Peer() as peer:
+            template(root, peer, endpoints=[pattern])
+            with proxy(binary, root, home) as address:
+                result = request(address, root, peer, path='/v1/%61llowed')
+            records.append({'case':name, 'status':result['status'], 'credential_received':
+                            any(row['authorization'] == 'Bearer '+TOKEN for row in peer.records)})
+    dot_segments = []
+    for path in ['/v1/../denied', '/v1/%2e%2e/denied']:
+        with Peer() as peer:
+            template(root, peer)
+            with proxy(binary, root, home) as address:
+                result = request(address, root, peer, path=path)
+            dot_segments.append({'path':path, 'status':result['status'], 'credential_received':
+                                 any(row['authorization'] == 'Bearer '+TOKEN for row in peer.records)})
+    records.append({'case':'dot-segment-policy', 'observations':dot_segments})
     for name, strict in [("unmatched-forwarded", False), ("unmatched-strict", True)]:
         with Peer(tls=False) as peer:
             for existing in (root / "templates").glob("*.yaml"): existing.unlink()
@@ -501,7 +517,7 @@ def main():
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/", "scripts/rust-port/cmd/cligap/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/egress_contract.py",
                               "scripts/rust-port/egress_contract_probe.go.txt", ".github/workflows/rust-broker-egress.yml"})
     receipt = {"passed": False, "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
@@ -560,6 +576,9 @@ def main():
                     elif left["case"] == "redirect-authority-binding":
                         assert left["status"] == 200 and left["redirected_credential_received"], left
                         assert right["status"] == 302 and not right["redirected_credential_received"], right
+                    elif left['case'] == 'dot-segment-policy':
+                        assert all(row['status'] == 200 and row['credential_received'] for row in left['observations']), left
+                        assert all(row['status'] == 403 and not row['credential_received'] for row in right['observations']), right
                     else:
                         assert left == right, (left, right)
                 receipt["passed"] = True

@@ -345,6 +345,24 @@ impl<'a> EgressBroker<'a> {
         mut request: Request,
         tunnel: Option<&str>,
     ) -> Result<(), String> {
+        // Keep the original HTTP path for authorization: Url normalizes dot
+        // segments, while Go's request ACL sees the percent-decoded raw path.
+        let Ok(original_uri) = request.target.parse::<http::Uri>() else {
+            return write_error(transport, 400, "invalid request target");
+        };
+        let Ok(path_bytes) = api::api_percent_decoded_bytes(original_uri.path(), false) else {
+            return write_error(transport, 400, "invalid request path");
+        };
+        let Ok(authorization_path) = std::str::from_utf8(&path_bytes) else {
+            return write_error(transport, 400, "invalid request path");
+        };
+        if authorization_path
+            .split('/')
+            .any(|part| matches!(part, "." | ".."))
+            || request.target.contains('\\')
+        {
+            return write_error(transport, 403, "ambiguous request path is blocked");
+        }
         let target = if request.target.starts_with('/') {
             let host = request
                 .headers
@@ -420,7 +438,7 @@ impl<'a> EgressBroker<'a> {
                 && !definition
                     .allowed_endpoints
                     .iter()
-                    .any(|p| endpoint_matches(p, url.path(), &mut endpoint_budget))
+                    .any(|p| endpoint_matches(p, authorization_path, &mut endpoint_budget))
             {
                 return write_error(transport, 403, "endpoint not allowed by template");
             }

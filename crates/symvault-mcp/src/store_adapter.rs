@@ -3182,7 +3182,10 @@ fn api_path_unescape(value: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&decoded).into_owned())
 }
 
-fn api_percent_decoded_bytes(value: &str, tolerate_malformed: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn api_percent_decoded_bytes(
+    value: &str,
+    tolerate_malformed: bool,
+) -> Result<Vec<u8>, String> {
     let mut decoded = Vec::with_capacity(value.len());
     let bytes = value.as_bytes();
     let mut index = 0;

@@ -97,6 +97,62 @@ fn egress_preflight_denies_before_credential_read_or_upstream_contact() {
 }
 
 #[test]
+fn egress_decoded_path_acl_denies_before_entry_read_or_normalization() {
+    let root = tempfile::tempdir().unwrap();
+    let (identity, store) = vault(root.path());
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    upstream.set_nonblocking(true).unwrap();
+    let target = upstream.local_addr().unwrap();
+    let template = root.path().join("templates/fixture.yaml");
+    let write_template = |pattern: &str| {
+        fs::write(&template, format!(
+            "base_url: http://{target}\nauth_type: bearer\nentry_ref: missing-entry\nallowed_methods: [GET]\nallowed_endpoints: ['{pattern}']\n"
+        )).unwrap();
+    };
+    write_template("/v1/%61llowed");
+    let broker = EgressBroker::new(
+        root.path(),
+        &store,
+        &identity,
+        EgressOptions {
+            allow_private: true, // Explicit in-process fixture seam, never a CLI flag.
+            ..EgressOptions::default()
+        },
+    )
+    .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    broker
+        .with_running(listener, || {
+            for (path, pattern, status) in [
+                ("/v1/%61llowed", "/v1/%61llowed", "403"),
+                ("/v1/../denied", "/denied", "403"),
+                ("/v1/%2e%2e/denied", "/denied", "403"),
+                ("/v1/%zz", "/v1/*", "400"),
+                ("/v1/%ff", "/v1/*", "400"),
+            ] {
+                write_template(pattern);
+                let response = raw_request(
+                    address,
+                    &format!("GET http://{target}{path} HTTP/1.1\r\nHost: {target}\r\n\r\n"),
+                );
+                // Touching the missing entry would produce 500. No authority can
+                // be admitted using Url's normalized path or a lossy UTF-8 decode.
+                assert!(
+                    response.starts_with(format!("HTTP/1.1 {status}").as_bytes()),
+                    "{response:?}"
+                );
+            }
+            assert_eq!(
+                upstream.accept().unwrap_err().kind(),
+                std::io::ErrorKind::WouldBlock
+            );
+            Ok(())
+        })
+        .unwrap();
+}
+
+#[test]
 fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
     let root = tempfile::tempdir().unwrap();
     let (identity, store) = vault(root.path());

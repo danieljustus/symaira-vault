@@ -92,7 +92,7 @@ for the connection; private/local destinations remain blocked in production.
 Neither admission stop nor transport cancellation claims to undo a request that
 an upstream has already received.
 
-Four integration tests use actual encrypted entries, verified TLS peers,
+Five integration tests use actual encrypted entries, verified TLS peers,
 binary response bytes, repeated Set-Cookie headers, preflight failures, idle
 clients and pending upstream cancellation. Strict CLI/MCP Clippy and the full
 MCP suite passed during development; final clean-source and native receipts
@@ -137,6 +137,25 @@ child reads and validates its actual public PEM and Unix 0600 file/0700 parent
 permissions while alive; after exit, the driver independently verifies that
 Rust's instance certificate/directory and listener have gone. The CA directory
 is created with narrow permissions rather than tightened after publication.
+
+Authorize the percent-decoded original HTTP path, before URL-library
+normalization. Actual Go allows /v1/%61llowed under the decoded /v1/allowed
+pattern and denies it under the literal /v1/%61llowed pattern. The first Rust
+comparison measured the reverse, including actual bearer delivery in the
+denied case. The repaired runtime matches both Go outcomes before entry reads.
+An independent regression uses a missing entry and verifies denial before a
+500 lookup error or any upstream connection can occur.
+
+Reject literal or encoded dot segments before normalization, rather than let
+the URL library turn an initially denied path into an allowed endpoint. Actual
+Go delivers the credential for both /v1/../denied and /v1/%2e%2e/denied under
+/v1/*; Rust denies both with 403 before credential access. Reject malformed
+percent escapes and non-UTF-8 decoded paths instead of authorizing a replacement
+character. The bounded original-path parser comes from the already retained
+http crate; shared percent decoding is reused without changing the older MCP
+helper's error contract. The latest development corpus passes 19 runtime and
+14 CLI cases, including both encoded ACL outcomes and measured dot-segment
+policy. Native acceptance must repeat the complete corpus at a clean commit.
 
 Disposable native fixture vaults use explicitly configured Argon2id parameters
 of 19456 KiB, two iterations and one lane, within Go's configured minimum

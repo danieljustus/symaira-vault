@@ -68,8 +68,8 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           text = Path('target/native-egress-tests.txt').read_text()
-          assert '4 passed; 0 failed; 0 ignored' in text
-          for case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout']:
+          assert '5 passed; 0 failed; 0 ignored' in text
+          for case in ['egress_preflight_denies_before_credential_read_or_upstream_contact', 'egress_decoded_path_acl_denies_before_entry_read_or_normalization', 'egress_verified_mitm_injects_and_masks_real_encrypted_credentials', 'egress_callback_error_joins_idle_clients_and_releases_listener', 'egress_stop_cancels_owned_upstream_request_without_waiting_for_network_timeout']:
               assert f'{case} ... ok' in text
           PY
           cargo build -p symvault-cli --bin symvault -p symvault-mcp --example egress_contract_probe --locked
@@ -87,11 +87,20 @@ jobs:
           assert receipt['passed'] and receipt['candidate_worktree_clean']
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
-          runtime = {'tls-auth-bearer','tls-auth-basic','tls-auth-header','tls-auth-query_param','tls-auth-none','tls-all-substitution-surfaces','method-denied','endpoint-denied','unmatched-forwarded','unmatched-strict','passthrough-preserves-upstream-tls','untrusted-upstream-tls','template-port-binding','template-plaintext-binding','connect-inner-authority-binding','redirect-authority-binding'}
+          runtime = {'tls-auth-bearer','tls-auth-basic','tls-auth-header','tls-auth-query_param','tls-auth-none','tls-all-substitution-surfaces','method-denied','endpoint-denied','encoded-endpoint-allowed','encoded-endpoint-denied','dot-segment-policy','unmatched-forwarded','unmatched-strict','passthrough-preserves-upstream-tls','untrusted-upstream-tls','template-port-binding','template-plaintext-binding','connect-inner-authority-binding','redirect-authority-binding'}
           cli = {'broker-missing-vault','broker-boolean-forms','run-broker-flags-reach-vault','run-broker-disabled','run-broker-public-env','run-broker-strict-passthrough','run-broker-child-error','run-broker-timeout','run-broker-explicit-env','run-broker-launch-error','standalone-broker','standalone-broker-flags','loopback-listener-policy','concurrent-broker-ca-isolation'}
           for implementation in ['go','rust']:
               assert runtime == {row['case'] for row in receipt[implementation]}
               assert cli == {row['case'] for row in receipt[implementation+'_cli']}
+          PY
+          go run ./scripts/rust-port/cmd/cligap --binary "$rust_cli" --output target/native-broker-gaps.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('target/native-broker-gaps.json').read_bytes())
+          assert report['oracle_paths'] >= 134 and report['rust_paths'] >= 100
+          for kind in ['missing_paths','flag_gaps','alias_gaps']:
+              assert not any(gap['path'] in {'symvault broker','symvault run'} for gap in report[kind] or []), kind
           PY
       - name: Upload source-bound actual evidence
         if: always()
@@ -101,5 +110,6 @@ jobs:
           path: |
             native-egress.json
             target/native-egress-tests.txt
+            target/native-broker-gaps.json
           if-no-files-found: error
           retention-days: 14
