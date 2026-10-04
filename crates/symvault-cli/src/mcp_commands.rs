@@ -37,6 +37,16 @@ use symvault_mcp::{
 };
 use symvault_platform::approval::is_tty_present;
 
+/// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
+/// intact and deny every tool call through the existing locked handler.
+pub fn run_locked_stdio() -> Result<(), String> {
+    let mut handler = ProtocolHandler::new("symaira", "1.0.0");
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
+        .map_err(|error| format!("MCP stdio: {error}"))
+}
+
 /// Starts the bounded native MCP server for an already unlocked vault.
 ///
 /// The caller supplies the identity and keyring obtained through the
@@ -119,6 +129,13 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        eprintln!(
+            "MCP server listening on {bind}:{}",
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port()
+        );
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =
@@ -211,10 +228,9 @@ pub fn run(
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
-        let profile = config
-            .agents
-            .get(agent_name)
-            .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
+        let profile = config.agents.get(agent_name).ok_or_else(|| {
+            format!("failed to create MCP server: agent {agent_name:?} not found")
+        })?;
         let mut handler = build_handler(
             root,
             agent_name,
@@ -227,7 +243,8 @@ pub fn run(
             None,
             clipboard_auto_clear_duration,
             clipboard,
-        )?;
+        )
+        .map_err(|error| format!("failed to create MCP server: {error}"))?;
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)

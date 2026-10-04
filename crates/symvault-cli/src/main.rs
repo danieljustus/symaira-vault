@@ -15,7 +15,9 @@ mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod cli_artifacts;
 mod completion_commands;
+mod completion_protocol;
 mod config;
 mod daemon_commands;
 mod deprecated_stubs;
@@ -29,6 +31,7 @@ mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod intake_commands;
 mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
@@ -130,11 +133,19 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Review-gated credential intake from loose files.
+    Intake {
+        #[command(flatten)]
+        options: intake_commands::IntakeOptions,
+        #[command(subcommand)]
+        command: Option<IntakeCommand>,
+    },
     /// Generate a shell completion script.
     Completion {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
         shell: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
@@ -401,45 +412,24 @@ enum Command {
         _extra: Vec<OsString>,
     },
     /// Start the MCP server for agent access.
+    #[command(args_override_self = true)]
     Mcp {
         #[command(subcommand)]
         action: Option<McpAction>,
-        /// Agent profile used by this server (required in both transports).
-        #[arg(long)]
-        agent: Option<String>,
-        /// Run the MCP protocol over stdin/stdout.
-        #[arg(long)]
-        stdio: bool,
-        /// Bind address for HTTP mode (remote binds require TLS).
-        #[arg(long, default_value = "127.0.0.1")]
-        bind: String,
-        /// Server port.
-        #[arg(long, default_value_t = 8080)]
-        port: u16,
-        /// PEM TLS certificate file path.
-        #[arg(long, default_value = "")]
-        tls_cert: String,
-        /// PEM TLS private key file path.
-        #[arg(long, default_value = "")]
-        tls_key: String,
-        /// PEM client CA file path; enables mandatory mTLS.
-        #[arg(long, default_value = "")]
-        tls_ca: String,
-        /// Permit a locked vault (unsupported by the native runtime).
-        #[arg(long)]
-        allow_locked: bool,
+        #[command(flatten)]
+        flags: McpFlags,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
     },
     /// Deprecated: use `symvault mcp`.
-    ///
-    /// Hidden like the oracle's `serve` command (`cmd/mcp/serve.go`). Only the
-    /// deprecated `token` children are ported: the bare `serve` server and
-    /// `serve install|status|uninstall` belong to the unported
-    /// HTTP/service runtime, so `token` is this parent's only declared
-    /// subcommand and clap rejects the rest (see `deprecated_stubs`).
-    #[command(hide = true)]
+    #[command(hide = true, args_override_self = true)]
     Serve {
         #[command(subcommand)]
-        action: ServeAction,
+        action: Option<McpAction>,
+        #[command(flatten)]
+        flags: McpFlags,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
     },
     /// Deprecated: use `symvault agent install <agent> --config-only`.
     ///
@@ -549,6 +539,31 @@ enum Command {
 }
 
 #[derive(Debug, Subcommand)]
+enum IntakeCommand {
+    /// Watch a folder for new credential files and stage quarantined batches.
+    #[command(args_override_self = true)]
+    Watch {
+        #[arg(value_name = "DIRECTORY")]
+        directory: Option<PathBuf>,
+        #[arg(long, default_value = "10s", allow_hyphen_values = true)]
+        interval: String,
+        #[arg(long, default_value = "5s", allow_hyphen_values = true)]
+        debounce: String,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        once: bool,
+        #[command(subcommand)]
+        command: Option<IntakeWatchCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeWatchCommand {
+    /// Disable an intake watch LaunchAgent (macOS).
+    Disable,
+}
+
+#[derive(Debug, Subcommand)]
 enum GenerateCommand {
     /// Generate manual pages.
     Manpages {
@@ -566,32 +581,10 @@ enum McpAction {
     /// Hidden to match the oracle: Go's `serve` command is `Hidden: true` and
     /// its `mcp` group only lists `install`, `status` and `uninstall`, so
     /// `generate manpages` must not emit a `symvault-mcp-serve.1` page.
-    #[command(hide = true)]
+    #[command(hide = true, args_override_self = true)]
     Serve {
-        /// Agent profile used by this server (required in both transports).
-        #[arg(long)]
-        agent: Option<String>,
-        /// Run the MCP protocol over stdin/stdout.
-        #[arg(long)]
-        stdio: bool,
-        /// Bind address for HTTP mode (remote binds require TLS).
-        #[arg(long, default_value = "127.0.0.1")]
-        bind: String,
-        /// Server port.
-        #[arg(long, default_value_t = 8080)]
-        port: u16,
-        /// PEM TLS certificate file path.
-        #[arg(long, default_value = "")]
-        tls_cert: String,
-        /// PEM TLS private key file path.
-        #[arg(long, default_value = "")]
-        tls_key: String,
-        /// PEM client CA file path; enables mandatory mTLS.
-        #[arg(long, default_value = "")]
-        tls_ca: String,
-        /// Permit a locked vault (unsupported by the native runtime).
-        #[arg(long)]
-        allow_locked: bool,
+        #[command(flatten)]
+        flags: McpFlags,
     },
     /// Install MCP server as a background service.
     Install,
@@ -611,25 +604,35 @@ enum McpAction {
     },
 }
 
-/// Subcommands the port implements under the deprecated `serve` parent.
-///
-/// The oracle's `serve` also owns `install`, `status`, `uninstall` and the
-/// bare server itself; those stay unported with the HTTP/service runtime, so
-/// they are deliberately absent here (see `deprecated_stubs`).
-#[derive(Debug, Subcommand)]
-enum ServeAction {
-    /// Deprecated: use `symvault agent token <action> <name>`.
-    ///
-    /// Deliberately a catch-all instead of clap subcommands, mirroring
-    /// `McpAction::Token`: the oracle shares one `newMcpTokenCmd()` between
-    /// the `mcp` and `serve` parents, so `serve token <unknown>` still runs
-    /// the group handler and the words after `token` are dispatched in
-    /// `deprecated_stubs::serve_token`.
-    #[command(hide = true)]
-    Token {
-        #[arg(value_name = "ARGS", num_args = 0..)]
-        args: Vec<String>,
-    },
+/// One argument boundary for canonical and deprecated MCP launch commands.
+#[derive(Debug, Args)]
+struct McpFlags {
+    #[arg(long)]
+    agent: Option<String>,
+    #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+    stdio: bool,
+    #[arg(long, default_value = "127.0.0.1")]
+    bind: String,
+    #[arg(long, default_value_t = 8080, allow_hyphen_values = true)]
+    port: i64,
+    #[arg(long, default_value = "")]
+    tls_cert: String,
+    #[arg(long, default_value = "")]
+    tls_key: String,
+    #[arg(long, default_value = "")]
+    tls_ca: String,
+    #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+    allow_locked: bool,
+}
+
+fn parse_mcp_bool(value: &str) -> Result<bool, String> {
+    match value {
+        "1" | "t" | "T" | "true" | "TRUE" | "True" => Ok(true),
+        "0" | "f" | "F" | "false" | "FALSE" | "False" => Ok(false),
+        _ => Err(format!("invalid boolean value {value:?}")),
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -1181,6 +1184,9 @@ fn main() -> ExitCode {
 
 fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
+    if let Some(index) = completion_protocol::request_index(&args) {
+        return completion_protocol::run(&args, index);
+    }
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
     }
@@ -1207,6 +1213,45 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Intake { command, options }) => match command {
+            Some(IntakeCommand::Watch {
+                directory,
+                interval,
+                debounce,
+                once,
+                command,
+            }) => {
+                if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                    intake_commands::finish(intake_commands::disable(cli.quiet))
+                } else {
+                    let mut runtime = None;
+                    intake_commands::watch(
+                        directory.as_deref(),
+                        &interval,
+                        &debounce,
+                        once,
+                        cli.json,
+                        cli.quiet,
+                        || {
+                            let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())
+                                .map_err(|e| (6, e))?;
+                            require_initialized(&root).map_err(|e| (3, e))?;
+                            let runtime = runtime.get_or_insert_with(runtime_session_manager);
+                            let identity = device::unlock_vault_with_runtime(&root, runtime)
+                                .map_err(|e| (4, e))?;
+                            Ok((root, identity))
+                        },
+                    )
+                }
+            }
+            None => intake_commands::files(&options, cli.json, cli.quiet, || {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())
+                    .map_err(|e| (6, e))?;
+                require_initialized(&root).map_err(|e| (3, e))?;
+                let identity = device::unlock_vault(&root).map_err(|e| (4, e))?;
+                Ok((root, identity))
+            }),
+        },
         Some(Command::Completion {
             shell,
             no_descriptions,
@@ -2109,68 +2154,22 @@ fn run_cli() -> ExitCode {
                 }
             }
         }
-        Some(Command::Mcp {
+        Some(Command::Mcp { action, flags, .. }) => run_mcp_action(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
             action,
-            agent,
-            stdio,
-            bind,
-            port,
-            tls_cert,
-            tls_key,
-            tls_ca,
-            allow_locked,
-        }) => match action {
-            Some(McpAction::Install) => {
-                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Install)
-            }
-            Some(McpAction::Status) => {
-                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Status)
-            }
-            Some(McpAction::Uninstall) => {
-                run_mcp_service(cli.vault.as_deref(), cli.quiet, McpService::Uninstall)
-            }
-            Some(McpAction::Serve {
-                agent,
-                stdio,
-                bind,
-                port,
-                tls_cert,
-                tls_key,
-                tls_ca,
-                allow_locked,
-            }) => run_mcp(
-                cli.vault.as_deref(),
-                cli._profile.as_deref(),
-                agent.as_deref(),
-                stdio,
-                bind.as_str(),
-                port,
-                tls_cert.as_str(),
-                tls_key.as_str(),
-                tls_ca.as_str(),
-                allow_locked,
-                cli.quiet,
-            ),
-            None => run_mcp(
-                cli.vault.as_deref(),
-                cli._profile.as_deref(),
-                agent.as_deref(),
-                stdio,
-                bind.as_str(),
-                port,
-                tls_cert.as_str(),
-                tls_key.as_str(),
-                tls_ca.as_str(),
-                allow_locked,
-                cli.quiet,
-            ),
-            Some(McpAction::Token { args }) => {
-                deprecated_stub_message(deprecated_token_message(args.first().map(String::as_str)))
-            }
-        },
-        Some(Command::Serve {
-            action: ServeAction::Token { args },
-        }) => deprecated_stubs::serve_token(&args),
+            flags,
+            false,
+            cli.quiet,
+        ),
+        Some(Command::Serve { action, flags, .. }) => run_mcp_action(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            action,
+            flags,
+            true,
+            cli.quiet,
+        ),
         Some(Command::McpConfig { .. }) => deprecated_stub_message(DEPRECATED_MCP_CONFIG),
         Some(Command::McpTokenRotate { .. }) => {
             deprecated_stub_message(DEPRECATED_MCP_TOKEN_ROTATE)
@@ -4158,7 +4157,7 @@ fn println_quiet_aware(quiet: bool, line: &str) {
 fn service_config(warn: bool) -> Option<Config> {
     // The oracle reads `<home>/.symvault/config.yaml` (config.DefaultVaultSubdir),
     // not the XDG path, and only `install` reports a load failure.
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from)?;
+    let home = daemon_commands::home_dir()?;
     let config_path = home.join(".symvault").join("config.yaml");
     if let Err(error) = fs::read(&config_path) {
         if warn {
@@ -4176,6 +4175,13 @@ fn service_config(warn: bool) -> Option<Config> {
 /// Renders an io error the way Go's `*os.PathError` does ("no such file or
 /// directory", "permission denied", ...).
 fn go_io_reason(error: &std::io::Error) -> String {
+    #[cfg(windows)]
+    match error.raw_os_error() {
+        Some(2) => return "The system cannot find the file specified.".to_owned(),
+        Some(3) => return "The system cannot find the path specified.".to_owned(),
+        Some(5) => return "Access is denied.".to_owned(),
+        _ => {}
+    }
     match error.kind() {
         std::io::ErrorKind::NotFound => "no such file or directory".to_owned(),
         std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
@@ -4186,17 +4192,18 @@ fn go_io_reason(error: &std::io::Error) -> String {
 
 fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpService) -> ExitCode {
     let result = (|| {
-        let vault = resolve_vault(explicit_vault, None)?;
+        let vault = resolve_vault(explicit_vault, None).map_err(|error| {
+            symvault_core::error::CliError::new(symvault_core::error::ExitCode::Config, error, None)
+        })?;
         let config = service_config(matches!(action, McpService::Install));
         let (port, bind) = match config.as_ref().and_then(|cfg| cfg.mcp.as_ref()) {
             Some(mcp) => (Some(mcp.port), Some(mcp.bind.as_str())),
             None => (None, None),
         };
-        let installer = daemon_commands::Installer::new(&vault, port, bind)
-            .map_err(|error| error.formatted())?;
+        let installer = daemon_commands::Installer::new(&vault, port, bind)?;
         match action {
             McpService::Install => {
-                installer.install().map_err(|error| error.formatted())?;
+                installer.install()?;
                 println_quiet_aware(quiet, "Service installed successfully.");
                 if let Ok(path) = installer.service_file_path() {
                     println!("  Service file: {}", path.display());
@@ -4206,12 +4213,12 @@ fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpServic
                 println!("  Vault:        {}", installer.vault_dir().display());
             }
             McpService::Uninstall => {
-                installer.uninstall().map_err(|error| error.formatted())?;
+                installer.uninstall()?;
                 println_quiet_aware(quiet, "Service uninstalled successfully.");
             }
             McpService::Status => {
-                let status = installer.status().map_err(|error| error.formatted())?;
-                println_quiet_aware(quiet, &format!("Status: {status}"));
+                let status = installer.status()?;
+                println!("Status: {status}");
                 if let Ok(path) = installer.service_file_path() {
                     println!("  Service file: {}", path.display());
                 }
@@ -4220,9 +4227,55 @@ fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpServic
                 println!("  Vault:        {}", installer.vault_dir().display());
             }
         }
-        Ok(())
+        Ok::<(), symvault_core::error::CliError>(())
     })();
-    finish_vault_result(result)
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            print_error_like_go(&error.formatted());
+            ExitCode::from(error.code().value())
+        }
+    }
+}
+
+fn run_mcp_action(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    action: Option<McpAction>,
+    flags: McpFlags,
+    deprecated: bool,
+    quiet: bool,
+) -> ExitCode {
+    let flags = match action {
+        Some(McpAction::Install) => {
+            return run_mcp_service(explicit_vault, quiet, McpService::Install);
+        }
+        Some(McpAction::Status) => {
+            return run_mcp_service(explicit_vault, quiet, McpService::Status);
+        }
+        Some(McpAction::Uninstall) => {
+            return run_mcp_service(explicit_vault, quiet, McpService::Uninstall);
+        }
+        Some(McpAction::Token { args }) => return deprecated_stubs::serve_token(&args),
+        Some(McpAction::Serve { flags }) => flags,
+        None => flags,
+    };
+    if deprecated {
+        eprintln!("Warning: 'symvault serve' is deprecated, use 'symvault mcp' instead.");
+    }
+    run_mcp(
+        explicit_vault,
+        profile,
+        flags.agent.as_deref(),
+        flags.stdio,
+        &flags.bind,
+        flags.port,
+        &flags.tls_cert,
+        &flags.tls_key,
+        &flags.tls_ca,
+        flags.allow_locked,
+        quiet,
+    )
 }
 
 #[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
@@ -4232,7 +4285,7 @@ fn run_mcp(
     agent: Option<&str>,
     stdio: bool,
     bind: &str,
-    port: u16,
+    port: i64,
     tls_cert: &str,
     tls_key: &str,
     tls_ca: &str,
@@ -4240,35 +4293,28 @@ fn run_mcp(
     _quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        if !stdio {
-            let bind_ip = if bind == "localhost" {
-                "127.0.0.1"
-                    .parse::<std::net::IpAddr>()
-                    .expect("literal loopback IP")
-            } else {
-                bind.parse::<std::net::IpAddr>()
-                    .map_err(|_| "native MCP HTTP --bind must be an IP address".to_owned())?
-            };
-            if bind_ip.is_unspecified() {
-                return Err(
-                    "native MCP HTTP wildcard binds are unavailable; choose a concrete IP"
-                        .to_owned(),
-                );
-            }
-        }
         if allow_locked && !stdio {
             return Err("--allow-locked is only supported in --stdio mode".to_owned());
         }
-        if allow_locked {
-            return Err("--allow-locked is not supported by the native MCP runtime".to_owned());
+        if bind.is_empty() {
+            return Err("--bind must not be empty; use '127.0.0.1' for localhost-only".to_owned());
         }
         let agent = agent.filter(|name| !name.is_empty());
         if stdio && agent.is_none() {
-            return Err("--agent is required for the native MCP stdio server".to_owned());
+            return Err("--agent is required in --stdio mode".to_owned());
         }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let identity = device::unlock_vault(&vault)?;
+        let identity = match device::unlock_vault_for_transport(&vault, !stdio) {
+            Ok(identity) => identity,
+            Err(error) if stdio && allow_locked && error.starts_with("vault locked:") => {
+                eprintln!(
+                    "Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools."
+                );
+                return mcp_commands::run_locked_stdio();
+            }
+            Err(error) => return Err(error),
+        };
         let runtime = runtime_session_manager();
         let keyring = runtime
             .keyring
@@ -4281,7 +4327,7 @@ fn run_mcp(
             keyring,
             stdio,
             bind,
-            port,
+            u16::try_from(port).unwrap_or(0),
             tls_cert,
             tls_key,
             tls_ca,
@@ -4295,8 +4341,41 @@ fn run_mcp(
                 )
             },
         )
+        .map_err(|error| {
+            if stdio {
+                format!("stdio server: {error}")
+            } else {
+                error
+            }
+        })
     })();
-    finish_vault_result(result)
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            print_error_like_go(&error);
+            if error.starts_with("vault not initialized") {
+                eprintln!(
+                    "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+                );
+                ExitCode::from(3)
+            } else if error.starts_with("vault locked:") {
+                if error
+                    .contains("SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled")
+                {
+                    eprintln!(
+                        "Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow SYMVAULT_PASSPHRASE for non-interactive use."
+                    );
+                } else {
+                    eprintln!(
+                        "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored."
+                    );
+                }
+                ExitCode::from(4)
+            } else {
+                ExitCode::from(1)
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
@@ -4638,6 +4717,16 @@ fn unlock_passphrase(
     vault: &Path,
     runtime: &RuntimeSession,
 ) -> Result<Zeroizing<String>, String> {
+    unlock_passphrase_with_mode(config_bytes, config, vault, runtime, true)
+}
+
+fn unlock_passphrase_with_mode(
+    config_bytes: &[u8],
+    config: &Config,
+    vault: &Path,
+    runtime: &RuntimeSession,
+    interactive: bool,
+) -> Result<Zeroizing<String>, String> {
     let vault_string = vault
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
@@ -4666,7 +4755,14 @@ fn unlock_passphrase(
             return Ok(Zeroizing::new(passphrase));
         }
     }
-    session_input::unlock_passphrase_for_session(config_bytes)
+    if interactive {
+        session_input::unlock_passphrase_for_session(config_bytes)
+    } else {
+        session_input::unlock_passphrase_noninteractive(
+            config_bytes,
+            runtime.cache_status().persistent,
+        )
+    }
 }
 
 fn run_auth_status(

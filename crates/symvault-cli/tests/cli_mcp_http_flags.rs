@@ -32,14 +32,54 @@ fn mcp_http_flags_match_go_surface_and_default_loopback() {
 #[test]
 fn mcp_http_rejects_wildcard_bind() {
     let binary = env!("CARGO_BIN_EXE_symvault");
-    let output = Command::new(binary)
+    let root = tempfile::tempdir().expect("private real-vault fixture");
+    let command = || {
+        let mut command = Command::new(binary);
+        for (key, _) in std::env::vars_os() {
+            if key.to_string_lossy().starts_with("SYMVAULT_") {
+                command.env_remove(key);
+            }
+        }
+        command
+            .current_dir(root.path())
+            .env("HOME", root.path())
+            .env("USERPROFILE", root.path())
+            .env("XDG_CONFIG_HOME", root.path().join("config"))
+            .env("XDG_DATA_HOME", root.path().join("data"))
+            .env("XDG_CACHE_HOME", root.path().join("cache"))
+            .env("SYMVAULT_VAULT", root.path().join("vault"))
+            .env("SYMVAULT_TEST_KEYRING", "memory")
+            .env("SYMVAULT_PASSPHRASE", "public-wildcard-fixture")
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+            .env("SYMVAULT_NO_ENV_WARNING", "1");
+        command
+    };
+    let missing = command()
         .args(["mcp", "--bind", "0.0.0.0"])
         .output()
-        .expect("run fail-closed MCP option");
+        .unwrap();
+    assert_eq!(
+        missing.status.code(),
+        Some(3),
+        "Go checks vault initialization before HTTP bootstrap"
+    );
+    let initialized = command()
+        .args(["init", "--auth", "passphrase"])
+        .output()
+        .unwrap();
+    assert!(
+        initialized.status.success(),
+        "initialize actual encrypted fixture: {:?}",
+        initialized.stderr
+    );
+    let output = command()
+        .args(["mcp", "--bind", "0.0.0.0"])
+        .output()
+        .expect("run fail-closed MCP runtime");
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("native MCP HTTP wildcard binds are unavailable; choose a concrete IP"),
+        stderr.contains("MCP HTTP wildcard binds are unavailable; choose a concrete IP"),
         "unexpected error: {stderr}"
     );
 }

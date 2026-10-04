@@ -144,27 +144,11 @@ fn home_dir_error_message() -> &'static str {
     }
 }
 
-/// Mirrors Go's `os.UserHomeDir`: `$HOME` on unix, `%USERPROFILE%` (with the
-/// `HOMEDRIVE`+`HOMEPATH` fallback) on Windows.
-fn home_dir() -> Option<PathBuf> {
-    if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(home));
-    }
-    #[cfg(windows)]
-    {
-        if let Some(profile) = env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
-            return Some(PathBuf::from(profile));
-        }
-        if let (Some(drive), Some(path)) = (env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH"))
-            && !drive.is_empty()
-            && !path.is_empty()
-        {
-            let mut joined = PathBuf::from(drive);
-            joined.push(path);
-            return Some(joined);
-        }
-    }
-    None
+/// Mirrors Go's os.UserHomeDir: HOME on Unix, USERPROFILE on Windows.
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Characters rejected before any template rendering (oracle
@@ -428,7 +412,10 @@ impl Installer {
                     return Err(CliError::new(
                         ExitCode::General,
                         format!("{}: {}", label, combined_output(&output).trim()),
-                        None,
+                        Some(ErrorCause::new(
+                            CauseKind::Other,
+                            format!("exit status {}", output.status.code().unwrap_or(-1)),
+                        )),
                     ));
                 }
                 Err(err) => {
@@ -458,8 +445,7 @@ impl Installer {
             .map_err(|err| err.message().to_string())?;
 
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir).map_err(|err| format!("create directory: {err}"))?;
-            set_mode(dir, 0o700);
+            create_private_directories(dir).map_err(|err| format!("create directory: {err}"))?;
         }
         fs::write(path, render_systemd_unit(self))
             .map_err(|err| format!("write service file: {err}"))?;
@@ -478,7 +464,7 @@ impl Installer {
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
 
         if let Some(dir) = plist_path.parent() {
-            fs::create_dir_all(dir).map_err(|err| {
+            create_private_directories(dir).map_err(|err| {
                 CliError::new(
                     ExitCode::General,
                     "create directory",
@@ -487,7 +473,7 @@ impl Installer {
             })?;
         }
         if let Some(dir) = self.log_path.parent() {
-            fs::create_dir_all(dir).map_err(|err| {
+            create_private_directories(dir).map_err(|err| {
                 CliError::new(
                     ExitCode::General,
                     "create log directory",
@@ -514,7 +500,10 @@ impl Installer {
                     Err(CliError::new(
                         ExitCode::General,
                         format!("failed to load launchd service: {}", combined.trim()),
-                        None,
+                        Some(ErrorCause::new(
+                            CauseKind::Other,
+                            format!("exit status {}", output.status.code().unwrap_or(-1)),
+                        )),
                     ))
                 }
             }
@@ -646,6 +635,17 @@ fn combined_output(output: &std::process::Output) -> String {
     let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
     combined.push_str(&String::from_utf8_lossy(&output.stderr));
     combined
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn create_private_directories(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    // Like Go's MkdirAll(0700), apply private permissions to every newly
+    // created ancestor without changing an existing operator directory.
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(path)
 }
 
 fn set_mode(path: &Path, mode: u32) {
