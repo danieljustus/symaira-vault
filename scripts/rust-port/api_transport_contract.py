@@ -189,6 +189,10 @@ def execute(binary, spec, home, is_go, cancel_event=None):
     spec_path = home.parent / (home.name + '-spec.json')
     spec_path.write_text(json.dumps(spec))
     env = fixture_env(home, spec_path)
+    if is_go:
+        # The immutable server package's TestMain requires explicit native
+        # Windows cross-language opt-in; otherwise it exits without m.Run.
+        env['SYMVAULT_RUN_WINDOWS_CROSSLANG'] = '1'
     argv = [str(binary), '-test.run=^TestAPITransportNativeProbe$'] if is_go else [str(binary), str(spec_path)]
     process = subprocess.Popen(argv, cwd=home, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     started = time.monotonic()

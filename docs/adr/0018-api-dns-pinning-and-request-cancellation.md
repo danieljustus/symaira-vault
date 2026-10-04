@@ -120,3 +120,15 @@ ConnectionReset in that regression, retaining the required successful body
 progress, timeout diagnostic, joined upstream and sub-second deadline. Do not
 accept arbitrary socket errors, increase the deadline or remove the control.
 Retain the failed native artifact and require fresh current-head native proof.
+
+The subsequent Windows owning suite passes, but the Go certificate probe exits
+zero with empty stdout and no observations. The strict recorder rejects it.
+The retained oracle's server TestMain historically returns without m.Run on
+Windows unless SYMVAULT_RUN_WINDOWS_CROSSLANG=1. Set that existing explicit opt-in
+only in the disposable Go test process. Keep the exact PASS output, actual
+result-file, DNS/socket and all eight-case assertions; a zero-case exit is never
+acceptance. Retain the failed artifact and require the real Windows rerun.
+
+Integrate ADR 0020's verified native Mac image and actual Darwin/arm64 assertion
+into the API and all inherited acceptance workflows. Each current head still
+requires fresh native evidence; the runner routing itself proves no API case.
