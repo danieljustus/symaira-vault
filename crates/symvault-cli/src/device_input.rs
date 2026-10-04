@@ -84,6 +84,21 @@ pub(crate) fn env_passphrase_selected(bytes: &[u8]) -> bool {
 }
 
 pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<String>, String> {
+    unlock_passphrase_with_mode(bytes, true, false)
+}
+
+pub(crate) fn unlock_passphrase_noninteractive(
+    bytes: &[u8],
+    persistent: bool,
+) -> Result<Zeroizing<String>, String> {
+    unlock_passphrase_with_mode(bytes, false, persistent)
+}
+
+fn unlock_passphrase_with_mode(
+    bytes: &[u8],
+    interactive: bool,
+    persistent: bool,
+) -> Result<Zeroizing<String>, String> {
     let policy: UnlockPolicy =
         serde_yaml_ng::from_slice(bytes).map_err(|e| format!("parse unlock policy: {e}"))?;
     let policy = policy.security.unwrap_or_default();
@@ -94,7 +109,11 @@ pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<St
             if policy.disable_env_passphrase
                 || !(policy.allow_env_passphrase || matches!(opt_in.as_str(), "1" | "true" | "yes"))
             {
-                return Err("environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
+                return Err(if interactive {
+                    "environment passphrase is disabled; opt in with security.allow_env_passphrase or SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
+                } else {
+                    "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
+                }.to_owned());
             }
             if !QUIET.load(Ordering::Relaxed) {
                 eprintln!(
@@ -103,6 +122,12 @@ pub(crate) fn unlock_passphrase_for_session(bytes: &[u8]) -> Result<Zeroizing<St
             }
             return Ok(pass);
         }
+    }
+    if !interactive {
+        if persistent {
+            return Err("vault locked: run 'symvault unlock' first or enable Touch ID with 'symvault auth set touchid' (for headless/CI see security.allow_env_passphrase)".to_owned());
+        }
+        return Err("vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1".to_owned());
     }
     read_passphrase("Enter passphrase: ")
 }

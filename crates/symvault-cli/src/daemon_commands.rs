@@ -144,27 +144,11 @@ fn home_dir_error_message() -> &'static str {
     }
 }
 
-/// Mirrors Go's `os.UserHomeDir`: `$HOME` on unix, `%USERPROFILE%` (with the
-/// `HOMEDRIVE`+`HOMEPATH` fallback) on Windows.
-fn home_dir() -> Option<PathBuf> {
-    if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(home));
-    }
-    #[cfg(windows)]
-    {
-        if let Some(profile) = env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
-            return Some(PathBuf::from(profile));
-        }
-        if let (Some(drive), Some(path)) = (env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH"))
-            && !drive.is_empty()
-            && !path.is_empty()
-        {
-            let mut joined = PathBuf::from(drive);
-            joined.push(path);
-            return Some(joined);
-        }
-    }
-    None
+/// Mirrors Go's os.UserHomeDir: HOME on Unix, USERPROFILE on Windows.
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Characters rejected before any template rendering (oracle

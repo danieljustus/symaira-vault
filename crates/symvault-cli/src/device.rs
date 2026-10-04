@@ -90,6 +90,14 @@ pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     unlock_vault_with_runtime(vault, &runtime)
 }
 
+pub(crate) fn unlock_vault_for_transport(
+    vault: &Path,
+    interactive: bool,
+) -> Result<Identity, String> {
+    let runtime = crate::runtime_session_manager();
+    unlock_vault_with_mode(vault, &runtime, interactive)
+}
+
 pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(), String> {
     let store = symvault_store::Store::open(vault, identity).map_err(|error| error.to_string())?;
     store
@@ -100,6 +108,14 @@ pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(
 fn unlock_vault_with_runtime(
     vault: &Path,
     runtime: &crate::RuntimeSession,
+) -> Result<Identity, String> {
+    unlock_vault_with_mode(vault, runtime, true)
+}
+
+fn unlock_vault_with_mode(
+    vault: &Path,
+    runtime: &crate::RuntimeSession,
+    interactive: bool,
 ) -> Result<Identity, String> {
     let vault_string = vault
         .to_str()
@@ -143,7 +159,8 @@ fn unlock_vault_with_runtime(
         return Ok(identity);
     }
 
-    let passphrase = crate::unlock_passphrase(&config_bytes, &config, vault, runtime)?;
+    let passphrase =
+        crate::unlock_passphrase_with_mode(&config_bytes, &config, vault, runtime, interactive)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
     let identity = decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))?;
     open_unlocked_vault(vault, &identity).map_err(|error| format!("open vault: {error}"))?;
