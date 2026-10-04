@@ -51,7 +51,7 @@ concurrency:
 jobs:
   native-policy:
     name: KDF policy (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -68,6 +68,15 @@ jobs:
       # The required named-test assertions below reject that false-green result.
       SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
     steps:
+      - name: Assert actual native macOS arm64
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = macOS
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          sw_vers
       - name: Checkout retained oracle history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
