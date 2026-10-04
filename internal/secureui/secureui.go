@@ -6,6 +6,7 @@
 package secureui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -39,6 +40,7 @@ func (c Capability) String() string {
 // PromptRequest describes a request for secure user input. Title/Path/Field/
 // Description are shown to the user. The returned value is never logged.
 type PromptRequest struct {
+	Context     context.Context
 	Title       string
 	Path        string
 	Field       string
@@ -64,6 +66,9 @@ func Detect() Capability {
 // Prompt asks the user for sensitive data using the best available backend.
 // The returned value is never logged or written to the server's stdout.
 func Prompt(req PromptRequest) (string, error) {
+	if req.Context != nil && req.Context.Err() != nil {
+		return "", req.Context.Err()
+	}
 	if req.Timeout <= 0 {
 		req.Timeout = defaultTimeout
 	}
@@ -72,6 +77,9 @@ func Prompt(req PromptRequest) (string, error) {
 		return "", ErrUnavailable
 	}
 	value, err := b.prompt(req)
+	if req.Context != nil && req.Context.Err() != nil {
+		return "", req.Context.Err()
+	}
 	if err != nil {
 		return "", err
 	}
@@ -83,6 +91,7 @@ func Prompt(req PromptRequest) (string, error) {
 
 // ApprovalRequest describes a request for user approval of a sensitive operation.
 type ApprovalRequest struct {
+	Context context.Context
 	// Operation is the name of the operation being approved (e.g., "set_entry_field").
 	Operation string
 	// Details is a human-readable description of what the operation does.
@@ -103,6 +112,9 @@ type ApprovalResult struct {
 // the best available backend (TTY or GUI). Returns the approval result or
 // ErrUnavailable if no backend is available.
 func PromptApproval(req ApprovalRequest) (ApprovalResult, error) {
+	if req.Context != nil && req.Context.Err() != nil {
+		return ApprovalResult{}, req.Context.Err()
+	}
 	if req.Timeout <= 0 {
 		req.Timeout = defaultTimeout
 	}
@@ -132,7 +144,7 @@ func promptApprovalTTY(req ApprovalRequest) (ApprovalResult, error) {
 		}
 	}
 
-	response, rerr := readTTY(dev, req.Timeout)
+	response, rerr := readTTYContext(req.Context, dev, req.Timeout)
 	if rerr != nil {
 		if errors.Is(rerr, ErrCanceled) {
 			return ApprovalResult{}, ErrCanceled
@@ -170,6 +182,7 @@ func promptApprovalGUI(req ApprovalRequest) (ApprovalResult, error) {
 	// For GUI, we use the existing prompt function with a special request
 	// that asks for "y" or "n" input instead of a secret value.
 	guiReq := PromptRequest{
+		Context:     req.Context,
 		Title:       "Symaira Vault: Approval Required",
 		Description: buildApprovalDescription(req),
 		Hidden:      false,
@@ -177,6 +190,9 @@ func promptApprovalGUI(req ApprovalRequest) (ApprovalResult, error) {
 	}
 
 	value, err := b.prompt(guiReq)
+	if req.Context != nil && req.Context.Err() != nil {
+		return ApprovalResult{}, req.Context.Err()
+	}
 	if err != nil {
 		return ApprovalResult{}, err
 	}

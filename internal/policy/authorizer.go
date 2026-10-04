@@ -107,6 +107,9 @@ const (
 )
 
 func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool, approved bool) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if path == "" {
 		return errors.New("empty path")
 	}
@@ -144,6 +147,9 @@ func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool,
 		return fmt.Errorf("write to %q requires approval", path)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	a.logAudit(ctx, actionType, path, approved)
 	if write && approved {
 		metrics.RecordApproval(a.config.AgentName, "granted")
@@ -169,6 +175,12 @@ func (a *authorizerImpl) promptApproval(ctx context.Context, path string) error 
 	a.logAudit(ctx, "approval_prompted", path, false)
 
 	outcome, err := a.approvalQueue.Wait(ctx, id)
+	if canceled := ctx.Err(); canceled != nil {
+		// This request belongs to this authorization call. Retire pending
+		// consent; an affirmative reply racing cancellation cannot grant.
+		_, _ = a.approvalQueue.Deny(id, "request canceled")
+		err = canceled
+	}
 	if err != nil {
 		// Context deadline/cancel while waiting: audit as unresolved.
 		a.logAudit(ctx, "approval_timeout", path, false)

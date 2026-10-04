@@ -19,6 +19,7 @@ func newTestServer(t *testing.T, profile config.AgentProfile, transport string) 
 	if err != nil {
 		t.Fatalf("audit.New() error = %v", err)
 	}
+	t.Cleanup(func() { _ = auditLog.Close() })
 
 	v := &vault.Vault{}
 	srv := &Server{

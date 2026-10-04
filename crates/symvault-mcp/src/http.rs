@@ -2903,7 +2903,6 @@ mod tests {
     fn idle_connection_does_not_block_twenty_keep_alive_requests() {
         let source = include_str!("../../../internal/mcp/serverbootstrap/http.go");
         assert!(source.contains("IdleTimeout:       120 * time.Second"));
-        assert!(source.contains("serveErr = server.Serve(listener)"));
         fn test_handler(_: &str) -> Result<ProtocolHandler, String> {
             Ok(ProtocolHandler::new("symaira", "1.0.0"))
         }

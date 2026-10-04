@@ -22,19 +22,44 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "21f849ee"
+	pinnedOracleCommit  = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 	pinnedOracleRelease = "unreleased"
 )
 
 var productionSources = []string{
+	"internal/clipboard/clipboard.go",
+	"internal/clipboard/clipboard_signal_unix.go",
+	"internal/clipboard/clipboard_signal_windows.go",
+	"internal/clipboard/interface.go",
+	"internal/clipboard/null_clipboard.go",
+	"internal/clipboard/provider.go",
+	"internal/clipboard/system_clipboard.go",
 	"internal/config/config.go",
 	"internal/config/config_load.go",
 	"internal/config/config_merge.go",
 	"internal/config/config_save.go",
 	"internal/config/config_validate.go",
+	"internal/config/dottedpath.go",
+	"internal/config/migrate.go",
+	"internal/config/migrate_copy_unix.go",
+	"internal/config/migrate_copy_windows.go",
+	"internal/config/migrate_source_unix.go",
+	"internal/config/migrate_source_windows.go",
 	"internal/config/paths.go",
 	"internal/config/presets.go",
-	"internal/clipboard/clipboard.go",
+	"internal/config/schema.go",
+	"internal/config/warn.go",
+	"internal/secureui/backend.go",
+	"internal/secureui/backend_darwin.go",
+	"internal/secureui/backend_other.go",
+	"internal/secureui/backend_tty.go",
+	"internal/secureui/backend_unix.go",
+	"internal/secureui/backend_windows.go",
+	"internal/secureui/capslock.go",
+	"internal/secureui/capslock_darwin.go",
+	"internal/secureui/capslock_linux.go",
+	"internal/secureui/capslock_other.go",
+	"internal/secureui/runner.go",
 	"internal/secureui/secureui.go",
 }
 
