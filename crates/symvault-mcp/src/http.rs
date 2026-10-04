@@ -3,7 +3,7 @@
 //! checks and response framing for bounded HTTP/1.x connections.
 
 #[path = "http_shutdown.rs"]
-mod shutdown;
+pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
 use crate::approval::{ApprovalQueue, handle_local_request};
@@ -17,6 +17,7 @@ use rustls::{
 };
 use serde::Deserialize;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     fs,
     io::{BufRead, BufReader, Read, Write},
@@ -27,7 +28,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub struct HttpRequest<'a> {
@@ -46,19 +47,115 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
 }
 
-enum HttpStream {
-    Tcp(TcpStream, Option<HttpShutdown>),
-    Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
+struct HttpStream {
+    transport: HttpTransport,
+    head_response: bool,
+    http10_response: bool,
+}
+
+enum HttpTransport {
+    Tcp(ReadDeadlineSocket, Option<HttpShutdown>),
+    Tls(Box<StreamOwned<ServerConnection, ReadDeadlineSocket>>),
+}
+
+struct ReadDeadlineSocket {
+    stream: TcpStream,
+    configured_timeout: Cell<Option<Duration>>,
+    deadline: Cell<Option<Instant>>,
+}
+
+impl ReadDeadlineSocket {
+    fn new(stream: TcpStream) -> Self {
+        Self {
+            stream,
+            configured_timeout: Cell::new(None),
+            deadline: Cell::new(None),
+        }
+    }
+
+    fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        self.stream.peer_addr()
+    }
+
+    fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        self.stream.local_addr()
+    }
+
+    fn set_nonblocking(&self, value: bool) -> Result<(), std::io::Error> {
+        self.stream.set_nonblocking(value)
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        self.stream.set_read_timeout(timeout)?;
+        self.configured_timeout.set(timeout);
+        Ok(())
+    }
+
+    fn read_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
+        Ok(self.configured_timeout.get())
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        self.stream.set_write_timeout(timeout)
+    }
+
+    fn write_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
+        self.stream.write_timeout()
+    }
+}
+
+impl Read for ReadDeadlineSocket {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let timeout = match self.deadline.get() {
+            Some(deadline) => {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|remaining| !remaining.is_zero())
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::TimedOut, "HTTP read deadline")
+                    })?;
+                Some(
+                    self.configured_timeout
+                        .get()
+                        .map_or(remaining, |timeout| timeout.min(remaining)),
+                )
+            }
+            None => self.configured_timeout.get(),
+        };
+        self.stream.set_read_timeout(timeout)?;
+        self.stream.read(buffer)
+    }
+}
+
+impl Write for ReadDeadlineSocket {
+    fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
+        self.stream.write(buffer)
+    }
+
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        self.stream.flush()
+    }
 }
 
 impl HttpStream {
     fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
-        let stream = match tls {
+        let stream = ReadDeadlineSocket::new(stream);
+        let transport = match tls {
             Some(config) => ServerConnection::new(config)
-                .map(|connection| Self::Tls(Box::new(StreamOwned::new(connection, stream))))
+                .map(|connection| {
+                    HttpTransport::Tls(Box::new(StreamOwned::new(connection, stream)))
+                })
                 .map_err(std::io::Error::other),
-            None => Ok(Self::Tcp(stream, None)),
+            None => Ok(HttpTransport::Tcp(stream, None)),
         }?;
+        let stream = Self {
+            transport,
+            head_response: false,
+            http10_response: false,
+        };
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
         stream.set_write_timeout(Some(timeouts.write))?;
@@ -66,71 +163,89 @@ impl HttpStream {
     }
 
     fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.peer_addr(),
-            Self::Tls(stream) => stream.sock.peer_addr(),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.peer_addr(),
+            HttpTransport::Tls(stream) => stream.sock.peer_addr(),
         }
     }
 
     fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.local_addr(),
-            Self::Tls(stream) => stream.sock.local_addr(),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.local_addr(),
+            HttpTransport::Tls(stream) => stream.sock.local_addr(),
         }
     }
 
     fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.set_read_timeout(timeout),
-            Self::Tls(stream) => stream.sock.set_read_timeout(timeout),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.set_read_timeout(timeout),
+            HttpTransport::Tls(stream) => stream.sock.set_read_timeout(timeout),
         }
     }
 
     fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.set_write_timeout(timeout),
-            Self::Tls(stream) => stream.sock.set_write_timeout(timeout),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.set_write_timeout(timeout),
+            HttpTransport::Tls(stream) => stream.sock.set_write_timeout(timeout),
         }
     }
 
     fn is_tls(&self) -> bool {
-        matches!(self, Self::Tls(_))
+        matches!(&self.transport, HttpTransport::Tls(_))
+    }
+
+    fn set_read_deadline(&self, deadline: Option<Instant>) {
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.deadline.set(deadline),
+            HttpTransport::Tls(stream) => stream.sock.deadline.set(deadline),
+        }
+    }
+
+    fn read_deadline(&self) -> Option<Instant> {
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.deadline.get(),
+            HttpTransport::Tls(stream) => stream.sock.deadline.get(),
+        }
     }
 }
 
 impl From<TcpStream> for HttpStream {
     fn from(stream: TcpStream) -> Self {
-        Self::Tcp(stream, None)
+        Self {
+            transport: HttpTransport::Tcp(ReadDeadlineSocket::new(stream), None),
+            head_response: false,
+            http10_response: false,
+        }
     }
 }
 
 impl Read for HttpStream {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
-        match self {
-            Self::Tcp(stream, Some(shutdown)) => {
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, Some(shutdown)) => {
                 shutdown.socket_io(stream.read_timeout()?, || stream.read(buffer))
             }
-            Self::Tcp(stream, None) => stream.read(buffer),
-            Self::Tls(stream) => stream.read(buffer),
+            HttpTransport::Tcp(stream, None) => stream.read(buffer),
+            HttpTransport::Tls(stream) => stream.read(buffer),
         }
     }
 }
 
 impl Write for HttpStream {
     fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
-        match self {
-            Self::Tcp(stream, Some(shutdown)) => {
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, Some(shutdown)) => {
                 shutdown.socket_io(stream.write_timeout()?, || stream.write(buffer))
             }
-            Self::Tcp(stream, None) => stream.write(buffer),
-            Self::Tls(stream) => stream.write(buffer),
+            HttpTransport::Tcp(stream, None) => stream.write(buffer),
+            HttpTransport::Tls(stream) => stream.write(buffer),
         }
     }
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.flush(),
-            Self::Tls(stream) => stream.flush(),
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, _) => stream.flush(),
+            HttpTransport::Tls(stream) => stream.flush(),
         }
     }
 }
@@ -218,6 +333,8 @@ impl LocalApprovalApi {
 }
 
 const MAX_HTTP_HEADERS: usize = 16 * 1024;
+const MAX_HTTP_CHUNK_LINE: usize = 4096;
+const MAX_HTTP_CHUNK_OVERHEAD: usize = 16 * 1024;
 const MAX_HTTP_BODY: usize = 1_048_576;
 const MAX_HTTP_SESSIONS: usize = 256;
 const MAX_HTTP_REQUEST_LINE: usize = 8 * 1024;
@@ -237,9 +354,9 @@ struct HttpTimeouts {
 impl Default for HttpTimeouts {
     fn default() -> Self {
         Self {
-            // Keep the existing 10-second bounded request-read behavior;
-            // only an idle keep-alive wait adopts Go's longer idle timeout.
-            initial_read: Duration::from_secs(10),
+            // Match Go's five-second initial/header admission wait. Body reads
+            // retain ten seconds; an idle keep-alive has its separate bound.
+            initial_read: Duration::from_secs(5),
             request_read: Duration::from_secs(10),
             keep_alive_idle: Duration::from_secs(120),
             write: Duration::from_secs(10),
@@ -367,6 +484,51 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_loopback_with_oauth_and_approval_ttls(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        local_approval_api,
+        OAuthTokenTtls::default(),
+    )
+}
+
+/// Positive OAuth lifetimes supplied by the owning CLI/config boundary.
+#[derive(Clone, Copy, Debug)]
+pub struct OAuthTokenTtls {
+    pub access_token_ttl: Duration,
+    pub refresh_token_ttl: Duration,
+}
+
+impl Default for OAuthTokenTtls {
+    fn default() -> Self {
+        Self {
+            access_token_ttl: Duration::from_secs(24 * 60 * 60),
+            refresh_token_ttl: Duration::from_secs(720 * 60 * 60),
+        }
+    }
+}
+
+/// Loopback MCP/OAuth/approval with explicit bounded token lifetimes.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_loopback_with_oauth_and_approval_ttls<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    local_approval_api: LocalApprovalApi,
+    token_ttls: OAuthTokenTtls,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let root = registry_path
         .as_ref()
         .parent()
@@ -376,12 +538,15 @@ where
         listener,
         registry_path.as_ref(),
         handler_for_agent,
-        Some(crate::oauth::OAuthState::new(
-            root,
-            oauth_agent_name.into(),
-            Box::new(consent),
-            Box::new(verify_passphrase),
-        )),
+        Some(
+            crate::oauth::OAuthState::new(
+                root,
+                oauth_agent_name.into(),
+                Box::new(consent),
+                Box::new(verify_passphrase),
+            )
+            .with_token_ttls(token_ttls)?,
+        ),
         None,
         Some(Arc::new(local_approval_api)),
     )
@@ -404,6 +569,37 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_with_tls_oauth_and_approval_ttls(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        tls,
+        local_approval_api,
+        OAuthTokenTtls::default(),
+    )
+}
+
+/// TLS MCP/OAuth/approval with explicit bounded token lifetimes.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_tls_oauth_and_approval_ttls<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Arc<ServerConfig>,
+    local_approval_api: LocalApprovalApi,
+    token_ttls: OAuthTokenTtls,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let root = registry_path
         .as_ref()
         .parent()
@@ -413,12 +609,15 @@ where
         listener,
         registry_path.as_ref(),
         handler_for_agent,
-        Some(crate::oauth::OAuthState::new(
-            root,
-            oauth_agent_name.into(),
-            Box::new(consent),
-            Box::new(verify_passphrase),
-        )),
+        Some(
+            crate::oauth::OAuthState::new(
+                root,
+                oauth_agent_name.into(),
+                Box::new(consent),
+                Box::new(verify_passphrase),
+            )
+            .with_token_ttls(token_ttls)?,
+        ),
         Some(tls),
         Some(Arc::new(local_approval_api)),
     )
@@ -530,8 +729,8 @@ where
             // clone can fail with EINVAL even though cancellation succeeded.
             let cancellation_socket = shutdown.as_ref().map(|_| socket.try_clone()).transpose()?;
             let mut stream = HttpStream::new(socket, tls.clone())?;
-            if let (HttpStream::Tcp(socket, cancellation), Some(shutdown)) =
-                (&mut stream, &shutdown)
+            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown)) =
+                (&mut stream.transport, &shutdown)
             {
                 socket.set_nonblocking(true)?;
                 *cancellation = Some(shutdown.clone());
@@ -724,11 +923,18 @@ where
             timeouts.keep_alive_idle
         };
         let request =
-            match read_wire_request(&mut reader, first_byte_timeout, timeouts.request_read) {
+            match read_wire_request(&mut reader, first_byte_timeout, timeouts, first_request) {
                 Ok(Some(request)) => request,
                 Ok(None) => return Ok(()),
                 Err(read_error) if read_error.kind() == std::io::ErrorKind::InvalidData => {
                     if read_error.to_string().contains("request body too large") {
+                        let response =
+                            error(413, None, error_code::PARSE_ERROR, "request body too large")
+                                .map_err(std::io::Error::other)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        return Ok(());
+                    }
+                    if read_error.to_string() == "invalid JSON" {
                         let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
                             .map_err(std::io::Error::other)?;
                         write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
@@ -823,6 +1029,22 @@ where
         )?;
         return Ok(keep_alive);
     }
+    if request.path.split('?').next() != Some("/mcp") {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: 404,
+                headers: vec![
+                    ("Content-Type", "text/plain; charset=utf-8"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                body: b"404 page not found\n".to_vec(),
+            },
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
     let _mcp_request = match local_approval {
         Some(local_approval) => match local_approval.try_acquire_mcp_request() {
             Some(request) => Some(request),
@@ -854,21 +1076,21 @@ where
             return Ok(keep_alive);
         }
     };
-    if !token.agent_name.is_empty() && token.agent_name != request.agent {
-        write_request_error(
-            stream,
-            403,
-            "forbidden: token agent does not match X-Symaira-Agent header",
-            response_version,
-            keep_alive,
-        )?;
-        return Ok(keep_alive);
-    }
     if request.agent.is_empty() {
         write_request_error(
             stream,
             403,
             "forbidden: missing X-Symaira-Agent header",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
+    if !token.agent_name.is_empty() && token.agent_name != request.agent {
+        write_request_error(
+            stream,
+            403,
+            "forbidden: token agent does not match X-Symaira-Agent header",
             response_version,
             keep_alive,
         )?;
@@ -972,16 +1194,31 @@ struct WireRequest {
 fn read_wire_request(
     reader: &mut BufReader<HttpStream>,
     first_byte_timeout: Duration,
-    request_read_timeout: Duration,
+    timeouts: HttpTimeouts,
+    first_request: bool,
 ) -> Result<Option<WireRequest>, std::io::Error> {
+    let waiting_started = Instant::now();
+    reader.get_mut().head_response = false;
+    reader.get_mut().http10_response = false;
     reader
         .get_mut()
         .set_read_timeout(Some(first_byte_timeout))?;
+    reader
+        .get_mut()
+        .set_read_deadline(waiting_started.checked_add(first_byte_timeout));
     let has_first_byte = !reader.fill_buf()?.is_empty();
+    let request_started = if first_request {
+        waiting_started
+    } else {
+        Instant::now()
+    };
     if has_first_byte {
         reader
             .get_mut()
-            .set_read_timeout(Some(request_read_timeout))?;
+            .set_read_timeout(Some(timeouts.initial_read))?;
+        reader.get_mut().set_read_deadline(
+            request_started.checked_add(timeouts.initial_read.min(timeouts.request_read)),
+        );
     }
     let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
@@ -991,6 +1228,8 @@ fn read_wire_request(
     let method = parts.next().unwrap_or_default();
     let path = parts.next().unwrap_or_default();
     let version = parts.next().unwrap_or_default();
+    reader.get_mut().head_response = method == "HEAD";
+    reader.get_mut().http10_response = version == "HTTP/1.0";
     if method.is_empty()
         || path.is_empty()
         || !matches!(version, "HTTP/1.0" | "HTTP/1.1")
@@ -1003,7 +1242,7 @@ fn read_wire_request(
     }
     let method = method.to_owned();
     let path = path.to_owned();
-    let mut headers = BTreeMap::new();
+    let mut headers: BTreeMap<String, String> = BTreeMap::new();
     let mut header_bytes = first.len();
     loop {
         let Some(line) = read_bounded_line(reader, MAX_HTTP_HEADERS)? else {
@@ -1033,33 +1272,67 @@ fn read_wire_request(
             return Err(invalid_http("invalid HTTP header value"));
         }
         let name = name.to_ascii_lowercase();
-        if headers
-            .insert(name, value.trim_matches([' ', '\t']).to_owned())
-            .is_some()
-        {
-            return Err(invalid_http("duplicate HTTP header"));
+        let value = value.trim_matches([' ', '\t']);
+        if let Some(previous) = headers.get_mut(&name) {
+            if name != "accept" {
+                return Err(invalid_http("duplicate HTTP header"));
+            }
+            previous.push(',');
+            previous.push_str(value);
+        } else {
+            headers.insert(name, value.to_owned());
         }
     }
     if headers.get("host").is_none_or(String::is_empty) {
         return Err(invalid_http("missing Host header"));
     }
-    if headers.contains_key("transfer-encoding") {
-        return Err(invalid_http("transfer encoding is unsupported"));
-    }
-    let length = match headers.get("content-length") {
-        Some(value) => value
-            .parse::<usize>()
-            .map_err(|_| invalid_http("invalid Content-Length"))?,
-        None => 0,
+    reader
+        .get_mut()
+        .set_read_timeout(Some(timeouts.request_read))?;
+    reader
+        .get_mut()
+        .set_read_deadline(request_started.checked_add(timeouts.request_read));
+    let body = if let Some(encoding) = headers.get("transfer-encoding") {
+        if version != "HTTP/1.1"
+            || !encoding.eq_ignore_ascii_case("chunked")
+            || headers.contains_key("content-length")
+        {
+            return Err(invalid_http("ambiguous or unsupported transfer encoding"));
+        }
+        read_chunked_body(reader)?
+    } else {
+        let length = match headers.get("content-length") {
+            Some(value) => value
+                .parse::<usize>()
+                .map_err(|_| invalid_http("invalid Content-Length"))?,
+            None => 0,
+        };
+        if length > MAX_HTTP_BODY {
+            // Retain at most the declared bound. An already-invalid JSON prefix is
+            // Go's 400; a bounded prefix that needs more input is the actual 413.
+            let mut prefix = vec![0; MAX_HTTP_BODY];
+            reader.read_exact(&mut prefix)?;
+            // Consume one lookahead byte, like Go's MaxBytesReader. In particular,
+            // the one-byte-over-limit response must not race an unread TCP byte.
+            let mut lookahead = [0; 1];
+            reader.read_exact(&mut lookahead)?;
+            let invalid = serde_json::from_slice::<Message>(&prefix)
+                .err()
+                .is_some_and(|error| !error.is_eof());
+            return Err(invalid_http(if invalid {
+                "invalid JSON"
+            } else {
+                "request body too large"
+            }));
+        }
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body)?;
+        body
     };
-    if length > MAX_HTTP_BODY {
-        return Err(invalid_http("request body too large"));
-    }
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body)?;
     let body = String::from_utf8(body).map_err(|_| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, "request body is not UTF-8")
     })?;
+    reader.get_mut().set_read_deadline(None);
     let get = |name: &str| headers.get(name).cloned().unwrap_or_default();
     Ok(Some(WireRequest {
         method,
@@ -1077,6 +1350,142 @@ fn read_wire_request(
         connection: get("connection"),
         body,
     }))
+}
+
+fn read_chunked_body(reader: &mut BufReader<HttpStream>) -> Result<Vec<u8>, std::io::Error> {
+    let mut body = Vec::new();
+    let mut excess = 0_usize;
+    loop {
+        let line = read_bounded_line(reader, MAX_HTTP_CHUNK_LINE)
+            .map_err(chunk_read_error)?
+            .ok_or_else(|| invalid_http("incomplete chunk header"))?;
+        let line = line
+            .strip_suffix(b"\r\n")
+            .ok_or_else(|| invalid_http("invalid chunk header terminator"))?;
+        let size = line
+            .trim_ascii_end()
+            .split(|byte| *byte == b';')
+            .next()
+            .unwrap_or_default();
+        if size.is_empty() || size.len() > 16 || !size.iter().all(u8::is_ascii_hexdigit) {
+            return Err(invalid_http("invalid chunk length"));
+        }
+        let size = u64::from_str_radix(
+            std::str::from_utf8(size).map_err(|_| invalid_http("invalid chunk length"))?,
+            16,
+        )
+        .map_err(|_| invalid_http("invalid chunk length"))?;
+        let size = usize::try_from(size).unwrap_or(usize::MAX);
+        excess = excess
+            .saturating_add(line.len().saturating_add(2))
+            .saturating_sub(16_usize.saturating_add(size.saturating_mul(2)));
+        if excess > MAX_HTTP_CHUNK_OVERHEAD {
+            return Err(invalid_http("excessive chunk overhead"));
+        }
+        if size == 0 {
+            break;
+        }
+        let retained = size.min(MAX_HTTP_BODY + 1 - body.len());
+        let offset = body.len();
+        body.resize(offset + retained, 0);
+        reader
+            .read_exact(&mut body[offset..])
+            .map_err(chunk_read_error)?;
+        if body.len() > MAX_HTTP_BODY {
+            // One bounded prefetch consumes a short chunk terminator/final
+            // chunk already sent by a just-over-limit peer. Closing with
+            // those bytes unread in the TCP receive queue can erase the 413
+            // response with a reset. Never drain an arbitrary oversized body.
+            let previous_timeout = match &reader.get_ref().transport {
+                HttpTransport::Tcp(socket, _) => socket.read_timeout()?,
+                HttpTransport::Tls(stream) => stream.sock.read_timeout()?,
+            };
+            reader
+                .get_mut()
+                .set_read_timeout(Some(Duration::from_millis(10)))?;
+            let previous_deadline = reader.get_ref().read_deadline();
+            let prefetch_deadline = Instant::now().checked_add(Duration::from_millis(10));
+            reader
+                .get_mut()
+                .set_read_deadline(match (previous_deadline, prefetch_deadline) {
+                    (Some(request), Some(prefetch)) => Some(request.min(prefetch)),
+                    (request, prefetch) => request.or(prefetch),
+                });
+            let _ = reader.fill_buf();
+            reader.get_mut().set_read_timeout(previous_timeout)?;
+            reader.get_mut().set_read_deadline(previous_deadline);
+            let invalid = serde_json::from_slice::<Message>(&body[..MAX_HTTP_BODY])
+                .err()
+                .is_some_and(|error| !error.is_eof());
+            return Err(invalid_http(if invalid {
+                "invalid JSON"
+            } else {
+                "request body too large"
+            }));
+        }
+        let mut terminator = [0; 2];
+        reader
+            .read_exact(&mut terminator)
+            .map_err(chunk_read_error)?;
+        if terminator != *b"\r\n" {
+            return Err(invalid_http("invalid chunk data terminator"));
+        }
+    }
+    let mut trailer_bytes = 0_usize;
+    loop {
+        let line = read_bounded_line(reader, MAX_HTTP_HEADERS)
+            .map_err(chunk_read_error)?
+            .ok_or_else(|| invalid_http("incomplete chunk trailers"))?;
+        trailer_bytes = trailer_bytes.saturating_add(line.len());
+        if trailer_bytes > MAX_HTTP_HEADERS {
+            return Err(invalid_http("chunk trailers too large"));
+        }
+        if line == b"\r\n" {
+            break;
+        }
+        let (name, value) = parse_crlf_line(&line)?
+            .split_once(':')
+            .ok_or_else(|| invalid_http("invalid chunk trailer"))?;
+        if name.is_empty()
+            || !name.bytes().all(is_http_token)
+            || value
+                .bytes()
+                .any(|byte| (byte < 0x20 && byte != b'\t') || byte == 0x7f)
+            || [
+                "host",
+                "authorization",
+                "origin",
+                "cookie",
+                "proxy-authorization",
+                "content-type",
+                "accept",
+                "mcp-protocol-version",
+                "connection",
+                "upgrade",
+                "trailer",
+                "te",
+                "content-length",
+                "transfer-encoding",
+                "x-symaira-agent",
+                "x-enroll-timestamp",
+                "x-enroll-proof",
+            ]
+            .iter()
+            .any(|forbidden| name.eq_ignore_ascii_case(forbidden))
+        {
+            return Err(invalid_http("invalid or security-sensitive chunk trailer"));
+        }
+        // Ordinary trailers are validated and discarded; they never replace
+        // the original route, authentication or enrollment metadata.
+    }
+    Ok(body)
+}
+
+fn chunk_read_error(error: std::io::Error) -> std::io::Error {
+    match error.kind() {
+        std::io::ErrorKind::UnexpectedEof => invalid_http("incomplete chunk framing"),
+        _ => error,
+    }
 }
 
 fn read_bounded_line<R: BufRead>(
@@ -1187,8 +1596,10 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
 }
 
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
-    let request_host = host_without_port(request_host);
-    if !loopback_host(request_host) {
+    let Some((request_host, _)) = validated_authority(request_host, 80) else {
+        return false;
+    };
+    if !loopback_host(&request_host) {
         return false;
     }
     if origin.trim().is_empty() {
@@ -1197,15 +1608,14 @@ pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };
-    if !matches!(scheme, "http" | "https")
-        || authority.is_empty()
-        || authority.contains('/')
-        || authority.contains('@')
-    {
+    let default_port = if scheme.eq_ignore_ascii_case("http") {
+        80
+    } else if scheme.eq_ignore_ascii_case("https") {
+        443
+    } else {
         return false;
-    }
-    let origin_host = host_without_port(authority);
-    loopback_host(origin_host)
+    };
+    validated_authority(authority, default_port).is_some_and(|(host, _)| loopback_host(&host))
 }
 
 pub(super) fn allowed_origin_for_transport(origin: &str, request_host: &str, secure: bool) -> bool {
@@ -1229,6 +1639,10 @@ pub(super) fn allowed_origin_for_transport(origin: &str, request_host: &str, sec
 }
 
 fn tls_authority(authority: &str) -> Option<(String, u16)> {
+    validated_authority(authority, 443)
+}
+
+fn validated_authority(authority: &str, default_port: u16) -> Option<(String, u16)> {
     if authority.is_empty()
         || authority.bytes().any(|byte| {
             byte <= 0x20 || byte >= 0x7f || matches!(byte, b'/' | b'\\' | b'@' | b'?' | b'#' | b'%')
@@ -1240,8 +1654,8 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
         let (host, suffix) = rest.split_once(']')?;
         let address = host.parse::<std::net::Ipv6Addr>().ok()?;
         let port = match suffix {
-            "" => 443,
-            suffix => suffix.strip_prefix(':')?.parse::<u16>().ok()?,
+            "" => default_port,
+            suffix => parse_http_port(suffix.strip_prefix(':')?)?,
         };
         (address.to_string(), port)
     } else {
@@ -1250,9 +1664,9 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
                 if host.contains(':') {
                     return None;
                 }
-                (host, port.parse::<u16>().ok()?)
+                (host, parse_http_port(port)?)
             }
-            None => (authority, 443),
+            None => (authority, default_port),
         };
         let host = if let Ok(address) = host.parse::<std::net::Ipv4Addr>() {
             address.to_string()
@@ -1278,21 +1692,24 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
     (port != 0).then_some((host, port))
 }
 
-fn host_without_port(authority: &str) -> &str {
-    if let Some(rest) = authority.strip_prefix('[') {
-        return rest.split_once(']').map(|(host, _)| host).unwrap_or("");
+fn parse_http_port(value: &str) -> Option<u16> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
     }
-    authority
-        .rsplit_once(':')
-        .filter(|(_, port)| port.parse::<u16>().is_ok())
-        .map_or(authority, |(host, _)| host)
+    value.parse::<u16>().ok().filter(|port| *port != 0)
 }
 
 fn loopback_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost")
-        || host
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
+        || host.parse::<IpAddr>().is_ok_and(|address| match address {
+            IpAddr::V4(address) => address.is_loopback(),
+            IpAddr::V6(address) => {
+                address.is_loopback()
+                    || address
+                        .to_ipv4_mapped()
+                        .is_some_and(|address| address.is_loopback())
+            }
+        })
 }
 
 fn write_http_response(
@@ -1312,19 +1729,39 @@ fn write_http_response(
         405 => "Method Not Allowed",
         406 => "Not Acceptable",
         409 => "Conflict",
-        413 => "Payload Too Large",
+        413 => "Request Entity Too Large",
         415 => "Unsupported Media Type",
         429 => "Too Many Requests",
         _ => "Internal Server Error",
     };
     write!(stream, "{version} {} {reason}\r\n", response.status)?;
-    for (name, value) in response.headers {
+    for (name, value) in &response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    let head_only = stream.head_response;
+    let chunked = !head_only && version == "HTTP/1.1" && response.body.len() > 2048;
+    if chunked {
+        stream.write_all(b"Transfer-Encoding: chunked\r\n")?;
+    } else if !(head_only
+        && response
+            .headers
+            .iter()
+            .any(|(name, value)| *name == "Content-Type" && value.starts_with("text/html")))
+    {
+        write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    }
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
-    stream.write_all(&response.body)
+    if head_only {
+        return Ok(());
+    }
+    if chunked {
+        write!(stream, "{:x}\r\n", response.body.len())?;
+        stream.write_all(&response.body)?;
+        stream.write_all(b"\r\n0\r\n\r\n")
+    } else {
+        stream.write_all(&response.body)
+    }
 }
 
 fn write_http_redirect(
@@ -1358,8 +1795,11 @@ fn well_known_response(
     local: std::net::SocketAddr,
     secure: bool,
 ) -> Option<HttpResponse> {
-    if request.method != "GET" || request.path != "/.well-known/oauth-protected-resource" {
+    if request.path.split('?').next() != Some("/.well-known/oauth-protected-resource") {
         return None;
+    }
+    if !matches!(request.method.as_str(), "GET" | "HEAD") {
+        return Some(method_not_allowed("GET, HEAD"));
     }
     let scheme = if secure { "https" } else { "http" };
     let resource = format!("{scheme}://{local}/mcp");
@@ -1375,6 +1815,18 @@ fn well_known_response(
         headers: vec![("Content-Type", "application/json")],
         body,
     })
+}
+
+pub(super) fn method_not_allowed(allow: &'static str) -> HttpResponse {
+    HttpResponse {
+        status: 405,
+        headers: vec![
+            ("Allow", allow),
+            ("Content-Type", "text/plain; charset=utf-8"),
+            ("X-Content-Type-Options", "nosniff"),
+        ],
+        body: b"Method Not Allowed\n".to_vec(),
+    }
 }
 
 fn write_plain_error(
@@ -1399,11 +1851,23 @@ fn write_http_error(
         503 => "Service Unavailable",
         _ => "Internal Server Error",
     };
+    let version = if stream.http10_response {
+        "HTTP/1.0"
+    } else {
+        "HTTP/1.1"
+    };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "{version} {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\n",
         body.len()
-    )
+    )?;
+    write_connection_header(stream, version, false)?;
+    stream.write_all(b"\r\n")?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 fn write_request_error(
@@ -1426,7 +1890,12 @@ fn write_request_error(
         body.len()
     )?;
     write_connection_header(stream, version, keep_alive)?;
-    write!(stream, "\r\n{body}")
+    stream.write_all(b"\r\n")?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 fn write_json_error_for_request(
@@ -1437,7 +1906,7 @@ fn write_json_error_for_request(
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let body = format!(
-        "{{\"jsonrpc\":\"2.0\",\"error\":{{\"code\":-32600,\"message\":{}}}}}\n",
+        "{{\"error\":{{\"message\":{},\"code\":-32600}},\"jsonrpc\":\"2.0\"}}\n",
         serde_json::to_string(message).unwrap_or_else(|_| "\"invalid request\"".into())
     );
     write!(
@@ -1446,7 +1915,12 @@ fn write_json_error_for_request(
         body.len()
     )?;
     write_connection_header(stream, version, keep_alive)?;
-    write!(stream, "\r\n{body}")
+    stream.write_all(b"\r\n")?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 /// Handles the initialize-sized `/mcp` HTTP slice using the shared JSON-RPC
@@ -1458,7 +1932,7 @@ pub fn handle_request(
     if request.method != "POST" {
         return error(405, None, error_code::INVALID_REQUEST, "method not allowed");
     }
-    if request.path != "/mcp" {
+    if request.path.split('?').next() != Some("/mcp") {
         return Ok(HttpResponse {
             status: 404,
             headers: vec![
@@ -1484,8 +1958,11 @@ pub fn handle_request(
             "Accept must include application/json and text/event-stream",
         );
     }
-    if request.body.len() > 1_048_576 {
+    if serde_json::from_str::<Message>(request.body).is_err() {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
+    }
+    if request.body.len() > MAX_HTTP_BODY {
+        return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
 
     let version = request.protocol_version.trim();
@@ -3516,6 +3993,53 @@ mod tests {
 
     #[test]
     fn loopback_listener_rejects_foreign_origin_before_authentication() {
+        for invalid in [
+            "http://[::1]public",
+            "http://[::1]:public",
+            "http://[::1]:",
+            "http://[::1]:0",
+            "http://[::1]:65536",
+            "http://[::1]:+80",
+            "http://[::1]:-1",
+            "http://[127.0.0.1]",
+            "http://localhost:",
+            "http://localhost:0",
+            "http://localhost:65536",
+            "http://localhost:+80",
+            "http://localhost:-1",
+            "http://localhost/path",
+            "http://localhost?public=fixture",
+            "http://localhost#public",
+            "http://foreign.example@localhost",
+            "ftp://localhost",
+        ] {
+            assert!(!allowed_origin(invalid, "127.0.0.1:8080"), "{invalid}");
+        }
+        for invalid in [
+            "[::1]public",
+            "[::1]:public",
+            "[::1]:",
+            "[::1]:0",
+            "[::1]:65536",
+            "[::1]:+80",
+            "[::1]:-1",
+            "[127.0.0.1]",
+            "localhost:",
+            "localhost:0",
+            "localhost:65536",
+            "localhost:+80",
+            "localhost:-1",
+        ] {
+            assert!(!allowed_origin("", invalid), "{invalid}");
+        }
+        for valid in [
+            "HTTP://LOCALHOST:8080",
+            "https://[::1]:8080",
+            "http://[::ffff:127.0.0.1]:8080",
+            "http://127.2.3.4:8080",
+        ] {
+            assert!(allowed_origin(valid, "[::ffff:127.0.0.1]:8080"), "{valid}");
+        }
         let response = round_trip(false, "https://attacker.example");
         assert!(
             response.starts_with("HTTP/1.1 403 Forbidden\r\n"),
