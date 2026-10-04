@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted maintainer-delegated decision, 2026-10-04. Implementation is in
-progress; issue #1238 and the complete IO-003 contract remain open.
+Accepted maintainer-delegated decision, 2026-10-04. Implementation and IO-003
+native acceptance passed on Linux, macOS and Windows. Repository integration
+is in progress; #1238 stays open until the ordinary gated merge.
 
 ## Decision and rationale
 
@@ -89,7 +90,21 @@ The Windows driver checks actual console membership before allocating a
 console: hosted runners can inherit an invisible console, for which a window
 handle is not an attachment test. It still requires successful delivery to the
 child's real process group and graceful exit; access errors are not ignored.
-IO-003 stays in_progress until those actual native jobs pass.
+IO-003 is PASS on the actual native workflow for PR head
+`a9eb56d11b28462314d9df8e1ed466ef3c354404`, run `37169427003`:
+
+| Native platform | Actual Go/Rust observations | Evidence |
+| --- | --- | --- |
+| Linux | 34 | [job 111339166033](https://github.com/danieljustus/symaira-vault/actions/runs/37169427003/job/111339166033) |
+| Windows | 33, including real console control | [job 111339165976](https://github.com/danieljustus/symaira-vault/actions/runs/37169427003/job/111339165976) |
+| macOS | 35, including the disposable disable path | [job 111339166078](https://github.com/danieljustus/symaira-vault/actions/runs/37169427003/job/111339166078) |
+
+The platform counts differ only for the explicit native signal/disable cases.
+All jobs execute real Go/Rust binaries and require clean source-bound receipts,
+named nonzero cases, owning Rust tests and the actual CLI gap report.
+The subsequent main integration preserves the intake implementation and brings
+in the separately accepted HTTP oracle correction from #1291; current-head
+repository gates must still pass before merging #1292.
 Polling is the oracle's native behavior; an OS event-watcher implementation is
 not an additional acceptance requirement. Broader platform UI and release gates
 are not promoted by these injected and disposable-root checks.
