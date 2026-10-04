@@ -50,3 +50,6 @@ x509-parser = "=0.18.1"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.4", features = ["event", "fs", "process", "termios"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
