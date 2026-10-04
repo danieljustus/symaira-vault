@@ -14,7 +14,9 @@ import tempfile
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
-PIN = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+# CLI manuals intentionally correct Markdown interpretation of dynamic paths.
+# The earlier oracle remains frozen in manual_path_probe.py and Git history.
+PIN = "5cf3da06f1750afad974f2b722734af52ce87362"
 ARTIFACT = ROOT / "testdata/port/cli/artifacts.json"
 PROBE = ROOT / "scripts/rust-port/cli_artifacts_probe.go.txt"
 BASH_COMPLETION_COMMIT = "79d225bad8939a3833314b5af93509131c03f2f8"
@@ -27,9 +29,27 @@ def write_utf8(path, text):
     path.write_bytes(text.encode('utf-8'))
 
 
+def literal_roff_text(text):
+    # Shared with the revised Go manual renderer and the standalone Rust CLI.
+    escapes = {'\a': 'a', '\b': 'b', '\t': 't', '\n': 'n', '\v': 'v', '\f': 'f', '\r': 'r'}
+    result = '\\&' if text.startswith(('.', "'")) else ''
+    for char in text:
+        code = ord(char)
+        if char == '\\':
+            result += '\\\\'
+        elif char in escapes:
+            result += '\\\\' + escapes[char]
+        elif code < 32 or code == 127:
+            result += f'\\\\x{code:02x}'
+        elif 128 <= code <= 159 or code in (0x2028, 0x2029):
+            result += f'\\\\u{code:04x}'
+        else:
+            result += char
+    return result
+
+
 def normalized_man(path, config_path):
-    # md2man's paragraph renderer escapes every path backslash for roff.
-    return path.read_bytes().decode('utf-8').replace(config_path.replace('\\','\\\\'),'__CONFIG_PATH__')
+    return path.read_bytes().decode('utf-8').replace(literal_roff_text(config_path),'__CONFIG_PATH__')
 
 
 def execute(args, cwd, env, data=None):
@@ -331,11 +351,13 @@ def main():
                         else: print(key, str(left)[:220],str(right)[:220])
                     raise AssertionError('actual immutable Go CLI artifacts changed')
             if args.rust:
+                from manual_path_contract import verify_manual_paths
                 rust = args.rust.resolve()
                 counts = verify_rust(rust, artifact, base, env)
+                manual_paths = verify_manual_paths(go,rust,base/'manual-path-controls',env,artifact)
                 shells = verify_shells(go,rust,artifact,base,env,args.require_native_shells)
                 candidate_files = subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines()
-                candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith('scripts/rust-port/cmd/cligap/') or p in {'Cargo.toml','Cargo.lock','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml'})
+                candidate_files = sorted(p for p in candidate_files if (p.startswith(('crates/','third_party/','testdata/')) and p.endswith(('.rs','.toml','.lock','.json','.txt'))) or p.startswith(('internal/manpages/','scripts/rust-port/cmd/cligap/','scripts/rust-port/manual_path_')) or p in {'Cargo.toml','Cargo.lock','cmd/manpages.go','cmd/mcp/serve.go','scripts/rust-port/cli_artifacts_contract.py','scripts/rust-port/cli_artifacts_probe.go.txt','.github/workflows/rust-cli-artifacts.yml','docs/adr/0011-cli-artifacts-and-completion-protocol.md'})
                 digest = hashlib.sha256()
                 for path in candidate_files:
                     digest.update(path.encode()+b'\0'+(ROOT/path).read_bytes()+b'\0')
@@ -345,7 +367,8 @@ def main():
                     'probe_sha256':artifact['probe_sha256'],'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                     'go_binary_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
                     'native_os':platform.system(),'architecture':platform.machine(),'keyring':'memory','actual_counts':counts,
-                    'go_protocol_observations':artifact['entry_completions'],'actual_shells':shells}
+                    'go_protocol_observations':artifact['entry_completions'],'actual_shells':shells,
+                    'manual_path_controls':manual_paths}
                 write_utf8(args.receipt,json.dumps(receipt,indent=2)+'\n')
                 print(f'PASS actual Go/Rust CLI artifacts: {counts}')
             else:

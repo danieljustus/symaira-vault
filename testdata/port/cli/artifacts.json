@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "oracle_commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+  "oracle_commit": "5cf3da06f1750afad974f2b722734af52ce87362",
   "oracle_source_files": [
     "cmd/admin/audit.go",
     "cmd/admin/audit_export.go",
@@ -237,6 +237,7 @@
     "internal/intake/spool.go",
     "internal/intake/watch.go",
     "internal/logging/logging.go",
+    "internal/manpages/manpages.go",
     "internal/mcp/apitemplates/auth.go",
     "internal/mcp/apitemplates/template.go",
     "internal/mcp/auth/auth.go",
@@ -299,6 +300,7 @@
     "internal/mcp/server/tools_unseal.go",
     "internal/mcp/server/tools_whoami.go",
     "internal/mcp/serverbootstrap/http.go",
+    "internal/mcp/serverbootstrap/http_lifecycle.go",
     "internal/mcp/serverbootstrap/http_metrics.go",
     "internal/mcp/serverbootstrap/http_nometrics.go",
     "internal/mcp/serverbootstrap/http_setup.go",
@@ -525,7 +527,7 @@
     "scripts/rust-port/internal/diff/wait_error_windows.go",
     "scripts/rust-port/internal/provenance/provenance.go"
   ],
-  "oracle_source_digest": "1dc9e67b6ff55261e8ab19827a4170acf3bb3d2b775093f84007808aa6b32f44",
+  "oracle_source_digest": "e3ffcab2d6b04ff5090486c19ab1d07cf9137136b004e16e0fe37a88bc352735",
   "probe_sha256": "06748b12deca6c443d7d43141f1e48f85b47721f079c9768a7a3a7e5a6d53b2e",
   "commands": [
     {

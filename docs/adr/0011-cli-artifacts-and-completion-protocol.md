@@ -22,13 +22,14 @@ installed completion scripts and change published command documentation during
 the migration. Future public interface changes require a separately reviewed
 artifact regeneration and a versioned compatibility decision.
 
-Help text and all eight script variants use byte parity. The manual tree also
-preserves filenames and content, with its date rendered at runtime from
+Help text and all eight script variants use byte parity. The manual tree
+preserves filenames and ordinary-path content, with its date rendered at runtime from
 SOURCE_DATE_EPOCH or the current local time, as in Go. The advertised MCP/serve
 configuration path is an environment-derived value; freeze a named placeholder
 and render the actual shared path resolver's result. Never embed the capture
 machine's HOME in a user's help or manual. These are the declared substitutions,
-not permission to discard other differences.
+not permission to discard other differences. The literal-path correction below
+intentionally supersedes legacy Markdown interpretation of dynamic path text.
 
 Implement Cobra's hidden __complete / __completeNoDesc response protocol in
 Rust. Generate command/flag metadata from the actual Go command tree and
@@ -52,8 +53,8 @@ and does not close #1236, #1237 or #1239.
 
 ## Evidence and acceptance
 
-The generator rebuilds retained Go source
-55da4ca13ead39d4000cf6f866ac8671ca86d8f2 and executes its actual CLI and production
+The generator now rebuilds the revised literal-manual Go source
+5cf3da06f1750afad974f2b722734af52ce87362 and executes its actual CLI and production
 completion callbacks in disposable HOME/XDG roots with a memory session backend.
 It binds the full production Go inventory and the injected generator-only probe.
 The probe refuses undeclared completion callbacks. Data is never inferred from
@@ -76,9 +77,10 @@ first native Windows capture exposed Python's implicit ANSI-codepage decoding:
 the stored native artifact proved that Go emitted the same Unicode help and
 scripts as Linux, while the driver misread the golden file and manuals. Keep
 the real UTF-8 data; do not freeze that mojibake as Windows behavior. The live
-config path inside a manual uses md2man's doubled-backslash roff encoding;
-ordinary help prints the unescaped path. Both capture normalization and Rust
-rendering preserve that declared format-specific substitution.
+config path inside an ordinary manual uses doubled-backslash roff encoding;
+ordinary help prints the unescaped path. The initial substitution handled only
+backslashes and did not handle paths that Markdown interprets as formatting.
+The coordinated correction below replaces that incomplete assumption.
 
 The native workflow repeats actual immutable Go regeneration and Rust binary
 comparison on macOS/Linux/Windows. Unix jobs require Bash, Zsh and Fish; Windows
@@ -119,3 +121,65 @@ and recognize a complete bare name as a candidate row. Compare every resulting
 row, require both get and generate, and retain both raw screens. Sourced-script
 candidate byte comparison remains required. Do not omit Bash or classify the
 failed native receipt as acceptance; the new commit requires fresh native gates.
+
+## Literal dynamic configuration paths in manuals
+
+Issue #1313 records a real native Windows failure: Markdown interpreted part of
+the temporary configuration path as emphasis, and the old literal replacement
+failed to normalize `symvault-mcp.1`. Its unchanged retained artifact SHA-256 is
+`88644cb33bafa42150c88761eab5963466add93604819c94e83254874770ee75`. The old immutable
+oracle remains `55da4ca13ead39d4000cf6f866ac8671ca86d8f2`, with the original fixture
+recoverable from Git history before this correction. `manual_path_probe.py` and
+its Go probe retain executable legacy behavior; historical failures are not new
+literal-path acceptance. The supplied `s__b0nk` spelling did not reproduce the
+failure. An independently supplied `s__b0nk_` component reproduces the entire
+retained page, but transformed output alone cannot establish the original input.
+
+The legacy problem includes bold/code spans, links, images, HTML spans, entities
+and backslash escapes. Some constructs discard path characters entirely. Do not
+port a partial Markdown parser, constrain temporary paths to hide the defect, or
+silently fix only Rust. The approved correction treats only the dynamic config
+path in the direct MCP and deprecated serve descriptions as literal data during
+manual generation. Static documentation still uses the pinned Cobra/md2man
+renderer. The Go manual boundary substitutes an opaque alphanumeric marker,
+renders with real Cobra, restores the command's original description on every
+exit, and then replaces the marker with roff-safe literal text. It retains the
+existing command visibility, filenames, traversal and headers; hidden serve does
+not acquire a new public manual page. A portable Go package test renders that
+hidden command explicitly and checks both description restoration and help bytes.
+Unlike the existing `cmd` package's Windows TestMain, this test actually runs on
+Windows.
+
+Printable Unicode, spaces and Markdown punctuation stay literal. Backslashes are
+doubled for roff; a leading dot or apostrophe is protected by `\&`. ASCII and C1
+controls, plus Unicode line/paragraph separators, appear as visible Go-style
+escaped text, never physical newlines or tabs that can introduce roff requests.
+Rust and the normalizer use the same small escaping rule, without a new parser
+or dependency. Ordinary help/usage output remains unescaped and byte-identical.
+This is an intentional Go/Rust correction for hostile path syntax, not a claim
+of byte parity with the old oracle for those inputs.
+
+The CLI-specific fixture was deliberately regenerated through revised immutable
+Go. The complete command/config-key/help/script/manual/completion-observation
+payloads are unchanged; only oracle revision, source inventory and source digest
+change. The inventory adds the new manual renderer and the already-integrated
+HTTP lifecycle source from main. The probe digest is unchanged. Other historical
+oracle pins are independent and are not automatically advanced.
+
+The existing native artifact driver now invokes `manual_path_contract.py` with
+its actual rebuilt Go and Rust binaries. All eighteen documentation-only path
+controls execute on every OS, including names that cannot be materialized as
+Windows directories. Each compares all 119 manual filenames/bytes, checks that
+the path is literal, compares MCP/serve help against the frozen unchanged help,
+and retains both raw MCP pages and actual help in the receipt. Controls include
+ordinary/single/double underscores, backticks, brackets, links, images, entities,
+HTML, backslashes, spaces, line-leading punctuation, controls and marker collision.
+The standalone driver additionally compares both help pages against the original
+immutable Go binary. The original 140 help pages, eight scripts, 119 manuals,
+455 protocol observations, 421 real CLI requests and native shell gates remain
+required; no case or threshold was removed.
+
+Local macOS execution proves the focused literal path correction and unchanged
+ordinary payloads. Fresh candidate-bound native macOS/Linux/Windows receipts,
+shared CLI-001 provenance refresh and independent review remain separate gates.
+No migration, release or broader CLI row is promoted by this correction alone.
