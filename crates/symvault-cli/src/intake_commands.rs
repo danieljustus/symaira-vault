@@ -307,7 +307,12 @@ pub fn finish(result: Result<(), Error>) -> ExitCode {
 
 pub fn disable(quiet: bool) -> Result<(), Error> {
     // Match Go's HOME-derived fixed path; no daemon is installed automatically.
-    let path = PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(PLIST);
+    // Go expands the literal "$HOME/Library/..." spelling. PathBuf::join
+    // would add a backslash on Windows and change this public status line.
+    let mut spelling = std::env::var_os("HOME").unwrap_or_default();
+    spelling.push("/");
+    spelling.push(PLIST);
+    let path = PathBuf::from(spelling);
     if matches!(fs::metadata(&path), Err(e) if e.kind() == io::ErrorKind::NotFound) {
         if !quiet {
             println!(
