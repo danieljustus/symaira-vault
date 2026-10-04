@@ -147,12 +147,22 @@ gate is 72 on Windows and 67 on Unix; this is not a general error exemption.
 The next Windows run at a4dd27a fails an older encrypted-store fixture test,
 before the process corpus executes. That test normalizes only the verbatim
 canonical path; corrected metadata now uses the ordinary path. Update its
-Windows expectation to the actual caller root and assert the exact reported
+Windows expectation to the ordinary canonical root and assert the exact reported
 path before normalization. Preserve canonical expectations on Unix and leave
 the frozen Go fixture unchanged. The process driver still accepts only its
 ordinary HOME-prefix normalization. Integrate the separately measured launchd
 final-byte correction from ADR 0013 into dependent broker/MCP branches so their
 native serve gates test the repaired dependency.
+
+The subsequent native Windows runs at c655d9d and a5fd217 identify a second
+fixture-path distinction: the runner's temporary directory contains the short
+name `RUNNER~1`, while canonicalization expands it to `runneradmin`. Using the
+caller spelling therefore rejects correct metadata. Resolve the synthetic root
+with the filesystem first and remove only the Windows drive verbatim prefix in
+the existing test expectation. Still assert both exact whoami paths before
+normalizing the frozen fixture. Runtime source, Go observations and process
+driver normalization are unchanged; short names must not become an arbitrary
+case-folding or path-equivalence exemption.
 
 Normalize JSON object order/nested JSON text, actual fixture HOME prefixes,
 validated paired random 16-hex data-marker ids, and nonnegative measured command
