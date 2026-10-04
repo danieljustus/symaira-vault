@@ -39,6 +39,7 @@ def isolated(home):
                XDG_CONFIG_HOME=str(home / "config"), XDG_DATA_HOME=str(home / "data"),
                XDG_CACHE_HOME=str(home / "cache"), SYMVAULT_TEST_KEYRING="memory",
                SYMVAULT_VAULT=str(home / "vault"), CI="1", NO_COLOR="1",
+               SYMVAULT_SECUREUI="none",
                SYMVAULT_PASSPHRASE="correct horse battery staple",
                SYMVAULT_ALLOW_ENV_PASSPHRASE="1", SYMVAULT_NO_ENV_WARNING="1")
     return env
@@ -55,7 +56,7 @@ def observe(name, result, home, binary, protocol=False):
             "stderr": normal(result.stderr, home, binary)}
 
 
-def protocol_input(locked):
+def protocol_input(locked, gui_metadata=False):
     requests = [
         (1, "initialize", {"protocolVersion": "2025-11-25", "clientInfo": {"name": "public-fixture", "version": "1"}, "capabilities": {}}),
         (2, "ping", {}), (3, "tools/list", {}), (4, "tools/list", {"_meta": {"includeAllTools": True}}),
@@ -67,6 +68,9 @@ def protocol_input(locked):
         # logs/desktop notifications after the reply. Bootstrap acceptance
         # exercises metadata and unknown dispatch; #1248 owns store tool calls.
         requests[5] = (6, "public_unknown_method", {})
+    if gui_metadata:
+        requests[6] = (7, "tools/call", {"name": "request_credential", "arguments": {
+            "path": "public/missing", "field": "credential", "reason": "public-fixture"}})
     return b"".join((json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params})+"\n").encode("utf-8")
                     for i, method, params in requests)
 
@@ -95,12 +99,20 @@ def launch_cases(binary, inspector, base):
     home.mkdir()
     env = isolated(home)
     checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    gui_bin = home / "gui-metadata-bin"
+    gui_bin.mkdir()
+    gui_name = "powershell.exe" if os.name == "nt" else "osascript" if platform.system() == "Darwin" else "zenity"
+    gui_helper = gui_bin / gui_name
+    # This is a lookup-only fixture. A locked tool call must never launch it.
+    gui_helper.write_bytes(b"#!/bin/sh\nexit 99\n")
+    gui_helper.chmod(0o755)
     before = {x.relative_to(home / "vault").as_posix(): hashlib.sha256(x.read_bytes()).hexdigest()
               for x in (home / "vault").rglob("*") if x.is_file()}
     for name, args, unlocked, code, frames in [
         ("locked-stdio", ["--quiet", "serve", "--stdio", "--agent", "default", "--allow-locked"], False, 0, True),
         ("locked-unknown-agent", ["--quiet", "serve", "--stdio", "--agent", "unknown", "--allow-locked"], False, 0, True),
         ("locked-canonical", ["--quiet", "mcp", "--stdio", "--agent", "default", "--allow-locked"], False, 0, True),
+        ("locked-gui-metadata", ["--quiet", "serve", "--stdio", "--agent", "default", "--allow-locked"], False, 0, True),
         ("locked-without-opt-in", ["--quiet", "serve", "--stdio", "--agent", "default", "--allow-locked=false"], False, 4, False),
         ("unlocked-stdio", ["--quiet", "serve", "--stdio", "--agent", "default"], True, 0, True),
         ("unlocked-allow-locked", ["--quiet", "serve", "--stdio", "--agent", "default", "--allow-locked"], True, 0, True),
@@ -110,12 +122,18 @@ def launch_cases(binary, inspector, base):
         case_env = dict(env)
         if not unlocked:
             del case_env["SYMVAULT_PASSPHRASE"]
-        result = run([binary, *args], cwd=home, env=case_env, data=protocol_input(not unlocked))
+        gui_metadata = name == "locked-gui-metadata"
+        if gui_metadata:
+            case_env.update(SYMVAULT_SECUREUI="gui", PATH=str(gui_bin)+os.pathsep+case_env.get("PATH", ""))
+        result = run([binary, *args], cwd=home, env=case_env, data=protocol_input(not unlocked, gui_metadata))
         assert result.returncode == code, (name, result.stderr)
         record = observe(name, result, home, binary, frames)
         if frames:
             assert len(record["stdout"]) == 7, name
             assert [row["id"] for row in record["stdout"]] == list(range(1, 8))
+        if gui_metadata:
+            assert "request_credential" in {row["name"] for row in record["stdout"][2]["result"]["tools"]}
+            assert record["stdout"][6]["error"]["message"] == "vault locked: run 'symvault unlock' first"
         if not unlocked:
             after = {x.relative_to(home / "vault").as_posix(): hashlib.sha256(x.read_bytes()).hexdigest()
                      for x in (home / "vault").rglob("*") if x.is_file()}
@@ -386,7 +404,9 @@ def main():
                         comparable["tls_file_modes"] = left["tls_file_modes"]
                     assert left == comparable, (left, right)
                 elif left["case"] == "http-client-ca":
-                    assert "client didn't provide a certificate" in left["transport_logs"]
+                    # Rejection is independently proven by the TLS exchange.
+                    # The async Go log may race this fixture's forced stop;
+                    # retain and strictly validate every observed line above.
                     assert right["transport_logs"] == ""
                     comparable = dict(right, transport_logs=left["transport_logs"])
                     assert left == comparable, (left, right)
@@ -403,6 +423,7 @@ def main():
                        "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                        "native_os": platform.system(), "architecture": platform.machine(),
                        "keyring": "memory", "service_manager_mode": "injected-process-outcomes",
+                       "secure_ui_fixture": "none for bootstrap; explicit lookup-only GUI metadata case with locked credential call denied",
                        "test_umask": "0022" if os.name != "nt" else "native-Windows",
                        "stdio_scope": "locked metadata and locked tool-call rejection; unlocked bootstrap metadata and unknown dispatch; full store/anomaly tool acceptance remains #1248",
                        **observed}

@@ -76,7 +76,7 @@ jobs:
           receipt = json.loads(Path('native-serve-cli.json').read_bytes())
           assert receipt['passed'] and receipt['candidate_worktree_clean']
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
-          required = {'bare-uninitialized', 'quiet-uninitialized', 'arbitrary-arguments', 'stdio-agent-required', 'empty-bind', 'locked-http-rejected', 'signed-port-accepted', 'valued-bool', 'tls-flags-reach-vault', 'locked-stdio', 'locked-unknown-agent', 'locked-canonical', 'locked-without-opt-in', 'unlocked-stdio', 'unlocked-allow-locked', 'unlocked-canonical', 'unlocked-unknown-agent', 'service-status-absent', 'service-install', 'service-status-running', 'service-status-quiet', 'service-uninstall', 'service-status-removed', 'canonical-service-status'}
+          required = {'bare-uninitialized', 'quiet-uninitialized', 'arbitrary-arguments', 'stdio-agent-required', 'empty-bind', 'locked-http-rejected', 'signed-port-accepted', 'valued-bool', 'tls-flags-reach-vault', 'locked-stdio', 'locked-unknown-agent', 'locked-canonical', 'locked-gui-metadata', 'locked-without-opt-in', 'unlocked-stdio', 'unlocked-allow-locked', 'unlocked-canonical', 'unlocked-unknown-agent', 'service-status-absent', 'service-install', 'service-status-running', 'service-status-quiet', 'service-uninstall', 'service-status-removed', 'canonical-service-status'}
           if receipt['native_os'] != 'Windows': required.add('service-helper-failure')
           required.update({'service-default-config', 'http-default-tls', 'http-custom-tls', 'http-client-ca'})
           for implementation in ['go','rust']:
