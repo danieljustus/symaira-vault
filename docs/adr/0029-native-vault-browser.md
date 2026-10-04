@@ -100,6 +100,59 @@ and locked/uninitialized cases. The short keybinding smoke separately matched
 the public output bytes. The zero-TTL quit correction above still requires its
 actual Go observation. Source-bound clean/native macOS-arm64 and Windows ConPTY
 acceptance and a meaningful independent source mutation remain outstanding.
-The new complete TUI CI workflow has not been added. #1239 and CLI/host-provider
+At that checkpoint the complete TUI CI workflow had not been added. #1239 and CLI/host-provider
 rows stay in progress. See the dated MacBook handoff and its retained failed
 development receipt; do not treat a passing prefix as the whole driver passing.
+
+## Acceptance harness repair
+
+The terminal decoder does not implement xterm OSC 10/11 color reports. A bounded
+real Go editor-only reproduction exposed a late OSC 11 query immediately after
+the confirmation screen and intermittent missing key/exit observations. Go's
+lazy termenv report reader and Bubble Tea's key reader share that terminal.
+Advertising `xterm-256color` was therefore an invalid capability assumption,
+not evidence that the editor environment allowlist needed weakening. Advertise
+the supported `screen-256color` profile instead. Eight consecutive real,
+unmodified pinned-Go empty-editor operations then completed with unchanged
+encrypted entries and no clipboard access. The historical failure receipt is
+unchanged; its exact original scheduling cannot be reconstructed from a screen.
+
+Recheck a wait predicate after the process-exit observation. Exit can happen
+between those reads; observing the exit in the second read must not falsely
+reject a valid exit/receipt predicate. A deterministic interleaving test covers
+that race. The fixture console wrapper publishes its result atomically and
+retains the controlling session until the parent has read the native modes.
+This avoids Darwin's revoked slave ioctls after the session leader exits.
+
+Darwin's kernel `PENDIN` bookkeeping bit (`0x20000000`, pending-input
+reprocessing) may change independently of application mode restoration. A real
+before/after observation differed only in that bit. Exclude only that bit on
+Darwin in both independent mode readers; preserve comparison of all other
+native fields, including input echo/canonical/raw processing and output modes.
+The observer never repairs the terminal to manufacture a passing result.
+
+Keep editor filtering unchanged. Its private sidecar now supplies a console
+baseline, and the actual editor reports terminal ownership and absence of the
+fixture-only environment canary, passphrase variable and memory-keyring switch.
+Record and assert foreground restoration on Windows as well as Unix, rather
+than substituting a final-mode assertion for editor-mode evidence.
+
+Receipt schema 2 requires explicit per-case success, the exact ordered fifteen
+cases for each binary, native target identity, clean source at start/end,
+complete source inventories and a fresh run-owned Rust rebuild matching the
+executed binary. Retain failed rows, terminal bytes and ordinary child logs;
+replay checks contained regular artifacts, byte counts, hashes, canary absence
+and native console restoration. Replay requires an explicitly supplied receipt
+digest and full candidate commit. Synthetic validator controls are not native
+execution evidence. Production-source controls separately reject a dirty
+candidate, a binary from altered source, and a clean committed default-reveal
+mutant through the real runtime gate.
+
+The new `rust-tui.yml` runs the full owning crate checks and actual Go/Rust
+comparison on fresh Linux, Darwin arm64 (`xcode-27`) and Windows ConPTY runners,
+including the source-mutation controls. Native receipts remain pending until
+those operations execute and their downloaded artifacts are verified. Personal
+MacBook runs are limited to pure/injected tests, compilation, source-only binary
+proof and the explicitly clipboard-free real-editor regression. #1239 remains
+in progress; exit taxonomy differences remain tracked by #1241 and this browser
+does not establish all signal or host-provider contracts.

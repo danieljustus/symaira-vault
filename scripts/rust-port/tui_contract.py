@@ -21,6 +21,7 @@ import shutil
 import signal
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -39,6 +40,9 @@ CASES = ['browser-navigation-filter-sort-help', 'native-copy-expiry-quit',
          'add-invalid-no-initial-write', 'delete-confirmation',
          'zero-ttl-quit-cleanup', 'ctrl-c-filter-cleanup', 'locked-wrong-passphrase',
          'uninitialized', 'public-keybinding-table']
+COMMAND_OUTPUT = None
+COMMAND_NUMBER = 0
+CAPTURE_OUTPUT = None
 
 
 def digest(path):
@@ -50,8 +54,25 @@ def inventory(root, names):
 
 
 def checked(argv, cwd=ROOT, env=None, timeout=240):
-    result = subprocess.run([str(x) for x in argv], cwd=cwd, env=env,
-                            capture_output=True, timeout=timeout)
+    global COMMAND_NUMBER
+    COMMAND_NUMBER += 1
+    prefix = None
+    if COMMAND_OUTPUT is not None:
+        COMMAND_OUTPUT.mkdir(parents=True, exist_ok=True)
+        prefix = COMMAND_OUTPUT/str(COMMAND_NUMBER)
+    try:
+        result = subprocess.run([str(x) for x in argv], cwd=cwd, env=env,
+                                capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        if prefix is not None:
+            prefix.with_suffix('.stdout').write_bytes(error.stdout or b'')
+            prefix.with_suffix('.stderr').write_bytes(error.stderr or b'')
+            prefix.with_suffix('.json').write_text(json.dumps({'argv': [str(x) for x in argv], 'timed_out': True}))
+        raise
+    if prefix is not None:
+        prefix.with_suffix('.stdout').write_bytes(result.stdout)
+        prefix.with_suffix('.stderr').write_bytes(result.stderr)
+        prefix.with_suffix('.json').write_text(json.dumps({'argv': [str(x) for x in argv], 'exit_code': result.returncode, 'timed_out': False}))
     assert result.returncode == 0, (Path(argv[0]).name, result.returncode,
                                   scrub(result.stderr.decode(errors='replace')[-1800:]))
     return result.stdout
@@ -79,7 +100,8 @@ def fixture_env(home, provider):
                # Advertising xterm makes Go's lazy termenv query reader compete
                # with Bubble Tea for confirmation keys. screen-256color is the
                # actual emulated capability set (no OSC 10/11 reports).
-               TERM='screen-256color', TZ='UTC', NO_COLOR='1')
+               TERM='screen-256color', TZ='UTC', NO_COLOR='1',
+               TUI_PRIVATE_ENV='public-environment-filter-canary')
     env.update(provider)
     return env
 
@@ -322,12 +344,14 @@ class Browser:
     def quit(self, key='q', clipboard_owned=False):
         started = time.monotonic()
         self.write(key)
-        self.finish(0)
+        observed = self.finish(0)
         if clipboard_owned:
             assert time.monotonic()-started < 1.3, 'quit was measured only after timer expiry'
             assert not clipboard(self.env), 'copied secret survived quit'
         assert PHRASE.encode() not in self.capture
         return {'exit_code': 0, 'terminal_restored': True,
+                'input_restored': True, 'output_restored': True,
+                'console': observed,
                 'capture_sha256': hashlib.sha256(self.capture).hexdigest()}
 
     def editor_terminal_restored(self):
@@ -376,7 +400,7 @@ def run_case(case, label, binary, helper, seed, base, provider):
     seeded = inventory(seed, sorted(str(p.relative_to(seed)) for p in seed.rglob('*') if p.is_file()))
     assert inventory(root, list(seeded)) == seeded
     before = snapshot(helper, root, home, env)
-    row = {'case': case, 'seeded_files': seeded, 'before': before}
+    row = {'case': case, 'seeded_files': seeded, 'before': before, 'passed': False}
     if case == 'uninitialized':
         root = home/'nonexistent'
     ready, release = home/'editor-ready.json', home/'editor-release'
@@ -388,8 +412,9 @@ def run_case(case, label, binary, helper, seed, base, provider):
         # production environment filtering is exercised without an exception.
         editor = home/('fixture-editor.exe' if os.name == 'nt' else 'fixture-editor')
         shutil.copy2(helper, editor)
-        Path(str(editor)+'.editor.json').write_text(json.dumps(
-            {'Mode': mode, 'Ready': str(ready), 'Release': str(release)}))
+        with os.fdopen(os.open(str(editor)+'.editor.json', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600), 'w') as sidecar:
+            json.dump({'Mode': mode, 'Ready': str(ready), 'Release': str(release),
+                       'Console': str(home/'console.json.before')}, sidecar)
         env.update(EDITOR=str(editor))
     browser = Browser(binary, helper, home, root, env)
     try:
@@ -399,10 +424,13 @@ def run_case(case, label, binary, helper, seed, base, provider):
                 browser.write('public-wrong-passphrase-782a\n')
             observed = browser.finish(6 if label == 'go' else 1)
             assert all(c.encode() not in browser.capture for c in [PHRASE, *CANARIES])
-            row.update(exit_code=observed['exit_code'], terminal_restored=True,
+            row.update(exit_code=observed['exit_code'], terminal_restored=True, console=observed,
                        diagnostic=scrub(browser.capture.decode(errors='replace')),
                        capture_sha256=hashlib.sha256(browser.capture).hexdigest())
-            assert snapshot(helper, home/'vault', home, env) == before
+            row.update(input_restored=True, output_restored=True,
+                       after=snapshot(helper, home/'vault', home, env), canary_disclosure=False)
+            assert row['after'] == before
+            row['passed'] = True
             return row
         browser.unlock()
         if case == 'browser-navigation-filter-sort-help':
@@ -455,6 +483,8 @@ def run_case(case, label, binary, helper, seed, base, provider):
             browser.wait(ready.is_file, 'actual foreground editor opened real document')
             editor = json.loads(ready.read_bytes())
             assert editor['input_is_terminal'] and editor['output_is_terminal'] and editor['document_bytes'] > 0
+            assert editor['environment_filtered'] is True, 'editor environment filtering weakened'
+            assert editor['foreground_terminal_restored'] is (label == 'rust'), 'foreground terminal decision changed'
             if os.name != 'nt':
                 assert editor['mode'] == 0o600, 'editor document permissions'
             row['editor'] = editor
@@ -524,37 +554,140 @@ def run_case(case, label, binary, helper, seed, base, provider):
         assert PHRASE.encode() not in browser.capture
         if case != 'browser-navigation-filter-sort-help':
             assert all(c.encode() not in browser.capture for c in CANARIES), 'implicit canary output'
+        row.update(passed=True, canary_disclosure=False)
         return row
+    except Exception as error:
+        row.update(failure=scrub(type(error).__name__+': '+str(error)),
+                   diagnostic=scrub(browser.capture.decode(errors='replace')),
+                   capture_sha256=hashlib.sha256(browser.capture).hexdigest())
+        raise CaseFailure(row) from error
     finally:
+        if CAPTURE_OUTPUT is not None:
+            CAPTURE_OUTPUT.mkdir(parents=True, exist_ok=True)
+            artifact = CAPTURE_OUTPUT/(case+'-'+label+'.terminal')
+            artifact.write_bytes(browser.capture)
+            row.update(capture_artifact=str(artifact.relative_to(CAPTURE_OUTPUT.parent)),
+                       capture_bytes=len(browser.capture), capture_sha256=digest(artifact))
         browser.close()
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rust-cli', type=Path, required=True)
-    parser.add_argument('--receipt', type=Path, required=True)
-    parser.add_argument('--xvfb', default=shutil.which('Xvfb'))
-    parser.add_argument('--xclip', default=shutil.which('xclip'))
-    parser.add_argument('--allow-dirty-for-development', action='store_true')
-    args = parser.parse_args()
-    rust = args.rust_cli.resolve()
-    commit = checked(['git', 'rev-parse', 'HEAD']).decode().strip()
-    clean = not checked(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
-    assert clean or args.allow_dirty_for_development, 'native acceptance requires clean source'
-    names = sorted(x for x in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
-                   if x.startswith(('crates/', 'third_party/', 'testdata/'))
-                   or x in {'Cargo.toml', 'Cargo.lock', '.gitattributes', 'deny.toml',
+class CaseFailure(AssertionError):
+    def __init__(self, row):
+        self.row = row
+        super().__init__(row['failure'])
+
+
+def source_inventory():
+    names = checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
+    names = sorted(x for x in names if x.startswith(('crates/', 'third_party/', 'testdata/', '.cargo/'))
+                   or x in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.gitattributes', 'deny.toml',
                             'scripts/rust-port/tui_contract.py', 'scripts/rust-port/tui_fixture.go.txt',
+                            'scripts/rust-port/tui_harness_test.py', 'scripts/rust-port/tui_mutation_test.py',
                             'scripts/rust-port/tui-validation-requirements.txt',
                             '.github/workflows/rust-tui.yml', 'docs/adr/0029-native-vault-browser.md'})
-    before = inventory(ROOT, names)
-    receipt = {'schema_version': 1, 'candidate_commit': commit, 'candidate_worktree_clean': clean,
-               'native_os': platform.system(), 'architecture': platform.machine(),
-               'candidate_sources': before, 'rust_executable_sha256': digest(rust),
-               'oracle_commit': ORACLE, 'go': [], 'rust': [], 'passed': False,
-               'declared_differences': []}
+    assert all((ROOT/name).resolve().is_relative_to(ROOT) for name in names), 'source escaped checkout'
+    return inventory(ROOT, names)
+
+
+def clean_source():
+    return not checked(['git', 'status', '--porcelain=v1', '--untracked-files=all']).strip()
+
+
+def build_source_bound_rust(rust, base, receipt):
+    manifest = ROOT/'Cargo.toml'
+    metadata = json.loads(checked(['cargo', 'metadata', '--manifest-path', manifest,
+                                   '--no-deps', '--format-version', '1', '--locked']))
+    assert Path(metadata['workspace_root']).resolve() == ROOT, 'wrong Cargo workspace'
+    for package in metadata['packages']:
+        assert Path(package['manifest_path']).resolve().is_relative_to(ROOT), 'dependency source escaped checkout'
+        assert all(Path(t['src_path']).resolve().is_relative_to(ROOT) for t in package['targets'])
+    # Cargo freshness alone does not prove an externally supplied binary's
+    # contents. Rebuild into a new run-owned target and compare actual bytes.
+    env = os.environ.copy()
+    env.update(CARGO_TARGET_DIR=str(base/'rust-source-build'), CARGO_INCREMENTAL='0',
+               CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
+    checked(['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli',
+             '--bin', 'symvault', '--locked'], env=env, timeout=900)
+    rebuilt = base/'rust-source-build/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+    receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
+    assert receipt['rebuilt_rust_executable_sha256'] == digest(rust), 'source/binary mismatch'
+    receipt['binary_source_verified'] = True
+
+
+def validate_receipt(receipt, candidate, native_os, architecture, sources, binary_sha256, evidence_root=None):
+    assert isinstance(candidate, str) and re.fullmatch(r'[0-9a-f]{40}', candidate), 'invalid candidate commit'
+    assert receipt['schema_version'] == 2 and type(receipt['schema_version']) is int
+    assert receipt['candidate_commit'] == candidate, 'candidate identity mismatch'
+    assert receipt['oracle_commit'] == ORACLE, 'oracle identity mismatch'
+    assert receipt['native_os'] == native_os and receipt['architecture'] == architecture, 'native target mismatch'
+    for key in ['passed', 'candidate_worktree_clean', 'candidate_worktree_clean_at_end', 'binary_source_verified']:
+        assert receipt[key] is True, 'missing/false '+key
+    assert receipt['candidate_sources'] == sources and receipt['candidate_sources_at_end'] == sources, 'source inventory mismatch'
+    for key in ['rust_executable_sha256', 'rebuilt_rust_executable_sha256']:
+        value = receipt[key]
+        assert isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value)
+        assert value == binary_sha256, 'source/binary mismatch'
+    for label in ['go', 'rust']:
+        rows = receipt[label]
+        assert [row['case'] for row in rows] == CASES, 'incomplete/duplicate case set'
+        for row in rows:
+            assert row['passed'] is True, 'missing/false case success'
+            assert type(row['exit_code']) is int, 'invalid exit code type'
+            expected_exit = (6 if label == 'go' else 1) if row['case'] in {'locked-wrong-passphrase', 'uninitialized'} else 0
+            assert row['exit_code'] == expected_exit, 'exit class mismatch'
+            if row['case'] != CASES[-1]:
+                for key in ['terminal_restored', 'input_restored', 'output_restored']:
+                    assert row[key] is True, 'un-restored terminal modes'
+                assert row['canary_disclosure'] is False, 'canary disclosure'
+                console = row['console']
+                assert type(console['exit_code']) is int and console['exit_code'] == expected_exit
+                assert console['input_restored'] is True and console['output_restored'] is True, 'un-restored native console'
+                if evidence_root is not None:
+                    name = Path(row['capture_artifact'])
+                    assert not name.is_absolute() and '..' not in name.parts, 'capture path escaped evidence root'
+                    path = (evidence_root/name).resolve()
+                    assert path.is_relative_to(evidence_root.resolve()) and path.is_file(), 'capture path escaped evidence root'
+                    raw = path.read_bytes()
+                    assert type(row['capture_bytes']) is int and len(raw) == row['capture_bytes'], 'capture size mismatch'
+                    assert hashlib.sha256(raw).hexdigest() == row['capture_sha256'], 'capture digest mismatch'
+                    assert PHRASE.encode() not in raw, 'passphrase disclosure'
+                    if row['case'] != CASES[0]:
+                        assert all(c.encode() not in raw for c in CANARIES), 'canary disclosure'
+                assert isinstance(row['before'], list) and isinstance(row['after'], list)
+                if row['case'].startswith(('editor-', 'add-')):
+                    editor = row['editor']
+                    assert editor['environment_filtered'] is True, 'editor environment filtering weakened'
+                    assert editor['input_is_terminal'] is True and editor['output_is_terminal'] is True
+                    assert editor['foreground_terminal_restored'] is (label == 'rust')
+                    assert type(editor['document_bytes']) is int and editor['document_bytes'] > 0
+    for go_row, rust_row in zip(receipt['go'], receipt['rust']):
+        if go_row['case'] != CASES[-1]:
+            for field in ['before', 'after']:
+                assert json.dumps(go_row[field], sort_keys=True) == json.dumps(rust_row[field], sort_keys=True), 'encrypted-store differential mismatch'
+        else:
+            assert go_row['stdout_sha256'] == rust_row['stdout_sha256'], 'keybinding byte mismatch'
+
+
+def execute(args, receipt):
+    rust = args.rust_cli.resolve()
+    commit = checked(['git', 'rev-parse', 'HEAD']).decode().strip()
+    clean = clean_source()
+    receipt.update(candidate_commit=commit, candidate_worktree_clean=clean)
+    assert clean or args.allow_dirty_for_development, 'native acceptance requires clean source'
+    before = source_inventory()
+    receipt.update(candidate_sources=before, rust_executable_sha256=digest(rust))
+    assert sys.version_info[:2] == (3, 13), 'pinned Python 3.13 required'
+    receipt['rustc'] = checked(['rustc', '--version']).decode().strip()
+    receipt['go_version'] = checked(['go', 'version']).decode().strip()
+    assert receipt['rustc'].startswith('rustc 1.98.0 '), 'pinned Rust required'
+    assert receipt['go_version'].startswith('go version go1.26.6 '), 'pinned Go required'
     with tempfile.TemporaryDirectory(prefix='symvault-tui-native-') as raw:
         base = Path(raw)
+        build_source_bound_rust(rust, base, receipt)
+        assert source_inventory() == before, 'source changed during Rust build'
+        if args.source_only:
+            receipt['source_only_verified'] = True
+            return
         tree = base/'oracle'
         checked(['git', 'worktree', 'add', '--detach', tree, ORACLE])
         try:
@@ -584,13 +717,17 @@ def main():
                     seeds[ttl] = seed
                 for case in CASES[:-1]:
                     for label, binary in [('go', go), ('rust', rust)]:
-                        row = run_case(case, label, binary, helper,
-                                       seeds[0 if case == 'zero-ttl-quit-cleanup' else 2], base, provider)
+                        try:
+                            row = run_case(case, label, binary, helper,
+                                           seeds[0 if case == 'zero-ttl-quit-cleanup' else 2], base, provider)
+                        except CaseFailure as error:
+                            receipt[label].append(error.row)
+                            raise
                         receipt[label].append(row)
                         print(json.dumps({'case': case, 'implementation': label, 'passed': True}), flush=True)
                     go_row, rust_row = receipt['go'][-1], receipt['rust'][-1]
-                    if case.startswith(('editor-', 'add-')) and os.name != 'nt':
-                        receipt['declared_differences'].append({'case': case, 'field': 'editor_terminal_restored',
+                    if case.startswith(('editor-', 'add-')):
+                        receipt['declared_differences'].append({'case': case, 'field': 'foreground_terminal_restored',
                                                               'go': False, 'rust': True, 'decision': 'ADR-0029'})
                     if case == 'zero-ttl-quit-cleanup':
                         receipt['declared_differences'].append({'case': case, 'field': 'clipboard_survived_quit',
@@ -605,24 +742,63 @@ def main():
                     env = fixture_env(home, provider)
                     output = checked([binary, 'ui', '--print-keybindings'], cwd=home, env=env)
                     outputs.append(output)
-                    receipt[label].append({'case': CASES[-1], 'exit_code': 0,
+                    receipt[label].append({'case': CASES[-1], 'exit_code': 0, 'passed': True,
                                            'stdout_sha256': hashlib.sha256(output).hexdigest()})
                 assert outputs[0] == outputs[1], 'actual public keybinding table bytes differ'
             assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == commit
-            assert inventory(ROOT, names) == before and digest(rust) == receipt['rust_executable_sha256']
+            receipt['candidate_sources_at_end'] = source_inventory()
+            assert receipt['candidate_sources_at_end'] == before and digest(rust) == receipt['rust_executable_sha256']
             assert inventory(tree, oracle_names) == receipt['oracle_sources']
-            receipt['candidate_worktree_clean_at_end'] = not checked(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
+            receipt['candidate_worktree_clean_at_end'] = clean_source()
             assert receipt['candidate_worktree_clean_at_end'] == clean
             assert all(len(receipt[label]) == len(CASES) for label in ['go', 'rust'])
-            receipt['passed'] = True
+            receipt['passed'] = clean
+            if clean:
+                validate_receipt(receipt, commit, platform.system(), platform.machine(), before, digest(rust), args.receipt.parent)
         except Exception as error:
             receipt['failure'] = scrub(type(error).__name__+': '+str(error))
             raise
         finally:
-            args.receipt.parent.mkdir(parents=True, exist_ok=True)
-            args.receipt.write_text(json.dumps(receipt, indent=2)+'\n')
             checked(['git', 'worktree', 'remove', '--force', tree])
-    print('PASS: fifteen actual Go/Rust browser cases on '+platform.system())
+    print(('PASS' if clean else 'DEVELOPMENT ONLY')+': fifteen actual Go/Rust browser cases on '+platform.system())
+
+
+def main():
+    global COMMAND_OUTPUT, CAPTURE_OUTPUT
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--rust-cli', type=Path, required=True)
+    parser.add_argument('--receipt', type=Path, required=True)
+    parser.add_argument('--xvfb', default=shutil.which('Xvfb'))
+    parser.add_argument('--xclip', default=shutil.which('xclip'))
+    parser.add_argument('--allow-dirty-for-development', action='store_true')
+    parser.add_argument('--source-only', action='store_true', help='build/binary proof only; never uses clipboard')
+    parser.add_argument('--validate-receipt', action='store_true')
+    parser.add_argument('--candidate')
+    parser.add_argument('--expected-receipt-sha256')
+    args = parser.parse_args()
+    COMMAND_OUTPUT = args.receipt.parent/(args.receipt.stem+('-replay-commands' if args.validate_receipt else '-commands'))
+    CAPTURE_OUTPUT = args.receipt.parent/(args.receipt.stem+'-captures')
+    if args.validate_receipt:
+        raw = args.receipt.read_bytes()
+        expected = args.expected_receipt_sha256
+        assert isinstance(expected, str) and re.fullmatch(r'[0-9a-f]{64}', expected), 'trusted receipt digest required'
+        assert hashlib.sha256(raw).hexdigest() == expected, 'receipt integrity mismatch'
+        assert clean_source(), 'native replay requires clean source'
+        assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == args.candidate
+        validate_receipt(json.loads(raw), args.candidate, platform.system(), platform.machine(),
+                         source_inventory(), digest(args.rust_cli), args.receipt.parent)
+        print('PASS: source-bound native receipt replay')
+        return
+    receipt = {'schema_version': 2, 'native_os': platform.system(), 'architecture': platform.machine(),
+               'oracle_commit': ORACLE, 'go': [], 'rust': [], 'passed': False, 'declared_differences': []}
+    try:
+        execute(args, receipt)
+    except Exception as error:
+        receipt.update(passed=False, failure=scrub(type(error).__name__+': '+str(error)))
+        raise
+    finally:
+        args.receipt.parent.mkdir(parents=True, exist_ok=True)
+        args.receipt.write_text(json.dumps(receipt, indent=2)+'\n')
 
 
 if __name__ == '__main__':
