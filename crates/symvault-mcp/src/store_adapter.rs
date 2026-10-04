@@ -33,6 +33,24 @@ mod go_unicode_15;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
+fn runtime_vault_dir(root: &Path) -> String {
+    let directory = root.to_string_lossy();
+    // Windows canonicalization uses verbatim paths for I/O. Expose the ordinary
+    // drive/UNC spelling in runtime metadata, as Go does, without changing I/O.
+    #[cfg(windows)]
+    {
+        if let Some(rest) = directory.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = directory.strip_prefix(r"\\?\")
+            && rest.as_bytes().get(1) == Some(&b':')
+        {
+            return rest.to_owned();
+        }
+    }
+    directory.into_owned()
+}
+
 const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
 
 /// Load one API template at request time so on-disk endpoint, method,
@@ -470,6 +488,7 @@ pub struct StoreReadOnlyRuntime {
     clipboard: Arc<dyn symvault_core::platform::Clipboard>,
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
     clipboard_auto_clear_duration: Duration,
+    api_transport_options: broker::ApiTransportOptions,
 }
 
 impl StoreReadOnlyRuntime {
@@ -493,11 +512,14 @@ impl StoreReadOnlyRuntime {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
         }
+        let reported_root = runtime_vault_dir(root.as_ref());
         let adapter = StoreReadOnlyAdapter::open(root, identity)?;
         let root = adapter.root().to_path_buf();
         let share_store = ShareStore::read(root.join(SHARE_STORE_FILE))
             .map_err(|error| format!("load share store: {error}"))?;
-        config.vault_dir = root.to_string_lossy().into_owned();
+        // Go reports the configured path spelling. Canonical roots remain
+        // authoritative for all I/O, including Windows short-name expansion.
+        config.vault_dir = reported_root;
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
@@ -539,6 +561,7 @@ impl StoreReadOnlyRuntime {
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
+            api_transport_options: broker::ApiTransportOptions::default(),
         })
     }
 
@@ -565,7 +588,7 @@ impl StoreReadOnlyRuntime {
         let adapter = StoreReadOnlyAdapter { store, identity };
         let share_store = ShareStore::read(adapter.root().join(SHARE_STORE_FILE))
             .map_err(|error| format!("load share store: {error}"))?;
-        config.vault_dir = adapter.root().to_string_lossy().into_owned();
+        config.vault_dir = runtime_vault_dir(adapter.root());
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
@@ -608,6 +631,7 @@ impl StoreReadOnlyRuntime {
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
+            api_transport_options: broker::ApiTransportOptions::default(),
         })
     }
 
@@ -616,6 +640,14 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_approval_seam(mut self, seam: Arc<dyn ApprovalSeam>) -> Self {
         self.approval = seam;
+        self
+    }
+
+    /// Explicit scoped fixture/application transport inputs. Installed CLI
+    /// construction retains OS DNS and normal verified roots.
+    #[must_use]
+    pub fn with_api_transport_options(mut self, options: broker::ApiTransportOptions) -> Self {
+        self.api_transport_options = options;
         self
     }
 
@@ -1398,7 +1430,12 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
-    fn execute_api_request(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+    fn execute_api_request(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
         let Some(name) = arguments.get("template").and_then(Value::as_str) else {
             self.append_audit("execute_api_request", "<invalid:missing-template>", false);
             return Ok(ToolCallResult::error(
@@ -1418,6 +1455,7 @@ impl StoreReadOnlyRuntime {
                 return Ok(ToolCallResult::error(error));
             }
         };
+        let context = context.with_timeout(timeout);
         let definition = match load_api_template_definition(&self.share_root, name) {
             Ok(definition) => definition,
             Err(error) => {
@@ -1468,7 +1506,13 @@ impl StoreReadOnlyRuntime {
             default_headers: definition.default_headers,
             allow_private: definition.allow_private,
         };
-        if let Err(error) = broker::validate_api_request(&runtime_template, &method, &endpoint) {
+        if let Err(error) = broker::validate_api_request_with_context(
+            &runtime_template,
+            &method,
+            &endpoint,
+            &context,
+            &self.api_transport_options,
+        ) {
             let audit_target = if error == "method not allowed by template" {
                 format!("<method-denied:{name}>")
             } else if error == "endpoint not allowed by template" {
@@ -1490,6 +1534,8 @@ impl StoreReadOnlyRuntime {
             self.append_audit("execute_api_request", "<approval-denied>", false);
             return Err(error);
         }
+
+        context.check()?;
 
         let entry_path = match api_entry_path(&definition.entry_ref) {
             Ok(path) => path,
@@ -1515,9 +1561,8 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        // Security hardening pending Go alignment: path-less Go API arguments
-        // bypass entry policy. Reuse the command secret-use authorization boundary
-        // before resolving the template entry's credentials.
+        // Authorize the template's credential entry for the run action before
+        // reading it, matching the retained Go handler's policy boundary.
         self.authorize_run_secret_path(&entry_path, "execute_api_request")
             .map_err(run_files_error)?;
 
@@ -1661,6 +1706,8 @@ impl StoreReadOnlyRuntime {
             broker::ApiResponseBounds {
                 timeout,
                 response_limit: broker::API_RESPONSE_LIMIT,
+                context,
+                options: &self.api_transport_options,
             },
         ) {
             Ok(response) => response,
@@ -2623,6 +2670,16 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
+        self.call_with_context(name, arguments, &crate::RequestContext::default())
+    }
+
+    fn call_with_context(
+        &self,
+        name: &str,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
         // Go registers rate limiting as a pre-call hook. It runs only after
         // tool availability, argument decoding, and authorization have
         // succeeded, and hook failures are returned as handler errors so the
@@ -2662,7 +2719,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         } else if name == "execute_with_secret" {
             self.execute_with_secret(arguments)
         } else if name == "execute_api_request" {
-            self.execute_api_request(arguments)
+            self.execute_api_request(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
         } else if name == "run_command" {
@@ -3182,7 +3239,10 @@ fn api_path_unescape(value: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&decoded).into_owned())
 }
 
-fn api_percent_decoded_bytes(value: &str, tolerate_malformed: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn api_percent_decoded_bytes(
+    value: &str,
+    tolerate_malformed: bool,
+) -> Result<Vec<u8>, String> {
     let mut decoded = Vec::with_capacity(value.len());
     let bytes = value.as_bytes();
     let mut index = 0;
@@ -3242,7 +3302,9 @@ fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Result<(), String> {
+pub(crate) fn validate_api_template_definition(
+    definition: &ApiTemplateDefinition,
+) -> Result<(), String> {
     if definition.base_url.is_empty() {
         return Err("base_url is required".into());
     }
@@ -3295,7 +3357,7 @@ fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Resul
     Ok(())
 }
 
-fn api_entry_path(reference: &str) -> Result<String, String> {
+pub(crate) fn api_entry_path(reference: &str) -> Result<String, String> {
     let path = reference.trim();
     if path.is_empty() {
         return Err("entry_ref is required".into());
@@ -3337,7 +3399,7 @@ fn substitution_applies(substitution: &ApiSubstitution, surface: &str) -> bool {
             .any(|item| item == surface)
 }
 
-fn resolve_api_substitutions(
+pub(crate) fn resolve_api_substitutions(
     substitutions: &[ApiSubstitution],
     fields: &BTreeMap<String, Value>,
 ) -> Result<BTreeMap<String, String>, String> {
@@ -3358,7 +3420,7 @@ fn resolve_api_substitutions(
     Ok(values)
 }
 
-fn api_request_url(
+pub(crate) fn api_request_url(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3386,7 +3448,7 @@ fn api_request_url(
     Ok(url.to_string())
 }
 
-fn apply_api_body_substitutions(
+pub(crate) fn apply_api_body_substitutions(
     body: &str,
     substitutions: &[ApiSubstitution],
     values: &BTreeMap<String, String>,
@@ -3402,7 +3464,7 @@ fn apply_api_body_substitutions(
     body
 }
 
-fn apply_api_header_substitutions(
+pub(crate) fn apply_api_header_substitutions(
     headers: &mut BTreeMap<String, String>,
     substitutions: &[ApiSubstitution],
     values: &BTreeMap<String, String>,
@@ -3418,13 +3480,16 @@ fn apply_api_header_substitutions(
     }
 }
 
-fn overlay_api_headers(target: &mut BTreeMap<String, String>, incoming: BTreeMap<String, String>) {
+pub(crate) fn overlay_api_headers(
+    target: &mut BTreeMap<String, String>,
+    incoming: BTreeMap<String, String>,
+) {
     for (name, value) in incoming {
         set_api_header(target, &name, value);
     }
 }
 
-fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
+pub(crate) fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
     headers.retain(|existing, _| !existing.eq_ignore_ascii_case(name));
     headers.insert(name.to_owned(), value);
 }
@@ -3442,7 +3507,7 @@ type ApiAuthHeader = Option<(String, String)>;
 type ApiAuthQuery = Option<(String, String)>;
 type ApiAuthResult = Result<(ApiAuthHeader, ApiAuthQuery), String>;
 
-fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
+pub(crate) fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
     match auth_type {
         "bearer" => {
             let token = api_field(fields, &["credential", "token", "password"])
@@ -3492,7 +3557,11 @@ fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult 
     }
 }
 
-fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String, String> {
+pub(crate) fn set_api_query_parameter(
+    url: &str,
+    name: &str,
+    value: &str,
+) -> Result<String, String> {
     let mut url = reqwest::Url::parse(url).map_err(|_| "invalid template URL")?;
     let mut pairs = BTreeMap::<String, Vec<String>>::new();
     for (key, value) in url.query_pairs() {
@@ -3512,7 +3581,7 @@ fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String,
     Ok(url.to_string())
 }
 
-fn api_query_escape(value: &str) -> String {
+pub(crate) fn api_query_escape(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
@@ -3574,7 +3643,7 @@ fn api_escaped_path(value: &str) -> String {
         .collect()
 }
 
-fn api_substitution_redaction_values(value: &str) -> Vec<String> {
+pub(crate) fn api_substitution_redaction_values(value: &str) -> Vec<String> {
     // Preserve Go escaping while covering the URL serializer used by the request.
     let mut url = reqwest::Url::parse("http://localhost/").expect("static URL");
     url.set_path(&format!("/{value}"));
@@ -3610,7 +3679,7 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
     ]
 }
 
-fn api_path_substitution_redaction_values(
+pub(crate) fn api_path_substitution_redaction_values(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3677,7 +3746,7 @@ fn api_path_substitution_redaction_values(
     Ok(known)
 }
 
-fn api_query_substitution_redaction_values(
+pub(crate) fn api_query_substitution_redaction_values(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3737,7 +3806,7 @@ fn api_query_substitution_redaction_values(
     Ok(known)
 }
 
-fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
+pub(crate) fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
     let (known_sanitized, exact_count) =
         symvault_core::redact::redact_known_values(text, known_values, "***");
     let mut scanner = symvault_core::redact::Scanner::new(vec![Box::new(

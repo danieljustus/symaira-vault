@@ -1,0 +1,104 @@
+// Generator-only probe: production Cobra completion with disposable vaults and
+// the real process-memory session backend. No operator keyring is consulted.
+package main
+
+import (
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "os"
+ "path/filepath"
+ "reflect"
+ "runtime"
+ "strings"
+ "time"
+
+ "filippo.io/age"
+ "github.com/spf13/cobra"
+ "github.com/spf13/pflag"
+ vaultcmd "github.com/danieljustus/symaira-vault/cmd"
+ cli "github.com/danieljustus/symaira-vault/internal/cli"
+ config "github.com/danieljustus/symaira-vault/internal/config"
+ vault "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+type request struct {
+ Name string `json:"name"`
+ Args []string `json:"args"`
+ State string `json:"state"`
+}
+type observation struct {
+ request
+ Stdout string `json:"stdout"`
+ Stderr string `json:"stderr"`
+ Error string `json:"error,omitempty"`
+}
+
+func main() {
+ if len(os.Args)>1 && os.Args[1]=="tree" {
+  root:=vaultcmd.NewRootCmd()
+  root.InitDefaultHelpCmd(); root.InitDefaultCompletionCmd()
+  var commands []map[string]any
+  var walk func(*cobra.Command)
+  walk=func(c *cobra.Command) {
+   c.InitDefaultHelpFlag()
+   flags:=func(set *pflag.FlagSet) []map[string]any {
+    result:=make([]map[string]any,0)
+    set.VisitAll(func(f *pflag.Flag) {
+     result=append(result,map[string]any{"name":f.Name,"shorthand":f.Shorthand,"usage":f.Usage,
+      "type":f.Value.Type(),"default":f.DefValue,"no_opt_default":f.NoOptDefVal,
+      "hidden":f.Hidden,"deprecated":f.Deprecated,"annotations":f.Annotations})
+    })
+    return result
+   }
+   dynamic:=""
+   if c.ValidArgsFunction!=nil {
+    symbol:=runtime.FuncForPC(reflect.ValueOf(c.ValidArgsFunction).Pointer()).Name()
+    switch {
+    case strings.HasSuffix(symbol,".EntryCompletionFunc"): dynamic="entries"
+    case strings.HasSuffix(symbol,".ConfigKeyCompletionFunc"): dynamic="config"
+    case strings.HasSuffix(symbol,".NoFileCompletions"): dynamic="none"
+    case c.Name()=="help" && strings.Contains(symbol,"InitDefaultHelpCmd"): dynamic="help"
+    default: panic("undeclared Go completion callback: "+symbol)
+    }
+   }
+   commands=append(commands,map[string]any{"path":c.CommandPath(),"name":c.Name(),"short":c.Short,
+    "aliases":c.Aliases,"valid_args":c.ValidArgs,"arg_aliases":c.ArgAliases,"hidden":c.Hidden,
+    "deprecated":c.Deprecated,"available":c.IsAvailableCommand(),"disable_flag_parsing":c.DisableFlagParsing,"dynamic":dynamic,
+    "local_flags":flags(c.LocalNonPersistentFlags()),"persistent_flags":flags(c.PersistentFlags())})
+   for _,child:=range c.Commands() {walk(child)}
+  }
+  walk(root)
+  if err:=json.NewEncoder(os.Stdout).Encode(map[string]any{"commands":commands,"config_keys":config.KnownConfigKeys(),"config_path":filepath.Join(config.DefaultConfigDir(),"config.yaml")});err!=nil {panic(err)}
+  return
+ }
+ var requests []request
+ if err:=json.NewDecoder(os.Stdin).Decode(&requests); err!=nil { panic(err) }
+ observations:=make([]observation,0,len(requests))
+ for i,r:=range requests {
+  root:=filepath.Join(os.Getenv("HOME"),fmt.Sprintf("vault-%d",i))
+  if r.State!="absent" {
+   identity,err:=age.GenerateX25519Identity(); if err!=nil {panic(err)}
+   if err=vault.Init(root,identity,&config.Config{});err!=nil {panic(err)}
+   for _,path:=range []string{"alpha/account","alpha/token","beta"} {
+    if err=vault.WriteEntry(root,path,&vault.Entry{Data:map[string]any{"password":"public-fixture"}},identity);err!=nil {panic(err)}
+   }
+   if r.State!="locked" {
+    key:=identity.String()
+    if r.State=="malformed" {key="not-an-age-identity"}
+    ttl:=time.Minute
+    if r.State=="expired" {ttl=time.Nanosecond}
+    if err=cli.SessionSaveIdentity(root,key,ttl);err!=nil {panic(err)}
+   }
+  }
+  command:=vaultcmd.NewRootCmd()
+  var out,errout bytes.Buffer
+  command.SetOut(&out); command.SetErr(&errout)
+  command.SetArgs(append([]string{"--vault",root,"__complete"},r.Args...))
+  err:=command.Execute()
+  result:=observation{request:r,Stdout:out.String(),Stderr:errout.String()}
+  if err!=nil {result.Error=err.Error()}
+  observations=append(observations,result)
+ }
+ if err:=json.NewEncoder(os.Stdout).Encode(observations);err!=nil {panic(err)}
+}
