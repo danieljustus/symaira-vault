@@ -18,16 +18,8 @@
 //! error rendered twice with an `Error: ` prefix, and the generic not-found
 //! hint — empty stdout, exit status 2.
 //!
-//! Documented known difference (asserted below as a negative control): bare
-//! `symvault serve` and `serve install|status|uninstall` are deliberately
-//! **not** ported — they belong to the HTTP/service runtime. The oracle
-//! prints `Warning: 'symvault serve' is deprecated, use 'symvault mcp'
-//! instead.` and then starts the server (on an empty `HOME` it continues with
-//! `Error: vault not initialized. …`, exit 3); the port declares only the
-//! `token` child, so clap rejects the word forms with `unrecognized
-//! subcommand` (exit 1) while the bare form renders clap's help on stderr
-//! (exit 1), the same shape as bare `agent`/`policy`. `symvault help` stays a
-//! documented non-goal of the port, as in the merged alias slice.
+//! Bare serve now delegates to the canonical runtime; its actual Go/Rust
+//! native behavior is covered by the separate serve contract driver.
 use std::{
     env,
     path::{Path, PathBuf},
@@ -210,64 +202,18 @@ fn help_lists_command(help: &str, name: &str) -> bool {
     })
 }
 
-/// Negative control: the deliberately unported `serve` runtime paths must
-/// fail closed instead of masquerading as the ported stubs.
-///
-/// The oracle's bare `serve` prints its own deprecation warning and then
-/// starts (or fails inside) the server — captured on an empty `HOME`: exit 3
-/// with `Error: vault not initialized. …`; `serve install`/`uninstall` write
-/// a launchd/systemd unit. None of that is ported. Instead clap rejects the
-/// word forms with `unrecognized subcommand` (exit 1, stderr), and the bare
-/// form renders clap's help-on-missing-subcommand on stderr with exit 1 —
-/// the established shape for every required-subcommand parent in this port
-/// (bare `agent`, `policy` and `device` behave the same). If a future slice
-/// ports the runtime, this test is the one to update together with the
-/// module docs in `deprecated_stubs`.
+/// Bare and arbitrary-argument serve must reach the initialized-vault guard.
 #[test]
-fn unported_serve_runtime_paths_fail_closed_without_stub_output() {
+fn serve_runtime_reaches_vault_guard_and_preserves_deprecation_notice() {
     let binary = rust_binary();
     let (_guard, home, root) = disposable_roots();
-
-    for args in [
-        &["serve"][..],
-        &["serve", "install"],
-        &["serve", "status"],
-        &["serve", "uninstall"],
-        &["serve", "bogus"],
-    ] {
+    for args in [&["serve"][..], &["serve", "bogus"], &["--quiet", "serve"]] {
         let output = run(&binary, args, &root, &home);
-        let label = format!("symvault {}", args.join(" "));
+        assert_eq!(output.status.code(), Some(3));
+        assert!(output.stdout.is_empty());
         assert_eq!(
-            output.status.code(),
-            Some(1),
-            "{label} must fail closed; stderr={:?}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(output.stdout.is_empty(), "{label} wrote to stdout");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        // Windows renders the executable name as `symvault.exe` in clap usage.
-        assert!(
-            stderr.contains(" serve [") || stderr.contains(" serve "),
-            "{label} did not target the serve command: {stderr}"
-        );
-        if args.len() > 1 {
-            assert!(
-                stderr.starts_with("error:"),
-                "{label} stderr is not a parse error: {stderr}"
-            );
-        } else {
-            assert!(
-                stderr.starts_with("Deprecated: use `symvault mcp`"),
-                "{label} stderr is not the serve help: {stderr}"
-            );
-        }
-        assert!(
-            !stderr.contains("This command is deprecated"),
-            "{label} must not print stub bytes: {stderr}"
-        );
-        assert!(
-            !stderr.contains("Warning: 'symvault serve' is deprecated"),
-            "{label} must not print the oracle's server warning: {stderr}"
+            String::from_utf8_lossy(&output.stderr),
+            "Warning: 'symvault serve' is deprecated, use 'symvault mcp' instead.\nError: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
         );
     }
 }

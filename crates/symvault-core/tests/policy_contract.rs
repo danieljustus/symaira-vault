@@ -366,6 +366,44 @@ fn path_cases_match_go_oracle() {
 }
 
 #[test]
+fn bounded_network_globs_match_captured_go_unicode_and_escape_cases() {
+    let mut count = 0;
+    for case in &fixture().path_cases {
+        if !matches!(
+            case.name.as_str(),
+            "unicode_question_is_one_rune"
+                | "unicode_class"
+                | "backslash_escapes_a_metacharacter"
+                | "question_is_not_a_literal_directory"
+                | "class_is_not_a_literal_directory"
+                | "question_keeps_its_glob_meaning"
+        ) {
+            continue;
+        }
+        let mut budget = 8 * 1024 * 1024;
+        assert_eq!(
+            symvault_core::policy::glob_match_with_budget(&case.pattern, &case.path, &mut budget),
+            case.matches,
+            "actual Go case {}",
+            case.name
+        );
+        count += 1;
+    }
+    assert_eq!(count, 6);
+    let mut budget = 4;
+    assert!(!symvault_core::policy::glob_match_with_budget(
+        "*secret*",
+        "long-secret-value",
+        &mut budget
+    ));
+    assert_eq!(budget, 0);
+    assert!(
+        !symvault_core::policy::glob_match_with_budget("*", "allowed", &mut budget),
+        "a later ACL pattern must not reset an exhausted request allowance"
+    );
+}
+
+#[test]
 fn empty_engine_cases_match_genuine_default_result() {
     let fixture = fixture();
     for case in &fixture.empty_engine_cases {

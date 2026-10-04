@@ -1,11 +1,21 @@
-//! Bounded HTTP slice for Go's API-template and egress broker contract.
+//! Owned TLS egress broker and bounded HTTP API-template transport.
 //! Oracle sources: broker proxy/auth at `ba4dc0680878870bfb30ccd39a0b973b960d3e09`,
 //! and `internal/ssrf/ssrf.go` at `c7c6d04b6dc6349800d12d87d605ae55081bf694`.
 //!
-//! This helper sends plain HTTP only to numeric loopback addresses or `localhost`,
+//! `EgressBroker` validates and pins public destinations, owns its TLS workers,
+//! and borrows the real identity/store for request-time credential projection.
+//! The earlier `execute_http` helper sends plain HTTP only to numeric loopback addresses or `localhost`,
 //! and verified HTTPS only to those same local targets in this slice. Public
-//! DNS validation, vault lookup, substitutions, audit, and response pattern
-//! sanitization remain separate migration work.
+//! DNS validation for that MCP helper and the remaining MCP approval/audit
+//! context retain their separate migration gates; egress evidence alone does
+//! not promote the full MCP API contract. See ADR 0015.
+
+#[path = "broker_connect.rs"]
+mod connect;
+pub use connect::serve_connect_passthrough;
+#[path = "broker_egress.rs"]
+mod egress;
+pub use egress::{EgressBroker, EgressOptions};
 
 use reqwest::{
     Method, Url,
