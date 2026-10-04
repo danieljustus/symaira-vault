@@ -85,6 +85,10 @@ code, stderr placement and absence of vault writes here.
 The actual CLI gap report has no intake path, flag or alias gaps. The native
 workflow requires clean candidate receipts, real Go observations and named
 cases on macOS/Linux/Windows, including a real Windows console-control event.
+The Windows driver checks actual console membership before allocating a
+console: hosted runners can inherit an invisible console, for which a window
+handle is not an attachment test. It still requires successful delivery to the
+child's real process group and graceful exit; access errors are not ignored.
 IO-003 stays in_progress until those actual native jobs pass.
 Polling is the oracle's native behavior; an OS event-watcher implementation is
 not an additional acceptance requirement. Broader platform UI and release gates

@@ -60,7 +60,13 @@ def spawn(args, home):
     flags = 0
     if os.name == "nt":
         kernel = ctypes.windll.kernel32
-        if not kernel.GetConsoleWindow() and not kernel.AllocConsole():
+        # Hosted runners can inherit an invisible console. GetConsoleWindow
+        # does not prove attachment; AllocConsole then fails with ACCESS_DENIED
+        # because the process already has a console. Check actual membership.
+        members = (ctypes.c_ulong * 1)()
+        kernel.GetConsoleProcessList.argtypes = [ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong]
+        kernel.GetConsoleProcessList.restype = ctypes.c_ulong
+        if not kernel.GetConsoleProcessList(members, 1) and not kernel.AllocConsole():
             raise ctypes.WinError()
         flags = subprocess.CREATE_NEW_PROCESS_GROUP
     return subprocess.Popen([str(x) for x in args], cwd=home, env=isolated(home),
