@@ -96,3 +96,10 @@ fed grouped Go-compatible help, although all 134 direct oracle-path probes
 succeeded. A regression test reads the actual generated Go root help, and
 native acceptance requires a nontrivial discovered tree. The report measures
 documentation/flag reachability; it still does not certify runtime behavior.
+
+The current native macOS job failed while cleaning up its interactive Bash:
+both the ordinary exit and SIGTERM wait timed out, obscuring the original Tab
+failure. The test now kills the owned session group after the bounded ordinary
+exit wait and reaps its shell. Preserve any original completion failure; never
+turn a cleanup timeout into acceptance or omit Bash from the native job. The
+next macOS receipt must establish the actual candidate rows independently.

@@ -136,6 +136,7 @@ def terminal_completion(shell, setup, base, env):
     import errno
     import pty
     import select
+    import signal
     import time
     master, slave = pty.openpty()
     process = subprocess.Popen([shell, '-f' if Path(shell).name == 'zsh' else '--norc', '-i'],
@@ -174,13 +175,22 @@ def terminal_completion(shell, setup, base, env):
                 'candidates':[line.strip() for line in screen.splitlines()
                               if re.match(r'^(?:generate|get|git)\s',line)]}
     finally:
-        os.write(master, b'\x15exit\n')
         try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.terminate()
-            process.wait(timeout=3)
-        os.close(master)
+            if process.poll() is None:
+                try:
+                    os.write(master, b'\x15exit\n')
+                    process.wait(timeout=3)
+                except (OSError, subprocess.TimeoutExpired):
+                    # Interactive shells may ignore SIGTERM. Kill the owned
+                    # session group, then reap it; never mask a failed Tab case
+                    # with a second cleanup timeout.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait(timeout=3)
+        finally:
+            os.close(master)
 
 
 def verify_shells(go, rust, artifact, base, env, require_native_shells):
