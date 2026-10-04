@@ -947,7 +947,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     };
 
     let success_profile = AgentProfile {
-        tier: Some("standard".into()),
+        tier: Some("admin".into()),
         approval_mode: Some("none".into()),
         allowed_paths: vec!["*".into()],
         can_run_commands: true,
@@ -955,6 +955,26 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         ..AgentProfile::default()
     };
     let status_case = cases_by_name["bearer_get_response_redaction"];
+    for tier in ["read-only", "standard"] {
+        let mut restricted = success_profile.clone();
+        restricted.tier = Some(tier.into());
+        let (_, _, denied) = execute_case(status_case, restricted, true);
+        let required = if tier == "read-only" {
+            "standard"
+        } else {
+            "admin"
+        };
+        assert_eq!(denied["result"]["isError"], true);
+        assert_eq!(
+            denied["result"]["content"][0]["text"],
+            format!("Tool \"execute_api_request\" requires tier {required:?}")
+        );
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            0,
+            "tier denial contacted upstream"
+        );
+    }
     let (status_vault, mut status_handler, status_response) =
         execute_case(status_case, success_profile.clone(), true);
     assert_eq!(
@@ -1113,7 +1133,16 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             "Go fixture must capture an error for {name}"
         );
         let (_vault, _handler, response) = execute_case(case, profile, with_entry);
-        let expected_error = case.error.as_deref().unwrap_or(&case.text);
+        // The source fixture invokes the Go handler directly. The complete
+        // production registry denies an unavailable API tool before reaching
+        // that handler, as measured by the native MCP process contract.
+        let expected_error = if name == "capability_denied_no_request" {
+            assert_eq!(response["result"]["isError"], true);
+            assert!(response.get("error").is_none());
+            "tool \"execute_api_request\" is not available in the current environment"
+        } else {
+            case.error.as_deref().unwrap_or(&case.text)
+        };
         let actual_error = response["error"]["message"]
             .as_str()
             .or_else(|| response["result"]["content"][0]["text"].as_str())

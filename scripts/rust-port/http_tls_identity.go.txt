@@ -1,0 +1,90 @@
+// Disposable, strict-verifier-compatible identities. No production trust store.
+package main
+
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
+	"flag"
+	"math/big"
+	"net"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func identity(root, name string, issuer *x509.Certificate, issuerKey *ecdsa.PrivateKey, ca bool, usage x509.ExtKeyUsage) (*x509.Certificate, *ecdsa.PrivateKey) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		panic(err)
+	}
+	digest := sha256.Sum256(public)
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		panic(err)
+	}
+	now := time.Now()
+	cert := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "public-http-tls-" + name}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour), BasicConstraintsValid: true, IsCA: ca, KeyUsage: x509.KeyUsageDigitalSignature, SubjectKeyId: digest[:20]}
+	if ca {
+		cert.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+		cert.MaxPathLen = 0
+		cert.MaxPathLenZero = true
+	} else {
+		cert.ExtKeyUsage = []x509.ExtKeyUsage{usage}
+		if usage == x509.ExtKeyUsageServerAuth {
+			cert.DNSNames = []string{"localhost", "vault.example.test"}
+			cert.IPAddresses = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+		}
+	}
+	if issuer == nil {
+		issuer, issuerKey = cert, key
+	}
+	cert.AuthorityKeyId = issuer.SubjectKeyId
+	der, err := x509.CreateCertificate(rand.Reader, cert, issuer, &key.PublicKey, issuerKey)
+	if err != nil {
+		panic(err)
+	}
+	parsed, err := x509.ParseCertificate(der)
+	if err != nil {
+		panic(err)
+	}
+	private, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		panic(err)
+	}
+	for suffix, block := range map[string]*pem.Block{".pem": {Type: "CERTIFICATE", Bytes: der}, ".key": {Type: "PRIVATE KEY", Bytes: private}} {
+		if err = os.WriteFile(filepath.Join(root, name+suffix), pem.EncodeToMemory(block), 0600); err != nil {
+			panic(err)
+		}
+	}
+	return parsed, key
+}
+
+func main() {
+	root := flag.String("root", "", "owned disposable identity directory")
+	flag.Parse()
+	if *root == "" {
+		panic("empty identity directory")
+	}
+	if err := os.Mkdir(*root, 0700); err != nil {
+		panic(err)
+	}
+	ca, key := identity(*root, "server-ca", nil, nil, true, 0)
+	identity(*root, "server", ca, key, false, x509.ExtKeyUsageServerAuth)
+	clients, clientKey := identity(*root, "client-ca", nil, nil, true, 0)
+	identity(*root, "client", clients, clientKey, false, x509.ExtKeyUsageClientAuth)
+	foreign, foreignKey := identity(*root, "foreign-ca", nil, nil, true, 0)
+	identity(*root, "foreign-client", foreign, foreignKey, false, x509.ExtKeyUsageClientAuth)
+	if err := json.NewEncoder(os.Stdout).Encode(map[string]string{"curve": "P-256", "server_name": "localhost", "client_auth": "separate-client-ca"}); err != nil {
+		panic(err)
+	}
+}

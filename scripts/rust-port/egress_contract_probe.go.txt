@@ -1,0 +1,59 @@
+// Private native fixture launcher. None of its transport seams is a CLI flag.
+package main
+
+import (
+ "crypto/tls"
+ "crypto/x509"
+ "encoding/json"
+ "flag"
+ "fmt"
+ "io"
+ "net"
+ "net/http"
+ "os"
+ "path/filepath"
+ "github.com/danieljustus/symaira-vault/internal/broker"
+ configpkg "github.com/danieljustus/symaira-vault/internal/config"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+func main() {
+ root := flag.String("root", "", "private fixture vault")
+ seed := flag.String("seed", "", "public fixture entry JSON")
+ ca := flag.String("upstream-ca", "", "private fixture root")
+ strict := flag.Bool("strict", false, "strict unmatched host rejection")
+ passthrough := flag.String("passthrough", "", "fixture passthrough selector")
+ private := flag.Bool("allow-private", false, "explicit private fixture seam")
+ flag.Parse()
+ phrase := []byte("correct horse battery staple")
+ if *seed != "" {
+  raw, err := os.ReadFile(*seed); if err != nil { panic(err) }
+  var data map[string]any; if err = json.Unmarshal(raw, &data); err != nil { panic(err) }
+  cfg := configpkg.Default()
+  cfg.Vault = &configpkg.VaultConfig{FormatVersion:2, AuthMethod:"passphrase", Argon2idTime:2, Argon2idMemory:19456, Argon2idThreads:1}
+  identity, err := vault.InitWithPassphrase(*root, phrase, cfg); if err != nil { panic(err) }
+  if err = vault.WriteEntry(*root, "fixture", &vault.Entry{Data:data}, identity); err != nil { panic(err) }
+  return
+ }
+ v, err := vault.OpenWithPassphrase(*root, phrase); if err != nil { panic(err) }
+ cfg := broker.Config{VaultDir:*root, Identity:v.Identity, Strict:*strict, AllowPrivate:*private}
+ if *passthrough != "" { cfg.Passthrough = []string{*passthrough} }
+ if *ca != "" {
+  raw, err := os.ReadFile(*ca); if err != nil { panic(err) }
+  roots, err := x509.SystemCertPool(); if err != nil { roots = x509.NewCertPool() }
+  if !roots.AppendCertsFromPEM(raw) { panic("invalid fixture root") }
+  cfg.UpstreamTLS = &tls.Config{RootCAs:roots, MinVersion:tls.VersionTLS12}
+ }
+ proxy, err := broker.New(cfg); if err != nil { panic(err) }
+ if err = os.WriteFile(filepath.Join(*root,"probe-ca.pem"), proxy.CA().CertPEM(),0600); err != nil { panic(err) }
+ listener, err := net.Listen("tcp","127.0.0.1:0"); if err != nil { panic(err) }
+ server := &http.Server{Handler:proxy.Handler()}
+ done := make(chan error,1)
+ go func(){ done <- server.Serve(listener) }()
+ fmt.Println(listener.Addr().String())
+ var stop [1]byte
+ _, _ = io.ReadFull(os.Stdin,stop[:])
+ _ = server.Close()
+ _ = listener.Close()
+ <-done
+}

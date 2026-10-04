@@ -1,6 +1,6 @@
 //! MCP-004 differential: replays the Go-generated hostile-frame corpus and
-//! asserts the stdout byte stream, the absence of bounds the oracle does not
-//! have, and the one adjudicated divergence.
+//! asserts the stdout byte stream and retained five-megabyte compatibility.
+//! ADR 0016 adds an explicitly adjudicated eight-megabyte frame bound.
 
 use serde::Deserialize;
 use symvault_mcp::{ProtocolHandler, handle_line_bytes, run_stream};
@@ -187,8 +187,8 @@ fn unterminated_frame_is_discarded() {
     );
 }
 
-/// Input is not bounded in the oracle, so the port must not invent a bound: a
-/// five-megabyte frame is answered normally. Rebuilt from the fixture's shape
+/// Legacy Go is unbounded; Rust retains this measured five-megabyte input
+/// below its explicitly documented eight-megabyte bound. Rebuilt from the fixture's shape
 /// description rather than embedding megabytes in the corpus.
 #[test]
 fn bounds_match_go_oracle() {
