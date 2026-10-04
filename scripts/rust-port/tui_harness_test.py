@@ -5,6 +5,7 @@ python tui_harness_test.py --go-cli /path/go-cli --go-helper /path/go-fixture
 executes the pinned binaries. Without those arguments only pure checks execute.
 """
 import argparse
+import base64
 import copy
 import json
 import hashlib
@@ -15,21 +16,26 @@ from unittest.mock import patch
 
 import tui_contract as tui
 
+STRUCTURAL_BYTES = b'public-safe-terminal'
+STRUCTURAL_SHA = hashlib.sha256(STRUCTURAL_BYTES).hexdigest()
+
 
 class HarnessTests(unittest.TestCase):
     def valid_structural_receipt(self):
         # Synthetic schema control only. Never registered as native evidence.
         r = {'schema_version': 2, 'candidate_commit': 'a'*40, 'oracle_commit': tui.ORACLE,
              'native_os': 'Darwin', 'architecture': 'arm64', 'candidate_sources': {'fixture': 'b'*64},
-             'candidate_sources_at_end': {'fixture': 'b'*64}, 'rust_executable_sha256': 'c'*64,
-             'rebuilt_rust_executable_sha256': 'c'*64, 'binary_source_verified': True,
+             'candidate_sources_at_end': {'fixture': 'b'*64}, 'rust_executable_sha256': STRUCTURAL_SHA,
+             'rebuilt_rust_executable_sha256': STRUCTURAL_SHA, 'binary_source_verified': True,
+             'rebuilt_binary_artifact': 'safe', 'rebuilt_binary_bytes': len(STRUCTURAL_BYTES),
              'passed': True, 'candidate_worktree_clean': True, 'candidate_worktree_clean_at_end': True}
         for label in ['go', 'rust']:
             r[label] = []
             for case in tui.CASES:
                 row = {'case': case, 'passed': True, 'exit_code': 0, 'terminal_restored': True,
                        'input_restored': True, 'output_restored': True, 'canary_disclosure': False,
-                       'before': [{'version': 1}], 'after': [{'version': 1}], 'stdout_sha256': 'd'*64}
+                       'before': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}],
+                       'after': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}], 'stdout_sha256': 'd'*64}
                 if case in {'locked-wrong-passphrase', 'uninitialized'}:
                     row['exit_code'] = 6 if label == 'go' else 1
                 row['console'] = {'exit_code': row['exit_code'], 'input_restored': True, 'output_restored': True}
@@ -41,7 +47,7 @@ class HarnessTests(unittest.TestCase):
         return r
 
     def validate(self, r):
-        tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, 'c'*64)
+        tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, STRUCTURAL_SHA)
 
     def test_success_and_clean_flags_reject_missing_false_and_integer_true(self):
         valid = self.valid_structural_receipt()
@@ -73,7 +79,10 @@ class HarnessTests(unittest.TestCase):
             r = copy.deepcopy(valid); r[key] = 'wrong'
             with self.subTest(key=key), self.assertRaises(AssertionError): self.validate(r)
         r = copy.deepcopy(valid); r['rust'][0]['after'][0]['version'] = True
-        with self.assertRaisesRegex(AssertionError, 'differential mismatch'): self.validate(r)
+        with self.assertRaisesRegex(AssertionError, 'invalid snapshot version'): self.validate(r)
+        r = copy.deepcopy(valid)
+        for label in ['go', 'rust']: del r[label][0]['after'][0]['tags']
+        with self.assertRaisesRegex(AssertionError, 'incomplete snapshot fields'): self.validate(r)
 
     def test_terminal_canary_and_editor_security_flags_are_rejected(self):
         valid = self.valid_structural_receipt(); self.validate(valid)
@@ -115,7 +124,7 @@ class HarnessTests(unittest.TestCase):
                 for row in valid[label][:-1]:
                     row.update(capture_artifact='safe', capture_bytes=len(data), capture_sha256=hashlib.sha256(data).hexdigest())
             def validate(r):
-                tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, 'c'*64, root)
+                tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, STRUCTURAL_SHA, root)
             validate(valid)
             for key, value in [('capture_artifact', '../outside'), ('capture_artifact', str(root/'safe')),
                                ('capture_bytes', 1), ('capture_sha256', 'e'*64)]:
@@ -131,6 +140,22 @@ class HarnessTests(unittest.TestCase):
         browser.alive = lambda: False
         observations = iter([False, True])
         browser.wait(lambda: next(observations), 'exit between observations')
+
+    def test_genuine_deleted_status_is_not_a_remaining_entry(self):
+        fixture = json.loads(Path(__file__).with_name('tui_delete_status_fixture.json').read_bytes())
+        raw = base64.b64decode(fixture['capture'], validate=True)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), '50c290f1aca0dd001e454b8dfd3bd0cd090cfa54d312990a23813508af3de62f')
+        self.assertEqual(len(raw), 9675)
+        browser = object.__new__(tui.Browser)
+        browser.screen = tui.pyte.Screen(120, 32)
+        stream = tui.pyte.Stream(browser.screen)
+        stream.feed(raw.decode('utf-8'))
+        self.assertIn('Deleted alpha/login', browser.view())
+        self.assertIn(tui.PATHS[0], browser.view())  # genuine old-predicate failure
+        self.assertTrue(browser.deletion_visible())
+        # Structural negative control only, not another native capture.
+        stream.feed('\x1b[1;44Halpha/login')
+        self.assertFalse(browser.deletion_visible())
 
     def test_darwin_pending_input_exclusion_keeps_application_mode_checks(self):
         state = [1, 2, 3, 4, 5, 6, []]

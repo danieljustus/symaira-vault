@@ -51,6 +51,10 @@ jobs:
       CARGO_INCREMENTAL: '0'
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_TEST_DEBUG: '0'
+      # Acceptance-only byte reproducibility; release/debug packaging is unchanged.
+      # ponytail: retain exact-byte proof without Darwin's changing UUID until
+      # the native linker produces repeatable UUIDs; don't normalize binaries.
+      RUSTFLAGS: ${{ matrix.os == 'macos-latest' && '-C link-arg=-Wl,-no_uuid' || matrix.os == 'windows-latest' && '-C link-arg=/Brepro' || '' }}
 
       SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
     steps:
@@ -139,7 +143,7 @@ jobs:
           set -euo pipefail
           binary="$CARGO_TARGET_DIR/debug/symvault"
           if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
-          python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
+          python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
       - name: Retain all native receipts and failures
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
