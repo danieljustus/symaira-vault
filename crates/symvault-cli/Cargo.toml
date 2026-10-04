@@ -47,6 +47,7 @@ symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 url = "=2.5.8"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
 x509-parser = "=0.18.1"
+ctrlc = { version = "=3.5.2", features = ["termination"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.4", features = ["event", "fs", "process", "termios"] }

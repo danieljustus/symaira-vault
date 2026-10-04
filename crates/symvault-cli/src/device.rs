@@ -97,7 +97,7 @@ pub(crate) fn open_unlocked_vault(vault: &Path, identity: &Identity) -> Result<(
         .map_err(|error| format!("migrate legacy entries: {error}"))
 }
 
-fn unlock_vault_with_runtime(
+pub(crate) fn unlock_vault_with_runtime(
     vault: &Path,
     runtime: &crate::RuntimeSession,
 ) -> Result<Identity, String> {
