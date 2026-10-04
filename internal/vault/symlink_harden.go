@@ -72,24 +72,38 @@ func readEntryFileBounded(path string) ([]byte, error) {
 	return readEntryStreamBounded(file, path)
 }
 
-func readEntryRootedBounded(vaultDir, relative string) ([]byte, error) {
+func readRootedFileLimited(vaultDir, relative string, limit int64, budgets ...*vaultReadBatch) ([]byte, error) {
+	var raw []byte
+	err := withRootedFile(vaultDir, relative, func(file *os.File, path string) error {
+		var err error
+		raw, err = readEntryStreamLimited(file, path, limit, budgets...)
+		return err
+	})
+	return raw, err
+}
+
+func withRootedFile(vaultDir, relative string, consume func(*os.File, string) error) error {
 	root, err := os.OpenRoot(vaultDir)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = root.Close() }()
 	if rejectErr := rejectEntryRootSymlinks(root, relative); rejectErr != nil {
-		return nil, rejectErr
+		return rejectErr
 	}
 	file, err := root.OpenFile(relative, os.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: filepath.Join(vaultDir, relative), Err: err}
+		return &os.PathError{Op: "open", Path: filepath.Join(vaultDir, relative), Err: err}
 	}
 	defer func() { _ = file.Close() }()
-	return readEntryStreamBounded(file, filepath.Join(vaultDir, relative))
+	return consume(file, filepath.Join(vaultDir, relative))
 }
 
 func readEntryStreamBounded(file *os.File, path string) ([]byte, error) {
+	return readEntryStreamLimited(file, path, maxEntryCiphertextBytesV1)
+}
+
+func readEntryStreamLimited(file *os.File, path string, limit int64, budgets ...*vaultReadBatch) ([]byte, error) {
 	info, err := file.Stat()
 	if err != nil {
 		return nil, &os.PathError{Op: "fstat", Path: path, Err: err}
@@ -97,15 +111,31 @@ func readEntryStreamBounded(file *os.File, path string) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, &os.PathError{Op: "open", Path: path, Err: syscall.ENOTDIR}
 	}
-	if info.Size() > maxEntryCiphertextBytesV1 {
-		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	var batch *vaultReadBatch
+	if len(budgets) != 0 {
+		batch = budgets[0]
 	}
-	bytes, err := io.ReadAll(io.LimitReader(file, maxEntryCiphertextBytesV1+1))
+	if budgetErr := batch.consume(0); budgetErr != nil {
+		return nil, budgetErr
+	}
+	if info.Size() > limit {
+		batch.fail()
+		return nil, errEntryReadLimit
+	}
+	if budgetErr := batch.consume(int(info.Size())); budgetErr != nil {
+		return nil, budgetErr
+	}
+	readLimit := limit
+	if batch != nil {
+		readLimit = info.Size()
+	}
+	bytes, err := io.ReadAll(io.LimitReader(file, readLimit+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(bytes) > maxEntryCiphertextBytesV1 {
-		return nil, fmt.Errorf("%w: ciphertext", errEntryReadLimit)
+	if int64(len(bytes)) > readLimit {
+		batch.fail()
+		return nil, errEntryReadLimit
 	}
 	return bytes, nil
 }

@@ -235,6 +235,56 @@ impl StoreReadOnlyAdapter {
         self.store.root()
     }
 
+    fn ref_at_path(
+        reader: &symvault_store::ReadSession<'_>,
+        reference: &str,
+        expected_path: &str,
+    ) -> Result<String, String> {
+        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+            let candidate_path = &reference[..index];
+            let candidate_field = &reference[index + 1..];
+            let candidate = match reader.get(candidate_path) {
+                Ok(entry) => Some(entry),
+                Err(error) if error.is_resource_failure() => return Err(store_error(error)),
+                Err(_) => None,
+            };
+            if let Some(entry) = candidate
+                && let Some(value) = entry.data.get(candidate_field)
+            {
+                if candidate_path != expected_path {
+                    return Err("secret ref target changed during resolution".into());
+                }
+                if candidate_field.is_empty() {
+                    return Ok(format_go_secret_map(&entry.data));
+                }
+                return Ok(format_go_secret_value(value));
+            }
+        }
+        if reference != expected_path {
+            return Err("secret ref target changed during resolution".into());
+        }
+        let entry = reader.get(reference).map_err(store_error)?;
+        Ok(format_go_secret_map(&entry.data))
+    }
+
+    fn ref_path(
+        reader: &symvault_store::ReadSession<'_>,
+        reference: &str,
+    ) -> Result<String, String> {
+        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+            let candidate_path = &reference[..index];
+            let candidate_field = &reference[index + 1..];
+            match reader.get(candidate_path) {
+                Ok(entry) if entry.data.contains_key(candidate_field) => {
+                    return Ok(candidate_path.to_owned());
+                }
+                Err(error) if error.is_resource_failure() => return Err(store_error(error)),
+                _ => {}
+            }
+        }
+        Ok(reference.to_owned())
+    }
+
     fn project(path: &str, entry: Entry) -> ReadOnlyEntry {
         ReadOnlyEntry {
             path: if entry.path.is_empty() {
@@ -258,12 +308,13 @@ impl StoreReadOnlyAdapter {
 
 impl ReadOnlyStore for StoreReadOnlyAdapter {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String> {
-        let paths = self.store.list(&self.identity).map_err(store_error)?;
+        let reader = self.store.read_session(&self.identity);
+        let paths = reader.list().map_err(store_error)?;
         paths
             .into_iter()
             .map(|path| {
-                self.store
-                    .get(&path, &self.identity)
+                reader
+                    .get(&path)
                     .map(|entry| Self::project(&path, entry))
                     .map_err(store_error)
             })
@@ -285,42 +336,14 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
         reference: &str,
         expected_path: &str,
     ) -> Result<String, String> {
-        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
-            let candidate_path = &reference[..index];
-            let candidate_field = &reference[index + 1..];
-            if let Ok(entry) = self.store.get(candidate_path, &self.identity)
-                && let Some(value) = entry.data.get(candidate_field)
-            {
-                if candidate_path != expected_path {
-                    return Err("secret ref target changed during resolution".into());
-                }
-                if candidate_field.is_empty() {
-                    return Ok(format_go_secret_map(&entry.data));
-                }
-                return Ok(format_go_secret_value(value));
-            }
-        }
-        if reference != expected_path {
-            return Err("secret ref target changed during resolution".into());
-        }
-        let entry = self
-            .store
-            .get(reference, &self.identity)
-            .map_err(store_error)?;
-        Ok(format_go_secret_map(&entry.data))
+        Self::ref_at_path(
+            &self.store.read_session(&self.identity),
+            reference,
+            expected_path,
+        )
     }
-
     fn resolve_secret_ref_path(&self, reference: &str) -> Result<String, String> {
-        if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
-            let candidate_path = &reference[..index];
-            let candidate_field = &reference[index + 1..];
-            if let Ok(entry) = self.store.get(candidate_path, &self.identity)
-                && entry.data.contains_key(candidate_field)
-            {
-                return Ok(candidate_path.to_owned());
-            }
-        }
-        Ok(reference.to_owned())
+        Self::ref_path(&self.store.read_session(&self.identity), reference)
     }
 
     fn delete_entry(&self, path: &str) -> Result<(), String> {
@@ -790,6 +813,8 @@ impl StoreReadOnlyRuntime {
     }
 
     fn run_command(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let adapter = self.inner.store();
+        let reader = adapter.store.read_session(&adapter.identity);
         let Some(executor) = &self.command_executor else {
             return Err("run_command has no configured command executor".into());
         };
@@ -900,12 +925,9 @@ impl StoreReadOnlyRuntime {
                     });
                 }
             }
-            let path = self
-                .inner
-                .resolve_secret_ref_path(reference)
-                .map_err(|error| {
-                    format!("cannot resolve secret ref path {reference:?}: {error}")
-                })?;
+            let path = StoreReadOnlyAdapter::ref_path(&reader, reference).map_err(|error| {
+                format!("cannot resolve secret ref path {reference:?}: {error}")
+            })?;
             if !self.inner.scope_allows(&path) {
                 self.append_audit("scope_denied", &path, false);
                 return Err(format!(
@@ -936,10 +958,7 @@ impl StoreReadOnlyRuntime {
             let expected_path = resolved_paths
                 .get(name)
                 .expect("every validated command secret has a resolved path");
-            let value = match self
-                .inner
-                .resolve_secret_ref_at_path(reference, expected_path)
-            {
+            let value = match StoreReadOnlyAdapter::ref_at_path(&reader, reference, expected_path) {
                 Ok(value) => value,
                 Err(error) => {
                     return Ok(ToolCallResult::error(format!(
@@ -949,7 +968,7 @@ impl StoreReadOnlyRuntime {
             };
             environment.insert(name.clone(), value);
         }
-        let files = match self.resolve_run_command_files(arguments.get("files")) {
+        let files = match self.resolve_run_command_files(&reader, arguments.get("files")) {
             Ok(files) => files,
             Err(RunFilesError::Tool(message)) => return Ok(ToolCallResult::error(message)),
             Err(RunFilesError::Denied(message)) => return Err(message),
@@ -1135,6 +1154,8 @@ impl StoreReadOnlyRuntime {
     }
 
     fn execute_with_secret(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let adapter = self.inner.store();
+        let reader = adapter.store.read_session(&adapter.identity);
         let Some(executor) = &self.command_executor else {
             return Err("execute_with_secret has no configured command executor".into());
         };
@@ -1236,19 +1257,16 @@ impl StoreReadOnlyRuntime {
                 } else {
                     format!("{entry_path}.{field}")
                 };
-                let resolved_path = self
-                    .inner
-                    .resolve_secret_ref_path(&resolver_ref)
+                let resolved_path = StoreReadOnlyAdapter::ref_path(&reader, &resolver_ref)
                     .map_err(|error| format!("cannot resolve secret ref {reference:?}: {error}"))?;
                 self.authorize_run_secret_path(&resolved_path, "execute_with_secret")
                     .map_err(run_files_error)?;
-                let value = self
-                    .inner
-                    .resolve_secret_ref_at_path(&resolver_ref, &resolved_path)
-                    .map_err(|error| {
-                        self.append_audit("execute_with_secret", reference, false);
-                        format!("cannot resolve secret ref {reference:?}: {error}")
-                    });
+                let value =
+                    StoreReadOnlyAdapter::ref_at_path(&reader, &resolver_ref, &resolved_path)
+                        .map_err(|error| {
+                            self.append_audit("execute_with_secret", reference, false);
+                            format!("cannot resolve secret ref {reference:?}: {error}")
+                        });
                 let value = match value {
                     Ok(value) => value,
                     Err(error) => {
@@ -1785,6 +1803,7 @@ impl StoreReadOnlyRuntime {
 
     fn resolve_run_command_files(
         &self,
+        reader: &symvault_store::ReadSession<'_>,
         raw: Option<&Value>,
     ) -> Result<ResolvedRunFiles, RunFilesError> {
         let mut files = ResolvedRunFiles::default();
@@ -1804,17 +1823,12 @@ impl StoreReadOnlyRuntime {
                 .map_err(|message| RunFilesError::Tool(format!("files.{name}: {message}")))?;
             let candidate_path = extract_path_from_secret_ref(&reference);
             self.authorize_run_secret_path(&candidate_path, "run_command")?;
-            let path = self
-                .inner
-                .resolve_secret_ref_path(&reference)
-                .map_err(|error| {
-                    RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
-                })?;
+            let path = StoreReadOnlyAdapter::ref_path(reader, &reference).map_err(|error| {
+                RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
+            })?;
             self.authorize_run_secret_path(&path, "run_command")?;
-            let source = self
-                .inner
-                .resolve_secret_ref_at_path(&reference, &path)
-                .map_err(|error| {
+            let source =
+                StoreReadOnlyAdapter::ref_at_path(reader, &reference, &path).map_err(|error| {
                     RunFilesError::Tool(format!("cannot resolve secret ref {reference:?}: {error}"))
                 })?;
             let content = if encoding == "base64" {
@@ -5155,5 +5169,61 @@ mod tests {
             .expect_err("run policy denies before resolving the missing entry");
         assert_eq!(error, "policy denied by rule \"deny command use\"");
     }
+    #[test]
+    fn run_command_secret_refs_share_one_resource_allowance() {
+        let directory = tempdir().unwrap();
+        fs::create_dir(directory.path().join("entries")).unwrap();
+        fs::write(
+            directory.path().join("config.yaml"),
+            b"vault:\n  format_version: 2\n",
+        )
+        .unwrap();
+        fs::write(directory.path().join("identity.age"), b"fixture marker").unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let data = ["one", "two", "three", "four"].map(|key| {
+            (
+                key.into(),
+                json!("public-fixture".repeat((1024 * 1024) / 14)),
+            )
+        });
+        Store::open(directory.path(), &identity)
+            .unwrap()
+            .write_new_entry(
+                "control",
+                &Entry {
+                    data: BTreeMap::from(data),
+                    ..Default::default()
+                },
+                &identity,
+            )
+            .unwrap();
+        let runtime = StoreReadOnlyRuntime::open(
+            directory.path(),
+            identity,
+            ReadOnlyRuntimeConfig {
+                available_tools: vec!["run_command".into()],
+                can_run_commands: true,
+                allowed_executables: vec!["sh".into()],
+                allowed_paths: vec!["*".into()],
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .unwrap()
+        .with_command_executor(Arc::new(FakeCommandExecutor));
+        let environment: serde_json::Map<String, Value> = (0..8)
+            .map(|i| (format!("KEY_{i:02}"), json!("control.one")))
+            .collect();
+        let arguments = json!({"command":["sh","-c","echo ok"],"env":environment});
+        runtime.authorize("run_command", &arguments).unwrap();
+        let result = runtime.call("run_command", &arguments).unwrap();
+        assert!(
+            result.is_error,
+            "bounded resolution reached the command executor"
+        );
+        assert!(result.text.contains("vault resource limit exceeded"));
+    }
+
     include!("api_review_tests.rs");
 }

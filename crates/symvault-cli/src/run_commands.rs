@@ -18,6 +18,7 @@ use std::{
 
 use serde_json::Value;
 use symvault_core::redact::{PatternDetector, ScanOptions, Scanner, redact_known_values};
+#[cfg(test)]
 use symvault_crypto::Identity;
 use symvault_mcp::{CommandExecution, CommandExecutor};
 use symvault_store::{Entry, StoreError};
@@ -187,6 +188,7 @@ where
 /// exists and contains that field. Otherwise the full reference is read as
 /// an entry path, which permits dotted entry names. The Store and Identity
 /// are borrowed so this helper performs no writes or session changes.
+#[cfg(test)]
 pub(crate) fn resolve_secret_ref(
     root: &Path,
     identity: &Identity,
@@ -194,15 +196,27 @@ pub(crate) fn resolve_secret_ref(
 ) -> Result<String, String> {
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| resolve_error(reference, error))?;
+    resolve_secret_ref_in_session(&store.read_session(identity), reference)
+}
+
+pub(crate) fn resolve_secret_ref_in_session(
+    reader: &symvault_store::ReadSession<'_>,
+    reference: &str,
+) -> Result<String, String> {
     let mut path = reference;
     let mut field = None;
 
     if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
         let candidate_path = &reference[..index];
         let candidate_field = &reference[index + 1..];
-        if let Ok(entry) = store.get(candidate_path, identity)
-            && entry.data.contains_key(candidate_field)
-        {
+        let candidate = match reader.get(candidate_path) {
+            Ok(entry) => Some(entry),
+            Err(error) if error.is_resource_failure() => {
+                return Err(resolve_error(reference, error));
+            }
+            Err(_) => None,
+        };
+        if let Some(entry) = candidate.filter(|entry| entry.data.contains_key(candidate_field)) {
             path = candidate_path;
             // Go uses an empty string as its sentinel for no field. An entry
             // may legally contain an empty key, in which case ref. selects
@@ -214,8 +228,8 @@ pub(crate) fn resolve_secret_ref(
         }
     }
 
-    let entry = store
-        .get(path, identity)
+    let entry = reader
+        .get(path)
         .map_err(|error| resolve_error(reference, error))?;
     format_resolved_value(path, field, &entry)
 }

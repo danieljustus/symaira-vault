@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -692,28 +693,30 @@ func detectLegacyMode(cfg *vaultconfig.Config, vaultDir string) error {
 }
 
 func hasLegacyTopLevelAgeFiles(vaultDir string) (bool, error) {
-	entries, err := os.ReadDir(vaultDir)
+	directory, err := os.Open(vaultDir) // #nosec G304 -- caller-selected vault root; bounded top-level enumeration is the intended operation
 	if err != nil {
 		return false, err
 	}
-	entriesDirAbs := filepath.Join(vaultDir, entriesDirName)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
+	defer func() { _ = directory.Close() }()
+	visited := 0
+	for {
+		entries, err := directory.ReadDir(128)
+		if err != nil && !errors.Is(err, io.EOF) {
+			return false, err
 		}
-		if filepath.Ext(entry.Name()) != ".age" { //nolint:goconst // file extension literal
-			continue
+		for _, entry := range entries {
+			visited++
+			if visited > maxVaultEntryCount {
+				return false, errEntryEnumerationLimit
+			}
+			if !entry.IsDir() && filepath.Ext(entry.Name()) == entryExtAge && entry.Name() != identityAgeName {
+				return true, nil
+			}
 		}
-		if entry.Name() == "identity.age" { //nolint:goconst // filename literal
-			continue
+		if errors.Is(err, io.EOF) {
+			return false, nil
 		}
-		absPath := filepath.Join(vaultDir, entry.Name())
-		if absPath == entriesDirAbs {
-			continue
-		}
-		return true, nil
 	}
-	return false, nil
 }
 
 func cloneBytes(b []byte) []byte {

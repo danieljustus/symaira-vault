@@ -136,7 +136,20 @@ jobs:
       - name: Run gosec SAST scanner
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@${{ env.GOSEC_VERSION }}
-          gosec -exclude-generated -exclude-dir=testdata -fmt sarif -out gosec.sarif ./...
+          scanner_status=0
+          gosec -exclude-generated -exclude-dir=testdata -fmt sarif -out gosec.sarif ./... || scanner_status=$?
+          python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          report = Path('gosec.sarif')
+          if report.exists():
+              for run in json.loads(report.read_text()).get('runs', []):
+                  for finding in run.get('results', []):
+                      for location in finding.get('locations', []):
+                          physical = location.get('physicalLocation', {})
+                          print(f"{finding.get('ruleId')}: {physical.get('artifactLocation', {}).get('uri')}:{physical.get('region', {}).get('startLine')}: {finding.get('message', {}).get('text')}")
+          PYCODE
+          exit "$scanner_status"
 
       - name: Upload gosec SARIF report
         if: always()

@@ -140,14 +140,15 @@ pub fn initialize(root: &Path, passphrase: &SecretBytes) -> Result<Identity, Str
 /// Lists entry metadata, optionally restricted to a path prefix.
 pub fn list(root: &Path, identity: &Identity, prefix: &str) -> Result<Vec<ListEntryInfo>, String> {
     let store = open_vault(root, identity)?;
-    let paths = store
-        .list(identity)
+    let reader = store.read_session(identity);
+    let paths = reader
+        .list()
         .map_err(|error| format!("cannot list entries: {error}"))?;
     paths
         .into_iter()
         .filter(|path| prefix.is_empty() || path.starts_with(prefix))
         .map(|path| {
-            let info = match store.get(&path, identity) {
+            let info = match reader.get(&path) {
                 Ok(entry) => {
                     let has_value = has_value(&entry);
                     let field_count = entry.data.len();
@@ -160,6 +161,7 @@ pub fn list(root: &Path, identity: &Identity, prefix: &str) -> Result<Vec<ListEn
                         field_count,
                     }
                 }
+                Err(error) if error.is_resource_failure() => return Err(error.to_string()),
                 Err(_) => ListEntryInfo {
                     path,
                     secret_type: String::new(),
@@ -183,39 +185,47 @@ fn has_value(entry: &Entry) -> bool {
 /// Resolves an exact path or `path.field` query.
 pub fn get(root: &Path, identity: &Identity, query: &str) -> Result<GetResult, String> {
     let store = open_vault(root, identity)?;
+    let reader = store.read_session(identity);
     if let Some((path, field)) = query
         .rsplit_once('.')
         .filter(|(_, field)| !field.is_empty())
-        && let Ok(entry) = store.get(path, identity)
-        && let Some(value) = entry.data.get(field).cloned()
     {
-        return Ok(GetResult::Field {
-            path: path.to_owned(),
-            field: field.to_owned(),
-            value,
-        });
+        match reader.get(path) {
+            Ok(entry) => {
+                if let Some(value) = entry.data.get(field).cloned() {
+                    return Ok(GetResult::Field {
+                        path: path.to_owned(),
+                        field: field.to_owned(),
+                        value,
+                    });
+                }
+            }
+            Err(error) if error.is_resource_failure() => return Err(error.to_string()),
+            Err(_) => {}
+        }
     }
-    let exact_error = match store.get(query, identity) {
+    let exact_error = match reader.get(query) {
         Ok(entry) => {
             return Ok(GetResult::Entry {
                 path: query.to_owned(),
                 entry: Box::new(entry),
             });
         }
+        Err(error) if error.is_resource_failure() => return Err(error.to_string()),
         Err(error) => error,
     };
 
     let needle = query.to_ascii_lowercase();
-    let matches: Vec<_> = store
-        .list(identity)
+    let matches: Vec<_> = reader
+        .list()
         .map_err(|error| format!("cannot read entry: {error}"))?
         .into_iter()
         .filter(|path| path.to_ascii_lowercase().contains(&needle))
         .collect();
     match matches.as_slice() {
         [path] => {
-            let entry = store
-                .get(path, identity)
+            let entry = reader
+                .get(path)
                 .map_err(|error| format!("cannot read entry: {error}"))?;
             Ok(GetResult::Entry {
                 path: path.clone(),

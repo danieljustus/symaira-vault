@@ -94,20 +94,9 @@ to write new entries to pseudonymized paths.`,
 func runPseudonymizeMigration(v *vaultpkg.Vault) error {
 	vaultDir := v.Dir
 
-	var ageFiles []string
-	err := filepath.WalkDir(filepath.Join(vaultDir, "entries"), func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if filepath.Ext(path) == ".age" {
-			ageFiles = append(ageFiles, path)
-		}
-		return nil
-	})
-	if err != nil && !os.IsNotExist(err) {
+	reader := vaultpkg.NewReadSession(vaultDir, v.Identity)
+	ageFiles, err := reader.EntryFiles()
+	if err != nil {
 		return fmt.Errorf("walk entries: %w", err)
 	}
 
@@ -132,7 +121,7 @@ func runPseudonymizeMigration(v *vaultpkg.Vault) error {
 		// The file name only identifies the entry while paths are still
 		// plaintext. Read the ciphertext to learn the logical path, so already
 		// pseudonymized files are recognized instead of being hashed again.
-		entry, readErr := vaultpkg.ReadEntryFile(vaultDir, filePath, v.Identity)
+		entry, readErr := reader.GetFile(filePath)
 		if readErr != nil {
 			return fmt.Errorf("read entry file %s: %w", filePath, readErr)
 		}

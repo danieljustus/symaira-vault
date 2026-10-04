@@ -28,8 +28,9 @@ pub fn find(
 ) -> Result<Vec<SearchMatch>, String> {
     let store = symvault_store::Store::open_with_legacy_migration(root, identity)
         .map_err(|error| format!("cannot open vault: {error}"))?;
-    let mut paths = store
-        .list(identity)
+    let reader = store.read_session(identity);
+    let mut paths = reader
+        .list()
         .map_err(|error| format!("cannot list entries: {error}"))?;
 
     let normalized_url = url_filter
@@ -37,12 +38,15 @@ pub fn find(
         .map(normalize_host)
         .transpose()?;
     if let Some(host) = normalized_url.as_deref() {
-        paths.retain(|path| {
-            store
-                .get(path, identity)
-                .ok()
-                .is_some_and(|entry| entry_has_host(&entry, host))
-        });
+        let mut filtered = Vec::new();
+        for path in paths {
+            match reader.get(&path) {
+                Ok(entry) if entry_has_host(&entry, host) => filtered.push(path),
+                Err(error) if error.is_resource_failure() => return Err(error.to_string()),
+                _ => {}
+            }
+        }
+        paths = filtered;
     }
 
     if query.is_empty() && normalized_url.is_some() {
@@ -69,8 +73,8 @@ pub fn find(
         if path_matches.contains(&path) {
             continue;
         }
-        let entry = store
-            .get(&path, identity)
+        let entry = reader
+            .get(&path)
             .map_err(|error| format!("search entry {path}: {error}"))?;
         let mut fields = Vec::new();
         for (field, value) in &entry.data {

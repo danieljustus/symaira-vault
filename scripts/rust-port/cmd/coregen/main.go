@@ -44,7 +44,7 @@ var kindOracles = map[string]kindOracle{
 		generator: []string{"scripts/rust-port/cmd/coregen/main.go"},
 	},
 	"secret_ref": {
-		commit: "caadd5e", release: "v0.22.1",
+		commit: "b13189220519de245d8972d7af2e2d81618f0432", release: "unreleased",
 		sources: []string{
 			"internal/template/builtins.go",
 			"internal/template/engine.go",

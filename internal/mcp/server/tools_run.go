@@ -49,6 +49,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(timeoutErr.Error()), nil
 	}
 
+	reader := vaultpkg.NewReadSession(s.vault.Dir, s.vault.Identity)
 	resolvedEnv := make(map[string]string)
 	// Audit data: env var names only, never secret values.
 	envNames := make([]string, 0)
@@ -71,14 +72,17 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 			}
-			resolvedPath := s.resolveMCPSecretRefTarget(ref)
+			resolvedPath, targetErr := s.resolveMCPSecretRefTarget(ref, reader)
+			if targetErr != nil {
+				return mcp.NewToolResultError(targetErr.Error()), nil
+			}
 			if !s.checkScope(resolvedPath) {
 				s.logAudit(ctx, "run_command", resolvedPath, false)
 				metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
 			}
 
-			value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath)
+			value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath, reader)
 			if resolveErr != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 			}
@@ -94,7 +98,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(fmt.Sprintf("env contains denied keys: %s", strings.Join(denied, ", "))), nil
 	}
 
-	resolvedFiles, fileKnownSecrets, fileAudit, filesToolErr, filesErr := s.resolveRunCommandFiles(ctx, req.Arguments["files"])
+	resolvedFiles, fileKnownSecrets, fileAudit, filesToolErr, filesErr := s.resolveRunCommandFiles(ctx, req.Arguments["files"], reader)
 	if filesErr != nil {
 		return nil, filesErr
 	}
@@ -190,7 +194,11 @@ func buildRunCommandAuditPath(command, envNames, fileAudit []string, knownSecret
 // unresolvable ref) the caller should return as-is; err is a hard access
 // denial the caller should propagate as a JSON-RPC error, matching how the
 // rest of handleRunCommand distinguishes the two.
-func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (resolvedFiles, knownSecrets map[string]string, fileAudit []string, toolErr *mcp.CallToolResult, err error) {
+func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any, sessions ...*vaultpkg.ReadSession) (resolvedFiles, knownSecrets map[string]string, fileAudit []string, toolErr *mcp.CallToolResult, err error) {
+	reader := vaultpkg.NewReadSession(s.vault.Dir, s.vault.Identity)
+	if len(sessions) != 0 && sessions[0] != nil {
+		reader = sessions[0]
+	}
 	resolvedFiles = make(map[string]string)
 	knownSecrets = make(map[string]string)
 	if filesRaw == nil {
@@ -215,14 +223,17 @@ func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (reso
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 		}
-		resolvedPath := s.resolveMCPSecretRefTarget(ref)
+		resolvedPath, targetErr := s.resolveMCPSecretRefTarget(ref, reader)
+		if targetErr != nil {
+			return nil, nil, nil, mcp.NewToolResultError(targetErr.Error()), nil
+		}
 		if !s.checkScope(resolvedPath) {
 			s.logAudit(ctx, "run_command", resolvedPath, false)
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", resolvedPath)
 		}
 
-		value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath)
+		value, resolveErr := s.resolveMCPSecretRefAtPath(ref, resolvedPath, reader)
 		if resolveErr != nil {
 			return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 		}
@@ -260,31 +271,37 @@ func extractPathFromRef(ref string) string {
 // path.field-or-dotted-entry convention. Callers must scope-check the candidate
 // path before this probes it, then scope-check the returned path before reading
 // a fallback bare entry.
-func (s *Server) resolveMCPSecretRefTarget(ref string) string {
+func (s *Server) resolveMCPSecretRefTarget(ref string, reader *vaultpkg.ReadSession) (string, error) {
 	if idx := strings.LastIndex(ref, "."); idx > 0 {
 		candidatePath := ref[:idx]
 		candidateField := ref[idx+1:]
-		entry, readErr := vaultpkg.ReadEntry(s.vault.Dir, candidatePath, s.vault.Identity)
+		entry, readErr := reader.Get(candidatePath)
+		if errors.Is(readErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(readErr, vaultpkg.ErrVaultResourceBusy) {
+			return "", readErr
+		}
 		if readErr == nil {
 			if _, ok := entry.Data[candidateField]; ok {
-				return candidatePath
+				return candidatePath, nil
 			}
 		}
 	}
-	return ref
+	return ref, nil
 }
 
 // resolveMCPSecretRefAtPath re-evaluates the reference after its resolved path
 // has passed the caller's scope check. A changed interpretation fails closed,
 // and the fallback entry is not read until its exact path is verified.
-func (s *Server) resolveMCPSecretRefAtPath(ref, expectedPath string) (string, error) {
+func (s *Server) resolveMCPSecretRefAtPath(ref, expectedPath string, reader *vaultpkg.ReadSession) (string, error) {
 	path := ref
 	field := ""
 	var entry *vaultpkg.Entry
 	if idx := strings.LastIndex(ref, "."); idx > 0 {
 		candidatePath := ref[:idx]
 		candidateField := ref[idx+1:]
-		candidate, readErr := vaultpkg.ReadEntry(s.vault.Dir, candidatePath, s.vault.Identity)
+		candidate, readErr := reader.Get(candidatePath)
+		if errors.Is(readErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(readErr, vaultpkg.ErrVaultResourceBusy) {
+			return "", readErr
+		}
 		if readErr == nil {
 			if _, ok := candidate.Data[candidateField]; ok {
 				path = candidatePath
@@ -298,7 +315,7 @@ func (s *Server) resolveMCPSecretRefAtPath(ref, expectedPath string) (string, er
 	}
 	if entry == nil {
 		var err error
-		entry, err = vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+		entry, err = reader.Get(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return "", fmt.Errorf("secret ref not found: %s", path)

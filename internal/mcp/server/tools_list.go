@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -22,8 +23,9 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", prefix)
 	}
 
+	reader := s.vaultService.ForReadOperation()
 	_, span := metrics.StartSpan(ctx, "vault.List")
-	paths, err := s.vaultService.ListEntries(prefix)
+	paths, err := reader.ListEntries(prefix)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "list", prefix, false)
@@ -46,8 +48,11 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 
 	summaries := make([]vaultpkg.ListEntryInfo, 0, len(paths))
 	for _, path := range paths {
-		entry, getErr := s.vaultService.GetEntry(path)
+		entry, getErr := reader.GetEntry(path)
 		if getErr != nil {
+			if errors.Is(getErr, vaultpkg.ErrVaultResourceLimit) || errors.Is(getErr, vaultpkg.ErrVaultResourceBusy) {
+				return vaultServiceErrorResult(getErr)
+			}
 			continue
 		}
 

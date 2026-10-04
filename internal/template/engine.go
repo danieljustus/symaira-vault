@@ -55,13 +55,13 @@ func NewEngine(vault *vaultpkg.Vault) *Engine {
 
 // Render executes the named template with the given secret references.
 // In dry-run mode, all secret values are replaced with "***".
-func (e *Engine) Render(ctx context.Context, templateName string, name string, refs map[string]string, dryRun bool) (string, error) {
+func (e *Engine) Render(ctx context.Context, templateName string, name string, refs map[string]string, dryRun bool, sessions ...*vaultpkg.ReadSession) (string, error) {
 	src, err := e.getTemplateSource(templateName)
 	if err != nil {
 		return "", err
 	}
 
-	values, err := e.resolveRefs(ctx, refs, dryRun)
+	values, err := e.resolveRefs(ctx, refs, dryRun, sessions...)
 	if err != nil {
 		return "", err
 	}
@@ -126,7 +126,7 @@ func (e *Engine) getTemplateSource(name string) (string, error) {
 
 // resolveRefs resolves all secret references in refs.
 // In dry-run mode, returns masked values instead of actual secrets.
-func (e *Engine) resolveRefs(ctx context.Context, refs map[string]string, dryRun bool) (map[string]string, error) {
+func (e *Engine) resolveRefs(ctx context.Context, refs map[string]string, dryRun bool, sessions ...*vaultpkg.ReadSession) (map[string]string, error) {
 	values := make(map[string]string, len(refs))
 	if dryRun {
 		for alias := range refs {
@@ -141,9 +141,13 @@ func (e *Engine) resolveRefs(ctx context.Context, refs map[string]string, dryRun
 	}
 	sort.Strings(aliases)
 
+	reader := vaultpkg.NewReadSession(e.vault.Dir, e.vault.Identity)
+	if len(sessions) != 0 && sessions[0] != nil {
+		reader = sessions[0]
+	}
 	for _, alias := range aliases {
 		ref := refs[alias]
-		value, err := ResolveRef(ctx, e.vault, ref)
+		value, err := ResolveRef(ctx, e.vault, ref, reader)
 		if err != nil {
 			return nil, fmt.Errorf("resolve ref %q: %w", alias, err)
 		}

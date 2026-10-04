@@ -86,11 +86,12 @@ type listCachePayload struct {
 // fall back to a single-entry decrypt instead of retaining those values in
 // heap memory for the cache TTL.
 type pseudonymizedCacheEntry struct {
-	paths        []string
-	entries      map[string]map[string]any
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
+	retainedBytes int
+	paths         []string
+	entries       map[string]map[string]any
+	createdAt     time.Time
+	entriesMtime  time.Time
+	vaultMtime    time.Time
 }
 
 // configCacheEntry holds a parsed vault config together with the
@@ -444,13 +445,44 @@ func (c *VaultCache) storePseudonymizedListCache(vaultDir string, identity *age.
 		return
 	}
 	key := pseudonymizedCacheKey(vaultDir, identity)
+	retained := len(key)
+	for _, path := range paths {
+		if len(path)+256 > maxPseudonymCacheBytes-retained {
+			return
+		}
+		retained += len(path) + 256
+	}
+	for path, data := range entries {
+		cost, fits := retainedDataCost(data, maxPseudonymCacheBytes-retained)
+		if !fits || cost+len(path)+256 > maxPseudonymCacheBytes-retained {
+			return
+		}
+		retained += cost + len(path) + 256
+	}
 	c.pseudonymMu.Lock()
+	delete(c.pseudonymItems, key)
+	for {
+		total := retained
+		oldestKey := ""
+		var oldest time.Time
+		for existingKey, entry := range c.pseudonymItems {
+			total += entry.retainedBytes
+			if oldestKey == "" || entry.createdAt.Before(oldest) {
+				oldestKey, oldest = existingKey, entry.createdAt
+			}
+		}
+		if total <= maxPseudonymCacheBytes && len(c.pseudonymItems) < defaultListCacheVaults {
+			break
+		}
+		delete(c.pseudonymItems, oldestKey)
+	}
 	c.pseudonymItems[key] = pseudonymizedCacheEntry{
-		paths:        append([]string(nil), paths...),
-		entries:      entries,
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
+		retainedBytes: retained,
+		paths:         append([]string(nil), paths...),
+		entries:       entries,
+		createdAt:     time.Now(),
+		entriesMtime:  getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:    getDirMtime(vaultDir),
 	}
 	c.pseudonymMu.Unlock()
 }

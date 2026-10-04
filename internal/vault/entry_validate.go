@@ -20,7 +20,7 @@ func validateEntryPath(vaultDir, path string) error {
 		return err
 	}
 	if pathDepth(strings.ReplaceAll(path, "\\", "/")) > maxVaultEntryPathDepth {
-		return fmt.Errorf("entry path %q exceeds maximum depth %d", path, maxVaultEntryPathDepth)
+		return ErrVaultResourceLimit
 	}
 	filePath := entryFilePath(vaultDir, path)
 	cleanPath := filepath.Clean(filePath)
@@ -94,13 +94,7 @@ func migrateLegacyEntries(vaultDir string) error {
 	if err := SafeMkdirAll(entriesDirClean, 0o700); err != nil {
 		return err
 	}
-	return filepath.Walk(vaultDirClean, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
+	return walkVaultEntriesBounded(vaultDirClean, func(path string, info os.DirEntry) error {
 		if path == vaultDirClean {
 			return nil
 		}

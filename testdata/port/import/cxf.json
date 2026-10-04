@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
-    "commit_sha": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
+    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -68,8 +68,11 @@
       "internal/vault/entry_canary.go",
       "internal/vault/entry_metadata.go",
       "internal/vault/entry_readwrite.go",
+      "internal/vault/entry_resources.go",
       "internal/vault/entry_validate.go",
+      "internal/vault/file_digest.go",
       "internal/vault/git.go",
+      "internal/vault/index_resources.go",
       "internal/vault/kdf_resource_migration.go",
       "internal/vault/lock_unix.go",
       "internal/vault/lock_windows.go",
@@ -77,6 +80,7 @@
       "internal/vault/manifest_updater.go",
       "internal/vault/metrics.go",
       "internal/vault/payment.go",
+      "internal/vault/read_admission.go",
       "internal/vault/recipients.go",
       "internal/vault/reencrypt.go",
       "internal/vault/reencrypt_journal.go",
@@ -84,6 +88,7 @@
       "internal/vault/reencrypt_journal_windows.go",
       "internal/vault/reencrypt_unix.go",
       "internal/vault/reencrypt_windows.go",
+      "internal/vault/retention_budget.go",
       "internal/vault/search.go",
       "internal/vault/search_index.go",
       "internal/vault/service.go",
@@ -96,13 +101,13 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_digest": "da7d553466b4912ccada0a9b8be6512f5c698bb4ee5146402b8ea75b3870c6b6",
+    "source_digest": "66badf869a0ac2818a2b183a29dd1ac87a81b6b0d068339386dbc021f61e3d85",
     "generator_files": [
       "scripts/rust-port/cmd/cxfgen/archive_extract.go",
       "scripts/rust-port/cmd/cxfgen/archive_extract_test.go",
       "scripts/rust-port/cmd/cxfgen/main.go"
     ],
-    "generator_digest": "b63929f31d4d5eb6bb9608a93cefc907d5c1516e6d1c925253a1b35930b7fa1b"
+    "generator_digest": "434ca819f64a561b6ccf3b3ea647976a1d8e7b6e152e55dec5685e5d72117dd3"
   },
   "cases": [
     {

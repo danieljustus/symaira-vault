@@ -15,14 +15,14 @@ func TestSearchWorkersUsesVaultDefault(t *testing.T) {
 	}
 }
 
-func TestSearchWorkersUsesConfiguredValue(t *testing.T) {
+func TestSearchWorkersCapsConfiguredValue(t *testing.T) {
 	cfg := &configpkg.Config{
 		Vault: &configpkg.VaultConfig{SearchWorkers: 12},
 	}
 
 	got := searchWorkers(cfg)
-	if got != 12 {
-		t.Fatalf("searchWorkers(configured) = %d, want 12", got)
+	if got != 4 {
+		t.Fatalf("searchWorkers(configured) = %d, want 4", got)
 	}
 }
 

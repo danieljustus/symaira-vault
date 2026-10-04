@@ -1495,9 +1495,12 @@ fn run_cli() -> ExitCode {
                 let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 require_initialized(&root)?;
                 let identity = device::unlock_vault(&root)?;
+                let store = symvault_store::Store::open_with_legacy_migration(&root, &identity)
+                    .map_err(|error| error.to_string())?;
+                let reader = store.read_session(&identity);
                 let environment =
                     run_commands::build_secret_environment(&env, &env_file, |reference| {
-                        run_commands::resolve_secret_ref(&root, &identity, reference)
+                        run_commands::resolve_secret_ref_in_session(&reader, reference)
                     })?;
                 let timeout = timeout
                     .as_deref()

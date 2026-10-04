@@ -23,7 +23,7 @@ type windowsReencryptStaged struct {
 	backupPath string
 }
 
-func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*reencryptCandidate, error) {
+func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo, budgets ...*vaultReadBatch) (*reencryptCandidate, error) {
 	rel, err := filepath.Rel(entriesPath, path)
 	if err != nil || rel == "." || filepath.IsAbs(rel) || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
 		return nil, fmt.Errorf("entry path escapes entries directory: %q", path)
@@ -49,7 +49,7 @@ func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*r
 		_ = file.Close()
 		return nil, fmt.Errorf("entry %q changed while opening", path)
 	}
-	data, err := readEntryStreamBounded(file, path)
+	data, err := readEntryStreamLimited(file, path, maxEntryCiphertextBytesV1, budgets...)
 	closeErr := file.Close()
 	if err != nil {
 		return nil, fmt.Errorf("read entry %q: %w", path, err)
@@ -249,7 +249,7 @@ func commitReencryptFile(item *reencryptStaged) error {
 	return nil
 }
 
-func rollbackReencryptFile(item *reencryptStaged) error {
+func rollbackReencryptFile(item *reencryptStaged, budgets ...*vaultReadBatch) error {
 	c := item.candidate.platform.(*windowsReencryptCandidate)
 	staged := item.platform.(*windowsReencryptStaged)
 	if staged.backupPath == "" {
@@ -258,7 +258,7 @@ func rollbackReencryptFile(item *reencryptStaged) error {
 	if err := verifyWindowsReencryptParent(c); err != nil {
 		return fmt.Errorf("verify rollback directory: %w", err)
 	}
-	matches, err := verifyReencryptDigest(c.path, item.candidate.digest)
+	matches, err := verifyReencryptDigest(c.path, item.candidate.digest, budgets...)
 	if err != nil {
 		return fmt.Errorf("verify installed target: %w", err)
 	}

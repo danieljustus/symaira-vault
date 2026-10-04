@@ -20,8 +20,8 @@
 //
 // Bounded Parallelism Rationale:
 // -----------------------------
-// We use a bounded worker pool (default: one worker per CPU core, capped at 8;
-// configurable up to 64 — see SearchWorkerCount) rather than unbounded
+// We use a bounded worker pool (default: one worker per CPU core, capped at 4;
+// configured counts follow the process read cap — see SearchWorkerCount) rather than unbounded
 // parallelism for these reasons:
 //
 //  1. Memory Pressure: Each decrypted entry consumes memory. With unbounded
@@ -151,6 +151,7 @@
 package vault
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -162,8 +163,6 @@ import (
 
 	"filippo.io/age"
 	"golang.org/x/exp/slices"
-
-	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 type Match struct {
@@ -192,18 +191,18 @@ func (v *Vault) CurrentSearchIdentity() *age.X25519Identity {
 
 // SearchWorkerCount returns the number of concurrent decryption workers
 // to use for search/listing operations. When configured > 0, that value is
-// used (capped at 64 to prevent resource exhaustion). Otherwise it
-// auto-scales to min(runtime.NumCPU(), 8).
+// used up to the process read-admission cap. Otherwise it
+// auto-scales to min(runtime.NumCPU(), 4).
 func SearchWorkerCount(configured int) int {
 	if configured > 0 {
-		if configured > 64 {
-			return 64
+		if configured > maxActiveVaultReads {
+			return maxActiveVaultReads
 		}
 		return configured
 	}
 	cpus := runtime.NumCPU()
-	if cpus > 8 {
-		return 8
+	if cpus > maxActiveVaultReads {
+		return maxActiveVaultReads
 	}
 	if cpus < 1 {
 		return 1
@@ -218,6 +217,10 @@ func SearchWorkerCount(configured int) int {
 // When pseudonymization is enabled, entries are decrypted to extract the plaintext
 // path from the entry data.
 func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]string, error) {
+	return listWithBudget(vaultDir, prefix, identity, &vaultReadBatch{})
+}
+
+func listWithBudget(vaultDir string, prefix string, identity *age.X25519Identity, batch *vaultReadBatch) ([]string, error) {
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
 		return nil, err
@@ -230,7 +233,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 		if cfg != nil && cfg.Vault != nil {
 			workers = cfg.Vault.SearchWorkers
 		}
-		return listPseudonymized(vaultDir, prefix, identity, workers)
+		return listPseudonymizedWithBudget(vaultDir, prefix, identity, workers, batch)
 	}
 
 	// Check cache when listing the entire vault (prefix == "").
@@ -255,7 +258,8 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 	start := time.Now()
 	seen := map[string]struct{}{}
 
-	if err := listEntriesFast(entriesDir(vaultDir), entriesDir(vaultDir), prefix, seen, false); err != nil && !os.IsNotExist(err) {
+	visited := 0
+	if err := listEntriesFast(entriesDir(vaultDir), entriesDir(vaultDir), prefix, seen, false, &visited); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	// Skip the legacy top-level walk when detectLegacyMode confirmed no legacy
@@ -263,7 +267,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 	// common (non-legacy) case.
 	skipLegacyWalk := cfg != nil && cfg.Vault != nil && cfg.Vault.LegacyMode != nil && !*cfg.Vault.LegacyMode
 	if !skipLegacyWalk {
-		if err := listEntriesFast(vaultDir, vaultDir, prefix, seen, true); err != nil {
+		if err := listEntriesFast(vaultDir, vaultDir, prefix, seen, true, &visited); err != nil {
 			return nil, err
 		}
 	}
@@ -290,40 +294,17 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 //
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
-func listPseudonymized(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
-	return listPseudonymizedWithIdentity(vaultDir, prefix, identity, configuredWorkers)
-}
 
 func pseudonymizedEntryFiles(vaultDir string) ([]string, error) {
 	var filePaths []string
-	visited := 0
-	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if filepath.Clean(filePath) != filepath.Clean(entriesDir(vaultDir)) {
-			visited++
-		}
-		if visited > maxVaultEntryCount {
-			return errEntryEnumerationLimit
-		}
-		rel, relErr := filepath.Rel(entriesDir(vaultDir), filePath)
-		if relErr != nil {
-			return relErr
-		}
-		if pathDepth(rel) > maxVaultEntryPathDepth {
-			if d.IsDir() {
-				return filepath.SkipDir
+	pathBytes := 0
+	err := walkVaultEntriesBounded(entriesDir(vaultDir), func(filePath string, d os.DirEntry) error {
+		if !d.IsDir() && filepath.Ext(filePath) == entryExtAge {
+			if err := addVaultPathBytes(&pathBytes, filePath); err != nil {
+				return err
 			}
-			return nil
+			filePaths = append(filePaths, filePath)
 		}
-		if d.IsDir() {
-			return nil
-		}
-		if filepath.Ext(filePath) != ".age" { //nolint:goconst // file extension literal
-			return nil
-		}
-		filePaths = append(filePaths, filePath)
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
@@ -332,121 +313,102 @@ func pseudonymizedEntryFiles(vaultDir string) ([]string, error) {
 	return filePaths, nil
 }
 
-func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
+func listPseudonymizedWithBudget(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int, batch *vaultReadBatch) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
-
-	// Check cache for full-vault listings (prefix == "").
 	if prefix == "" {
 		if paths := listCacheFor(vaultDir).cachedPseudonymizedList(vaultDir, identity); paths != nil {
 			recordDuration("list_pseudonymized_cached", 0)
 			return paths, nil
 		}
 	}
-
 	start := time.Now()
-
-	// First pass: walk filesystem to collect all .age file paths.
-	// This is fast O(n) and does not involve decryption.
 	filePaths, err := pseudonymizedEntryFiles(vaultDir)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(filePaths) == 0 {
-		recordDuration("list_pseudonymized", time.Since(start))
-		recordCount(vaultDir, 0)
-		if prefix == "" {
-			listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, nil, nil)
-		}
-		return nil, nil
-	}
-
-	// Second pass: decrypt entries in parallel using a bounded worker pool.
 	maxWorkers := SearchWorkerCount(configuredWorkers)
-
 	type decryptResult struct {
-		entryPath string
-		data      map[string]any
+		path string
+		data map[string]any
+		err  error
 	}
-
-	fileChan := make(chan string, len(filePaths))
-	resultChan := make(chan decryptResult, len(filePaths))
-
+	fileChan := make(chan string, maxWorkers)
+	resultChan := make(chan decryptResult, maxWorkers)
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for fp := range fileChan {
-				raw, readErr := readVaultEntryBounded(vaultDir, fp)
-				if readErr != nil {
+				entry, err := readEntryFileWithBudget(identity, func(readBatch *vaultReadBatch) ([]byte, error) {
+					return readVaultEntryBounded(vaultDir, fp, readBatch)
+				}, batch)
+				if err != nil {
+					resultChan <- decryptResult{err: err}
 					continue
 				}
-
-				plaintext, decryptErr := decryptEntryBounded(raw, identity, maxEntryPlaintextBytesV1)
-				if decryptErr != nil {
-					continue
-				}
-
-				entry, jsonErr := decodeEntryBounded(plaintext)
-				vaultcrypto.Wipe(plaintext)
-				if jsonErr != nil {
-					continue
-				}
-
-				entryPath := entry.Path
-				if entryPath == "" {
-					rel, relErr := filepath.Rel(entriesDir(vaultDir), fp)
-					if relErr != nil {
+				path := entry.Path
+				if path == "" {
+					rel, err := filepath.Rel(entriesDir(vaultDir), fp)
+					if err != nil {
+						resultChan <- decryptResult{err: err}
 						continue
 					}
-					entryPath = strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+					path = strings.TrimSuffix(filepath.ToSlash(rel), entryExtAge)
 				}
-
-				if prefix != "" && !strings.HasPrefix(entryPath, prefix) {
-					continue
+				if prefix == "" || strings.HasPrefix(path, prefix) {
+					resultChan <- decryptResult{path: path, data: entry.Data}
 				}
-
-				resultChan <- decryptResult{entryPath: entryPath, data: entry.Data}
 			}
 		}()
 	}
-
 	go func() {
 		for _, fp := range filePaths {
 			fileChan <- fp
 		}
 		close(fileChan)
-	}()
-
-	go func() {
 		wg.Wait()
 		close(resultChan)
 	}()
-
 	paths := make([]string, 0, len(filePaths))
-	cachedEntries := make(map[string]map[string]any, len(filePaths))
-
+	cachedEntries := make(map[string]map[string]any)
+	pathBytes, cacheBytes := 0, 0
+	var resourceErr error
 	for result := range resultChan {
-		if result.entryPath == "" {
+		if result.err != nil {
+			if errors.Is(result.err, ErrVaultResourceLimit) || errors.Is(result.err, ErrVaultResourceBusy) || errors.Is(result.err, errEntryReadLimit) {
+				if resourceErr == nil {
+					resourceErr = result.err
+				}
+			}
 			continue
 		}
-		paths = append(paths, result.entryPath)
-		if result.data != nil {
-			if cachedData := pseudonymCacheSafeData(result.data); cachedData != nil {
-				cachedEntries[result.entryPath] = cachedData
+		if resourceErr != nil || result.path == "" {
+			continue
+		}
+		if err := addVaultPathBytes(&pathBytes, result.path); err != nil {
+			resourceErr = err
+			continue
+		}
+		paths = append(paths, result.path)
+		// Check a conservative retention cost before making the cache copy.
+		cost, fits := retainedDataCost(result.data, maxPseudonymCacheBytes-cacheBytes)
+		if prefix == "" && fits {
+			if data := pseudonymCacheSafeData(result.data); data != nil {
+				cacheBytes += cost
+				cachedEntries[result.path] = data
 			}
 		}
 	}
-
+	if resourceErr != nil {
+		return nil, resourceErr
+	}
 	sort.Strings(paths)
-
 	if prefix == "" {
 		listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, paths, cachedEntries)
 	}
-
 	recordDuration("list_pseudonymized", time.Since(start))
 	recordCount(vaultDir, len(paths))
 	return paths, nil
@@ -573,7 +535,13 @@ func listViaManifest(vaultDir string, identity *age.X25519Identity) []string {
 	return paths
 }
 
-func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool) error {
+func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool, counters ...*int) error {
+	pathBytes := 0
+	for path := range seen {
+		if err := addVaultPathBytes(&pathBytes, path); err != nil {
+			return err
+		}
+	}
 	return walkVaultEntriesBounded(root, func(path string, d os.DirEntry) error {
 		if d.IsDir() {
 			if legacy && path != root && (d.Name() == entriesDirName || d.Name() == ".git") {
@@ -596,9 +564,17 @@ func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy
 		if prefix != "" && !strings.HasPrefix(rel, prefix) {
 			return nil
 		}
+		if _, exists := seen[rel]; !exists {
+			if len(seen) >= maxVaultEntryCount {
+				return errEntryEnumerationLimit
+			}
+			if err := addVaultPathBytes(&pathBytes, rel); err != nil {
+				return err
+			}
+		}
 		seen[rel] = struct{}{}
 		return nil
-	})
+	}, counters...)
 }
 
 // FindOptions configures search behavior for FindWithOptions.
@@ -652,7 +628,8 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 		recordDuration("search", time.Since(start))
 	}()
 
-	paths, err := List(vaultDir, "", identity)
+	batch := &vaultReadBatch{}
+	paths, err := listWithBudget(vaultDir, "", identity, batch)
 	if err != nil {
 		return nil, err
 	}
@@ -667,7 +644,7 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 			return nil, fmt.Errorf("invalid url filter %q: %w", opts.URLFilter, err)
 		}
 
-		urlPaths, err := filterPathsUsingHostIndex(vaultDir, paths, normHost, identity)
+		urlPaths, err := filterPathsUsingHostIndex(vaultDir, paths, normHost, identity, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -712,18 +689,15 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 	// The index maps search tokens to entry paths. Entries whose field values
 	// don't contain any query token can be safely skipped.
 	if len(pathsNeedingDecrypt) > 0 && needle != "" {
-		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle, identity)
+		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle, identity, batch)
 	}
 
-	maxWorkers := opts.MaxWorkers
-	if maxWorkers <= 0 {
-		maxWorkers = min(runtime.NumCPU(), 8)
-	}
+	maxWorkers := SearchWorkerCount(opts.MaxWorkers)
 	if maxWorkers <= 1 {
 		for _, path := range pathsNeedingDecrypt {
 			data := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, identity, path)
 			if data == nil {
-				entry, err := ReadEntry(vaultDir, path, identity)
+				entry, err := readEntryInner(vaultDir, path, identity, nil, batch)
 				if err != nil {
 					return nil, err
 				}
@@ -758,8 +732,8 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 			fields []string
 		}
 
-		pathChan := make(chan string, len(pathsNeedingDecrypt))
-		resultChan := make(chan decryptResult, len(pathsNeedingDecrypt))
+		pathChan := make(chan string, maxWorkers)
+		resultChan := make(chan decryptResult, maxWorkers)
 
 		var wg sync.WaitGroup
 
@@ -770,7 +744,7 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 				for path := range pathChan {
 					data := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, identity, path)
 					if data == nil {
-						entry, err := ReadEntry(vaultDir, path, identity)
+						entry, err := readEntryInner(vaultDir, path, identity, nil, batch)
 						if err != nil {
 							resultChan <- decryptResult{err: err, path: path}
 							continue
@@ -808,13 +782,20 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 			close(resultChan)
 		}()
 
+		var firstErr error
 		for result := range resultChan {
 			if result.err != nil {
-				return nil, result.err
+				if firstErr == nil {
+					firstErr = result.err
+				}
+				continue
 			}
 			if result.fields != nil {
 				matches = append(matches, Match{Path: result.path, Fields: result.fields})
 			}
+		}
+		if firstErr != nil {
+			return nil, firstErr
 		}
 	}
 
@@ -848,7 +829,11 @@ func hasField(fields []string, want string) bool {
 // input candidates unchanged so the caller can still perform a full decrypt
 // pass. This guards against silently returning an empty set when the
 // on-disk index was built with a different key.
-func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity) []string {
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity, budgets ...*vaultReadBatch) []string {
+	batch := &vaultReadBatch{}
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
 	if identity == nil {
 		return candidates
 	}
@@ -860,7 +845,7 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 	idx := searchIndexForVault(vaultDir)
 	if !idx.Covers(vaultDir, identity) {
 		if err := idx.loadFromDisk(vaultDir, identity); err != nil || !idx.Covers(vaultDir, identity) {
-			if err := idx.Build(vaultDir, identity); err != nil {
+			if err := idx.buildIndex(vaultDir, identity, true, batch); err != nil {
 				return candidates
 			}
 		}
@@ -869,7 +854,7 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 	matching, err := idx.MatchEntries(vaultDir, identity, candidates, needle)
 	if err != nil {
 		// The vault's index is stale or corrupted: rebuild and retry once.
-		if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
+		if buildErr := idx.buildIndex(vaultDir, identity, true, batch); buildErr != nil {
 			return candidates
 		}
 		matching, err = idx.MatchEntries(vaultDir, identity, candidates, needle)
@@ -891,7 +876,11 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 // filterPathsUsingHostIndex uses the encrypted search index to find entries whose
 // "url" field matches the target host. Falls back to scanning candidate entries on
 // missing/stale index or decryption error.
-func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity) ([]string, error) {
+func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity, budgets ...*vaultReadBatch) ([]string, error) {
+	batch := &vaultReadBatch{}
+	if len(budgets) != 0 {
+		batch = budgets[0]
+	}
 	if identity == nil {
 		return candidates, fmt.Errorf("no search identity available")
 	}
@@ -904,20 +893,20 @@ func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost 
 	idx := searchIndexForVault(vaultDir)
 	if !idx.Covers(vaultDir, identity) {
 		if loadErr := idx.loadFromDisk(vaultDir, identity); loadErr != nil || !idx.Covers(vaultDir, identity) {
-			if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
-				return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+			if buildErr := idx.buildIndex(vaultDir, identity, true, batch); buildErr != nil {
+				return scanCandidatesForHostBounded(vaultDir, candidates, normHost, identity, batch)
 			}
 		}
 	}
 
 	matching, err := idx.MatchHost(vaultDir, identity, candidates, normHost)
 	if err != nil {
-		if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
-			return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+		if buildErr := idx.buildIndex(vaultDir, identity, true, batch); buildErr != nil {
+			return scanCandidatesForHostBounded(vaultDir, candidates, normHost, identity, batch)
 		}
 		matching, err = idx.MatchHost(vaultDir, identity, candidates, normHost)
 		if err != nil {
-			return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+			return scanCandidatesForHostBounded(vaultDir, candidates, normHost, identity, batch)
 		}
 	}
 
@@ -935,11 +924,15 @@ func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost 
 
 // scanCandidatesForHost is the fallback for filterPathsUsingHostIndex when the index
 // is unavailable or fails to decrypt. It decrypts candidate entries to inspect their url fields.
-func scanCandidatesForHost(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity) []string {
+
+func scanCandidatesForHostBounded(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity, batch *vaultReadBatch) ([]string, error) {
 	var matching []string
 	for _, path := range candidates {
-		entry, err := ReadEntry(vaultDir, path, identity)
+		entry, err := readEntryInner(vaultDir, path, identity, nil, batch)
 		if err != nil {
+			if errors.Is(err, ErrVaultResourceLimit) || errors.Is(err, ErrVaultResourceBusy) {
+				return nil, err
+			}
 			continue
 		}
 		hosts := ExtractHostsFromData(entry.Data)
@@ -951,7 +944,7 @@ func scanCandidatesForHost(vaultDir string, candidates []string, targetHost stri
 		}
 	}
 	sort.Strings(matching)
-	return matching
+	return matching, nil
 }
 
 // collectStringValues recursively collects string values from a map.

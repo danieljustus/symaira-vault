@@ -123,20 +123,20 @@ fn set_and_delete_tty_approval_replay_go_handlers_and_mutation_order() {
         "../../../testdata/port/mcp/write-tty-approval.json"
     ))
     .expect("valid Go write approval fixture");
-    assert_eq!(fixture.oracle.commit, "cfbfd59a");
+    assert_eq!(fixture.oracle.commit, "55da4ca1");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "cfbfd59a8a4580e8547e278ff8b9de6c7e806967"
+        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
     );
     assert_eq!(
         fixture.oracle.source_hash,
-        "9b98f83f96e8b07cc8f8916f66d3682c200b89b89919ccc09a7508bfe6c5ce57"
+        "559984a34f699e0e526a464fdaf2afac811c639a1be8ca107eb7c29de2e40ffc"
     );
     assert_eq!(
         fixture.oracle.generator_hash,
-        "cdc1abdb75d04992e5fe49869cd2daf25741ecc0a046ab84b799094fafc55c8e"
+        "9e68e08350d1a0b2ffdf2fedca406f8e002490941c792ebaba4c8ba26d1a2242"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 16);
+    assert_eq!(fixture.oracle.source_files.len(), 91);
     assert_eq!(fixture.oracle.generator_files.len(), 4);
     assert_eq!(
         fixture.normalizations,

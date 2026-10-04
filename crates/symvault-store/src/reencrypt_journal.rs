@@ -1,4 +1,8 @@
-use serde::Deserialize;
+use serde::{
+    Deserialize,
+    de::{self, SeqAccess, Visitor},
+};
+use std::fmt;
 use std::{
     ffi::OsStr,
     fs, io,
@@ -14,6 +18,7 @@ const JOURNAL_NAME: &str = ".reencrypt.journal";
 #[derive(Debug, Deserialize)]
 struct Journal {
     version: u32,
+    #[serde(deserialize_with = "bounded_entries")]
     entries: Vec<JournalEntry>,
 }
 
@@ -26,6 +31,36 @@ struct JournalEntry {
     backup: String,
     #[serde(default)]
     digest: String,
+}
+
+fn bounded_entries<'de, D: serde::Deserializer<'de>>(
+    decoder: D,
+) -> Result<Vec<JournalEntry>, D::Error> {
+    struct Entries;
+    impl<'de> Visitor<'de> for Entries {
+        type Value = Vec<JournalEntry>;
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("bounded journal entries")
+        }
+        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+            let mut entries = Vec::new();
+            let mut paths = 0usize;
+            while let Some(entry) = seq.next_element::<JournalEntry>()? {
+                if entries.len() >= crate::MAX_VAULT_ENTRY_COUNT {
+                    return Err(de::Error::custom("vault resource limit exceeded"));
+                }
+                for path in [&entry.path, &entry.temp, &entry.backup] {
+                    paths = paths
+                        .checked_add(path.len())
+                        .filter(|bytes| *bytes <= crate::read_admission::MAX_PATH_BYTES)
+                        .ok_or_else(|| de::Error::custom("vault resource limit exceeded"))?;
+                }
+                entries.push(entry);
+            }
+            Ok(entries)
+        }
+    }
+    decoder.deserialize_seq(Entries)
 }
 
 struct ResolvedEntry {
@@ -61,10 +96,19 @@ pub(crate) fn recover_locked_if_present(
 
 fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> {
     let root = &store.root;
-    let journal_path = root.join(JOURNAL_NAME);
-    let bytes = read_journal(store, &journal_path)?;
-    let journal: Journal = serde_json::from_slice(&bytes)
-        .map_err(|error| StoreError::Config(format!("parse re-encryption journal: {error}")))?;
+    let batch = crate::read_admission::Batch::default();
+    let journal = {
+        let _lease = crate::read_admission::acquire()?;
+        let bytes = read_bounded_root(store, JOURNAL_NAME, &batch)?;
+        crate::entry_resources::validate_journal(&bytes, JOURNAL_NAME)?;
+        serde_json::from_slice::<Journal>(&bytes).map_err(|error| {
+            if error.to_string().contains("vault resource limit exceeded") {
+                StoreError::ResourceLimit
+            } else {
+                StoreError::Config(format!("parse re-encryption journal: {error}"))
+            }
+        })?
+    };
     if journal.version != JOURNAL_VERSION {
         return Err(StoreError::Config(format!(
             "unsupported re-encryption journal version {}",
@@ -79,6 +123,15 @@ fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> 
         .map(|entry| resolve_entry(root, entry))
         .collect::<Result<Vec<_>, _>>()?;
 
+    // Snapshot before any rename/removal; an oversized manifest preserves all artifacts.
+    let manifest = root.join("manifest.age");
+    let old_manifest = if regular_exists(store, &manifest)? {
+        let _lease = crate::read_admission::acquire()?;
+        Some(read_bounded_root(store, "manifest.age", &batch)?)
+    } else {
+        None
+    };
+
     for entry in &entries {
         if entry.digest.is_empty() {
             remove_artifact(store, entry.temp.as_deref())?;
@@ -86,7 +139,7 @@ fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> 
             continue;
         }
 
-        if target_matches(store, &entry.target, &entry.digest)? {
+        if target_matches(store, &entry.target, &entry.digest, &batch)? {
             // Keep the backup until manifest publication succeeds below.
         } else if let Some(backup) = entry.backup.as_ref() {
             if regular_exists(store, backup)? {
@@ -117,9 +170,7 @@ fn recover_locked(store: &Store, identity: &Identity) -> Result<(), StoreError> 
         remove_artifact(store, entry.temp.as_deref())?;
     }
 
-    let manifest = root.join("manifest.age");
-    let old_manifest = read_optional(store, &manifest)?;
-    if let Err(error) = store.rebuild_manifest_locked(identity) {
+    if let Err(error) = store.rebuild_manifest_with_budget(identity, &batch) {
         let rollback = rollback_locked(store, &entries);
         let restore = if let Some(old_manifest) = old_manifest.as_deref() {
             crate::publication::replace(&manifest, old_manifest, &store.root_cap)
@@ -377,48 +428,43 @@ fn regular_exists(store: &Store, path: &Path) -> Result<bool, StoreError> {
     }
 }
 
-fn read_journal(store: &Store, path: &Path) -> Result<Vec<u8>, StoreError> {
-    let relative = validated_relative(&store.root, path)?;
-    #[cfg(not(unix))]
-    let _ = &relative;
+// Caller holds admission across buffering and (for journals) typed decoding.
+fn read_bounded_root(
+    store: &Store,
+    name: &str,
+    batch: &crate::read_admission::Batch,
+) -> Result<Vec<u8>, StoreError> {
+    batch.consume(0)?;
+    let path = store.root.join(name);
     #[cfg(unix)]
-    {
-        crate::rooted::read(&store.root_cap, &relative, path)
-    }
+    let file = crate::rooted::open_regular(&store.root_cap, Path::new(name), &path)?;
     #[cfg(not(unix))]
-    {
-        fs::read(path).map_err(|source| StoreError::Read {
-            path: path.to_owned(),
-            source,
-        })
-    }
+    let file = crate::open_nofollow(&path).map_err(|source| StoreError::Read {
+        path: path.clone(),
+        source,
+    })?;
+    crate::read_open_regular_with_metadata_budget(
+        file,
+        &path,
+        crate::MAX_ENTRY_PLAINTEXT_BYTES_V1,
+        Some(batch),
+    )
+    .map(|(bytes, _)| bytes)
 }
 
-fn target_matches(store: &Store, path: &Path, expected: &str) -> Result<bool, StoreError> {
-    let Some(bytes) = read_optional(store, path)? else {
-        return Ok(false);
-    };
-    Ok(crate::sha256_hex(&bytes).eq_ignore_ascii_case(expected))
-}
-
-fn read_optional(store: &Store, path: &Path) -> Result<Option<Vec<u8>>, StoreError> {
+fn target_matches(
+    store: &Store,
+    path: &Path,
+    expected: &str,
+    batch: &crate::read_admission::Batch,
+) -> Result<bool, StoreError> {
     if !regular_exists(store, path)? {
-        return Ok(None);
+        return Ok(false);
     }
     let relative = validated_relative(&store.root, path)?;
-    #[cfg(not(unix))]
-    let _ = &relative;
-    #[cfg(unix)]
-    {
-        crate::rooted::read(&store.root_cap, &relative, path).map(Some)
-    }
-    #[cfg(not(unix))]
-    {
-        fs::read(path).map(Some).map_err(|source| StoreError::Read {
-            path: path.to_owned(),
-            source,
-        })
-    }
+    let (digest, _, _) =
+        store.hash_file(&relative, crate::MAX_ENTRY_CIPHERTEXT_BYTES_V1, Some(batch))?;
+    Ok(digest.eq_ignore_ascii_case(expected))
 }
 
 fn remove_artifact(store: &Store, path: Option<&Path>) -> Result<(), StoreError> {
@@ -469,6 +515,7 @@ fn rename_path(store: &Store, source: &Path, destination: &Path) -> Result<(), S
 }
 
 fn rollback_locked(store: &Store, entries: &[ResolvedEntry]) -> Result<(), StoreError> {
+    let batch = crate::read_admission::Batch::default();
     for entry in entries.iter().rev() {
         let Some(backup) = entry.backup.as_ref() else {
             continue;
@@ -477,7 +524,9 @@ fn rollback_locked(store: &Store, entries: &[ResolvedEntry]) -> Result<(), Store
             continue;
         }
         if regular_exists(store, &entry.target)? {
-            if !entry.digest.is_empty() && !target_matches(store, &entry.target, &entry.digest)? {
+            if !entry.digest.is_empty()
+                && !target_matches(store, &entry.target, &entry.digest, &batch)?
+            {
                 return Err(StoreError::Config(format!(
                     "refusing to overwrite changed rollback target: {}",
                     entry.target.display()
