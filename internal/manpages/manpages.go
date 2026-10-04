@@ -29,7 +29,7 @@ func GenerateTree(command *cobra.Command, header *doc.GenManHeader, dir string) 
 		}
 	}
 	name := strings.ReplaceAll(command.CommandPath(), " ", "-") + "." + header.Section
-	file, err := os.Create(filepath.Join(dir, name))
+	file, err := os.Create(filepath.Join(dir, name)) // #nosec G304 -- explicit CLI output directory; filename and section come from the built-in Cobra tree.
 	if err != nil {
 		return err
 	}
