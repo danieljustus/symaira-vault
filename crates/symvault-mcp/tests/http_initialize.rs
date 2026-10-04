@@ -22,6 +22,9 @@ struct Oracle {
     commit: String,
     commit_sha: String,
     source_digest: String,
+    source_files: Vec<String>,
+    generator_files: Vec<String>,
+    generator_digest: String,
 }
 
 #[derive(Deserialize)]
@@ -94,15 +97,34 @@ fn fixture() -> Fixture {
 #[test]
 fn go_authenticated_http_session_matches_rust_adapter() {
     let fixture = fixture();
-    assert_eq!(fixture.oracle.commit, "cd741531");
+    assert_eq!(
+        fixture.oracle.commit,
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+    );
     assert_eq!(
         fixture.oracle.commit_sha,
-        "cd741531bb5302d3ffe723490eef464da74f2f55"
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
     );
     assert_eq!(
         fixture.oracle.source_digest,
-        "dee03f837dc962d746609a6e20686c9f4a399f524ee1da2b0ec29b570a1447ef"
+        "cc06f4204e428ba553a5f42d6696035fdfc0346567a57f2683e52c67c6f4b4d1"
     );
+    assert_eq!(fixture.oracle.source_files.len(), 177);
+    assert!(
+        fixture
+            .oracle
+            .source_files
+            .contains(&"internal/mcp/serverbootstrap/http_lifecycle.go".to_owned())
+    );
+    assert_eq!(
+        fixture.oracle.generator_files,
+        ["scripts/rust-port/cmd/http001initgen/main.go"]
+    );
+    assert_eq!(
+        fixture.oracle.generator_digest,
+        "c0a20861accca99ad2af2b97338571c4e30ba861a50d69cf9f8320bd8abb4717"
+    );
+    assert_eq!(fixture.cases.len(), 27);
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
     let addr = listener.local_addr().expect("loopback address");

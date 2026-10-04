@@ -115,7 +115,10 @@ fn unlock_passphrase_with_mode(
                     "vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled"
                 }.to_owned());
             }
-            if !QUIET.load(Ordering::Relaxed) {
+            if !QUIET.load(Ordering::Relaxed)
+                && !std::env::var("SYMVAULT_NO_ENV_WARNING")
+                    .is_ok_and(|value| !value.is_empty() && value != "0")
+            {
                 eprintln!(
                     "SYMVAULT_PASSPHRASE is active \u{2014} environment passphrases are visible in process listings and crash dumps."
                 );

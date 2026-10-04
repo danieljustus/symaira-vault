@@ -237,12 +237,12 @@ fn go_generated_rate_limit_fixture_matches_rust_dispatch() {
     ))
     .expect("valid Go-generated rate-limit fixture");
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "55da4ca1");
+    assert_eq!(fixture.oracle.commit, "d1cd0f97");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
     );
-    assert_eq!(fixture.oracle.source_files.len(), 7);
+    assert_eq!(fixture.oracle.source_files.len(), 177);
     assert_eq!(fixture.oracle.source_hash.len(), 64);
     assert_eq!(fixture.oracle.generator_hash.len(), 64);
     assert_eq!(fixture.cases.len(), 4);
@@ -554,11 +554,11 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
     .expect("valid Go-generated initialized tools/call fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
     );
     assert_eq!(
         fixture.oracle.source_hash.as_deref(),
-        Some("ae83aab06ba6c2f06e521e8bbfd8d9e852eb62435c6d013750d807a843b1e7d7")
+        Some("0cd184bb0155c46391f31c32bb2a3e9f4c814059acaff4c7f8afddfeb64b689c")
     );
     let case = fixture
         .cases

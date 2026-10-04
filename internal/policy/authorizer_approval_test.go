@@ -210,9 +210,16 @@ func TestApprovalWaitContextTimeoutAudits(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on context timeout")
 	}
-	// The request remains pending and decidable for the device.
-	if len(q.Pending()) != 1 {
+	// The canceled call has no waiter; its consent is retired and remains in
+	// history so devices cannot approve an abandoned authorization request.
+	if len(q.Pending()) != 0 {
 		t.Fatalf("pending = %+v", q.Pending())
 	}
-	_ = errors.Is(err, context.DeadlineExceeded)
+	entries := q.List()
+	if len(entries) != 1 || entries[0].Status != approval.StatusDenied {
+		t.Fatalf("canceled consent history = %+v", entries)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("timeout cause lost: %v", err)
+	}
 }

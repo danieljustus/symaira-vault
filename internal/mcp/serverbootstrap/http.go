@@ -93,6 +93,10 @@ func RunHTTPServer(ctx context.Context, bind string, port int, v *vaultpkg.Vault
 //
 //nolint:gocyclo // Complex server initialization: auth, middleware, metrics, graceful shutdown
 func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaultpkg.Vault, vaultDir string, version string, factory func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error), opts ...HTTPServerOption) error {
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	defer func() { _ = listener.Close() }()
+	var owners httpCallbackOwners
 	var options serverOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -106,31 +110,56 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	if err != nil {
 		return fmt.Errorf("init tracing: %w", err)
 	}
+	var ts *tokenSystem
+	var rateLimiter *auth.RateLimiter
+	var stopCleanup func()
+	handlerCache := make(map[string]*mcpserver.ProtocolHandler)
+	var cacheMu sync.RWMutex
+	var cleanupOnce sync.Once
+	cleanupTransferred := false
+	cleanup := func() {
+		cleanupOnce.Do(func() {
+			if stopCleanup != nil {
+				stopCleanup()
+			}
+			if rateLimiter != nil {
+				_ = rateLimiter.Close()
+			}
+			cacheMu.Lock()
+			for _, h := range handlerCache {
+				_ = h.Close()
+			}
+			clear(handlerCache)
+			cacheMu.Unlock()
+			if ts != nil && ts.registry != nil {
+				_ = ts.registry.Close()
+			}
+			ts.Close()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = shutdownTracing(shutdownCtx)
+			cancel()
+		})
+	}
 	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = shutdownTracing(shutdownCtx)
-		cancel()
+		if !cleanupTransferred {
+			cleanup()
+		}
 	}()
 
 	addr := net.JoinHostPort(bind, strconv.Itoa(port))
-
-	// Load the token registry (with legacy fallback), wire its cleanup audit
-	// logging and background cleanup, and build the auth audit logger.
-	ts, err := setupTokenSystem(ctx, v, vaultDir)
+	ts, err = setupTokenSystem(runCtx, v, vaultDir)
 	if err != nil {
 		return err
 	}
-	defer ts.Close()
 	registry := ts.registry
 	legacyToken := ts.legacyToken
 	authAuditLog := ts.authAuditLog
-
-	rateLimiter, stopCleanup := setupRateLimiter(ctx, v)
-
-	handlerCache := make(map[string]*mcpserver.ProtocolHandler)
-	var cacheMu sync.RWMutex
+	rateLimiter, stopCleanup = setupRateLimiter(runCtx, v)
 
 	handlerForAgent := func(agentName string) (*mcpserver.ProtocolHandler, error) {
+		if contextErr := runCtx.Err(); contextErr != nil {
+			return nil, contextErr
+		}
 		cacheMu.RLock()
 		if h, ok := handlerCache[agentName]; ok {
 			cacheMu.RUnlock()
@@ -144,7 +173,11 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		}
 		resultChan := make(chan result, 1)
 
+		if !owners.begin() {
+			return nil, fmt.Errorf("server shutting down")
+		}
 		go func() {
+			defer owners.active.Done()
 			mcpSrv, mcpErr := factory(v, agentName, "http")
 			if mcpErr != nil {
 				resultChan <- result{err: mcpErr}
@@ -153,6 +186,12 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 			h := mcpserver.NewProtocolHandler("symaira", "1.0.0", mcpSrv)
 
 			cacheMu.Lock()
+			if runCtx.Err() != nil {
+				_ = h.Close()
+				cacheMu.Unlock()
+				resultChan <- result{err: runCtx.Err()}
+				return
+			}
 			if existing, ok := handlerCache[agentName]; ok {
 				_ = h.Close()
 				cacheMu.Unlock()
@@ -212,7 +251,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	if err != nil {
 		return fmt.Errorf("load oauth client store: %w", err)
 	}
-	clientStore.StartCleanup(ctx, 5*time.Minute)
+	clientStore.StartCleanup(runCtx, 5*time.Minute)
 
 	oauthRegisterHandler := auth.OriginValidationMiddleware(addr, handleOAuthRegister(clientStore))
 	mux.HandleFunc("POST /oauth/register", oauthRegisterHandler.ServeHTTP)
@@ -352,7 +391,8 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           owners.handler(mux),
+		BaseContext:       func(net.Listener) context.Context { return runCtx },
 		ReadHeaderTimeout: timeouts.readHeader,
 		ReadTimeout:       timeouts.read,
 		WriteTimeout:      timeouts.write,
@@ -402,55 +442,44 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 			"MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).%s", bind, loopbackNote)
 	}
 
+	servingListener := listener
+	if tlsEnabled && mtlsEnabled {
+		caCert, readErr := os.ReadFile(tlsCAFile)
+		if readErr != nil {
+			return fmt.Errorf("read client CA certificate: %w", readErr)
+		}
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return fmt.Errorf("parse client CA certificate: no valid PEM block found in %q", tlsCAFile)
+		}
+		cert, loadErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
+		if loadErr != nil {
+			return fmt.Errorf("load server TLS key pair failed")
+		}
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			ClientCAs:    caCertPool,
+			MinVersion:   tls.VersionTLS12,
+		}
+		servingListener = tls.NewListener(listener, tlsConfig)
+	}
+	shutdownDone := make(chan error, 1)
+	cleanupTransferred = true
 	go func() {
-		<-ctx.Done()
-		if stopCleanup != nil {
-			stopCleanup()
-		}
-		if rateLimiter != nil {
-			_ = rateLimiter.Close()
-		}
-		if registry != nil {
-			_ = registry.Close()
-		}
-		cacheMu.Lock()
-		for _, h := range handlerCache {
-			_ = h.Close()
-		}
-		cacheMu.Unlock()
-		shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
+		<-runCtx.Done()
+		shutdownDone <- drainHTTP(server, &owners, shutdownTimeout, cleanup)
 	}()
-
 	var serveErr error
-	if tlsEnabled {
-		if mtlsEnabled {
-			caCert, readErr := os.ReadFile(tlsCAFile)
-			if readErr != nil {
-				return fmt.Errorf("read client CA certificate: %w", readErr)
-			}
-			caCertPool := x509.NewCertPool()
-			if !caCertPool.AppendCertsFromPEM(caCert) {
-				return fmt.Errorf("parse client CA certificate: no valid PEM block found in %q", tlsCAFile)
-			}
-			cert, loadErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
-			if loadErr != nil {
-				return fmt.Errorf("load server TLS key pair failed")
-			}
-			tlsConfig := &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				ClientAuth:   tls.RequireAndVerifyClientCert,
-				ClientCAs:    caCertPool,
-				MinVersion:   tls.VersionTLS12,
-			}
-			tlsListener := tls.NewListener(listener, tlsConfig)
-			serveErr = server.Serve(tlsListener)
-		} else {
-			serveErr = server.ServeTLS(listener, tlsCert, tlsKey)
-		}
+	if tlsEnabled && !mtlsEnabled {
+		serveErr = server.ServeTLS(servingListener, tlsCert, tlsKey)
 	} else {
-		serveErr = server.Serve(listener)
+		serveErr = server.Serve(servingListener)
+	}
+	cancelRun()
+	shutdownErr := <-shutdownDone
+	if shutdownErr != nil {
+		return shutdownErr
 	}
 	if serveErr != nil && serveErr != http.ErrServerClosed {
 		return serveErr

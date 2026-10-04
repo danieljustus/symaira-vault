@@ -15,7 +15,9 @@ mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod cli_artifacts;
 mod completion_commands;
+mod completion_protocol;
 mod config;
 mod daemon_commands;
 mod deprecated_stubs;
@@ -29,6 +31,7 @@ mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod intake_commands;
 mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
@@ -130,11 +133,19 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Review-gated credential intake from loose files.
+    Intake {
+        #[command(flatten)]
+        options: intake_commands::IntakeOptions,
+        #[command(subcommand)]
+        command: Option<IntakeCommand>,
+    },
     /// Generate a shell completion script.
     Completion {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
         shell: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
@@ -525,6 +536,31 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeCommand {
+    /// Watch a folder for new credential files and stage quarantined batches.
+    #[command(args_override_self = true)]
+    Watch {
+        #[arg(value_name = "DIRECTORY")]
+        directory: Option<PathBuf>,
+        #[arg(long, default_value = "10s", allow_hyphen_values = true)]
+        interval: String,
+        #[arg(long, default_value = "5s", allow_hyphen_values = true)]
+        debounce: String,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        once: bool,
+        #[command(subcommand)]
+        command: Option<IntakeWatchCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeWatchCommand {
+    /// Disable an intake watch LaunchAgent (macOS).
+    Disable,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1148,6 +1184,9 @@ fn main() -> ExitCode {
 
 fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
+    if let Some(index) = completion_protocol::request_index(&args) {
+        return completion_protocol::run(&args, index);
+    }
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
     }
@@ -1174,6 +1213,45 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Intake { command, options }) => match command {
+            Some(IntakeCommand::Watch {
+                directory,
+                interval,
+                debounce,
+                once,
+                command,
+            }) => {
+                if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                    intake_commands::finish(intake_commands::disable(cli.quiet))
+                } else {
+                    let mut runtime = None;
+                    intake_commands::watch(
+                        directory.as_deref(),
+                        &interval,
+                        &debounce,
+                        once,
+                        cli.json,
+                        cli.quiet,
+                        || {
+                            let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())
+                                .map_err(|e| (6, e))?;
+                            require_initialized(&root).map_err(|e| (3, e))?;
+                            let runtime = runtime.get_or_insert_with(runtime_session_manager);
+                            let identity = device::unlock_vault_with_runtime(&root, runtime)
+                                .map_err(|e| (4, e))?;
+                            Ok((root, identity))
+                        },
+                    )
+                }
+            }
+            None => intake_commands::files(&options, cli.json, cli.quiet, || {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())
+                    .map_err(|e| (6, e))?;
+                require_initialized(&root).map_err(|e| (3, e))?;
+                let identity = device::unlock_vault(&root).map_err(|e| (4, e))?;
+                Ok((root, identity))
+            }),
+        },
         Some(Command::Completion {
             shell,
             no_descriptions,

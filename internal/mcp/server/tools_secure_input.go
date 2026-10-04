@@ -16,6 +16,7 @@ func (s *Server) handleSecureInput(ctx context.Context, req mcp.CallToolRequest)
 		return result, err
 	}
 	return s.promptAndStore(ctx, secureui.PromptRequest{
+		Context:     ctx,
 		Title:       "Symaira Vault: Secure Input",
 		Path:        path,
 		Field:       field,
