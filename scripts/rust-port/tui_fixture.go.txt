@@ -25,9 +25,9 @@ func main() {
  if len(os.Args)==2 {
   executable,err:=os.Executable();if err!=nil {panic(err)}
   if data,e:=os.ReadFile(executable+".editor.json");e==nil {
-   var spec struct{Mode,Ready,Release string}
+   var spec struct{Mode,Ready,Release,Console string}
    if err=json.Unmarshal(data,&spec);err!=nil {panic(err)}
-   editor(spec.Mode,os.Args[1],spec.Ready,spec.Release);return
+   editor(spec.Mode,os.Args[1],spec.Ready,spec.Release,spec.Console);return
   }
  }
  root:=flag.String("root","","private disposable vault")
@@ -39,6 +39,8 @@ func main() {
  if *consoleBinary!="" {
   beforeIn,err:=term.GetState(int(os.Stdin.Fd()));if err!=nil {panic(err)}
   beforeOut,err:=term.GetState(int(os.Stdout.Fd()));if err!=nil {panic(err)}
+  beforeJSON,err:=json.Marshal(map[string]any{"input":consoleState(reflect.ValueOf(beforeIn),""),"output":consoleState(reflect.ValueOf(beforeOut),"")});if err!=nil {panic(err)}
+  if err=os.WriteFile(*consoleReceipt+".before",beforeJSON,0600);err!=nil {panic(err)}
   command:=exec.Command(*consoleBinary,"--vault",*root,"ui")
   command.Stdin=os.Stdin;command.Stdout=os.Stdout;command.Stderr=os.Stderr
   err=command.Run();code:=0
@@ -105,11 +107,18 @@ func consoleState(value reflect.Value,name string) any {
 // A real child editor receives the actual private JSON document. It pauses on
 // a private rendezvous so the driver can observe terminal modes and clipboard
 // expiry while the browser is waiting for this foreground process.
-func editor(mode,path,ready,release string) {
+func editor(mode,path,ready,release,console string) {
  info,err:=os.Stat(path);if err!=nil {panic(err)}
  receipt:=map[string]any{"input_is_terminal":term.IsTerminal(int(os.Stdin.Fd())),"output_is_terminal":term.IsTerminal(int(os.Stdout.Fd())),"mode":uint32(info.Mode().Perm()),"document_bytes":info.Size()}
+ before,err:=os.ReadFile(console);if err!=nil {panic(err)}
+ in,err:=term.GetState(int(os.Stdin.Fd()));if err!=nil {panic(err)}
+ out,err:=term.GetState(int(os.Stdout.Fd()));if err!=nil {panic(err)}
+ current,err:=json.Marshal(map[string]any{"input":consoleState(reflect.ValueOf(in),""),"output":consoleState(reflect.ValueOf(out),"")});if err!=nil {panic(err)}
+ receipt["foreground_terminal_restored"]=string(before)==string(current)
+ receipt["environment_filtered"]=os.Getenv("TUI_PRIVATE_ENV")=="" && os.Getenv("SYMVAULT_TEST_KEYRING")=="" && os.Getenv("SYMVAULT_PASSPHRASE")==""
  data,err:=json.Marshal(receipt);if err!=nil {panic(err)}
- if err=os.WriteFile(ready,data,0600);err!=nil {panic(err)}
+ if err=os.WriteFile(ready+".tmp",data,0600);err!=nil {panic(err)}
+ if err=os.Rename(ready+".tmp",ready);err!=nil {panic(err)}
  fmt.Fprintln(os.Stdout,"TUI_EDITOR_READY")
  deadline:=time.Now().Add(20*time.Second)
  for {if _,err=os.Stat(release);err==nil {break};if time.Now().After(deadline){panic("private editor rendezvous expired")};time.Sleep(20*time.Millisecond)}
