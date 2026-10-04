@@ -91,3 +91,19 @@ framing cases, the complete hostile-origin/host/slow-peer matrix, TLS/mTLS and
 native gates remain required. OAuth entropy/time need controlled-provider or
 explicit semantic evidence; they cannot be silently normalized under the
 Date-only rule. HTTP-001..004 and #1249 stay open until full acceptance.
+
+The first Windows run at ddf346e passes all 227 owning runtime tests and the
+assembled API control, then times out in the actual Go HTTP process after 43
+requests. Its retained stderr contains the per-request missing-Origin warnings;
+the recorder left stderr unread until disposal. Windows' smaller pipe capacity
+can block the logger before the OAuth missing-parameter handler responds.
+Drain both process pipes concurrently throughout the corpus, cap each retained
+stream at 1 MiB, join both readers after owned process disposal and fail if
+capture is incomplete. Keep every actual warning byte and the existing canary
+checks. Do not remove requests or suppress the measured Go logger to pass CI.
+
+Also retain partial HTTP bytes in a finally block when recv times out, rather
+than retaining only exchanges that return normally. Neither change reconstructs
+responses, changes runtime behavior, promotes forced disposal to shutdown proof
+or relaxes status/header/body comparisons. Fresh Windows and other native
+current-head evidence remains required.
