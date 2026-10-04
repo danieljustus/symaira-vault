@@ -265,6 +265,7 @@ def main():
     parser.add_argument("--capture", action="store_true")
     parser.add_argument("--rust", type=Path)
     parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--captured-output", type=Path)
     parser.add_argument("--allow-dirty-for-development", action="store_true")
     parser.add_argument("--require-native-shells", action="store_true")
     args = parser.parse_args()
@@ -284,6 +285,8 @@ def main():
         execute(["git", "worktree", "add", "--detach", tree, PIN], ROOT, os.environ.copy())
         try:
             artifact, go = capture(tree, base, env)
+            if args.captured_output:
+                args.captured_output.write_text(json.dumps(artifact,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
             if args.capture:
                 ARTIFACT.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
             else:
@@ -294,7 +297,13 @@ def main():
                     for key in changed:
                         left, right = expected.get(key), artifact[key]
                         if isinstance(right, dict):
-                            print(key, [k for k in right if left.get(k) != right[k]][:12])
+                            differences = [k for k in right if left.get(k) != right[k]]
+                            print(key, differences[:12])
+                            for name in differences[:3]:
+                                before, after = left.get(name,''), right[name]
+                                if isinstance(before,str) and isinstance(after,str):
+                                    offset = next((i for i,(a,b) in enumerate(zip(before,after)) if a!=b),min(len(before),len(after)))
+                                    print(name,'first differing byte',offset,repr(before[max(0,offset-100):offset+200]),repr(after[max(0,offset-100):offset+200]))
                         elif isinstance(right, list):
                             print(key, [(i,str(a)[:220],str(b)[:220]) for i,(a,b) in enumerate(zip(left,right)) if a!=b][:8])
                         else: print(key, str(left)[:220],str(right)[:220])

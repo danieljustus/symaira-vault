@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           rust_binary=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_binary=target/debug/symvault.exe; fi
-          python3 scripts/run_go_tests.py cargo -- python3 scripts/rust-port/cli_artifacts_contract.py --rust "$rust_binary" --receipt native-cli-artifacts.json --require-native-shells
+          python3 scripts/run_go_tests.py cargo -- python3 scripts/rust-port/cli_artifacts_contract.py --rust "$rust_binary" --receipt native-cli-artifacts.json --captured-output native-cli-go-artifacts.json --require-native-shells
           python3 - <<'PY'
           import json, subprocess
           from pathlib import Path
@@ -110,6 +110,7 @@ jobs:
           name: cli-artifacts-${{ matrix.os }}
           path: |
             native-cli-artifacts.json
+            native-cli-go-artifacts.json
             target/native-cli-artifact-gaps.json
           if-no-files-found: error
           retention-days: 14
