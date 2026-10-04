@@ -165,6 +165,21 @@ normalizing the frozen fixture. Runtime source, Go observations and process
 driver normalization are unchanged; short names must not become an arbitrary
 case-folding or path-equivalence exemption.
 
+The subsequent actual Windows process run at fff7676 passes all 227 owning
+runtime tests, then rejects the complete operator-restricted whoami result:
+Go reports the requested `RUNNER~1` path while Rust reports the expanded
+`runneradmin` path. This shows that the earlier test-only canonical expectation
+was insufficient to establish Go metadata behavior. Preserve the requested
+ordinary path in open_with_audit metadata on every OS; retain the separate
+canonical adapter/share root for all filesystem operations. This follows the
+existing CLI rule for displayed store paths. Keep from_store metadata based on
+its already-open Store root, since that API has no original caller path.
+
+The existing encrypted fixture test now asserts the exact requested root before
+normalization. Neither its frozen Go fixture nor the real process driver gains
+an alias-normalization exemption. Retain the native failure receipts and require
+fresh complete process evidence for this runtime correction.
+
 Normalize JSON object order/nested JSON text, actual fixture HOME prefixes,
 validated paired random 16-hex data-marker ids, and nonnegative measured command
 durations only. Keep labels, wrapped content, full schemas, error classes,

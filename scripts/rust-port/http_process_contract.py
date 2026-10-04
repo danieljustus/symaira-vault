@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from urllib.parse import urlencode
 
@@ -22,6 +23,39 @@ from mcp_process_contract import ORACLE, checked, isolated, inventory, vault_sna
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT/'scripts/rust-port/http_process_seed.go.txt'
 SECRET = 'public-http-secret-729c'
+
+
+class ProcessCapture:
+    """Drain both real pipes throughout the request corpus, with bounded storage."""
+    def __init__(self, process):
+        self.buffers = {'stdout': bytearray(), 'stderr': bytearray()}
+        self.errors = []
+        self.workers = []
+        for name, pipe in [('stdout', process.stdout), ('stderr', process.stderr)]:
+            def drain(name=name, pipe=pipe):
+                try:
+                    while True:
+                        data = os.read(pipe.fileno(), 4096)
+                        if not data:
+                            break
+                        remaining = 1024*1024-len(self.buffers[name])
+                        self.buffers[name] += data[:max(0,remaining)]
+                        if len(data)>remaining:
+                            self.errors.append(name+' exceeds the 1 MiB fixture capture bound')
+                            process.kill()
+                except Exception as error:
+                    self.errors.append(name+': '+type(error).__name__)
+                finally:
+                    pipe.close()
+            worker = threading.Thread(target=drain)
+            worker.start()
+            self.workers.append(worker)
+
+    def finish(self):
+        for worker in self.workers:
+            worker.join(timeout=5)
+        complete = not self.errors and all(not worker.is_alive() for worker in self.workers)
+        return bytes(self.buffers['stdout']), bytes(self.buffers['stderr']), complete
 
 
 def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fixture', headers=()):
@@ -40,24 +74,27 @@ def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fix
 
 
 def exchange(port, data, retained):
+    result = bytearray()
+    send_reset = False
     with socket.create_connection(('127.0.0.1',port),timeout=15) as connection:
-        send_reset = False
         try:
-            connection.sendall(data)
-        except (ConnectionResetError, BrokenPipeError):
-            send_reset = True
-        result = bytearray()
-        while True:
             try:
-                chunk = connection.recv(65536)
-            except ConnectionResetError:
-                break
-            if not chunk:
-                break
-            result += chunk
-            assert len(result)<8*1024*1024
-    retained['raw_base64']=base64.b64encode(result).decode()
-    retained['send_reset']=send_reset
+                connection.sendall(data)
+            except (ConnectionResetError, BrokenPipeError):
+                send_reset = True
+            while True:
+                try:
+                    chunk = connection.recv(65536)
+                except ConnectionResetError:
+                    break
+                if not chunk:
+                    break
+                result += chunk
+                assert len(result)<8*1024*1024
+        finally:
+            # Also preserve actual partial bytes when recv times out or fails.
+            retained['raw_base64']=base64.b64encode(result).decode()
+            retained['send_reset']=send_reset
     head,body = bytes(result).split(b'\r\n\r\n',1)
     lines = head.decode('latin1').split('\r\n')
     fields = [tuple(line.split(':',1)) for line in lines[1:]]
@@ -239,6 +276,7 @@ def stalled_connections(port,tokens,observations):
 def observe(binary,home,port,tokens,rows,process_record,transport_rows):
     process = subprocess.Popen([str(binary),'--quiet','mcp','--bind','127.0.0.1','--port',str(port)],
         cwd=home,env=isolated(home),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    capture = ProcessCapture(process)
     # The actual Go CLI requires explicit consent for configured cleartext.
     # Only disposable, public fixture credentials are served over loopback.
     process.stdin.write(b'y\n')
@@ -270,9 +308,12 @@ def observe(binary,home,port,tokens,rows,process_record,transport_rows):
     finally:
         if process.poll() is None:
             process.kill()
-        stdout,stderr = process.communicate(timeout=15)
+        process.wait(timeout=15)
+        stdout,stderr,complete = capture.finish()
         process_record.update(stdout_base64=base64.b64encode(stdout).decode(),stderr_utf8=stderr.decode('utf-8'),
-                              forced_cleanup_not_graceful_evidence=True,exit=process.returncode)
+                              forced_cleanup_not_graceful_evidence=True,exit=process.returncode,
+                              output_capture_complete=complete,output_capture_errors=capture.errors)
+        assert complete, 'owned stdout/stderr readers did not finish complete bounded capture'
         assert not any(value.encode() in stdout+stderr for value in [SECRET]+list(tokens.values())), 'credential in process output'
     return process_record
 

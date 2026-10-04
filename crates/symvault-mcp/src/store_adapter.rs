@@ -512,11 +512,14 @@ impl StoreReadOnlyRuntime {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
         }
+        let reported_root = runtime_vault_dir(root.as_ref());
         let adapter = StoreReadOnlyAdapter::open(root, identity)?;
         let root = adapter.root().to_path_buf();
         let share_store = ShareStore::read(root.join(SHARE_STORE_FILE))
             .map_err(|error| format!("load share store: {error}"))?;
-        config.vault_dir = runtime_vault_dir(&root);
+        // Go reports the configured path spelling. Canonical roots remain
+        // authoritative for all I/O, including Windows short-name expansion.
+        config.vault_dir = reported_root;
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
