@@ -1,0 +1,105 @@
+name: Windows ordinary attachment reader
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-windows-file-use.yml'
+      - 'crates/symvault-cli/**'
+      - 'crates/symvault-platform/**'
+      - 'crates/symvault-sync/**'
+      - 'crates/symvault-store/**'
+      - 'Cargo.lock'
+      - 'scripts/rust-port/windows_file_use_contract.py'
+      - 'docs/adr/0012-windows-materialized-file-ownership.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  file-use:
+    name: Ordinary file reader (${{ matrix.os }}, ${{ matrix.architecture }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            architecture: x64
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            architecture: arm64
+            target: aarch64-pc-windows-msvc
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      SYMVAULT_TEST_KEYRING: memory
+      TZ: UTC
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout retained Go oracle and candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust and native target
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+          rustup target add '${{ matrix.target }}'
+      - name: Check and execute native retained-handle regressions
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo clippy -p symvault-cli -p symvault-platform --all-targets --all-features --target '${{ matrix.target }}' --locked -- -D warnings
+          cargo test -p symvault-platform --lib --target '${{ matrix.target }}' --locked windows_attachment::tests:: -- --nocapture > target/native-windows-handle-tests.txt 2>&1
+          cat target/native-windows-handle-tests.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('target/native-windows-handle-tests.txt').read_bytes().decode('utf-8')
+          for name in ['ordinary_read_only_sharing_reads_exact_payload', 'cleanup_deletes_original_after_path_and_parent_replacement', 'retained_reader_reports_cleanup_failure_without_path_fallback']:
+              assert f'windows_attachment::tests::{name} ... ok' in text, name
+          assert '3 passed; 0 failed; 0 ignored' in text
+          PY
+          cargo build -p symvault-cli --target '${{ matrix.target }}' --locked
+      - name: Execute real Go and Rust with ordinary PowerShell readers
+        run: |
+          set -euo pipefail
+          python3 scripts/rust-port/windows_file_use_contract.py --rust 'target/${{ matrix.target }}/debug/symvault.exe' --architecture '${{ matrix.architecture }}' --receipt native-windows-file-use.json
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          receipt = json.loads(Path('native-windows-file-use.json').read_bytes())
+          assert receipt['passed'] and receipt['candidate_worktree_clean']
+          assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
+          assert receipt['native_os'] == 'Windows'
+          for implementation in ['go','rust']:
+              assert {case['case'] for case in receipt[implementation]} == {'ordinary', 'error', 'timeout', 'launch-error'}
+          PY
+      - name: Upload actual native execution evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-file-use-${{ matrix.architecture }}
+          path: |
+            target/native-windows-handle-tests.txt
+            native-windows-file-use.json
+          if-no-files-found: error
+          retention-days: 14
