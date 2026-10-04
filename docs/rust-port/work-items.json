@@ -97,7 +97,7 @@
       "status": "blocked",
       "depends_on": ["RUST-010"],
       "contract_rows": ["HTTP-001", "HTTP-002", "HTTP-003", "HTTP-004", "APPROVAL-001", "BROKER-001", "BROKER-002"],
-      "note": "2026-10-04 #1140: a focused CONNECT library restores the accepted-socket blocking reset, four owned workers/four queued admissions, registered cancellation and joined duplex relays. Four socket regressions and three actual source-bound Go/Rust loopback CONNECT transcripts pass locally; native three-OS acceptance remains pending. Full broker CLI/MITM/credential/template behavior remains #1237; BROKER-001/002 are not promoted. See ADR 0014.",
+      "note": "2026-10-04 #1140: a focused CONNECT library restores the accepted-socket blocking reset, four owned workers/four queued admissions, registered cancellation and joined duplex relays. Four socket regressions and three actual source-bound Go/Rust loopback CONNECT transcripts pass locally; native three-OS acceptance remains pending. The #1237 follow-up now implements one owned runtime for broker and run --broker, actual ephemeral CA/TLS interception, source-tested auth/substitution and bounded masking. Four real socket/TLS/cancellation regressions and 16 actual Go/Rust Linux runtime cases pass in development; native full CLI/runtime acceptance remains pending. ADR 0015 records measured scheme/port/CONNECT/redirect decisions. BROKER-001/002 are not promoted by development evidence.",
       "acceptance": ["make http-oauth-broker-differential", "cargo nextest run -p symvault-mcp"]
     },
     {

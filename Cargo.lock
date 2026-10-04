@@ -3477,6 +3477,7 @@ dependencies = [
  "base64 0.22.1",
  "getrandom 0.3.3",
  "hmac 0.12.1",
+ "rcgen",
  "reqwest",
  "rustls",
  "serde",
@@ -3491,7 +3492,9 @@ dependencies = [
  "symvault-sync",
  "tempfile",
  "time",
+ "tokio",
  "unicode-normalization",
+ "zeroize",
 ]
 
 [[package]]

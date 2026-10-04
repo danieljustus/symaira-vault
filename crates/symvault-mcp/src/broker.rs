@@ -10,6 +10,9 @@
 #[path = "broker_connect.rs"]
 mod connect;
 pub use connect::serve_connect_passthrough;
+#[path = "broker_egress.rs"]
+mod egress;
+pub use egress::{EgressBroker, EgressOptions};
 
 use reqwest::{
     Method, Url,

@@ -15,6 +15,7 @@ mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod broker_commands;
 mod cli_artifacts;
 mod completion_commands;
 mod completion_protocol;
@@ -149,6 +150,7 @@ enum Command {
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
+    #[command(args_override_self = true)]
     Run {
         #[arg(short = 'e', long = "env")]
         env: Vec<String>,
@@ -160,8 +162,29 @@ enum Command {
         working_dir: Option<PathBuf>,
         #[arg(short = 't', long)]
         timeout: Option<String>,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        broker: bool,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        broker_strict: bool,
+        #[arg(long)]
+        broker_passthrough: Vec<String>,
         #[arg(last = true, required = true)]
         command: Vec<String>,
+    },
+    /// Run the egress credential broker (loopback MITM proxy).
+    #[command(args_override_self = true)]
+    Broker {
+        #[arg(long, default_value = "127.0.0.1:0")]
+        addr: String,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        strict: bool,
+        #[arg(long)]
+        passthrough: Vec<String>,
+        #[arg(hide = true)]
+        _args: Vec<String>,
     },
     /// Manage secret sharing between agents.
     Share {
@@ -1534,6 +1557,9 @@ fn run_cli() -> ExitCode {
             passthrough,
             working_dir,
             timeout,
+            broker,
+            broker_strict,
+            broker_passthrough,
             command,
         }) => {
             let result = (|| {
@@ -1557,20 +1583,36 @@ fn run_cli() -> ExitCode {
                     .values()
                     .map(|value| value.as_bytes().to_vec())
                     .collect();
-                let result = run_commands::run_process(run_commands::ProcessOptions {
-                    command: &command,
-                    environment: &environment.values,
-                    files: &std::collections::BTreeMap::new(),
-                    extra_environment: &[],
-                    generic_redaction: true,
-                    passthrough: &passthrough,
-                    working_directory: working_dir
-                        .as_deref()
-                        .filter(|path| !path.as_os_str().is_empty()),
-                    timeout,
-                    redactions: &redactions,
-                    whitelist: run_commands::RUN_ENV_WHITELIST,
-                })?;
+                let execute = |proxy_environment: BTreeMap<String, String>| {
+                    let mut values = environment.values.clone();
+                    values.extend(proxy_environment);
+                    run_commands::run_process(run_commands::ProcessOptions {
+                        command: &command,
+                        environment: &values,
+                        files: &std::collections::BTreeMap::new(),
+                        extra_environment: &[],
+                        generic_redaction: true,
+                        passthrough: &passthrough,
+                        working_directory: working_dir
+                            .as_deref()
+                            .filter(|path| !path.as_os_str().is_empty()),
+                        timeout,
+                        redactions: &redactions,
+                        whitelist: run_commands::RUN_ENV_WHITELIST,
+                    })
+                };
+                let result = if broker {
+                    broker_commands::with_broker(
+                        &root,
+                        &store,
+                        &identity,
+                        broker_strict,
+                        &broker_passthrough,
+                        execute,
+                    )?
+                } else {
+                    execute(BTreeMap::new())?
+                };
                 if result.timed_out {
                     return Err(format!(
                         "command timed out after {}",
@@ -1587,7 +1629,26 @@ fn run_cli() -> ExitCode {
             if let Err(error) = &result {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
-            finish_vault_result(result)
+            finish_execution_result(result)
+        }
+        Some(Command::Broker {
+            addr,
+            strict,
+            passthrough,
+            ..
+        }) => {
+            let result = (|| {
+                let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&root)?;
+                let identity = device::unlock_vault(&root)?;
+                let store = symvault_store::Store::open_with_legacy_migration(&root, &identity)
+                    .map_err(|error| error.to_string())?;
+                broker_commands::run(&root, &store, &identity, &addr, strict, &passthrough)
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_execution_result(result)
         }
         Some(Command::Share {
             command: ShareCommand::Revoke { grant_id },
@@ -3516,6 +3577,22 @@ fn run_find(
         Ok(())
     })();
     finish_vault_result(result)
+}
+
+fn finish_execution_result(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            if error.starts_with("vault not initialized") {
+                ExitCode::from(3)
+            } else if error.starts_with("vault locked:") {
+                ExitCode::from(4)
+            } else {
+                ExitCode::from(1)
+            }
+        }
+    }
 }
 
 fn finish_vault_result(result: Result<(), String>) -> ExitCode {

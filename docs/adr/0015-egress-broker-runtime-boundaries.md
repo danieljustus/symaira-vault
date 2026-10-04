@@ -3,7 +3,8 @@
 ## Status
 
 Accepted maintainer-delegated implementation direction, 2026-10-04. #1237 is
-in progress. No BROKER-001/002 acceptance or new runtime is claimed here.
+in progress. The implemented runtime has development evidence; BROKER-001/002
+acceptance still requires clean-source and native-platform receipts.
 
 ## Decision and rationale
 
@@ -36,7 +37,88 @@ admission and closes owned transports; already running application work remains
 owned until completion. Per-host certificate material, intercepted request
 buffers and decrypted entry projections must not become unbounded caches.
 
-## Required evidence and scope
+## Measured authority decisions
+
+The 2026-10-04 Linux development transcript executes actual Go at immutable
+d1cd0f97ac550bc3020bc86b0514989f8d28d95c and the Rust runtime against private
+TLS peers and a real Go-initialized encrypted vault. It covers all five auth
+types, all four substitution surfaces, denied methods/endpoints, unmatched
+forwarding/strict mode, passthrough, upstream trust rejection and four authority
+cases. Development receipts are not native acceptance for a clean candidate.
+
+Actual Go delivers the fixture bearer credential and returns 200 when the
+template's port differs from the request, when a HTTPS template is used through
+plain HTTP, and when the inner Host after CONNECT differs from the CONNECT
+target. It also follows a redirect to another port of the same host, delivering
+the bearer credential there and returning the final 200. Rust returns 403
+without credential delivery for the first three and returns the sanitized 302
+without following the redirect. Preserve these narrower boundaries: hostname
+alone does not identify a credential destination; scheme and effective port
+belong to that destination, and a CONNECT peer cannot introduce another one.
+In the shipped runtime, credential templates require HTTPS. Plain/private
+fixture transport remains an explicit in-process seam. Do not export this seam
+as a CLI option or install the fixture CA in system trust.
+
+The same development run initially measured Go ignoring a custom auth_type none
+template without substitutions, silently forwarding with caller headers. Rust
+rejects that invalid template at startup. A valid none template with declared
+substitutions is executed separately and matches actual Go injection/masking.
+Failing startup avoids silently changing an operator's credential policy.
+Reject duplicate host templates and oversized catalogs for the same reason.
+
+The actual CLI comparison also measures Go accepting a wildcard listener while
+Rust rejects it. Keep the shipped broker on loopback: exposing a local
+credential-injecting proxy to another host must require a separately designed
+and authenticated service boundary. Empty passthrough CSV selectors never match
+a destination, including a DNS name with a trailing dot. The passthrough list
+continues to use exact names or dot-separated subdomains.
+
+The runtime uses four owned workers and four pending sockets, 64 KiB aggregate
+headers, 8 KiB request lines and 16 MiB request/response bodies. ACL glob work
+shares an eight-million-operation allowance per request and uses linear memory;
+an exhausted allowance denies the request before any credential read. The
+encrypted-store admission and batch limits remain in force. These are payload
+and operation bounds, not a measured RSS claim. Per-host certificates are minted
+without a retained leaf cache; their lifetime is 24 hours and the ephemeral CA
+is valid for one year, matching the Go certificate lifetime policy.
+
+Each forwarded request owns a current-thread async transport runtime. Stop
+checks interrupt its network future and dropping that runtime drops its network
+tasks/sockets before the worker joins. An actual pending upstream test proves
+EOF and complete shutdown in under two seconds, rather than merely waiting for
+the 60-second network timeout. Blocking system DNS resolution still belongs to
+the worker and is not advertised as cancellable. Every checked address is pinned
+for the connection; private/local destinations remain blocked in production.
+Neither admission stop nor transport cancellation claims to undo a request that
+an upstream has already received.
+
+Four integration tests use actual encrypted entries, verified TLS peers,
+binary response bytes, repeated Set-Cookie headers, preflight failures, idle
+clients and pending upstream cancellation. Strict CLI/MCP Clippy and the full
+MCP suite passed during development; final clean-source and native receipts
+remain required, including real CLI child error/timeout/launch and console stop.
+
+The complete Linux development driver subsequently passed 16 real Go/Rust
+runtime cases and 13 CLI cases. The CLI cases exercise ordinary child exit,
+child error, timeout, explicit separately authorized environment mappings,
+launch failure, valued/repeated boolean flags, CSV passthrough, public proxy
+environment and native console stop. Actual missing-vault observations required
+Rust run/broker to return the Go initialization exit code 3; a locked vault uses
+4. These decisions are scoped to run/broker and do not rewrite unrelated CLI
+error classifications. Both drivers retain actual output and binary/source
+hashes. Development success does not substitute for the required clean commit
+or native macOS/Windows jobs.
+
+Disposable native fixture vaults use explicitly configured Argon2id parameters
+of 19456 KiB, two iterations and one lane, within Go's configured minimum
+policy. Real Go InitWithPassphrase writes the encrypted identity and entries;
+both implementations then decrypt those actual artifacts. Keeping functional
+fixtures within that supported configuration avoids repeatedly benchmarking
+an unoptimized debug KDF during transport tests. Production defaults, the
+accepted KDF resource policy and release performance gates remain separate.
+The receipt records these fixture parameters and the actual binary hashes.
+
+## Required acceptance
 
 Before accepting this issue, execute real immutable Go and Rust CLI/runtime
 cases in disposable HOME/XDG/vault roots on native Linux, macOS and Windows.
