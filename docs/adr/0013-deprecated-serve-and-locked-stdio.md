@@ -123,3 +123,12 @@ all observed log lines (and their strict known-source validation), including
 an empty log, rather than treating an asynchronous log's timing as delivery
 evidence. Forced test termination and whole-runtime logging remain outside
 this launch acceptance and are explicitly recorded in the receipt.
+
+The first native macOS process run at ddcf190 fails service-install byte parity:
+Rust appends a final LF to its launchd plist, whereas the actual pinned Go CLI
+ends at </plist>. Remove that LF from production rendering. Preserve the old
+unit-test literal and explicitly remove its one appended LF in the expectation;
+the literal's previous provenance claim did not establish this wire byte.
+Do not trim or normalize service bytes in the native driver. All permissions,
+helper invocations and CLI outputs already agree in the failed observation;
+the repaired commit must still pass the complete native process gate.
