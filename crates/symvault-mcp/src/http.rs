@@ -512,6 +512,97 @@ impl Default for OAuthTokenTtls {
     }
 }
 
+/// Explicit transport input/write budgets and OAuth lifetimes.
+/// Zero network budgets retain the built-in defaults; keep-alive idle remains
+/// the Go-compatible 120 seconds. Shutdown is owned by the caller's lifecycle.
+#[derive(Clone, Copy, Debug)]
+pub struct HttpServerOptions {
+    pub token_ttls: OAuthTokenTtls,
+    pub read_header_timeout: Duration,
+    pub read_timeout: Duration,
+    pub write_timeout: Duration,
+}
+
+impl Default for HttpServerOptions {
+    fn default() -> Self {
+        let timeouts = HttpTimeouts::default();
+        Self {
+            token_ttls: OAuthTokenTtls::default(),
+            read_header_timeout: timeouts.initial_read,
+            read_timeout: timeouts.request_read,
+            write_timeout: timeouts.write,
+        }
+    }
+}
+
+impl HttpServerOptions {
+    fn timeouts(self) -> Result<HttpTimeouts, std::io::Error> {
+        let mut result = HttpTimeouts::default();
+        for (configured, target) in [
+            (self.read_header_timeout, &mut result.initial_read),
+            (self.read_timeout, &mut result.request_read),
+            (self.write_timeout, &mut result.write),
+        ] {
+            if configured > Duration::from_nanos(i64::MAX as u64) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "HTTP timeout exceeds Go time.Duration range",
+                ));
+            }
+            if !configured.is_zero() {
+                *target = configured;
+            }
+        }
+        Ok(result)
+    }
+}
+
+/// Serves MCP/OAuth/approval with explicit transport budgets and optional TLS.
+/// Cleartext retains the loopback restriction; TLS client verification stays
+/// in the supplied server config. This entry point preserves the older APIs.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_oauth_and_approval_options<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Option<Arc<ServerConfig>>,
+    local_approval_api: LocalApprovalApi,
+    options: HttpServerOptions,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
+    let timeouts = options.timeouts()?;
+    let root = registry_path
+        .as_ref()
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+    serve_loopback_inner_with_shutdown(
+        listener,
+        registry_path.as_ref(),
+        handler_for_agent,
+        Some(
+            crate::oauth::OAuthState::new(
+                root,
+                oauth_agent_name.into(),
+                Box::new(consent),
+                Box::new(verify_passphrase),
+            )
+            .with_token_ttls(options.token_ttls)?,
+        ),
+        tls,
+        Some(Arc::new(local_approval_api)),
+        None,
+        timeouts,
+    )
+}
+
 /// Loopback MCP/OAuth/approval with explicit bounded token lifetimes.
 #[allow(clippy::too_many_arguments)]
 pub fn serve_loopback_with_oauth_and_approval_ttls<F, C, V>(
@@ -643,6 +734,7 @@ where
         None,
         None,
         Some(shutdown),
+        HttpTimeouts::default(),
     )
 }
 
@@ -665,6 +757,7 @@ where
         tls,
         local_approval,
         None,
+        HttpTimeouts::default(),
     )
 }
 
@@ -677,6 +770,7 @@ fn serve_loopback_inner_with_shutdown<F>(
     tls: Option<Arc<ServerConfig>>,
     local_approval: Option<Arc<LocalApprovalApi>>,
     shutdown: Option<HttpShutdown>,
+    timeouts: HttpTimeouts,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
@@ -729,6 +823,8 @@ where
             // clone can fail with EINVAL even though cancellation succeeded.
             let cancellation_socket = shutdown.as_ref().map(|_| socket.try_clone()).transpose()?;
             let mut stream = HttpStream::new(socket, tls.clone())?;
+            stream.set_read_timeout(Some(timeouts.initial_read))?;
+            stream.set_write_timeout(Some(timeouts.write))?;
             if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown)) =
                 (&mut stream.transport, &shutdown)
             {
@@ -779,7 +875,7 @@ where
                     &state,
                     oauth.as_deref(),
                     local_approval.as_deref(),
-                    HttpTimeouts::default(),
+                    timeouts,
                 );
             }) {
                 active.fetch_sub(1, Ordering::AcqRel);
@@ -2491,6 +2587,7 @@ mod tests {
                 None,
                 Some(local_approval),
                 Some(worker_shutdown),
+                HttpTimeouts::default(),
             )
             .expect("serve production loopback accept loop");
         });

@@ -227,6 +227,15 @@ pub fn run(
                 refresh_token_ttl: oauth.refresh_token_ttl,
             }
         });
+        let mut http_options = symvault_mcp::http::HttpServerOptions {
+            token_ttls,
+            ..symvault_mcp::http::HttpServerOptions::default()
+        };
+        if let Some(mcp) = config.mcp.as_ref() {
+            http_options.read_header_timeout = mcp.read_header_timeout;
+            http_options.read_timeout = mcp.read_timeout;
+            http_options.write_timeout = mcp.write_timeout;
+        }
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();
         let handler_for_agent = move |agent: &str| {
@@ -265,29 +274,17 @@ pub fn run(
                 })
             })
         };
-        let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval_ttls(
-                listener,
-                registry_path,
-                handler_for_agent,
-                oauth_agent_name,
-                consent,
-                verify_passphrase,
-                tls,
-                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
-                token_ttls,
-            ),
-            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval_ttls(
-                listener,
-                registry_path,
-                handler_for_agent,
-                oauth_agent_name,
-                consent,
-                verify_passphrase,
-                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
-                token_ttls,
-            ),
-        };
+        let result = symvault_mcp::http::serve_with_oauth_and_approval_options(
+            listener,
+            registry_path,
+            handler_for_agent,
+            oauth_agent_name,
+            consent,
+            verify_passphrase,
+            tls,
+            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+            http_options,
+        );
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         #[cfg(unix)]

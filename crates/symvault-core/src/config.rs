@@ -1012,6 +1012,22 @@ fn duration(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, Confi
     }
     Ok(Duration::from_nanos(nanos as u64))
 }
+
+fn network_timeout_duration(
+    value: &serde_yaml_ng::Value,
+    field: &str,
+) -> Result<Duration, ConfigError> {
+    if value.is_null() {
+        return Ok(Duration::ZERO);
+    }
+    let nanos = if let Some(number) = value.as_i64() {
+        number
+    } else {
+        let text = string(value, field)?;
+        parse_go_duration(&text).map_err(|error| ConfigError::Parse(format!("{field}: {error}")))?
+    };
+    Ok(Duration::from_nanos(nanos.max(0) as u64))
+}
 /// Parses Go's `time.ParseDuration` grammar and returns nanoseconds.
 ///
 /// The signed result is intentional: Go accepts zero and negative durations;
@@ -1706,11 +1722,16 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
         ("read_timeout", &mut out.read_timeout),
         ("write_timeout", &mut out.write_timeout),
         ("shutdown_timeout", &mut out.shutdown_timeout),
-        ("approval_timeout", &mut out.approval_timeout),
     ] {
         if let Some(v) = map.get(key(k)) {
-            *d = duration(v, k)?;
+            // Go's server applies only positive network timeout overrides.
+            // Preserve non-positive values as zero in this unsigned model;
+            // the transport selects its safe default rather than disabling I/O.
+            *d = network_timeout_duration(v, k)?;
         }
+    }
+    if let Some(v) = map.get(key("approval_timeout")) {
+        out.approval_timeout = duration(v, "approval_timeout")?;
     }
     if let Some(v) = map.get(key("rate_limit")) {
         out.rate_limit = integer(v, "rate_limit")?;
