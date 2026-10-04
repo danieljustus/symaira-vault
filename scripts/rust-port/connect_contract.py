@@ -125,7 +125,7 @@ def main():
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/connect_contract.py", "scripts/rust-port/connect_contract_probe.go.txt", ".github/workflows/rust-broker-connect.yml"})
     with tempfile.TemporaryDirectory(prefix="symvault-connect-contract-") as raw:
         base = Path(raw)
@@ -135,6 +135,9 @@ def main():
             oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
                                     if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
             oracle_digest = inventory(oracle_sources, tree)
+            embedded = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
+                              if x.startswith("internal/mcp/apitemplates/builtin/"))
+            assert len(embedded) == 17
             helper = tree / "scripts/rust-port/cmd/connectprobe"
             helper.mkdir()
             (helper / "main.go").write_bytes(PROBE.read_bytes())
@@ -144,6 +147,7 @@ def main():
             assert observed["go"] == observed["rust"]
             receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": oracle_sources,
                        "oracle_source_digest": oracle_digest, "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+                       "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
                        "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
                        "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
                        "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
