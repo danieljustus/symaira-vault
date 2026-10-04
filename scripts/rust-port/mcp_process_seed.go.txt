@@ -1,0 +1,38 @@
+// Seed only disposable native-process fixtures through actual Go vault/config APIs.
+package main
+
+import (
+ "encoding/json"
+ "flag"
+ "os"
+ "path/filepath"
+ "github.com/danieljustus/symaira-vault/internal/config"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+ "gopkg.in/yaml.v3"
+)
+
+func main() {
+ root := flag.String("root", "", "private fixture vault")
+ profileFile := flag.String("profile", "", "public fixture profile JSON/YAML")
+ builtin := flag.String("builtin", "", "actual Go built-in profile, with only fixture scope overlaid")
+ agent := flag.String("agent", "fixture", "actual selected profile name")
+ flag.Parse()
+ raw, err := os.ReadFile(*profileFile); if err != nil { panic(err) }
+ cfg := config.Default()
+ var profile config.AgentProfile
+ if *builtin != "" {
+  var ok bool
+  profile, ok = cfg.Agents[*builtin]; if !ok { panic("unknown built-in profile") }
+ }
+ if err = yaml.Unmarshal(raw, &profile); err != nil { panic(err) }
+ cfg.Vault = &config.VaultConfig{FormatVersion:2, AuthMethod:"passphrase", Argon2idTime:2, Argon2idMemory:19456, Argon2idThreads:1}
+ cfg.Agents = map[string]config.AgentProfile{*agent:profile}
+ cfg.DefaultAgent = *agent
+ identity, err := vault.InitWithPassphrase(*root, []byte("correct horse battery staple"), cfg); if err != nil { panic(err) }
+ entry := &vault.Entry{Data:map[string]any{"username":"public-fixture-user", "password":"public-mcp-secret-6af2", "nested":map[string]any{"token":"public-nested-secret-88d1"}}}
+ if err = vault.WriteEntry(*root,"public/fixture",entry,identity); err != nil { panic(err) }
+ // The parent verifies that Go really applied the named profile to disk.
+ raw, err = os.ReadFile(filepath.Join(*root,"config.yaml")); if err != nil { panic(err) }
+ loaded, err := config.LoadFromBytes(raw); if err != nil { panic(err) }
+ if err = json.NewEncoder(os.Stdout).Encode(loaded.Agents[*agent]); err != nil { panic(err) }
+}

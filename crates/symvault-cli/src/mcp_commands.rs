@@ -8,7 +8,6 @@
 #[path = "mcp_tls_cert.rs"]
 mod mcp_tls_cert;
 
-#[cfg(unix)]
 use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::sync::OnceLock;
@@ -36,6 +35,69 @@ use symvault_mcp::{
     ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
 use symvault_platform::approval::is_tty_present;
+
+/// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
+/// intact and deny every tool call through the existing locked handler.
+pub fn run_locked_stdio() -> Result<(), String> {
+    // Go lists host-capable secure input metadata even with a nil vault. This
+    // handler still owns no tool runtime: listing cannot enable a prompt/read.
+    let available = locked_secure_input_metadata_available();
+    let mut handler = ProtocolHandler::with_tool_list_config(
+        "symaira",
+        "1.0.0",
+        ToolListConfig {
+            secure_input_available: available,
+            request_credential_available: available,
+            ..ToolListConfig::default()
+        },
+    );
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
+        .map_err(|error| format!("MCP stdio: {error}"))
+}
+
+fn locked_secure_input_metadata_available() -> bool {
+    let mode = std::env::var("SYMVAULT_SECUREUI").unwrap_or_default();
+    if mode == "none" {
+        return false;
+    }
+    if mode != "gui" && is_tty_present() {
+        return true;
+    }
+    if mode == "tty" {
+        return false;
+    }
+    let names: &[&str] = if cfg!(windows) {
+        &["powershell.exe"]
+    } else if cfg!(target_os = "macos") {
+        &["osascript"]
+    } else {
+        &["zenity", "kdialog"]
+    };
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|directory| {
+            names.iter().any(|name| {
+                let candidate = directory.join(name);
+                let Ok(metadata) = candidate.metadata() else {
+                    return false;
+                };
+                if !metadata.is_file() {
+                    return false;
+                }
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    metadata.permissions().mode() & 0o111 != 0
+                }
+                #[cfg(not(unix))]
+                {
+                    true
+                }
+            })
+        })
+    })
+}
 
 /// Starts the bounded native MCP server for an already unlocked vault.
 ///
@@ -70,6 +132,13 @@ pub fn run(
     let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
+        if config
+            .mcp
+            .as_ref()
+            .is_some_and(|mcp| mcp.allow_insecure_bind)
+        {
+            confirm_insecure_bind(io::stdin().lock(), &mut io::stderr().lock())?;
+        }
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -119,6 +188,13 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        eprintln!(
+            "MCP server listening on {bind}:{}",
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port()
+        );
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =
@@ -144,6 +220,13 @@ pub fn run(
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
         let oauth_agent_name = oauth_agent(&config).to_owned();
+        let oauth = config.mcp.as_ref().and_then(|mcp| mcp.oauth.as_ref());
+        let token_ttls = oauth.map_or_else(symvault_mcp::http::OAuthTokenTtls::default, |oauth| {
+            symvault_mcp::http::OAuthTokenTtls {
+                access_token_ttl: oauth.access_token_ttl,
+                refresh_token_ttl: oauth.refresh_token_ttl,
+            }
+        });
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();
         let handler_for_agent = move |agent: &str| {
@@ -183,7 +266,7 @@ pub fn run(
             })
         };
         let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval(
+            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval_ttls(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -192,8 +275,9 @@ pub fn run(
                 verify_passphrase,
                 tls,
                 symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+                token_ttls,
             ),
-            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval(
+            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval_ttls(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -201,6 +285,7 @@ pub fn run(
                 consent,
                 verify_passphrase,
                 symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+                token_ttls,
             ),
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))
@@ -211,10 +296,9 @@ pub fn run(
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
-        let profile = config
-            .agents
-            .get(agent_name)
-            .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
+        let profile = config.agents.get(agent_name).ok_or_else(|| {
+            format!("failed to create MCP server: agent {agent_name:?} not found")
+        })?;
         let mut handler = build_handler(
             root,
             agent_name,
@@ -227,7 +311,8 @@ pub fn run(
             None,
             clipboard_auto_clear_duration,
             clipboard,
-        )?;
+        )
+        .map_err(|error| format!("failed to create MCP server: {error}"))?;
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
@@ -415,6 +500,30 @@ fn effective_tls<'a>(
     };
     let mtls = !ca_flag.is_empty() || config.is_some_and(|mcp| mcp.mtls_enabled);
     (cert, key, ca, mtls)
+}
+
+fn confirm_insecure_bind(input: impl BufRead, output: &mut impl Write) -> Result<(), String> {
+    writeln!(output, "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.")
+        .map_err(|error| format!("write insecure bind confirmation: {error}"))?;
+    write!(output, "Bind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] ")
+        .and_then(|()| output.flush())
+        .map_err(|error| format!("write insecure bind confirmation: {error}"))?;
+    // Bound confirmation input independently of the HTTP request limits.
+    let mut reply = String::new();
+    let count = input
+        .take(256)
+        .read_line(&mut reply)
+        .map_err(|error| format!("read insecure bind confirmation: {error}"))?;
+    if count == 256 && !reply.ends_with('\n') {
+        return Err("read insecure bind confirmation: input exceeds 256 bytes".to_owned());
+    }
+    if count == 0 || !reply.ends_with('\n') {
+        return Err("read insecure bind confirmation: EOF".to_owned());
+    }
+    if !matches!(reply.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        return Err("insecure bind not confirmed; set MCP.allow_insecure_bind=false to use TLS (auto-generated self-signed certificate)".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_tls(
@@ -650,6 +759,13 @@ fn runtime_config(
     }
     let secure_input_available = transport == "stdio" && is_tty_present();
     let mut unavailable_tools = Vec::new();
+    if !profile.can_run_commands {
+        unavailable_tools.push(unavailable_tool(
+            "execute_api_request",
+            "not_available",
+            "tool \"execute_api_request\" is not available in the current environment",
+        ));
+    }
     if secure_input_available {
         available_tools.push("secure_input".into());
         available_tools.push("request_credential".into());
@@ -678,17 +794,14 @@ fn runtime_config(
         unavailable_tools.push(unavailable_tool(
             "generate_totp",
             "not_available",
-            "mcp.Tool is not available in the current environment",
+            "tool \"generate_totp\" is not available in the current environment",
         ));
     }
     if !expose_value_tools {
         unavailable_tools.push(unavailable_tool(
             "get_entry_value",
             "blocked_by_agent",
-            format!(
-                "Tool \"get_entry_value\" requires tier {:?}",
-                profile.tier.as_deref().unwrap_or("standard")
-            ),
+            "Tool \"get_entry_value\" requires tier \"standard\"",
         ));
     }
     ReadOnlyRuntimeConfig {
@@ -716,6 +829,7 @@ fn runtime_config(
         max_secrets_in_session: profile.max_secrets_in_session,
         available_tools,
         unavailable_tools,
+        tool_list_config: Some(tool_list_config(profile, secure_input_available)),
         vault_dir: root.to_string_lossy().into_owned(),
         vault_unlocked: true,
         ..ReadOnlyRuntimeConfig::default()
@@ -742,6 +856,7 @@ fn tool_list_config(profile: &AgentProfile, secure_input_available: bool) -> Too
         generate_totp_available: profile.can_read_values
             || profile.can_use_clipboard
             || profile.can_use_autotype,
+        allowed_tools: profile.allowed_tools.clone(),
     }
 }
 

@@ -186,6 +186,23 @@ pub struct McpConfig {
     pub tls_client_ca_file: String,
     pub mtls_enabled: bool,
     pub allow_insecure_bind: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth: Option<OAuthConfig>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct OAuthConfig {
+    pub access_token_ttl: Duration,
+    pub refresh_token_ttl: Duration,
+}
+
+impl Default for OAuthConfig {
+    fn default() -> Self {
+        Self {
+            access_token_ttl: Duration::from_secs(24 * 60 * 60),
+            refresh_token_ttl: Duration::from_secs(720 * 60 * 60),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -228,6 +245,7 @@ impl Default for McpConfig {
             tls_client_ca_file: String::new(),
             mtls_enabled: false,
             allow_insecure_bind: false,
+            oauth: None,
         }
     }
 }
@@ -1717,6 +1735,25 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
             *target = boolean(v, key_name)?;
         }
     }
+    if let Some(value) = map.get(key("oauth")).filter(|value| !value.is_null()) {
+        let fields = mapping(value)?;
+        let mut oauth = OAuthConfig::default();
+        for (name, target) in [
+            ("access_token_ttl", &mut oauth.access_token_ttl),
+            ("refresh_token_ttl", &mut oauth.refresh_token_ttl),
+        ] {
+            if let Some(value) = fields.get(key(name)).filter(|value| !value.is_null()) {
+                // Go's positive-only config merge retains defaults for zero
+                // and syntactically valid negative durations.
+                if let Some(duration) = duration_allowing_negative(value, name)?
+                    && !duration.is_zero()
+                {
+                    *target = duration;
+                }
+            }
+        }
+        out.oauth = Some(oauth);
+    }
     Ok(out)
 }
 fn parse_update(value: &serde_yaml_ng::Value) -> Result<UpdateConfig, ConfigError> {
@@ -2104,6 +2141,14 @@ fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
     if v.allow_insecure_bind {
         out.push_str("    allow_insecure_bind: true\n");
     }
+    if let Some(oauth) = &v.oauth {
+        out.push_str("    oauth:\n");
+        out.push_str(&format!(
+            "        access_token_ttl: {}\n        refresh_token_ttl: {}\n",
+            format_duration(oauth.access_token_ttl),
+            format_duration(oauth.refresh_token_ttl)
+        ));
+    }
     Ok(())
 }
 fn write_update(out: &mut String, v: &UpdateConfig) -> Result<(), ConfigError> {
@@ -2256,6 +2301,32 @@ mod tests {
                 .unwrap()
                 .mcp,
             config.mcp
+        );
+        for (access, refresh, expected) in [
+            (
+                "2s",
+                "1m",
+                OAuthConfig {
+                    access_token_ttl: Duration::from_secs(2),
+                    refresh_token_ttl: Duration::from_secs(60),
+                },
+            ),
+            ("0s", "-5m", OAuthConfig::default()),
+        ] {
+            let yaml = format!(
+                "mcp:\n  oauth:\n    access_token_ttl: {access}\n    refresh_token_ttl: {refresh}\n"
+            );
+            let config = Config::load_from_bytes(yaml.as_bytes()).unwrap();
+            assert_eq!(config.mcp.as_ref().unwrap().oauth, Some(expected));
+            assert_eq!(
+                Config::load_from_bytes(&config.to_yaml_bytes().unwrap())
+                    .unwrap()
+                    .mcp,
+                config.mcp
+            );
+        }
+        assert!(
+            Config::load_from_bytes(b"mcp:\n  oauth:\n    access_token_ttl: invalid\n").is_err()
         );
     }
     #[test]

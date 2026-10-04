@@ -224,6 +224,37 @@ func TestSubcommandsSkipsGeneratedHelpers(t *testing.T) {
 	}
 }
 
+func TestSubcommandsReadsTheActualGroupedGoRootHelp(t *testing.T) {
+	content, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "testdata", "port", "cli", "artifacts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifact struct {
+		Help map[string]string `json:"help"`
+	}
+	if err := json.Unmarshal(content, &artifact); err != nil {
+		t.Fatal(err)
+	}
+	got := subcommands(artifact.Help["symvault"])
+	if len(got) < 40 {
+		t.Fatalf("grouped Go root yielded only %d commands: %v", len(got), got)
+	}
+	seen := map[string]bool{}
+	for _, name := range got {
+		seen[name] = true
+	}
+	for _, name := range []string{"get", "broker", "intake", "agent", "unlock", "update", "version"} {
+		if !seen[name] {
+			t.Errorf("actual Go root group omitted %q", name)
+		}
+	}
+	for _, name := range []string{"symvault", "help", "completion", "--json", "--vault"} {
+		if seen[name] {
+			t.Errorf("prose/helper/option %q parsed as a child", name)
+		}
+	}
+}
+
 func TestAliasPathForReplacesTheLeaf(t *testing.T) {
 	if got := aliasPathFor("symvault agent skill export", "exp"); got != "symvault agent skill exp" {
 		t.Errorf("aliasPathFor = %q", got)
