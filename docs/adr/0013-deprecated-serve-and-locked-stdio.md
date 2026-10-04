@@ -65,6 +65,15 @@ timestamped handshake log; record the full actual Go log and the empty Rust
 transport log. Logging policy and remaining HTTP equivalence stay under
 #1241/#1249. Neither difference is silently normalized into byte-parity proof.
 
+Keep Rust's shared atomic publication mode 0600 for the generated public TLS
+certificate, as well as for its private key. Actual Go uses 0644 for the
+certificate and 0600 for the key. Broader filesystem certificate readability is
+unnecessary for the same-user local approval CLI and remote clients receive
+the public certificate during TLS. The driver fixes its Unix umask at 0022 and
+records both actual file modes; an inherited 0077 initially concealed this
+measured difference. Custom fixture certificates are explicitly 0600 in both
+implementations. Exact HTTP file-mode equivalence remains part of #1249.
+
 TLS startup uses a real scoped fixture token created by the public Go CLI.
 An empty registry would trigger Go's legacy wildcard-token creation/migration;
 that separate migration behavior is not part of these launch observations.
@@ -81,3 +90,15 @@ contracts; they do not establish desktop permissions or installed-service
 operation on a user's machine. Full callback shutdown, signal behavior, TLS/
 OAuth edge cases, whole-CLI diagnostics and GUI delivery retain their separate
 #1249, #1242, #1241 and #1245 acceptance requirements.
+
+The final unlocked stdio bootstrap corpus uses metadata plus unknown method/tool
+responses. A real Go tool-read denial also launches clock-dependent asynchronous
+anomaly callbacks, which can emit off-hours logs and desktop notifications
+before process exit; earlier development runs observed that denial but cannot
+turn nondeterministic missing logs into stderr parity. Locked bootstrap still
+executes the real get_entry call and proves its locked rejection. Full unlocked
+store-tool, anomaly and notification behavior remains #1248/#1241/#1245.
+TLS flag-path assertions use filesystem identity: Windows extended paths and
+macOS resolved temporary-directory aliases must identify the actual configured
+certificate/CA file. Exact runtime-metadata path spelling and omission rules
+remain #1249; this startup slice does not declare those JSON bytes equivalent.

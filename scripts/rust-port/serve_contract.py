@@ -55,13 +55,18 @@ def observe(name, result, home, binary, protocol=False):
             "stderr": normal(result.stderr, home, binary)}
 
 
-def protocol_input():
+def protocol_input(locked):
     requests = [
         (1, "initialize", {"protocolVersion": "2025-11-25", "clientInfo": {"name": "public-fixture", "version": "1"}, "capabilities": {}}),
         (2, "ping", {}), (3, "tools/list", {}), (4, "tools/list", {"_meta": {"includeAllTools": True}}),
         (5, "prompts/list", {}), (6, "tools/call", {"name": "get_entry", "arguments": {"path": "public/missing"}}),
         (7, "tools/call", {"name": "public_unknown_tool", "arguments": {}}),
     ]
+    if not locked:
+        # Tool-read anomaly callbacks use the real clock and can emit async
+        # logs/desktop notifications after the reply. Bootstrap acceptance
+        # exercises metadata and unknown dispatch; #1248 owns store tool calls.
+        requests[5] = (6, "public_unknown_method", {})
     return b"".join((json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params})+"\n").encode("utf-8")
                     for i, method, params in requests)
 
@@ -92,7 +97,6 @@ def launch_cases(binary, inspector, base):
     checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
     before = {x.relative_to(home / "vault").as_posix(): hashlib.sha256(x.read_bytes()).hexdigest()
               for x in (home / "vault").rglob("*") if x.is_file()}
-    data = protocol_input()
     for name, args, unlocked, code, frames in [
         ("locked-stdio", ["--quiet", "serve", "--stdio", "--agent", "default", "--allow-locked"], False, 0, True),
         ("locked-unknown-agent", ["--quiet", "serve", "--stdio", "--agent", "unknown", "--allow-locked"], False, 0, True),
@@ -106,7 +110,7 @@ def launch_cases(binary, inspector, base):
         case_env = dict(env)
         if not unlocked:
             del case_env["SYMVAULT_PASSPHRASE"]
-        result = run([binary, *args], cwd=home, env=case_env, data=data)
+        result = run([binary, *args], cwd=home, env=case_env, data=protocol_input(not unlocked))
         assert result.returncode == code, (name, result.stderr)
         record = observe(name, result, home, binary, frames)
         if frames:
@@ -253,6 +257,7 @@ def http_cases(binary, inspector, base):
         child = subprocess.Popen([str(x) for x in args], cwd=home, env=env,
                                  stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         response = None
+        file_modes = None
         try:
             deadline = time.monotonic()+30
             while time.monotonic() < deadline:
@@ -280,9 +285,12 @@ def http_cases(binary, inspector, base):
             assert json.loads((vault / ".runtime-port").read_bytes()) == {"bind": "127.0.0.1", "port": port}
             if custom:
                 metadata = json.loads((vault / ".runtime-tls-cert").read_bytes())
-                assert metadata["certificate"] == str(cert)
+                assert Path(metadata["certificate"]).samefile(cert)
                 assert metadata.get("client_auth_required", False) == mtls
-                assert metadata.get("client_ca_file", "") == (str(cert) if mtls else "")
+                if mtls:
+                    assert Path(metadata["client_ca_file"]).samefile(cert)
+                else:
+                    assert metadata.get("client_ca_file", "") == ""
             if not mtls:
                 assert response["status"] == 200
                 body = response["body"]
@@ -295,7 +303,8 @@ def http_cases(binary, inspector, base):
                 # response in the receipt instead of rewriting that evidence.
                 response["body"]["resource"] = resource.replace(str(port), "__PORT__")
             if os.name != "nt":
-                assert cert.stat().st_mode & 0o777 == 0o600
+                file_modes = {"certificate": cert.stat().st_mode & 0o777, "private_key": key.stat().st_mode & 0o777}
+                assert file_modes["certificate"] in {0o600, 0o644}
                 assert key.stat().st_mode & 0o777 == 0o600
         finally:
             if child.poll() is None:
@@ -318,6 +327,7 @@ def http_cases(binary, inspector, base):
                         "runtime_bind_and_port_verified": True, "tls_flag_paths_verified": custom,
                         "stdout": "", "stderr": expected_stderr.replace(str(port), "__PORT__"),
                         "transport_logs": transport_logs,
+                        "tls_file_modes": file_modes,
                         "termination": "forced-test-child-stop; graceful-exit-not-measured"})
     return records
 
@@ -337,6 +347,10 @@ def main():
     args = parser.parse_args()
     rust = args.rust.resolve()
     assert rust.is_file()
+    if os.name != "nt":
+        # Equal, explicit input: an inherited 0077 umask would conceal Go's
+        # public-certificate 0644 versus Rust's private publication mode.
+        os.umask(0o022)
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development, "commit the candidate before native acceptance"
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
@@ -363,6 +377,10 @@ def main():
                     # Compare every other measured property unchanged.
                     comparable = json.loads(json.dumps(right))
                     comparable["response"]["body"]["resource"] = left["response"]["body"]["resource"]
+                    if left["case"] == "http-default-tls" and os.name != "nt":
+                        assert left["tls_file_modes"] == {"certificate": 0o644, "private_key": 0o600}
+                        assert right["tls_file_modes"] == {"certificate": 0o600, "private_key": 0o600}
+                        comparable["tls_file_modes"] = left["tls_file_modes"]
                     assert left == comparable, (left, right)
                 elif left["case"] == "http-client-ca":
                     assert "client didn't provide a certificate" in left["transport_logs"]
@@ -381,6 +399,8 @@ def main():
                        "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                        "native_os": platform.system(), "architecture": platform.machine(),
                        "keyring": "memory", "service_manager_mode": "injected-process-outcomes",
+                       "test_umask": "0022" if os.name != "nt" else "native-Windows",
+                       "stdio_scope": "locked metadata and locked tool-call rejection; unlocked bootstrap metadata and unknown dispatch; full store/anomaly tool acceptance remains #1248",
                        **observed}
             args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
             print(f"PASS: {len(observed['go'])} actual Go/Rust serve observations on {platform.system()}")
