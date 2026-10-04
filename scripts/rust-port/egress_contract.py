@@ -21,6 +21,7 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 PROBE = ROOT / "scripts/rust-port/egress_contract_probe.go.txt"
+IDENTITY = ROOT / "scripts/rust-port/http_tls_identity.go.txt"
 TOKEN = "public-fixture-secret-9f31"
 NESTED = "public-nested-secret-c771"
 DATA = {"credential": TOKEN, "username": "public-fixture-user", "header_name": "X-Api-Key",
@@ -45,7 +46,7 @@ def isolated(home):
 
 class Peer:
     """Own the listener and every fixture handler, including Go's dial probe."""
-    def __init__(self, tls=True, redirect=None):
+    def __init__(self, identities, tls=True, redirect=None):
         self.listener = socket.socket()
         self.listener.bind(("127.0.0.1", 0))
         self.listener.listen(16)
@@ -58,8 +59,8 @@ class Peer:
         self.workers = []
         self.stop = threading.Event()
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        fixture = ROOT / "crates/symvault-mcp/tests/fixtures"
-        self.context.load_cert_chain(fixture / "tls-server.pem", fixture / "tls-server.key")
+        self.identities = identities
+        self.context.load_cert_chain(identities / "server.pem", identities / "server.key")
         self.context.minimum_version = ssl.TLSVersion.TLSv1_2
         self.worker = threading.Thread(target=self.accept)
 
@@ -146,12 +147,12 @@ class Peer:
 
 
 @contextlib.contextmanager
-def proxy(binary, root, home, *, private=True, strict=False, passthrough=False, trusted=True):
+def proxy(binary, root, home, identities, *, private=True, strict=False, passthrough=False, trusted=True):
     args = [binary, "--root", root, "--allow-private="+str(private).lower(), "--strict="+str(strict).lower()]
     if passthrough:
         args += ["--passthrough", "127.0.0.1"]
     if trusted:
-        args += ["--upstream-ca", ROOT / "crates/symvault-mcp/tests/fixtures/tls-ca.pem"]
+        args += ["--upstream-ca", identities / "server-ca.pem"]
     child = subprocess.Popen([str(x) for x in args], cwd=home, env=isolated(home), stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
     line = queue.Queue()
@@ -187,7 +188,7 @@ def request(address, root, peer, method="GET", path="/v1/allowed", body=b"", pas
             response.begin()
             if response.status != 200:
                 return {"status": response.status, "body_base64": base64.b64encode(response.read()).decode(), "echo": None, "cookies": []}
-            cafile = ROOT / "crates/symvault-mcp/tests/fixtures/tls-ca.pem" if passthrough else root / "probe-ca.pem"
+            cafile = peer.identities / "server-ca.pem" if passthrough else root / "probe-ca.pem"
             context = ssl.create_default_context(cafile=str(cafile))
             # Python 3.13 enables this by default. Require the same verified
             # chain/hostname/extension policy locally on older Python too.
@@ -225,14 +226,14 @@ def template(root, peer, *, auth="bearer", port=None, scheme=None, substitutions
     (directory / (name+".yaml")).write_text(json.dumps(definition), encoding="utf-8")
 
 
-def runtime_cases(binary, seed, home, records):
+def runtime_cases(binary, seed, home, records, identities):
     home.mkdir()
     root = home / "vault"
     checked([seed, "--root", root, "--seed", home.parent / "entry.json"], cwd=home)
     for auth in ["bearer", "basic", "header", "query_param", "none"]:
-        with Peer() as peer:
+        with Peer(identities) as peer:
             template(root, peer, auth=auth, substitutions=auth == "none", name="github" if auth == "bearer" else "fixture")
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer)
             assert result["status"] == 200 and len(peer.records) == 1, (auth, result, peer.records)
             seen = peer.records[0]
@@ -245,9 +246,9 @@ def runtime_cases(binary, seed, home, records):
             assert result["echo"] == "***" and result["cookies"] == ["a=***", "b=***"]
             assert base64.b64decode(result["body_base64"]) == b"*** ***\x00\xff", (auth, result)
             records.append({"case": "tls-auth-"+auth, "response": result, "upstream": seen, "tls_verified": True})
-    with Peer() as peer:
+    with Peer(identities) as peer:
         template(root, peer, substitutions=True)
-        with proxy(binary, root, home) as address:
+        with proxy(binary, root, home, identities) as address:
             result = request(address, root, peer, method="POST", path="/v1/__SECRET__?token=__SECRET__", body=b"__SECRET__")
         assert result["status"] == 200 and len(peer.records) == 1
         seen = peer.records[0]
@@ -255,64 +256,64 @@ def runtime_cases(binary, seed, home, records):
         assert base64.b64decode(seen["body_base64"]) == TOKEN.encode()
         records.append({"case": "tls-all-substitution-surfaces", "response": result, "upstream": seen})
     for name, method, path in [("method-denied", "DELETE", "/v1/allowed"), ("endpoint-denied", "GET", "/denied")]:
-        with Peer() as peer:
+        with Peer(identities) as peer:
             template(root, peer)
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer, method=method, path=path)
             assert result["status"] == 403 and not peer.records
             records.append({"case": name, "status": 403, "upstream_requests": 0})
     for name, pattern in [('encoded-endpoint-allowed', '/v1/allowed'), ('encoded-endpoint-denied', '/v1/%61llowed')]:
-        with Peer() as peer:
+        with Peer(identities) as peer:
             template(root, peer, endpoints=[pattern])
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer, path='/v1/%61llowed')
             records.append({'case':name, 'status':result['status'], 'credential_received':
                             any(row['authorization'] == 'Bearer '+TOKEN for row in peer.records)})
     dot_segments = []
     for path in ['/v1/../denied', '/v1/%2e%2e/denied']:
-        with Peer() as peer:
+        with Peer(identities) as peer:
             template(root, peer)
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer, path=path)
             dot_segments.append({'path':path, 'status':result['status'], 'credential_received':
                                  any(row['authorization'] == 'Bearer '+TOKEN for row in peer.records)})
     records.append({'case':'dot-segment-policy', 'observations':dot_segments})
     for name, strict in [("unmatched-forwarded", False), ("unmatched-strict", True)]:
-        with Peer(tls=False) as peer:
+        with Peer(identities, tls=False) as peer:
             for existing in (root / "templates").glob("*.yaml"): existing.unlink()
-            with proxy(binary, root, home, strict=strict) as address:
+            with proxy(binary, root, home, identities, strict=strict) as address:
                 result = request(address, root, peer)
             assert result["status"] == (403 if strict else 200)
             assert len(peer.records) == (0 if strict else 1)
             if not strict: assert peer.records[0]["authorization"] is None
             records.append({"case": name, "status": result["status"], "upstream_requests": len(peer.records)})
-    with Peer() as peer:
+    with Peer(identities) as peer:
         template(root, peer)
-        with proxy(binary, root, home, passthrough=True) as address:
+        with proxy(binary, root, home, identities, passthrough=True) as address:
             result = request(address, root, peer, passthrough=True)
         assert result["status"] == 200 and peer.records[0]["authorization"] is None
         assert result["echo"] == TOKEN  # Explicit passthrough does not sanitize or inject.
         records.append({"case": "passthrough-preserves-upstream-tls", "response": result, "upstream": peer.records[0]})
-    with Peer() as peer:
+    with Peer(identities) as peer:
         template(root, peer)
-        with proxy(binary, root, home, trusted=False) as address:
+        with proxy(binary, root, home, identities, trusted=False) as address:
             result = request(address, root, peer)
         assert result["status"] == 502 and not peer.records
         records.append({"case": "untrusted-upstream-tls", "status": 502, "upstream_requests": 0})
     # Measure actual Go authority and redirect behavior before deciding divergences.
     for name, tls, changed_port, changed_host in [("template-port-binding", True, True, False),
             ("template-plaintext-binding", False, False, False), ("connect-inner-authority-binding", True, False, True)]:
-        with Peer(tls=tls) as peer:
+        with Peer(identities, tls=tls) as peer:
             template(root, peer, port=(peer.port % 60000)+1024 if changed_port else None,
                      scheme="https", host="localhost" if changed_host else "127.0.0.1")
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer, host=f"localhost:{peer.port}" if changed_host else None)
             records.append({"case": name, "status": result["status"], "credential_received":
                             any(row["authorization"] == "Bearer "+TOKEN for row in peer.records)})
-    with Peer() as redirected:
-        with Peer(redirect=f"https://127.0.0.1:{redirected.port}/v1/redirected") as peer:
+    with Peer(identities) as redirected:
+        with Peer(identities, redirect=f"https://127.0.0.1:{redirected.port}/v1/redirected") as peer:
             template(root, peer)
-            with proxy(binary, root, home) as address:
+            with proxy(binary, root, home, identities) as address:
                 result = request(address, root, peer)
             records.append({"case": "redirect-authority-binding", "status": result["status"],
                             "redirected_credential_received": any(row["authorization"] == "Bearer "+TOKEN for row in redirected.records)})
@@ -523,12 +524,13 @@ def main():
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
                      if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/", "scripts/rust-port/cmd/cligap/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/egress_contract.py",
-                              "scripts/rust-port/egress_contract_probe.go.txt", ".github/workflows/rust-broker-egress.yml"})
+                              "scripts/rust-port/egress_contract_probe.go.txt", "scripts/rust-port/http_tls_identity.go.txt", ".github/workflows/rust-broker-egress.yml"})
     receipt = {"passed": False, "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
                "candidate_worktree_clean": clean, "native_os": platform.system(), "architecture": platform.machine(),
                "candidate_source_files": sources, "candidate_source_digest": inventory(sources, ROOT),
                "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                "probe_sha256": hashlib.sha256(PROBE.read_bytes()).hexdigest(),
+               "identity_probe_sha256": hashlib.sha256(IDENTITY.read_bytes()).hexdigest(),
                "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(), "oracle_commit": ORACLE,
                "rust_cli_binary_sha256": hashlib.sha256(rust_cli.read_bytes()).hexdigest(),
                "fixture_identity_kdf": {"algorithm":"argon2id", "memory_kib":19456, "iterations":2, "lanes":1, "purpose":"explicit supported disposable-fixture settings; production defaults and performance not measured"},
@@ -556,10 +558,24 @@ def main():
                 go_cli = base / ("go-cli.exe" if os.name == "nt" else "go-cli")
                 checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."], cwd=tree)
                 receipt["go_cli_binary_sha256"] = hashlib.sha256(go_cli.read_bytes()).hexdigest()
+                identity_helper = tree / "scripts/rust-port/cmd/egressidentity"
+                identity_helper.mkdir()
+                (identity_helper / "main.go").write_bytes(IDENTITY.read_bytes())
+                identity_binary = base / ("go-identity.exe" if os.name == "nt" else "go-identity")
+                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", identity_binary, "./scripts/rust-port/cmd/egressidentity"], cwd=tree)
+                identities = base / "identities"
+                checked([identity_binary, "--root", identities], cwd=base)
+                identity_files = sorted(p.name for p in identities.iterdir())
+                assert len(identity_files) == 12
+                receipt.update(identity_binary_sha256=hashlib.sha256(identity_binary.read_bytes()).hexdigest(),
+                               fixture_identity_files=identity_files, fixture_identity_digest=inventory(identity_files, identities))
+                if os.name != "nt":
+                    assert identities.stat().st_mode & 0o777 == 0o700
+                    assert all((identities / name).stat().st_mode & 0o777 == 0o600 for name in identity_files)
                 receipt["go"] = []
-                runtime_cases(go, go, base / "go-home", receipt["go"])
+                runtime_cases(go, go, base / "go-home", receipt["go"], identities)
                 receipt["rust"] = []
-                runtime_cases(rust, go, base / "rust-home", receipt["rust"])
+                runtime_cases(rust, go, base / "rust-home", receipt["rust"], identities)
                 receipt["go_cli"] = []
                 cli_cases(go_cli, go, base / "go-cli-home", receipt["go_cli"])
                 receipt["rust_cli"] = []
@@ -586,6 +602,15 @@ def main():
                         assert all(row['status'] == 403 and not row['credential_received'] for row in right['observations']), right
                     else:
                         assert left == right, (left, right)
+                assert inventory(sources, ROOT) == receipt["candidate_source_digest"]
+                assert inventory(identity_files, identities) == receipt["fixture_identity_digest"]
+                assert checked(["git", "rev-parse", "HEAD"]).decode().strip() == receipt["candidate_commit"]
+                for binary, key in [(rust, "rust_binary_sha256"), (rust_cli, "rust_cli_binary_sha256"),
+                                    (go, "go_binary_sha256"), (go_cli, "go_cli_binary_sha256"),
+                                    (identity_binary, "identity_binary_sha256")]:
+                    assert hashlib.sha256(binary.read_bytes()).hexdigest() == receipt[key]
+                receipt["candidate_worktree_clean_at_end"] = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
+                assert receipt["candidate_worktree_clean_at_end"] or args.allow_dirty_for_development
                 receipt["passed"] = True
             finally:
                 checked(["git", "worktree", "remove", "--force", tree])

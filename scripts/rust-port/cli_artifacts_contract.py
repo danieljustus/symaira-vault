@@ -173,7 +173,7 @@ def terminal_completion(shell, setup, base, env):
         screen = output.decode(errors='replace').replace('\r', '')
         return {'screen':screen,
                 'candidates':[line.strip() for line in screen.splitlines()
-                              if re.match(r'^(?:generate|get|git)\s',line)]}
+                              if re.match(r'^(?:generate|get|git)(?:\s|$)',line)]}
     finally:
         try:
             if process.poll() is None:
@@ -239,7 +239,9 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
             assert executable, f'actual {shell} is required on Unix native runners'
             script = scripts / f'symvault.{shell}'
             write_utf8(script,artifact['completions'][shell+'/descriptions'])
-            setup = (f'PS1="contract> "; source {shlex.quote(str(library))}' if shell == 'bash'
+            # Fix readline's display layout in this disposable shell. Native
+            # macOS Bash otherwise puts all bare names on one horizontal row.
+            setup = (f'PS1="contract> "; bind "set completion-display-width 1"; source {shlex.quote(str(library))}' if shell == 'bash'
                      else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -i -D')
             setup += '; source ' + shlex.quote(str(script))
             results = []
@@ -248,7 +250,7 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
                                  BASH_COMPLETION_COMPAT_DIR=str(compat), BASH_COMPLETION_USER_FILE='/dev/null')
                 results.append(terminal_completion(executable, setup, base, shell_env))
             candidates = results[0]['candidates']
-            assert candidates == results[1]['candidates'] and any(c.startswith('get ') for c in candidates) and any(c.startswith('generate ') for c in candidates), (shell, results)
+            assert candidates == results[1]['candidates'] and any(c == 'get' or c.startswith('get ') for c in candidates) and any(c == 'generate' or c.startswith('generate ') for c in candidates), (shell, results)
             proof.setdefault(shell, {})['terminal'] = {'go':results[0],'rust':results[1]}
         fish = shutil.which('fish')
         assert fish or not require_native_shells, 'actual Fish is required for native Unix acceptance'

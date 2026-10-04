@@ -161,7 +161,41 @@ fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
     fs::write(root.path().join("templates/fixture.yaml"), format!(
         "base_url: https://{target}\nauth_type: bearer\nentry_ref: fixture\nallowed_methods: [POST]\nallowed_endpoints: [/v1/*]\nsubstitutions:\n  - placeholder: __SECRET__\n    field: credential\n    in: [path, query, header, body]\n"
     )).unwrap();
-    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    // Platform TLS policy is part of this real round trip. Fresh short-lived
+    // identities keep the fixture independent of static certificate age and
+    // native maximum leaf-validity policy; verification remains enabled.
+    let fixture_directory = tempfile::tempdir().unwrap();
+    let fixture = fixture_directory.path();
+    let now = time::OffsetDateTime::now_utc();
+    let mut ca_params = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca_params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "broker fixture root");
+    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca_params.key_usages = vec![
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::CrlSign,
+    ];
+    ca_params.not_before = now - time::Duration::minutes(5);
+    ca_params.not_after = now + time::Duration::days(365);
+    let ca = rcgen::CertifiedIssuer::self_signed(ca_params, rcgen::KeyPair::generate().unwrap())
+        .unwrap();
+    let mut leaf_params =
+        rcgen::CertificateParams::new(vec!["localhost".into(), "127.0.0.1".into()]).unwrap();
+    leaf_params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "localhost");
+    leaf_params.is_ca = rcgen::IsCa::ExplicitNoCa;
+    leaf_params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+    leaf_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    leaf_params.use_authority_key_identifier_extension = true;
+    leaf_params.not_before = now - time::Duration::minutes(5);
+    leaf_params.not_after = now + time::Duration::days(1);
+    let leaf_key = rcgen::KeyPair::generate().unwrap();
+    let leaf = leaf_params.signed_by(&leaf_key, &ca).unwrap();
+    fs::write(fixture.join("tls-ca.pem"), ca.pem()).unwrap();
+    fs::write(fixture.join("tls-server.pem"), leaf.pem()).unwrap();
+    fs::write(fixture.join("tls-server.key"), leaf_key.serialize_pem()).unwrap();
     let tls = symvault_mcp::http::load_tls_server_config(
         fixture.join("tls-server.pem"),
         fixture.join("tls-server.key"),
