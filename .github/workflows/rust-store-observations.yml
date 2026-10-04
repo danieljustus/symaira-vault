@@ -27,7 +27,7 @@ concurrency:
 jobs:
   observations:
     name: Store observations (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -40,6 +40,15 @@ jobs:
       GOTOOLCHAIN: go1.26.6
       GOWORK: 'off'
     steps:
+      - name: Assert actual native macOS arm64
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = macOS
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          sw_vers
       - name: Checkout immutable oracle history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
