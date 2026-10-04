@@ -257,7 +257,7 @@ func probe(binary, path string) (string, bool) {
 
 var longFlag = regexp.MustCompile(`--([a-zA-Z0-9][a-zA-Z0-9-]*)`)
 
-// flagNames extracts the long option names from a clap help page's option
+// flagNames extracts the long option names from a help page's option
 // section only; names mentioned in prose are not flags.
 func flagNames(help string) map[string]bool {
 	names := map[string]bool{}
@@ -318,7 +318,7 @@ func rustWalkAll(binary string, depth int) map[string]bool {
 	return seen
 }
 
-// subcommands extracts child command names from a help page's command section,
+// subcommands extracts child command names from Clap or grouped Cobra help,
 // skipping the generated help and completion helpers.
 func subcommands(help string) []string {
 	var names []string
@@ -326,10 +326,12 @@ func subcommands(help string) []string {
 	for _, line := range strings.Split(help, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch trimmed {
-		case "Commands:", "Available Commands:":
+		case "Commands:", "Available Commands:", "Additional Commands:",
+			"Essentials:", "Vault:", "Sharing & Sync:", "Agents & MCP:",
+			"Auth & Access:", "Administration:":
 			inCommands = true
 			continue
-		case "Options:", "Flags:":
+		case "Options:", "Flags:", "Global Flags:", "Arguments:", "Usage:", "Examples:", "Aliases:":
 			inCommands = false
 			continue
 		}

@@ -60,11 +60,12 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
         .find(|command| command["path"] == "symvault add")
         .expect("Go add command");
     let add_name = add["name"].as_str().expect("Go add command name");
+    assert_eq!(add_name, "add");
     assert!(has_flag(root, "persistent_flags", "vault"));
     assert!(has_flag(add, "local_flags", "length"));
 
     for (shell, marker) in [
-        ("bash", "complete -F"),
+        ("bash", "-F __start_symvault"),
         ("zsh", "#compdef symvault"),
         ("fish", "complete -c symvault"),
         ("powershell", "Register-ArgumentCompleter"),
@@ -84,12 +85,21 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
             script.contains(marker),
             "Rust {shell} did not emit a shell script"
         );
-        for expected in ["symvault", add_name, "vault", "length"] {
+        for expected in ["symvault", "__complete"] {
             assert!(
                 script.contains(expected),
                 "Rust {shell} script omits {expected}"
             );
         }
+        let artifacts: Value =
+            serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json"))
+                .unwrap();
+        assert_eq!(
+            script,
+            artifacts["completions"][format!("{shell}/descriptions")]
+                .as_str()
+                .unwrap()
+        );
         #[cfg(unix)]
         if shell == "bash" || shell == "zsh" {
             check_shell_syntax(shell, script.as_bytes());
@@ -116,6 +126,7 @@ fn bare_completion_and_no_descriptions_follow_go_command_behavior() {
     assert!(plain.status.success());
     assert!(plain.stderr.is_empty());
     assert!(!plain.stdout.is_empty());
-    assert!(full.stdout.len() > plain.stdout.len());
+    assert_ne!(full.stdout, plain.stdout);
+    assert!(String::from_utf8_lossy(&plain.stdout).contains("__completeNoDesc"));
     assert!(!String::from_utf8_lossy(&plain.stdout).contains("Add a new password entry"));
 }
