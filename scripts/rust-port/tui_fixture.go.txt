@@ -9,11 +9,13 @@ import (
  "fmt"
  "os"
  "os/exec"
+ "path/filepath"
  "reflect"
  "runtime"
  "time"
 
  "golang.org/x/term"
+ "gopkg.in/yaml.v3"
 
  "github.com/danieljustus/symaira-vault/internal/config"
  "github.com/danieljustus/symaira-vault/internal/ui"
@@ -72,6 +74,21 @@ func main() {
  cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1}
  cfg.Clipboard=&config.ClipboardConfig{AutoClearDuration:*clipboardTTL}
  identity,err:=vault.InitWithPassphrase(*root,[]byte(passphrase),cfg);if err!=nil {panic(err)}
+ // Production serialization omits a numeric zero, which reloads as 30.
+ // This scenario requires an explicit, genuine YAML configured-zero input.
+ configPath:=filepath.Join(*root,"config.yaml")
+ initial,err:=config.Load(configPath);if err!=nil {panic(err)}
+ if *clipboardTTL==0 {
+  data,e:=os.ReadFile(configPath);if e!=nil {panic(e)}
+  var document map[string]any
+  if e=yaml.Unmarshal(data,&document);e!=nil {panic(e)}
+  section,ok:=document["clipboard"].(map[string]any);if !ok {panic("missing fixture clipboard config")}
+  section["auto_clear_duration"]=0
+  data,e=yaml.Marshal(document);if e!=nil {panic(e)}
+  if e=os.WriteFile(configPath,data,0600);e!=nil {panic(e)}
+ }
+ effective,err:=config.Load(configPath);if err!=nil {panic(err)}
+ if effective.Clipboard.AutoClearDuration!=*clipboardTTL {panic("fixture clipboard duration did not round trip")}
  for _,spec:=range []struct{path,field,value,tag,kind string}{
   {"alpha/login","password","public-tui-secret-alpha-782a","work","password"},
   {"beta/api","token","public-tui-secret-beta-782a","home","api_key"},
@@ -82,7 +99,7 @@ func main() {
   entry.SecretMetadata.Type=vault.SecretType(spec.kind)
   if err=vault.WriteEntry(*root,spec.path,entry,identity);err!=nil {panic(err)}
  }
- if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings()});err!=nil {panic(err)}
+ if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings(),"requested_clipboard_seconds":*clipboardTTL,"initial_roundtrip_clipboard_seconds":initial.Clipboard.AutoClearDuration,"effective_clipboard_seconds":effective.Clipboard.AutoClearDuration});err!=nil {panic(err)}
 }
 
 // Darwin PENDIN is kernel bookkeeping for reprocessing pending input, not an

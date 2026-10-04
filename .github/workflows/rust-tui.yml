@@ -51,10 +51,12 @@ jobs:
       CARGO_INCREMENTAL: '0'
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_TEST_DEBUG: '0'
-      # Acceptance-only byte reproducibility; release/debug packaging is unchanged.
-      # ponytail: retain exact-byte proof without Darwin's changing UUID until
-      # the native linker produces repeatable UUIDs; don't normalize binaries.
-      RUSTFLAGS: ${{ matrix.os == 'macos-latest' && '-C link-arg=-Wl,-no_uuid' || matrix.os == 'windows-latest' && '-C link-arg=/Brepro' || '' }}
+      # Acceptance-only byte reproducibility, preserving native UUID/signing.
+      # Native opt-level 1 smoke builds are byte-identical across target paths;
+      # disabling UUIDs is invalid on Darwin 27. Release packaging is unchanged.
+      CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
+      CARGO_PROFILE_TEST_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
+      RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C link-arg=/Brepro' || '' }}
 
       SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
     steps:
