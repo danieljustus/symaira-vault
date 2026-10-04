@@ -589,12 +589,18 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .collect::<Vec<Value>>();
     let mut actual = actual;
     let mut expected = case.output.clone();
-    #[cfg(not(windows))]
     let actual_root = fs::canonicalize(root.path()).expect("canonical synthetic vault root");
-    // Windows metadata uses the ordinary caller path, while store I/O retains
-    // the verbatim canonical path. Assert that spelling before normalization.
+    // Canonicalization expands Windows short names such as RUNNER~1. Metadata
+    // exposes that resolved drive path without its verbatim I/O prefix.
+    // Assert the exact spelling before fixture normalization.
     #[cfg(windows)]
-    let actual_root = root.path().to_path_buf();
+    let actual_root = std::path::PathBuf::from(
+        actual_root
+            .to_str()
+            .expect("UTF-8 synthetic vault root")
+            .strip_prefix(r"\\?\")
+            .expect("canonical Windows temporary drive path"),
+    );
     for id in [3, 8] {
         let response = actual
             .iter()
