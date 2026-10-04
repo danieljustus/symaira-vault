@@ -86,3 +86,34 @@ those unsupported pipe observations. All hosts still require portable queue and
 GUI/process cancellation tests. Windows HTTP TTY consent remains unavailable
 when the underlying terminal cannot support deadlines; other approval adapters
 retain their cancellation contracts.
+
+## Combined oracle and verification decision, 2026-10-04
+
+Integrate the accepted KDF implementation and the read-policy candidate before
+final shutdown verification. Shutdown, authorization and bounded reads share
+production handlers; testing isolated branches would leave their interaction
+unverified. Merge the read-policy PR first, then this dependent PR using ordinary
+protected merges with the tested head SHA.
+
+Freeze the combined production Go source at
+`d1cd0f97ac550bc3020bc86b0514989f8d28d95c`, retained by
+`oracle/http-shutdown-source-20261004`. Re-execute all 25 MCP captures and the
+27-case authenticated HTTP capture against those actual bytes. Their recorded
+observations are unchanged. Expand the source inventories to 177 production
+files covering vault, crypto, config, filesystem, template, MCP, policy,
+approval and secure UI. The inventory guard also rejects a compiled untracked
+helper omitted from these declared package closures. Bind the HTTP generator's
+own bytes separately, and require cleanup to complete rather than silently
+accepting a still-running oracle server.
+
+Always select the memory keyring and disposable HOME/XDG directories inside
+the HTTP generator. HOME isolation alone does not isolate an OS credential
+service. Keep the read-resource fixture's previous immutable source pin and
+independently execute its current-candidate check; unrelated handler changes do
+not justify replacing historical observations with manually edited metadata.
+
+The combined full Rust workspace passes 1,229 tests with six existing ignored
+tests. All Go generator tests pass and strict owning-package lint reports zero
+issues. The full port contract, current-candidate read proof and owning-package
+race tests must also pass. Native Linux/macOS/Windows jobs remain acceptance
+requirements; pending jobs are not counted as completed evidence.
