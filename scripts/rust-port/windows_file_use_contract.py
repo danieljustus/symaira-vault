@@ -101,7 +101,10 @@ def exercise(binary, inspector, home, reader, pwsh):
             assert not materialized.parent.exists(), (mode, "private directory remains")
         assert not list((home / "temporary").glob("symvault-file-*")), (mode, "materialization remains")
         if mode in ["ordinary", "error"]:
-            assert b"REDACTED" in result.stdout and b"REDACTED" in result.stderr, (mode, result.stdout, result.stderr)
+            # The public Go/Rust output contract uses *** for each raw and
+            # Base64 value; require both replacements after the exact reader.
+            for stream in [result.stdout, result.stderr]:
+                assert b"***\n***\n" in stream.replace(b"\r\n", b"\n"), (mode, stream)
         if mode == "error":
             assert b"command exited with code 7" in result.stderr, result.stderr
         if mode == "timeout":
