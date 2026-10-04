@@ -1,6 +1,7 @@
 package secureui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -76,7 +77,7 @@ func (*ttyBackend) prompt(req PromptRequest) (string, error) {
 		}
 	}
 
-	value, rerr := readTTY(dev, req.Timeout)
+	value, rerr := readTTYContext(req.Context, dev, req.Timeout)
 	if rerr != nil {
 		if errors.Is(rerr, ErrCanceled) {
 			if out := dev.Output(); out != nil {
@@ -96,7 +97,13 @@ func (*ttyBackend) prompt(req PromptRequest) (string, error) {
 	return strings.TrimSpace(value), nil
 }
 
-func readTTY(d ttyDevice, timeout time.Duration) (string, error) {
+func readTTYContext(ctx context.Context, d ttyDevice, timeout time.Duration) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if in := d.Input(); in != nil {
 		if err := in.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 			return "", err
@@ -120,7 +127,14 @@ func readTTY(d ttyDevice, timeout time.Duration) (string, error) {
 
 	select {
 	case res := <-resultCh:
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		return res.value, res.err
+	case <-ctx.Done():
+		_ = d.Close()
+		<-resultCh
+		return "", ctx.Err()
 	case <-sigCh:
 		// Close the device to unblock the in-flight ReadString. The caller's
 		// own defer will Close() again, but Close on an already-closed handle

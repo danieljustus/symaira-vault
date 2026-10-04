@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -135,6 +136,15 @@ func IsTTYPresent() bool {
 // The prompt times out after the specified duration (defaults to 30 seconds).
 // If TTY is not available, the operation is denied with an error.
 func RequestApproval(req ApprovalRequest) ApprovalResult {
+	return RequestApprovalContext(context.Background(), req)
+}
+
+// RequestApprovalContext denies canceled consent and interrupts deadline-capable
+// terminal reads. A terminal that cannot support bounded reads fails closed.
+func RequestApprovalContext(ctx context.Context, req ApprovalRequest) ApprovalResult {
+	if err := ctx.Err(); err != nil {
+		return ApprovalResult{Error: err}
+	}
 	timeout := req.Timeout
 	if timeout <= 0 {
 		timeout = defaultTimeout
@@ -166,7 +176,7 @@ func RequestApproval(req ApprovalRequest) ApprovalResult {
 		}
 	}
 
-	response, readErr := readTTYResponse(tt, timeout)
+	response, readErr := readTTYResponseContext(ctx, tt, timeout)
 	if readErr != nil {
 		restore()
 		if isTimeoutError(readErr) {
@@ -262,8 +272,11 @@ func centerText(text string, width int) string {
 	return strings.Repeat(" ", left) + text + strings.Repeat(" ", right)
 }
 
-func readTTYResponse(tt ttyDevice, timeout time.Duration) (string, error) {
+func readTTYResponseContext(ctx context.Context, tt ttyDevice, timeout time.Duration) (string, error) {
 	input := tt.Input()
+	if input == nil && ctx.Done() != nil {
+		return "", fmt.Errorf("terminal does not support cancellable approval reads")
+	}
 	if input != nil {
 		if err := input.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 			return "", err
@@ -271,9 +284,22 @@ func readTTYResponse(tt ttyDevice, timeout time.Duration) (string, error) {
 		defer func() {
 			_ = input.SetReadDeadline(time.Time{})
 		}()
+		interrupted := make(chan struct{})
+		stop := context.AfterFunc(ctx, func() {
+			_ = input.SetReadDeadline(time.Now())
+			close(interrupted)
+		})
+		defer func() {
+			if !stop() {
+				<-interrupted
+			}
+		}()
 	}
-
-	return tt.ReadString()
+	response, err := tt.ReadString()
+	if canceled := ctx.Err(); canceled != nil {
+		return "", canceled
+	}
+	return response, err
 }
 
 func isTimeoutError(err error) bool {

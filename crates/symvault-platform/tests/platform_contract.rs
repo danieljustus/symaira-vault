@@ -41,10 +41,13 @@ fn fixture() -> Fixture {
 fn platform_fixture_has_provenance_and_explicit_native_blocker() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "21f849ee");
+    assert_eq!(
+        fixture.oracle.commit,
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+    );
     assert_eq!(
         fixture.oracle.commit_sha,
-        "21f849ee971ba60ca3a85eaf4e61e6e520b41034"
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
     );
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
@@ -54,7 +57,7 @@ fn platform_fixture_has_provenance_and_explicit_native_blocker() {
             .commit_sha
             .starts_with(&fixture.oracle.commit)
     );
-    assert_eq!(fixture.oracle.source_files.len(), 9);
+    assert_eq!(fixture.oracle.source_files.len(), 34);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     assert!(fixture.cases.is_none());

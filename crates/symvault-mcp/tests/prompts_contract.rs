@@ -55,7 +55,7 @@ fn prompts_replay_real_go_protocol_with_validated_random_boundaries() {
         serde_json::from_str(include_str!("../../../testdata/port/mcp/prompts.json")).unwrap();
     assert_eq!(
         fixture["oracle"]["commit_sha"],
-        "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
     );
     for case in fixture["cases"].as_array().unwrap() {
         let mut handler = ProtocolHandler::new("symvault", "0.0.0-fixture");
