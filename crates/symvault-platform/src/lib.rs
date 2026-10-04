@@ -2,6 +2,8 @@
 #![deny(unsafe_code)]
 
 pub mod approval;
+mod text_clipboard;
+pub use text_clipboard::{OwnedTextClipboard, native_text_clipboard};
 #[cfg(any(target_os = "macos", test))]
 mod focus;
 #[cfg(target_os = "macos")]

@@ -38,6 +38,19 @@ allow = [
 multiple-versions = "warn"
 wildcards = "deny"
 
+# ADR 0029: pinned arboard Windows text-clipboard implementation. Boost 1.0
+# is permissive; these explicit package/version exceptions preserve the general
+# license allowlist and require review when either implementation changes.
+[[licenses.exceptions]]
+name = "clipboard-win"
+version = "=5.4.1"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+name = "error-code"
+version = "=3.4.0"
+allow = ["BSL-1.0"]
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"

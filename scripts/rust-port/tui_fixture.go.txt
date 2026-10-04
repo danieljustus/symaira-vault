@@ -1,0 +1,107 @@
+// Fixture-only Go producer/reader; all vault operations use the real oracle.
+package main
+
+import (
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
+ "flag"
+ "fmt"
+ "os"
+ "os/exec"
+ "reflect"
+ "time"
+
+ "golang.org/x/term"
+
+ "github.com/danieljustus/symaira-vault/internal/config"
+ "github.com/danieljustus/symaira-vault/internal/ui"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+const passphrase = "public-tui-passphrase-782a"
+func main() {
+ if len(os.Args)==2 {
+  executable,err:=os.Executable();if err!=nil {panic(err)}
+  if data,e:=os.ReadFile(executable+".editor.json");e==nil {
+   var spec struct{Mode,Ready,Release string}
+   if err=json.Unmarshal(data,&spec);err!=nil {panic(err)}
+   editor(spec.Mode,os.Args[1],spec.Ready,spec.Release);return
+  }
+ }
+ root:=flag.String("root","","private disposable vault")
+ snapshot:=flag.Bool("snapshot",false,"read actual encrypted entries")
+ clipboardTTL:=flag.Int("clipboard-seconds",2,"private fixture clipboard lifetime")
+ consoleBinary:=flag.String("console-binary","","run actual CLI under this native console, then check modes")
+ consoleReceipt:=flag.String("console-receipt","","private native-console receipt")
+ flag.Parse()
+ if *consoleBinary!="" {
+  beforeIn,err:=term.GetState(int(os.Stdin.Fd()));if err!=nil {panic(err)}
+  beforeOut,err:=term.GetState(int(os.Stdout.Fd()));if err!=nil {panic(err)}
+  command:=exec.Command(*consoleBinary,"--vault",*root,"ui")
+  command.Stdin=os.Stdin;command.Stdout=os.Stdout;command.Stderr=os.Stderr
+  err=command.Run();code:=0
+  if err!=nil {if exit,ok:=err.(*exec.ExitError);ok {code=exit.ExitCode()} else {panic(err)}}
+  afterIn,e:=term.GetState(int(os.Stdin.Fd()));if e!=nil {panic(e)}
+  afterOut,e:=term.GetState(int(os.Stdout.Fd()));if e!=nil {panic(e)}
+  data,e:=json.Marshal(map[string]any{"exit_code":code,"input_restored":reflect.DeepEqual(beforeIn,afterIn),"output_restored":reflect.DeepEqual(beforeOut,afterOut)})
+  if e!=nil {panic(e)};if e=os.WriteFile(*consoleReceipt,data,0600);e!=nil {panic(e)}
+  os.Exit(code)
+ }
+ if *snapshot {
+  v,err:=vault.OpenWithPassphrase(*root,[]byte(passphrase));if err!=nil {panic(err)}
+  paths,err:=vault.List(*root,"",v.Identity);if err!=nil {panic(err)}
+  rows:=[]map[string]any{}
+  for _,path:=range paths {
+   entry,e:=vault.ReadEntry(*root,path,v.Identity);if e!=nil {panic(e)}
+   data,e:=json.Marshal(entry.Data);if e!=nil {panic(e)};sum:=sha256.Sum256(data)
+   rows=append(rows,map[string]any{"path":path,"data_sha256":hex.EncodeToString(sum[:]),"tags":entry.Metadata.Tags,"version":entry.Metadata.Version})
+  }
+  if err=json.NewEncoder(os.Stdout).Encode(rows);err!=nil {panic(err)}
+  return
+ }
+ cfg:=config.Default()
+ cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1}
+ cfg.Clipboard=&config.ClipboardConfig{AutoClearDuration:*clipboardTTL}
+ identity,err:=vault.InitWithPassphrase(*root,[]byte(passphrase),cfg);if err!=nil {panic(err)}
+ for _,spec:=range []struct{path,field,value,tag,kind string}{
+  {"alpha/login","password","public-tui-secret-alpha-782a","work","password"},
+  {"beta/api","token","public-tui-secret-beta-782a","home","api_key"},
+  {"gamma/control","private_key","public-tui-secret-gamma-782a","work","ssh_key"},
+ } {
+  entry:=&vault.Entry{Data:map[string]any{spec.field:spec.value,"username":"public-tui-user"}}
+  entry.Metadata.Tags=[]string{spec.tag}
+  entry.SecretMetadata.Type=vault.SecretType(spec.kind)
+  if err=vault.WriteEntry(*root,spec.path,entry,identity);err!=nil {panic(err)}
+ }
+ if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings()});err!=nil {panic(err)}
+}
+
+// A real child editor receives the actual private JSON document. It pauses on
+// a private rendezvous so the driver can observe terminal modes and clipboard
+// expiry while the browser is waiting for this foreground process.
+func editor(mode,path,ready,release string) {
+ info,err:=os.Stat(path);if err!=nil {panic(err)}
+ receipt:=map[string]any{"input_is_terminal":term.IsTerminal(int(os.Stdin.Fd())),"output_is_terminal":term.IsTerminal(int(os.Stdout.Fd())),"mode":uint32(info.Mode().Perm()),"document_bytes":info.Size()}
+ data,err:=json.Marshal(receipt);if err!=nil {panic(err)}
+ if err=os.WriteFile(ready,data,0600);err!=nil {panic(err)}
+ fmt.Fprintln(os.Stdout,"TUI_EDITOR_READY")
+ deadline:=time.Now().Add(20*time.Second)
+ for {if _,err=os.Stat(release);err==nil {break};if time.Now().After(deadline){panic("private editor rendezvous expired")};time.Sleep(20*time.Millisecond)}
+ switch mode {
+ case "invalid":err=os.WriteFile(path,[]byte("invalid-json"),0600)
+ case "empty":err=os.WriteFile(path,nil,0600)
+ case "failure":os.Exit(23)
+ case "valid":
+  var entry vault.Entry
+  data,err=os.ReadFile(path);if err!=nil {panic(err)}
+  if err=json.Unmarshal(data,&entry);err!=nil {panic(err)}
+  if entry.Data==nil {entry.Data=map[string]any{}}
+  entry.Data["password"]="public-tui-edited-secret-782a"
+  entry.Data["username"]="public-tui-edited-user"
+  data,err=json.Marshal(entry);if err!=nil {panic(err)}
+  err=os.WriteFile(path,data,0600)
+ default:panic("unknown private editor mode")
+ }
+ if err!=nil {panic(err)}
+}
