@@ -29,6 +29,7 @@ mod help_commands;
 mod history_commands;
 mod import_commands;
 mod import_review_commands;
+mod intake_commands;
 mod manpage_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
@@ -130,6 +131,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Review-gated credential intake from loose files.
+    Intake {
+        #[command(subcommand)]
+        command: IntakeCommand,
+    },
     /// Generate a shell completion script.
     Completion {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
@@ -546,6 +552,29 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeCommand {
+    /// Watch a folder for new credential files and stage quarantined batches.
+    Watch {
+        #[arg(value_name = "DIRECTORY")]
+        directory: Option<PathBuf>,
+        #[arg(long, default_value = "10s", allow_hyphen_values = true)]
+        interval: String,
+        #[arg(long, default_value = "5s", allow_hyphen_values = true)]
+        debounce: String,
+        #[arg(long)]
+        once: bool,
+        #[command(subcommand)]
+        command: Option<IntakeWatchCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum IntakeWatchCommand {
+    /// Disable an intake watch LaunchAgent (macOS).
+    Disable,
 }
 
 #[derive(Debug, Subcommand)]
@@ -1207,6 +1236,38 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Intake { command }) => match command {
+            IntakeCommand::Watch {
+                directory,
+                interval,
+                debounce,
+                once,
+                command,
+            } => {
+                if matches!(command, Some(IntakeWatchCommand::Disable)) {
+                    intake_commands::finish(intake_commands::disable(cli.quiet))
+                } else {
+                    let mut runtime = None;
+                    intake_commands::watch(
+                        directory.as_deref(),
+                        &interval,
+                        &debounce,
+                        once,
+                        cli.json,
+                        cli.quiet,
+                        || {
+                            let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())
+                                .map_err(|e| (6, e))?;
+                            require_initialized(&root).map_err(|e| (3, e))?;
+                            let runtime = runtime.get_or_insert_with(runtime_session_manager);
+                            let identity = device::unlock_vault_with_runtime(&root, runtime)
+                                .map_err(|e| (4, e))?;
+                            Ok((root, identity))
+                        },
+                    )
+                }
+            }
+        },
         Some(Command::Completion {
             shell,
             no_descriptions,

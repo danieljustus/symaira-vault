@@ -37,6 +37,7 @@ crates/symvault-sync/tests/fixtures/** text eol=lf
 
 # The read-policy generator hashes its immutable Python orchestrator.
 scripts/rust-port/refresh-read-policy-fixtures.py text eol=lf
+scripts/rust-port/intake_watch_contract.py text eol=lf
 # Retained upstream source and the historical KDF driver feed byte hashes.
 third_party/argon2/** text eol=lf
 scripts/rust-port/kdf_policy_fixtures.py text eol=lf

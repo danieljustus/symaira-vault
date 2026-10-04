@@ -57,6 +57,28 @@ pub struct FileResult {
     #[serde(skip)]
     pub spool_path: Option<PathBuf>,
 }
+
+impl FileResult {
+    /// Go's quarantine writer accepts the first non-empty suggestion per field,
+    /// capped at 4096 bytes. Public serialization never includes these values.
+    pub fn quarantine_fields(&self) -> BTreeMap<String, String> {
+        let mut fields = BTreeMap::new();
+        for suggestion in &self.suggestions {
+            if suggestion.attachment || suggestion.field == ATTACHMENT_FIELD {
+                continue;
+            }
+            if let Some(value) = &suggestion.value
+                && !value.is_empty()
+                && value.len() <= 4096
+            {
+                fields
+                    .entry(suggestion.field.clone())
+                    .or_insert_with(|| value.clone());
+            }
+        }
+        fields
+    }
+}
 #[derive(Debug, Error)]
 pub enum IntakeError {
     #[error("source is not a stable regular file: {0}")]
