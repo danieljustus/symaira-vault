@@ -1625,8 +1625,14 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             })
             .collect::<Vec<_>>();
         let mut meta = Map::new();
-        meta.insert("created".into(), Value::String(entry.created));
-        meta.insert("updated".into(), Value::String(entry.updated));
+        meta.insert(
+            "created".into(),
+            Value::String(go_seconds_timestamp(&entry.created)),
+        );
+        meta.insert(
+            "updated".into(),
+            Value::String(go_seconds_timestamp(&entry.updated)),
+        );
         meta.insert("version".into(), Value::from(entry.version));
         let mut result = Map::new();
         result.insert("auto_rotate".into(), Value::Bool(entry.auto_rotate));

@@ -237,9 +237,9 @@ struct HttpTimeouts {
 impl Default for HttpTimeouts {
     fn default() -> Self {
         Self {
-            // Keep the existing 10-second bounded request-read behavior;
-            // only an idle keep-alive wait adopts Go's longer idle timeout.
-            initial_read: Duration::from_secs(10),
+            // Match Go's five-second initial/header admission wait. Body reads
+            // retain ten seconds; an idle keep-alive has its separate bound.
+            initial_read: Duration::from_secs(5),
             request_read: Duration::from_secs(10),
             keep_alive_idle: Duration::from_secs(120),
             write: Duration::from_secs(10),
@@ -729,6 +729,13 @@ where
                 Ok(None) => return Ok(()),
                 Err(read_error) if read_error.kind() == std::io::ErrorKind::InvalidData => {
                     if read_error.to_string().contains("request body too large") {
+                        let response =
+                            error(413, None, error_code::PARSE_ERROR, "request body too large")
+                                .map_err(std::io::Error::other)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        return Ok(());
+                    }
+                    if read_error.to_string() == "invalid JSON" {
                         let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
                             .map_err(std::io::Error::other)?;
                         write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
@@ -823,6 +830,22 @@ where
         )?;
         return Ok(keep_alive);
     }
+    if request.path.split('?').next() != Some("/mcp") {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: 404,
+                headers: vec![
+                    ("Content-Type", "text/plain; charset=utf-8"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                body: b"404 page not found\n".to_vec(),
+            },
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
     let _mcp_request = match local_approval {
         Some(local_approval) => match local_approval.try_acquire_mcp_request() {
             Some(request) => Some(request),
@@ -854,21 +877,21 @@ where
             return Ok(keep_alive);
         }
     };
-    if !token.agent_name.is_empty() && token.agent_name != request.agent {
-        write_request_error(
-            stream,
-            403,
-            "forbidden: token agent does not match X-Symaira-Agent header",
-            response_version,
-            keep_alive,
-        )?;
-        return Ok(keep_alive);
-    }
     if request.agent.is_empty() {
         write_request_error(
             stream,
             403,
             "forbidden: missing X-Symaira-Agent header",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
+    if !token.agent_name.is_empty() && token.agent_name != request.agent {
+        write_request_error(
+            stream,
+            403,
+            "forbidden: token agent does not match X-Symaira-Agent header",
             response_version,
             keep_alive,
         )?;
@@ -1003,7 +1026,7 @@ fn read_wire_request(
     }
     let method = method.to_owned();
     let path = path.to_owned();
-    let mut headers = BTreeMap::new();
+    let mut headers: BTreeMap<String, String> = BTreeMap::new();
     let mut header_bytes = first.len();
     loop {
         let Some(line) = read_bounded_line(reader, MAX_HTTP_HEADERS)? else {
@@ -1033,11 +1056,15 @@ fn read_wire_request(
             return Err(invalid_http("invalid HTTP header value"));
         }
         let name = name.to_ascii_lowercase();
-        if headers
-            .insert(name, value.trim_matches([' ', '\t']).to_owned())
-            .is_some()
-        {
-            return Err(invalid_http("duplicate HTTP header"));
+        let value = value.trim_matches([' ', '\t']);
+        if let Some(previous) = headers.get_mut(&name) {
+            if name != "accept" {
+                return Err(invalid_http("duplicate HTTP header"));
+            }
+            previous.push(',');
+            previous.push_str(value);
+        } else {
+            headers.insert(name, value.to_owned());
         }
     }
     if headers.get("host").is_none_or(String::is_empty) {
@@ -1053,7 +1080,22 @@ fn read_wire_request(
         None => 0,
     };
     if length > MAX_HTTP_BODY {
-        return Err(invalid_http("request body too large"));
+        // Retain at most the declared bound. An already-invalid JSON prefix is
+        // Go's 400; a bounded prefix that needs more input is the actual 413.
+        let mut prefix = vec![0; MAX_HTTP_BODY];
+        reader.read_exact(&mut prefix)?;
+        // Consume one lookahead byte, like Go's MaxBytesReader. In particular,
+        // the one-byte-over-limit response must not race an unread TCP byte.
+        let mut lookahead = [0; 1];
+        reader.read_exact(&mut lookahead)?;
+        let invalid = serde_json::from_slice::<Message>(&prefix)
+            .err()
+            .is_some_and(|error| !error.is_eof());
+        return Err(invalid_http(if invalid {
+            "invalid JSON"
+        } else {
+            "request body too large"
+        }));
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body)?;
@@ -1312,7 +1354,7 @@ fn write_http_response(
         405 => "Method Not Allowed",
         406 => "Not Acceptable",
         409 => "Conflict",
-        413 => "Payload Too Large",
+        413 => "Request Entity Too Large",
         415 => "Unsupported Media Type",
         429 => "Too Many Requests",
         _ => "Internal Server Error",
@@ -1321,10 +1363,21 @@ fn write_http_response(
     for (name, value) in response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    let chunked = version == "HTTP/1.1" && response.body.len() > 2048;
+    if chunked {
+        stream.write_all(b"Transfer-Encoding: chunked\r\n")?;
+    } else {
+        write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    }
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
-    stream.write_all(&response.body)
+    if chunked {
+        write!(stream, "{:x}\r\n", response.body.len())?;
+        stream.write_all(&response.body)?;
+        stream.write_all(b"\r\n0\r\n\r\n")
+    } else {
+        stream.write_all(&response.body)
+    }
 }
 
 fn write_http_redirect(
@@ -1358,8 +1411,11 @@ fn well_known_response(
     local: std::net::SocketAddr,
     secure: bool,
 ) -> Option<HttpResponse> {
-    if request.method != "GET" || request.path != "/.well-known/oauth-protected-resource" {
+    if request.path.split('?').next() != Some("/.well-known/oauth-protected-resource") {
         return None;
+    }
+    if request.method != "GET" {
+        return Some(method_not_allowed("GET, HEAD"));
     }
     let scheme = if secure { "https" } else { "http" };
     let resource = format!("{scheme}://{local}/mcp");
@@ -1375,6 +1431,18 @@ fn well_known_response(
         headers: vec![("Content-Type", "application/json")],
         body,
     })
+}
+
+pub(super) fn method_not_allowed(allow: &'static str) -> HttpResponse {
+    HttpResponse {
+        status: 405,
+        headers: vec![
+            ("Allow", allow),
+            ("Content-Type", "text/plain; charset=utf-8"),
+            ("X-Content-Type-Options", "nosniff"),
+        ],
+        body: b"Method Not Allowed\n".to_vec(),
+    }
 }
 
 fn write_plain_error(
@@ -1437,7 +1505,7 @@ fn write_json_error_for_request(
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let body = format!(
-        "{{\"jsonrpc\":\"2.0\",\"error\":{{\"code\":-32600,\"message\":{}}}}}\n",
+        "{{\"error\":{{\"message\":{},\"code\":-32600}},\"jsonrpc\":\"2.0\"}}\n",
         serde_json::to_string(message).unwrap_or_else(|_| "\"invalid request\"".into())
     );
     write!(
@@ -1458,7 +1526,7 @@ pub fn handle_request(
     if request.method != "POST" {
         return error(405, None, error_code::INVALID_REQUEST, "method not allowed");
     }
-    if request.path != "/mcp" {
+    if request.path.split('?').next() != Some("/mcp") {
         return Ok(HttpResponse {
             status: 404,
             headers: vec![
@@ -1484,8 +1552,11 @@ pub fn handle_request(
             "Accept must include application/json and text/event-stream",
         );
     }
-    if request.body.len() > 1_048_576 {
+    if serde_json::from_str::<Message>(request.body).is_err() {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
+    }
+    if request.body.len() > MAX_HTTP_BODY {
+        return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
 
     let version = request.protocol_version.trim();

@@ -37,7 +37,8 @@ availability errors precede tier/capability errors, matching the actual complete
 Go dispatcher. An isolated handler fixture does not establish that ordering.
 
 `fetch` projects native creation/update times to RFC3339 whole seconds, as Go
-does. Other entry responses retain their fractional timestamps. Fix the
+does. ADR 0017 also records the actual metadata handler's whole-second
+projection; value responses retain their fractional timestamps. Fix the
 projection rather than masking dates in the comparison.
 
 ## Deliberate narrower behavior
