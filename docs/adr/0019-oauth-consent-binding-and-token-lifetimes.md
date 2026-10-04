@@ -95,3 +95,13 @@ runtime/config tests and the original 51-case HTTP corpus. Native gates, HEAD,
 the full hostile origin/Host/framing/slow-peer matrix, complete token storage
 and expiration boundaries, TLS/mTLS acceptance and GUI/TTY/device consent remain
 separate required work. HTTP-001..004 and #1249 stay open until full acceptance.
+
+The first native Linux run at `2629376a` passes all 46 OAuth cases and owning
+tests, then the original HTTP driver rejects the checkout before executing
+any case. The preceding OAuth receipt was written as an untracked file at the
+repository root. Write both CI receipts inside the already ignored build
+directory `target/` and upload those exact files. Keep the clean-source guard
+and all corpus assertions unchanged. An earlier corpus must not invalidate
+the next one's source provenance merely by retaining its observations; nor
+does this failure count as original-corpus acceptance. Fresh native evidence
+on the corrected workflow is required.

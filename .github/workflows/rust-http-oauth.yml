@@ -95,11 +95,11 @@ jobs:
           set -euo pipefail
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 scripts/rust-port/http_oauth_contract.py --rust "$rust_cli" --receipt native-http-oauth.json
+          python3 scripts/rust-port/http_oauth_contract.py --rust "$rust_cli" --receipt target/native-http-oauth.json
           python3 - <<'PY'
           import json,subprocess
           from pathlib import Path
-          r=json.loads(Path('native-http-oauth.json').read_bytes())
+          r=json.loads(Path('target/native-http-oauth.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
@@ -121,11 +121,11 @@ jobs:
           set -euo pipefail
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt native-http-process.json
+          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-http-process.json
           python3 - <<'PY'
           import json
           from pathlib import Path
-          r=json.loads(Path('native-http-process.json').read_bytes())
+          r=json.loads(Path('target/native-http-process.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and not r['differences']
           assert len(r['go'])==len(r['rust'])==51 and len(r['declared_differences'])==4
           PY
@@ -135,8 +135,8 @@ jobs:
         with:
           name: http-oauth-${{ matrix.os }}
           path: |
-            native-http-oauth.json
-            native-http-process.json
+            target/native-http-oauth.json
+            target/native-http-process.json
             target/native-oauth-tests.txt
             target/native-oauth-config-tests.txt
           if-no-files-found: error
