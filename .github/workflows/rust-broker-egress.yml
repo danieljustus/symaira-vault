@@ -88,7 +88,7 @@ jobs:
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           runtime = {'tls-auth-bearer','tls-auth-basic','tls-auth-header','tls-auth-query_param','tls-auth-none','tls-all-substitution-surfaces','method-denied','endpoint-denied','unmatched-forwarded','unmatched-strict','passthrough-preserves-upstream-tls','untrusted-upstream-tls','template-port-binding','template-plaintext-binding','connect-inner-authority-binding','redirect-authority-binding'}
-          cli = {'broker-missing-vault','broker-boolean-forms','run-broker-flags-reach-vault','run-broker-disabled','run-broker-public-env','run-broker-strict-passthrough','run-broker-child-error','run-broker-timeout','run-broker-explicit-env','run-broker-launch-error','standalone-broker','standalone-broker-flags','loopback-listener-policy'}
+          cli = {'broker-missing-vault','broker-boolean-forms','run-broker-flags-reach-vault','run-broker-disabled','run-broker-public-env','run-broker-strict-passthrough','run-broker-child-error','run-broker-timeout','run-broker-explicit-env','run-broker-launch-error','standalone-broker','standalone-broker-flags','loopback-listener-policy','concurrent-broker-ca-isolation'}
           for implementation in ['go','rust']:
               assert runtime == {row['case'] for row in receipt[implementation]}
               assert cli == {row['case'] for row in receipt[implementation+'_cli']}

@@ -344,6 +344,11 @@ keys = ['HTTPS_PROXY','HTTP_PROXY','SSL_CERT_FILE','NODE_EXTRA_CA_CERTS','REQUES
 record = {key:os.environ.get(key) for key in keys}
 record['explicit'] = os.environ.get('EXPLICIT_FIXTURE')
 record['passphrase_absent'] = 'SYMVAULT_PASSPHRASE' not in os.environ
+if record['SSL_CERT_FILE']:
+    ca = pathlib.Path(record['SSL_CERT_FILE'])
+    record['ca_pem'] = ca.read_text(encoding='ascii')
+    record['ca_mode'] = ca.stat().st_mode & 0o777
+    record['ca_parent_mode'] = ca.parent.stat().st_mode & 0o777
 pathlib.Path(sys.argv[1]).write_text(json.dumps(record), encoding='utf-8')
 print(json.dumps(record), flush=True)
 if sys.argv[2] == 'timeout': time.sleep(8)
@@ -370,10 +375,17 @@ sys.exit(7 if sys.argv[2] == 'error' else 0)
             assert observed["HTTPS_PROXY"] == observed["HTTP_PROXY"]
             assert observed["NO_PROXY"] == "127.0.0.1,localhost"
             ca = Path(observed["SSL_CERT_FILE"])
-            assert ca.samefile(root / "broker-ca.pem") and ca.samefile(observed["NODE_EXTRA_CA_CERTS"]) and ca.samefile(observed["REQUESTS_CA_BUNDLE"])
-            assert ssl.PEM_cert_to_DER_cert(ca.read_text(encoding="ascii"))
-            assert "PRIVATE KEY" not in ca.read_text(encoding="ascii")
-            if os.name != "nt": assert ca.stat().st_mode & 0o777 == 0o600
+            assert ca == Path(observed["NODE_EXTRA_CA_CERTS"]) == Path(observed["REQUESTS_CA_BUNDLE"])
+            assert ssl.PEM_cert_to_DER_cert(observed['ca_pem'])
+            assert "PRIVATE KEY" not in observed['ca_pem']
+            if os.name != "nt":
+                assert observed['ca_mode'] == 0o600 and observed['ca_parent_mode'] == 0o700
+            if ca.exists():
+                assert ca.samefile(root / "broker-ca.pem")
+                assert ca.read_text(encoding='ascii') == observed['ca_pem']
+            else:
+                assert ca.parent.parent == root and ca.parent.name.startswith('.broker-ca-')
+                assert not ca.parent.exists()
             host, port = observed["HTTP_PROXY"].removeprefix("http://").rsplit(":", 1)
             with socket.socket() as connection:
                 connection.settimeout(2)
@@ -381,7 +393,8 @@ sys.exit(7 if sys.argv[2] == 'error' else 0)
         assert observed["explicit"] == (TOKEN if name == "run-broker-explicit-env" else None)
         records.append({"case": name, "exit": expected, "public_proxy_env_verified": name != "run-broker-disabled",
                         "listener_gone": name != "run-broker-disabled", "passphrase_absent": True,
-                        "explicit_env_preserved": name == "run-broker-explicit-env", "canaries_absent_from_output": True})
+                        "explicit_env_preserved": name == "run-broker-explicit-env", "canaries_absent_from_output": True,
+                        "public_ca_retained_after_exit": Path(observed['SSL_CERT_FILE']).exists() if observed['SSL_CERT_FILE'] else None})
     result = subprocess.run([str(binary), "run", "--broker", "--", str(home / "public-missing-command")],
                             cwd=home, env=isolated(home), capture_output=True, timeout=90)
     assert result.returncode == 1 and TOKEN.encode() not in result.stdout+result.stderr
@@ -414,6 +427,7 @@ sys.exit(7 if sys.argv[2] == 'error' else 0)
             if child.poll() is None: child.kill(); child.communicate(timeout=10)
             reader.join(timeout=5)
             assert not reader.is_alive()
+    concurrent_ca_case(binary, home, records)
     # Actual Go accepts a public wildcard listener; the maintained Rust CLI is
     # deliberately restricted to loopback. The root contains only public fixtures.
     child = console_child([binary, "broker", "--addr", "0.0.0.0:0"], home)
@@ -433,6 +447,43 @@ sys.exit(7 if sys.argv[2] == 'error' else 0)
         if child.poll() is None: child.kill(); child.communicate(timeout=10)
         reader.join(timeout=5)
         assert not reader.is_alive()
+
+
+def concurrent_ca_case(binary, home, records):
+    # Two real, simultaneously live CLI processes share the same encrypted
+    # vault. Observe their actual certificates, without injecting private trust.
+    started = []
+    try:
+        for _ in range(2):
+            child = console_child([binary, 'broker'], home)
+            output = queue.Queue()
+            reader = threading.Thread(target=lambda p=child, q=output: q.put([p.stdout.readline(), p.stdout.readline()]))
+            reader.start()
+            started.append({'child':child, 'reader':reader})
+            first, second = output.get(timeout=30)
+            assert first.startswith(b'Symaira Vault egress broker listening on http://127.0.0.1:')
+            assert second.startswith(b'CA certificate written to ')
+            ca = Path(second.decode('utf-8').strip().removeprefix('CA certificate written to '))
+            pem = ca.read_bytes()
+            assert ssl.PEM_cert_to_DER_cert(pem.decode('ascii')) and b'PRIVATE KEY' not in pem
+            started[-1].update(ca=ca, digest=hashlib.sha256(pem).hexdigest())
+        assert all(row['child'].poll() is None for row in started)
+        distinct = not started[0]['ca'].samefile(started[1]['ca'])
+        unchanged = hashlib.sha256(started[0]['ca'].read_bytes()).hexdigest() == started[0]['digest']
+    finally:
+        for row in started:
+            child = row['child']
+            if child.poll() is None:
+                try:
+                    stop_cli(child)
+                finally:
+                    if child.poll() is None:
+                        child.kill()
+                        child.communicate(timeout=10)
+            row['reader'].join(timeout=5)
+            assert not row['reader'].is_alive()
+    records.append({'case':'concurrent-broker-ca-isolation', 'ca_paths_distinct':distinct,
+                    'first_ca_unchanged':unchanged, 'ca_removed_after_stop':all(not row['ca'].exists() for row in started)})
 
 
 def main():
@@ -495,8 +546,13 @@ def main():
                 for left, right in zip(receipt["go_cli"], receipt["rust_cli"], strict=True):
                     if left["case"] == "loopback-listener-policy":
                         assert left["public_listener_accepted"] and not right["public_listener_accepted"]
+                    elif left['case'] == 'concurrent-broker-ca-isolation':
+                        assert not left['ca_paths_distinct'] and not left['first_ca_unchanged'] and not left['ca_removed_after_stop'], left
+                        assert right['ca_paths_distinct'] and right['first_ca_unchanged'] and right['ca_removed_after_stop'], right
                     else:
-                        assert left == right, (left, right)
+                        if left.get('public_proxy_env_verified'):
+                            assert left['public_ca_retained_after_exit'] and not right['public_ca_retained_after_exit'], (left, right)
+                        assert {k:v for k,v in left.items() if k != 'public_ca_retained_after_exit'} == {k:v for k,v in right.items() if k != 'public_ca_retained_after_exit'}, (left, right)
                 for left, right in zip(receipt["go"], receipt["rust"], strict=True):
                     if left["case"] in {"template-port-binding", "template-plaintext-binding", "connect-inner-authority-binding"}:
                         assert left["status"] == 200 and left["credential_received"], left

@@ -109,6 +109,35 @@ error classifications. Both drivers retain actual output and binary/source
 hashes. Development success does not substitute for the required clean commit
 or native macOS/Windows jobs.
 
+At clean integrated Linux commit 55e781aa8a43303aa8b649f2e630cc49fa2fe911,
+all 16 runtime and 13 CLI comparisons passed against immutable Go. The owning
+CLI suite passed 487 tests with five existing ignored cases; MCP passed 222
+tests without an ignored case, the core policy suite passed 11, and strict
+Clippy plus pinned dependency checks passed. Subsequent CA-lifetime changes
+require a fresh clean receipt and their additional real concurrency case.
+
+Give each live CLI broker a private temporary directory containing only its
+public CA certificate. Keep that directory alive through child process-tree
+completion and joined broker workers, then explicitly remove it. Preserve the
+primary execution failure if certificate cleanup also fails; otherwise expose
+the cleanup failure. The ephemeral private key remains solely in RAM. A shared
+vault-level broker-ca.pem permits a second concurrent broker to replace the
+first broker's trust root, disrupting a still-running child or standalone
+client. The public environment and startup message therefore name the owning
+instance's CA path. Callers must use those advertised values instead of
+guessing a persistent vault filename. This is a deliberate lifetime/path
+decision, measured against two actual simultaneously live Go/Rust CLI brokers;
+it does not install trust globally or change decrypted credential handling.
+
+The actual Linux concurrency observation is Go paths_distinct=false,
+first_ca_unchanged=false and ca_removed_after_stop=false. Rust measures true
+for all three. All other runtime and CLI cases still pass with the lifetime
+decision: 16 runtime and now 14 CLI cases in the development transcript. The
+child reads and validates its actual public PEM and Unix 0600 file/0700 parent
+permissions while alive; after exit, the driver independently verifies that
+Rust's instance certificate/directory and listener have gone. The CA directory
+is created with narrow permissions rather than tightened after publication.
+
 Disposable native fixture vaults use explicitly configured Argon2id parameters
 of 19456 KiB, two iterations and one lane, within Go's configured minimum
 policy. Real Go InitWithPassphrase writes the encrypted identity and entries;

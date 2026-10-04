@@ -12,6 +12,13 @@ use symvault_crypto::Identity;
 use symvault_mcp::broker::{EgressBroker, EgressOptions};
 use symvault_store::Store;
 
+struct PreparedBroker<'a> {
+    broker: EgressBroker<'a>,
+    listener: TcpListener,
+    environment: BTreeMap<String, String>,
+    ca_directory: tempfile::TempDir,
+}
+
 fn prepare<'a>(
     root: &'a Path,
     store: &'a Store,
@@ -19,7 +26,7 @@ fn prepare<'a>(
     addr: &str,
     strict: bool,
     passthrough: &[String],
-) -> Result<(EgressBroker<'a>, TcpListener, BTreeMap<String, String>), String> {
+) -> Result<PreparedBroker<'a>, String> {
     let broker = EgressBroker::new(
         root,
         store,
@@ -49,7 +56,19 @@ fn prepare<'a>(
             .local_addr()
             .map_err(|_| "inspect broker address")?
     );
-    let ca = root.join("broker-ca.pem");
+    // Concurrent brokers must never replace another live instance's CA. Only
+    // the public certificate is written; the key stays in the owned runtime.
+    let mut ca_directory_builder = tempfile::Builder::new();
+    ca_directory_builder.prefix(".broker-ca-");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        ca_directory_builder.permissions(std::fs::Permissions::from_mode(0o700));
+    }
+    let ca_directory = ca_directory_builder
+        .tempdir_in(root)
+        .map_err(|_| "create broker CA directory")?;
+    let ca = ca_directory.path().join("broker-ca.pem");
     symvault_sync::safeio::write_atomic(&ca, broker.ca_pem().as_bytes())
         .map_err(|_| "write CA certificate")?;
     let ca = ca.to_str().ok_or("broker CA path is not UTF-8")?.to_owned();
@@ -61,7 +80,19 @@ fn prepare<'a>(
         ("REQUESTS_CA_BUNDLE".into(), ca),
         ("NO_PROXY".into(), "127.0.0.1,localhost".into()),
     ]);
-    Ok((broker, listener, environment))
+    Ok(PreparedBroker {
+        broker,
+        listener,
+        environment,
+        ca_directory,
+    })
+}
+
+fn finish_ca<T>(result: Result<T, String>, ca_directory: tempfile::TempDir) -> Result<T, String> {
+    let cleanup = ca_directory
+        .close()
+        .map_err(|_| "remove broker public CA directory".to_owned());
+    result.and_then(|value| cleanup.map(|()| value))
 }
 
 pub(crate) fn with_broker<T: Send>(
@@ -72,10 +103,17 @@ pub(crate) fn with_broker<T: Send>(
     passthrough: &[String],
     action: impl FnOnce(BTreeMap<String, String>) -> Result<T, String>,
 ) -> Result<T, String> {
-    let (broker, listener, environment) =
-        prepare(root, store, identity, "127.0.0.1:0", strict, passthrough)
-            .map_err(|error| format!("start broker: {error}"))?;
-    broker.with_running(listener, || action(environment))
+    let PreparedBroker {
+        broker,
+        listener,
+        environment,
+        ca_directory,
+    } = prepare(root, store, identity, "127.0.0.1:0", strict, passthrough)
+        .map_err(|error| format!("start broker: {error}"))?;
+    finish_ca(
+        broker.with_running(listener, || action(environment)),
+        ca_directory,
+    )
 }
 
 pub(crate) fn run(
@@ -86,8 +124,12 @@ pub(crate) fn run(
     strict: bool,
     passthrough: &[String],
 ) -> Result<(), String> {
-    let (broker, listener, environment) =
-        prepare(root, store, identity, addr, strict, passthrough)?;
+    let PreparedBroker {
+        broker,
+        listener,
+        environment,
+        ca_directory,
+    } = prepare(root, store, identity, addr, strict, passthrough)?;
     let hosts = parse_hosts(passthrough)?;
     let (sender, receiver) = mpsc::channel();
     let stop = broker.shutdown();
@@ -122,7 +164,7 @@ pub(crate) fn run(
         );
     }
     io::stdout().flush().map_err(|_| "flush broker startup")?;
-    broker.with_running(listener, || {
+    let result = broker.with_running(listener, || {
         loop {
             match receiver.recv_timeout(Duration::from_millis(25)) {
                 Ok(()) => return Ok(()),
@@ -133,7 +175,8 @@ pub(crate) fn run(
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
         }
-    })
+    });
+    finish_ca(result, ca_directory)
 }
 
 // pflag StringSlice is CSV, including doubled quotes and repeated flag values.
