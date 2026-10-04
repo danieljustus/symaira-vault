@@ -59,3 +59,4 @@ scripts/rust-port/http_process_contract.py text eol=lf
 
 /scripts/rust-port/api_transport_contract.py text eol=lf
 /.github/workflows/rust-api-transport.yml text eol=lf
+scripts/rust-port/http_tls_identity.go.txt text eol=lf
