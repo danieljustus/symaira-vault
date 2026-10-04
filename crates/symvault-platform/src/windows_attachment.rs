@@ -1,6 +1,6 @@
 //! Retain Windows file identity without blocking ordinary FileShare.Read.
 //! See ADR 0012 for handle ownership, memory lifetime and cleanup invariants.
-#![allow(unsafe_code)] // Three audited Windows API calls behind safe owned File inputs.
+#![allow(unsafe_code)] // Three audited FFI/ownership operations behind safe owned File inputs.
 use std::{
     fs::File,
     io::{self, Seek, SeekFrom, Write},
@@ -111,12 +111,17 @@ mod tests {
         fs::create_dir(&directory).unwrap();
         let path = directory.join("attachment");
         let guard = fixture(&path);
+        // Windows refuses moving a directory that still contains an open
+        // file. Move the retained file object out first, then actually replace
+        // both its old pathname and parent. No failed swap is treated as proof.
+        let original_file = root.path().join("retained-original");
+        fs::rename(&path, &original_file).unwrap();
         let original_directory = root.path().join("renamed");
         fs::rename(&directory, &original_directory).unwrap();
         fs::create_dir(&directory).unwrap();
         fs::write(&path, b"replacement must survive").unwrap();
         shred_and_delete(guard, b"synthetic attachment".len() as u64).unwrap();
-        assert!(!original_directory.join("attachment").exists());
+        assert!(!original_file.exists());
         assert_eq!(fs::read(&path).unwrap(), b"replacement must survive");
     }
 

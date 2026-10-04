@@ -30,6 +30,13 @@ No raw handle or pointer escapes the safe adapter. Native x64/ARM64 tests cover
 sharing, original-object deletion after replacement, and cleanup failure. Miri
 cannot execute these Windows kernel APIs; real native execution is required.
 
+Actual Windows execution denies renaming a directory while it still contains
+the open original file. The mandatory replacement test therefore first moves
+that same open file object out, then renames/replaces its former parent and
+creates a replacement at its former pathname. Both replacements must succeed;
+an OS-denied swap is not accepted as evidence. Cleanup must delete the retained
+original and leave the replacement bytes intact.
+
 If secure Windows cleanup fails, report the failure. A successful child must
 not conceal that failure; if the child already failed, preserve its error and
 add a generic cleanup warning. No pathname-based fallback is allowed. A still
