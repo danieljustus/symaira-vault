@@ -62,3 +62,5 @@ scripts/rust-port/http_origin_contract.py text eol=lf
 scripts/rust-port/http_framing_contract.py text eol=lf
 scripts/rust-port/http_slow_peer_contract.py text eol=lf
 .github/workflows/rust-http-oauth.yml text eol=lf
+scripts/rust-port/http_tls_contract.py text eol=lf
+.github/workflows/rust-http-tls.yml text eol=lf
