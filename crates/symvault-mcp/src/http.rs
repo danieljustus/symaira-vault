@@ -1327,8 +1327,10 @@ fn load_token_registry(registry_path: &Path) -> Result<TokenRegistry, std::io::E
 }
 
 pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
-    let request_host = host_without_port(request_host);
-    if !loopback_host(request_host) {
+    let Some((request_host, _)) = validated_authority(request_host, 80) else {
+        return false;
+    };
+    if !loopback_host(&request_host) {
         return false;
     }
     if origin.trim().is_empty() {
@@ -1337,15 +1339,14 @@ pub(super) fn allowed_origin(origin: &str, request_host: &str) -> bool {
     let Some((scheme, authority)) = origin.trim().split_once("://") else {
         return false;
     };
-    if !matches!(scheme, "http" | "https")
-        || authority.is_empty()
-        || authority.contains('/')
-        || authority.contains('@')
-    {
+    let default_port = if scheme.eq_ignore_ascii_case("http") {
+        80
+    } else if scheme.eq_ignore_ascii_case("https") {
+        443
+    } else {
         return false;
-    }
-    let origin_host = host_without_port(authority);
-    loopback_host(origin_host)
+    };
+    validated_authority(authority, default_port).is_some_and(|(host, _)| loopback_host(&host))
 }
 
 pub(super) fn allowed_origin_for_transport(origin: &str, request_host: &str, secure: bool) -> bool {
@@ -1369,6 +1370,10 @@ pub(super) fn allowed_origin_for_transport(origin: &str, request_host: &str, sec
 }
 
 fn tls_authority(authority: &str) -> Option<(String, u16)> {
+    validated_authority(authority, 443)
+}
+
+fn validated_authority(authority: &str, default_port: u16) -> Option<(String, u16)> {
     if authority.is_empty()
         || authority.bytes().any(|byte| {
             byte <= 0x20 || byte >= 0x7f || matches!(byte, b'/' | b'\\' | b'@' | b'?' | b'#' | b'%')
@@ -1380,8 +1385,8 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
         let (host, suffix) = rest.split_once(']')?;
         let address = host.parse::<std::net::Ipv6Addr>().ok()?;
         let port = match suffix {
-            "" => 443,
-            suffix => suffix.strip_prefix(':')?.parse::<u16>().ok()?,
+            "" => default_port,
+            suffix => parse_http_port(suffix.strip_prefix(':')?)?,
         };
         (address.to_string(), port)
     } else {
@@ -1390,9 +1395,9 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
                 if host.contains(':') {
                     return None;
                 }
-                (host, port.parse::<u16>().ok()?)
+                (host, parse_http_port(port)?)
             }
-            None => (authority, 443),
+            None => (authority, default_port),
         };
         let host = if let Ok(address) = host.parse::<std::net::Ipv4Addr>() {
             address.to_string()
@@ -1418,21 +1423,24 @@ fn tls_authority(authority: &str) -> Option<(String, u16)> {
     (port != 0).then_some((host, port))
 }
 
-fn host_without_port(authority: &str) -> &str {
-    if let Some(rest) = authority.strip_prefix('[') {
-        return rest.split_once(']').map(|(host, _)| host).unwrap_or("");
+fn parse_http_port(value: &str) -> Option<u16> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
     }
-    authority
-        .rsplit_once(':')
-        .filter(|(_, port)| port.parse::<u16>().is_ok())
-        .map_or(authority, |(host, _)| host)
+    value.parse::<u16>().ok().filter(|port| *port != 0)
 }
 
 fn loopback_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost")
-        || host
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
+        || host.parse::<IpAddr>().is_ok_and(|address| match address {
+            IpAddr::V4(address) => address.is_loopback(),
+            IpAddr::V6(address) => {
+                address.is_loopback()
+                    || address
+                        .to_ipv4_mapped()
+                        .is_some_and(|address| address.is_loopback())
+            }
+        })
 }
 
 fn write_http_response(
@@ -3709,6 +3717,53 @@ mod tests {
 
     #[test]
     fn loopback_listener_rejects_foreign_origin_before_authentication() {
+        for invalid in [
+            "http://[::1]public",
+            "http://[::1]:public",
+            "http://[::1]:",
+            "http://[::1]:0",
+            "http://[::1]:65536",
+            "http://[::1]:+80",
+            "http://[::1]:-1",
+            "http://[127.0.0.1]",
+            "http://localhost:",
+            "http://localhost:0",
+            "http://localhost:65536",
+            "http://localhost:+80",
+            "http://localhost:-1",
+            "http://localhost/path",
+            "http://localhost?public=fixture",
+            "http://localhost#public",
+            "http://foreign.example@localhost",
+            "ftp://localhost",
+        ] {
+            assert!(!allowed_origin(invalid, "127.0.0.1:8080"), "{invalid}");
+        }
+        for invalid in [
+            "[::1]public",
+            "[::1]:public",
+            "[::1]:",
+            "[::1]:0",
+            "[::1]:65536",
+            "[::1]:+80",
+            "[::1]:-1",
+            "[127.0.0.1]",
+            "localhost:",
+            "localhost:0",
+            "localhost:65536",
+            "localhost:+80",
+            "localhost:-1",
+        ] {
+            assert!(!allowed_origin("", invalid), "{invalid}");
+        }
+        for valid in [
+            "HTTP://LOCALHOST:8080",
+            "https://[::1]:8080",
+            "http://[::ffff:127.0.0.1]:8080",
+            "http://127.2.3.4:8080",
+        ] {
+            assert!(allowed_origin(valid, "[::ffff:127.0.0.1]:8080"), "{valid}");
+        }
         let response = round_trip(false, "https://attacker.example");
         assert!(
             response.starts_with("HTTP/1.1 403 Forbidden\r\n"),
