@@ -61,6 +61,7 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings
           cargo test -p symvault-cli --locked --test cli_agent_setup_serve_stubs
+          cargo test -p symvault-cli --locked --test cli_mcp_http_flags
           cargo test -p symvault-cli --bin symvault --locked daemon_commands::tests::
           cargo build -p symvault-cli --locked
       - name: Execute actual native Go and Rust contracts
