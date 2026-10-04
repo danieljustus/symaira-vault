@@ -106,6 +106,13 @@ helper omitted from these declared package closures. Bind the HTTP generator's
 own bytes separately, and require cleanup to complete rather than silently
 accepting a still-running oracle server.
 
+The complete port gate also detected the config/platform generator's old
+secure-UI source pin. Re-execute its six config and four injected platform
+observations against the same immutable combined source; all observations are
+unchanged. Bind the 34-file config/clipboard/secure-UI closure so new cancellation
+helpers cannot disappear from provenance. These formatting and injected cases
+do not claim native clipboard, biometric or GUI acceptance.
+
 Always select the memory keyring and disposable HOME/XDG directories inside
 the HTTP generator. HOME isolation alone does not isolate an OS credential
 service. Keep the read-resource fixture's previous immutable source pin and
