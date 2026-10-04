@@ -488,6 +488,7 @@ pub struct StoreReadOnlyRuntime {
     clipboard: Arc<dyn symvault_core::platform::Clipboard>,
     clipboard_clear_cancel: Mutex<Option<mpsc::Sender<()>>>,
     clipboard_auto_clear_duration: Duration,
+    api_transport_options: broker::ApiTransportOptions,
 }
 
 impl StoreReadOnlyRuntime {
@@ -557,6 +558,7 @@ impl StoreReadOnlyRuntime {
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
+            api_transport_options: broker::ApiTransportOptions::default(),
         })
     }
 
@@ -626,6 +628,7 @@ impl StoreReadOnlyRuntime {
             clipboard: Arc::new(symvault_core::platform::UnavailablePlatform),
             clipboard_clear_cancel: Mutex::new(None),
             clipboard_auto_clear_duration: Duration::from_secs(30),
+            api_transport_options: broker::ApiTransportOptions::default(),
         })
     }
 
@@ -634,6 +637,14 @@ impl StoreReadOnlyRuntime {
     #[must_use]
     pub fn with_approval_seam(mut self, seam: Arc<dyn ApprovalSeam>) -> Self {
         self.approval = seam;
+        self
+    }
+
+    /// Explicit scoped fixture/application transport inputs. Installed CLI
+    /// construction retains OS DNS and normal verified roots.
+    #[must_use]
+    pub fn with_api_transport_options(mut self, options: broker::ApiTransportOptions) -> Self {
+        self.api_transport_options = options;
         self
     }
 
@@ -1416,7 +1427,12 @@ impl StoreReadOnlyRuntime {
         ))
     }
 
-    fn execute_api_request(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+    fn execute_api_request(
+        &self,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
         let Some(name) = arguments.get("template").and_then(Value::as_str) else {
             self.append_audit("execute_api_request", "<invalid:missing-template>", false);
             return Ok(ToolCallResult::error(
@@ -1436,6 +1452,7 @@ impl StoreReadOnlyRuntime {
                 return Ok(ToolCallResult::error(error));
             }
         };
+        let context = context.with_timeout(timeout);
         let definition = match load_api_template_definition(&self.share_root, name) {
             Ok(definition) => definition,
             Err(error) => {
@@ -1486,7 +1503,13 @@ impl StoreReadOnlyRuntime {
             default_headers: definition.default_headers,
             allow_private: definition.allow_private,
         };
-        if let Err(error) = broker::validate_api_request(&runtime_template, &method, &endpoint) {
+        if let Err(error) = broker::validate_api_request_with_context(
+            &runtime_template,
+            &method,
+            &endpoint,
+            &context,
+            &self.api_transport_options,
+        ) {
             let audit_target = if error == "method not allowed by template" {
                 format!("<method-denied:{name}>")
             } else if error == "endpoint not allowed by template" {
@@ -1508,6 +1531,8 @@ impl StoreReadOnlyRuntime {
             self.append_audit("execute_api_request", "<approval-denied>", false);
             return Err(error);
         }
+
+        context.check()?;
 
         let entry_path = match api_entry_path(&definition.entry_ref) {
             Ok(path) => path,
@@ -1533,9 +1558,8 @@ impl StoreReadOnlyRuntime {
             ));
         }
 
-        // Security hardening pending Go alignment: path-less Go API arguments
-        // bypass entry policy. Reuse the command secret-use authorization boundary
-        // before resolving the template entry's credentials.
+        // Authorize the template's credential entry for the run action before
+        // reading it, matching the retained Go handler's policy boundary.
         self.authorize_run_secret_path(&entry_path, "execute_api_request")
             .map_err(run_files_error)?;
 
@@ -1679,6 +1703,8 @@ impl StoreReadOnlyRuntime {
             broker::ApiResponseBounds {
                 timeout,
                 response_limit: broker::API_RESPONSE_LIMIT,
+                context,
+                options: &self.api_transport_options,
             },
         ) {
             Ok(response) => response,
@@ -2641,6 +2667,16 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
+        self.call_with_context(name, arguments, &crate::RequestContext::default())
+    }
+
+    fn call_with_context(
+        &self,
+        name: &str,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
         // Go registers rate limiting as a pre-call hook. It runs only after
         // tool availability, argument decoding, and authorization have
         // succeeded, and hook failures are returned as handler errors so the
@@ -2680,7 +2716,7 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         } else if name == "execute_with_secret" {
             self.execute_with_secret(arguments)
         } else if name == "execute_api_request" {
-            self.execute_api_request(arguments)
+            self.execute_api_request(arguments, context)
         } else if name == "copy_to_clipboard" {
             self.copy_to_clipboard(arguments)
         } else if name == "run_command" {

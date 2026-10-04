@@ -24,6 +24,8 @@ pub mod http;
 mod oauth;
 mod prompts;
 pub mod render;
+mod request_context;
+pub use request_context::RequestContext;
 pub mod store_adapter;
 mod tools;
 pub use call::{
@@ -408,6 +410,7 @@ pub struct ProtocolHandler {
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
+    request_context: RequestContext,
 }
 
 impl ProtocolHandler {
@@ -419,6 +422,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -436,6 +440,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -454,6 +459,7 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -518,6 +524,11 @@ impl ProtocolHandler {
         self.token_allowed_tools = Some(allowed_tools.to_vec());
     }
 
+    /// Set context on this session, never on its shared application runtime.
+    pub fn set_request_context(&mut self, context: RequestContext) {
+        self.request_context = context;
+    }
+
     /// Creates a fresh protocol session with the same configured runtime and
     /// tool catalog. HTTP transport state is isolated by authenticated token.
     pub fn new_session(&self) -> Self {
@@ -528,6 +539,7 @@ impl ProtocolHandler {
             tool_call_runtime: self.tool_call_runtime.clone(),
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
+            request_context: RequestContext::default(),
         }
     }
 
@@ -749,7 +761,7 @@ impl ProtocolHandler {
             }
             return Message::response(msg.id.clone(), call::payload(result));
         }
-        match runtime.call(&name, &arguments) {
+        match runtime.call_with_context(&name, &arguments, &self.request_context) {
             Ok(result) => Message::response(msg.id.clone(), call::payload(result)),
             Err(error) => Ok(Message::error_response(
                 msg.id.clone(),

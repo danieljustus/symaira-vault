@@ -108,6 +108,18 @@ pub trait ToolCallRuntime: Send + Sync {
     /// Execute an authorized tool. Handler failures become JSON-RPC internal
     /// errors, matching Go's `executeTool` dispatch boundary.
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String>;
+
+    /// Existing handlers retain their implementation; cancellable network
+    /// handlers override this boundary with request-local context.
+    fn call_with_context(
+        &self,
+        name: &str,
+        arguments: &Value,
+        context: &crate::RequestContext,
+    ) -> Result<ToolCallResult, String> {
+        context.check()?;
+        self.call(name, arguments)
+    }
 }
 
 /// Result of executing an already authorized MCP command.
