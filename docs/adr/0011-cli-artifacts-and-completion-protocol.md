@@ -75,6 +75,12 @@ The workflow refuses dirty candidates, missing shell cases and zero completion
 results. Native macOS/Linux/Windows receipts remain pending; CLI-004 remains
 in_progress and no broader CLI or release row is promoted by this evidence.
 
+Hosted Zsh images may contain insecure global completion directories. The
+disposable test shell uses compinit -i to exclude those directories rather than
+trust their functions or wait for an interactive approval. It sources the
+generated script from its own private test directory and still requires real
+nonempty Tab results. This is test-host isolation, not a product shell setting.
+
 The cligap walker now recognizes the published Go command group headings as
 well as Clap's Commands section. Its previous Rust path count became one when
 fed grouped Go-compatible help, although all 134 direct oracle-path probes

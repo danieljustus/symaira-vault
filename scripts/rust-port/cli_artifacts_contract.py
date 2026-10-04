@@ -220,7 +220,7 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
             script = scripts / f'symvault.{shell}'
             script.write_text(artifact['completions'][shell+'/descriptions'])
             setup = (f'PS1="contract> "; source {shlex.quote(str(library))}' if shell == 'bash'
-                     else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -D')
+                     else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -i -D')
             setup += '; source ' + shlex.quote(str(script))
             results = []
             for name in ['go','rust']:
