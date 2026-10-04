@@ -43,6 +43,12 @@ Whole-request deadlines for progressing headers, bodies and TLS records remain
 separate required work. Preserve the existing JSON-prefix versus exceeded-body
 classification and exact measured 413 envelope.
 
+ADR 0024 subsequently adds absolute deadlines at the underlying TCP reader,
+including TLS record reads, and bounds this prefetch by a separate short
+absolute deadline. The original socket-timeout-only limitation and failed
+development bytes above describe the pre-ADR-0024 implementation; full live
+TLS progress acceptance remains separate.
+
 ## Actual evidence and boundaries
 
 `http_framing_contract.py` rebuilds immutable production Go

@@ -17,6 +17,7 @@ use rustls::{
 };
 use serde::Deserialize;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     fs,
     io::{BufRead, BufReader, Read, Write},
@@ -27,7 +28,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub struct HttpRequest<'a> {
@@ -53,12 +54,95 @@ struct HttpStream {
 }
 
 enum HttpTransport {
-    Tcp(TcpStream, Option<HttpShutdown>),
-    Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
+    Tcp(ReadDeadlineSocket, Option<HttpShutdown>),
+    Tls(Box<StreamOwned<ServerConnection, ReadDeadlineSocket>>),
+}
+
+struct ReadDeadlineSocket {
+    stream: TcpStream,
+    configured_timeout: Cell<Option<Duration>>,
+    deadline: Cell<Option<Instant>>,
+}
+
+impl ReadDeadlineSocket {
+    fn new(stream: TcpStream) -> Self {
+        Self {
+            stream,
+            configured_timeout: Cell::new(None),
+            deadline: Cell::new(None),
+        }
+    }
+
+    fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        self.stream.peer_addr()
+    }
+
+    fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
+        self.stream.local_addr()
+    }
+
+    fn set_nonblocking(&self, value: bool) -> Result<(), std::io::Error> {
+        self.stream.set_nonblocking(value)
+    }
+
+    fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        self.stream.set_read_timeout(timeout)?;
+        self.configured_timeout.set(timeout);
+        Ok(())
+    }
+
+    fn read_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
+        Ok(self.configured_timeout.get())
+    }
+
+    fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        self.stream.set_write_timeout(timeout)
+    }
+
+    fn write_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
+        self.stream.write_timeout()
+    }
+}
+
+impl Read for ReadDeadlineSocket {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let timeout = match self.deadline.get() {
+            Some(deadline) => {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|remaining| !remaining.is_zero())
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::TimedOut, "HTTP read deadline")
+                    })?;
+                Some(
+                    self.configured_timeout
+                        .get()
+                        .map_or(remaining, |timeout| timeout.min(remaining)),
+                )
+            }
+            None => self.configured_timeout.get(),
+        };
+        self.stream.set_read_timeout(timeout)?;
+        self.stream.read(buffer)
+    }
+}
+
+impl Write for ReadDeadlineSocket {
+    fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
+        self.stream.write(buffer)
+    }
+
+    fn flush(&mut self) -> Result<(), std::io::Error> {
+        self.stream.flush()
+    }
 }
 
 impl HttpStream {
     fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
+        let stream = ReadDeadlineSocket::new(stream);
         let transport = match tls {
             Some(config) => ServerConnection::new(config)
                 .map(|connection| {
@@ -109,12 +193,26 @@ impl HttpStream {
     fn is_tls(&self) -> bool {
         matches!(&self.transport, HttpTransport::Tls(_))
     }
+
+    fn set_read_deadline(&self, deadline: Option<Instant>) {
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.deadline.set(deadline),
+            HttpTransport::Tls(stream) => stream.sock.deadline.set(deadline),
+        }
+    }
+
+    fn read_deadline(&self) -> Option<Instant> {
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.deadline.get(),
+            HttpTransport::Tls(stream) => stream.sock.deadline.get(),
+        }
+    }
 }
 
 impl From<TcpStream> for HttpStream {
     fn from(stream: TcpStream) -> Self {
         Self {
-            transport: HttpTransport::Tcp(stream, None),
+            transport: HttpTransport::Tcp(ReadDeadlineSocket::new(stream), None),
             head_response: false,
             http10_response: false,
         }
@@ -825,7 +923,7 @@ where
             timeouts.keep_alive_idle
         };
         let request =
-            match read_wire_request(&mut reader, first_byte_timeout, timeouts.request_read) {
+            match read_wire_request(&mut reader, first_byte_timeout, timeouts, first_request) {
                 Ok(Some(request)) => request,
                 Ok(None) => return Ok(()),
                 Err(read_error) if read_error.kind() == std::io::ErrorKind::InvalidData => {
@@ -1096,18 +1194,31 @@ struct WireRequest {
 fn read_wire_request(
     reader: &mut BufReader<HttpStream>,
     first_byte_timeout: Duration,
-    request_read_timeout: Duration,
+    timeouts: HttpTimeouts,
+    first_request: bool,
 ) -> Result<Option<WireRequest>, std::io::Error> {
+    let waiting_started = Instant::now();
     reader.get_mut().head_response = false;
     reader.get_mut().http10_response = false;
     reader
         .get_mut()
         .set_read_timeout(Some(first_byte_timeout))?;
+    reader
+        .get_mut()
+        .set_read_deadline(waiting_started.checked_add(first_byte_timeout));
     let has_first_byte = !reader.fill_buf()?.is_empty();
+    let request_started = if first_request {
+        waiting_started
+    } else {
+        Instant::now()
+    };
     if has_first_byte {
         reader
             .get_mut()
-            .set_read_timeout(Some(request_read_timeout))?;
+            .set_read_timeout(Some(timeouts.initial_read))?;
+        reader.get_mut().set_read_deadline(
+            request_started.checked_add(timeouts.initial_read.min(timeouts.request_read)),
+        );
     }
     let Some(first) = read_bounded_line(reader, MAX_HTTP_REQUEST_LINE)? else {
         return Ok(None);
@@ -1175,6 +1286,12 @@ fn read_wire_request(
     if headers.get("host").is_none_or(String::is_empty) {
         return Err(invalid_http("missing Host header"));
     }
+    reader
+        .get_mut()
+        .set_read_timeout(Some(timeouts.request_read))?;
+    reader
+        .get_mut()
+        .set_read_deadline(request_started.checked_add(timeouts.request_read));
     let body = if let Some(encoding) = headers.get("transfer-encoding") {
         if version != "HTTP/1.1"
             || !encoding.eq_ignore_ascii_case("chunked")
@@ -1215,6 +1332,7 @@ fn read_wire_request(
     let body = String::from_utf8(body).map_err(|_| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, "request body is not UTF-8")
     })?;
+    reader.get_mut().set_read_deadline(None);
     let get = |name: &str| headers.get(name).cloned().unwrap_or_default();
     Ok(Some(WireRequest {
         method,
@@ -1285,8 +1403,17 @@ fn read_chunked_body(reader: &mut BufReader<HttpStream>) -> Result<Vec<u8>, std:
             reader
                 .get_mut()
                 .set_read_timeout(Some(Duration::from_millis(10)))?;
+            let previous_deadline = reader.get_ref().read_deadline();
+            let prefetch_deadline = Instant::now().checked_add(Duration::from_millis(10));
+            reader
+                .get_mut()
+                .set_read_deadline(match (previous_deadline, prefetch_deadline) {
+                    (Some(request), Some(prefetch)) => Some(request.min(prefetch)),
+                    (request, prefetch) => request.or(prefetch),
+                });
             let _ = reader.fill_buf();
             reader.get_mut().set_read_timeout(previous_timeout)?;
+            reader.get_mut().set_read_deadline(previous_deadline);
             let invalid = serde_json::from_slice::<Message>(&body[..MAX_HTTP_BODY])
                 .err()
                 .is_some_and(|error| !error.is_eof());
