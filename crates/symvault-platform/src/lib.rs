@@ -15,6 +15,8 @@ mod macos;
     target_os = "netbsd"
 ))]
 mod os_keyring;
+#[cfg(windows)]
+pub mod windows_attachment;
 #[cfg(target_os = "macos")]
 pub use macos::{MacOsDaemon, MacOsKeyring, MacOsPlatform, MacOsTouchId};
 #[cfg(any(
