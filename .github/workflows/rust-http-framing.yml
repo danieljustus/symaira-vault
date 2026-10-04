@@ -82,7 +82,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-framing-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(227 if os.environ['RUNNER_OS']=='Windows' else 229)
+          assert results and sum(int(n) for n,_ in results)==(234 if os.environ['RUNNER_OS']=='Windows' else 236)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'loopback_listener_rejects_foreign_origin_before_authentication ... ok' in text
           PY
