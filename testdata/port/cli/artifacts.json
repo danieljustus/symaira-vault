@@ -12587,6 +12587,745 @@
       "state": "absent",
       "stdout": "--help\thelp for version\n:4\n",
       "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/before-leaf-int",
+      "args": [
+        "--length",
+        "2",
+        "add",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/after-leaf-int",
+      "args": [
+        "add",
+        "--length",
+        "2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/before-leaf-inline-int",
+      "args": [
+        "--length=2",
+        "add",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/before-leaf-short-int",
+      "args": [
+        "-l",
+        "2",
+        "generate",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for generate\n--quiet\tSuppress success output when using --store\n--reveal\tInclude generated password in output when using --store\n--store\tStore at path (optional)\n--symbols\tInclude symbols\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/after-leaf-short-int",
+      "args": [
+        "generate",
+        "-l",
+        "2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for generate\n--quiet\tSuppress success output when using --store\n--reveal\tInclude generated password in output when using --store\n--store\tStore at path (optional)\n--symbols\tInclude symbols\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/before-nested-duration",
+      "args": [
+        "--interval",
+        "2s",
+        "intake",
+        "watch",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--debounce\tRequire files to be stable for this long before pickup\n--help\thelp for watch\n--json\tEmit machine-readable JSON per scan\n--once\tRun a single scan and exit\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/after-nested-duration",
+      "args": [
+        "intake",
+        "watch",
+        "--interval",
+        "2s",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--debounce\tRequire files to be stable for this long before pickup\n--help\thelp for watch\n--json\tEmit machine-readable JSON per scan\n--once\tRun a single scan and exit\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/before-leaf-invalid-int",
+      "args": [
+        "--length",
+        "not-number",
+        "add",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length not-number]: invalid argument \"not-number\" for \"--length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-int",
+      "args": [
+        "add",
+        "--length",
+        "not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length not-number]: invalid argument \"not-number\" for \"--length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-inline-int",
+      "args": [
+        "add",
+        "--length=not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=not-number]: invalid argument \"not-number\" for \"--length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-int",
+      "args": [
+        "generate",
+        "-l",
+        "not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -l not-number]: invalid argument \"not-number\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-inline-int",
+      "args": [
+        "generate",
+        "-l=not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -l=not-number]: invalid argument \"not-number\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-attached-int",
+      "args": [
+        "generate",
+        "-lnot-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -lnot-number]: invalid argument \"not-number\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-overflow",
+      "args": [
+        "add",
+        "--length",
+        "9223372036854775808",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length 9223372036854775808]: invalid argument \"9223372036854775808\" for \"--length\" flag: strconv.ParseInt: parsing \"9223372036854775808\": value out of range\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-underflow",
+      "args": [
+        "add",
+        "--length",
+        "-9223372036854775809",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length -9223372036854775809]: invalid argument \"-9223372036854775809\" for \"--length\" flag: strconv.ParseInt: parsing \"-9223372036854775809\": value out of range\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-empty",
+      "args": [
+        "add",
+        "--length=",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=]: invalid argument \"\" for \"--length\" flag: strconv.ParseInt: parsing \"\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-negative",
+      "args": [
+        "add",
+        "--length",
+        "-2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-hex",
+      "args": [
+        "add",
+        "--length",
+        "0x10",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-octal",
+      "args": [
+        "add",
+        "--length",
+        "010",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-binary",
+      "args": [
+        "add",
+        "--length",
+        "0b10",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-underscores",
+      "args": [
+        "add",
+        "--length",
+        "1_000",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--generate\tGenerate a secure password (non-interactive)\n--help\thelp for add\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-invalid-octal",
+      "args": [
+        "add",
+        "--length",
+        "08",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length 08]: invalid argument \"08\" for \"--length\" flag: strconv.ParseInt: parsing \"08\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-invalid-underscores",
+      "args": [
+        "add",
+        "--length",
+        "1__0",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length 1__0]: invalid argument \"1__0\" for \"--length\" flag: strconv.ParseInt: parsing \"1__0\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int64-invalid",
+      "args": [
+        "intake",
+        "--batch-limit",
+        "not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --batch-limit not-number]: invalid argument \"not-number\" for \"--batch-limit\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-bool",
+      "args": [
+        "add",
+        "--generate=not-bool",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate=not-bool]: invalid argument \"not-bool\" for \"--generate\" flag: strconv.ParseBool: parsing \"not-bool\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/before-leaf-invalid-bool",
+      "args": [
+        "--json=not-bool",
+        "add",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --json=not-bool]: invalid argument \"not-bool\" for \"--json\" flag: strconv.ParseBool: parsing \"not-bool\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-bool",
+      "args": [
+        "audit",
+        "-j=not-bool",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -j=not-bool]: invalid argument \"not-bool\" for \"-j, --json\" flag: strconv.ParseBool: parsing \"not-bool\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-false",
+      "args": [
+        "add",
+        "--generate=false",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--help\thelp for add\n--length\tGenerated password length for --generate\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/bool-true-spelling",
+      "args": [
+        "add",
+        "--generate=TRUE",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--allow-empty\tAllow empty value for sensitive fields\n--auto-rotate\tEnable automatic rotation reminder\n--expires-at\tExpiration date (RFC3339 format)\n--force\tSkip password strength validation\n--help\thelp for add\n--length\tGenerated password length for --generate\n--notes\tNotes (non-interactive)\n--stdin-totp-secret\tRead TOTP secret from stdin (prevents argv leak)\n--stdin-value\tRead password value from stdin (prevents argv leak)\n--totp-account\tTOTP account name/username\n--totp-issuer\tTOTP issuer/service name\n--totp-secret\tTOTP secret key (base32 encoded, visible in process listings)\n--type\tSecret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.\n--url\tURL (non-interactive)\n--usage-hint\tUsage hint for AI agents\n--username\tUsername (non-interactive)\n--value\tPassword value (non-interactive, visible in process listings)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/help-false",
+      "args": [
+        "add",
+        "--help=false",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/help-before-invalid-int",
+      "args": [
+        "add",
+        "--help",
+        "--length=not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --help --length=not-number]: invalid argument \"not-number\" for \"--length\" flag: strconv.ParseInt: parsing \"not-number\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-separate-positional",
+      "args": [
+        "add",
+        "--generate",
+        "false",
+        ""
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/invalid-duration",
+      "args": [
+        "intake",
+        "watch",
+        "--interval",
+        "not-duration",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --interval not-duration]: invalid argument \"not-duration\" for \"--interval\" flag: time: invalid duration \"not-duration\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-inline-duration",
+      "args": [
+        "intake",
+        "watch",
+        "--interval=not-duration",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --interval=not-duration]: invalid argument \"not-duration\" for \"--interval\" flag: time: invalid duration \"not-duration\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-duration",
+      "args": [
+        "run",
+        "-t",
+        "not-duration",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -t not-duration]: invalid argument \"not-duration\" for \"-t, --timeout\" flag: time: invalid duration \"not-duration\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/invalid-short-inline-duration",
+      "args": [
+        "run",
+        "-t=not-duration",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -t=not-duration]: invalid argument \"not-duration\" for \"-t, --timeout\" flag: time: invalid duration \"not-duration\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-missing-unit",
+      "args": [
+        "unlock",
+        "--ttl",
+        "2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl 2]: invalid argument \"2\" for \"--ttl\" flag: time: missing unit in duration \"2\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-unknown-unit",
+      "args": [
+        "unlock",
+        "--ttl",
+        "2d",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl 2d]: invalid argument \"2d\" for \"--ttl\" flag: time: unknown unit \"d\" in duration \"2d\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-negative",
+      "args": [
+        "unlock",
+        "--ttl",
+        "-2s",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--check\tCheck if session is active (exit 0 = active, exit 1 = expired)\n--help\thelp for unlock\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/literal-config-equals",
+      "args": [
+        "config",
+        "get",
+        "invalid=vaultDir"
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/literal-config-valid",
+      "args": [
+        "config",
+        "get",
+        "vaultDir"
+      ],
+      "state": "absent",
+      "stdout": "vaultDir\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/literal-config-typed-equals",
+      "args": [
+        "config",
+        "get",
+        "invalid=vaultDir",
+        "vault"
+      ],
+      "state": "absent",
+      "stdout": "vaultDir\nvault\nvault.path\nvault.default_recipients\nvault.confirm_remove\nvault.authMethod\nvault.useTouchID\nvault.search_workers\nvault.search_index_cache\nvault.pseudonymize_paths\nvault.scrypt_work_factor\nvault.auto_migrate_kdf\nvault.last_rotated\nvault.format_version\nvault.legacy_mode\nvault.argon2id_time\nvault.argon2id_memory\nvault.argon2id_threads\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/literal-entry-equals",
+      "args": [
+        "get",
+        "invalid=alpha"
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/literal-entry-typed-equals",
+      "args": [
+        "get",
+        "invalid=alpha",
+        ""
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/unknown-final-inline",
+      "args": [
+        "config",
+        "get",
+        "--bogus=foo"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Subcommand 'get' does not support flag 'bogus'\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unknown-typed-inline",
+      "args": [
+        "config",
+        "get",
+        "--bogus=foo",
+        ""
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --bogus=foo]: unknown flag: --bogus\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unknown-typed-long",
+      "args": [
+        "config",
+        "get",
+        "--bogus",
+        "foo",
+        ""
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --bogus foo]: unknown flag: --bogus\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unknown-final-value",
+      "args": [
+        "config",
+        "get",
+        "--bogus",
+        "foo"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --bogus]: unknown flag: --bogus\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unknown-typed-short",
+      "args": [
+        "add",
+        "-l",
+        "not-number",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -l not-number]: unknown shorthand flag: 'l' in -l\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unknown-final-short-inline",
+      "args": [
+        "config",
+        "get",
+        "-z=foo"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Subcommand 'get' does not support flag 'z'\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-int",
+      "args": [
+        "add",
+        "--length",
+        "not-number"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-inline-int",
+      "args": [
+        "add",
+        "--length=not-number"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-short-int",
+      "args": [
+        "generate",
+        "-l",
+        "not-number"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-short-inline-int",
+      "args": [
+        "generate",
+        "-l=not-number"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-duration",
+      "args": [
+        "unlock",
+        "--ttl",
+        "not-duration"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/unfinished-bool-inline",
+      "args": [
+        "add",
+        "--generate=not-bool"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/missing-int-before-flag-prefix",
+      "args": [
+        "add",
+        "--length",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length]: flag needs an argument: --length\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/missing-int-before-separator",
+      "args": [
+        "add",
+        "--length",
+        "--",
+        ""
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length --]: invalid argument \"--\" for \"--length\" flag: strconv.ParseInt: parsing \"--\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/separator-literal-inline",
+      "args": [
+        "config",
+        "get",
+        "--",
+        "--bogus=vaultDir"
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/separator-literal-equals",
+      "args": [
+        "config",
+        "get",
+        "--",
+        "invalid=vaultDir"
+      ],
+      "state": "absent",
+      "stdout": ":4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/short-cluster-bools",
+      "args": [
+        "sync",
+        "-fp",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--quiet\tsuppress non-error output\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for sync\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/short-cluster-invalid-bool",
+      "args": [
+        "sync",
+        "-fp=not-bool",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault -fp=not-bool]: invalid argument \"not-bool\" for \"-p, --push\" flag: strconv.ParseBool: parsing \"not-bool\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/short-attached-valid-int",
+      "args": [
+        "generate",
+        "-l2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for generate\n--quiet\tSuppress success output when using --store\n--reveal\tInclude generated password in output when using --store\n--store\tStore at path (optional)\n--symbols\tInclude symbols\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/short-cluster-value",
+      "args": [
+        "generate",
+        "-sl2",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for generate\n--quiet\tSuppress success output when using --store\n--reveal\tInclude generated password in output when using --store\n--store\tStore at path (optional)\n:4\n",
+      "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
     }
   ]
 }
