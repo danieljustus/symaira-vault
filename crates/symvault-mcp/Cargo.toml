@@ -11,6 +11,8 @@ publish = false
 base64 = "=0.22.1"
 getrandom = "=0.3.3"
 hmac = "=0.12.1"
+http = "=1.5.0"
+hickory-resolver = { version = "=0.26.3", default-features = false, features = ["system-config", "tokio"] }
 sha2 = "=0.10.9"
 serde.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
@@ -18,6 +20,9 @@ serde_json = { workspace = true, features = ["raw_value"] }
 serde_yaml_ng = "=0.10.0"
 reqwest.workspace = true
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = "=0.14.10"
+zeroize = { version = "=1.8.2", features = ["alloc"] }
+tokio = { version = "=1.53.1", features = ["rt", "time"] }
 # Go 1.26 selects Unicode 15 tables; ICU 2.3 normalizes newer codepoints differently.
 unicode-normalization = "=0.1.22"
 symvault-core = { path = "../symvault-core", version = "=0.0.0" }

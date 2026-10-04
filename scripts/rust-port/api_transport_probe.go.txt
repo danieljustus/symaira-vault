@@ -1,0 +1,86 @@
+// Private native test launcher injected only into a detached immutable Go tree.
+package server
+
+import (
+ "bufio"
+ "context"
+ "crypto/ecdsa"
+ "crypto/elliptic"
+ "crypto/rand"
+ "crypto/tls"
+ "crypto/x509"
+ "crypto/x509/pkix"
+ "encoding/json"
+ "encoding/pem"
+ "io"
+ "math/big"
+ "net"
+ "net/http"
+ "os"
+ "path/filepath"
+ "testing"
+ "time"
+ "github.com/danieljustus/symaira-vault/internal/config"
+ mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+ "github.com/danieljustus/symaira-vault/internal/ssrf"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+type apiNativeSpec struct {
+ Mode string `json:"mode"`
+ Root string `json:"root"`
+ Output string `json:"output"`
+ BaseURL string `json:"base_url"`
+ Private bool `json:"allow_private"`
+ DNS string `json:"dns_server"`
+ CAFile string `json:"ca_file"`
+ Timeout int `json:"timeout_ms"`
+}
+
+func TestAPITransportNativeProbe(t *testing.T) {
+ raw, err := os.ReadFile(os.Getenv("SYMAIRA_API_NATIVE_SPEC")); if err != nil { t.Fatal(err) }
+ var spec apiNativeSpec
+ if err=json.Unmarshal(raw,&spec);err!=nil {t.Fatal(err)}
+ save:=func(value any){ bytes,e:=json.Marshal(value);if e!=nil{t.Fatal(e)};if e=os.WriteFile(spec.Output,bytes,0600);e!=nil{t.Fatal(e)} }
+ if spec.Mode=="cert" {
+  key,e:=ecdsa.GenerateKey(elliptic.P256(),rand.Reader);if e!=nil{t.Fatal(e)}
+  now:=time.Now()
+  ca:=&x509.Certificate{SerialNumber:big.NewInt(1),Subject:pkix.Name{CommonName:"public native API fixture CA"},NotBefore:now.Add(-time.Hour),NotAfter:now.Add(24*time.Hour),IsCA:true,BasicConstraintsValid:true,KeyUsage:x509.KeyUsageCertSign|x509.KeyUsageCRLSign,SubjectKeyId:[]byte{1,2,3,4,5}}
+  der,e:=x509.CreateCertificate(rand.Reader,ca,ca,&key.PublicKey,key);if e!=nil{t.Fatal(e)}
+  leafKey,e:=ecdsa.GenerateKey(elliptic.P256(),rand.Reader);if e!=nil{t.Fatal(e)}
+  leaf:=&x509.Certificate{SerialNumber:big.NewInt(2),Subject:pkix.Name{CommonName:"dns-api.example.test"},DNSNames:[]string{"dns-api.example.test"},NotBefore:now.Add(-time.Hour),NotAfter:now.Add(24*time.Hour),KeyUsage:x509.KeyUsageDigitalSignature,ExtKeyUsage:[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},BasicConstraintsValid:true,AuthorityKeyId:ca.SubjectKeyId}
+  leafDER,e:=x509.CreateCertificate(rand.Reader,leaf,ca,&leafKey.PublicKey,key);if e!=nil{t.Fatal(e)}
+  private,e:=x509.MarshalPKCS8PrivateKey(leafKey);if e!=nil{t.Fatal(e)}
+  for name,bytes:=range map[string][]byte{"ca.pem":pem.EncodeToMemory(&pem.Block{Type:"CERTIFICATE",Bytes:der}),"leaf.pem":pem.EncodeToMemory(&pem.Block{Type:"CERTIFICATE",Bytes:leafDER}),"leaf-key.pem":pem.EncodeToMemory(&pem.Block{Type:"PRIVATE KEY",Bytes:private})}{if e=os.WriteFile(filepath.Join(spec.Root,name),bytes,0600);e!=nil{t.Fatal(e)}}
+  save(map[string]any{"generated":true});return
+ }
+ if spec.Mode=="seed" {
+  cfg:=config.Default();cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1}
+  identity,e:=vault.InitWithPassphrase(spec.Root,[]byte("correct horse battery staple"),cfg);if e!=nil{t.Fatal(e)}
+  if e=vault.WriteEntry(spec.Root,"api-fixture",&vault.Entry{Data:map[string]any{"credential":"public-api-native-secret"}},identity);e!=nil{t.Fatal(e)}
+  if e=os.MkdirAll(filepath.Join(spec.Root,"templates"),0700);e!=nil{t.Fatal(e)}
+  rawTemplate:=[]byte("base_url: "+spec.BaseURL+"\nauth_type: bearer\nentry_ref: api-fixture\nallowed_endpoints: [/v1/*]\nallowed_methods: [GET]\nallow_private: ")
+  if spec.Private {rawTemplate=append(rawTemplate,[]byte("true\n")...)}else{rawTemplate=append(rawTemplate,[]byte("false\n")...)}
+  if e=os.WriteFile(filepath.Join(spec.Root,"templates","fixture.yaml"),rawTemplate,0600);e!=nil{t.Fatal(e)}
+  save(map[string]any{"seeded":true});return
+ }
+ oldResolver:=net.DefaultResolver
+ net.DefaultResolver=&net.Resolver{PreferGo:true,Dial:func(ctx context.Context,network,address string)(net.Conn,error){return (&net.Dialer{}).DialContext(ctx,"udp",spec.DNS)}}
+ t.Cleanup(func(){net.DefaultResolver=oldResolver})
+ oldFactory:=newExecuteAPIRequestHTTPClient
+ newExecuteAPIRequestHTTPClient=func(timeout time.Duration,private bool)*http.Client{
+  roots,e:=x509.SystemCertPool();if e!=nil{roots=x509.NewCertPool()}
+  if spec.CAFile!=""{bytes,e:=os.ReadFile(spec.CAFile);if e!=nil{t.Fatal(e)};if !roots.AppendCertsFromPEM(bytes){t.Fatal("invalid fixture root")}}
+  return ssrf.NewHTTPClientWithTLSConfig(timeout,private,&tls.Config{RootCAs:roots,MinVersion:tls.VersionTLS12})
+ }
+ t.Cleanup(func(){newExecuteAPIRequestHTTPClient=oldFactory})
+ opened,e:=vault.OpenWithPassphrase(spec.Root,[]byte("correct horse battery staple"));if e!=nil{t.Fatal(e)}
+ profile:=config.AgentProfile{Name:"api-native",AllowedPaths:[]string{"*"},CanRunCommands:config.BoolPtr(true),ApprovalMode:config.StrPtr("none")}
+ srv:=newTestServerWithVault(t,profile,"stdio",spec.Root);srv.vault.Identity=opened.Identity
+ ctx,cancel:=context.WithTimeout(context.Background(),time.Duration(spec.Timeout)*time.Millisecond);defer cancel()
+ done:=make(chan struct{})
+ go func(){ defer close(done);command,_:=bufio.NewReader(io.LimitReader(os.Stdin,32)).ReadString('\n');if command=="cancel\n"{cancel()} }()
+ result,callErr:=srv.handleExecuteAPIRequest(ctx,mcp.CallToolRequest{Arguments:map[string]any{"template":"fixture","endpoint":"/v1/status"}})
+ <-done
+ if callErr!=nil{save(map[string]any{"is_error":true,"handler_error":true,"text":callErr.Error()})}else if result==nil{t.Fatal("nil actual handler result")}else{save(map[string]any{"is_error":result.IsError,"handler_error":false,"text":result.Text})}
+}

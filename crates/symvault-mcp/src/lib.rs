@@ -24,6 +24,8 @@ pub mod http;
 mod oauth;
 mod prompts;
 pub mod render;
+mod request_context;
+pub use request_context::RequestContext;
 pub mod store_adapter;
 mod tools;
 pub use call::{
@@ -59,6 +61,11 @@ pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
 /// the more permissive side of a divergence, and the one that matters for stack
 /// safety once `params` is actually decoded by MCP-002/003.
 pub const MAX_ACCEPTED_NESTING_DEPTH: usize = 10_000;
+
+/// Maximum MCP frame bytes before the terminating LF. Larger stdio frames are
+/// drained with bounded storage and rejected before parsing or dispatch.
+/// ADR 0016 records this deliberately narrower boundary than legacy Go.
+pub const MAX_MCP_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 /// JSON-RPC 2.0 error codes used by the oracle.
 pub mod error_code {
@@ -403,6 +410,7 @@ pub struct ProtocolHandler {
     tool_call_runtime: Option<std::sync::Arc<dyn ToolCallRuntime>>,
     initialized: bool,
     token_allowed_tools: Option<Vec<String>>,
+    request_context: RequestContext,
 }
 
 impl ProtocolHandler {
@@ -414,6 +422,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -431,6 +440,7 @@ impl ProtocolHandler {
             tool_call_runtime: None,
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -449,6 +459,7 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
             token_allowed_tools: None,
+            request_context: RequestContext::default(),
         }
     }
 
@@ -513,6 +524,11 @@ impl ProtocolHandler {
         self.token_allowed_tools = Some(allowed_tools.to_vec());
     }
 
+    /// Set context on this session, never on its shared application runtime.
+    pub fn set_request_context(&mut self, context: RequestContext) {
+        self.request_context = context;
+    }
+
     /// Creates a fresh protocol session with the same configured runtime and
     /// tool catalog. HTTP transport state is isolated by authenticated token.
     pub fn new_session(&self) -> Self {
@@ -523,6 +539,7 @@ impl ProtocolHandler {
             tool_call_runtime: self.tool_call_runtime.clone(),
             initialized: false,
             token_allowed_tools: self.token_allowed_tools.clone(),
+            request_context: RequestContext::default(),
         }
     }
 
@@ -734,9 +751,17 @@ impl ProtocolHandler {
             ));
         }
         if let Err(result) = runtime.authorize(&name, &arguments) {
+            if result.authorization_internal_error {
+                return Ok(Message::error_response(
+                    msg.id.clone(),
+                    error_code::INTERNAL_ERROR,
+                    &result.text,
+                    None,
+                ));
+            }
             return Message::response(msg.id.clone(), call::payload(result));
         }
-        match runtime.call(&name, &arguments) {
+        match runtime.call_with_context(&name, &arguments, &self.request_context) {
             Ok(result) => Message::response(msg.id.clone(), call::payload(result)),
             Err(error) => Ok(Message::error_response(
                 msg.id.clone(),
@@ -756,6 +781,9 @@ impl ProtocolHandler {
 /// blank line is *not* skipped — the oracle reads with the delimiter retained,
 /// so an empty line arrives as `"\n"` and reaches the decoder.
 pub fn handle_line(line: &str, handler: &mut ProtocolHandler) -> Result<Option<String>, Error> {
+    if line.len() > MAX_MCP_FRAME_BYTES {
+        return oversized_frame_response().map(Some);
+    }
     if max_nesting_depth(line) > MAX_ACCEPTED_NESTING_DEPTH {
         return encode(&Message::error_response(
             None,
@@ -853,6 +881,9 @@ pub fn handle_line_bytes(
     line: &[u8],
     handler: &mut ProtocolHandler,
 ) -> Result<Option<String>, Error> {
+    if line.len() > MAX_MCP_FRAME_BYTES {
+        return oversized_frame_response().map(Some);
+    }
     match std::str::from_utf8(line) {
         Ok(text) => handle_line(text, handler),
         Err(err) => encode(&Message::error_response(
@@ -893,15 +924,62 @@ pub fn run_stdio<R: std::io::BufRead, W: std::io::Write>(
     let mut line = Vec::new();
     loop {
         line.clear();
-        let read = input.read_until(b'\n', &mut line).map_err(Error::Io)?;
-        if read == 0 || !line.ends_with(b"\n") {
+        let Some(oversized) = read_bounded_stdio_frame(&mut input, &mut line).map_err(Error::Io)?
+        else {
             return Ok(());
-        }
-        line.pop();
-        if let Some(response) = handle_line_bytes(&line, handler)? {
+        };
+        let response = if oversized {
+            Some(oversized_frame_response()?)
+        } else {
+            handle_line_bytes(&line, handler)?
+        };
+        if let Some(response) = response {
             output.write_all(response.as_bytes()).map_err(Error::Io)?;
             output.write_all(b"\n").map_err(Error::Io)?;
             output.flush().map_err(Error::Io)?;
+        }
+    }
+}
+
+fn oversized_frame_response() -> Result<String, Error> {
+    encode(&Message::error_response(
+        None,
+        error_code::INVALID_REQUEST,
+        "MCP frame exceeds 8 MiB limit",
+        None,
+    ))
+}
+
+/// None means EOF, including an unterminated fragment. Once the limit is
+/// reached, consume through LF without allocating more or invoking a parser.
+fn read_bounded_stdio_frame(
+    input: &mut impl std::io::BufRead,
+    line: &mut Vec<u8>,
+) -> std::io::Result<Option<bool>> {
+    let mut oversized = false;
+    loop {
+        let buffer = input.fill_buf()?;
+        if buffer.is_empty() {
+            return Ok(None);
+        }
+        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let payload_bytes = newline.unwrap_or(buffer.len());
+        let consumed = newline.map_or(buffer.len(), |index| index + 1);
+        if !oversized {
+            let retained = payload_bytes.min(MAX_MCP_FRAME_BYTES - line.len());
+            let needed = line.len() + retained;
+            if needed > line.capacity() {
+                let capacity = needed
+                    .max(line.capacity().saturating_mul(2))
+                    .min(MAX_MCP_FRAME_BYTES);
+                line.reserve_exact(capacity - line.len());
+            }
+            line.extend_from_slice(&buffer[..retained]);
+            oversized = retained < payload_bytes;
+        }
+        input.consume(consumed);
+        if newline.is_some() {
+            return Ok(Some(oversized));
         }
     }
 }
@@ -971,4 +1049,76 @@ fn max_nesting_depth(line: &str) -> usize {
 /// friends.
 fn encode(msg: &Message) -> Result<String, Error> {
     symvault_gojson::to_string(msg).map_err(Error::Serialize)
+}
+
+#[cfg(test)]
+mod frame_limit_tests {
+    use super::*;
+    use std::io::{BufReader, Cursor};
+
+    #[test]
+    fn oversized_stdio_frame_is_drained_with_bounded_storage() {
+        let mut source = vec![b'x'; MAX_MCP_FRAME_BYTES + 1];
+        source.extend_from_slice(b"\nnext\n");
+        let mut reader = BufReader::with_capacity(257, Cursor::new(source));
+        let mut frame = Vec::new();
+        assert_eq!(
+            read_bounded_stdio_frame(&mut reader, &mut frame).unwrap(),
+            Some(true)
+        );
+        assert_eq!(frame.len(), MAX_MCP_FRAME_BYTES);
+        assert!(frame.capacity() <= MAX_MCP_FRAME_BYTES);
+        frame.clear();
+        assert_eq!(
+            read_bounded_stdio_frame(&mut reader, &mut frame).unwrap(),
+            Some(false)
+        );
+        assert_eq!(frame, b"next");
+        assert_eq!(
+            read_bounded_stdio_frame(&mut reader, &mut Vec::new()).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize() {
+        let prefix = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","padding":""#;
+        let mut source = prefix.to_vec();
+        source.resize(MAX_MCP_FRAME_BYTES - 2, b'x');
+        source.extend_from_slice(b"\"}\n");
+        source.extend(std::iter::repeat_n(b'x', MAX_MCP_FRAME_BYTES + 1));
+        source.extend_from_slice(b"\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n");
+        let mut output = Vec::new();
+        run_stdio(
+            BufReader::with_capacity(257, Cursor::new(source)),
+            &mut output,
+            &mut ProtocolHandler::new("fixture", "1"),
+        )
+        .unwrap();
+        let frames: Vec<serde_json::Value> = output
+            .split(|b| *b == b'\n')
+            .filter(|line| !line.is_empty())
+            .map(|line| serde_json::from_slice(line).unwrap())
+            .collect();
+        assert_eq!(frames.len(), 3);
+        assert_eq!(frames[0]["id"], 1);
+        assert!(frames[0].get("result").is_some());
+        assert_eq!(frames[1]["error"]["code"], error_code::INVALID_REQUEST);
+        assert!(frames[1].get("id").is_none_or(serde_json::Value::is_null));
+        assert_eq!(frames[2]["id"], 3);
+        assert!(frames[2].get("result").is_some());
+    }
+
+    #[test]
+    fn oversized_unterminated_fragment_keeps_the_eof_contract() {
+        let source = vec![b'x'; MAX_MCP_FRAME_BYTES + 1];
+        let mut output = Vec::new();
+        run_stdio(
+            Cursor::new(source),
+            &mut output,
+            &mut ProtocolHandler::new("fixture", "1"),
+        )
+        .unwrap();
+        assert!(output.is_empty());
+    }
 }

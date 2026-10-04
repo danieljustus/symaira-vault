@@ -1,25 +1,75 @@
-//! Bounded HTTP slice for Go's API-template and egress broker contract.
+//! Owned TLS egress broker and bounded HTTP API-template transport.
 //! Oracle sources: broker proxy/auth at `ba4dc0680878870bfb30ccd39a0b973b960d3e09`,
 //! and `internal/ssrf/ssrf.go` at `c7c6d04b6dc6349800d12d87d605ae55081bf694`.
 //!
-//! This helper sends plain HTTP only to numeric loopback addresses or `localhost`,
-//! and verified HTTPS only to those same local targets in this slice. Public
-//! DNS validation, vault lookup, substitutions, audit, and response pattern
-//! sanitization remain separate migration work.
+//! `EgressBroker` validates and pins public destinations, owns its TLS workers,
+//! and borrows the real identity/store for request-time credential projection.
+//! The API helper pins every validated HTTPS destination and owns cancellable
+//! DNS/HTTP work. Cleartext remains limited to explicit loopback fixtures.
+//! Egress and complete MCP acceptance retain their separate native gates.
 
+#[path = "broker_connect.rs"]
+mod connect;
+pub use connect::serve_connect_passthrough;
+#[path = "broker_egress.rs"]
+mod egress;
+#[cfg(test)]
+#[path = "api_transport_tests.rs"]
+mod transport_tests;
+pub use egress::{EgressBroker, EgressOptions};
+
+use crate::RequestContext;
+#[cfg(test)]
+use reqwest::blocking::Client;
 use reqwest::{
     Method, Url,
-    blocking::Client,
     header::{HeaderMap, HeaderName, HeaderValue},
     redirect::Policy,
 };
 use serde::Deserialize;
 use std::{
     collections::BTreeMap,
-    io::Read,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     time::Duration,
 };
+
+/// Explicit in-process fixture/corporate trust inputs. Production CLI/API calls
+/// use the default: operating-system DNS and ordinary verified public roots.
+/// No CLI flag or ambient environment variable enables these seams.
+#[derive(Clone, Default)]
+pub struct ApiTransportOptions {
+    pub upstream_root_certificates: Vec<reqwest::Certificate>,
+    pub dns_server: Option<SocketAddr>,
+}
+
+#[allow(clippy::too_many_arguments)] // Request fields plus explicit owned context/options.
+pub fn execute_http_with_context(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+    bearer: Option<&str>,
+    context: &RequestContext,
+    options: &ApiTransportOptions,
+) -> Result<ApiResponse, String> {
+    execute_http_inner(
+        template,
+        method,
+        endpoint,
+        headers,
+        body,
+        bearer,
+        REQUEST_TIMEOUT,
+        MAX_BODY_BYTES,
+        false,
+        true,
+        None,
+        &options.upstream_root_certificates,
+        context,
+        options.dns_server,
+    )
+}
 
 const MAX_BODY_BYTES: usize = 16 * 1024 * 1024;
 pub const API_RESPONSE_LIMIT: usize = 100 * 1024;
@@ -118,6 +168,8 @@ fn execute_http_with_timeout(
         true,
         None,
         &[],
+        &RequestContext::default(),
+        None,
     )
 }
 
@@ -131,7 +183,7 @@ pub(crate) fn execute_http_for_api(
     request_url: &str,
     headers: &BTreeMap<String, String>,
     body: &[u8],
-    bounds: ApiResponseBounds,
+    bounds: ApiResponseBounds<'_>,
 ) -> Result<ApiResponse, String> {
     let request_url = Url::parse(request_url).map_err(|_| "invalid template URL")?;
     execute_http_inner(
@@ -146,13 +198,17 @@ pub(crate) fn execute_http_for_api(
         true,
         false,
         Some(request_url),
-        &[],
+        &bounds.options.upstream_root_certificates,
+        &bounds.context,
+        bounds.options.dns_server,
     )
 }
 
-pub(crate) struct ApiResponseBounds {
+pub(crate) struct ApiResponseBounds<'a> {
     pub timeout: Duration,
     pub response_limit: usize,
+    pub context: RequestContext,
+    pub options: &'a ApiTransportOptions,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -169,6 +225,8 @@ fn execute_http_inner(
     redact_bearer: bool,
     request_url_override: Option<Url>,
     extra_root_certificates: &[reqwest::Certificate],
+    context: &RequestContext,
+    dns_server: Option<SocketAddr>,
 ) -> Result<ApiResponse, String> {
     if body.len() > MAX_BODY_BYTES {
         return Err("request body too large".into());
@@ -264,38 +322,65 @@ fn execute_http_inner(
         add_header_bytes(&mut total_header_bytes, size)?;
     }
 
-    let addresses = target.addresses;
-    let client = build_http_client(timeout, &target.host, &addresses, extra_root_certificates)?;
-    let method = Method::from_bytes(method.as_bytes()).map_err(|_| "invalid request method")?;
-    let response = client
-        .request(method, target.url)
-        .headers(request_headers)
-        .body(body.to_vec())
-        .send()
-        .map_err(|error| {
-            if error.is_timeout() {
-                "upstream request timed out"
-            } else {
-                "upstream request failed"
+    let context = context.with_timeout(timeout);
+    context.check()?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "cannot configure upstream runtime")?;
+    let (status, raw_response_headers, mut response_body) = runtime.block_on(async {
+        let addresses =
+            resolve_addresses(&target, template.allow_private, &context, dns_server).await?;
+        let mut builder = reqwest::Client::builder()
+            .timeout(timeout)
+            .connect_timeout(timeout.min(Duration::from_secs(10)))
+            .redirect(Policy::none())
+            .no_proxy();
+        if target.host.parse::<IpAddr>().is_err() {
+            builder = builder.resolve_to_addrs(&target.host, &addresses);
+        }
+        if !extra_root_certificates.is_empty() {
+            builder = builder.tls_certs_only(extra_root_certificates.iter().cloned());
+        }
+        let client = builder
+            .build()
+            .map_err(|_| "cannot configure upstream connection")?;
+        let method = Method::from_bytes(method.as_bytes()).map_err(|_| "invalid request method")?;
+        let mut response = context
+            .wait(async {
+                client
+                    .request(method, target.url)
+                    .headers(request_headers)
+                    .body(body.to_vec())
+                    .send()
+                    .await
+                    .map_err(network_error)
+            })
+            .await?;
+        let status = response.status().as_u16();
+        let raw_headers = response.headers().clone();
+        let header_bytes = raw_headers
+            .iter()
+            .try_fold(0usize, |size, (name, value)| {
+                size.checked_add(name.as_str().len() + value.len() + 4)
+            })
+            .ok_or("upstream response headers too large")?;
+        if header_bytes > 64 * 1024 {
+            return Err("upstream response headers too large".into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = context
+            .wait(async { response.chunk().await.map_err(network_error) })
+            .await?
+        {
+            let remaining = (response_limit + 1).saturating_sub(bytes.len());
+            bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+            if bytes.len() > response_limit {
+                break;
             }
-        })?;
-
-    let status = response.status().as_u16();
-    let raw_response_headers = response.headers().clone();
-    let mut response_body = Vec::new();
-    response
-        .take((response_limit + 1) as u64)
-        .read_to_end(&mut response_body)
-        .map_err(|error| {
-            if matches!(
-                error.kind(),
-                std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
-            ) {
-                "upstream request timed out"
-            } else {
-                "upstream request failed"
-            }
-        })?;
+        }
+        Ok::<_, String>((status, raw_headers, bytes))
+    })?;
     let body_truncated = response_body.len() > response_limit;
     if body_truncated && !truncate_response {
         return Err("upstream response too large".into());
@@ -303,8 +388,22 @@ fn execute_http_inner(
     response_body.truncate(response_limit);
     let mut sanitized = false;
     let mut response_headers = BTreeMap::new();
+    // Go net/http consumes a Connection field containing the close token when
+    // projecting Response.Header. Preserve that measured API result surface.
+    let consumed_connection = raw_response_headers
+        .get_all("connection")
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .any(|value| {
+            value
+                .split(',')
+                .any(|token| token.trim().eq_ignore_ascii_case("close"))
+        });
     for name in raw_response_headers.keys() {
         let lower = name.as_str().to_ascii_lowercase();
+        if lower == "connection" && consumed_connection {
+            continue;
+        }
         if matches!(
             lower.as_str(),
             "set-cookie"
@@ -348,6 +447,7 @@ fn execute_http_inner(
     })
 }
 
+#[cfg(test)]
 fn build_http_client(
     timeout: Duration,
     host: &str,
@@ -391,6 +491,23 @@ pub fn validate_api_request(
     method: &str,
     endpoint: &str,
 ) -> Result<(), String> {
+    validate_api_request_with_context(
+        template,
+        method,
+        endpoint,
+        &RequestContext::default(),
+        &ApiTransportOptions::default(),
+    )
+}
+
+pub(crate) fn validate_api_request_with_context(
+    template: &ApiTemplate,
+    method: &str,
+    endpoint: &str,
+    context: &RequestContext,
+    options: &ApiTransportOptions,
+) -> Result<(), String> {
+    context.check()?;
     let target = Target::parse(&template.base_url, endpoint, template.allow_private)?;
     if template.allowed_endpoints.is_empty()
         || !template
@@ -428,6 +545,17 @@ pub fn validate_api_request(
         add_header_bytes(&mut header_bytes, value.len())?;
         add_header_bytes(&mut header_bytes, 4)?;
     }
+    let context = context.with_timeout(Duration::from_secs(10));
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|_| "cannot configure upstream runtime")?
+        .block_on(resolve_addresses(
+            &target,
+            template.allow_private,
+            &context,
+            options.dns_server,
+        ))?;
     Ok(())
 }
 
@@ -494,18 +622,24 @@ impl<'a> Target<'a> {
             .trim_end_matches(']')
             .to_owned();
         let port = url.port_or_known_default().ok_or("invalid template URL")?;
-        let addresses = match loopback_addresses(&host, port) {
-            Ok(addresses) => addresses,
-            Err(_) if scheme == "https" => {
-                return Err(
-                    "HTTPS public DNS targets are not supported by this broker slice".into(),
-                );
+        let addresses = if scheme == "http" {
+            let addresses = loopback_addresses(&host, port)?;
+            validate_addresses(&host, &addresses, allow_private)?;
+            addresses
+        } else if let Ok(ip) = host.parse::<IpAddr>() {
+            let addresses = vec![SocketAddr::new(ip, port)];
+            validate_addresses(&host, &addresses, allow_private)?;
+            addresses
+        } else if host.eq_ignore_ascii_case("localhost") {
+            let addresses = loopback_addresses(&host, port)?;
+            validate_addresses(&host, &addresses, allow_private)?;
+            addresses
+        } else {
+            if !allow_private && private_hostname(&host) {
+                return Err("blocked private or local upstream host".into());
             }
-            Err(error) => return Err(error),
+            Vec::new()
         };
-        if !allow_private {
-            return Err("blocked private or local upstream host".into());
-        }
         if url.scheme() != scheme {
             return Err("invalid template URL".into());
         }
@@ -516,6 +650,112 @@ impl<'a> Target<'a> {
             endpoint_path,
         })
     }
+}
+
+fn network_error(error: reqwest::Error) -> String {
+    if error.is_timeout() {
+        "upstream request timed out".into()
+    } else {
+        "upstream request failed".into()
+    }
+}
+
+fn private_hostname(host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    matches!(host.as_str(), "localhost" | "localhost.localdomain")
+        || host.ends_with(".localhost")
+        || host.ends_with(".local")
+}
+
+fn validate_addresses(
+    host: &str,
+    addresses: &[SocketAddr],
+    allow_private: bool,
+) -> Result<(), String> {
+    if addresses.is_empty() || addresses.len() > 32 {
+        return Err("invalid upstream address set".into());
+    }
+    if !allow_private
+        && (private_hostname(host) || addresses.iter().any(|a| connect::private_or_local(a.ip())))
+    {
+        return Err("blocked private or local upstream host".into());
+    }
+    Ok(())
+}
+
+async fn resolve_addresses(
+    target: &Target<'_>,
+    allow_private: bool,
+    context: &RequestContext,
+    dns_server: Option<SocketAddr>,
+) -> Result<Vec<SocketAddr>, String> {
+    context.check()?;
+    if !target.addresses.is_empty() {
+        validate_addresses(&target.host, &target.addresses, allow_private)?;
+        return Ok(target.addresses.clone());
+    }
+    let port = target
+        .url
+        .port_or_known_default()
+        .ok_or("invalid template URL")?;
+    resolve_host_addresses(&target.host, port, allow_private, context, dns_server).await
+}
+
+pub(super) async fn resolve_host_addresses(
+    host: &str,
+    port: u16,
+    allow_private: bool,
+    context: &RequestContext,
+    dns_server: Option<SocketAddr>,
+) -> Result<Vec<SocketAddr>, String> {
+    context.check()?;
+    if !allow_private && private_hostname(host) {
+        return Err("blocked private or local upstream host".into());
+    }
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        let addresses = vec![SocketAddr::new(ip, port)];
+        validate_addresses(host, &addresses, allow_private)?;
+        return Ok(addresses);
+    }
+    use hickory_resolver::{
+        Resolver,
+        config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
+        net::runtime::TokioRuntimeProvider,
+    };
+    let mut builder = if let Some(server) = dns_server {
+        let mut nameserver = NameServerConfig::udp(server.ip());
+        nameserver.connections[0].port = server.port();
+        Resolver::builder_with_config(
+            ResolverConfig::from_name_servers(vec![nameserver]),
+            TokioRuntimeProvider::default(),
+        )
+    } else {
+        Resolver::builder_tokio().map_err(|_| "cannot configure upstream DNS")?
+    };
+    // Resolve both families before validating the complete answer set. A
+    // public A record cannot hide a private AAAA answer (or the converse).
+    builder.options_mut().ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+    builder.options_mut().cache_size = 0;
+    builder.options_mut().num_concurrent_reqs = 1;
+    let resolver = builder
+        .build()
+        .map_err(|_| "cannot configure upstream DNS")?;
+    let dns_context = context.with_timeout(Duration::from_secs(10));
+    let lookup = dns_context
+        .wait(async {
+            resolver
+                .lookup_ip(host)
+                .await
+                .map_err(|_| "cannot resolve upstream host".to_owned())
+        })
+        .await?;
+    let addresses = lookup
+        .iter()
+        .take(33)
+        .map(|ip| SocketAddr::new(ip, port))
+        .collect::<Vec<_>>();
+    validate_addresses(host, &addresses, allow_private)?;
+    Ok(addresses)
 }
 
 fn loopback_addresses(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
@@ -647,7 +887,7 @@ mod tests {
     use super::*;
     use base64::{Engine, engine::general_purpose::STANDARD};
     use std::{
-        io::{BufRead, BufReader, Write},
+        io::{BufRead, BufReader, Read, Write},
         net::TcpListener,
         sync::Arc,
         thread,
@@ -802,34 +1042,29 @@ mod tests {
     }
 
     #[test]
-    fn https_is_verified_for_local_targets_and_public_dns_remains_blocked() {
-        let template = |base_url: &str, allow_private| ApiTemplate {
-            base_url: base_url.into(),
-            allowed_endpoints: vec!["/v1/*".into()],
-            allowed_methods: vec!["GET".into()],
-            default_headers: BTreeMap::new(),
-            allow_private,
-        };
+    fn https_accepts_public_authorities_and_denies_private_before_transport() {
         assert!(Target::parse("https://localhost:443", "/v1/status", true).is_ok());
         assert_eq!(
             Target::parse("https://localhost:443", "/v1/status", false).unwrap_err(),
             "blocked private or local upstream host"
         );
+        let target = Target::parse("https://api.example.test", "/v1/status", false).unwrap();
+        assert_eq!(target.host, "api.example.test");
+        assert!(target.addresses.is_empty());
+        let template = ApiTemplate {
+            base_url: "https://api.example.test".into(),
+            allowed_endpoints: vec!["/v1/*".into()],
+            allowed_methods: vec!["GET".into()],
+            default_headers: BTreeMap::new(),
+            allow_private: false,
+        };
         assert_eq!(
-            Target::parse("https://api.example.test", "/v1/status", true).unwrap_err(),
-            "HTTPS public DNS targets are not supported by this broker slice"
+            validate_api_request(&template, "POST", "/v1/status").unwrap_err(),
+            "method not allowed by template"
         );
         assert_eq!(
-            execute_http(
-                &template("https://api.example.test", true),
-                "GET",
-                "/v1/status",
-                &BTreeMap::new(),
-                b"",
-                None,
-            )
-            .unwrap_err(),
-            "HTTPS public DNS targets are not supported by this broker slice"
+            validate_api_request(&template, "GET", "/other").unwrap_err(),
+            "endpoint not allowed by template"
         );
     }
 
@@ -910,6 +1145,8 @@ mod tests {
                     false,
                     None,
                     &roots,
+                    &RequestContext::default(),
+                    None,
                 )
             };
             let actual_requests = server.join().unwrap();

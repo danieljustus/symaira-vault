@@ -17,11 +17,13 @@ struct State {
 
 /// Cancels socket I/O and wakes the HTTP accept loop.
 ///
-/// This is transport cancellation, not graceful draining or cancellation of an
-/// executing application callback. The server still joins its scoped workers.
+/// Cooperative API network callbacks share this cancellation context. Other
+/// callbacks still own their lifecycle; this is not a graceful-drain API.
+/// The server joins its scoped workers.
 #[derive(Clone, Default)]
 pub struct HttpShutdown {
     state: Arc<(Mutex<State>, Condvar)>,
+    request_context: crate::RequestContext,
 }
 
 fn close_transport(socket: &TcpStream) -> io::Result<()> {
@@ -45,7 +47,7 @@ impl HttpShutdown {
     // Windows shutdown does not wake a blocking recv/send (Rust 1.98's
     // std/net/tcp/tests.rs, close_read_wakes_up). Cancellable sockets use
     // nonblocking I/O, retaining the caller's full per-operation timeout.
-    pub(super) fn socket_io<T>(
+    pub(crate) fn socket_io<T>(
         &self,
         timeout: Option<Duration>,
         mut operation: impl FnMut() -> io::Result<T>,
@@ -75,6 +77,7 @@ impl HttpShutdown {
 
     /// Prevents new admissions and interrupts every registered transport.
     pub fn cancel(&self) -> io::Result<()> {
+        self.request_context.cancel();
         let (lock, changed) = &*self.state;
         let mut state = lock
             .lock()
@@ -92,7 +95,11 @@ impl HttpShutdown {
         first_error.map_or(Ok(()), Err)
     }
 
-    pub(super) fn is_cancelled(&self) -> io::Result<bool> {
+    pub(crate) fn request_context(&self) -> crate::RequestContext {
+        self.request_context.clone()
+    }
+
+    pub(crate) fn is_cancelled(&self) -> io::Result<bool> {
         self.state
             .0
             .lock()
@@ -100,7 +107,7 @@ impl HttpShutdown {
             .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))
     }
 
-    pub(super) fn wait_for_activity(&self) -> io::Result<()> {
+    pub(crate) fn wait_for_activity(&self) -> io::Result<()> {
         let (lock, changed) = &*self.state;
         let state = lock
             .lock()
@@ -113,7 +120,7 @@ impl HttpShutdown {
         Ok(())
     }
 
-    pub(super) fn register(&self, socket: &TcpStream) -> io::Result<Option<ConnectionGuard>> {
+    pub(crate) fn register(&self, socket: &TcpStream) -> io::Result<Option<ConnectionGuard>> {
         let mut state = self
             .state
             .0
@@ -136,7 +143,7 @@ impl HttpShutdown {
     }
 }
 
-pub(super) struct ConnectionGuard {
+pub(crate) struct ConnectionGuard {
     shutdown: HttpShutdown,
     id: usize,
 }

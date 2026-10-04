@@ -21,6 +21,49 @@ fn review_api_runtime(root: &Path, base: String) -> StoreReadOnlyRuntime {
 }
 
 // No blocking accept, bounded socket I/O, and a joined worker even on handler failure.
+#[test]
+fn protocol_context_cancels_actual_encrypted_api_request() {
+    use std::io::{Read, Write};
+    let root = tempfile::tempdir().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let runtime = review_api_runtime(root.path(), format!("http://{address}"));
+    let mut handler = crate::ProtocolHandler::with_tool_call_runtime("fixture", "1", Arc::new(runtime));
+    crate::handle_line(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#, &mut handler).unwrap();
+    let context = crate::RequestContext::default();
+    handler.set_request_context(context.clone());
+    let (send, observed) = std::sync::mpsc::channel();
+    let upstream = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut bytes = Vec::new();
+        while !bytes.ends_with(b"\r\n\r\n") && bytes.len() < 16384 {
+            let mut byte = [0];
+            socket.read_exact(&mut byte).unwrap(); bytes.push(byte[0]);
+        }
+        assert!(String::from_utf8_lossy(&bytes).contains("authorization: Bearer fixture-api-token\r\n"));
+        send.send(()).unwrap();
+        assert_eq!(socket.read(&mut [0]).unwrap(), 0);
+        let _ = socket.flush();
+    });
+    let worker = std::thread::spawn(move || {
+        API_REVIEW_READS.with(|n| n.set(0));
+        API_REVIEW_REQUESTS.with(|n| n.set(0));
+        let response = crate::handle_line(r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"execute_api_request","arguments":{"template":"fixture","endpoint":"/v1/status"}}}"#, &mut handler).unwrap().unwrap();
+        assert_eq!(API_REVIEW_READS.with(|n| n.get()), 1);
+        assert_eq!(API_REVIEW_REQUESTS.with(|n| n.get()), 1);
+        response
+    });
+    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    let started = std::time::Instant::now();
+    context.cancel();
+    let response = worker.join().unwrap();
+    assert!(!response.contains("fixture-api-token"));
+    assert!(response.contains("request failed: upstream request cancelled"));
+    upstream.join().unwrap();
+    assert!(started.elapsed() < Duration::from_secs(1));
+}
+
 fn review_echo_server(listener: std::net::TcpListener) -> std::thread::JoinHandle<Option<String>> {
     review_echo_server_with(listener, str::to_owned)
 }
@@ -814,6 +857,8 @@ fn api_review_ipv6_authority_changes_are_denied() {
                 crate::broker::ApiResponseBounds {
                     timeout: Duration::from_secs(1),
                     response_limit: 1024,
+                    context: crate::RequestContext::default(),
+                    options: &crate::broker::ApiTransportOptions::default(),
                 }
             )
             .unwrap_err(),

@@ -649,6 +649,48 @@ pub fn glob_match(pattern: &str, value: &str) -> bool {
     glob_match_at(&tokens, &value, 0, 0, &mut memo)
 }
 
+/// The same Go path-glob tokens with linear memory and a caller-owned work
+/// allowance. Network-facing callers share the allowance across ACL patterns.
+/// Exhaustion fails closed; it must never reset for each pattern.
+pub fn glob_match_with_budget(pattern: &str, value: &str, budget: &mut usize) -> bool {
+    let Some(tokens) = parse_glob(pattern) else {
+        return false;
+    };
+    let value: Vec<char> = value.chars().collect();
+    let mut previous = vec![false; value.len() + 1];
+    previous[0] = true;
+    for token in tokens {
+        let charge = (value.len() + 1).saturating_mul(match &token {
+            GlobToken::Class { ranges, .. } => ranges.len().max(1),
+            _ => 1,
+        });
+        let Some(remaining) = budget.checked_sub(charge) else {
+            *budget = 0;
+            return false;
+        };
+        *budget = remaining;
+        let mut next = vec![false; value.len() + 1];
+        if matches!(token, GlobToken::Star) {
+            next[0] = previous[0];
+        }
+        for (index, character) in value.iter().enumerate() {
+            next[index + 1] = match &token {
+                GlobToken::Star => previous[index + 1] || next[index] && *character != '/',
+                GlobToken::Any => previous[index] && *character != '/',
+                GlobToken::Literal(expected) => previous[index] && character == expected,
+                GlobToken::Class { negated, ranges } => {
+                    let matched = ranges
+                        .iter()
+                        .any(|(low, high)| low <= character && character <= high);
+                    previous[index] && if *negated { !matched } else { matched }
+                }
+            };
+        }
+        previous = next;
+    }
+    previous[value.len()]
+}
+
 fn parse_glob(pattern: &str) -> Option<Vec<GlobToken>> {
     let characters: Vec<char> = pattern.chars().collect();
     let mut tokens = Vec::new();
