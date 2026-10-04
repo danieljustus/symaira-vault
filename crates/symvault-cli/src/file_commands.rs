@@ -12,8 +12,7 @@ use std::{
 use std::io::{Seek, SeekFrom};
 
 #[cfg(windows)]
-#[path = "file_materialization_windows.rs"]
-mod windows_file;
+use symvault_platform::windows_attachment as windows_file;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;

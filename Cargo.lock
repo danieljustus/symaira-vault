@@ -3382,7 +3382,6 @@ dependencies = [
  "terminal_size",
  "time",
  "url",
- "windows-sys 0.61.2",
  "x509-parser",
  "yaml-edit",
  "zeroize",
@@ -3474,6 +3473,8 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "symvault-core",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

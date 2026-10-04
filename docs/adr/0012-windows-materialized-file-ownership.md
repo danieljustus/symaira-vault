@@ -21,6 +21,15 @@ deletion before closing both handles. Cleanup never opens or unlinks the
 child-controlled file pathname: a replacement file, renamed parent or junction
 cannot redirect the overwrite/deletion to another file.
 
+The CLI retains its deny(unsafe_code) boundary. The Windows FFI lives only in
+symvault-platform::windows_attachment, with a module-local exception for three
+calls. Each call borrows an owned live File; ReOpenFile returns a new owned
+handle that is checked before constructing File, and the disposition pointer
+has the exact Windows structure size and outlives its synchronous API call.
+No raw handle or pointer escapes the safe adapter. Native x64/ARM64 tests cover
+sharing, original-object deletion after replacement, and cleanup failure. Miri
+cannot execute these Windows kernel APIs; real native execution is required.
+
 If secure Windows cleanup fails, report the failure. A successful child must
 not conceal that failure; if the child already failed, preserve its error and
 add a generic cleanup warning. No pathname-based fallback is allowed. A still

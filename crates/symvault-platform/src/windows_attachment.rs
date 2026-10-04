@@ -1,4 +1,6 @@
 //! Retain Windows file identity without blocking ordinary FileShare.Read.
+//! See ADR 0012 for handle ownership, memory lifetime and cleanup invariants.
+#![allow(unsafe_code)] // Three audited Windows API calls behind safe owned File inputs.
 use std::{
     fs::File,
     io::{self, Seek, SeekFrom, Write},
@@ -30,7 +32,7 @@ fn reopen(original: &File, access: u32) -> io::Result<File> {
     Ok(unsafe { File::from_raw_handle(handle) })
 }
 
-pub(super) fn shareable_guard(writer: File) -> io::Result<File> {
+pub fn shareable_guard(writer: File) -> io::Result<File> {
     let guard = reopen(&writer, FILE_READ_ATTRIBUTES)?;
     // A retained WRITE_DATA handle conflicts with readers sharing only READ.
     // Acquire the identity guard before releasing that writer, with no gap.
@@ -38,7 +40,7 @@ pub(super) fn shareable_guard(writer: File) -> io::Result<File> {
     Ok(guard)
 }
 
-pub(super) fn shred_and_delete(guard: File, length: u64) -> io::Result<()> {
+pub fn shred_and_delete(guard: File, length: u64) -> io::Result<()> {
     let mut writer = reopen(&guard, GENERIC_WRITE | DELETE)?;
     writer.seek(SeekFrom::Start(0))?;
     let zeros = [0u8; 8192];

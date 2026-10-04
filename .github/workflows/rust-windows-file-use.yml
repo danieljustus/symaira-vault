@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/rust-windows-file-use.yml'
       - 'crates/symvault-cli/**'
+      - 'crates/symvault-platform/**'
       - 'crates/symvault-sync/**'
       - 'crates/symvault-store/**'
       - 'Cargo.lock'
@@ -67,14 +68,14 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all --check
-          cargo clippy -p symvault-cli --all-targets --all-features --target '${{ matrix.target }}' --locked -- -D warnings
-          cargo test -p symvault-cli --bin symvault --target '${{ matrix.target }}' --locked file_commands::windows_file::tests:: -- --nocapture > target/native-windows-handle-tests.txt 2>&1
+          cargo clippy -p symvault-cli -p symvault-platform --all-targets --all-features --target '${{ matrix.target }}' --locked -- -D warnings
+          cargo test -p symvault-platform --lib --target '${{ matrix.target }}' --locked windows_attachment::tests:: -- --nocapture > target/native-windows-handle-tests.txt 2>&1
           cat target/native-windows-handle-tests.txt
           python3 - <<'PY'
           from pathlib import Path
           text = Path('target/native-windows-handle-tests.txt').read_bytes().decode('utf-8')
           for name in ['ordinary_read_only_sharing_reads_exact_payload', 'cleanup_deletes_original_after_path_and_parent_replacement', 'retained_reader_reports_cleanup_failure_without_path_fallback']:
-              assert f'file_commands::windows_file::tests::{name} ... ok' in text, name
+              assert f'windows_attachment::tests::{name} ... ok' in text, name
           assert '3 passed; 0 failed; 0 ignored' in text
           PY
           cargo build -p symvault-cli --target '${{ matrix.target }}' --locked
