@@ -162,15 +162,53 @@ Keep source/binary comparison byte-exact. Same-source native MacBook builds
 failed that comparison; retained binary diagnosis found exactly sixteen changed
 `LC_UUID` bytes and the dependent thirty-two-byte first-page CodeDirectory hash,
 with every other byte equal. Explicit `-reproducible` still mismatched. The
-acceptance-only build therefore uses Darwin `-Wl,-no_uuid`, with the original
-byte comparison and ad-hoc signing intact. These test binaries lack debugger
-UUIDs; release/debug packaging is unchanged. Windows uses the native linker's
-`/Brepro` reproducibility option; its execution remains a native CI gate, not a
-cross-compilation claim. Retain the actual rebuilt binary even on mismatch and
-record the effective Rust flags. Never normalize binary differences away or
-replace an externally supplied binary silently.
+initial `-Wl,-no_uuid` attempt is explicitly rejected: native Darwin 27 dyld
+aborted the real build scripts before any test executed because `LC_UUID` is
+required. Bundled LLD 22 also cannot parse this SDK's `arm64e.x1` TAPI target;
+no replacement SDK or dependency is introduced. A bounded native opt-level 1
+smoke instead produced exactly identical bytes in two different output
+directories, executed both artifacts, retained `LC_UUID`/CodeDirectory and
+passed strict native signature verification. The acceptance-only Darwin dev
+and test profiles use opt-level 1; full CLI rebuild equality remains required,
+not inferred from that smoke. Windows uses the native linker's `/Brepro`
+option. Release/debug packaging is unchanged. Retain the actual rebuilt binary
+even on mismatch and record effective flags/profile. Never normalize binary
+differences away or replace an externally supplied binary silently.
 
-Fourteen artifact/schema controls start from the genuine passing native
+The next genuine Linux prefix reached zero-TTL, then correctly rejected an
+invalid fixture assumption. The pinned Go initializer's `omitempty` tag omits
+numeric zero; the actual persisted configuration reloaded as thirty seconds,
+not a disabled timer. Preserve that original failure and distinguish this
+round-trip behavior from the configured-zero scenario. The fixture now writes
+an explicit `clipboard.auto_clear_duration: 0` through the existing YAML
+parser and independently loads it through production `config.Load`; record
+requested, initial round-trip and effective durations. Actual clipboard-free
+Go controls observe `2 -> 2` and `0 -> 30 -> 0`. No production config code or
+oracle pin is changed. Require retained delivery beyond the two-second enabled
+timer before quitting the configured-zero case. Observe cleanup after actual
+CLI exit but before releasing the console wrapper/provider session; record
+post-wrapper delivery separately so fixture teardown cannot manufacture TUI
+cleanup. A structural order test guards that observation boundary.
+
+Clipboard-free actual error processes also disprove the old handwritten Go
+exit-six expectation. The pinned Go CLI exits one for wrong passphrase and
+three for uninitialized vault; the unchanged Rust implementation exits one for
+both. Use those captured classes in a single shared table; uninitialized
+three-versus-one stays a declared #1241 residual, not normalized parity.
+
+The native Windows failure retained only the real unlock prompt, with no
+delivered passphrase/browser output. Send the actual ConPTY Enter carriage
+return, rather than the Unix line-feed input; the complete native rerun must
+still prove delivery. Pinned pywinpty 3.0.5 `terminate()` already cancels I/O.
+Calling `cancel_io()` again raised the observed `Element not found` and erased
+the primary failing row. Do not repeat that cancellation; close both sockets,
+join the actual reader and require termination. Keep a secondary cleanup
+failure on the original failing row, or fail an otherwise successful row. A
+structural injected-primary-plus-cleanup test proves both observations and
+terminal bytes are preserved. No schema replay may approve a known failure
+merely by changing its success flag.
+
+Sixteen artifact/schema controls start from the genuine passing native
 receipt and invoke the actual CLI replay. Each deliberately refreshed digest
 belongs only to its negative-control input, never a replacement acceptance
 anchor. Preserve omitted versus explicit null snapshot fields and JSON types.

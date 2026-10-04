@@ -10,6 +10,7 @@ import codecs
 import contextlib
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -40,6 +41,9 @@ CASES = ['browser-navigation-filter-sort-help', 'native-copy-expiry-quit',
          'add-invalid-no-initial-write', 'delete-confirmation',
          'zero-ttl-quit-cleanup', 'ctrl-c-filter-cleanup', 'locked-wrong-passphrase',
          'uninitialized', 'public-keybinding-table']
+# Actual clipboard-free pinned Go and source-equivalent Rust console captures.
+EXIT_CLASSES = {'locked-wrong-passphrase': {'go': 1, 'rust': 1},
+                'uninitialized': {'go': 3, 'rust': 1}}
 COMMAND_OUTPUT = None
 COMMAND_NUMBER = 0
 CAPTURE_OUTPUT = None
@@ -313,7 +317,7 @@ class Browser:
 
     def unlock(self):
         self.wait(lambda: 'passphrase' in self.view().lower(), 'actual hidden unlock prompt')
-        self.write(PHRASE+'\n')
+        self.write(PHRASE+('\r' if os.name == 'nt' else '\n'))
         self.wait(lambda: 'Entries' in self.view() and 'public-tui-user' in self.view(),
                   'actual encrypted browser')
         assert all(c.encode() not in self.capture for c in CANARIES), 'implicit canary reveal'
@@ -331,7 +335,7 @@ class Browser:
         assert 1.3 <= elapsed <= 6, ('unexpected configured clipboard expiry', elapsed)
         return elapsed
 
-    def finish(self, expected_exit):
+    def finish(self, expected_exit, observation=None):
         # Keep the console wrapper alive until mode checks finish. Darwin
         # revokes slave ioctls when the controlling session leader exits.
         self.wait(self.console_receipt.is_file, 'actual CLI exit and native console receipt', timeout=10)
@@ -340,22 +344,29 @@ class Browser:
         if os.name != 'nt':
             import termios
             assert terminal_modes(termios.tcgetattr(self.slave)) == terminal_modes(self.original), 'controlling PTY was not restored'
+        if observation is not None:
+            observation()  # actual CLI has exited; wrapper/provider still live
         Path(str(self.console_receipt)+'.release').write_text('release\n')
         self.wait(lambda: not self.alive(), 'native console wrapper exit', timeout=10)
         self.pump(0.1)
         return receipt
 
-    def quit(self, key='q', clipboard_owned=False):
+    def quit(self, key='q', clipboard_owned=False, observe_clipboard=False):
         started = time.monotonic()
         self.write(key)
-        observed = self.finish(0)
-        if clipboard_owned:
-            assert time.monotonic()-started < 1.3, 'quit was measured only after timer expiry'
-            assert not clipboard(self.env), 'copied secret survived quit'
+        clipboard_observation = {}
+        def exited():
+            if clipboard_owned:
+                assert time.monotonic()-started < 1.3, 'quit was measured only after timer expiry'
+                assert not clipboard(self.env), 'copied secret survived quit'
+            if observe_clipboard:
+                clipboard_observation['clipboard_survived_quit'] = clipboard(self.env) == CANARIES[0].encode()
+        observed = self.finish(0, exited)
         assert PHRASE.encode() not in self.capture
         return {'exit_code': 0, 'terminal_restored': True,
                 'input_restored': True, 'output_restored': True,
                 'console': observed,
+                **clipboard_observation,
                 'capture_sha256': hashlib.sha256(self.capture).hexdigest()}
 
     def editor_terminal_restored(self):
@@ -380,10 +391,13 @@ class Browser:
         if os.name == 'nt':
             # Close both PtyProcess sockets even after isalive marks it closed.
             if self.alive():
-                self.child.terminate(force=True)
+                assert self.child.terminate(force=True), 'native ConPTY child did not terminate'
             self.child.fileobj.close()
             self.child._server.close()
-            self.child.pty.cancel_io()
+            # terminate() already cancels pending I/O. Repeating cancel_io()
+            # after it/natural exit raises WinptyError: Element not found.
+            self.child._thread.join(timeout=5)
+            assert not self.child._thread.is_alive(), 'native ConPTY reader did not join'
         else:
             if self.alive():
                 os.killpg(self.child.pid, signal.SIGKILL)
@@ -425,8 +439,8 @@ def run_case(case, label, binary, helper, seed, base, provider):
         if case in {'uninitialized', 'locked-wrong-passphrase'}:
             if case == 'locked-wrong-passphrase':
                 browser.wait(lambda: 'passphrase' in browser.view().lower(), 'hidden locked prompt')
-                browser.write('public-wrong-passphrase-782a\n')
-            observed = browser.finish(6 if label == 'go' else 1)
+                browser.write('public-wrong-passphrase-782a'+('\r' if os.name == 'nt' else '\n'))
+            observed = browser.finish(EXIT_CLASSES[case][label])
             assert all(c.encode() not in browser.capture for c in [PHRASE, *CANARIES])
             row.update(exit_code=observed['exit_code'], terminal_restored=True, console=observed,
                        diagnostic=scrub(browser.capture.decode(errors='replace')),
@@ -515,8 +529,12 @@ def run_case(case, label, binary, helper, seed, base, provider):
             row.update(browser.quit())
         elif case == 'zero-ttl-quit-cleanup':
             browser.copy()
-            row.update(browser.quit())
-            row['clipboard_survived_quit'] = clipboard(env) == CANARIES[0].encode()
+            copied = time.monotonic()
+            browser.pump(2.2)
+            row['zero_ttl_observation_seconds'] = time.monotonic()-copied
+            assert clipboard(env) == CANARIES[0].encode(), 'configured zero unexpectedly expired'
+            row.update(browser.quit(observe_clipboard=True))
+            row['clipboard_survived_console_exit'] = clipboard(env) == CANARIES[0].encode()
             assert row['clipboard_survived_quit'] == (label == 'go'), 'versioned zero-TTL cleanup decision changed'
             # Explicitly clear the disposable native clipboard after recording
             # Go's retained copy; never leave a fixture canary in the provider.
@@ -572,7 +590,13 @@ def run_case(case, label, binary, helper, seed, base, provider):
             artifact.write_bytes(browser.capture)
             row.update(capture_artifact=str(artifact.relative_to(CAPTURE_OUTPUT.parent)),
                        capture_bytes=len(browser.capture), capture_sha256=digest(artifact))
-        browser.close()
+        try:
+            browser.close()
+        except Exception as error:
+            row['cleanup_failure'] = scrub(type(error).__name__+': '+str(error))
+            if 'failure' not in row:
+                row.update(passed=False, failure='cleanup failed: '+row['cleanup_failure'])
+                raise CaseFailure(row) from error
 
 
 class CaseFailure(AssertionError):
@@ -646,6 +670,13 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
     for key in ['passed', 'candidate_worktree_clean', 'candidate_worktree_clean_at_end', 'binary_source_verified']:
         assert receipt[key] is True, 'missing/false '+key
     assert receipt['candidate_sources'] == sources and receipt['candidate_sources_at_end'] == sources, 'source inventory mismatch'
+    assert set(receipt['seed_configs']) == {'0', '2'}, 'missing seed config observations'
+    for ttl in [0, 2]:
+        config = receipt['seed_configs'][str(ttl)]
+        for key in ['requested_clipboard_seconds', 'effective_clipboard_seconds']:
+            assert type(config[key]) is int and config[key] == ttl, 'fixture clipboard duration mismatch'
+        assert type(config['initial_roundtrip_clipboard_seconds']) is int
+        assert config['initial_roundtrip_clipboard_seconds'] == (30 if ttl == 0 else 2)
     for key in ['rust_executable_sha256', 'rebuilt_rust_executable_sha256']:
         value = receipt[key]
         assert isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value)
@@ -658,8 +689,9 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
         assert [row['case'] for row in rows] == CASES, 'incomplete/duplicate case set'
         for row in rows:
             assert row['passed'] is True, 'missing/false case success'
+            assert 'failure' not in row and 'cleanup_failure' not in row, 'failed case observations'
             assert type(row['exit_code']) is int, 'invalid exit code type'
-            expected_exit = (6 if label == 'go' else 1) if row['case'] in {'locked-wrong-passphrase', 'uninitialized'} else 0
+            expected_exit = EXIT_CLASSES.get(row['case'], {}).get(label, 0)
             assert row['exit_code'] == expected_exit, 'exit class mismatch'
             if row['case'] != CASES[-1]:
                 for key in ['terminal_restored', 'input_restored', 'output_restored']:
@@ -668,6 +700,10 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
                 console = row['console']
                 assert type(console['exit_code']) is int and console['exit_code'] == expected_exit
                 assert console['input_restored'] is True and console['output_restored'] is True, 'un-restored native console'
+                if row['case'] == 'zero-ttl-quit-cleanup':
+                    assert row['clipboard_survived_quit'] is (label == 'go'), 'versioned zero-TTL cleanup decision changed'
+                    seconds = row['zero_ttl_observation_seconds']
+                    assert type(seconds) is float and math.isfinite(seconds) and seconds >= 2.05, 'zero timer was not exercised'
                 if evidence_root is not None:
                     raw = evidence_artifact(evidence_root, row['capture_artifact'], row['capture_bytes'], row['capture_sha256'])
                     assert PHRASE.encode() not in raw, 'passphrase disclosure'
@@ -706,6 +742,7 @@ def execute(args, receipt):
     assert sys.version_info[:2] == (3, 13), 'pinned Python 3.13 required'
     receipt['rustc'] = checked(['rustc', '--version']).decode().strip()
     receipt['rustflags'] = os.environ.get('RUSTFLAGS', '')
+    receipt['cargo_profile_dev_opt_level'] = os.environ.get('CARGO_PROFILE_DEV_OPT_LEVEL', '0')
     receipt['go_version'] = checked(['go', 'version']).decode().strip()
     assert receipt['rustc'].startswith('rustc 1.98.0 '), 'pinned Rust required'
     assert receipt['go_version'].startswith('go version go1.26.6 '), 'pinned Go required'
@@ -741,12 +778,15 @@ def execute(args, receipt):
                            terminal_driver='native-ConPTY' if os.name == 'nt' else 'controlling-Unix-PTY')
             with private_provider(base, args.xvfb, args.xclip) as provider:
                 seeds = {}
+                receipt['seed_configs'] = {}
                 for ttl in [2, 0]:
                     home = base/('seed-home-'+str(ttl))
                     env = fixture_env(home, provider)
                     seed = base/('seed-'+str(ttl))
                     result = json.loads(checked([helper, '--root', seed, '--clipboard-seconds', str(ttl)], cwd=home, env=env))
                     assert result['seeded_entries'] == 3 and len(result['keybindings']) == 12
+                    receipt['seed_configs'][str(ttl)] = {k: result[k] for k in ['requested_clipboard_seconds', 'initial_roundtrip_clipboard_seconds', 'effective_clipboard_seconds']}
+                    assert result['requested_clipboard_seconds'] == ttl and result['effective_clipboard_seconds'] == ttl, 'fixture clipboard duration mismatch'
                     receipt['keybindings'] = result['keybindings']
                     seeds[ttl] = seed
                 for case in CASES[:-1]:
@@ -767,9 +807,10 @@ def execute(args, receipt):
                         receipt['declared_differences'].append({'case': case, 'field': 'clipboard_survived_quit',
                                                               'go': True, 'rust': False, 'decision': 'ADR-0029'})
                     if case in {'locked-wrong-passphrase', 'uninitialized'}:
-                        assert go_row['exit_code'] == 6 and rust_row['exit_code'] == 1
-                        receipt['declared_differences'].append({'case': case, 'field': 'exit_code',
-                                                              'go': 6, 'rust': 1, 'tracking_issue': 1241})
+                        assert go_row['exit_code'] == EXIT_CLASSES[case]['go'] and rust_row['exit_code'] == EXIT_CLASSES[case]['rust']
+                        if go_row['exit_code'] != rust_row['exit_code']:
+                            receipt['declared_differences'].append({'case': case, 'field': 'exit_code',
+                                                                  'go': go_row['exit_code'], 'rust': rust_row['exit_code'], 'tracking_issue': 1241})
                 outputs = []
                 for label, binary in [('go', go), ('rust', rust)]:
                     home = base/('keybindings-'+label)

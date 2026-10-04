@@ -9,10 +9,11 @@ import base64
 import copy
 import json
 import hashlib
+import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import tui_contract as tui
 
@@ -21,6 +22,30 @@ STRUCTURAL_SHA = hashlib.sha256(STRUCTURAL_BYTES).hexdigest()
 
 
 class HarnessTests(unittest.TestCase):
+    def test_exit_observation_precedes_console_wrapper_release(self):
+        # Structural lifecycle test only, no native or clipboard claim.
+        with tempfile.TemporaryDirectory(prefix='tui-exit-order-') as raw:
+            browser = object.__new__(tui.Browser)
+            browser.console_receipt = Path(raw)/'console.json'
+            browser.console_receipt.write_text(json.dumps({'exit_code': 0, 'input_restored': True, 'output_restored': True}))
+            release = Path(str(browser.console_receipt)+'.release')
+            browser.original = [0, 0, 0, 0, 0, 0, []]
+            browser.slave = -1
+            browser.alive = lambda: not release.exists()
+            browser.pump = lambda seconds=0.12: None
+            browser.wait = lambda predicate, description, timeout=15: self.assertTrue(predicate(), description)
+            observed = []
+            def observation():
+                self.assertTrue(browser.alive())
+                self.assertFalse(release.exists())
+                observed.append('after-cli-exit-before-wrapper-release')
+            if os.name != 'nt':
+                with patch('termios.tcgetattr', return_value=browser.original): browser.finish(0, observation)
+            else:
+                browser.finish(0, observation)
+            self.assertEqual(observed, ['after-cli-exit-before-wrapper-release'])
+            self.assertTrue(release.exists())
+
     def valid_structural_receipt(self):
         # Synthetic schema control only. Never registered as native evidence.
         r = {'schema_version': 2, 'candidate_commit': 'a'*40, 'oracle_commit': tui.ORACLE,
@@ -28,6 +53,8 @@ class HarnessTests(unittest.TestCase):
              'candidate_sources_at_end': {'fixture': 'b'*64}, 'rust_executable_sha256': STRUCTURAL_SHA,
              'rebuilt_rust_executable_sha256': STRUCTURAL_SHA, 'binary_source_verified': True,
              'rebuilt_binary_artifact': 'safe', 'rebuilt_binary_bytes': len(STRUCTURAL_BYTES),
+             'seed_configs': {str(ttl): {'requested_clipboard_seconds': ttl, 'effective_clipboard_seconds': ttl,
+                                        'initial_roundtrip_clipboard_seconds': 30 if ttl == 0 else 2} for ttl in [0, 2]},
              'passed': True, 'candidate_worktree_clean': True, 'candidate_worktree_clean_at_end': True}
         for label in ['go', 'rust']:
             r[label] = []
@@ -37,12 +64,14 @@ class HarnessTests(unittest.TestCase):
                        'before': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}],
                        'after': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}], 'stdout_sha256': 'd'*64}
                 if case in {'locked-wrong-passphrase', 'uninitialized'}:
-                    row['exit_code'] = 6 if label == 'go' else 1
+                    row['exit_code'] = tui.EXIT_CLASSES[case][label]
                 row['console'] = {'exit_code': row['exit_code'], 'input_restored': True, 'output_restored': True}
                 if case.startswith(('editor-', 'add-')):
                     row['editor'] = {'environment_filtered': True, 'input_is_terminal': True,
                                      'output_is_terminal': True, 'document_bytes': 1,
                                      'foreground_terminal_restored': label == 'rust'}
+                if case == 'zero-ttl-quit-cleanup':
+                    row.update(clipboard_survived_quit=label == 'go', zero_ttl_observation_seconds=2.2)
                 r[label].append(row)
         return r
 
@@ -83,6 +112,8 @@ class HarnessTests(unittest.TestCase):
         r = copy.deepcopy(valid)
         for label in ['go', 'rust']: del r[label][0]['after'][0]['tags']
         with self.assertRaisesRegex(AssertionError, 'incomplete snapshot fields'): self.validate(r)
+        r = copy.deepcopy(valid); r['seed_configs']['0']['effective_clipboard_seconds'] = 30
+        with self.assertRaisesRegex(AssertionError, 'fixture clipboard duration mismatch'): self.validate(r)
 
     def test_terminal_canary_and_editor_security_flags_are_rejected(self):
         valid = self.valid_structural_receipt(); self.validate(valid)
@@ -115,6 +146,21 @@ class HarnessTests(unittest.TestCase):
             records = [json.loads(p.read_bytes()) for p in Path(raw).glob('*.json')]
             self.assertEqual([r['exit_code'] for r in records], [7])
             self.assertTrue(any(b'child-failure-control' in p.read_bytes() for p in Path(raw).glob('*.stdout')))
+
+    def test_cleanup_failure_cannot_erase_primary_row_and_capture(self):
+        with tempfile.TemporaryDirectory(prefix='tui-failure-retention-') as raw:
+            base = Path(raw); seed = base/'seed'; seed.mkdir(); (seed/'fixture').write_bytes(b'structural fixture')
+            browser = Mock()
+            browser.capture = bytearray(b'structural terminal failure')
+            browser.unlock.side_effect = AssertionError('primary child failure')
+            browser.close.side_effect = RuntimeError('secondary cleanup failure')
+            with patch.object(tui, 'Browser', return_value=browser), patch.object(tui, 'snapshot', return_value=[]), patch.object(tui, 'CAPTURE_OUTPUT', base/'captures'):
+                with self.assertRaisesRegex(tui.CaseFailure, 'primary child failure') as context:
+                    tui.run_case(tui.CASES[0], 'go', base/'binary', base/'helper', seed, base, {})
+            row = context.exception.row
+            self.assertIs(row['passed'], False)
+            self.assertIn('secondary cleanup failure', row['cleanup_failure'])
+            self.assertEqual((base/row['capture_artifact']).read_bytes(), browser.capture)
 
     def test_terminal_artifact_paths_sizes_digests_and_canaries(self):
         with tempfile.TemporaryDirectory() as raw:
