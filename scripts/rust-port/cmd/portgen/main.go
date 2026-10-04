@@ -26,7 +26,7 @@ const (
 	// The command tree is built from cmd/, so that package set is this row's
 	// production source. The pin advances whenever the CLI changes, which is
 	// the intended coupling: the fixture is the CLI's shape.
-	pinnedOracleCommit  = "5cf3da06f1750afad974f2b722734af52ce87362"
+	pinnedOracleCommit  = "dda01b562696136dd65e958b6abdce2f29fe297f"
 	pinnedOracleRelease = "unreleased"
 )
 
