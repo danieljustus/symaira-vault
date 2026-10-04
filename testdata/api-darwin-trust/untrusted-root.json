@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "source": {
+    "run": 37214397016,
+    "job": 111471858735,
+    "artifact": 11312400436,
+    "original_receipt_sha256": "b38baad84f7f7f086104127ec0a5292ecd01d0a22a6020542329195775a7bed5",
+    "candidate_commit": "373f7712e1aad53d61adbb460e433b22a5143519",
+    "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+    "native_os": "Darwin",
+    "original_receipt_passed": false
+  },
+  "case": "untrusted-root",
+  "go": {
+    "result": {
+      "handler_error": false,
+      "is_error": true,
+      "text": "request failed: Get \"https://dns-api.example.test:49553/v1/status\": tls: failed to verify certificate: x509: “dns-api.example.test” certificate is not trusted"
+    },
+    "stdout_base64": "UEFTUwo=",
+    "stderr_base64": "",
+    "exit_code": 0,
+    "elapsed_seconds": 0.05210900000020047,
+    "cancel_elapsed_seconds": null,
+    "upstream": [
+      {
+        "tls_rejection": "[SSL: SSLV3_ALERT_BAD_CERTIFICATE] sslv3 alert bad certificate (_ssl.c:1032)"
+      }
+    ]
+  },
+  "rust": {
+    "result": {
+      "handler_error": false,
+      "is_error": true,
+      "text": "request failed: upstream request failed"
+    },
+    "stdout_base64": "Y29tcGxldGVkIG9uZSBhY3R1YWwgZW5jcnlwdGVkIEFQSSBjYWxsCg==",
+    "stderr_base64": "",
+    "exit_code": 0,
+    "elapsed_seconds": 0.35613424999996823,
+    "cancel_elapsed_seconds": null,
+    "upstream": [
+      {
+        "tls_rejection": "[SSL: TLSV1_ALERT_UNKNOWN_CA] tlsv1 alert unknown ca (_ssl.c:1032)"
+      }
+    ]
+  }
+}

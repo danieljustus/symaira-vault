@@ -132,3 +132,29 @@ acceptance. Retain the failed artifact and require the real Windows rerun.
 Integrate ADR 0020's verified native Mac image and actual Darwin/arm64 assertion
 into the API and all inherited acceptance workflows. Each current head still
 requires fresh native evidence; the runner routing itself proves no API case.
+
+## Native certificate-trust diagnostics
+
+The retained failed native Darwin receipt for run 37214397016, job
+111471858735, checkout `373f7712e1aad53d61adbb460e433b22a5143519` records an
+actual untrusted-root rejection with the Go diagnostic
+`tls: failed to verify certificate: x509: “dns-api.example.test” certificate is not trusted`.
+Its original receipt SHA-256 is
+`b38baad84f7f7f086104127ec0a5292ecd01d0a22a6020542329195775a7bed5`.
+Both implementations reject the TLS exchange and the fixture server records
+their TLS rejection, but the validator had required the non-native generic
+unknown-authority wording. This is not evidence of a trust-policy bypass.
+
+Keep the raw native result unchanged. Admit this exact hostname-bound suffix
+only on Darwin, alongside the existing generic unknown-authority suffix.
+Actual boolean error results remain mandatory; a different hostname, platform,
+TLS error class, timeout or altered diagnostic does not satisfy this control.
+The committed fixture is an unchanged excerpt of a synthetic test workload
+executed on the real native runner, not a fabricated protocol observation.
+
+The original receipt remains failed after only three observed case pairs.
+It proves neither the remaining cases nor the current candidate. All eight
+actual exchanges, positive TLS/redaction controls, encrypted-state and DNS
+observations, cancellation/deadline bounds and seven declared differences
+remain required on each native target. Regression mutations execute the same
+production validator; no transport result is normalized or suppressed.

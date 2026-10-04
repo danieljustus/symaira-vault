@@ -13,6 +13,8 @@ on:
       - 'Cargo.lock'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/api_transport*'
+      - 'scripts/rust-port/test_api_transport_contract.py'
+      - 'testdata/api-darwin-trust/**'
       - 'docs/adr/0018-api-dns-pinning-and-request-cancellation.md'
   workflow_dispatch:
 
@@ -70,6 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all --check
+          python3 scripts/rust-port/test_api_transport_contract.py -v
           cargo clippy -p symvault-mcp --all-targets --all-features --locked -- -D warnings
           cargo test -p symvault-mcp --all-targets --locked > target/native-api-tests.txt 2>&1
           cat target/native-api-tests.txt

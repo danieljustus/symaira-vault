@@ -227,7 +227,7 @@ def execute(binary, spec, home, is_go, cancel_event=None):
                       exit_code=process.returncode, elapsed_seconds=time.monotonic()-started)
 
 
-def assert_pair(case, go, rust, host):
+def assert_pair(case, go, rust, host, native_os):
     left, right = go['result'], rust['result']
     assert left['handler_error'] is False and right['handler_error'] is False, case
     if case == 'verified-dns-https':
@@ -235,7 +235,7 @@ def assert_pair(case, go, rust, host):
         a, b = json.loads(left['text']), json.loads(right['text'])
         assert a == b and a['status_code'] == 200 and a['body'] == '***' and a['headers']['X-Echo'] == '***'
         return None
-    assert left['is_error'] and right['is_error'], case
+    assert left['is_error'] is True and right['is_error'] is True, case
     if case in {'private-answer', 'mixed-family-answer'}:
         assert left['text'] == f'blocked request target "{host}": resolves to private or local network address'
         assert right['text'] == 'blocked private or local upstream host'
@@ -243,7 +243,10 @@ def assert_pair(case, go, rust, host):
         assert left['text'].startswith('request failed: ') and 'certificate is valid for dns-api.example.test, not wrong-api.example.test' in left['text']
         assert right['text'] == 'request failed: upstream request failed'
     elif case == 'untrusted-root':
-        assert left['text'].startswith('request failed: ') and 'x509: certificate signed by unknown authority' in left['text']
+        generic = 'tls: failed to verify certificate: x509: certificate signed by unknown authority'
+        darwin = f'tls: failed to verify certificate: x509: “{host}” certificate is not trusted'
+        assert left['text'].startswith('request failed: ')
+        assert left['text'].endswith(generic) or (native_os == 'Darwin' and left['text'].endswith(darwin))
         assert right['text'] == 'request failed: upstream request failed'
     elif case == 'pending-headers-cancel':
         assert left['text'].startswith('request failed: ') and left['text'].endswith(': context canceled')
@@ -270,7 +273,8 @@ def main():
     names = sorted(x for x in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
                    if x.startswith(('crates/', 'third_party/', 'testdata/', 'internal/mcp/apitemplates/builtin/'))
                    or x in {'Cargo.toml', 'Cargo.lock', '.gitattributes', 'scripts/rust-port/api_transport_contract.py',
-                            'scripts/rust-port/api_transport_probe.go.txt', '.github/workflows/rust-api-transport.yml'})
+                            'scripts/rust-port/api_transport_probe.go.txt', 'scripts/rust-port/test_api_transport_contract.py',
+                            '.github/workflows/rust-api-transport.yml'})
     before = inventory(ROOT, names)
     receipt = {'schema_version': 1, 'candidate_commit': commit, 'candidate_worktree_clean': clean,
                'native_os': platform.system(), 'candidate_sources': before, 'rust_executable_sha256': digest(rust),
@@ -332,7 +336,7 @@ def main():
                             results.append(observation)
                         finally:
                             dns.close()
-                    difference = assert_pair(case, *results, host)
+                    difference = assert_pair(case, results[0], results[1], host, receipt['native_os'])
                     if difference:
                         receipt['declared_differences'].append(difference)
                 finally:
