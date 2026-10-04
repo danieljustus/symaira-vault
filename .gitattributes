@@ -51,3 +51,6 @@ scripts/rust-port/connect_contract_probe.go.txt text eol=lf
 .github/workflows/rust-broker-connect.yml text eol=lf
 scripts/rust-port/windows_file_use_contract.py text eol=lf
 .github/workflows/rust-windows-file-use.yml text eol=lf
+scripts/rust-port/egress_contract.py text eol=lf
+scripts/rust-port/egress_contract_probe.go.txt text eol=lf
+.github/workflows/rust-broker-egress.yml text eol=lf
