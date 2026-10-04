@@ -26,7 +26,7 @@ const (
 	// The command tree is built from cmd/, so that package set is this row's
 	// production source. The pin advances whenever the CLI changes, which is
 	// the intended coupling: the fixture is the CLI's shape.
-	pinnedOracleCommit  = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
+	pinnedOracleCommit  = "5cf3da06f1750afad974f2b722734af52ce87362"
 	pinnedOracleRelease = "unreleased"
 )
 
@@ -97,8 +97,9 @@ type flagSpec struct {
 // resolveOracle binds the fixture's claimed commit to git.
 //
 // The command tree is generated from the cmd/ package, so every tracked,
-// non-test Go file under cmd/ is a production source. The list is recorded in
-// the fixture so that adding a command file is visible as a change rather than
+// non-test Go file under cmd/ and its manual-rendering boundary is a production
+// source. The list is recorded in the fixture so that adding a command file is
+// visible as a change rather than
 // only as a digest that moved.
 func resolveOracle(commit, release string) (oracle, error) {
 	if commit != "" && commit != pinnedOracleCommit {
@@ -136,7 +137,7 @@ func resolveOracle(commit, release string) (oracle, error) {
 // commandSources lists the tracked, non-test Go files the command tree is
 // built from, sorted so the digest is stable.
 func commandSources(root string) ([]string, error) {
-	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--", "cmd/*.go", "cmd/**/*.go").Output() // #nosec G204 -- fixed arguments
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--", "cmd/*.go", "cmd/**/*.go", "internal/manpages/*.go").Output() // #nosec G204 -- fixed arguments
 	if err != nil {
 		return nil, fmt.Errorf("list command sources: %w", err)
 	}

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
-    "commit_sha": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+    "commit": "5cf3da06f1750afad974f2b722734af52ce87362",
+    "commit_sha": "5cf3da06f1750afad974f2b722734af52ce87362",
     "release": "unreleased",
     "source_files": [
       "cmd/admin/audit.go",
@@ -91,10 +91,11 @@
       "cmd/share.go",
       "cmd/sync.go",
       "cmd/template.go",
-      "cmd/ui.go"
+      "cmd/ui.go",
+      "internal/manpages/manpages.go"
     ],
-    "source_digest": "3a69f234cec2b7dffe8dc3ba678f93faf447efb2c90bc24ef288dc217ac13dd8",
-    "generator_digest": "2f241150759e65a9003a3d11a98fca1fa7fb65bdf86ff3970772a1772c4c7921"
+    "source_digest": "86adcbc3f0a2f03c45599d94f03c0f41d31dfdc0ff3c3320b4286d359c324eec",
+    "generator_digest": "21b656790490e71ac9d8478990168c4cb08b0b42734d1c394f4c133bd7d59429"
   },
   "groups": [
     {

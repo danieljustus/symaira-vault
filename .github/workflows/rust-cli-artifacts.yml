@@ -11,7 +11,11 @@ on:
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
       - 'scripts/rust-port/cli_artifacts*'
+      - 'scripts/rust-port/manual_path*'
+      - 'scripts/rust-port/cmd/portgen/**'
       - 'scripts/rust-port/cmd/cligap/**'
+      - 'cmd/manpages.go'
+      - 'internal/manpages/**'
       - 'testdata/port/cli/**'
       - 'third_party/cobra-completion/**'
       - 'docs/adr/0011-cli-artifacts-and-completion-protocol.md'
@@ -83,6 +87,17 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           go test ./scripts/rust-port/cmd/cligap -count=1
+          mkdir -p target
+          go test ./internal/manpages ./scripts/rust-port/cmd/portgen -count=1 -v > target/native-go-manual-tests.txt 2>&1
+          cat target/native-go-manual-tests.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('target/native-go-manual-tests.txt').read_text()
+          for name in ['TestManpageLiteralText', 'TestManualConfigPathIsLiteralAndDescriptionsAreRestored', 'TestManualLiteralPathDoesNotRewriteOtherDescriptions']:
+              assert '--- PASS: ' + name + ' ' in text, name
+          PY
+          make port-fixtures-check
+          python3 scripts/rust-port/manual_path_contract_test.py
           cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings
           python3 scripts/run_go_tests.py cargo -- cargo test -p symvault-cli --locked --bin symvault actual_go_protocol_queries_replay_through_real_rust_sessions_and_store
           python3 scripts/run_go_tests.py cargo -- cargo test -p symvault-cli --locked --test completions --test cli_generate_manpages --test cli_help --test cli_help_subcommand --test cli_update_help --test cli_get_list_help_differential --test cli_dynamic_setup_help
@@ -121,5 +136,6 @@ jobs:
             native-cli-artifacts.json
             native-cli-go-artifacts.json
             target/native-cli-artifact-gaps.json
+            target/native-go-manual-tests.txt
           if-no-files-found: error
           retention-days: 14
