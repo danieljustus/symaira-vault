@@ -3506,6 +3506,8 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "symvault-core",
+ "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

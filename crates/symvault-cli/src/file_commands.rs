@@ -2,11 +2,17 @@
 
 use std::{
     fs,
-    io::{Read, Seek, SeekFrom, Write as _},
+    io::{Read, Write as _},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
 };
+
+#[cfg(not(windows))]
+use std::io::{Seek, SeekFrom};
+
+#[cfg(windows)]
+use symvault_platform::windows_attachment as windows_file;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde_json::Value;
@@ -255,8 +261,22 @@ pub fn use_attachment(
         &read.content,
         options.timeout,
     );
-    cleanup_file(materialized);
-    result
+    let cleanup = cleanup_file(materialized);
+    match result {
+        Ok(result) if result.exit_code != 0 => {
+            if let Err(cleanup_error) = cleanup {
+                eprintln!("Warning: {cleanup_error}");
+            }
+            Ok(result)
+        }
+        Ok(result) => cleanup.map(|()| result),
+        Err(error) => {
+            if let Err(cleanup_error) = cleanup {
+                eprintln!("Warning: {cleanup_error}");
+            }
+            Err(error)
+        }
+    }
 }
 
 fn is_safe_file_name(name: &str) -> bool {
@@ -303,7 +323,8 @@ fn materialize_file(name: &str, content: &[u8]) -> Result<MaterializedFile, Stri
     })
 }
 
-fn cleanup_file(materialized: MaterializedFile) {
+#[cfg(not(windows))]
+fn cleanup_file(materialized: MaterializedFile) -> Result<(), String> {
     let MaterializedFile {
         directory,
         path,
@@ -329,6 +350,23 @@ fn cleanup_file(materialized: MaterializedFile) {
     // child installed a directory at this path, leave it rather than recurse.
     let _ = fs::remove_file(path);
     let _ = fs::remove_dir(directory);
+    Ok(())
+}
+
+#[cfg(windows)]
+fn cleanup_file(materialized: MaterializedFile) -> Result<(), String> {
+    let MaterializedFile {
+        directory,
+        handle,
+        length,
+        ..
+    } = materialized;
+    // Delete the retained object itself; never resolve the child-controlled
+    // file pathname again, even if its parent was replaced with a junction.
+    windows_file::shred_and_delete(handle, length)
+        .map_err(|error| format!("secure attachment cleanup failed: {error}"))?;
+    let _ = fs::remove_dir(directory);
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -364,6 +402,9 @@ fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> 
         .open(path)?;
     file.write_all(content)?;
     file.sync_all()?;
+    #[cfg(windows)]
+    return windows_file::shareable_guard(file);
+    #[cfg(not(windows))]
     Ok(file)
 }
 
