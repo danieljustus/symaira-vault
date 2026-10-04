@@ -46,19 +46,30 @@ pub struct HttpResponse {
     pub body: Vec<u8>,
 }
 
-enum HttpStream {
+struct HttpStream {
+    transport: HttpTransport,
+    head_response: bool,
+}
+
+enum HttpTransport {
     Tcp(TcpStream, Option<HttpShutdown>),
     Tls(Box<StreamOwned<ServerConnection, TcpStream>>),
 }
 
 impl HttpStream {
     fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
-        let stream = match tls {
+        let transport = match tls {
             Some(config) => ServerConnection::new(config)
-                .map(|connection| Self::Tls(Box::new(StreamOwned::new(connection, stream))))
+                .map(|connection| {
+                    HttpTransport::Tls(Box::new(StreamOwned::new(connection, stream)))
+                })
                 .map_err(std::io::Error::other),
-            None => Ok(Self::Tcp(stream, None)),
+            None => Ok(HttpTransport::Tcp(stream, None)),
         }?;
+        let stream = Self {
+            transport,
+            head_response: false,
+        };
         let timeouts = HttpTimeouts::default();
         stream.set_read_timeout(Some(timeouts.initial_read))?;
         stream.set_write_timeout(Some(timeouts.write))?;
@@ -66,71 +77,74 @@ impl HttpStream {
     }
 
     fn peer_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.peer_addr(),
-            Self::Tls(stream) => stream.sock.peer_addr(),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.peer_addr(),
+            HttpTransport::Tls(stream) => stream.sock.peer_addr(),
         }
     }
 
     fn local_addr(&self) -> Result<std::net::SocketAddr, std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.local_addr(),
-            Self::Tls(stream) => stream.sock.local_addr(),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.local_addr(),
+            HttpTransport::Tls(stream) => stream.sock.local_addr(),
         }
     }
 
     fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.set_read_timeout(timeout),
-            Self::Tls(stream) => stream.sock.set_read_timeout(timeout),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.set_read_timeout(timeout),
+            HttpTransport::Tls(stream) => stream.sock.set_read_timeout(timeout),
         }
     }
 
     fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.set_write_timeout(timeout),
-            Self::Tls(stream) => stream.sock.set_write_timeout(timeout),
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.set_write_timeout(timeout),
+            HttpTransport::Tls(stream) => stream.sock.set_write_timeout(timeout),
         }
     }
 
     fn is_tls(&self) -> bool {
-        matches!(self, Self::Tls(_))
+        matches!(&self.transport, HttpTransport::Tls(_))
     }
 }
 
 impl From<TcpStream> for HttpStream {
     fn from(stream: TcpStream) -> Self {
-        Self::Tcp(stream, None)
+        Self {
+            transport: HttpTransport::Tcp(stream, None),
+            head_response: false,
+        }
     }
 }
 
 impl Read for HttpStream {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
-        match self {
-            Self::Tcp(stream, Some(shutdown)) => {
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, Some(shutdown)) => {
                 shutdown.socket_io(stream.read_timeout()?, || stream.read(buffer))
             }
-            Self::Tcp(stream, None) => stream.read(buffer),
-            Self::Tls(stream) => stream.read(buffer),
+            HttpTransport::Tcp(stream, None) => stream.read(buffer),
+            HttpTransport::Tls(stream) => stream.read(buffer),
         }
     }
 }
 
 impl Write for HttpStream {
     fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
-        match self {
-            Self::Tcp(stream, Some(shutdown)) => {
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, Some(shutdown)) => {
                 shutdown.socket_io(stream.write_timeout()?, || stream.write(buffer))
             }
-            Self::Tcp(stream, None) => stream.write(buffer),
-            Self::Tls(stream) => stream.write(buffer),
+            HttpTransport::Tcp(stream, None) => stream.write(buffer),
+            HttpTransport::Tls(stream) => stream.write(buffer),
         }
     }
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
-        match self {
-            Self::Tcp(stream, _) => stream.flush(),
-            Self::Tls(stream) => stream.flush(),
+        match &mut self.transport {
+            HttpTransport::Tcp(stream, _) => stream.flush(),
+            HttpTransport::Tls(stream) => stream.flush(),
         }
     }
 }
@@ -612,8 +626,8 @@ where
             // clone can fail with EINVAL even though cancellation succeeded.
             let cancellation_socket = shutdown.as_ref().map(|_| socket.try_clone()).transpose()?;
             let mut stream = HttpStream::new(socket, tls.clone())?;
-            if let (HttpStream::Tcp(socket, cancellation), Some(shutdown)) =
-                (&mut stream, &shutdown)
+            if let (HttpTransport::Tcp(socket, cancellation), Some(shutdown)) =
+                (&mut stream.transport, &shutdown)
             {
                 socket.set_nonblocking(true)?;
                 *cancellation = Some(shutdown.clone());
@@ -1079,6 +1093,7 @@ fn read_wire_request(
     first_byte_timeout: Duration,
     request_read_timeout: Duration,
 ) -> Result<Option<WireRequest>, std::io::Error> {
+    reader.get_mut().head_response = false;
     reader
         .get_mut()
         .set_read_timeout(Some(first_byte_timeout))?;
@@ -1096,6 +1111,7 @@ fn read_wire_request(
     let method = parts.next().unwrap_or_default();
     let path = parts.next().unwrap_or_default();
     let version = parts.next().unwrap_or_default();
+    reader.get_mut().head_response = method == "HEAD";
     if method.is_empty()
         || path.is_empty()
         || !matches!(version, "HTTP/1.0" | "HTTP/1.1")
@@ -1442,17 +1458,26 @@ fn write_http_response(
         _ => "Internal Server Error",
     };
     write!(stream, "{version} {} {reason}\r\n", response.status)?;
-    for (name, value) in response.headers {
+    for (name, value) in &response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    let chunked = version == "HTTP/1.1" && response.body.len() > 2048;
+    let head_only = stream.head_response;
+    let chunked = !head_only && version == "HTTP/1.1" && response.body.len() > 2048;
     if chunked {
         stream.write_all(b"Transfer-Encoding: chunked\r\n")?;
-    } else {
+    } else if !(head_only
+        && response
+            .headers
+            .iter()
+            .any(|(name, value)| *name == "Content-Type" && value.starts_with("text/html")))
+    {
         write!(stream, "Content-Length: {}\r\n", response.body.len())?;
     }
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
+    if head_only {
+        return Ok(());
+    }
     if chunked {
         write!(stream, "{:x}\r\n", response.body.len())?;
         stream.write_all(&response.body)?;
@@ -1496,7 +1521,7 @@ fn well_known_response(
     if request.path.split('?').next() != Some("/.well-known/oauth-protected-resource") {
         return None;
     }
-    if request.method != "GET" {
+    if !matches!(request.method.as_str(), "GET" | "HEAD") {
         return Some(method_not_allowed("GET, HEAD"));
     }
     let scheme = if secure { "https" } else { "http" };
@@ -1551,9 +1576,14 @@ fn write_http_error(
     };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain; charset=utf-8\r\nX-Content-Type-Options: nosniff\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
-    )
+    )?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 fn write_request_error(
@@ -1576,7 +1606,12 @@ fn write_request_error(
         body.len()
     )?;
     write_connection_header(stream, version, keep_alive)?;
-    write!(stream, "\r\n{body}")
+    stream.write_all(b"\r\n")?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 fn write_json_error_for_request(
@@ -1596,7 +1631,12 @@ fn write_json_error_for_request(
         body.len()
     )?;
     write_connection_header(stream, version, keep_alive)?;
-    write!(stream, "\r\n{body}")
+    stream.write_all(b"\r\n")?;
+    if stream.head_response {
+        Ok(())
+    } else {
+        stream.write_all(body.as_bytes())
+    }
 }
 
 /// Handles the initialize-sized `/mcp` HTTP slice using the shared JSON-RPC

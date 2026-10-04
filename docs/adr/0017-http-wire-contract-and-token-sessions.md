@@ -113,3 +113,8 @@ than retaining only exchanges that return normally. Neither change reconstructs
 responses, changes runtime behavior, promotes forced disposal to shutdown proof
 or relaxes status/header/body comparisons. Fresh Windows and other native
 current-head evidence remains required.
+
+ADR 0021 adds real HEAD status/header/entity and persistent HEAD→GET controls,
+including read-only OAuth authorization inspection. The original 51-case
+corpus and its comparisons remain unchanged; other framing and native gates
+remain separate acceptance work.
