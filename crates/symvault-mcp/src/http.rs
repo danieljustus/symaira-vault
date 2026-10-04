@@ -54,22 +54,26 @@ struct HttpStream {
 }
 
 enum HttpTransport {
-    Tcp(ReadDeadlineSocket, Option<HttpShutdown>),
-    Tls(Box<StreamOwned<ServerConnection, ReadDeadlineSocket>>),
+    Tcp(DeadlineSocket, Option<HttpShutdown>),
+    Tls(Box<StreamOwned<ServerConnection, DeadlineSocket>>),
 }
 
-struct ReadDeadlineSocket {
+struct DeadlineSocket {
     stream: TcpStream,
     configured_timeout: Cell<Option<Duration>>,
     deadline: Cell<Option<Instant>>,
+    configured_write_timeout: Cell<Option<Duration>>,
+    write_deadline: Cell<Option<Instant>>,
 }
 
-impl ReadDeadlineSocket {
+impl DeadlineSocket {
     fn new(stream: TcpStream) -> Self {
         Self {
             stream,
             configured_timeout: Cell::new(None),
             deadline: Cell::new(None),
+            configured_write_timeout: Cell::new(None),
+            write_deadline: Cell::new(None),
         }
     }
 
@@ -96,15 +100,17 @@ impl ReadDeadlineSocket {
     }
 
     fn set_write_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
-        self.stream.set_write_timeout(timeout)
+        self.stream.set_write_timeout(timeout)?;
+        self.configured_write_timeout.set(timeout);
+        Ok(())
     }
 
     fn write_timeout(&self) -> Result<Option<Duration>, std::io::Error> {
-        self.stream.write_timeout()
+        Ok(self.configured_write_timeout.get())
     }
 }
 
-impl Read for ReadDeadlineSocket {
+impl Read for DeadlineSocket {
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, std::io::Error> {
         if buffer.is_empty() {
             return Ok(0);
@@ -130,8 +136,28 @@ impl Read for ReadDeadlineSocket {
     }
 }
 
-impl Write for ReadDeadlineSocket {
+impl Write for DeadlineSocket {
     fn write(&mut self, buffer: &[u8]) -> Result<usize, std::io::Error> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let timeout = match self.write_deadline.get() {
+            Some(deadline) => {
+                let remaining = deadline
+                    .checked_duration_since(Instant::now())
+                    .filter(|remaining| !remaining.is_zero())
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::TimedOut, "HTTP write deadline")
+                    })?;
+                Some(
+                    self.configured_write_timeout
+                        .get()
+                        .map_or(remaining, |timeout| timeout.min(remaining)),
+                )
+            }
+            None => self.configured_write_timeout.get(),
+        };
+        self.stream.set_write_timeout(timeout)?;
         self.stream.write(buffer)
     }
 
@@ -142,7 +168,7 @@ impl Write for ReadDeadlineSocket {
 
 impl HttpStream {
     fn new(stream: TcpStream, tls: Option<Arc<ServerConfig>>) -> Result<Self, std::io::Error> {
-        let stream = ReadDeadlineSocket::new(stream);
+        let stream = DeadlineSocket::new(stream);
         let transport = match tls {
             Some(config) => ServerConnection::new(config)
                 .map(|connection| {
@@ -207,12 +233,40 @@ impl HttpStream {
             HttpTransport::Tls(stream) => stream.sock.deadline.get(),
         }
     }
+
+    fn set_write_deadline(&self, deadline: Option<Instant>) {
+        match &self.transport {
+            HttpTransport::Tcp(stream, _) => stream.write_deadline.set(deadline),
+            HttpTransport::Tls(stream) => stream.sock.write_deadline.set(deadline),
+        }
+    }
+
+    fn complete_tls_handshake(&mut self, timeouts: HttpTimeouts) -> Result<(), std::io::Error> {
+        let HttpTransport::Tls(stream) = &mut self.transport else {
+            return Ok(());
+        };
+        let budget = timeouts
+            .initial_read
+            .min(timeouts.request_read)
+            .min(timeouts.write);
+        let deadline = Instant::now().checked_add(budget).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "TLS handshake deadline")
+        })?;
+        stream.sock.deadline.set(Some(deadline));
+        stream.sock.write_deadline.set(Some(deadline));
+        while stream.conn.is_handshaking() {
+            stream.conn.complete_io(&mut stream.sock)?;
+        }
+        stream.sock.deadline.set(None);
+        stream.sock.write_deadline.set(None);
+        Ok(())
+    }
 }
 
 impl From<TcpStream> for HttpStream {
     fn from(stream: TcpStream) -> Self {
         Self {
-            transport: HttpTransport::Tcp(ReadDeadlineSocket::new(stream), None),
+            transport: HttpTransport::Tcp(DeadlineSocket::new(stream), None),
             head_response: false,
             http10_response: false,
         }
@@ -1010,6 +1064,7 @@ where
         return write_plain_error(&mut stream, 403, "forbidden");
     }
     stream.set_write_timeout(Some(timeouts.write))?;
+    stream.complete_tls_handshake(timeouts)?;
     let mut reader = BufReader::new(stream);
     let mut first_request = true;
     loop {
@@ -1296,6 +1351,7 @@ fn read_wire_request(
     let waiting_started = Instant::now();
     reader.get_mut().head_response = false;
     reader.get_mut().http10_response = false;
+    reader.get_mut().set_write_deadline(None);
     reader
         .get_mut()
         .set_read_timeout(Some(first_byte_timeout))?;
@@ -1388,6 +1444,14 @@ fn read_wire_request(
     reader
         .get_mut()
         .set_read_deadline(request_started.checked_add(timeouts.request_read));
+    reader.get_mut().set_write_deadline(
+        Instant::now()
+            .checked_add(timeouts.write)
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "HTTP write deadline")
+            })
+            .map(Some)?,
+    );
     let body = if let Some(encoding) = headers.get("transfer-encoding") {
         if version != "HTTP/1.1"
             || !encoding.eq_ignore_ascii_case("chunked")
