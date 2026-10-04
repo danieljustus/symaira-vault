@@ -22,6 +22,16 @@ BASH_COMPLETION_SHA256 = "f347b832c91d44358bb335e69fa7576241d67040795a1a4d889731
 BASH_COMPAT_SHA256 = "ffe73ddfefc93936eae2a8aac8a3f749da8ed160485717393a272e84f9c754e2"
 
 
+def write_utf8(path, text):
+    # Never use the Windows process codepage or translate script newlines.
+    path.write_bytes(text.encode('utf-8'))
+
+
+def normalized_man(path, config_path):
+    # md2man's paragraph renderer escapes every path backslash for roff.
+    return path.read_bytes().decode('utf-8').replace(config_path.replace('\\','\\\\'),'__CONFIG_PATH__')
+
+
 def execute(args, cwd, env, data=None):
     result = subprocess.run([str(a) for a in args], cwd=cwd, env=env,
                             input=data, capture_output=True, timeout=120)
@@ -71,7 +81,7 @@ def capture(tree, base, env):
     man_dir = base / "man"
     result = execute([binary, "generate", "manpages", man_dir], base, env)
     assert not result.stderr
-    manpages = {p.name: p.read_text().replace(metadata['config_path'],'__CONFIG_PATH__') for p in sorted(man_dir.glob("*.1"))}
+    manpages = {p.name: normalized_man(p,metadata['config_path']) for p in sorted(man_dir.glob("*.1"))}
     seeded = execute(["go", "run", "./scripts/rust-port/cmd/cli004probe"], tree, env,
                      json.dumps(requests(commands)).encode())
     observations = json.loads(seeded.stdout)
@@ -107,7 +117,7 @@ def verify_rust(binary, artifact, base, env):
     man = base / 'rust-man'
     result = execute([binary, 'generate', 'manpages', man], base, env)
     assert not result.stderr
-    actual = {p.name: p.read_text().replace(config_path,'__CONFIG_PATH__') for p in sorted(man.glob('*.1'))}
+    actual = {p.name: normalized_man(p,config_path) for p in sorted(man.glob('*.1'))}
     assert actual == artifact['manpages'], 'all manual filenames and bytes must match real Go'
     counts['manuals'] = len(actual)
     queries = [c for c in artifact['entry_completions'] if c['state'] == 'absent']
@@ -179,7 +189,7 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
     scripts = base / 'shell-scripts'
     scripts.mkdir()
     script = scripts / 'symvault.bash'
-    script.write_text(artifact['completions']['bash/descriptions'])
+    write_utf8(script,artifact['completions']['bash/descriptions'])
     bash = os.environ.get('CLI_ARTIFACTS_BASH') or shutil.which('bash')
     assert bash, 'actual Bash completion execution is required on every runner'
     # Cobra's compatibility fallback calls the real bash-completion library.
@@ -218,7 +228,7 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
             executable = bash if shell == 'bash' else shutil.which(shell)
             assert executable, f'actual {shell} is required on Unix native runners'
             script = scripts / f'symvault.{shell}'
-            script.write_text(artifact['completions'][shell+'/descriptions'])
+            write_utf8(script,artifact['completions'][shell+'/descriptions'])
             setup = (f'PS1="contract> "; source {shlex.quote(str(library))}' if shell == 'bash'
                      else 'PROMPT="contract> "; RPROMPT=""; autoload -Uz compinit; compinit -i -D')
             setup += '; source ' + shlex.quote(str(script))
@@ -234,7 +244,7 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
         assert fish or not require_native_shells, 'actual Fish is required for native Unix acceptance'
         if fish:
             script = scripts / 'symvault.fish'
-            script.write_text(artifact['completions']['fish/descriptions'])
+            write_utf8(script,artifact['completions']['fish/descriptions'])
             results = []
             for name in ['go','rust']:
                 shell_env = dict(env, PATH=str(base/f'{name}-shell-bin')+os.pathsep+env['PATH'])
@@ -246,11 +256,11 @@ def verify_shells(go, rust, artifact, base, env, require_native_shells):
         pwsh = shutil.which('pwsh')
         assert pwsh, 'native PowerShell completion is required on Windows'
         ps = scripts / 'symvault.ps1'
-        ps.write_text(artifact['completions']['powershell/descriptions'])
+        write_utf8(ps,artifact['completions']['powershell/descriptions'])
         # Register and exercise the native argument completer through the real
         # PowerShell completion API; no script-format heuristic substitutes.
         probe = scripts / 'probe.ps1'
-        probe.write_text('param([string]$Script)\n. $Script\n(TabExpansion2 -inputScript "symvault g" -cursorColumn 10).CompletionMatches | ForEach-Object { $_.CompletionText }\n')
+        write_utf8(probe,'param([string]$Script)\n. $Script\n(TabExpansion2 -inputScript "symvault g" -cursorColumn 10).CompletionMatches | ForEach-Object { $_.CompletionText }\n')
         results = []
         for name in ['go','rust']:
             shell_env = dict(env, PATH=str(base/f'{name}-shell-bin')+os.pathsep+env['PATH'])
@@ -286,11 +296,11 @@ def main():
         try:
             artifact, go = capture(tree, base, env)
             if args.captured_output:
-                args.captured_output.write_text(json.dumps(artifact,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+                write_utf8(args.captured_output,json.dumps(artifact,ensure_ascii=False,indent=2)+'\n')
             if args.capture:
-                ARTIFACT.write_text(json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
+                write_utf8(ARTIFACT,json.dumps(artifact, ensure_ascii=False, indent=2) + "\n")
             else:
-                expected = json.loads(ARTIFACT.read_text())
+                expected = json.loads(ARTIFACT.read_bytes())
                 if artifact != expected:
                     changed = [key for key in artifact if artifact[key] != expected.get(key)]
                     print('Changed artifact sections:', changed)
@@ -324,7 +334,7 @@ def main():
                     'go_binary_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
                     'native_os':platform.system(),'architecture':platform.machine(),'keyring':'memory','actual_counts':counts,
                     'go_protocol_observations':artifact['entry_completions'],'actual_shells':shells}
-                args.receipt.write_text(json.dumps(receipt,indent=2)+'\n')
+                write_utf8(args.receipt,json.dumps(receipt,indent=2)+'\n')
                 print(f'PASS actual Go/Rust CLI artifacts: {counts}')
             else:
                 print(f"PASS actual Go capture: {len(artifact['help'])} help pages, {len(artifact['completions'])} scripts, {len(artifact['manpages'])} manuals, {len(artifact['entry_completions'])} protocol queries")

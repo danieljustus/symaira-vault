@@ -27,9 +27,18 @@ pub fn generate(_command: clap::Command, requested_dir: &Path) -> Result<PathBuf
 
 /// Write actual generated Go pages, substituting the live date and config path.
 fn write_pages(output_dir: &Path, date: &str) -> io::Result<()> {
+    // Go's md2man paragraph renderer doubles backslashes in a live Windows
+    // config path. Help uses the unescaped path; roff must preserve its syntax.
+    let config_path = symvault_core::config::PathResolver::new()
+        .config_path()
+        .to_string_lossy()
+        .replace('\\', "\\\\");
     for (name, page) in &crate::cli_artifacts::DATA.manpages {
-        let rendered =
-            crate::cli_artifacts::render(page).replacen("\"Jan 1970\"", &format!("\"{date}\""), 1);
+        let rendered = page.replace("__CONFIG_PATH__", &config_path).replacen(
+            "\"Jan 1970\"",
+            &format!("\"{date}\""),
+            1,
+        );
         std::fs::write(output_dir.join(name), rendered)?;
     }
     Ok(())

@@ -64,6 +64,15 @@ also return the same candidates and descriptions through Tab completion in
 actual PTYs. Terminal prompt/echo timing is excluded from that comparison;
 candidate rows are compared, and both raw screens are retained in the receipt.
 
+All corpus and script file I/O is explicit UTF-8 with stable LF bytes. The
+first native Windows capture exposed Python's implicit ANSI-codepage decoding:
+the stored native artifact proved that Go emitted the same Unicode help and
+scripts as Linux, while the driver misread the golden file and manuals. Keep
+the real UTF-8 data; do not freeze that mojibake as Windows behavior. The live
+config path inside a manual uses md2man's doubled-backslash roff encoding;
+ordinary help prints the unescaped path. Both capture normalization and Rust
+rendering preserve that declared format-specific substitution.
+
 The native workflow repeats actual immutable Go regeneration and Rust binary
 comparison on macOS/Linux/Windows. Unix jobs require Bash, Zsh and Fish; Windows
 requires Git Bash and real PowerShell TabExpansion2. Bash's official library
