@@ -227,6 +227,13 @@ Seventeen artifact/schema controls start from the genuine passing native
 receipt and invoke the actual CLI replay. Each deliberately refreshed digest
 belongs only to its negative-control input, never a replacement acceptance
 anchor. Preserve omitted versus explicit null snapshot fields and JSON types.
+On the next actual Linux candidate all thirty Go/Rust rows and seventeen
+receipt controls executed successfully; the dirty-source control then exposed
+a path bug: its relative output was written under the disposable child cwd but
+read under the original cwd. Resolve rejection receipts in the parent before
+launching the child. A bounded structural child proves this path and retained
+nonzero output without being substituted for native evidence. Keep that genuine
+partial mutation failure and do not call the three source controls passed.
 Reject existing execution-receipt paths; isolate replay command logs so another
 validation cannot overwrite the original runtime or prior replay observations.
 

@@ -14,6 +14,7 @@ import tui_contract as tui
 
 
 def rejected(tree, binary, receipt, reason, source_only=False):
+    receipt = receipt.resolve()  # child cwd is the disposable source tree
     argv = [sys.executable, str(tree/'scripts/rust-port/tui_contract.py'),
             '--rust-cli', str(binary), '--receipt', str(receipt)]
     if source_only:

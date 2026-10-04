@@ -16,6 +16,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import tui_contract as tui
+import tui_mutation_test as mutations
 
 STRUCTURAL_BYTES = b'public-safe-terminal'
 STRUCTURAL_SHA = hashlib.sha256(STRUCTURAL_BYTES).hexdigest()
@@ -150,6 +151,19 @@ class HarnessTests(unittest.TestCase):
             records = [json.loads(p.read_bytes()) for p in Path(raw).glob('*.json')]
             self.assertEqual([r['exit_code'] for r in records], [7])
             self.assertTrue(any(b'child-failure-control' in p.read_bytes() for p in Path(raw).glob('*.stdout')))
+
+    def test_relative_rejection_receipt_stays_in_parent_evidence_root(self):
+        # Deliberate synthetic rejection child, not native acceptance evidence.
+        with tempfile.TemporaryDirectory(prefix='tui-relative-receipt-') as raw:
+            base = Path(raw); tree = base/'clone'; script = tree/'scripts/rust-port/tui_contract.py'
+            script.parent.mkdir(parents=True)
+            script.write_text('import sys,json\nfrom pathlib import Path\np=Path(sys.argv[sys.argv.index("--receipt")+1]);p.parent.mkdir(parents=True,exist_ok=True)\np.write_text(json.dumps({"passed":False,"failure":"structural rejection"}))\nprint("structural child output")\nsys.exit(7)\n')
+            expected = base/'evidence/receipt.json'
+            relative = Path(os.path.relpath(expected))
+            result = mutations.rejected(tree, base/'unused-binary', relative, 'structural rejection', source_only=True)
+            self.assertIs(result['passed'], False)
+            self.assertTrue(expected.is_file())
+            self.assertIn(b'structural child output', expected.with_suffix('.stdout').read_bytes())
 
     def test_cleanup_failure_cannot_erase_primary_row_and_capture(self):
         with tempfile.TemporaryDirectory(prefix='tui-failure-retention-') as raw:
