@@ -7,6 +7,10 @@
 //! DNS validation, vault lookup, substitutions, audit, and response pattern
 //! sanitization remain separate migration work.
 
+#[path = "broker_connect.rs"]
+mod connect;
+pub use connect::serve_connect_passthrough;
+
 use reqwest::{
     Method, Url,
     blocking::Client,

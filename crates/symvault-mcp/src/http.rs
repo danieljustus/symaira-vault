@@ -3,7 +3,7 @@
 //! checks and response framing for bounded HTTP/1.x connections.
 
 #[path = "http_shutdown.rs"]
-mod shutdown;
+pub(crate) mod shutdown;
 pub use shutdown::HttpShutdown;
 
 use crate::approval::{ApprovalQueue, handle_local_request};
