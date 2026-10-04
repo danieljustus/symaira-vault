@@ -157,6 +157,14 @@ helper's error contract. The latest development corpus passes 19 runtime and
 14 CLI cases, including both encoded ACL outcomes and measured dot-segment
 policy. Native acceptance must repeat the complete corpus at a clean commit.
 
+The first native Linux and Windows jobs at ce70c715 completed the actual Go
+runtime corpus, then Python 3.13 rejected the first Rust intercepted leaf with
+Missing Authority Key Identifier. Include that extension when signing Rust
+leaves. The driver explicitly enables VERIFY_X509_STRICT even on older local
+Python, retaining chain and hostname verification for both implementations.
+Do not weaken client verification or discard this native failure. The repaired
+candidate must repeat all real cases before acceptance.
+
 Disposable native fixture vaults use explicitly configured Argon2id parameters
 of 19456 KiB, two iterations and one lane, within Go's configured minimum
 policy. Real Go InitWithPassphrase writes the encrypted identity and entries;

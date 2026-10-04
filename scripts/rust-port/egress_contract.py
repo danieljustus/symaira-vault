@@ -189,6 +189,10 @@ def request(address, root, peer, method="GET", path="/v1/allowed", body=b"", pas
                 return {"status": response.status, "body_base64": base64.b64encode(response.read()).decode(), "echo": None, "cookies": []}
             cafile = ROOT / "crates/symvault-mcp/tests/fixtures/tls-ca.pem" if passthrough else root / "probe-ca.pem"
             context = ssl.create_default_context(cafile=str(cafile))
+            # Python 3.13 enables this by default. Require the same verified
+            # chain/hostname/extension policy locally on older Python too.
+            context.verify_flags |= ssl.VERIFY_X509_STRICT
+            assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
             connection = context.wrap_socket(connection, server_hostname="127.0.0.1")
             destination = path
         else:
@@ -528,6 +532,7 @@ def main():
                "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(), "oracle_commit": ORACLE,
                "rust_cli_binary_sha256": hashlib.sha256(rust_cli.read_bytes()).hexdigest(),
                "fixture_identity_kdf": {"algorithm":"argon2id", "memory_kib":19456, "iterations":2, "lanes":1, "purpose":"explicit supported disposable-fixture settings; production defaults and performance not measured"},
+               "client_tls_verification":"required chain, hostname and VERIFY_X509_STRICT for actual Go and Rust",
                "transport_seams": "private fixture destinations and fixture CA only in library probes; never CLI flags"}
     try:
         with tempfile.TemporaryDirectory(prefix="symvault-egress-contract-") as raw:

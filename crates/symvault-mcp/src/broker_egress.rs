@@ -234,6 +234,7 @@ impl<'a> EgressBroker<'a> {
             KeyUsagePurpose::KeyEncipherment,
         ];
         params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        params.use_authority_key_identifier_extension = true;
         let key = KeyPair::generate().map_err(|_| "generate broker leaf key")?;
         let certificate = params
             .signed_by(&key, &self.ca)
