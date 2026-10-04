@@ -1,0 +1,93 @@
+{
+  "candidate_commit": "9d7178b33760335bcc9d2fdfd22cf0580f8580dd",
+  "passed": true,
+  "candidate_clean_at_end": true,
+  "frozen_binary_inventory_unchanged": true,
+  "cases": [
+    {
+      "case": "broker",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "67f94ef1bc4d6c94d1e77727d431aee0dacdaa47cfdda0a07519c18423bd5eb8"
+    },
+    {
+      "case": "api",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "56c0fcd42f5471e41c5a4e240fea5392dc86ed90616fe08ef8d23aee85060747"
+    },
+    {
+      "case": "connect",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": null,
+      "receipt_sha256": "6809acfab625a8b10145fc18f56834404a0012fe065b1d33f99094f59646d057"
+    },
+    {
+      "case": "http",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": null,
+      "receipt_sha256": "1e543ff4ca06ab582b140300bd99a2d0586ed38916913ab1ac4bc7a6515b3b3e"
+    },
+    {
+      "case": "oauth",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "f4be185e740f58e8f17b364e8c7504c6eaec71302b8133a67ec7dbfff7b556cf"
+    },
+    {
+      "case": "head",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "912a017633e27480942947f4cb2519965ee49ee423769ef47996374a35476151"
+    },
+    {
+      "case": "origin",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "12c8ee0daa190edf12c3c8ccc28d422df3188b4c63468c6aa315849a5556afcd"
+    },
+    {
+      "case": "framing",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "9e585d27e7d7dea4168dba9f58af414503ef7a8b37a7f13c259da9d3e0c41bde"
+    },
+    {
+      "case": "deadlines",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "e273cdbbee04a08529d7a2f0737f729d618f39ea4472cebf026f153317ed2228"
+    },
+    {
+      "case": "tls",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "06a5934f1751c7934b6081a2b3fca585a1cc2108b7aa111ae305a390b3898ea2"
+    },
+    {
+      "case": "timeouts",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "ecfad6f4a58bb93c659d789bcf9e14ab225eecd3fdc983551748163a95e53095"
+    },
+    {
+      "case": "write",
+      "passed": true,
+      "source_inventory_reverified": true,
+      "driver_end_clean_field": true,
+      "receipt_sha256": "dc6f31065800a897079e64b890744bcdb96864928fa5ebc5958b5bd8c0ea844f"
+    }
+  ],
+  "runner_schema_correction": "Connect and original HTTP receipts do not contain an end-clean field; all twelve actual passing receipts independently reverified against final unchanged source/binary inventory and clean HEAD."
+}

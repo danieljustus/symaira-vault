@@ -1,0 +1,1980 @@
+{
+  "snapshot_notice": "Historical last-observed workflow state. Re-read GitHub before each merge; queued is not a passing gate.",
+  "assembled_date": "2026-10-04",
+  "main_commit": "061682058ccd7faa0a2f57381b01172bd066dddd",
+  "browser_code_checkpoint": "3cdb452cde7ffb95fa884406f8b78fddb63a8e01",
+  "issues": [
+    {
+      "number": 870,
+      "title": "feat(ios): AutoFill credential provider extension, and measure its memory budget",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/870"
+    },
+    {
+      "number": 938,
+      "title": "iOS: ship the first internal TestFlight beta for Symaira Vault",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/938"
+    },
+    {
+      "number": 1029,
+      "title": "PB-2026-09-09 — Brain-integrated credential management; gate retirement of the separate management app",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1029"
+    },
+    {
+      "number": 1034,
+      "title": "Bug: biometrische Keychain-Abfrage läuft als security statt SymVault und promptet wiederholt",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1034"
+    },
+    {
+      "number": 1140,
+      "title": "Rust MCP CONNECT tunnel must reset accepted sockets to blocking mode on macOS",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1140"
+    },
+    {
+      "number": 1214,
+      "title": "Epic: Rust cutover for symvault and Go retirement",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1214"
+    },
+    {
+      "number": 1236,
+      "title": "CLI: port `serve` runtime, its flags and `serve install|status|uninstall`",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1236"
+    },
+    {
+      "number": 1237,
+      "title": "CLI: port `broker` and `run --broker/--broker-passthrough/--broker-strict` (BROKER-001/002)",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1237"
+    },
+    {
+      "number": 1239,
+      "title": "CLI: port the `ui` TUI (internal/ui) to Rust",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1239"
+    },
+    {
+      "number": 1240,
+      "title": "CLI-004: byte parity for help, completions and manpages (incl. `update * --help`)",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1240"
+    },
+    {
+      "number": 1241,
+      "title": "CLI-005/CLI-006: complete error taxonomy and output modes",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1241"
+    },
+    {
+      "number": 1242,
+      "title": "CLI-007: signal handling parity (SIGINT/SIGTERM/Ctrl-Break)",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1242"
+    },
+    {
+      "number": 1243,
+      "title": "SESSION-001/003: port session cache and Touch ID unlock natively",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1243"
+    },
+    {
+      "number": 1244,
+      "title": "PLATFORM-001: port clipboard and autotype",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1244"
+    },
+    {
+      "number": 1245,
+      "title": "PLATFORM-002: port secure UI, notifications and the daemon",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1245"
+    },
+    {
+      "number": 1247,
+      "title": "IO-001/002: complete importers and export/backup/restore parity",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1247"
+    },
+    {
+      "number": 1248,
+      "title": "MCP-001..004: promote stdio MCP with runtime discovery, profile matrix and call-time authorization",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1248"
+    },
+    {
+      "number": 1249,
+      "title": "HTTP-001..004: differential evidence and promotion for MCP HTTP/SSE, tokens, OAuth and TLS",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1249"
+    },
+    {
+      "number": 1250,
+      "title": "PAIRING-001 / APPROVAL-001: native three-OS gates and promotion",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1250"
+    },
+    {
+      "number": 1251,
+      "title": "FFI-001/002: replace the gomobile bridge with a Rust Swift bridge (`symvault-ffi`)",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1251"
+    },
+    {
+      "number": 1252,
+      "title": "DIST-001..005: Rust release pipeline (targets, archives, trust chain, Homebrew/Scoop/Docker/Nix, rollback)",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1252"
+    },
+    {
+      "number": 1253,
+      "title": "Freeze Go oracle corpora and make the Rust contract suite Go-independent",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1253"
+    },
+    {
+      "number": 1254,
+      "title": "VALUE-001: measure the value gate on the Rust release candidate",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1254"
+    },
+    {
+      "number": 1255,
+      "title": "RUST-013: ship the dual-binary Rust prerelease",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1255"
+    },
+    {
+      "number": 1256,
+      "title": "RUST-014: stable Rust cutover release with Go fallback and observation window",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1256"
+    },
+    {
+      "number": 1257,
+      "title": "RUST-015: remove the Go backend and Go toolchain from the repository",
+      "url": "https://github.com/danieljustus/symaira-vault/issues/1257"
+    }
+  ],
+  "pull_requests": [
+    {
+      "number": 1293,
+      "branch": "feat/1240-cli-artifacts",
+      "head": "abf2da414c8b741193f171b47f18309e6763b19e",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1293",
+      "last_observed_runs": [
+        {
+          "id": 37213580540,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580518,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580489,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580507,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580555,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580570,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580487,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37213580549,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37213580545,
+          "name": "Rust audit differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37213580537,
+          "name": "Sync oracle observations",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37213580499,
+          "name": "Rust CLI artifacts",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1295,
+      "branch": "feat/1236-serve-compat",
+      "head": "bee5d81755c4545134f53b9adf87360d9788610d",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1295",
+      "last_observed_runs": [
+        {
+          "id": 37215106264,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106276,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106291,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106286,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106314,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106289,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106316,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106340,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106349,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106267,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106336,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215106367,
+          "name": "Windows ordinary attachment reader",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "number": 1296,
+      "branch": "fix/1140-connect-blocking",
+      "head": "c13ec32c09bd917c84b295a6e23d178e019ffe34",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1296",
+      "last_observed_runs": [
+        {
+          "id": 37198378785,
+          "name": "Rust broker CONNECT",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378801,
+          "name": "Rust pairing differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378806,
+          "name": "Vault read resource policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378757,
+          "name": "Rust intake CLI",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378824,
+          "name": "MCP HTTP shutdown",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378751,
+          "name": "Rust audit differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378769,
+          "name": "KDF resource policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378783,
+          "name": "Sync oracle observations",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378756,
+          "name": "Store oracle observations",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37198378763,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "number": 1297,
+      "branch": "feat/1237-broker-cli",
+      "head": "668dc378d8740eb2d41d44a3561c6389fe2b6bc9",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1297",
+      "last_observed_runs": [
+        {
+          "id": 37214172925,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172948,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172923,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172933,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172906,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172859,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172862,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172921,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172927,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172868,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214172929,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214172904,
+          "name": "Rust intake CLI",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214172883,
+          "name": "Rust serve compatibility",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214172930,
+          "name": "Rust egress broker",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1298,
+      "branch": "feat/1248-mcp-native",
+      "head": "01ff782d29596c7d82c775c6719cea86dc9dff18",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1298",
+      "last_observed_runs": [
+        {
+          "id": 37214393902,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393875,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393910,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393907,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393870,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393912,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393906,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393924,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393911,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393913,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214393880,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214393884,
+          "name": "Rust pairing differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214394000,
+          "name": "Rust audit differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214393871,
+          "name": "Rust MCP native process contracts",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214393935,
+          "name": "Vault read resource policy",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1299,
+      "branch": "feat/1249-http-native",
+      "head": "ec7db4b0999d4f5b517ce3328001b691232ece08",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1299",
+      "last_observed_runs": [
+        {
+          "id": 37214394560,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394624,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394558,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394602,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394741,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394789,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394671,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394700,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394658,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394583,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394779,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214394742,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214394600,
+          "name": "Rust egress broker",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214394731,
+          "name": "Rust pairing differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214394743,
+          "name": "Vault read resource policy",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214394770,
+          "name": "Rust audit differential",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1300,
+      "branch": "feat/1237-api-context",
+      "head": "24b48b1e3ae9ab09c85ed5997a0d5c2555ceb389",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1300",
+      "last_observed_runs": [
+        {
+          "id": 37214397082,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214396981,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397039,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397016,
+          "name": "Rust API DNS and cancellation",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397035,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397034,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397032,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397023,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397047,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214396989,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397015,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214396997,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397018,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214396994,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397051,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397010,
+          "name": "Vault read resource policy",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 37214396955,
+          "name": "Rust broker CONNECT",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "number": 1302,
+      "branch": "feat/1249-oauth-flow",
+      "head": "b20ffbfc0d2d609cbd66fd5e3c001cbc5f2ecddb",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1302",
+      "last_observed_runs": [
+        {
+          "id": 37214397987,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397872,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397865,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397910,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397902,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397874,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397944,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397886,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397864,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397908,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397919,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397912,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397898,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397922,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397933,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397901,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214397918,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1303,
+      "branch": "feat/1249-http-head",
+      "head": "c5b6cc3f586a7db289bbcd1fa1a6517279aac17e",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1303",
+      "last_observed_runs": [
+        {
+          "id": 37214399150,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399202,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399185,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399222,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399216,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399160,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399195,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399217,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399168,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399214,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399186,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399197,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399146,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399208,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399165,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399159,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214399209,
+          "name": "Rust audit differential",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214399189,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1304,
+      "branch": "fix/1249-origin-authority",
+      "head": "a84151c95b60322dd12de5c22f9f969114a40420",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1304",
+      "last_observed_runs": [
+        {
+          "id": 37214402534,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402191,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402218,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402253,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402275,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402279,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402243,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402200,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402305,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402230,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402270,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402163,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402194,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402209,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402242,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402152,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402290,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214402223,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 37214402208,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "number": 1305,
+      "branch": "fix/1249-http-framing",
+      "head": "551b77e5cc24e9148c722449879143bf0eb40b11",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1305",
+      "last_observed_runs": [
+        {
+          "id": 37214403600,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403603,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403684,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403614,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403626,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403591,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403585,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403599,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403571,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403652,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403587,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403659,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403616,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403615,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403637,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403660,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403655,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403588,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403592,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214403642,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1306,
+      "branch": "fix/1249-http-read-deadlines",
+      "head": "69aa2d39a5f1f854aacce4f4780ada1953548133",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1306",
+      "last_observed_runs": [
+        {
+          "id": 37214404777,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404615,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404675,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404659,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404728,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404676,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404642,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404686,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404685,
+          "name": "Rust HTTP absolute input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404682,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404734,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404699,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404745,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404684,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404700,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404690,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404653,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404724,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404667,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404743,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214404634,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1307,
+      "branch": "test/1249-live-tls",
+      "head": "5a0c5699b93c0a040ed950dadd4777f21ac6a615",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1307",
+      "last_observed_runs": [
+        {
+          "id": 37214406169,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406202,
+          "name": "Rust live TLS and mTLS contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406167,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406114,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406246,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406201,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406195,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406106,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406071,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406214,
+          "name": "Rust HTTP absolute input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406161,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406215,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406095,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406148,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406224,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406193,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406134,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406197,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406123,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406233,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406247,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406196,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1308,
+      "branch": "fix/1249-http-timeout-config",
+      "head": "52fa4c41fa649edf8d3f0bf3459211170e28f0d7",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1308",
+      "last_observed_runs": [
+        {
+          "id": 37214406520,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406548,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406605,
+          "name": "Rust live TLS and mTLS contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406540,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406576,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406547,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406503,
+          "name": "Rust configured HTTP input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406550,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406612,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406487,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406583,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406461,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406581,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406526,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406545,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406529,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406505,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406489,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406597,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406493,
+          "name": "Rust HTTP absolute input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406491,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406559,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37214406572,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1309,
+      "branch": "fix/1249-http-write-deadlines",
+      "head": "1e64240dadbce4b4378b10433ff7d7b754666895",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1309",
+      "last_observed_runs": [
+        {
+          "id": 37215067870,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067890,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067787,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067842,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067824,
+          "name": "Rust live TLS and mTLS contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067906,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067867,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067863,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067904,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067778,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067860,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067848,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067819,
+          "name": "Rust configured HTTP input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067811,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067925,
+          "name": "Rust absolute HTTP write deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067923,
+          "name": "Rust HTTP absolute input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067781,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067895,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067771,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067822,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067874,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067852,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067790,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37215067791,
+          "name": "Windows ordinary attachment reader",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "number": 1310,
+      "branch": "fix/1237-owned-dns",
+      "head": "9d7178b33760335bcc9d2fdfd22cf0580f8580dd",
+      "url": "https://github.com/danieljustus/symaira-vault/pull/1310",
+      "last_observed_runs": [
+        {
+          "id": 37217547495,
+          "name": "Rust intake CLI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547488,
+          "name": "Rust HTTP OAuth lifecycle",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547502,
+          "name": "Rust egress broker",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547487,
+          "name": "Rust HTTP Host and Origin contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547532,
+          "name": "Rust HTTP absolute input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547499,
+          "name": "MCP HTTP shutdown",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547540,
+          "name": "Rust MCP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547489,
+          "name": "KDF resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547587,
+          "name": "Rust absolute HTTP write deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547588,
+          "name": "Store oracle observations",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547534,
+          "name": "Rust configured HTTP input deadlines",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547577,
+          "name": "Rust API DNS and cancellation",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547585,
+          "name": "Rust serve compatibility",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547548,
+          "name": "Windows ordinary attachment reader",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547651,
+          "name": "CI",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547576,
+          "name": "Rust HTTP request framing contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547570,
+          "name": "Rust live TLS and mTLS contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547632,
+          "name": "Rust audit differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547575,
+          "name": "Rust HTTP HEAD contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547637,
+          "name": "Rust MCP HTTP native process contracts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547564,
+          "name": "Vault read resource policy",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547725,
+          "name": "Rust CLI artifacts",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547612,
+          "name": "Rust pairing differential",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547553,
+          "name": "Rust broker CONNECT",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 37217547756,
+          "name": "Sync oracle observations",
+          "status": "queued",
+          "conclusion": null
+        }
+      ]
+    }
+  ],
+  "browser_draft": {
+    "number": 1311,
+    "branch": "feat/1239-tui",
+    "base": "fix/1237-owned-dns",
+    "draft": true,
+    "code_checkpoint": "3cdb452cde7ffb95fa884406f8b78fddb63a8e01",
+    "url": "https://github.com/danieljustus/symaira-vault/pull/1311"
+  }
+}
