@@ -354,7 +354,7 @@ def main():
     clean = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()
     assert clean or args.allow_dirty_for_development, "commit the candidate before native acceptance"
     sources = sorted(x for x in checked(["git", "ls-files", "--cached", "--others", "--exclude-standard"]).decode().splitlines()
-                     if x.startswith(("crates/", "third_party/", "testdata/"))
+                     if x.startswith(("crates/", "third_party/", "testdata/", "internal/mcp/apitemplates/builtin/"))
                      or x in {"Cargo.toml", "Cargo.lock", ".gitattributes", "scripts/rust-port/serve_contract.py", ".github/workflows/rust-serve-cli.yml"})
     with tempfile.TemporaryDirectory(prefix="symvault-serve-contract-") as raw:
         base = Path(raw)
@@ -365,6 +365,9 @@ def main():
             checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree)
             oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
                                     if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
+            embedded = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
+                              if x.startswith("internal/mcp/apitemplates/builtin/"))
+            assert len(embedded) == 17
             observed = {}
             for label, binary in [("go", go), ("rust", rust)]:
                 root = base / (label+"-roots")
@@ -391,6 +394,7 @@ def main():
                     assert left == right, (left, right)
             receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": oracle_sources,
                        "oracle_source_digest": inventory(oracle_sources, tree),
+                       "oracle_embedded_files": embedded, "oracle_embedded_digest": inventory(embedded, tree),
                        "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
                        "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
                        "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
