@@ -56,3 +56,5 @@ scripts/rust-port/egress_contract_probe.go.txt text eol=lf
 .github/workflows/rust-broker-egress.yml text eol=lf
 scripts/rust-port/http_process_contract.py text eol=lf
 .github/workflows/rust-mcp-http-process.yml text eol=lf
+scripts/rust-port/http_oauth_contract.py text eol=lf
+.github/workflows/rust-http-oauth.yml text eol=lf

@@ -92,6 +92,12 @@ native gates remain required. OAuth entropy/time need controlled-provider or
 explicit semantic evidence; they cannot be silently normalized under the
 Date-only rule. HTTP-001..004 and #1249 stay open until full acceptance.
 
+ADR 0019 adds a separate real 46-case OAuth consent/PKCE/refresh/restart and
+configured-lifetime corpus. Entropy/time/UI and specific consent/refresh safety
+differences receive explicit semantic assertions; the existing 51-case wire
+comparison and its four declared differences remain unchanged. Native and the
+other remaining acceptance boundaries are still required.
+
 The first Windows run at ddf346e passes all 227 owning runtime tests and the
 assembled API control, then times out in the actual Go HTTP process after 43
 requests. Its retained stderr contains the per-request missing-Origin warnings;

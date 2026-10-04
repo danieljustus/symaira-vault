@@ -1,0 +1,134 @@
+name: Rust HTTP OAuth lifecycle
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-http-oauth.yml'
+      - 'crates/symvault-cli/**'
+      - 'crates/symvault-mcp/**'
+      - 'crates/symvault-core/**'
+      - 'crates/symvault-store/**'
+      - 'crates/symvault-platform/**'
+      - 'Cargo.lock'
+      - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/http_oauth*'
+      - 'scripts/rust-port/http_process*'
+      - 'scripts/rust-port/mcp_process_contract.py'
+      - 'docs/adr/0019-oauth-consent-binding-and-token-lifetimes.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  oauth:
+    name: HTTP OAuth (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      TZ: UTC
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout retained Go oracle and candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Test owning config runtime and CLI assembly
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo clippy -p symvault-core -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
+          cargo test -p symvault-core --all-targets --locked > target/native-oauth-config-tests.txt 2>&1
+          cat target/native-oauth-config-tests.txt
+          cargo test -p symvault-mcp --all-targets --locked > target/native-oauth-tests.txt 2>&1
+          cat target/native-oauth-tests.txt
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          config=Path('target/native-oauth-config-tests.txt').read_text()
+          assert 'mcp_tls_settings_survive_config_roundtrip ... ok' in config
+          text=Path('target/native-oauth-tests.txt').read_text()
+          results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
+          assert results and sum(int(n) for n,_ in results)==(227 if os.environ['RUNNER_OS']=='Windows' else 229)
+          assert all(int(ignored)==0 for _,ignored in results)
+          assert 'consent_pkce_access_and_refresh_are_connected_and_single_use ... ok' in text
+          PY
+          cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
+          cargo build -p symvault-cli --bin symvault --locked
+      - name: Execute actual native consent PKCE rotation expiry and restart
+        run: |
+          set -euo pipefail
+          rust_cli=target/debug/symvault
+          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
+          python3 scripts/rust-port/http_oauth_contract.py --rust "$rust_cli" --receipt native-http-oauth.json
+          python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          r=json.loads(Path('native-http-oauth.json').read_bytes())
+          assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
+          assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences']
+          decisions={'fresh-persisted-client','bound-browser-consent','fresh-single-use-code','fresh-scoped-token-pair','single-use-browser-confirmation','server-bound-consent-metadata','server-bound-consent-pkce','server-side-consent-denial','configured-positive-token-ttls','bounded-refresh-after-access-expiry','bounded-refreshed-runtime-control'}
+          assert len(r['semantic_controls'])==26 and {x['decision'] for x in r['semantic_controls']}==decisions
+          for implementation in ['go','rust']:
+              observed=r[implementation]
+              assert len(observed['rows'])==35 and len(observed['ttl_rows'])==11
+              rows=observed['rows']+observed['ttl_rows']
+              assert len({x['case'] for x in rows})==46
+              assert all({'status_line','headers','body_base64','wire_body_base64','raw_base64'}<=x['response'].keys() for x in rows)
+              assert len(observed['processes'])==3
+              assert all(p['output_capture_complete'] and not p['output_capture_errors'] and p['forced_cleanup_not_graceful_evidence'] for p in observed['processes'])
+              assert observed['rows'][-1]['case']=='persisted-rotated-token-health'
+              assert observed['ttl_rows'][-1]['case']=='ttl-old-access-still-denied'
+          PY
+      - name: Preserve original strict HTTP corpus
+        run: |
+          set -euo pipefail
+          rust_cli=target/debug/symvault
+          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
+          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt native-http-process.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('native-http-process.json').read_bytes())
+          assert r['passed'] and r['candidate_worktree_clean'] and not r['differences']
+          assert len(r['go'])==len(r['rust'])==51 and len(r['declared_differences'])==4
+          PY
+      - name: Retain complete actual native observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: http-oauth-${{ matrix.os }}
+          path: |
+            native-http-oauth.json
+            native-http-process.json
+            target/native-oauth-tests.txt
+            target/native-oauth-config-tests.txt
+          if-no-files-found: error
+          retention-days: 14
