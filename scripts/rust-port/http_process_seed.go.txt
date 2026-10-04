@@ -1,0 +1,43 @@
+// Disposable fixtures through the actual immutable Go vault/config/token APIs.
+package main
+
+import (
+ "encoding/json"
+ "flag"
+ "os"
+ "time"
+ "github.com/danieljustus/symaira-vault/internal/config"
+ "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+func main() {
+ root := flag.String("root", "", "private disposable vault")
+ flag.Parse()
+ cfg := config.Default()
+ cfg.Vault = &config.VaultConfig{FormatVersion:2, AuthMethod:"passphrase", Argon2idTime:2, Argon2idMemory:19456, Argon2idThreads:1}
+ cfg.MCP = &config.MCPConfig{AllowInsecureBind:true, RateLimit:0}
+ profile := config.AgentProfile{Tier:config.StrPtr("admin"), ApprovalMode:config.StrPtr("none"), AllowedPaths:[]string{"public"}, CanReadValues:config.BoolPtr(true), CanRunCommands:config.BoolPtr(true), ExposeValueTools:config.BoolPtr(true)}
+ cfg.Agents = map[string]config.AgentProfile{"fixture":profile,"other":profile}
+ cfg.DefaultAgent = "fixture"
+ identity, err := vault.InitWithPassphrase(*root, []byte("correct horse battery staple"), cfg); if err != nil { panic(err) }
+ entry := &vault.Entry{Data:map[string]any{"password":"public-http-secret-729c"}}
+ if err = vault.WriteEntry(*root,"public/fixture",entry,identity); err != nil { panic(err) }
+ registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(*root))
+ if err = registry.Load(); err != nil { panic(err) }
+ tokens := map[string]string{}
+ for _, spec := range []struct{name,agent string; tools []string; ttl time.Duration}{
+  {"full","fixture",[]string{"*"},time.Hour},
+  {"health","fixture",[]string{"health"},time.Hour},
+  {"metadata","fixture",[]string{"get_entry_metadata"},time.Hour},
+  {"other","other",[]string{"*"},time.Hour},
+  {"expired","fixture",[]string{"*"},time.Nanosecond},
+  {"revoked","fixture",[]string{"*"},time.Hour},
+ } {
+  token, raw, e := registry.Create(spec.name,spec.tools,spec.agent,spec.ttl); if e != nil { panic(e) }
+  tokens[spec.name]=raw
+  if spec.name=="revoked" && !registry.Revoke(token.ID) { panic("revoke fixture token") }
+ }
+ if err = registry.Save(); err != nil { panic(err) }
+ if err = json.NewEncoder(os.Stdout).Encode(tokens); err != nil { panic(err) }
+}

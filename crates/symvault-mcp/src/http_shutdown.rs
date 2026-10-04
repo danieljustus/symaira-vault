@@ -45,7 +45,7 @@ impl HttpShutdown {
     // Windows shutdown does not wake a blocking recv/send (Rust 1.98's
     // std/net/tcp/tests.rs, close_read_wakes_up). Cancellable sockets use
     // nonblocking I/O, retaining the caller's full per-operation timeout.
-    pub(super) fn socket_io<T>(
+    pub(crate) fn socket_io<T>(
         &self,
         timeout: Option<Duration>,
         mut operation: impl FnMut() -> io::Result<T>,
@@ -92,7 +92,7 @@ impl HttpShutdown {
         first_error.map_or(Ok(()), Err)
     }
 
-    pub(super) fn is_cancelled(&self) -> io::Result<bool> {
+    pub(crate) fn is_cancelled(&self) -> io::Result<bool> {
         self.state
             .0
             .lock()
@@ -100,7 +100,7 @@ impl HttpShutdown {
             .map_err(|_| io::Error::other("HTTP shutdown state poisoned"))
     }
 
-    pub(super) fn wait_for_activity(&self) -> io::Result<()> {
+    pub(crate) fn wait_for_activity(&self) -> io::Result<()> {
         let (lock, changed) = &*self.state;
         let state = lock
             .lock()
@@ -113,7 +113,7 @@ impl HttpShutdown {
         Ok(())
     }
 
-    pub(super) fn register(&self, socket: &TcpStream) -> io::Result<Option<ConnectionGuard>> {
+    pub(crate) fn register(&self, socket: &TcpStream) -> io::Result<Option<ConnectionGuard>> {
         let mut state = self
             .state
             .0
@@ -136,7 +136,7 @@ impl HttpShutdown {
     }
 }
 
-pub(super) struct ConnectionGuard {
+pub(crate) struct ConnectionGuard {
     shutdown: HttpShutdown,
     id: usize,
 }
