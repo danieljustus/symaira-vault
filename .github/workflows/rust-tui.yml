@@ -1,0 +1,156 @@
+name: Rust native vault browser
+
+on:
+  push:
+    branches: [feat/1239-tui]
+  pull_request:
+    branches: [main, fix/1237-owned-dns]
+    paths:
+      - '.github/workflows/rust-tui.yml'
+      - 'crates/**'
+      - 'third_party/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'scripts/rust-port/tui*'
+      - 'docs/adr/0029-native-vault-browser.md'
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: Full expected candidate commit (must match checkout)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Native browser (${{ matrix.os }})
+    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      TZ: UTC
+      PYTHONDONTWRITEBYTECODE: '1'
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target/tui-candidate
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+      # Acceptance-only byte reproducibility, preserving native UUID/signing.
+      # Native opt-level 1 smoke builds are byte-identical across target paths;
+      # disabling UUIDs is invalid on Darwin 27. Release packaging is unchanged.
+      CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
+      CARGO_PROFILE_TEST_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
+      RUSTFLAGS: ${{ matrix.os == 'windows-latest' && '-C link-arg=/Brepro' || '' }}
+
+      SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
+    steps:
+      - name: Checkout complete candidate and immutable Go reference
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Assert requested revision and real native target
+        env:
+          EXPECTED_CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/tui-evidence
+          python3 - <<'PY'
+          import json,os,platform,re,subprocess
+          from pathlib import Path
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          expected=os.environ.get('EXPECTED_CANDIDATE','')
+          if expected:
+              assert re.fullmatch('[0-9a-f]{40}',expected) and expected==head
+          targets={'Linux':('Linux','x86_64'),'macOS':('Darwin','arm64'),'Windows':('Windows','AMD64')}
+          assert (platform.system(),platform.machine())==targets[os.environ['RUNNER_OS']]
+          assert os.environ['GITHUB_ACTIONS']=='true'
+          assert os.environ['RUNNER_ENVIRONMENT']=='github-hosted'
+          with Path(os.environ['GITHUB_ENV']).open('a') as environment:
+              environment.write('TMPDIR='+os.environ['RUNNER_TEMP']+'\n')
+          assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=all']).strip()
+          Path('target/tui-evidence/native-target.json').write_text(json.dumps({'head':head,'native_os':platform.system(),'architecture':platform.machine()},indent=2)+'\n')
+          PY
+          if [[ "$RUNNER_OS" == macOS ]]; then sw_vers; fi
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust and terminal validation tools
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+          python3 -m pip install -r scripts/rust-port/tui-validation-requirements.txt
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y xvfb xclip
+          fi
+      - name: Full owning CLI and platform checks without ignored credential tests
+        run: |
+          set -euo pipefail
+          manifest="$GITHUB_WORKSPACE/Cargo.toml"
+          cargo fmt --manifest-path "$manifest" --all --check > target/tui-evidence/fmt.txt 2>&1
+          cargo test --manifest-path "$manifest" -p symvault-cli -p symvault-platform --all-targets --locked > target/tui-evidence/tests.txt 2>&1
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          text=Path('target/tui-evidence/tests.txt').read_text()
+          rows=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
+          assert rows and sum(int(n) for n,_ in rows)>0
+          names=['encrypted_browser_masks_sensitive_values_until_explicit_reveal','browser_filters_navigation_and_canceled_delete_preserve_encrypted_entries','successful_copy_owns_ttl_and_quit_cleanup_even_with_disabled_timer','all_sensitive_fields_and_terminal_escape_surfaces_remain_masked','updated_sort_compares_instants_and_generator_does_not_write_entry']
+          for name in names:
+              assert f'tui::tests::{name} ... ok' in text
+          Path('target/tui-evidence/test-counts.json').write_text(json.dumps({'passed':sum(int(n) for n,_ in rows),'ignored':sum(int(n) for _,n in rows),'required_browser_cases':names},indent=2)+'\n')
+          PY
+          cargo clippy --manifest-path "$manifest" -p symvault-cli -p symvault-platform --all-targets --all-features --locked -- -D warnings > target/tui-evidence/clippy.txt 2>&1
+          cargo build --manifest-path "$manifest" -p symvault-cli --bin symvault --locked > target/tui-evidence/build.txt 2>&1
+          python3 - <<'BINARY'
+          import os,shutil
+          from pathlib import Path
+          name='symvault.exe' if os.name=='nt' else 'symvault'
+          shutil.copy2(Path(os.environ['CARGO_TARGET_DIR'])/'debug'/name,Path('target/tui-evidence')/name)
+          BINARY
+          python3 scripts/rust-port/tui_harness_test.py > target/tui-evidence/harness-tests.txt 2>&1
+      - name: Complete clean fifteen-case actual Go and Rust terminal comparison
+        run: |
+          set -euo pipefail
+          binary="$CARGO_TARGET_DIR/debug/symvault"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
+          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json > target/tui-evidence/native-tui.txt 2>&1
+          head=$(git rev-parse HEAD)
+          digest=$(python3 -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path("target/tui-evidence/native-tui.json").read_bytes()).hexdigest())')
+          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json --validate-receipt --candidate "$head" --expected-receipt-sha256 "$digest"
+      - name: Reject dirty source, foreign binary and actual production reveal mutation
+        run: |
+          set -euo pipefail
+          binary="$CARGO_TARGET_DIR/debug/symvault"
+          if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
+          python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
+      - name: Retain all native receipts and failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tui-${{ matrix.os }}
+          path: target/tui-evidence/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,46 @@
+{
+  "status": "development evidence only; complete native acceptance pending",
+  "native_os": "Linux",
+  "commands": {
+    "tests": {
+      "exit_code": 0,
+      "log_sha256": "5777ce454e0ab6c4da44dfad2f1710f95d4e32162842c008936e856e7057ecbf",
+      "reproduction_command": "cargo test -p symvault-cli -p symvault-platform --all-targets --locked"
+    },
+    "clippy": {
+      "exit_code": 0,
+      "log_sha256": "d3e93bb1348db0bf382ed2c088a4fea9352ba1675e2292f5e35ba644c5d37dc4",
+      "reproduction_command": "cargo clippy -p symvault-cli -p symvault-platform --all-targets --all-features --locked -- -D warnings"
+    },
+    "build": {
+      "exit_code": 0,
+      "log_sha256": "14428b7d006544a84c7544ee970afac3b32f875e66c62d362477d4db85a9a9ad",
+      "reproduction_command": "cargo build -p symvault-cli --bin symvault --locked"
+    },
+    "deny": {
+      "exit_code": 0,
+      "log_sha256": "c362a2a8c13c2af9b56987df8af7c402ef81d5fe1be2827fc43d6ab212d1deb6",
+      "reproduction_command": "cargo deny --locked check"
+    }
+  },
+  "cli": {
+    "passed": 492,
+    "ignored": 5
+  },
+  "platform": {
+    "passed": 53,
+    "ignored": 1
+  },
+  "source_files": {
+    "Cargo.lock": "2f051e5340015e884fc338511dd9de10fa3638608e8ee1f25f5756e5181699a2",
+    "crates/symvault-cli/Cargo.toml": "66f1bddefd2492e697c763a009af234885902bac36b869231d95530ff8f5368d",
+    "crates/symvault-cli/src/edit_commands.rs": "d4d13a8e3d6d740f30c05d25f33f8acc0d82383adfde1d0d360d8e43e0472d50",
+    "crates/symvault-cli/src/main.rs": "658aabf5caefc8f4b183a193fc95d22b23f01cc2f3607e0bd2b64a94e65324b8",
+    "crates/symvault-cli/src/run_commands.rs": "1d8ae3123036fc96cf4004a439ae36f8e761feeba0cd2826f0f07f9faff6e973",
+    "crates/symvault-platform/Cargo.toml": "d47f4b0a44ce273d099ae8ef21a8bbdbf55b3738563f1c714e40170f210b228d",
+    "crates/symvault-platform/src/lib.rs": "8169d6e7bfa4599f30ca565c7b9d4636dfb460e003b80074b9fbce4dfad80b4e",
+    "deny.toml": "7706533e93fb58f24ac5288cc458e85b48b3f9caa031230786b5e9a06aefdbde",
+    "crates/symvault-cli/src/tui.rs": "5cd9a68354d0ed1fa4c34161ed17ef5d985b4f763ba45ba6fb7d1be2c80a4941",
+    "crates/symvault-platform/src/text_clipboard.rs": "1f152e8d23de282be445ca45bfa7303e8bd1fc0f1724674c692f4b4880bb40a7"
+  }
+}

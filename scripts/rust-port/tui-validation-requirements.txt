@@ -1,0 +1,4 @@
+# Validation tools only; the installed symvault executable does not use Python.
+pyte==0.8.2
+wcwidth==0.2.13
+pywinpty==3.0.5; sys_platform == 'win32'

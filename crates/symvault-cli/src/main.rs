@@ -50,6 +50,7 @@ mod share_commands;
 mod startup_profile_commands;
 mod sync_commands;
 mod template_commands;
+mod tui;
 mod update_commands;
 mod utility_commands;
 mod vault_commands;
@@ -134,6 +135,15 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Launch the interactive terminal UI.
+    Ui {
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        print_keybindings: bool,
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+        experimental: bool,
+    },
     /// Review-gated credential intake from loose files.
     Intake {
         #[command(flatten)]
@@ -1236,6 +1246,22 @@ fn run_cli() -> ExitCode {
     session_input::set_quiet(cli.quiet);
 
     match cli.command {
+        Some(Command::Ui {
+            print_keybindings,
+            experimental: _,
+        }) => {
+            let result = if print_keybindings {
+                tui::print_keybindings(&mut io::stdout().lock()).map_err(|e| e.to_string())
+            } else {
+                (|| {
+                    let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                    require_initialized(&root)?;
+                    let identity = device::unlock_vault(&root)?;
+                    tui::run(&root, &identity)
+                })()
+            };
+            finish_vault_result(result)
+        }
         Some(Command::Intake { command, options }) => match command {
             Some(IntakeCommand::Watch {
                 directory,
