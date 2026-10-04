@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,17 +28,186 @@ import (
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
-const oracleCommit = "cd741531"
+const oracleCommit = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 
 var sources = []string{
+	"internal/approval/enroll.go",
+	"internal/approval/http.go",
+	"internal/approval/local.go",
+	"internal/approval/queue.go",
+	"internal/config/config.go",
+	"internal/config/config_load.go",
+	"internal/config/config_merge.go",
+	"internal/config/config_save.go",
+	"internal/config/config_validate.go",
+	"internal/config/dottedpath.go",
+	"internal/config/migrate.go",
+	"internal/config/migrate_copy_unix.go",
+	"internal/config/migrate_copy_windows.go",
+	"internal/config/migrate_source_unix.go",
+	"internal/config/migrate_source_windows.go",
+	"internal/config/paths.go",
+	"internal/config/presets.go",
+	"internal/config/schema.go",
+	"internal/config/warn.go",
+	"internal/crypto/age.go",
+	"internal/crypto/argon2_resources.go",
+	"internal/crypto/argon2id.go",
+	"internal/crypto/diceware.go",
+	"internal/crypto/hmac.go",
+	"internal/crypto/interop.go",
+	"internal/crypto/keygen.go",
+	"internal/crypto/keystore.go",
+	"internal/crypto/password.go",
+	"internal/crypto/secstring_other.go",
+	"internal/crypto/secstring_unix.go",
+	"internal/crypto/symmetric.go",
+	"internal/crypto/totp.go",
+	"internal/fsutil/createsensitiveoutput.go",
+	"internal/fsutil/doc.go",
+	"internal/fsutil/reexport.go",
+	"internal/fsutil/safepath/doc.go",
+	"internal/fsutil/safepath/manager_unix.go",
+	"internal/fsutil/safepath/manager_windows.go",
+	"internal/fsutil/safepath/safepath.go",
+	"internal/fsutil/safewrite_windows.go",
+	"internal/mcp/apitemplates/auth.go",
+	"internal/mcp/apitemplates/template.go",
 	"internal/mcp/auth/auth.go",
 	"internal/mcp/auth/token.go",
+	"internal/mcp/auth/token_ratelimit.go",
+	"internal/mcp/errors/codes.go",
+	"internal/mcp/install/agent.go",
+	"internal/mcp/install/config.go",
+	"internal/mcp/install/detect.go",
+	"internal/mcp/install/installer.go",
+	"internal/mcp/masking/doc.go",
+	"internal/mcp/masking/sanitizer.go",
+	"internal/mcp/masking/validator.go",
+	"internal/mcp/mcptypes.go",
+	"internal/mcp/server/approval.go",
+	"internal/mcp/server/approval_helper.go",
+	"internal/mcp/server/command_policy.go",
+	"internal/mcp/server/grant_keys.go",
+	"internal/mcp/server/grant_keys_fallback.go",
+	"internal/mcp/server/hooks.go",
+	"internal/mcp/server/hooks_builtin.go",
 	"internal/mcp/server/http_helpers.go",
+	"internal/mcp/server/leanmode.go",
 	"internal/mcp/server/prompt_registry.go",
 	"internal/mcp/server/protocol.go",
+	"internal/mcp/server/render.go",
+	"internal/mcp/server/secure_input.go",
+	"internal/mcp/server/server.go",
+	"internal/mcp/server/server_approval.go",
+	"internal/mcp/server/server_authorize.go",
+	"internal/mcp/server/server_dispatch.go",
+	"internal/mcp/server/setup.go",
+	"internal/mcp/server/sharing_store.go",
+	"internal/mcp/server/tool_registry.go",
+	"internal/mcp/server/tools_audit_self.go",
+	"internal/mcp/server/tools_auth.go",
+	"internal/mcp/server/tools_autotype.go",
+	"internal/mcp/server/tools_clipboard.go",
+	"internal/mcp/server/tools_delete.go",
+	"internal/mcp/server/tools_execute_api_request.go",
+	"internal/mcp/server/tools_execute_with_secret.go",
+	"internal/mcp/server/tools_find.go",
+	"internal/mcp/server/tools_generate.go",
+	"internal/mcp/server/tools_get.go",
+	"internal/mcp/server/tools_health.go",
+	"internal/mcp/server/tools_list.go",
+	"internal/mcp/server/tools_perplexity.go",
+	"internal/mcp/server/tools_prepare_payment.go",
+	"internal/mcp/server/tools_request_credential.go",
+	"internal/mcp/server/tools_run.go",
+	"internal/mcp/server/tools_sanitize.go",
+	"internal/mcp/server/tools_search.go",
+	"internal/mcp/server/tools_search_openai.go",
+	"internal/mcp/server/tools_secure_input.go",
+	"internal/mcp/server/tools_set.go",
+	"internal/mcp/server/tools_sharing.go",
+	"internal/mcp/server/tools_template.go",
+	"internal/mcp/server/tools_test_helpers.go",
+	"internal/mcp/server/tools_totp.go",
+	"internal/mcp/server/tools_unseal.go",
+	"internal/mcp/server/tools_whoami.go",
 	"internal/mcp/serverbootstrap/http.go",
+	"internal/mcp/serverbootstrap/http_lifecycle.go",
+	"internal/mcp/serverbootstrap/http_metrics.go",
+	"internal/mcp/serverbootstrap/http_nometrics.go",
 	"internal/mcp/serverbootstrap/http_setup.go",
+	"internal/mcp/serverbootstrap/oauth.go",
+	"internal/mcp/serverbootstrap/stdio.go",
+	"internal/mcp/serverbootstrap/tls.go",
+	"internal/mcp/serverbootstrap/wellknown.go",
+	"internal/mcp/sharing_types.go",
+	"internal/mcp/toolhash.go",
+	"internal/mcp/transport/stdio.go",
 	"internal/mcp/transport/transport.go",
+	"internal/mcp/util.go",
+	"internal/policy/authorizer.go",
+	"internal/policy/context.go",
+	"internal/policy/engine.go",
+	"internal/policy/parser.go",
+	"internal/policy/ratelimit.go",
+	"internal/policy/ratelimit_transition.go",
+	"internal/policy/types.go",
+	"internal/secureui/backend.go",
+	"internal/secureui/backend_darwin.go",
+	"internal/secureui/backend_other.go",
+	"internal/secureui/backend_tty.go",
+	"internal/secureui/backend_unix.go",
+	"internal/secureui/backend_windows.go",
+	"internal/secureui/capslock.go",
+	"internal/secureui/capslock_darwin.go",
+	"internal/secureui/capslock_linux.go",
+	"internal/secureui/capslock_other.go",
+	"internal/secureui/runner.go",
+	"internal/secureui/secureui.go",
+	"internal/template/builtins.go",
+	"internal/template/engine.go",
+	"internal/template/funcs.go",
+	"internal/template/resolver.go",
+	"internal/vault/backup_codes.go",
+	"internal/vault/cache.go",
+	"internal/vault/devices.go",
+	"internal/vault/entry.go",
+	"internal/vault/entry_canary.go",
+	"internal/vault/entry_metadata.go",
+	"internal/vault/entry_readwrite.go",
+	"internal/vault/entry_resources.go",
+	"internal/vault/entry_validate.go",
+	"internal/vault/file_digest.go",
+	"internal/vault/git.go",
+	"internal/vault/index_resources.go",
+	"internal/vault/kdf_resource_migration.go",
+	"internal/vault/lock_unix.go",
+	"internal/vault/lock_windows.go",
+	"internal/vault/manifest.go",
+	"internal/vault/manifest_updater.go",
+	"internal/vault/metrics.go",
+	"internal/vault/payment.go",
+	"internal/vault/read_admission.go",
+	"internal/vault/recipients.go",
+	"internal/vault/reencrypt.go",
+	"internal/vault/reencrypt_journal.go",
+	"internal/vault/reencrypt_journal_unix.go",
+	"internal/vault/reencrypt_journal_windows.go",
+	"internal/vault/reencrypt_unix.go",
+	"internal/vault/reencrypt_windows.go",
+	"internal/vault/retention_budget.go",
+	"internal/vault/search.go",
+	"internal/vault/search_index.go",
+	"internal/vault/service.go",
+	"internal/vault/symlink_harden.go",
+	"internal/vault/symlink_harden_windows.go",
+	"internal/vault/sync/sync.go",
+	"internal/vault/taint/taint.go",
+	"internal/vault/types.go",
+	"internal/vault/url.go",
+	"internal/vault/vault.go",
+	"internal/vault/vault_sync_reconcile.go",
 }
 
 type fixture struct {
@@ -56,10 +226,12 @@ type caseFixture struct {
 }
 
 type oracle struct {
-	Commit       string   `json:"commit"`
-	CommitSHA    string   `json:"commit_sha"`
-	SourceFiles  []string `json:"source_files"`
-	SourceDigest string   `json:"source_digest"`
+	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
+	SourceFiles     []string `json:"source_files"`
+	SourceDigest    string   `json:"source_digest"`
+	GeneratorFiles  []string `json:"generator_files"`
+	GeneratorDigest string   `json:"generator_digest"`
 }
 
 type request struct {
@@ -106,6 +278,33 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
+	// HOME isolation does not disable an OS credential service. Select the
+	// existing memory backend explicitly before creating any server resources.
+	oldEnvironment := make(map[string]*string)
+	for key, value := range map[string]string{
+		"HOME":                  filepath.Join(vaultDir, "home"),
+		"USERPROFILE":           filepath.Join(vaultDir, "home"),
+		"XDG_CONFIG_HOME":       filepath.Join(vaultDir, "config"),
+		"XDG_DATA_HOME":         filepath.Join(vaultDir, "data"),
+		"XDG_CACHE_HOME":        filepath.Join(vaultDir, "cache"),
+		"SYMVAULT_TEST_KEYRING": "memory",
+	} {
+		if previous, present := os.LookupEnv(key); present {
+			oldEnvironment[key] = &previous
+		} else {
+			oldEnvironment[key] = nil
+		}
+		check(os.Setenv(key, value))
+	}
+	defer func() {
+		for key, previous := range oldEnvironment {
+			if previous == nil {
+				check(os.Unsetenv(key))
+			} else {
+				check(os.Setenv(key, *previous))
+			}
+		}
+	}()
 	registry := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
 	check(registry.Load())
 	tokens := map[string]string{}
@@ -144,8 +343,9 @@ func main() {
 				fmt.Fprintln(os.Stderr, serverErr)
 				os.Exit(1)
 			}
-		case <-time.After(3 * time.Second):
+		case <-time.After(8 * time.Second):
 			_ = listener.Close()
+			check(errors.New("HTTP oracle server did not complete its bounded shutdown"))
 		}
 	}()
 
@@ -302,6 +502,9 @@ func main() {
 		ServerVersion: "1.0.0",
 		Cases:         requests,
 	}
+	out.Oracle.GeneratorFiles = []string{"scripts/rust-port/cmd/http001initgen/main.go"}
+	out.Oracle.GeneratorDigest, err = provenance.Digest(root, out.Oracle.GeneratorFiles)
+	check(err)
 	encoded, err := json.MarshalIndent(out, "", "  ")
 	check(err)
 	encoded = append(encoded, '\n')

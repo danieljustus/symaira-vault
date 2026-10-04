@@ -43,9 +43,8 @@ func (b *powershellBackend) prompt(req PromptRequest) (string, error) {
 		)
 	}
 
-	out, err := b.r.run("powershell.exe",
-		[]string{"-NoProfile", "-NonInteractive", "-Command", script},
-		req.Timeout)
+	out, err := runPrompt(b.r, req, "powershell.exe",
+		[]string{"-NoProfile", "-NonInteractive", "-Command", script})
 	if err != nil {
 		if isCmdCancel(err) {
 			return "", ErrCanceled

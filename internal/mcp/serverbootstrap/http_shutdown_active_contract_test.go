@@ -15,11 +15,23 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-// Record production semantics before choosing Rust callback ownership. The Go
-// caller returns while an already admitted factory callback remains running.
-// This is an observation, not a claim of graceful draining or safe cutover.
+// Exercise the corrected production lifecycle with a real authenticated request.
+// Clean drain waits for callbacks; deadline returns explicitly and closes transports.
 func TestHTTPShutdownActiveFactoryContract(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		name := "drain"
+		if deadline {
+			name = "deadline"
+		}
+		t.Run(name, func(t *testing.T) { exerciseActiveFactoryShutdown(t, deadline) })
+	}
+}
+
+func exerciseActiveFactoryShutdown(t *testing.T, deadline bool) {
 	v := newTestVault(t)
+	if deadline {
+		v.Config.MCP.ShutdownTimeout = 150 * time.Millisecond
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -65,14 +77,23 @@ func TestHTTPShutdownActiveFactoryContract(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("real authenticated request never entered factory")
 	}
+	var incomplete *HTTPShutdownError
 	cancel()
-	select {
-	case err := <-serverDone:
-		if err != nil {
-			t.Fatal(err)
+	if deadline {
+		select {
+		case err := <-serverDone:
+			if !errors.Is(err, context.DeadlineExceeded) || !errors.As(err, &incomplete) {
+				t.Fatalf("shutdown error = %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("shutdown exceeded its explicit deadline")
 		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Go server did not return while factory remained blocked")
+	} else {
+		select {
+		case err := <-serverDone:
+			t.Fatalf("server returned before its callback drained: %v", err)
+		case <-time.After(80 * time.Millisecond):
+		}
 	}
 	select {
 	case <-callbackDone:
@@ -87,11 +108,33 @@ func TestHTTPShutdownActiveFactoryContract(t *testing.T) {
 	}
 	select {
 	case err := <-requestDone:
-		if err != nil {
+		if err != nil && !deadline {
 			t.Fatal(err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("request goroutine not reaped")
 	}
-	t.Log("production Go returns after context cancellation without waiting for the already admitted factory callback; callback remains alive until explicit release")
+	if deadline {
+		select {
+		case <-incomplete.Drained:
+		case <-time.After(2 * time.Second):
+			t.Fatal("late callback cleanup did not signal complete drain")
+		}
+	}
+	if !deadline {
+		select {
+		case err := <-serverDone:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("server did not return after callbacks drained")
+		}
+	}
+	rebound, err := net.Listen("tcp", listener.Addr().String())
+	if err != nil {
+		t.Fatalf("endpoint unavailable after shutdown: %v", err)
+	}
+	_ = rebound.Close()
+	t.Log("authenticated active callback: explicit drain/deadline, joined request and endpoint rebind")
 }
