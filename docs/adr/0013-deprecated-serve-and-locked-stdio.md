@@ -102,3 +102,16 @@ TLS flag-path assertions use filesystem identity: Windows extended paths and
 macOS resolved temporary-directory aliases must identify the actual configured
 certificate/CA file. Exact runtime-metadata path spelling and omission rules
 remain #1249; this startup slice does not declare those JSON bytes equivalent.
+
+The native Windows run at candidate 768e802f measured Go listing
+request_credential in locked mode when powershell.exe is discoverable, while
+Rust's default catalog omitted it. Locked bootstrap now reproduces Go's host
+backend metadata detection (TTY or the platform GUI executable, honoring
+SYMVAULT_SECUREUI) without constructing a tool runtime or launching a helper.
+The driver explicitly sets secure UI to none for the ordinary headless bootstrap
+cases in both implementations. A separate lookup-only GUI fixture lists
+request_credential and actually calls it: both must return the locked error and
+leave the vault untouched. This brings the corpus to 30 Unix / 29 Windows cases.
+Listing while locked does not establish delivery of an unlocked GUI prompt;
+that runtime remains #1245. The original failed native observation is retained
+as the reason for this repair, not normalized out of a claimed parity result.
