@@ -115,3 +115,11 @@ leave the vault untouched. This brings the corpus to 30 Unix / 29 Windows cases.
 Listing while locked does not establish delivery of an unlocked GUI prompt;
 that runtime remains #1245. The original failed native observation is retained
 as the reason for this repair, not normalized out of a claimed parity result.
+
+The subsequent Windows run measured a rejected anonymous mTLS client with no
+Go handshake log before the fixture stopped the HTTP child. The transport
+rejection is independently required through the actual TLS exchange. Retain
+all observed log lines (and their strict known-source validation), including
+an empty log, rather than treating an asynchronous log's timing as delivery
+evidence. Forced test termination and whole-runtime logging remain outside
+this launch acceptance and are explicitly recorded in the receipt.
