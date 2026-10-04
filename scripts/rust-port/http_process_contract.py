@@ -95,7 +95,11 @@ def exchange(port, data, retained):
             # Also preserve actual partial bytes when recv times out or fails.
             retained['raw_base64']=base64.b64encode(result).decode()
             retained['send_reset']=send_reset
-    head,body = bytes(result).split(b'\r\n\r\n',1)
+    return parse_response(bytes(result), send_reset)
+
+
+def parse_response(raw, send_reset=False):
+    head,body = raw.split(b'\r\n\r\n',1)
     lines = head.decode('latin1').split('\r\n')
     fields = [tuple(line.split(':',1)) for line in lines[1:]]
     fields = [(name.lower(),value.strip()) for name,value in fields]
@@ -119,7 +123,7 @@ def exchange(port, data, retained):
         assert len(lengths)==1 and int(lengths[0])==len(body), 'complete HTTP framing'
     return {'status_line':lines[0],'headers':fields,'headers_without_date':sorted((k,v) for k,v in fields if k!='date'),
             'body_base64':base64.b64encode(body).decode(),'body_utf8':body.decode('utf-8'),
-            'raw_base64':base64.b64encode(result).decode(),'wire_body_base64':base64.b64encode(wire_body).decode(),
+            'raw_base64':base64.b64encode(raw).decode(),'wire_body_base64':base64.b64encode(wire_body).decode(),
             'send_reset':send_reset}
 
 
@@ -253,27 +257,69 @@ def startup_denials(binary,home,port,tokens,observations):
         assert b'insecure bind' in stderr and not any(value.encode() in stderr for value in [SECRET]+list(tokens.values()))
 
 
-def stalled_connections(port,tokens,observations):
+def stalled_response_class(row, implementation):
+    assert implementation in {'go','rust'}, 'known timeout implementation'
+    bounds={'idle-before-request':(4,8),'incomplete-request-body':(9,15)}
+    assert row['case'] in bounds, 'known stalled-client case'
+    minimum,maximum=bounds[row['case']]
+    elapsed=row['elapsed_seconds']
+    assert type(elapsed) in {int,float} and minimum<=elapsed<maximum, 'actual bounded transport closure'
+    received=base64.b64decode(row['received_base64'],validate=True)
+    if not received:
+        return 'silent-eof'
+    assert implementation=='go' and row['case']=='incomplete-request-body', 'unexpected stalled-client response'
+    # Go's equal default read/write deadlines can race after header acquisition.
+    # Preserve and validate the complete measured error, never normalize it away.
+    response=parse_response(received)
+    body=b'{"error":{"message":"invalid JSON","code":-32700},"jsonrpc":"2.0"}\n'
+    assert response['status_line']=='HTTP/1.1 400 Bad Request', 'timeout parse-error status'
+    assert base64.b64decode(response['body_base64'])==body, 'timeout parse-error body'
+    assert response['headers_without_date']==sorted([
+        ('connection','close'),('content-length',str(len(body))),('content-type','application/json')
+    ]), 'complete timeout parse-error headers'
+    dates=[value for name,value in response['headers'] if name=='date']
+    assert len(dates)==1 and re.fullmatch(r'[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT',dates[0]), 'one HTTP Date'
+    return 'complete-invalid-json-400'
+
+
+def validate_stalled_observations(receipt):
+    for implementation in ['go','rust']:
+        rows=receipt[implementation+'_stalled_clients']
+        assert [row['case'] for row in rows]==['idle-before-request','incomplete-request-body'], 'exact stalled-case inventory'
+        for row in rows:
+            assert row['passed'] is True and row['peer_eof'] is True, 'executed successful EOF assertion'
+            assert row['response_class']==stalled_response_class(row,implementation), 'derived timeout response class'
+    for left,right in zip(receipt['go_stalled_clients'],receipt['rust_stalled_clients'],strict=True):
+        assert re.fullmatch(r'[0-9a-f]{64}',left['request_sha256']) and left['request_sha256']==right['request_sha256'], 'same complete stalled request'
+
+
+def stalled_connections(port,tokens,observations,implementation):
     incomplete=request('/mcp',port,tokens,body=b' '*64)[:-63]
-    for name,data,minimum in [('idle-before-request',b'',4),('incomplete-request-body',incomplete,9)]:
-        row={'case':name,'request_sha256':hashlib.sha256(data).hexdigest(),'received_base64':''}
+    for name,data in [('idle-before-request',b''),('incomplete-request-body',incomplete)]:
+        row={'case':name,'request_sha256':hashlib.sha256(data).hexdigest(),'received_base64':'','peer_eof':False,'passed':False}
         observations.append(row)
         with socket.create_connection(('127.0.0.1',port),timeout=15) as connection:
             started=time.monotonic()
-            connection.sendall(data)
             received=bytearray()
-            while True:
-                part=connection.recv(4096)
-                if not part:break
-                received+=part
+            try:
+                connection.sendall(data)
+                while True:
+                    part=connection.recv(4096)
+                    if not part:
+                        row['peer_eof']=True
+                        break
+                    received+=part
+                    row['received_base64']=base64.b64encode(received).decode()
+                    assert len(received)<65536
+            finally:
                 row['received_base64']=base64.b64encode(received).decode()
-                assert len(received)<65536
-            row['elapsed_seconds']=time.monotonic()-started
-        maximum=8 if name=='idle-before-request' else 15
-        assert not received and minimum<=row['elapsed_seconds']<maximum, 'actual bounded transport closure, no reconstructed response'
+                row['elapsed_seconds']=time.monotonic()-started
+        assert row['peer_eof'] is True, 'actual peer EOF, not socket timeout/reset'
+        row['response_class']=stalled_response_class(row,implementation)
+        row['passed']=True
 
 
-def observe(binary,home,port,tokens,rows,process_record,transport_rows):
+def observe(binary,home,port,tokens,rows,process_record,transport_rows,implementation):
     process = subprocess.Popen([str(binary),'--quiet','mcp','--bind','127.0.0.1','--port',str(port)],
         cwd=home,env=isolated(home),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     capture = ProcessCapture(process)
@@ -299,7 +345,7 @@ def observe(binary,home,port,tokens,rows,process_record,transport_rows):
             row['response'].update(exchange(port,data,row['response']))
             assert SECRET not in row['response']['body_utf8']
             assert not any(token in row['response']['body_utf8'] for token in tokens.values())
-        stalled_connections(port,tokens,transport_rows)
+        stalled_connections(port,tokens,transport_rows,implementation)
         data=request('/mcp',port,tokens,body=b'{"jsonrpc":"2.0","id":6,"method":"ping"}')
         row={'case':'mcp-ping-after-stalled-clients','request_sha256':hashlib.sha256(data).hexdigest(),'response':{}}
         rows.append(row)
@@ -323,7 +369,7 @@ def candidate_paths():
         if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
         or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-mcp-http-process.yml',
             'scripts/rust-port/http_process_contract.py','scripts/rust-port/http_process_seed.go.txt',
-            'scripts/rust-port/mcp_process_contract.py'})
+            'scripts/rust-port/mcp_process_contract.py','scripts/rust-port/test_http_process_contract.py'})
 
 
 def main():
@@ -373,7 +419,8 @@ def main():
                     assert vault_snapshot(home/'vault')==snapshot
                     receipt[implementation+'_process']={}
                     startup_denials(binary,home,port,tokens,receipt[implementation+'_startup_denials'])
-                    observe(binary,home,port,tokens,receipt[implementation],receipt[implementation+'_process'],receipt[implementation+'_stalled_clients'])
+                    observe(binary,home,port,tokens,receipt[implementation],receipt[implementation+'_process'],receipt[implementation+'_stalled_clients'],implementation)
+                validate_stalled_observations(receipt)
                 for a,b in zip(receipt['go'],receipt['rust'],strict=True):
                     assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
                     left,right=a['response'],b['response']

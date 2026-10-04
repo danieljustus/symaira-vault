@@ -13,6 +13,8 @@ on:
       - 'Cargo.lock'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/http_process*'
+      - 'scripts/rust-port/test_http_process_contract.py'
+      - 'testdata/http-default-deadline/**'
       - 'scripts/rust-port/mcp_process_contract.py'
       - 'docs/adr/0017-http-wire-contract-and-token-sessions.md'
   workflow_dispatch:
@@ -71,6 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all --check
+          python3 scripts/rust-port/test_http_process_contract.py
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
           cargo test -p symvault-mcp --all-targets --locked > target/native-http-tests.txt 2>&1
           cat target/native-http-tests.txt
@@ -90,8 +93,10 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt native-http-process.json
           python3 - <<'PY'
-          import json,subprocess
+          import json,subprocess,sys
           from pathlib import Path
+          sys.path.insert(0,'scripts/rust-port')
+          from http_process_contract import validate_stalled_observations
           receipt=json.loads(Path('native-http-process.json').read_bytes())
           assert receipt['passed'] and receipt['candidate_worktree_clean'] and not receipt['differences']
           assert receipt['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
@@ -107,7 +112,7 @@ jobs:
               assert {r['case'] for r in receipt[implementation+'_stalled_clients']}=={'idle-before-request','incomplete-request-body'}
               assert receipt[implementation+'_process']['forced_cleanup_not_graceful_evidence']
           assert receipt['go_startup_denials']==receipt['rust_startup_denials']
-          assert all(a['request_sha256']==b['request_sha256'] and not a['received_base64'] and not b['received_base64'] for a,b in zip(receipt['go_stalled_clients'],receipt['rust_stalled_clients'],strict=True))
+          validate_stalled_observations(receipt)
           PY
       - name: Upload complete actual native observations
         if: always()

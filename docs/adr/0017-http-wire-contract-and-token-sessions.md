@@ -107,3 +107,43 @@ than retaining only exchanges that return normally. Neither change reconstructs
 responses, changes runtime behavior, promotes forced disposal to shutdown proof
 or relaxes status/header/body comparisons. Fresh Windows and other native
 current-head evidence remains required.
+
+## Default read/write deadline boundary
+
+The retained Windows Go observation from run 37214402152, job 111471877187,
+disproves the recorder's assumption that an incomplete body always closes
+without a response. At 9.990889700000025 seconds the immutable Go CLI returned
+the complete HTTP 400 invalid-JSON envelope and then EOF. Its original receipt
+is failed, not complete acceptance, and retains SHA-256
+`a5039d6e57180434587259ee5ae1c7d7c9ee0a093ded60b6938622016569a555`.
+The committed fixture extracts only that unchanged observation and safe
+source/binary identities; it does not synthesize the missing Rust observations
+or promote the historical failed report.
+
+Go's default read and write deadlines are both ten seconds. The read deadline
+starts before acquiring the headers, while net/http sets the write deadline
+after the headers. Consequently the parse-error write and write expiry can
+overlap. A preregistered, three-exchange native Darwin diagnostic of the same
+Go1.26.6 oracle observed default silence, a complete 400 when the diagnostic
+write deadline was fifteen seconds, and silence with a five-second diagnostic
+write deadline. Those overrides diagnose the boundary; they are not replacement
+acceptance or changes to production/default tests. They do not establish the
+physical scheduler cause of the original Windows timing.
+
+The incomplete-body control therefore retains either actual Go EOF with no
+bytes or its exact complete invalid-JSON 400 response. In the latter case it
+validates the status, entity/wire body, complete non-Date header multiset,
+framing and single HTTP Date. It never discards or reconstructs those bytes.
+Rust remains required to close silently; both implementations' idle-before-
+request controls also remain silent. This narrow measured reference boundary
+does not permit any other status, body, header, credential or success response.
+
+Keep the original four-to-eight-second initial wait and nine-to-fifteen-second
+body bound unchanged. Require actual peer EOF, explicit boolean passing
+assertions, the exact two-case inventory and identical request hashes. A reset,
+local socket timeout, partial 400, unexpected output or a subsequent unusable
+listener still fails. Preserve partial bytes and elapsed time on failure.
+The actual post-timeout ping, all 51 ordinary transcripts, five startup denials
+and four explicitly declared semantic differences remain mandatory on every
+native target. Mutation tests reject changed real response bytes, missing/
+false/type-substituted success, wrong cases/hashes and out-of-bound times.
