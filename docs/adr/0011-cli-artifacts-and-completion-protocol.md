@@ -5,6 +5,13 @@
 Accepted maintainer-delegated decision, 2026-10-04. Implementation and native
 acceptance are in progress; issue #1240 and CLI-004 remain open.
 
+Merging main's accepted intake slice at 8b79c477 creates conflicts only in
+line-ending attributes and CLI lockfile edges. Retain this slice's LF rules and
+removal of clap_complete/clap_mangen: the source-bound Go artifact renderers
+replace those dependencies. Locked offline metadata validates the resolved
+graph without updating package versions. The runtime/test tree is unchanged by
+this ancestry merge; native gates bind the resulting new commit.
+
 ## Decision and rationale
 
 Keep the existing public Go help, completion scripts and manuals as the v1
