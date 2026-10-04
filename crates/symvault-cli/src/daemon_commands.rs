@@ -264,7 +264,7 @@ pub fn render_plist(installer: &Installer, home: &Path) -> String {
         "        <key>StandardErrorPath</key>\n        <string>{}</string>\n",
         xml_escape(&installer.err_log_path.to_string_lossy())
     ));
-    out.push_str("    </dict>\n</plist>\n");
+    out.push_str("    </dict>\n</plist>");
     let _ = home;
     out
 }
@@ -667,7 +667,8 @@ mod tests {
     /// The plist recorded from the pinned Go oracle in
     /// `target/resume-evidence/wave3-daemon-differential.json`, with the
     /// program's own path, the synthetic home and the vault replaced by
-    /// placeholders (those are the only machine-dependent values).
+    /// placeholders (those are the only machine-dependent values). The old
+    /// literal below appended an LF; native Go at d1cd0f97 ends at </plist>.
     const ORACLE_PLIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -718,9 +719,12 @@ mod tests {
     fn render_plist_matches_the_go_oracle_byte_for_byte() {
         let installer = fixture_installer();
         let rendered = render_plist(&installer, Path::new(TEST_HOME));
-        if rendered != ORACLE_PLIST {
+        let expected = ORACLE_PLIST
+            .strip_suffix('\n')
+            .expect("old literal final LF");
+        if rendered != expected {
             let left: Vec<&str> = rendered.lines().collect();
-            let right: Vec<&str> = ORACLE_PLIST.lines().collect();
+            let right: Vec<&str> = expected.lines().collect();
             for index in 0..left.len().max(right.len()) {
                 let (a, b) = (
                     left.get(index).copied().unwrap_or("<missing>"),
@@ -729,7 +733,7 @@ mod tests {
                 assert_eq!(a, b, "plist line {index} diverged");
             }
         }
-        assert_eq!(rendered, ORACLE_PLIST);
+        assert_eq!(rendered, expected);
     }
 
     #[test]
