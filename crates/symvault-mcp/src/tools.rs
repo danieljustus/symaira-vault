@@ -15,6 +15,9 @@ pub struct ToolListConfig {
     pub secure_input_available: bool,
     pub request_credential_available: bool,
     pub generate_totp_available: bool,
+    /// Explicit operator restriction. Empty retains the ordinary registry.
+    #[serde(default)]
+    pub allowed_tools: Vec<String>,
 }
 
 impl Default for ToolListConfig {
@@ -27,6 +30,7 @@ impl Default for ToolListConfig {
             request_credential_available: false,
             // Go shows this tool without profile context.
             generate_totp_available: true,
+            allowed_tools: Vec::new(),
         }
     }
 }
@@ -47,6 +51,7 @@ impl ToolListConfig {
             secure_input_available,
             request_credential_available: secure_input_available,
             generate_totp_available,
+            allowed_tools: Vec::new(),
         }
     }
 }
@@ -203,7 +208,7 @@ fn cli_alternative(name: &str) -> Option<&'static str> {
     }
 }
 
-fn blocked_by_tier(tier: Option<&str>, name: &str) -> bool {
+pub(crate) fn blocked_by_tier(tier: Option<&str>, name: &str) -> bool {
     match tier {
         Some("read-only") => matches!(
             name,
@@ -227,25 +232,59 @@ fn blocked_by_tier(tier: Option<&str>, name: &str) -> bool {
 }
 
 fn available(def: &ToolDefinition, config: &ToolListConfig) -> bool {
-    if matches!(def.name.as_str(), "execute_api_request") && !config.execute_api_available {
-        return false;
+    unavailability(def, config).is_none()
+}
+
+fn unavailability(def: &ToolDefinition, config: &ToolListConfig) -> Option<(&'static str, String)> {
+    if !config.allowed_tools.is_empty() && !config.allowed_tools.contains(&def.name) {
+        return Some((
+            "blocked_by_agent",
+            format!("tool {:?} is not allowed", def.name),
+        ));
     }
-    if def.name == "secure_input" && !config.secure_input_available {
-        return false;
-    }
-    if def.name == "request_credential" && !config.request_credential_available {
-        return false;
-    }
-    if def.name == "generate_totp" && !config.generate_totp_available {
-        return false;
+    if (def.name == "execute_api_request" && !config.execute_api_available)
+        || (def.name == "secure_input" && !config.secure_input_available)
+        || (def.name == "request_credential" && !config.request_credential_available)
+        || (def.name == "generate_totp" && !config.generate_totp_available)
+    {
+        return Some((
+            "not_available",
+            "mcp.Tool is not available in the current environment".into(),
+        ));
     }
     if blocked_by_tier(config.tier.as_deref(), &def.name) {
-        return false;
+        let required = if config.tier.as_deref() == Some("read-only") {
+            "standard"
+        } else {
+            "admin"
+        };
+        return Some((
+            "blocked_by_agent",
+            format!("Tool {:?} requires tier {required:?}", def.name),
+        ));
     }
-    if !expose_value_tools(config) && def.name == "get_entry_value" {
-        return false;
+    if def.name == "get_entry_value" && !expose_value_tools(config) {
+        return Some((
+            "blocked_by_agent",
+            "Tool \"get_entry_value\" requires tier \"standard\"".into(),
+        ));
     }
-    true
+    None
+}
+
+/// Registry metadata for whoami, independent of the installed handler set.
+/// Listing and metadata use the same profile filter and preserve catalog order.
+pub(crate) fn profile_metadata(config: &ToolListConfig) -> Result<Value, String> {
+    let mut available_tools = Vec::new();
+    let mut unavailable = Vec::new();
+    for def in catalog()?.iter().filter(|def| def.deprecated != Some(true)) {
+        if let Some((code, reason)) = unavailability(def, config) {
+            unavailable.push(serde_json::json!({"name":def.name, "code":code, "reason":reason}));
+        } else {
+            available_tools.push(def.name.clone());
+        }
+    }
+    Ok(serde_json::json!({"available":available_tools,"unavailable":unavailable}))
 }
 
 fn expose_value_tools(config: &ToolListConfig) -> bool {

@@ -144,27 +144,11 @@ fn home_dir_error_message() -> &'static str {
     }
 }
 
-/// Mirrors Go's `os.UserHomeDir`: `$HOME` on unix, `%USERPROFILE%` (with the
-/// `HOMEDRIVE`+`HOMEPATH` fallback) on Windows.
-fn home_dir() -> Option<PathBuf> {
-    if let Some(home) = env::var_os("HOME").filter(|value| !value.is_empty()) {
-        return Some(PathBuf::from(home));
-    }
-    #[cfg(windows)]
-    {
-        if let Some(profile) = env::var_os("USERPROFILE").filter(|value| !value.is_empty()) {
-            return Some(PathBuf::from(profile));
-        }
-        if let (Some(drive), Some(path)) = (env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH"))
-            && !drive.is_empty()
-            && !path.is_empty()
-        {
-            let mut joined = PathBuf::from(drive);
-            joined.push(path);
-            return Some(joined);
-        }
-    }
-    None
+/// Mirrors Go's os.UserHomeDir: HOME on Unix, USERPROFILE on Windows.
+pub(crate) fn home_dir() -> Option<PathBuf> {
+    env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
 /// Characters rejected before any template rendering (oracle
@@ -280,7 +264,7 @@ pub fn render_plist(installer: &Installer, home: &Path) -> String {
         "        <key>StandardErrorPath</key>\n        <string>{}</string>\n",
         xml_escape(&installer.err_log_path.to_string_lossy())
     ));
-    out.push_str("    </dict>\n</plist>\n");
+    out.push_str("    </dict>\n</plist>");
     let _ = home;
     out
 }
@@ -428,7 +412,10 @@ impl Installer {
                     return Err(CliError::new(
                         ExitCode::General,
                         format!("{}: {}", label, combined_output(&output).trim()),
-                        None,
+                        Some(ErrorCause::new(
+                            CauseKind::Other,
+                            format!("exit status {}", output.status.code().unwrap_or(-1)),
+                        )),
                     ));
                 }
                 Err(err) => {
@@ -458,8 +445,7 @@ impl Installer {
             .map_err(|err| err.message().to_string())?;
 
         if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir).map_err(|err| format!("create directory: {err}"))?;
-            set_mode(dir, 0o700);
+            create_private_directories(dir).map_err(|err| format!("create directory: {err}"))?;
         }
         fs::write(path, render_systemd_unit(self))
             .map_err(|err| format!("write service file: {err}"))?;
@@ -478,7 +464,7 @@ impl Installer {
             .ok_or_else(|| CliError::new(ExitCode::General, home_dir_error_message(), None))?;
 
         if let Some(dir) = plist_path.parent() {
-            fs::create_dir_all(dir).map_err(|err| {
+            create_private_directories(dir).map_err(|err| {
                 CliError::new(
                     ExitCode::General,
                     "create directory",
@@ -487,7 +473,7 @@ impl Installer {
             })?;
         }
         if let Some(dir) = self.log_path.parent() {
-            fs::create_dir_all(dir).map_err(|err| {
+            create_private_directories(dir).map_err(|err| {
                 CliError::new(
                     ExitCode::General,
                     "create log directory",
@@ -514,7 +500,10 @@ impl Installer {
                     Err(CliError::new(
                         ExitCode::General,
                         format!("failed to load launchd service: {}", combined.trim()),
-                        None,
+                        Some(ErrorCause::new(
+                            CauseKind::Other,
+                            format!("exit status {}", output.status.code().unwrap_or(-1)),
+                        )),
                     ))
                 }
             }
@@ -648,6 +637,17 @@ fn combined_output(output: &std::process::Output) -> String {
     combined
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn create_private_directories(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    // Like Go's MkdirAll(0700), apply private permissions to every newly
+    // created ancestor without changing an existing operator directory.
+    fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(path)
+}
+
 fn set_mode(path: &Path, mode: u32) {
     #[cfg(unix)]
     {
@@ -667,7 +667,8 @@ mod tests {
     /// The plist recorded from the pinned Go oracle in
     /// `target/resume-evidence/wave3-daemon-differential.json`, with the
     /// program's own path, the synthetic home and the vault replaced by
-    /// placeholders (those are the only machine-dependent values).
+    /// placeholders (those are the only machine-dependent values). The old
+    /// literal below appended an LF; native Go at d1cd0f97 ends at </plist>.
     const ORACLE_PLIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -718,9 +719,12 @@ mod tests {
     fn render_plist_matches_the_go_oracle_byte_for_byte() {
         let installer = fixture_installer();
         let rendered = render_plist(&installer, Path::new(TEST_HOME));
-        if rendered != ORACLE_PLIST {
+        let expected = ORACLE_PLIST
+            .strip_suffix('\n')
+            .expect("old literal final LF");
+        if rendered != expected {
             let left: Vec<&str> = rendered.lines().collect();
-            let right: Vec<&str> = ORACLE_PLIST.lines().collect();
+            let right: Vec<&str> = expected.lines().collect();
             for index in 0..left.len().max(right.len()) {
                 let (a, b) = (
                     left.get(index).copied().unwrap_or("<missing>"),
@@ -729,7 +733,7 @@ mod tests {
                 assert_eq!(a, b, "plist line {index} diverged");
             }
         }
-        assert_eq!(rendered, ORACLE_PLIST);
+        assert_eq!(rendered, expected);
     }
 
     #[test]

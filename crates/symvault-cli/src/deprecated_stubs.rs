@@ -18,21 +18,8 @@
 //! exit status 2 of the pinned oracle) and, for `serve token`, the shared
 //! word-to-notice mapping `deprecated_token_message`.
 //!
-//! # Known differences (deliberate)
-//!
-//! Only the deprecated `token` children of `serve` are ported. The `serve`
-//! parent is declared (hidden, like the oracle) solely so those children are
-//! reachable, and it declares `token` as its only subcommand: bare `serve`
-//! and `serve install|status|uninstall` belong to the server/service runtime,
-//! which this port does not implement (HTTP client, launchd/systemd). In the
-//! oracle an uninitialized vault makes bare `serve` print a deprecation
-//! warning and fail with `vault not initialized` (exit 3), and an initialized
-//! one starts the HTTP/stdio server; here the word forms are rejected with
-//! clap's `unrecognized subcommand` (exit 1) and the bare form renders clap's
-//! help on stderr (exit 1) — the established shape for required-subcommand
-//! parents such as `agent` and `policy`. Declaring the unported children
-//! would only make the surface inventory prettier than the runtime is — the
-//! same decision already recorded for `update check`/`update apply`.
+//! Bare serve and its service commands reuse the canonical MCP dispatcher;
+//! only the token children retain these v4.0 stub notices.
 
 use std::process::ExitCode;
 
