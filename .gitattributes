@@ -54,3 +54,4 @@ scripts/rust-port/windows_file_use_contract.py text eol=lf
 scripts/rust-port/egress_contract.py text eol=lf
 scripts/rust-port/egress_contract_probe.go.txt text eol=lf
 .github/workflows/rust-broker-egress.yml text eol=lf
+scripts/rust-port/http_tls_identity.go.txt text eol=lf
