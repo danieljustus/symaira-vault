@@ -68,3 +68,4 @@ scripts/rust-port/http_timeout_contract.py text eol=lf
 .github/workflows/rust-http-timeouts.yml text eol=lf
 scripts/rust-port/http_write_contract.py text eol=lf
 .github/workflows/rust-http-write.yml text eol=lf
+scripts/rust-port/http_tls_identity.go.txt text eol=lf
