@@ -1,5 +1,29 @@
 # CLI surface gap (measured)
 
+## Current help surface, 2026-10-04
+
+At candidate 9178a3e6 (PR #1293), the source-tree cligap probes all 134 frozen
+oracle paths at depth three and reports zero missing help paths, flags or
+aliases. Its actual candidate binary SHA-256 is
+0c674bb386c1462601672cbd3aa80d65b5f618b8f071efd0bafcc18c707aec63.
+The repaired grouped-help walker discovers 119 visible paths, including the
+root; it excludes generated help/completion helpers and hidden parents.
+Direct probes also cover hidden oracle paths. The earlier walker counted only
+one path when fed Go's grouped root help; a regression test now reads the real
+generated artifact instead of assuming a Clap-only layout.
+
+The Rust CLI preserves the public Go documentation, including commands whose
+runtime is still incomplete. These zero help gaps therefore do not complete
+CLI-002 or CLI-003. Serve service/runtime, broker flags/runtime, TUI, broad
+argument diagnostics and whole output-mode acceptance remain open. CLI-004
+has actual local Go/Rust artifact and completion evidence, with native
+Linux/macOS/Windows acceptance pending. See ADR 0011 and the contract matrix.
+
+The measurements below are historical snapshots, retained with their original
+candidate and binary identity; their gap counts are not current status.
+
+## Historical measurement, 2026-09-27
+
 Measured on **2026-09-27** against the Rust CLI built from candidate
 `9628016f` and the pinned Go command tree in
 `testdata/port/cli/command-tree.json` (oracle `3232e31f`, release

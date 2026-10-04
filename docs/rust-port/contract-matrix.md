@@ -7,16 +7,13 @@ seven-case corpus and Go pin remain intact. The exception proves the historical
 Windows rejection rather than successful archive parity; it does not promote
 GIT-002/003 or IO-002/003.
 
-> **Read this matrix together with
-> [`port-coverage-20260916.md`](port-coverage-20260916.md).** Counting `PASS`
-> rows overstates how close a cutover is: the rows are concentrated in the
-> library layer, while `internal/mcp` (the largest subsystem in the repository),
-> the HTTP server, and 133 of 135 CLI command paths have no Rust implementation
-> at all. Roughly 30 % of the Go production code sits in subsystems that have a
-> Rust counterpart. No row's status is affected -- every `PASS` is backed by the
-> evidence it claims -- but a `TODO` row waiting on a *port* is not comparable
-> work to one waiting on a *fixture*, and the matrix alone does not distinguish
-> them.
+> [`port-coverage-20260916.md`](port-coverage-20260916.md) is a historical source
+> coverage snapshot. Later implementation and native evidence are recorded in
+> these rows and the work-item ledger; its old command counts are not current
+> status. Counting PASS rows still does not establish readiness for cutover.
+> Whole CLI/MCP behavior, importer edge cases, device/GUI acceptance and release
+> gates remain separate work. Displayed Go-compatible help is documentation
+> reachability and does not prove the corresponding runtime is implemented.
 
 `TODO` means the contract is identified but does not yet have a language-neutral
 fixture and Rust parity test. `PASS` requires an executable test in CI; prose or
