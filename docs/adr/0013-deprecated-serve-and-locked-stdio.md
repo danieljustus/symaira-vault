@@ -46,6 +46,32 @@ encrypted-store runtime; default-agent initialize/catalog/denied reads match Go.
 The remaining unknown-agent diagnostic prefix was identified through actual
 execution and repaired.
 
+The extended Linux development driver now executes 29 real Go/Rust cases:
+argument/vault guards, seven-response locked/unlocked stdio exchanges, service
+installation/status/removal/failing helper, and actual default/custom TLS and
+mTLS startup. Newly created service-directory ancestors use 0700, generated
+unit/plist files use 0600, and pre-existing operator directories retain their
+mode, matching Go's MkdirAll contract. Linux and macOS helper failures retain
+their real exit status. The absent-config/default-service case also matches
+actual Go output and generated defaults. These development results do not replace clean
+candidate receipts or the three native operating-system jobs.
+
+Retain the existing Rust HTTPS discovery URL when serving TLS. Actual Go
+advertises an HTTP resource URL over that TLS listener; reproducing that
+scheme would direct clients to the wrong transport. The driver records both
+actual URLs and compares every other discovery/startup property unchanged.
+Also retain Rust's current rejection of an anonymous mTLS peer without Go's
+timestamped handshake log; record the full actual Go log and the empty Rust
+transport log. Logging policy and remaining HTTP equivalence stay under
+#1241/#1249. Neither difference is silently normalized into byte-parity proof.
+
+TLS startup uses a real scoped fixture token created by the public Go CLI.
+An empty registry would trigger Go's legacy wildcard-token creation/migration;
+that separate migration behavior is not part of these launch observations.
+Startup stderr, including the listening address under --quiet, follows the
+actual Go launch result. HTTP children are force-stopped by the test after
+readiness: their exit status/drain is not counted as graceful signal evidence.
+
 Acceptance will bind an immutable Go source inventory, real Go/Rust binaries,
 driver, clean candidate sources and native OS. Mandatory Linux/macOS/Windows
 jobs must execute nonzero named launch, protocol and service cases. Disposable

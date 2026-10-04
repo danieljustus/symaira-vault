@@ -129,6 +129,13 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        eprintln!(
+            "MCP server listening on {bind}:{}",
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port()
+        );
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =

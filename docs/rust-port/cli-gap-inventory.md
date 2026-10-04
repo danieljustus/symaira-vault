@@ -14,8 +14,13 @@ generated artifact instead of assuming a Clap-only layout.
 
 The Rust CLI preserves the public Go documentation, including commands whose
 runtime is still incomplete. These zero help gaps therefore do not complete
-CLI-002 or CLI-003. Serve service/runtime, broker flags/runtime, TUI, broad
-argument diagnostics and whole output-mode acceptance remain open. CLI-004
+CLI-002 or CLI-003. #1236 now implements shared serve/mcp launch flags,
+locked/unlocked stdio and service children, with actual source-bound Linux
+Go/Rust launch/protocol/private-file/TLS comparisons and mandatory native
+Linux/macOS/Windows receipt jobs. The old bare-serve negative control is
+replaced by the real initialized-vault guard; ADR 0013 records decisions and
+measured HTTP differences. Serve native acceptance, broker flags/runtime, TUI,
+broad argument diagnostics and whole output-mode acceptance remain open. CLI-004
 has actual local Go/Rust artifact and completion evidence, with native
 Linux/macOS/Windows acceptance pending. See ADR 0011 and the contract matrix.
 

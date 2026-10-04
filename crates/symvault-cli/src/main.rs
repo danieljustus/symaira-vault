@@ -4175,6 +4175,13 @@ fn service_config(warn: bool) -> Option<Config> {
 /// Renders an io error the way Go's `*os.PathError` does ("no such file or
 /// directory", "permission denied", ...).
 fn go_io_reason(error: &std::io::Error) -> String {
+    #[cfg(windows)]
+    match error.raw_os_error() {
+        Some(2) => return "The system cannot find the file specified.".to_owned(),
+        Some(3) => return "The system cannot find the path specified.".to_owned(),
+        Some(5) => return "Access is denied.".to_owned(),
+        _ => {}
+    }
     match error.kind() {
         std::io::ErrorKind::NotFound => "no such file or directory".to_owned(),
         std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
