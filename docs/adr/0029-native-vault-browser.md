@@ -148,6 +148,35 @@ execution evidence. Production-source controls separately reject a dirty
 candidate, a binary from altered source, and a clean committed default-reveal
 mutant through the real runtime gate.
 
+The next clean Linux run advanced past empty-editor handling and retained an
+actual deletion-status false failure: Rust correctly reported
+`Deleted alpha/login`, which the old whole-screen absence predicate mistook for
+a remaining entry. Check selected-entry detail plus the changed count instead,
+then retain the independent encrypted-store deletion assertion. The committed
+`tui_delete_status_fixture.json` is a lossless base64 encoding of that genuine
+Linux terminal capture, with its original digest, bytes and candidate/job IDs;
+it is not a synthesized terminal session. Replay proves the old predicate's
+failure and rejects a structural control with a still-visible selected entry.
+
+Keep source/binary comparison byte-exact. Same-source native MacBook builds
+failed that comparison; retained binary diagnosis found exactly sixteen changed
+`LC_UUID` bytes and the dependent thirty-two-byte first-page CodeDirectory hash,
+with every other byte equal. Explicit `-reproducible` still mismatched. The
+acceptance-only build therefore uses Darwin `-Wl,-no_uuid`, with the original
+byte comparison and ad-hoc signing intact. These test binaries lack debugger
+UUIDs; release/debug packaging is unchanged. Windows uses the native linker's
+`/Brepro` reproducibility option; its execution remains a native CI gate, not a
+cross-compilation claim. Retain the actual rebuilt binary even on mismatch and
+record the effective Rust flags. Never normalize binary differences away or
+replace an externally supplied binary silently.
+
+Fourteen artifact/schema controls start from the genuine passing native
+receipt and invoke the actual CLI replay. Each deliberately refreshed digest
+belongs only to its negative-control input, never a replacement acceptance
+anchor. Preserve omitted versus explicit null snapshot fields and JSON types.
+Reject existing execution-receipt paths; isolate replay command logs so another
+validation cannot overwrite the original runtime or prior replay observations.
+
 The new `rust-tui.yml` runs the full owning crate checks and actual Go/Rust
 comparison on fresh Linux, Darwin arm64 (`xcode-27`) and Windows ConPTY runners,
 including the source-mutation controls. Native receipts remain pending until

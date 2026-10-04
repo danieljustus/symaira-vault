@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Native production-source mutation controls, using disposable worktrees only."""
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -26,10 +27,68 @@ def rejected(tree, binary, receipt, reason, source_only=False):
     return observed
 
 
+def receipt_controls(args, binary, candidate, summary):
+    # Start from a genuine passing native receipt. Updated hashes here are
+    # deliberate negative-control inputs, never new acceptance anchors.
+    original = args.native_receipt.read_bytes()
+    baseline = json.loads(original)
+    def replay(path):
+        result = subprocess.run([sys.executable, str(tui.ROOT/'scripts/rust-port/tui_contract.py'),
+                                 '--rust-cli', str(binary), '--receipt', str(path), '--validate-receipt',
+                                 '--candidate', candidate, '--expected-receipt-sha256', tui.digest(path)],
+                                cwd=tui.ROOT, capture_output=True, timeout=60)
+        path.with_suffix('.replay.stdout').write_bytes(result.stdout)
+        path.with_suffix('.replay.stderr').write_bytes(result.stderr)
+        return result
+    assert replay(args.native_receipt).returncode == 0, 'positive native receipt replay failed'
+    controls = {'missing-success': 'passed', 'false-success': 'missing/false passed',
+                'missing-case-success': 'passed', 'false-case-success': 'case success',
+                'integer-case-success': 'case success', 'incomplete-case-set': 'case set',
+                'native-target-mismatch': 'native target mismatch', 'source-inventory-mismatch': 'source inventory mismatch',
+                'unrestored-terminal': 'terminal modes', 'canary-flag': 'canary disclosure',
+                'missing-null-valued-tags': 'incomplete snapshot fields', 'capture-parent-traversal': 'escaped evidence root',
+                'capture-size': 'artifact size mismatch', 'capture-canary-bytes': 'canary disclosure'}
+    for name, reason in controls.items():
+        mutant = copy.deepcopy(baseline)
+        row = mutant['rust'][1]
+        if name == 'missing-success': del mutant['passed']
+        elif name == 'false-success': mutant['passed'] = False
+        elif name == 'missing-case-success': del row['passed']
+        elif name == 'false-case-success': row['passed'] = False
+        elif name == 'integer-case-success': row['passed'] = 1
+        elif name == 'incomplete-case-set': mutant['rust'].pop()
+        elif name == 'native-target-mismatch': mutant['architecture'] = 'not-the-native-target'
+        elif name == 'source-inventory-mismatch': mutant['candidate_sources']['Cargo.toml'] = '0'*64
+        elif name == 'unrestored-terminal': row['input_restored'] = False
+        elif name == 'canary-flag': row['canary_disclosure'] = True
+        elif name == 'missing-null-valued-tags':
+            for label in ['go', 'rust']:
+                added = next(r for r in mutant[label] if r['case'] == 'add-valid')
+                entry = next(e for e in added['after'] if e['path'] == 'delta/new')
+                assert entry['tags'] is None
+                del entry['tags']
+        elif name == 'capture-parent-traversal': row['capture_artifact'] = '../outside-sentinel'
+        elif name == 'capture-size': row['capture_bytes'] += 1
+        elif name == 'capture-canary-bytes':
+            path = args.native_receipt.with_name('schema-canary.terminal')
+            assert not path.exists()
+            raw = (args.native_receipt.parent/row['capture_artifact']).read_bytes()+tui.CANARIES[0].encode()
+            path.write_bytes(raw)
+            row.update(capture_artifact=path.name, capture_bytes=len(raw), capture_sha256=tui.digest(path))
+        path = args.native_receipt.with_name('schema-'+name+'.json')
+        assert not path.exists()
+        path.write_text(json.dumps(mutant, indent=2)+'\n')
+        result = replay(path)
+        assert result.returncode != 0 and reason in result.stderr.decode(errors='replace'), 'schema mutation accepted or wrong rejection: '+name
+        summary['controls']['receipt-'+name] = True
+    assert args.native_receipt.read_bytes() == original, 'original native receipt changed'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rust-cli', required=True, type=Path)
     parser.add_argument('--receipt', required=True, type=Path)
+    parser.add_argument('--native-receipt', required=True, type=Path)
     args = parser.parse_args()
     assert tui.clean_source(), 'mutation controls require clean baseline'
     args.receipt.parent.mkdir(parents=True, exist_ok=True)
@@ -42,6 +101,7 @@ def main():
         base = Path(raw); tree = base/'candidate'
         tui.checked(['git', 'worktree', 'add', '--detach', tree, candidate])
         try:
+            receipt_controls(args, binary, candidate, summary)
             source = tree/'crates/symvault-cli/src/tui.rs'
             original = source.read_bytes()
             old, new = b'revealed: false,', b'revealed: true,'

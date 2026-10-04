@@ -271,6 +271,10 @@ class Browser:
     def detail(self):
         return '\n'.join(self.rows(42))
 
+    def deletion_visible(self):
+        # A legitimate "Deleted alpha/login" status is not an entry.
+        return PATHS[0] not in self.detail() and '[1/2]' in self.view()
+
     def rows(self, first=0):
         # Read actual cell positions. pyte 0.8.2's display accessor indexes an
         # empty wide-character stub after an ANSI partial overwrite and raises
@@ -507,7 +511,7 @@ def run_case(case, label, binary, helper, seed, base, provider):
             assert snapshot(helper, root, home, env) == before, 'cancelled deletion mutated vault'
             browser.write('d'); browser.wait(lambda: 'y/N' in browser.view(), 'second delete confirmation')
             browser.write('y')
-            browser.wait(lambda: PATHS[0] not in browser.view() and '[1/2]' in browser.view(), 'confirmed deletion')
+            browser.wait(browser.deletion_visible, 'confirmed deletion')
             row.update(browser.quit())
         elif case == 'zero-ttl-quit-cleanup':
             browser.copy()
@@ -583,6 +587,7 @@ def source_inventory():
                    or x in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.gitattributes', 'deny.toml',
                             'scripts/rust-port/tui_contract.py', 'scripts/rust-port/tui_fixture.go.txt',
                             'scripts/rust-port/tui_harness_test.py', 'scripts/rust-port/tui_mutation_test.py',
+                            'scripts/rust-port/tui_delete_status_fixture.json',
                             'scripts/rust-port/tui-validation-requirements.txt',
                             '.github/workflows/rust-tui.yml', 'docs/adr/0029-native-vault-browser.md'})
     assert all((ROOT/name).resolve().is_relative_to(ROOT) for name in names), 'source escaped checkout'
@@ -591,6 +596,19 @@ def source_inventory():
 
 def clean_source():
     return not checked(['git', 'status', '--porcelain=v1', '--untracked-files=all']).strip()
+
+
+def evidence_artifact(root, name, size, sha256):
+    assert isinstance(name, str), 'invalid artifact path'
+    name = Path(name)
+    assert not name.is_absolute() and '..' not in name.parts, 'artifact path escaped evidence root'
+    path = (root/name).resolve()
+    assert path.is_relative_to(root.resolve()) and path.is_file(), 'artifact path escaped evidence root'
+    raw = path.read_bytes()
+    assert type(size) is int and len(raw) == size, 'artifact size mismatch'
+    assert isinstance(sha256, str) and re.fullmatch(r'[0-9a-f]{64}', sha256), 'invalid artifact digest'
+    assert hashlib.sha256(raw).hexdigest() == sha256, 'artifact digest mismatch'
+    return raw
 
 
 def build_source_bound_rust(rust, base, receipt):
@@ -610,6 +628,11 @@ def build_source_bound_rust(rust, base, receipt):
              '--bin', 'symvault', '--locked'], env=env, timeout=900)
     rebuilt = base/'rust-source-build/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
     receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
+    if COMMAND_OUTPUT is not None:
+        retained = COMMAND_OUTPUT/('source-rebuild.exe' if os.name == 'nt' else 'source-rebuild')
+        shutil.copy2(rebuilt, retained)
+        receipt['rebuilt_binary_artifact'] = str(retained.relative_to(COMMAND_OUTPUT.parent))
+        receipt['rebuilt_binary_bytes'] = retained.stat().st_size
     assert receipt['rebuilt_rust_executable_sha256'] == digest(rust), 'source/binary mismatch'
     receipt['binary_source_verified'] = True
 
@@ -627,6 +650,9 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
         value = receipt[key]
         assert isinstance(value, str) and re.fullmatch(r'[0-9a-f]{64}', value)
         assert value == binary_sha256, 'source/binary mismatch'
+    if evidence_root is not None:
+        evidence_artifact(evidence_root, receipt['rebuilt_binary_artifact'],
+                          receipt['rebuilt_binary_bytes'], receipt['rebuilt_rust_executable_sha256'])
     for label in ['go', 'rust']:
         rows = receipt[label]
         assert [row['case'] for row in rows] == CASES, 'incomplete/duplicate case set'
@@ -643,17 +669,18 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
                 assert type(console['exit_code']) is int and console['exit_code'] == expected_exit
                 assert console['input_restored'] is True and console['output_restored'] is True, 'un-restored native console'
                 if evidence_root is not None:
-                    name = Path(row['capture_artifact'])
-                    assert not name.is_absolute() and '..' not in name.parts, 'capture path escaped evidence root'
-                    path = (evidence_root/name).resolve()
-                    assert path.is_relative_to(evidence_root.resolve()) and path.is_file(), 'capture path escaped evidence root'
-                    raw = path.read_bytes()
-                    assert type(row['capture_bytes']) is int and len(raw) == row['capture_bytes'], 'capture size mismatch'
-                    assert hashlib.sha256(raw).hexdigest() == row['capture_sha256'], 'capture digest mismatch'
+                    raw = evidence_artifact(evidence_root, row['capture_artifact'], row['capture_bytes'], row['capture_sha256'])
                     assert PHRASE.encode() not in raw, 'passphrase disclosure'
                     if row['case'] != CASES[0]:
                         assert all(c.encode() not in raw for c in CANARIES), 'canary disclosure'
                 assert isinstance(row['before'], list) and isinstance(row['after'], list)
+                for state in ['before', 'after']:
+                    for entry in row[state]:
+                        assert set(entry) == {'path', 'tags', 'version', 'data_sha256'}, 'incomplete snapshot fields'
+                        assert isinstance(entry['path'], str) and entry['path'], 'invalid snapshot path'
+                        assert type(entry['version']) is int and entry['version'] > 0, 'invalid snapshot version'
+                        assert entry['tags'] is None or (isinstance(entry['tags'], list) and all(isinstance(t, str) for t in entry['tags'])), 'invalid snapshot tags'
+                        assert isinstance(entry['data_sha256'], str) and re.fullmatch(r'[0-9a-f]{64}', entry['data_sha256']), 'invalid snapshot digest'
                 if row['case'].startswith(('editor-', 'add-')):
                     editor = row['editor']
                     assert editor['environment_filtered'] is True, 'editor environment filtering weakened'
@@ -678,6 +705,7 @@ def execute(args, receipt):
     receipt.update(candidate_sources=before, rust_executable_sha256=digest(rust))
     assert sys.version_info[:2] == (3, 13), 'pinned Python 3.13 required'
     receipt['rustc'] = checked(['rustc', '--version']).decode().strip()
+    receipt['rustflags'] = os.environ.get('RUSTFLAGS', '')
     receipt['go_version'] = checked(['go', 'version']).decode().strip()
     assert receipt['rustc'].startswith('rustc 1.98.0 '), 'pinned Rust required'
     assert receipt['go_version'].startswith('go version go1.26.6 '), 'pinned Go required'
@@ -686,6 +714,12 @@ def execute(args, receipt):
         build_source_bound_rust(rust, base, receipt)
         assert source_inventory() == before, 'source changed during Rust build'
         if args.source_only:
+            receipt['candidate_sources_at_end'] = source_inventory()
+            receipt['candidate_worktree_clean_at_end'] = clean_source()
+            assert receipt['candidate_sources_at_end'] == before
+            assert receipt['candidate_worktree_clean_at_end'] == clean
+            assert checked(['git', 'rev-parse', 'HEAD']).decode().strip() == commit
+            assert digest(rust) == receipt['rust_executable_sha256']
             receipt['source_only_verified'] = True
             return
         tree = base/'oracle'
@@ -776,7 +810,13 @@ def main():
     parser.add_argument('--candidate')
     parser.add_argument('--expected-receipt-sha256')
     args = parser.parse_args()
-    COMMAND_OUTPUT = args.receipt.parent/(args.receipt.stem+('-replay-commands' if args.validate_receipt else '-commands'))
+    args.receipt.parent.mkdir(parents=True, exist_ok=True)
+    if args.validate_receipt:
+        COMMAND_OUTPUT = Path(tempfile.mkdtemp(prefix=args.receipt.stem+'-replay-commands-', dir=args.receipt.parent))
+    else:
+        assert not args.receipt.exists(), 'existing execution receipt must be preserved'
+        COMMAND_OUTPUT = args.receipt.parent/(args.receipt.stem+'-commands')
+        COMMAND_OUTPUT.mkdir(exist_ok=False)
     CAPTURE_OUTPUT = args.receipt.parent/(args.receipt.stem+'-captures')
     if args.validate_receipt:
         raw = args.receipt.read_bytes()
