@@ -41,3 +41,5 @@ scripts/rust-port/intake_watch_contract.py text eol=lf
 # Retained upstream source and the historical KDF driver feed byte hashes.
 third_party/argon2/** text eol=lf
 scripts/rust-port/kdf_policy_fixtures.py text eol=lf
+scripts/rust-port/windows_file_use_contract.py text eol=lf
+.github/workflows/rust-windows-file-use.yml text eol=lf
