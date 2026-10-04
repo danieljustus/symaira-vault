@@ -281,9 +281,11 @@ fn quarantine_is_review_gated_and_dry_run_has_no_side_effect() {
             size: 3,
             sha256: "hash".into(),
             mtime: 0,
+            mtime_unix_nanoseconds: 0,
         }),
         suggestions: vec![],
         spool_path: None,
+        duplicate_paths: Vec::new(),
     };
     let mut sink = Sink {
         paths: BTreeSet::new(),
