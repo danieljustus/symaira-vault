@@ -267,6 +267,10 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
             sent += 1;
             match stream.read(&mut [0u8]) {
                 Ok(0) => return sent,
+                // Dropping a response while unread body bytes arrive can
+                // close TCP with RST rather than FIN. Both prove that the
+                // owned connection has ended; a live idle socket does not.
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => return sent,
                 Err(error)
                     if matches!(
                         error.kind(),

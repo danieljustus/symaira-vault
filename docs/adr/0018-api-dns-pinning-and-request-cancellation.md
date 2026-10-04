@@ -111,3 +111,12 @@ actual encrypted API request still reaches its upstream, but cancellation no
 longer closes it; the upstream reaches its socket deadline and the regression
 fails. Restoring the original propagation makes that same test pass. No mutated
 source is included in the publication candidate.
+
+The first current-head native Linux owning suite exposes a fixture assumption:
+the progressing-body deadline closes its actual socket with TCP reset while
+unread response bytes are in flight. A reset is a terminal connection outcome,
+just as FIN/EOF is; it is not a live idle connection. Accept specifically
+ConnectionReset in that regression, retaining the required successful body
+progress, timeout diagnostic, joined upstream and sub-second deadline. Do not
+accept arbitrary socket errors, increase the deadline or remove the control.
+Retain the failed native artifact and require fresh current-head native proof.
