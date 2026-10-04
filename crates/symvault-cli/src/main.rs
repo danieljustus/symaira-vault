@@ -15,7 +15,9 @@ mod approval_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
+mod cli_artifacts;
 mod completion_commands;
+mod completion_protocol;
 mod config;
 mod daemon_commands;
 mod deprecated_stubs;
@@ -142,7 +144,8 @@ enum Command {
     Completion {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
         shell: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
@@ -1214,6 +1217,9 @@ fn main() -> ExitCode {
 
 fn run_cli() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
+    if let Some(index) = completion_protocol::request_index(&args) {
+        return completion_protocol::run(&args, index);
+    }
     if has_unescaped_version_flag(&args) {
         return write_unknown_version_flag();
     }
