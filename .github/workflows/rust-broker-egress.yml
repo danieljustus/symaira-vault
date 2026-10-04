@@ -12,6 +12,7 @@ on:
       - 'Cargo.lock'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/egress_contract*'
+      - 'scripts/rust-port/http_tls_identity.go.txt'
       - 'docs/adr/0015-egress-broker-runtime-boundaries.md'
   workflow_dispatch:
 
@@ -72,7 +73,7 @@ jobs:
           cargo fmt --all --check
           cargo clippy -p symvault-cli -p symvault-mcp -p symvault-core --all-targets --locked -- -D warnings
           cargo test -p symvault-core --test policy_contract --locked bounded_network_globs_match_captured_go_unicode_and_escape_cases
-          cargo test -p symvault-mcp --test egress_broker --locked > target/native-egress-tests.txt 2>&1
+          cargo test -p symvault-mcp --test egress_broker --locked > target/native-egress-tests.txt 2>&1 || { cat target/native-egress-tests.txt; exit 1; }
           cat target/native-egress-tests.txt
           python3 - <<'PY'
           from pathlib import Path
@@ -93,7 +94,7 @@ jobs:
           import json, subprocess
           from pathlib import Path
           receipt = json.loads(Path('native-egress.json').read_bytes())
-          assert receipt['passed'] and receipt['candidate_worktree_clean']
+          assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end']
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           runtime = {'tls-auth-bearer','tls-auth-basic','tls-auth-header','tls-auth-query_param','tls-auth-none','tls-all-substitution-surfaces','method-denied','endpoint-denied','encoded-endpoint-allowed','encoded-endpoint-denied','dot-segment-policy','unmatched-forwarded','unmatched-strict','passthrough-preserves-upstream-tls','untrusted-upstream-tls','template-port-binding','template-plaintext-binding','connect-inner-authority-binding','redirect-authority-binding'}
