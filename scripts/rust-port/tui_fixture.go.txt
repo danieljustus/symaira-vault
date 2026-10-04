@@ -34,6 +34,7 @@ func main() {
  }
  root:=flag.String("root","","private disposable vault")
  snapshot:=flag.Bool("snapshot",false,"read actual encrypted entries")
+ configReceipt:=flag.String("config-receipt","","private actual open and persisted configuration readback")
  clipboardTTL:=flag.Int("clipboard-seconds",2,"private fixture clipboard lifetime")
  consoleBinary:=flag.String("console-binary","","run actual CLI under this native console, then check modes")
  consoleReceipt:=flag.String("console-receipt","","private native-console receipt")
@@ -60,6 +61,11 @@ func main() {
  }
  if *snapshot {
   v,err:=vault.OpenWithPassphrase(*root,[]byte(passphrase));if err!=nil {panic(err)}
+  if *configReceipt!="" {
+   persisted,e:=config.Load(filepath.Join(*root,"config.yaml"));if e!=nil {panic(e)}
+   data,e:=json.Marshal(map[string]any{"vault_clipboard_seconds":v.Config.Clipboard.AutoClearDuration,"persisted_clipboard_seconds":persisted.Clipboard.AutoClearDuration});if e!=nil {panic(e)}
+   if e=os.WriteFile(*configReceipt,data,0600);e!=nil {panic(e)}
+  }
   paths,err:=vault.List(*root,"",v.Identity);if err!=nil {panic(err)}
   rows:=[]map[string]any{}
   for _,path:=range paths {
@@ -71,7 +77,8 @@ func main() {
   return
  }
  cfg:=config.Default()
- cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1}
+ legacyMode:=false
+ cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1,LegacyMode:&legacyMode}
  cfg.Clipboard=&config.ClipboardConfig{AutoClearDuration:*clipboardTTL}
  identity,err:=vault.InitWithPassphrase(*root,[]byte(passphrase),cfg);if err!=nil {panic(err)}
  // Production serialization omits a numeric zero, which reloads as 30.
@@ -87,8 +94,6 @@ func main() {
   data,e=yaml.Marshal(document);if e!=nil {panic(e)}
   if e=os.WriteFile(configPath,data,0600);e!=nil {panic(e)}
  }
- effective,err:=config.Load(configPath);if err!=nil {panic(err)}
- if effective.Clipboard.AutoClearDuration!=*clipboardTTL {panic("fixture clipboard duration did not round trip")}
  for _,spec:=range []struct{path,field,value,tag,kind string}{
   {"alpha/login","password","public-tui-secret-alpha-782a","work","password"},
   {"beta/api","token","public-tui-secret-beta-782a","home","api_key"},
@@ -99,6 +104,11 @@ func main() {
   entry.SecretMetadata.Type=vault.SecretType(spec.kind)
   if err=vault.WriteEntry(*root,spec.path,entry,identity);err!=nil {panic(err)}
  }
+ // Opening is part of the real reader chain, not merely config.Load. Without
+ // explicit nonlegacy metadata its first-open SaveTo would omit zero again.
+ opened,err:=vault.OpenWithPassphrase(*root,[]byte(passphrase));if err!=nil {panic(err)}
+ effective,err:=config.Load(configPath);if err!=nil {panic(err)}
+ if effective.Clipboard.AutoClearDuration!=*clipboardTTL || opened.Config.Clipboard.AutoClearDuration!=*clipboardTTL {panic("fixture clipboard duration did not survive real vault open")}
  if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings(),"requested_clipboard_seconds":*clipboardTTL,"initial_roundtrip_clipboard_seconds":initial.Clipboard.AutoClearDuration,"effective_clipboard_seconds":effective.Clipboard.AutoClearDuration});err!=nil {panic(err)}
 }
 

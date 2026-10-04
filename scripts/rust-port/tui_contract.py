@@ -390,14 +390,25 @@ class Browser:
     def close(self):
         if os.name == 'nt':
             # Close both PtyProcess sockets even after isalive marks it closed.
-            if self.alive():
-                assert self.child.terminate(force=True), 'native ConPTY child did not terminate'
-            self.child.fileobj.close()
-            self.child._server.close()
+            errors = []
+            try:
+                if self.alive():
+                    assert self.child.terminate(force=True), 'native ConPTY child did not terminate'
+            except Exception as error:
+                errors.append(error)
             # terminate() already cancels pending I/O. Repeating cancel_io()
             # after it/natural exit raises WinptyError: Element not found.
-            self.child._thread.join(timeout=5)
-            assert not self.child._thread.is_alive(), 'native ConPTY reader did not join'
+            for cleanup in (self.child.fileobj.close, self.child._server.close,
+                            lambda: self.child._thread.join(timeout=5)):
+                try:
+                    cleanup()
+                except Exception as error:
+                    errors.append(error)
+            if self.child._thread.is_alive():
+                errors.append(AssertionError('native ConPTY reader did not join'))
+            if errors:
+                raise ExceptionGroup('native ConPTY cleanup failed: '+
+                                     '; '.join(scrub(type(e).__name__+': '+str(e)) for e in errors), errors)
         else:
             if self.alive():
                 os.killpg(self.child.pid, signal.SIGKILL)
@@ -406,8 +417,11 @@ class Browser:
             os.close(self.slave)
 
 
-def snapshot(helper, root, home, env):
-    return json.loads(checked([helper, '--root', root, '--snapshot'], cwd=home, env=env))
+def snapshot(helper, root, home, env, config_receipt=None):
+    command = [helper, '--root', root, '--snapshot']
+    if config_receipt is not None:
+        command.extend(['--config-receipt', config_receipt])
+    return json.loads(checked(command, cwd=home, env=env))
 
 
 def run_case(case, label, binary, helper, seed, base, provider):
@@ -417,8 +431,18 @@ def run_case(case, label, binary, helper, seed, base, provider):
     shutil.copytree(seed, root)
     seeded = inventory(seed, sorted(str(p.relative_to(seed)) for p in seed.rglob('*') if p.is_file()))
     assert inventory(root, list(seeded)) == seeded
-    before = snapshot(helper, root, home, env)
-    row = {'case': case, 'seeded_files': seeded, 'before': before, 'passed': False}
+    row = {'case': case, 'seeded_files': seeded, 'passed': False}
+    try:
+        config_receipt = home/'before-config.json'
+        before = snapshot(helper, root, home, env, config_receipt)
+        row['before'] = before
+        row['before_config'] = json.loads(config_receipt.read_bytes())
+        expected_ttl = 0 if case == 'zero-ttl-quit-cleanup' else 2
+        assert all(type(row['before_config'][key]) is int and row['before_config'][key] == expected_ttl
+                   for key in ['vault_clipboard_seconds', 'persisted_clipboard_seconds']), 'pre-runtime fixture duration changed'
+    except Exception as error:
+        row['failure'] = scrub(type(error).__name__+': '+str(error))
+        raise CaseFailure(row) from error
     if case == 'uninitialized':
         root = home/'nonexistent'
     ready, release = home/'editor-ready.json', home/'editor-release'
@@ -690,6 +714,10 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
         for row in rows:
             assert row['passed'] is True, 'missing/false case success'
             assert 'failure' not in row and 'cleanup_failure' not in row, 'failed case observations'
+            if row['case'] != 'public-keybinding-table':
+                expected_ttl = 0 if row['case'] == 'zero-ttl-quit-cleanup' else 2
+                assert all(type(row['before_config'][key]) is int and row['before_config'][key] == expected_ttl
+                           for key in ['vault_clipboard_seconds', 'persisted_clipboard_seconds']), 'pre-runtime fixture duration changed'
             assert type(row['exit_code']) is int, 'invalid exit code type'
             expected_exit = EXIT_CLASSES.get(row['case'], {}).get(label, 0)
             assert row['exit_code'] == expected_exit, 'exit class mismatch'

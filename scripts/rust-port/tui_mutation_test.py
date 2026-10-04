@@ -49,7 +49,8 @@ def receipt_controls(args, binary, candidate, summary):
                 'missing-null-valued-tags': 'incomplete snapshot fields', 'capture-parent-traversal': 'escaped evidence root',
                 'capture-size': 'artifact size mismatch', 'capture-canary-bytes': 'canary disclosure',
                 'configured-zero-reloads-default': 'fixture clipboard duration mismatch',
-                'cleanup-failure-masquerading-as-pass': 'failed case observations'}
+                'cleanup-failure-masquerading-as-pass': 'failed case observations',
+                'snapshot-rewrites-zero-before-runtime': 'pre-runtime fixture duration changed'}
     for name, reason in controls.items():
         mutant = copy.deepcopy(baseline)
         row = mutant['rust'][1]
@@ -63,6 +64,7 @@ def receipt_controls(args, binary, candidate, summary):
         elif name == 'source-inventory-mismatch': mutant['candidate_sources']['Cargo.toml'] = '0'*64
         elif name == 'configured-zero-reloads-default': mutant['seed_configs']['0']['effective_clipboard_seconds'] = 30
         elif name == 'cleanup-failure-masquerading-as-pass': row['cleanup_failure'] = 'deliberate structural failure'
+        elif name == 'snapshot-rewrites-zero-before-runtime': mutant['go'][tui.CASES.index('zero-ttl-quit-cleanup')]['before_config']['persisted_clipboard_seconds'] = 30
         elif name == 'unrestored-terminal': row['input_restored'] = False
         elif name == 'canary-flag': row['canary_disclosure'] = True
         elif name == 'missing-null-valued-tags':

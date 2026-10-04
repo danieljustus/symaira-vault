@@ -59,7 +59,9 @@ class HarnessTests(unittest.TestCase):
         for label in ['go', 'rust']:
             r[label] = []
             for case in tui.CASES:
-                row = {'case': case, 'passed': True, 'exit_code': 0, 'terminal_restored': True,
+                row = {'case': case, 'passed': True, 'exit_code': 0,
+                       'before_config': {k: 0 if case == 'zero-ttl-quit-cleanup' else 2
+                                         for k in ['vault_clipboard_seconds', 'persisted_clipboard_seconds']}, 'terminal_restored': True,
                        'input_restored': True, 'output_restored': True, 'canary_disclosure': False,
                        'before': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}],
                        'after': [{'path': 'alpha/login', 'tags': None, 'version': 1, 'data_sha256': 'e'*64}], 'stdout_sha256': 'd'*64}
@@ -114,6 +116,8 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'incomplete snapshot fields'): self.validate(r)
         r = copy.deepcopy(valid); r['seed_configs']['0']['effective_clipboard_seconds'] = 30
         with self.assertRaisesRegex(AssertionError, 'fixture clipboard duration mismatch'): self.validate(r)
+        r = copy.deepcopy(valid); r['go'][tui.CASES.index('zero-ttl-quit-cleanup')]['before_config']['persisted_clipboard_seconds'] = 30
+        with self.assertRaisesRegex(AssertionError, 'pre-runtime fixture duration changed'): self.validate(r)
 
     def test_terminal_canary_and_editor_security_flags_are_rejected(self):
         valid = self.valid_structural_receipt(); self.validate(valid)
@@ -154,13 +158,32 @@ class HarnessTests(unittest.TestCase):
             browser.capture = bytearray(b'structural terminal failure')
             browser.unlock.side_effect = AssertionError('primary child failure')
             browser.close.side_effect = RuntimeError('secondary cleanup failure')
-            with patch.object(tui, 'Browser', return_value=browser), patch.object(tui, 'snapshot', return_value=[]), patch.object(tui, 'CAPTURE_OUTPUT', base/'captures'):
+            def snapshot(helper, root, home, env, config_receipt=None):
+                if config_receipt is not None:
+                    config_receipt.write_text(json.dumps({'vault_clipboard_seconds': 2, 'persisted_clipboard_seconds': 2}))
+                return []
+            with patch.object(tui, 'Browser', return_value=browser), patch.object(tui, 'snapshot', side_effect=snapshot), patch.object(tui, 'CAPTURE_OUTPUT', base/'captures'):
                 with self.assertRaisesRegex(tui.CaseFailure, 'primary child failure') as context:
                     tui.run_case(tui.CASES[0], 'go', base/'binary', base/'helper', seed, base, {})
             row = context.exception.row
             self.assertIs(row['passed'], False)
             self.assertIn('secondary cleanup failure', row['cleanup_failure'])
             self.assertEqual((base/row['capture_artifact']).read_bytes(), browser.capture)
+
+    def test_native_windows_cleanup_attempts_all_owned_resources(self):
+        browser = object.__new__(tui.Browser)
+        browser.child = Mock()
+        browser.alive = lambda: True
+        browser.child.terminate.side_effect = RuntimeError('structural termination failure')
+        browser.child.fileobj.close.side_effect = OSError('structural socket failure')
+        browser.child._thread.is_alive.return_value = False
+        with patch.object(tui.os, 'name', 'nt'):
+            with self.assertRaises(ExceptionGroup) as context: browser.close()
+        browser.child._server.close.assert_called_once_with()
+        browser.child._thread.join.assert_called_once_with(timeout=5)
+        self.assertEqual(len(context.exception.exceptions), 2)
+        self.assertIn('structural termination failure', str(context.exception))
+        self.assertIn('structural socket failure', str(context.exception))
 
     def test_terminal_artifact_paths_sizes_digests_and_canaries(self):
         with tempfile.TemporaryDirectory() as raw:

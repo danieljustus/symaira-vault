@@ -190,6 +190,18 @@ CLI exit but before releasing the console wrapper/provider session; record
 post-wrapper delivery separately so fixture teardown cannot manufacture TUI
 cleanup. A structural order test guards that observation boundary.
 
+The next native Linux capture still correctly failed closed. A bounded actual
+clipboard-free reader control identified the remaining precondition: initial
+`detectLegacyMode` saves configuration on the first `vault.OpenWithPassphrase`,
+including the supposedly observational before-snapshot, and omits zero again.
+Use genuine explicit nonlegacy metadata in the newly initialized format-two
+fixture, exercise the real opener before publishing the seed, and record both
+opened-vault and persisted durations for each runtime case. Actual controls
+keep zero intact through three consecutive production opens/snapshots (and
+likewise retain two). Reject the observed thirty-second mutation through replay.
+This is a repair of fixture initialization, not a reinterpretation of the
+failing clipboard observation or an OS-dependent exception.
+
 Clipboard-free actual error processes also disprove the old handwritten Go
 exit-six expectation. The pinned Go CLI exits one for wrong passphrase and
 three for uninitialized vault; the unchanged Rust implementation exits one for
@@ -207,8 +219,11 @@ failure on the original failing row, or fail an otherwise successful row. A
 structural injected-primary-plus-cleanup test proves both observations and
 terminal bytes are preserved. No schema replay may approve a known failure
 merely by changing its success flag.
+Attempt every owned cleanup even when termination or socket close fails; keep
+all such errors in an exception group. A structural two-fault test proves the
+other socket close and bounded reader join still execute.
 
-Sixteen artifact/schema controls start from the genuine passing native
+Seventeen artifact/schema controls start from the genuine passing native
 receipt and invoke the actual CLI replay. Each deliberately refreshed digest
 belongs only to its negative-control input, never a replacement acceptance
 anchor. Preserve omitted versus explicit null snapshot fields and JSON types.
