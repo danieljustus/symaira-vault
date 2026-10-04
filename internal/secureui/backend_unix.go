@@ -38,7 +38,7 @@ func (b *linuxGUIBackend) prompt(req PromptRequest) (string, error) {
 		if req.Hidden {
 			args = append(args, "--hide-text")
 		}
-		out, err := b.r.run(b.toolBin, args, req.Timeout)
+		out, err := runPrompt(b.r, req, b.toolBin, args)
 		if err != nil {
 			if isCmdCancel(err) {
 				return "", ErrCanceled
@@ -53,7 +53,7 @@ func (b *linuxGUIBackend) prompt(req PromptRequest) (string, error) {
 			flag = "--password"
 		}
 		args := []string{flag, body, "--title", sanitizeOneLine(title)}
-		out, err := b.r.run(b.toolBin, args, req.Timeout)
+		out, err := runPrompt(b.r, req, b.toolBin, args)
 		if err != nil {
 			if isCmdCancel(err) {
 				return "", ErrCanceled

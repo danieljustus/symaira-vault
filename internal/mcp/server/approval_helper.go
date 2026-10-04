@@ -30,6 +30,9 @@ type Intent struct {
 // for the given intent. Returns nil if the operation is allowed, or an error
 // if it is denied or the user did not approve.
 func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if s == nil || s.agent == nil {
 		return fmt.Errorf("server not initialized")
 	}
@@ -80,6 +83,7 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 
 		if !IsTTYPresent() && secureui.Detect() == secureui.CapGUI {
 			result, err := secureui.PromptApproval(secureui.ApprovalRequest{
+				Context:     ctx,
 				Operation:   intent.Action,
 				Details:     intent.Summary,
 				Timeout:     timeout,
@@ -106,7 +110,7 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 		gitBranch := getGitBranch(workingDir)
 		projectType := detectProjectContext(workingDir)
 
-		result := RequestApproval(ApprovalRequest{
+		result := RequestApprovalContext(ctx, ApprovalRequest{
 			Operation:       intent.Action,
 			Details:         intent.Summary,
 			Timeout:         timeout,

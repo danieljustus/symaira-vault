@@ -97,7 +97,10 @@ fn config_fixture_has_pinned_provenance_and_complete_case_set() {
     // RUST-007 deliberately advances its config oracle: the previous caadd5e
     // claim was verified only as a label, and four of the generator's seven
     // production sources already differed from that commit.
-    assert_eq!(fixture.oracle.commit, "21f849ee");
+    assert_eq!(
+        fixture.oracle.commit,
+        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+    );
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
@@ -106,7 +109,7 @@ fn config_fixture_has_pinned_provenance_and_complete_case_set() {
             .commit_sha
             .starts_with(&fixture.oracle.commit)
     );
-    assert_eq!(fixture.oracle.source_files.len(), 9);
+    assert_eq!(fixture.oracle.source_files.len(), 34);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     let names: Vec<_> = fixture

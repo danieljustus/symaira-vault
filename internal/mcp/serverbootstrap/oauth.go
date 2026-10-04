@@ -558,7 +558,7 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 			return
 		}
 
-		result := server.RequestApproval(server.ApprovalRequest{
+		result := server.RequestApprovalContext(r.Context(), server.ApprovalRequest{
 			Operation: "OAuth Authorization Request",
 			Details:   fmt.Sprintf("Client %q requests vault access\n  Redirect URI: %s", clientID, redirectURI),
 			Timeout:   60 * time.Second,
