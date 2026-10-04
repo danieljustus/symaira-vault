@@ -103,7 +103,10 @@ jobs:
               rows = receipt[implementation+'_hostile']
               assert len(rows)==12 and {row['case'] for row in rows}==expected_hostile
               assert all(row['stdout_is_only_protocol'] for row in rows)
-          assert len(receipt['declared_differences'])==67
+          expected_differences = 72 if receipt['native_os']=='Windows' else 67
+          assert len(receipt['declared_differences'])==expected_differences
+          windows_denials = [row for row in receipt['declared_differences'] if row['decision']=='windows-headless-approval-denial']
+          assert len(windows_denials)==(5 if receipt['native_os']=='Windows' else 0)
           assert sum(len(row['frames']) for name in ['go','rust','go_hostile','rust_hostile'] for row in receipt[name])==1022
           PY
       - name: Upload complete actual native observations

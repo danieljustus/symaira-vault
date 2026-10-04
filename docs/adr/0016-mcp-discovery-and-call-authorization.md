@@ -128,6 +128,22 @@ clean commit/source/executable receipts; Windows has two fewer pre-existing
 Unix-only MCP tests, while every new regression must execute on all three OSes.
 No CI/native acceptance is claimed by the development result.
 
+The first native Windows run at 8c0e764 fails the complete process comparison,
+despite passing all 227 owning runtime tests and the assembled CLI API test.
+Its retained actual Go/Rust observations expose Windows verbatim canonical paths
+in Rust's whoami vault directory. Project ordinary drive/UNC paths for metadata
+while retaining verbatim paths for store I/O; do not normalize away the defect
+in the driver.
+
+That same native run records five headless approval diagnostic differences:
+Go attempts terminal reads and reports "file type does not support deadline";
+Rust rejects with "no TTY or GUI dialog available" before prompting. Retain
+the earlier fail-closed Rust behavior and its useful diagnostic. Assert the
+complete actual Go and Rust envelopes individually for the two delete names and
+execute_with_secret, including their distinct tool-result/RPC classifications.
+Only Windows may declare these five differences. The total declared difference
+gate is 72 on Windows and 67 on Unix; this is not a general error exemption.
+
 Normalize JSON object order/nested JSON text, actual fixture HOME prefixes,
 validated paired random 16-hex data-marker ids, and nonnegative measured command
 durations only. Keep labels, wrapped content, full schemas, error classes,

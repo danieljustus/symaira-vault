@@ -201,6 +201,17 @@ def declared_profile_difference(profile, a, b, go_catalog_names):
         assert all(c in json.dumps(a) for c in CANARIES), 'actual legacy value-return control'
         assert b==tool_error(frame_id,'get_entry_value requires approval but no interactive approval is available')
         return 'legacy-missing-value-authorization'
+    if platform.system()=='Windows' and profile.get('tier')=='admin' and name in ['delete_entry','symaira_delete','execute_with_secret']:
+        operation = 'delete_entry' if name=='symaira_delete' else name
+        go_text = operation+' approval failed: failed to read from terminal: file type does not support deadline'
+        rust_text = operation+' requires approval but no TTY or GUI dialog available'
+        if operation=='execute_with_secret':
+            expected_go = {'jsonrpc':'2.0','id':frame_id,'error':{'code':-32603,'message':go_text}}
+            expected_rust = {'jsonrpc':'2.0','id':frame_id,'error':{'code':-32603,'message':rust_text}}
+        else:
+            expected_go,expected_rust = tool_error(frame_id,go_text),tool_error(frame_id,rust_text)
+        assert a==expected_go and b==expected_rust, 'both native headless approval denials must retain the exact error classification'
+        return 'windows-headless-approval-denial'
     return None
 
 
