@@ -10,6 +10,7 @@ import (
  "os"
  "os/exec"
  "reflect"
+ "runtime"
  "time"
 
  "golang.org/x/term"
@@ -44,8 +45,13 @@ func main() {
   if err!=nil {if exit,ok:=err.(*exec.ExitError);ok {code=exit.ExitCode()} else {panic(err)}}
   afterIn,e:=term.GetState(int(os.Stdin.Fd()));if e!=nil {panic(e)}
   afterOut,e:=term.GetState(int(os.Stdout.Fd()));if e!=nil {panic(e)}
-  data,e:=json.Marshal(map[string]any{"exit_code":code,"input_restored":reflect.DeepEqual(beforeIn,afterIn),"output_restored":reflect.DeepEqual(beforeOut,afterOut)})
-  if e!=nil {panic(e)};if e=os.WriteFile(*consoleReceipt,data,0600);e!=nil {panic(e)}
+  data,e:=json.Marshal(map[string]any{"exit_code":code,"input_restored":reflect.DeepEqual(consoleState(reflect.ValueOf(beforeIn),""),consoleState(reflect.ValueOf(afterIn),"")),"output_restored":reflect.DeepEqual(consoleState(reflect.ValueOf(beforeOut),""),consoleState(reflect.ValueOf(afterOut),""))})
+  if e!=nil {panic(e)}
+  if e=os.WriteFile(*consoleReceipt+".tmp",data,0600);e!=nil {panic(e)}
+  if e=os.Rename(*consoleReceipt+".tmp",*consoleReceipt);e!=nil {panic(e)}
+  // Retain the controlling session while the parent independently checks modes.
+  deadline:=time.Now().Add(15*time.Second)
+  for {if _,e=os.Stat(*consoleReceipt+".release");e==nil {break};if time.Now().After(deadline){panic("console mode rendezvous expired")};time.Sleep(10*time.Millisecond)}
   os.Exit(code)
  }
  if *snapshot {
@@ -75,6 +81,25 @@ func main() {
   if err=vault.WriteEntry(*root,spec.path,entry,identity);err!=nil {panic(err)}
  }
  if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings()});err!=nil {panic(err)}
+}
+
+// Darwin PENDIN is kernel bookkeeping for reprocessing pending input, not an
+// application terminal mode. Compare every other native field, without unsafe
+// access or writing/restoring the terminal to make this observation pass.
+func consoleState(value reflect.Value,name string) any {
+ switch value.Kind() {
+ case reflect.Pointer:return consoleState(value.Elem(),name)
+ case reflect.Struct:
+  fields:=map[string]any{}
+  for i:=0;i<value.NumField();i++ {n:=value.Type().Field(i).Name;fields[n]=consoleState(value.Field(i),n)}
+  return fields
+ case reflect.Array:
+  fields:=[]any{};for i:=0;i<value.Len();i++ {fields=append(fields,consoleState(value.Index(i),""))};return fields
+ case reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64:
+  number:=value.Uint();if runtime.GOOS=="darwin" && name=="Lflag" {number &^= 0x20000000};return number
+ case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64:return value.Int()
+ default:panic("unsupported native console state field")
+ }
 }
 
 // A real child editor receives the actual private JSON document. It pauses on

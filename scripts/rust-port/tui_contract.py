@@ -75,7 +75,11 @@ def fixture_env(home, provider):
                XDG_DATA_HOME=str(home/'data'), XDG_CACHE_HOME=str(home/'cache'),
                TMPDIR=str(temporary), TEMP=str(temporary), TMP=str(temporary),
                SYMVAULT_TEST_KEYRING='memory', SYMVAULT_NO_NOTIFY='1',
-               TERM='xterm-256color', TZ='UTC', NO_COLOR='1')
+               # pyte is a screen decoder, not an xterm OSC color-query peer.
+               # Advertising xterm makes Go's lazy termenv query reader compete
+               # with Bubble Tea for confirmation keys. screen-256color is the
+               # actual emulated capability set (no OSC 10/11 reports).
+               TERM='screen-256color', TZ='UTC', NO_COLOR='1')
     env.update(provider)
     return env
 
@@ -163,6 +167,14 @@ def clipboard(env):
            re.search(rb'target (?:STRING|UTF8_STRING) not available', result.stderr)), \
         ('private clipboard query failed', result.returncode, scrub(result.stderr.decode(errors='replace')))
     return result.stdout
+
+
+def terminal_modes(state):
+    state = list(state)
+    if platform.system() == 'Darwin':
+        # Same documented kernel-only PENDIN exclusion as the Go observer.
+        state[3] &= ~0x20000000
+    return state
 
 
 class Browser:
@@ -254,6 +266,10 @@ class Browser:
                 return
             if not self.alive():
                 break
+        # Exit can occur between the predicate and alive() observations. A
+        # receipt/exit predicate must be checked after that final transition.
+        if predicate():
+            return
         raise AssertionError(description+'; screen='+scrub(self.view())[-2000:])
 
     def keys(self, text):
@@ -289,16 +305,24 @@ class Browser:
         assert 1.3 <= elapsed <= 6, ('unexpected configured clipboard expiry', elapsed)
         return elapsed
 
+    def finish(self, expected_exit):
+        # Keep the console wrapper alive until mode checks finish. Darwin
+        # revokes slave ioctls when the controlling session leader exits.
+        self.wait(self.console_receipt.is_file, 'actual CLI exit and native console receipt', timeout=10)
+        receipt = json.loads(self.console_receipt.read_bytes())
+        assert receipt == {'exit_code': expected_exit, 'input_restored': True, 'output_restored': True}, receipt
+        if os.name != 'nt':
+            import termios
+            assert terminal_modes(termios.tcgetattr(self.slave)) == terminal_modes(self.original), 'controlling PTY was not restored'
+        Path(str(self.console_receipt)+'.release').write_text('release\n')
+        self.wait(lambda: not self.alive(), 'native console wrapper exit', timeout=10)
+        self.pump(0.1)
+        return receipt
+
     def quit(self, key='q', clipboard_owned=False):
         started = time.monotonic()
         self.write(key)
-        self.wait(lambda: not self.alive(), 'actual browser quit', timeout=10)
-        self.pump(0.1)
-        receipt = json.loads(self.console_receipt.read_bytes())
-        assert receipt == {'exit_code': 0, 'input_restored': True, 'output_restored': True}, receipt
-        if os.name != 'nt':
-            import termios
-            assert termios.tcgetattr(self.slave) == self.original, 'controlling PTY was not restored'
+        self.finish(0)
         if clipboard_owned:
             assert time.monotonic()-started < 1.3, 'quit was measured only after timer expiry'
             assert not clipboard(self.env), 'copied secret survived quit'
@@ -310,7 +334,7 @@ class Browser:
         if os.name == 'nt':
             return None  # post-exit native input/output modes are independently checked
         import termios
-        return termios.tcgetattr(self.slave) == self.original
+        return terminal_modes(termios.tcgetattr(self.slave)) == terminal_modes(self.original)
 
     def resize(self):
         if os.name == 'nt':
@@ -373,10 +397,7 @@ def run_case(case, label, binary, helper, seed, base, provider):
             if case == 'locked-wrong-passphrase':
                 browser.wait(lambda: 'passphrase' in browser.view().lower(), 'hidden locked prompt')
                 browser.write('public-wrong-passphrase-782a\n')
-            browser.wait(lambda: not browser.alive(), 'locked/uninitialized process exit')
-            browser.pump(0.1)
-            observed = json.loads(browser.console_receipt.read_bytes())
-            assert observed['exit_code'] != 0 and observed['input_restored'] and observed['output_restored']
+            observed = browser.finish(6 if label == 'go' else 1)
             assert all(c.encode() not in browser.capture for c in [PHRASE, *CANARIES])
             row.update(exit_code=observed['exit_code'], terminal_restored=True,
                        diagnostic=scrub(browser.capture.decode(errors='replace')),
