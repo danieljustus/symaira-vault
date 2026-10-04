@@ -110,3 +110,12 @@ failure. The test now kills the owned session group after the bounded ordinary
 exit wait and reaps its shell. Preserve any original completion failure; never
 turn a cleanup timeout into acceptance or omit Bash from the native job. The
 next macOS receipt must establish the actual candidate rows independently.
+
+The subsequent native macOS receipt exposes the original failure: both actual
+Go/Rust Bash screens contain the same bare names on one horizontal row,
+`generate  get  git`, whereas the driver expects separate descriptive rows.
+Fix readline's completion-display-width to one in each disposable Bash shell,
+and recognize a complete bare name as a candidate row. Compare every resulting
+row, require both get and generate, and retain both raw screens. Sourced-script
+candidate byte comparison remains required. Do not omit Bash or classify the
+failed native receipt as acceptance; the new commit requires fresh native gates.
