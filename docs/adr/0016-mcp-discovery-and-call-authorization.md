@@ -144,6 +144,16 @@ execute_with_secret, including their distinct tool-result/RPC classifications.
 Only Windows may declare these five differences. The total declared difference
 gate is 72 on Windows and 67 on Unix; this is not a general error exemption.
 
+The next Windows run at a4dd27a fails an older encrypted-store fixture test,
+before the process corpus executes. That test normalizes only the verbatim
+canonical path; corrected metadata now uses the ordinary path. Update its
+Windows expectation to the actual caller root and assert the exact reported
+path before normalization. Preserve canonical expectations on Unix and leave
+the frozen Go fixture unchanged. The process driver still accepts only its
+ordinary HOME-prefix normalization. Integrate the separately measured launchd
+final-byte correction from ADR 0013 into dependent broker/MCP branches so their
+native serve gates test the repaired dependency.
+
 Normalize JSON object order/nested JSON text, actual fixture HOME prefixes,
 validated paired random 16-hex data-marker ids, and nonnegative measured command
 durations only. Keep labels, wrapped content, full schemas, error classes,

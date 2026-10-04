@@ -589,7 +589,29 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .collect::<Vec<Value>>();
     let mut actual = actual;
     let mut expected = case.output.clone();
+    #[cfg(not(windows))]
     let actual_root = fs::canonicalize(root.path()).expect("canonical synthetic vault root");
+    // Windows metadata uses the ordinary caller path, while store I/O retains
+    // the verbatim canonical path. Assert that spelling before normalization.
+    #[cfg(windows)]
+    let actual_root = root.path().to_path_buf();
+    for id in [3, 8] {
+        let response = actual
+            .iter()
+            .find(|response| response["id"] == id)
+            .expect("whoami response");
+        let metadata: Value = serde_json::from_str(
+            response["result"]["content"][0]["text"]
+                .as_str()
+                .expect("whoami JSON text"),
+        )
+        .expect("whoami metadata");
+        assert_eq!(
+            metadata["vault"]["dir"].as_str(),
+            Some(actual_root.to_string_lossy().as_ref()),
+            "exact reported vault path before fixture normalization"
+        );
+    }
     let actual_markers = actual
         .iter_mut()
         .map(|value| normalize(value, &actual_root.to_string_lossy()))
