@@ -36,6 +36,8 @@ pub struct Provenance {
     pub size: u64,
     pub sha256: String,
     pub mtime: u64,
+    #[serde(skip)]
+    pub mtime_unix_nanoseconds: i128,
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Suggestion {
@@ -56,6 +58,8 @@ pub struct FileResult {
     pub suggestions: Vec<Suggestion>,
     #[serde(skip)]
     pub spool_path: Option<PathBuf>,
+    #[serde(skip)]
+    pub duplicate_paths: Vec<String>,
 }
 
 impl FileResult {
@@ -81,6 +85,8 @@ impl FileResult {
 }
 #[derive(Debug, Error)]
 pub enum IntakeError {
+    #[error("read {0:?}: EOF")]
+    EmptySource(String),
     #[error("source is not a stable regular file: {0}")]
     InvalidSource(String),
     #[error("source exceeds limit")]
@@ -97,18 +103,14 @@ fn sha(bytes: &[u8]) -> String {
         .collect()
 }
 pub fn source_type(name: &str, data: &[u8]) -> SourceType {
-    let ext = Path::new(name)
-        .extension()
-        .and_then(|x| x.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    if data.starts_with(b"\x89PNG") || data.starts_with(b"\xff\xd8\xff") {
+    let _ = name; // Production Go sniffs bytes; extensions do not determine the type.
+    if data.starts_with(b"\x89PNG\r\n\x1a\n") || data.starts_with(b"\xff\xd8\xff") {
         return SourceType::Image;
     }
     if data.starts_with(b"%PDF-") {
         return SourceType::Pdf;
     }
-    if data.starts_with(b"PK\x03\x04") {
+    if data.starts_with(b"PK\x03\x04") || data.starts_with(b"PK\x05\x06") {
         return SourceType::Archive;
     }
     let t = String::from_utf8_lossy(data);
@@ -125,15 +127,27 @@ pub fn source_type(name: &str, data: &[u8]) -> SourceType {
     {
         return SourceType::Json;
     }
-    if ext == "env"
-        || t.lines().filter(|l| l.contains('=')).count() * 2
-            >= t.lines().filter(|l| !l.trim().is_empty()).count().max(1)
-    {
+    let lines: Vec<_> = t
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    let matches = lines
+        .iter()
+        .filter(|line| {
+            line.split_once('=').is_some_and(|(key, _)| {
+                let key = key.trim();
+                !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            })
+        })
+        .count();
+    if !lines.is_empty() && matches * 2 >= lines.len() {
         return SourceType::Env;
     }
-    if data
-        .iter()
-        .all(|b| *b == b'\n' || *b == b'\r' || *b == b'\t' || *b >= 0x20)
+    if !data.is_empty()
+        && data
+            .iter()
+            .all(|b| *b == b'\n' || *b == b'\r' || *b == b'\t' || *b == 0x1b || *b >= 0x20)
     {
         SourceType::Text
     } else {
@@ -141,15 +155,21 @@ pub fn source_type(name: &str, data: &[u8]) -> SourceType {
     }
 }
 fn field(k: &str) -> (&str, f64) {
-    match k.trim().to_ascii_lowercase().as_str() {
-        "username" | "user" | "login" | "email" => ("username", 0.95),
-        "password" | "pass" | "secret" => ("password", 0.95),
-        "token" | "api_key" | "apikey" => ("token", 0.9),
-        "totp" | "otp" | "2fa" => ("totp", 0.85),
-        "client_id" => ("client_id", 0.8),
-        "client_secret" => ("client_secret", 0.85),
-        "certificate" | "cert" => ("certificate", 0.8),
-        "notes" | "note" | "comment" => ("notes", 0.5),
+    match k.trim().to_lowercase().as_str() {
+        "username" | "user" | "login" | "login_id" | "loginid" | "account" | "email" | "mail"
+        | "userid" | "user_id" => ("username", 0.95),
+        "password" | "pass" | "passwd" | "pwd" | "password_plain" | "secret" => ("password", 0.95),
+        "token" | "access_token" | "accesstoken" | "api_key" | "apikey" | "api-key" | "key"
+        | "auth_token" | "authtoken" | "bearer" => ("token", 0.9),
+        "totp" | "otp" | "otpauth" | "secret_key" | "secretkey" | "2fa" | "two_factor" => {
+            ("totp", 0.85)
+        }
+        "client_id" | "clientid" | "client-id" => ("client_id", 0.8),
+        "client_secret" | "clientsecret" | "client-secret" => ("client_secret", 0.85),
+        "certificate" | "cert" | "cert_p12" | "certificate_p12" | "pfx" | "p12" => {
+            ("certificate", 0.8)
+        }
+        "note" | "notes" | "comment" | "comments" | "description" | "desc" => ("notes", 0.5),
         _ => ("", 0.6),
     }
 }
@@ -166,15 +186,17 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
         }]
     };
     match kind {
-        SourceType::Env | SourceType::Text => {
+        SourceType::Env => {
             let mut out = Vec::new();
             for line in String::from_utf8_lossy(data).lines() {
-                let (k, v) = if kind == SourceType::Env {
-                    line.split_once('=').map(|(a, b)| (a, b.trim()))
-                } else {
-                    line.split_once(':').map(|(a, b)| (a, b.trim()))
+                let line = line.trim();
+                if line.starts_with('#') {
+                    continue;
                 }
-                .unwrap_or(("", ""));
+                let (k, v) = line
+                    .split_once('=')
+                    .map(|(a, b)| (a.trim(), b.trim()))
+                    .unwrap_or(("", ""));
                 if k.is_empty() || v.is_empty() {
                     continue;
                 }
@@ -194,6 +216,55 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
             }
             if out.is_empty() { attachment() } else { out }
         }
+        SourceType::Text => {
+            let patterns: &[(&str, &str, f64)] = &[
+                ("username:", "username", 0.8),
+                ("user name:", "username", 0.8),
+                ("user:", "username", 0.8),
+                ("login:", "username", 0.8),
+                ("login id:", "username", 0.8),
+                ("account:", "username", 0.6),
+                ("email:", "username", 0.7),
+                ("password:", "password", 0.85),
+                ("pass:", "password", 0.8),
+                ("passwd:", "password", 0.8),
+                ("pwd:", "password", 0.8),
+                ("secret:", "password", 0.7),
+                ("token:", "token", 0.8),
+                ("api key:", "token", 0.85),
+                ("api-key:", "token", 0.85),
+                ("apikey:", "token", 0.85),
+                ("access token:", "token", 0.85),
+                ("auth token:", "token", 0.8),
+                ("totp:", "totp", 0.8),
+                ("otp:", "totp", 0.8),
+                ("2fa:", "totp", 0.7),
+                ("client id:", "client_id", 0.7),
+                ("client secret:", "client_secret", 0.8),
+            ];
+            let mut out = Vec::new();
+            for line in String::from_utf8_lossy(data).lines() {
+                let line = line.trim();
+                let lower = line.to_lowercase();
+                if let Some((prefix, field, confidence)) = patterns
+                    .iter()
+                    .find(|(prefix, _, _)| lower.starts_with(prefix))
+                {
+                    let value = line[prefix.len()..].trim();
+                    if !value.is_empty() {
+                        out.push(Suggestion {
+                            path: path.clone(),
+                            field: (*field).into(),
+                            confidence: *confidence,
+                            value: Some(value.into()),
+                            warning: None,
+                            attachment: false,
+                        });
+                    }
+                }
+            }
+            if out.is_empty() { attachment() } else { out }
+        }
         SourceType::Json => {
             let Ok(serde_json::Value::Object(obj)) = serde_json::from_slice(data) else {
                 return attachment();
@@ -201,14 +272,14 @@ pub fn suggestions(data: &[u8], kind: SourceType, name: &str) -> Vec<Suggestion>
             let mut out = Vec::new();
             for (k, v) in obj {
                 if let Some(v) = v.as_str() {
-                    if v.is_empty() {
+                    if v.trim().is_empty() {
                         continue;
                     }
                     let (c, cfg) = field(&k);
                     out.push(Suggestion {
                         path: path.clone(),
                         field: if c.is_empty() {
-                            k.to_ascii_lowercase()
+                            k.trim().to_lowercase()
                         } else {
                             c.into()
                         },
@@ -287,6 +358,11 @@ impl Spool {
         if !m.is_file() {
             return Err(IntakeError::InvalidSource(path.display().to_string()));
         }
+        if m.len() == 0 {
+            return Err(IntakeError::EmptySource(
+                path.to_string_lossy().into_owned(),
+            ));
+        }
         if m.len() > limit {
             return Err(IntakeError::Limit);
         }
@@ -351,6 +427,15 @@ impl Spool {
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                 .map_or(0, |d| d.as_secs()),
+            mtime_unix_nanoseconds: after.modified().ok().map_or(0, |t| {
+                let nanos = |d: Duration| {
+                    i128::from(d.as_secs()) * 1_000_000_000 + i128::from(d.subsec_nanos())
+                };
+                match t.duration_since(SystemTime::UNIX_EPOCH) {
+                    Ok(d) => nanos(d),
+                    Err(e) => -nanos(e.duration()),
+                }
+            }),
         };
         Ok((data, provenance, staged_path, after))
     }
@@ -410,6 +495,7 @@ fn process_with_metadata(
                     provenance: Some(p.clone()),
                     suggestions: suggestions(&data, p.source_type, &p.source_name),
                     spool_path: Some(spool_path),
+                    duplicate_paths: Vec::new(),
                 },
                 Some(source_metadata),
             )
@@ -422,13 +508,17 @@ fn process_with_metadata(
                 provenance: None,
                 suggestions: Vec::new(),
                 spool_path: None,
+                duplicate_paths: Vec::new(),
             },
             None,
         ),
         Err(e) => (
             FileResult {
                 file: path.to_string_lossy().into(),
-                status: if matches!(e, IntakeError::Io(_) | IntakeError::Verification) {
+                status: if matches!(
+                    e,
+                    IntakeError::Io(_) | IntakeError::Verification | IntakeError::EmptySource(_)
+                ) {
                     "error"
                 } else {
                     "skipped"
@@ -438,6 +528,7 @@ fn process_with_metadata(
                 provenance: None,
                 suggestions: Vec::new(),
                 spool_path: None,
+                duplicate_paths: Vec::new(),
             },
             None,
         ),

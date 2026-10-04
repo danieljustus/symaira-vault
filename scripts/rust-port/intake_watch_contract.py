@@ -121,6 +121,17 @@ def exercise(binary, inspector, root):
             assert json.loads(result.stdout) == {"scanned": 0, "staged": None}
         assert not (home / "vault").exists()
 
+    for name, args in [
+        ("invalid-interval", ["intake", "watch", "missing", "--once", "--interval", "bad"]),
+        ("invalid-debounce", ["intake", "watch", "missing", "--once", "--debounce", "bad"]),
+        ("file-no-argument", ["intake"]),
+        ("file-unknown-flag", ["intake", "missing", "--dry-run", "--unknown"]),
+        ("file-count-limit", ["intake", "one", "two", "--dry-run", "--max-files", "1"]),
+    ]:
+        result, home = case(name, args)
+        assert result.returncode and result.stderr and not result.stdout
+        assert not (home / "vault").exists()
+
     # JSON --once only stages. The reported random private paths are already
     # removed on return. No unlock or encrypted-vault write is permitted here.
     home = root / "json-staging"
@@ -201,6 +212,56 @@ def exercise(binary, inspector, root):
             if child.poll() is None:
                 child.kill()
                 child.communicate(timeout=10)
+
+    for name, filename, payload, extra in [
+        ("file-env", "fixture.env", b"# comment\nUSERNAME=fixture-user\nPASSWORD=fixture-password\n", []),
+        ("file-text", "fixture.txt", b"User name: fixture-user\nPassword: fixture-password\nunknown: ignored\n", []),
+        ("file-json", "fixture.json", b'{"username":"fixture-user","password":"fixture-password","notes":"fixture-note","ignored":123}', []),
+        ("extension-not-type", "fixture.env", b"Password: fixture-password\n", []),
+        ("attachment-empty", "empty.txt", b"", []),
+        ("attachment-png", "fixture.png", b"\x89PNG\r\n\x1a\npublic fixture", []),
+        ("file-ocr", "fixture.png", b"\x89PNG\r\n\x1a\npublic fixture", ["--ocr-text", "ocr.txt"]),
+        ("file-byte-limit", "fixture.env", b"PASSWORD=fixture-password\n", ["--batch-limit", "1"]),
+        ("file-default-limits", "fixture.env", b"PASSWORD=fixture-password\n", ["--batch-limit", "0", "--max-files", "0"]),
+        ("file-bool-true", "fixture.env", b"PASSWORD=fixture-password\n", ["--dry-run=TRUE", "--move-to-trash=False"]),
+    ]:
+        home = root / name
+        home.mkdir()
+        (home / filename).write_bytes(payload)
+        os.utime(home / filename, (1700000000, 1700000000))
+        if "--ocr-text" in extra:
+            (home / "ocr.txt").write_text("Password: fixture-ocr-password\n")
+        result, _ = case(name, ["intake", filename, "--dry-run", "--json", *extra], home)
+        assert result.returncode == 0, (name, result.stderr)
+        observed = json.loads(normal(result.stdout, home))
+        for item in observed["results"]:
+            if "suggestions" in item:
+                # Go iterates JSON object's keys in unspecified order; every
+                # field here is distinct, so array order has no write effect.
+                item["suggestions"].sort(key=lambda s: (s["path"], s["field"]))
+        records[-1]["json"] = observed
+        del records[-1]["stdout"]
+        assert not (home / "vault").exists()
+        assert b"fixture-password" not in result.stdout
+        assert b"fixture-ocr-password" not in result.stdout
+        assert (home / filename).read_bytes() == payload
+
+    home = root / "ordinary-encrypted-file"
+    home.mkdir()
+    env = isolated(home)
+    checked([inspector, "init", "--auth", "passphrase"], cwd=home, env=env)
+    source = home / "source.env"
+    source.write_bytes(b"USERNAME=fixture-user\nPASSWORD=fixture-password\n")
+    os.utime(source, (1700000000,1700000000))
+    for name in ["ordinary-encrypted-file", "ordinary-encrypted-file-repeat"]:
+        result, _ = case(name, ["intake", "source.env", "--dry-run=false", "--json"], home)
+        assert result.returncode == 0, (name,result.stderr)
+        records[-1]["json"] = json.loads(normal(result.stdout,home))
+        del records[-1]["stdout"]
+        assert b"fixture-password" not in result.stdout
+    assert records[-1]["json"]["results"][0]["status"] == "skipped"
+    assert len(records[-1]["json"]["results"][0]["duplicates"]) == 1
+    assert source.read_bytes() == b"USERNAME=fixture-user\nPASSWORD=fixture-password\n"
     return records
 
 
@@ -208,7 +269,7 @@ def compare(go, rust):
     assert [x["case"] for x in go] == [x["case"] for x in rust]
     for left, right in zip(go, rust):
         name = left["case"]
-        if name in {"missing-directory", "missing-argument", "not-directory"}:
+        if name in {"missing-directory", "missing-argument", "not-directory", "invalid-interval", "invalid-debounce", "file-no-argument", "file-unknown-flag"}:
             # OS/parser diagnostics belong to CLI-005. Require the same actual
             # denial, stderr placement, and no output or vault side effects.
             assert left["exit"] == right["exit"] and left["exit"] != 0 and not left["stdout"] and not right["stdout"]

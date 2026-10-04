@@ -20,6 +20,22 @@ the first bounded non-empty suggestion for each field. Dedupe and existing-entry
 checks share one vault ReadSession per batch, so resource errors abort rather
 than being skipped as ordinary unreadable entries.
 
+Connect ordinary `intake <file...>` to the same staging and quarantine path.
+Expose all five parent flags: dry-run, batch-limit, max-files, move-to-trash and
+ocr-text. Preserve Go's nonpositive-limit defaults, content-based type detection,
+empty-file error and metadata-only suggestions. Dry-run never opens a vault.
+JSON is compared structurally; distinct JSON field suggestions may have a
+different array order because Go iterates object keys in unspecified order.
+This does not decide precedence for conflicting aliases; that belongs to the
+complete importer contract in #1247.
+
+Read each newly written encrypted attachment back before considering its source
+eligible for the optional macOS Trash action. Verify the exact attachment and
+its metadata using the same bounded ReadSession. This makes the advertised
+write-before-cleanup rule concrete. Watch mode never moves sources. Finder
+automation remains best effort, as in Go; disposable CLI tests do not establish
+interactive Finder permission or broader platform UI acceptance.
+
 Match Go's distinct one-shot modes: text `--once` writes a review batch when
 there are accepted files, while `--once --json` only reports staging and does
 not unlock or write a vault. Its random staging paths are no longer present
@@ -49,23 +65,27 @@ full Go source inventory, both binaries, the driver, the candidate source
 inventory and native OS. Acceptance rejects a dirty candidate; development
 receipts must explicitly identify their dirty state.
 
-Seventeen actual Linux Go/Rust observations pass: empty scans, defaulted
-durations, invalid arguments/directories, disable/no-op, JSON staging with
-private-copy cleanup, encrypted batch creation, repeat hash deduplication and
-idle SIGINT/SIGTERM. Real Go reads the Rust-written attachment and credential;
-the attachment bytes and source bytes match exactly. The comparison exposed
-and repaired Go's argument-error exit code and the shared Rust unlock helper's
-missing `SYMVAULT_NO_ENV_WARNING` handling. Strict Clippy and existing watcher,
-scan, spool and run-loop tests also pass locally.
+Thirty-four actual Linux Go/Rust observations pass: empty scans, defaulted and
+invalid durations, invalid arguments/directories, disable/no-op, JSON staging
+with private-copy cleanup, encrypted batch creation, repeat hash deduplication,
+idle SIGINT/SIGTERM, ordinary file intake, dry-run, OCR text, content sniffing,
+empty files, batch limits and valued/repeated Boolean flags. Real Go reads the
+Rust-written attachment and credential; attachment and source bytes match
+exactly. The comparison exposed and repaired argument-error exit codes, empty
+file handling, parser confidence and the shared Rust unlock helper's missing
+`SYMVAULT_NO_ENV_WARNING` handling. The owning CLI/sync suites pass locally
+(620 tests, five explicitly ignored); their optional differential tests are not
+substitutes for the separately executed actual Go/Rust driver.
 
 Random batch IDs and staging paths are opaque. Compare their structure and
 effects, and normalize only those generated identities in output comparisons.
 OS/parser diagnostic wording stays under CLI-005; require actual denial, exit
 code, stderr placement and absence of vault writes here.
 
-The new watch paths are reachable, but the ordinary file-intake CLI and its five
-parent flags still need completion. IO-003 stays in_progress until that surface,
-the additional batch/error cases and actual macOS/Linux/Windows jobs pass.
+The actual CLI gap report has no intake path, flag or alias gaps. The native
+workflow requires clean candidate receipts, real Go observations and named
+cases on macOS/Linux/Windows, including a real Windows console-control event.
+IO-003 stays in_progress until those actual native jobs pass.
 Polling is the oracle's native behavior; an OS event-watcher implementation is
 not an additional acceptance requirement. Broader platform UI and release gates
 are not promoted by these injected and disposable-root checks.
