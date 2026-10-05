@@ -96,7 +96,7 @@ pub fn serve_connect_passthrough(
     })
 }
 
-fn configure_accepted_client(client: &TcpStream) -> io::Result<()> {
+pub(super) fn configure_accepted_client(client: &TcpStream) -> io::Result<()> {
     // macOS accepted sockets inherit the nonblocking listener's mode. Reset
     // before ordinary blocking header reads or relay I/O can see WouldBlock.
     client.set_nonblocking(false)?;
@@ -104,13 +104,13 @@ fn configure_accepted_client(client: &TcpStream) -> io::Result<()> {
     client.set_write_timeout(Some(IO_TIMEOUT))
 }
 
-struct Socket {
-    stream: TcpStream,
+pub(super) struct Socket {
+    pub(super) stream: TcpStream,
     cancellation: HttpShutdown,
 }
 
 impl Socket {
-    fn new(stream: TcpStream, cancellation: &HttpShutdown) -> io::Result<Self> {
+    pub(super) fn new(stream: TcpStream, cancellation: &HttpShutdown) -> io::Result<Self> {
         #[cfg(windows)]
         stream.set_nonblocking(true)?;
         stream.set_read_timeout(Some(IO_TIMEOUT))?;
@@ -120,7 +120,7 @@ impl Socket {
             cancellation: cancellation.clone(),
         })
     }
-    fn duplicate(&self) -> io::Result<Self> {
+    pub(super) fn duplicate(&self) -> io::Result<Self> {
         Self::new(self.stream.try_clone()?, &self.cancellation)
     }
 }
@@ -243,7 +243,7 @@ fn handle_client(
     Ok(())
 }
 
-fn resolve_connect_target(
+pub(super) fn resolve_connect_target(
     authority: &str,
     allow_private: bool,
 ) -> Option<(String, Vec<SocketAddr>)> {
@@ -286,14 +286,17 @@ fn resolve_connect_target(
     Some((host, addresses))
 }
 
-fn canonical_host(value: &str) -> String {
+pub(super) fn canonical_host(value: &str) -> String {
     let value = value.trim_start_matches('[').trim_end_matches(']');
     value
         .parse::<IpAddr>()
         .map_or_else(|_| value.to_ascii_lowercase(), |ip| ip.to_string())
 }
 
-fn host_matches(pattern: &str, host: &str) -> bool {
+pub(super) fn host_matches(pattern: &str, host: &str) -> bool {
+    if pattern.is_empty() {
+        return false;
+    }
     if pattern.starts_with('[')
         && let Some((host_pattern, _)) = pattern.split_once(']')
     {
@@ -304,6 +307,9 @@ fn host_matches(pattern: &str, host: &str) -> bool {
         .filter(|(host, _)| !host.contains(':'))
         .map_or(pattern, |(host, _)| host);
     let pattern = canonical_host(pattern);
+    if pattern.is_empty() {
+        return false;
+    }
     host == pattern || host.ends_with(&format!(".{pattern}"))
 }
 
@@ -322,7 +328,7 @@ fn write_proxy_error(stream: &mut impl Write, status: u16, message: &str) -> Res
     .map_err(|error| format!("write proxy error response: {error}"))
 }
 
-fn private_or_local(ip: IpAddr) -> bool {
+pub(super) fn private_or_local(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
             ip.is_private()
@@ -461,6 +467,8 @@ mod tests {
         assert!(!host_matches("example.com", "notexample.com"));
         assert!(!host_matches("example.com", "example.com.evil"));
         assert!(host_matches("[::1]:443", "::1"));
+        assert!(!host_matches("", "example.com."));
+        assert!(!host_matches(":443", "example.com."));
         let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
         upstream.set_nonblocking(true).unwrap();
         let target = upstream.local_addr().unwrap();

@@ -3182,7 +3182,10 @@ fn api_path_unescape(value: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&decoded).into_owned())
 }
 
-fn api_percent_decoded_bytes(value: &str, tolerate_malformed: bool) -> Result<Vec<u8>, String> {
+pub(crate) fn api_percent_decoded_bytes(
+    value: &str,
+    tolerate_malformed: bool,
+) -> Result<Vec<u8>, String> {
     let mut decoded = Vec::with_capacity(value.len());
     let bytes = value.as_bytes();
     let mut index = 0;
@@ -3242,7 +3245,9 @@ fn normalize_api_endpoint(endpoint: &str) -> Result<String, String> {
     Ok(normalized)
 }
 
-fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Result<(), String> {
+pub(crate) fn validate_api_template_definition(
+    definition: &ApiTemplateDefinition,
+) -> Result<(), String> {
     if definition.base_url.is_empty() {
         return Err("base_url is required".into());
     }
@@ -3295,7 +3300,7 @@ fn validate_api_template_definition(definition: &ApiTemplateDefinition) -> Resul
     Ok(())
 }
 
-fn api_entry_path(reference: &str) -> Result<String, String> {
+pub(crate) fn api_entry_path(reference: &str) -> Result<String, String> {
     let path = reference.trim();
     if path.is_empty() {
         return Err("entry_ref is required".into());
@@ -3337,7 +3342,7 @@ fn substitution_applies(substitution: &ApiSubstitution, surface: &str) -> bool {
             .any(|item| item == surface)
 }
 
-fn resolve_api_substitutions(
+pub(crate) fn resolve_api_substitutions(
     substitutions: &[ApiSubstitution],
     fields: &BTreeMap<String, Value>,
 ) -> Result<BTreeMap<String, String>, String> {
@@ -3358,7 +3363,7 @@ fn resolve_api_substitutions(
     Ok(values)
 }
 
-fn api_request_url(
+pub(crate) fn api_request_url(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3386,7 +3391,7 @@ fn api_request_url(
     Ok(url.to_string())
 }
 
-fn apply_api_body_substitutions(
+pub(crate) fn apply_api_body_substitutions(
     body: &str,
     substitutions: &[ApiSubstitution],
     values: &BTreeMap<String, String>,
@@ -3402,7 +3407,7 @@ fn apply_api_body_substitutions(
     body
 }
 
-fn apply_api_header_substitutions(
+pub(crate) fn apply_api_header_substitutions(
     headers: &mut BTreeMap<String, String>,
     substitutions: &[ApiSubstitution],
     values: &BTreeMap<String, String>,
@@ -3418,13 +3423,16 @@ fn apply_api_header_substitutions(
     }
 }
 
-fn overlay_api_headers(target: &mut BTreeMap<String, String>, incoming: BTreeMap<String, String>) {
+pub(crate) fn overlay_api_headers(
+    target: &mut BTreeMap<String, String>,
+    incoming: BTreeMap<String, String>,
+) {
     for (name, value) in incoming {
         set_api_header(target, &name, value);
     }
 }
 
-fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
+pub(crate) fn set_api_header(headers: &mut BTreeMap<String, String>, name: &str, value: String) {
     headers.retain(|existing, _| !existing.eq_ignore_ascii_case(name));
     headers.insert(name.to_owned(), value);
 }
@@ -3442,7 +3450,7 @@ type ApiAuthHeader = Option<(String, String)>;
 type ApiAuthQuery = Option<(String, String)>;
 type ApiAuthResult = Result<(ApiAuthHeader, ApiAuthQuery), String>;
 
-fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
+pub(crate) fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult {
     match auth_type {
         "bearer" => {
             let token = api_field(fields, &["credential", "token", "password"])
@@ -3492,7 +3500,11 @@ fn api_auth(auth_type: &str, fields: &BTreeMap<String, Value>) -> ApiAuthResult 
     }
 }
 
-fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String, String> {
+pub(crate) fn set_api_query_parameter(
+    url: &str,
+    name: &str,
+    value: &str,
+) -> Result<String, String> {
     let mut url = reqwest::Url::parse(url).map_err(|_| "invalid template URL")?;
     let mut pairs = BTreeMap::<String, Vec<String>>::new();
     for (key, value) in url.query_pairs() {
@@ -3512,7 +3524,7 @@ fn set_api_query_parameter(url: &str, name: &str, value: &str) -> Result<String,
     Ok(url.to_string())
 }
 
-fn api_query_escape(value: &str) -> String {
+pub(crate) fn api_query_escape(value: &str) -> String {
     value
         .bytes()
         .map(|byte| match byte {
@@ -3574,7 +3586,7 @@ fn api_escaped_path(value: &str) -> String {
         .collect()
 }
 
-fn api_substitution_redaction_values(value: &str) -> Vec<String> {
+pub(crate) fn api_substitution_redaction_values(value: &str) -> Vec<String> {
     // Preserve Go escaping while covering the URL serializer used by the request.
     let mut url = reqwest::Url::parse("http://localhost/").expect("static URL");
     url.set_path(&format!("/{value}"));
@@ -3610,7 +3622,7 @@ fn api_substitution_redaction_values(value: &str) -> Vec<String> {
     ]
 }
 
-fn api_path_substitution_redaction_values(
+pub(crate) fn api_path_substitution_redaction_values(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3677,7 +3689,7 @@ fn api_path_substitution_redaction_values(
     Ok(known)
 }
 
-fn api_query_substitution_redaction_values(
+pub(crate) fn api_query_substitution_redaction_values(
     base_url: &str,
     endpoint: &str,
     substitutions: &[ApiSubstitution],
@@ -3737,7 +3749,7 @@ fn api_query_substitution_redaction_values(
     Ok(known)
 }
 
-fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
+pub(crate) fn sanitize_api_value(text: &str, known_values: &[String]) -> (String, bool) {
     let (known_sanitized, exact_count) =
         symvault_core::redact::redact_known_values(text, known_values, "***");
     let mut scanner = symvault_core::redact::Scanner::new(vec![Box::new(
