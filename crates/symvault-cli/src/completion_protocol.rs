@@ -76,7 +76,11 @@ fn validate_value(flag: &artifact::Flag, value: &str) -> Result<(), String> {
         } else {
             format!("-{}, --{}", flag.shorthand, flag.name)
         };
-        format!("invalid argument {value:?} for {name:?} flag: {cause}")
+        format!(
+            "invalid argument {} for {} flag: {cause}",
+            artifact::quote_go_string(value),
+            artifact::quote_go_string(&name)
+        )
     })
 }
 
@@ -127,7 +131,10 @@ fn validate_integer(value: &str) -> Result<(), String> {
         }
     };
     match error {
-        Some(error) => Err(format!("strconv.ParseInt: parsing {value:?}: {error}")),
+        Some(error) => Err(format!(
+            "strconv.ParseInt: parsing {}: {error}",
+            artifact::quote_go_string(value)
+        )),
         None => Ok(()),
     }
 }
@@ -638,13 +645,13 @@ mod tests {
             serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json"))
                 .unwrap();
         let cases = fixture["entry_completions"].as_array().unwrap();
-        assert_eq!(cases.len(), 519);
+        assert_eq!(cases.len(), 537);
         assert_eq!(
             cases
                 .iter()
                 .filter(|c| c["name"].as_str().unwrap().starts_with("parser/"))
                 .count(),
-            64
+            82
         );
         assert_eq!(
             cases

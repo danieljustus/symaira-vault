@@ -19,9 +19,10 @@ class CompletionCaptureGuards(unittest.TestCase):
     def test_complete_ordered_actual_go_inventory(self):
         cases = self.artifact['entry_completions']
         queries = contract.validate_observations(cases, self.artifact['commands'])
-        self.assertEqual(len(cases), 519)
-        self.assertEqual(len(queries), 485)
-        self.assertEqual(len(contract.PARSER_REQUESTS), 64)
+        self.assertEqual(len(cases), 537)
+        self.assertEqual(len(queries), 503)
+        self.assertEqual(len(contract.PARSER_REQUESTS), 82)
+        self.assertEqual(sum('-quoted-' in c['name'] for c in cases), 18)
         self.assertTrue(all(c['name'].startswith('parser/') for c in cases[455:]))
         by_name = {c['name']: c for c in cases}
         for name in ('invalid-int', 'invalid-bool', 'invalid-duration',

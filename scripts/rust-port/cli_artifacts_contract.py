@@ -173,6 +173,17 @@ PARSER_REQUESTS = [
     ('short-cluster-value', ['generate', '-sl2', '--']),
 ]
 
+# Exercise both layers of Go's typed-value diagnostic, including duration's
+# intentionally different quoting. Expected bytes still come from real Go.
+for kind, args in [('int', ['add', '--length']),
+                   ('bool', ['add', '--generate']),
+                   ('duration', ['unlock', '--ttl'])]:
+    for name, value in [('bel', '\x07'), ('esc', '\x1b'), ('tab', '\t'),
+                        ('nbsp', '\u00a0'), ('separator', '\u2028'),
+                        ('emoji', '\U0001f600')]:
+        words = [*args[:-1], args[-1] + '=' + value, '--']
+        PARSER_REQUESTS.append((f'{kind}-quoted-{name}', words))
+
 
 def validate_observations(observations, commands):
     declared = requests(commands)

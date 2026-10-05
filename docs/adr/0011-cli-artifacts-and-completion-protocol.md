@@ -186,9 +186,9 @@ No migration, release or broader CLI row is promoted by this correction alone.
 
 ## Completion parser correction and retained failures
 
-The completion parser correction appends 64 actual-Go controls to the historical
-455 observations. The inventory now contains 519 observations, of which 485
-are exercised through the standalone CLI with an absent session. Existing
+The initial completion parser correction appends 64 actual-Go controls to the
+historical 455 observations. That correction contains 519 observations, of which
+485 are exercised through the standalone CLI with an absent session. Existing
 stateful controls, help pages, scripts and manuals are retained unchanged.
 The added controls cover command discovery before leaf and nested flags,
 typed-value diagnostics, literal equals signs, separators and short clusters.
@@ -203,3 +203,13 @@ on failure as well as success. The owning workflow checks the expanded counts
 and executes the capture/inventory negative controls. Fresh native receipts
 and independent candidate review remain required; this correction does not
 advance other historical oracle pins or promote a broader migration row.
+
+The typed-diagnostic quoting correction adds 18 further actual-Go controls for
+integer, boolean and duration values containing BEL, ESC, tab, nonbreaking
+space, line separator and a printable supplementary rune. The current inventory
+contains 537 observations, including 503 standalone CLI queries and 82 parser
+controls. Both the invalid-argument envelope and the shared boolean/integer
+causes use one Go string-quote helper with the existing immutable Go Unicode
+print table. Duration causes retain Go `time`'s distinct byte-oriented quoting.
+Making the existing print predicate available does not change secure-input
+filtering, terminal ownership or approval behavior. No dependency is added.

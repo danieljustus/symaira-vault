@@ -13326,6 +13326,204 @@
       "state": "absent",
       "stdout": "--color\tWhen to emit ANSI color: auto, always, never\n--json\tOutput format shorthand for --output json; overrides --output when both are specified\n--no-pipe-warning\tsuppress 'reading from non-TTY' warning when piping secrets\n--output\tOutput format (text, json, yaml)\n--profile\tuse a named vault profile\n--theme\tColor preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n--help\thelp for generate\n--quiet\tSuppress success output when using --store\n--reveal\tInclude generated password in output when using --store\n--store\tStore at path (optional)\n:4\n",
       "stderr": "Completion ended with directive: ShellCompDirectiveNoFileComp\n"
+    },
+    {
+      "name": "parser/int-quoted-bel",
+      "args": [
+        "add",
+        "--length=\u0007",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=\u0007]: invalid argument \"\\a\" for \"--length\" flag: strconv.ParseInt: parsing \"\\a\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-quoted-esc",
+      "args": [
+        "add",
+        "--length=\u001b",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=\u001b]: invalid argument \"\\x1b\" for \"--length\" flag: strconv.ParseInt: parsing \"\\x1b\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-quoted-tab",
+      "args": [
+        "add",
+        "--length=\t",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=\t]: invalid argument \"\\t\" for \"--length\" flag: strconv.ParseInt: parsing \"\\t\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-quoted-nbsp",
+      "args": [
+        "add",
+        "--length= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length= ]: invalid argument \"\\u00a0\" for \"--length\" flag: strconv.ParseInt: parsing \"\\u00a0\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-quoted-separator",
+      "args": [
+        "add",
+        "--length= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length= ]: invalid argument \"\\u2028\" for \"--length\" flag: strconv.ParseInt: parsing \"\\u2028\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/int-quoted-emoji",
+      "args": [
+        "add",
+        "--length=😀",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --length=😀]: invalid argument \"😀\" for \"--length\" flag: strconv.ParseInt: parsing \"😀\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-bel",
+      "args": [
+        "add",
+        "--generate=\u0007",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate=\u0007]: invalid argument \"\\a\" for \"--generate\" flag: strconv.ParseBool: parsing \"\\a\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-esc",
+      "args": [
+        "add",
+        "--generate=\u001b",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate=\u001b]: invalid argument \"\\x1b\" for \"--generate\" flag: strconv.ParseBool: parsing \"\\x1b\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-tab",
+      "args": [
+        "add",
+        "--generate=\t",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate=\t]: invalid argument \"\\t\" for \"--generate\" flag: strconv.ParseBool: parsing \"\\t\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-nbsp",
+      "args": [
+        "add",
+        "--generate= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate= ]: invalid argument \"\\u00a0\" for \"--generate\" flag: strconv.ParseBool: parsing \"\\u00a0\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-separator",
+      "args": [
+        "add",
+        "--generate= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate= ]: invalid argument \"\\u2028\" for \"--generate\" flag: strconv.ParseBool: parsing \"\\u2028\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/bool-quoted-emoji",
+      "args": [
+        "add",
+        "--generate=😀",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --generate=😀]: invalid argument \"😀\" for \"--generate\" flag: strconv.ParseBool: parsing \"😀\": invalid syntax\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-bel",
+      "args": [
+        "unlock",
+        "--ttl=\u0007",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl=\u0007]: invalid argument \"\\a\" for \"--ttl\" flag: time: invalid duration \"\\x07\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-esc",
+      "args": [
+        "unlock",
+        "--ttl=\u001b",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl=\u001b]: invalid argument \"\\x1b\" for \"--ttl\" flag: time: invalid duration \"\\x1b\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-tab",
+      "args": [
+        "unlock",
+        "--ttl=\t",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl=\t]: invalid argument \"\\t\" for \"--ttl\" flag: time: invalid duration \"\\x09\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-nbsp",
+      "args": [
+        "unlock",
+        "--ttl= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl= ]: invalid argument \"\\u00a0\" for \"--ttl\" flag: time: invalid duration \"\\xc2\\xa0\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-separator",
+      "args": [
+        "unlock",
+        "--ttl= ",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl= ]: invalid argument \"\\u2028\" for \"--ttl\" flag: time: invalid duration \"\\xe2\\x80\\xa8\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
+    },
+    {
+      "name": "parser/duration-quoted-emoji",
+      "args": [
+        "unlock",
+        "--ttl=😀",
+        "--"
+      ],
+      "state": "absent",
+      "stdout": ":0\n",
+      "stderr": "[Debug] [Error] Error while parsing flags from args [--vault absent-vault --ttl=😀]: invalid argument \"😀\" for \"--ttl\" flag: time: invalid duration \"\\xf0\\x9f\\x98\\x80\"\nCompletion ended with directive: ShellCompDirectiveDefault\n"
     }
   ]
 }

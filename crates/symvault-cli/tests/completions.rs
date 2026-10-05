@@ -136,15 +136,15 @@ fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
     let artifact: Value =
         serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json")).unwrap();
     let cases = artifact["entry_completions"].as_array().unwrap();
-    assert_eq!(cases.len(), 519);
+    assert_eq!(cases.len(), 537);
     let absent: Vec<_> = cases.iter().filter(|c| c["state"] == "absent").collect();
-    assert_eq!(absent.len(), 485);
+    assert_eq!(absent.len(), 503);
     assert_eq!(
         absent
             .iter()
             .filter(|c| c["name"].as_str().unwrap().starts_with("parser/"))
             .count(),
-        64
+        82
     );
     let home = tempfile::tempdir().unwrap();
     let mut executed = std::collections::BTreeSet::new();
@@ -188,6 +188,6 @@ fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
         );
         assert!(executed.insert(case["name"].as_str().unwrap()));
     }
-    assert_eq!(executed.len(), 485);
+    assert_eq!(executed.len(), 503);
     assert!(!home.path().join("absent-vault").exists());
 }
