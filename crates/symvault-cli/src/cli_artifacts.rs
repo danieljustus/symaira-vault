@@ -71,6 +71,41 @@ pub fn root() -> &'static Command {
         .expect("root artifact")
 }
 
+/// Go `strconv.Quote` for UTF-8 flag diagnostics. Duration errors intentionally
+/// retain `time`'s different byte-oriented quoting in the core duration parser.
+pub fn quote_go_string(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\u{7}' => quoted.push_str("\\a"),
+            '\u{8}' => quoted.push_str("\\b"),
+            '\u{c}' => quoted.push_str("\\f"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            '\u{b}' => quoted.push_str("\\v"),
+            character if symvault_platform::approval::go_is_print(character) => {
+                quoted.push(character);
+            }
+            character => {
+                let code = u32::from(character);
+                if code < 0x80 {
+                    quoted.push_str(&format!("\\x{code:02x}"));
+                } else if code <= 0xffff {
+                    quoted.push_str(&format!("\\u{code:04x}"));
+                } else {
+                    quoted.push_str(&format!("\\U{code:08x}"));
+                }
+            }
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
 pub fn children(command: &Command) -> impl Iterator<Item = &'static Command> {
     let prefix = format!("{} ", command.path);
     DATA.commands.iter().filter(move |c| {

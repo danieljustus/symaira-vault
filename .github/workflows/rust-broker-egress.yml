@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-broker-egress.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - 'testdata/**'
+      - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/cmd/cligap/**'
       - 'scripts/rust-port/egress_contract*'
       - 'scripts/rust-port/http_tls_identity.go.txt'
       - 'docs/adr/0015-egress-broker-runtime-boundaries.md'
