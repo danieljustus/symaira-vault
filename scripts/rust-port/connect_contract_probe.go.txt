@@ -1,0 +1,26 @@
+package main
+
+import (
+    "fmt"
+    "net"
+    "net/http"
+    "os"
+
+    "filippo.io/age"
+    "github.com/danieljustus/symaira-vault/internal/broker"
+)
+
+func main() {
+    identity, err := age.GenerateX25519Identity()
+    if err != nil { panic(err) }
+    proxy, err := broker.New(broker.Config{
+        VaultDir: os.Args[1], Identity: identity, Strict: true,
+        Passthrough: []string{"127.0.0.1"}, AllowPrivate: true,
+    })
+    if err != nil { panic(err) }
+    listener, err := net.Listen("tcp", "127.0.0.1:0")
+    if err != nil { panic(err) }
+    fmt.Println(listener.Addr().String())
+    server := &http.Server{Handler: proxy.Handler()}
+    if err := server.Serve(listener); err != nil { panic(err) }
+}
