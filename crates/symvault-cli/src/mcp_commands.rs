@@ -37,6 +37,69 @@ use symvault_mcp::{
 };
 use symvault_platform::approval::is_tty_present;
 
+/// Go's locked stdio bootstrap owns no vault runtime. Keep protocol input
+/// intact and deny every tool call through the existing locked handler.
+pub fn run_locked_stdio() -> Result<(), String> {
+    // Go lists host-capable secure input metadata even with a nil vault. This
+    // handler still owns no tool runtime: listing cannot enable a prompt/read.
+    let available = locked_secure_input_metadata_available();
+    let mut handler = ProtocolHandler::with_tool_list_config(
+        "symaira",
+        "1.0.0",
+        ToolListConfig {
+            secure_input_available: available,
+            request_credential_available: available,
+            ..ToolListConfig::default()
+        },
+    );
+    let stdin = io::stdin();
+    let stdout = io::stdout();
+    run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
+        .map_err(|error| format!("MCP stdio: {error}"))
+}
+
+fn locked_secure_input_metadata_available() -> bool {
+    let mode = std::env::var("SYMVAULT_SECUREUI").unwrap_or_default();
+    if mode == "none" {
+        return false;
+    }
+    if mode != "gui" && is_tty_present() {
+        return true;
+    }
+    if mode == "tty" {
+        return false;
+    }
+    let names: &[&str] = if cfg!(windows) {
+        &["powershell.exe"]
+    } else if cfg!(target_os = "macos") {
+        &["osascript"]
+    } else {
+        &["zenity", "kdialog"]
+    };
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|directory| {
+            names.iter().any(|name| {
+                let candidate = directory.join(name);
+                let Ok(metadata) = candidate.metadata() else {
+                    return false;
+                };
+                if !metadata.is_file() {
+                    return false;
+                }
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    metadata.permissions().mode() & 0o111 != 0
+                }
+                #[cfg(not(unix))]
+                {
+                    true
+                }
+            })
+        })
+    })
+}
+
 /// Starts the bounded native MCP server for an already unlocked vault.
 ///
 /// The caller supplies the identity and keyring obtained through the
@@ -119,6 +182,13 @@ pub fn run(
         }
         let listener = TcpListener::bind((address, port))
             .map_err(|error| format!("bind MCP HTTP loopback {address}:{port}: {error}"))?;
+        eprintln!(
+            "MCP server listening on {bind}:{}",
+            listener
+                .local_addr()
+                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                .port()
+        );
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =
@@ -211,10 +281,9 @@ pub fn run(
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
-        let profile = config
-            .agents
-            .get(agent_name)
-            .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
+        let profile = config.agents.get(agent_name).ok_or_else(|| {
+            format!("failed to create MCP server: agent {agent_name:?} not found")
+        })?;
         let mut handler = build_handler(
             root,
             agent_name,
@@ -227,7 +296,8 @@ pub fn run(
             None,
             clipboard_auto_clear_duration,
             clipboard,
-        )?;
+        )
+        .map_err(|error| format!("failed to create MCP server: {error}"))?;
         let stdin = io::stdin();
         let stdout = io::stdout();
         run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)

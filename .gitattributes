@@ -40,6 +40,8 @@ scripts/rust-port/refresh-read-policy-fixtures.py text eol=lf
 scripts/rust-port/intake_watch_contract.py text eol=lf
 scripts/rust-port/cli_artifacts_contract.py text eol=lf
 .github/workflows/rust-cli-artifacts.yml text eol=lf
+scripts/rust-port/serve_contract.py text eol=lf
+.github/workflows/rust-serve-cli.yml text eol=lf
 # Retained upstream source and the historical KDF driver feed byte hashes.
 third_party/argon2/** text eol=lf
 third_party/cobra-completion/** text eol=lf
