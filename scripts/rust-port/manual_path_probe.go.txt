@@ -1,0 +1,47 @@
+// Diagnostic probe only: call the pinned production descriptions and Cobra's
+// real renderer with supplied paths, including a retained native Windows path.
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	vaultcmd "github.com/danieljustus/symaira-vault/cmd"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/spf13/cobra/doc"
+)
+
+type observation struct {
+	Path string `json:"path"`
+	Command string `json:"command"`
+	Page string `json:"page"`
+}
+
+func main() {
+	var paths []string
+	if err := json.NewDecoder(os.Stdin).Decode(&paths); err != nil { panic(err) }
+	root := vaultcmd.NewRootCmd()
+	native := filepath.Join(config.DefaultConfigDir(), "config.yaml")
+	date := time.Unix(0, 0).UTC()
+	observations := make([]observation, 0, len(paths)*2)
+	for _, name := range []string{"mcp", "serve"} {
+		command, _, err := root.Find([]string{name})
+		if err != nil || command.Name() != name { panic("missing production command") }
+		original := command.Long
+		if strings.Count(original, native) != 1 { panic("production config path substitution boundary changed") }
+		for _, path := range paths {
+			command.Long = strings.Replace(original, native, path, 1)
+			command.DisableAutoGenTag = true
+			var page bytes.Buffer
+			header := &doc.GenManHeader{Title:"SYMVAULT", Section:"1", Date:&date, Source:"Symaira Vault", Manual:"Symaira Vault Manual"}
+			if err := doc.GenMan(command, header, &page); err != nil { panic(err) }
+			observations = append(observations, observation{Path:path, Command:name, Page:page.String()})
+		}
+		command.Long = original
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(observations); err != nil { panic(err) }
+}

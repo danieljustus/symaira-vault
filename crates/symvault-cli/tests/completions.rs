@@ -60,11 +60,12 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
         .find(|command| command["path"] == "symvault add")
         .expect("Go add command");
     let add_name = add["name"].as_str().expect("Go add command name");
+    assert_eq!(add_name, "add");
     assert!(has_flag(root, "persistent_flags", "vault"));
     assert!(has_flag(add, "local_flags", "length"));
 
     for (shell, marker) in [
-        ("bash", "complete -F"),
+        ("bash", "-F __start_symvault"),
         ("zsh", "#compdef symvault"),
         ("fish", "complete -c symvault"),
         ("powershell", "Register-ArgumentCompleter"),
@@ -84,12 +85,21 @@ fn shell_completions_are_generated_from_the_cli_and_match_go_commands_and_flags(
             script.contains(marker),
             "Rust {shell} did not emit a shell script"
         );
-        for expected in ["symvault", add_name, "vault", "length"] {
+        for expected in ["symvault", "__complete"] {
             assert!(
                 script.contains(expected),
                 "Rust {shell} script omits {expected}"
             );
         }
+        let artifacts: Value =
+            serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json"))
+                .unwrap();
+        assert_eq!(
+            script,
+            artifacts["completions"][format!("{shell}/descriptions")]
+                .as_str()
+                .unwrap()
+        );
         #[cfg(unix)]
         if shell == "bash" || shell == "zsh" {
             check_shell_syntax(shell, script.as_bytes());
@@ -116,6 +126,68 @@ fn bare_completion_and_no_descriptions_follow_go_command_behavior() {
     assert!(plain.status.success());
     assert!(plain.stderr.is_empty());
     assert!(!plain.stdout.is_empty());
-    assert!(full.stdout.len() > plain.stdout.len());
+    assert_ne!(full.stdout, plain.stdout);
+    assert!(String::from_utf8_lossy(&plain.stdout).contains("__completeNoDesc"));
     assert!(!String::from_utf8_lossy(&plain.stdout).contains("Add a new password entry"));
+}
+
+#[test]
+fn complete_actual_go_inventory_matches_public_rust_stdout_stderr_and_exit() {
+    let artifact: Value =
+        serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json")).unwrap();
+    let cases = artifact["entry_completions"].as_array().unwrap();
+    assert_eq!(cases.len(), 537);
+    let absent: Vec<_> = cases.iter().filter(|c| c["state"] == "absent").collect();
+    assert_eq!(absent.len(), 503);
+    assert_eq!(
+        absent
+            .iter()
+            .filter(|c| c["name"].as_str().unwrap().starts_with("parser/"))
+            .count(),
+        82
+    );
+    let home = tempfile::tempdir().unwrap();
+    let mut executed = std::collections::BTreeSet::new();
+    for case in absent {
+        let args: Vec<_> = case["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
+        let result = Command::new(env!("CARGO_BIN_EXE_symvault"))
+            .args(["--vault", "absent-vault", "__complete"])
+            .args(&args)
+            .current_dir(home.path())
+            .env_clear()
+            .envs(
+                ["PATH", "SystemRoot", "WINDIR", "TEMP", "TMP"]
+                    .into_iter()
+                    .filter_map(|name| std::env::var_os(name).map(|value| (name, value))),
+            )
+            .env("HOME", home.path())
+            .env("USERPROFILE", home.path())
+            .env("XDG_CONFIG_HOME", home.path().join("config"))
+            .env("XDG_DATA_HOME", home.path().join("data"))
+            .env("XDG_CACHE_HOME", home.path().join("cache"))
+            .env("SYMVAULT_TEST_KEYRING", "memory")
+            .output()
+            .unwrap();
+        assert_eq!(result.status.code(), Some(0), "{}", case["name"]);
+        assert_eq!(
+            result.stdout,
+            case["stdout"].as_str().unwrap().as_bytes(),
+            "{}",
+            case["name"]
+        );
+        assert_eq!(
+            result.stderr,
+            case["stderr"].as_str().unwrap().as_bytes(),
+            "{}",
+            case["name"]
+        );
+        assert!(executed.insert(case["name"].as_str().unwrap()));
+    }
+    assert_eq!(executed.len(), 503);
+    assert!(!home.path().join("absent-vault").exists());
 }

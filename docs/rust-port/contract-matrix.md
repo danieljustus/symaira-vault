@@ -7,16 +7,13 @@ seven-case corpus and Go pin remain intact. The exception proves the historical
 Windows rejection rather than successful archive parity; it does not promote
 GIT-002/003 or IO-002/003.
 
-> **Read this matrix together with
-> [`port-coverage-20260916.md`](port-coverage-20260916.md).** Counting `PASS`
-> rows overstates how close a cutover is: the rows are concentrated in the
-> library layer, while `internal/mcp` (the largest subsystem in the repository),
-> the HTTP server, and 133 of 135 CLI command paths have no Rust implementation
-> at all. Roughly 30 % of the Go production code sits in subsystems that have a
-> Rust counterpart. No row's status is affected -- every `PASS` is backed by the
-> evidence it claims -- but a `TODO` row waiting on a *port* is not comparable
-> work to one waiting on a *fixture*, and the matrix alone does not distinguish
-> them.
+> [`port-coverage-20260916.md`](port-coverage-20260916.md) is a historical source
+> coverage snapshot. Later implementation and native evidence are recorded in
+> these rows and the work-item ledger; its old command counts are not current
+> status. Counting PASS rows still does not establish readiness for cutover.
+> Whole CLI/MCP behavior, importer edge cases, device/GUI acceptance and release
+> gates remain separate work. Displayed Go-compatible help is documentation
+> reachability and does not prove the corresponding runtime is implemented.
 
 `TODO` means the contract is identified but does not yet have a language-neutral
 fixture and Rust parity test. `PASS` requires an executable test in CI; prose or
@@ -132,7 +129,7 @@ outcome under a higher-priority deny rule with an allow fallback.
 | CLI-001 | Version | `version`, output variants, extra args, `--version` | Go binary | exact exit/stdout/stderr and schema | `symvault-cli/tests/version.rs` + staged differential suite | macOS/Linux/Windows | bytes | PASS |
 | CLI-002 | Command tree | every visible/hidden command | `cmd.NewRootCmd()` generator | paths, aliases, groups, arity, annotations | inventory drift test; Clap's `help` subcommand reaches root and nested help, semantically compared with Go's `help` path in `cli_help_subcommand.rs` | all | semantic + bytes | TODO — source-tree `cligap` at candidate `9628016f`: 26 of 134 oracle paths reject the appended `--help` probe; four are reachable runtime commands with missing help handling (`help`, `update apply/check/info`). Hidden commands stay unmeasured. Report and method in [`cli-gap-inventory.md`](cli-gap-inventory.md). Surface reachability is not behavioral parity and does not promote this row. |
 | CLI-003 | Flags | local/inherited flags and defaults | Cobra generator | names, shorthands, types, defaults, required/conflicts | inventory drift test; `import --quarantine` is implemented and differentially exercised against Go CLI oracle `3232e31fb91362b6e6202774f7e95f6d477305d2` | all | semantic | TODO — source-tree `cligap` at candidate `9628016f` reports 8 missing flags: five on `mcp` and three on `run`. Update `--force`/`--dry-run` are recognized; direct-download apply verifies Cosign/checksums and stages, validates and rolls back the executable, but needs the external Cosign CLI. Defaults, shorthands, conflicts and inherited-flag resolution are not measured and do not promote this row. |
-| CLI-004 | Help/completions/manpages | all commands, four shells, man tree | Go generators | stable content and executable completions | `completions.rs` checks generated Bash/Zsh/Fish/PowerShell scripts, representative Go command/flag names, Bash/Zsh syntax, bare help and `--no-descriptions`; `cli-help-differential` compares root, get/list, dynamic/setup and all four update help pages against the checked-out Go command tree (41 update help cases, with invalid-flag/separator controls and disposable HOME/XDG roots) | all | bytes/declared normalization | TODO — the four Rust scripts are generated from Clap but do not yet match Cobra's bytes or Go's dynamic vault-entry suggestions; whole-command help/manpage parity remains open. |
+| CLI-004 | Help/completions/manpages | all commands, four shells, man tree | actual immutable Go CLI and production completion callbacks | stable content and executable completions | `cli_artifacts_contract.py` rebuilds retained Go: 140 help pages, 8 script variants, 119 manuals, 537 protocol observations including 82 parser controls; actual Rust binaries match all artifacts and 503 absent-session CLI queries; Rust replay uses real cached/locked/malformed/expired sessions and encrypted stores; earlier actual Bash/Zsh PTY completion passed locally, but interactive shell acceptance of the corrected candidate remains a fresh native gate; native workflow requires Unix Fish and Windows PowerShell too; [ADR 0011](../adr/0011-cli-artifacts-and-completion-protocol.md) | Linux and Darwin byte replay executed; exact-head native 3-OS acceptance pending | bytes; declared live date/config-path substitutions; terminal candidate rows | in_progress — native 3-OS evidence is pending; documentation reachability does not complete serve, broker, TUI or whole CLI. |
 | CLI-005 | Error taxonomy | invalid args/config/auth/not-found | Go binary | exit codes 0–10, stream placement, no secret leakage | differential cases; `doctor`'s stable multi-document config rejection is byte-compared across all five reporting checks by `differential_doctor_multi_document_config_errors_match_go`; non-TTY `config validate --fix` follows Go validation behavior in `config_validate_matches_go_contract`; scanner syntax diagnostics remain open in [`cli-gap-inventory.md`](cli-gap-inventory.md) | all | bytes | TODO — these bounded cases pass; broad exit/error taxonomy, interactive `--fix`, and go-yaml syntax-error wording remain open |
 | CLI-006 | Output modes | text/JSON/YAML/NDJSON capable commands | Go binary | field names, ordering, omission, newline behavior | differential cases | all | bytes/semantic by row | TODO |
 | CLI-007 | Signals | long-running watch/MCP/broker | Go binary | cancellation, flushing, process-tree cleanup, exit 130 where defined | signal harness | macOS/Linux/Windows equivalent | semantic | TODO |

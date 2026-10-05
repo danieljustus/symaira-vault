@@ -6,8 +6,8 @@
 //! (`/dev/tty`), never from MCP stdin/stdout, so a compromised or scripted
 //! MCP client cannot answer its own approval prompt.
 //!
-//! Only `is_tty_present` and `request_approval` are reachable from a public
-//! caller; the renderer, parsers and terminal seam are exercised by this
+//! The shared Go Unicode-print predicate exposes no terminal access. The
+//! renderer, parsers and terminal seam are private and exercised by this
 //! module's tests and by the Unix implementation. On non-Unix targets there is
 //! no terminal implementation at all (approval fails closed), so those items
 //! are unreachable in a non-test build there and must not fail `-D warnings`.
@@ -717,7 +717,8 @@ fn parse_secure_input(response: &str) -> Result<String, SecureInputError> {
     Ok(value.trim().to_owned())
 }
 
-fn go_is_print(character: char) -> bool {
+/// Go `unicode.IsPrint`, using the same immutable table as secure rune input.
+pub fn go_is_print(character: char) -> bool {
     let code = u32::from(character);
     go_unicode_print_15::PRINT_RANGES
         .binary_search_by(|(first, last)| {
