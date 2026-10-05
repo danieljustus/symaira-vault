@@ -84,6 +84,12 @@ helper, all production Go sources and its 17 embedded MCP assets. Require the
 same clean commit and source inventory throughout a native run. Execute the
 same corpus on Linux, macOS and Windows; skipped/zero cases cannot promote rows.
 
+Write native receipts under ignored `target/`, then measure and persist the
+candidate's final Git status after receipt creation. Unignored output must
+invalidate a previously passing receipt and fail the driver. The workflow
+also checks Git status independently; the isolated Git unit control exercises
+both ignored and unignored output without claiming native HTTP observations.
+
 ## Remaining acceptance
 
 Full OAuth consent/PKCE/DCR/token/refresh flows, replay/rotation, HEAD and other

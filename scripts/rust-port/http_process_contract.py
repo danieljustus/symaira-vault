@@ -454,6 +454,12 @@ def main():
                 checked(['git','worktree','remove','--force',tree])
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        receipt['candidate_worktree_clean_at_end'] = not checked(
+            ['git','status','--porcelain=v1','--untracked-files=normal']).strip()
+        if not receipt['candidate_worktree_clean_at_end'] and not args.allow_dirty_for_development:
+            receipt['passed'] = False
+        args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
     print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP CLI transcripts and five startup denials on {platform.system()}")
 
 

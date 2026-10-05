@@ -91,14 +91,15 @@ jobs:
           set -euo pipefail
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt native-http-process.json
+          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-http-process.json
           python3 - <<'PY'
           import json,subprocess,sys
           from pathlib import Path
           sys.path.insert(0,'scripts/rust-port')
           from http_process_contract import validate_stalled_observations
-          receipt=json.loads(Path('native-http-process.json').read_bytes())
-          assert receipt['passed'] and receipt['candidate_worktree_clean'] and not receipt['differences']
+          receipt=json.loads(Path('target/native-http-process.json').read_bytes())
+          assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end'] and not receipt['differences']
+          assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal']).strip()
           assert receipt['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           decisions={'token-session-isolation','complete-json-body-required','valid-utf8-required','metadata-fresh-marker-semantic-control'}
@@ -120,7 +121,7 @@ jobs:
         with:
           name: http-process-${{ matrix.os }}
           path: |
-            native-http-process.json
+            target/native-http-process.json
             target/native-http-tests.txt
           if-no-files-found: error
           retention-days: 14

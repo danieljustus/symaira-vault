@@ -94,6 +94,53 @@ fn egress_preflight_denies_before_credential_read_or_upstream_contact() {
         })
         .unwrap();
     // The template's allow_private cannot override production destination denial.
+    for strict in [false, true] {
+        if strict {
+            fs::remove_file(root.path().join("templates/fixture.yaml")).unwrap();
+        }
+        let broker = EgressBroker::new(
+            root.path(),
+            &store,
+            &identity,
+            EgressOptions {
+                strict,
+                allow_private: true, // In-process fixture only, never a CLI option.
+                ..EgressOptions::default()
+            },
+        )
+        .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        broker
+            .with_running(listener, || {
+                let client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(5))
+                    .proxy(reqwest::Proxy::all(format!("http://{address}")).unwrap())
+                    .add_root_certificate(
+                        reqwest::Certificate::from_pem(broker.ca_pem().as_bytes()).unwrap(),
+                    )
+                    .build()
+                    .unwrap();
+                for (method, path) in [
+                    (reqwest::Method::POST, "/allowed"),
+                    (reqwest::Method::GET, "/denied"),
+                ] {
+                    let response = client
+                        .request(method, format!("https://{target}{path}"))
+                        .send()
+                        .unwrap();
+                    // Missing credentials would give 500; early CONNECT contact
+                    // would leave a real socket in this listener's accept queue.
+                    assert_eq!(response.status(), 403);
+                    assert_eq!(
+                        upstream.accept().unwrap_err().kind(),
+                        std::io::ErrorKind::WouldBlock
+                    );
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
 }
 
 #[test]
@@ -206,7 +253,7 @@ fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
     thread::scope(|scope| {
         let accepted = accepted.clone();
         let peer = scope.spawn(move || {
-            for _ in 0..2 {
+            for _ in 0..1 {
                 let (stream, _) = upstream.accept().unwrap();
                 stream.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
                 let mut stream = rustls::StreamOwned::new(rustls::ServerConnection::new(tls.clone()).unwrap(), stream);
@@ -216,7 +263,7 @@ fn egress_verified_mitm_injects_and_masks_real_encrypted_credentials() {
                     match stream.read(&mut byte) { Ok(1) => bytes.push(byte[0]), _ => break }
                     if bytes.ends_with(b"\r\n\r\n") { break; }
                 }
-                if bytes.is_empty() { continue; } // Closed CONNECT reachability probe.
+                assert!(!bytes.is_empty(), "interception must not send a reachability-only dial");
                 let headers = String::from_utf8(bytes).unwrap();
                 assert!(headers.starts_with("POST /v1/public-fixture-secret-9f31?token=public-fixture-secret-9f31 HTTP/1.1"));
                 assert!(headers.to_ascii_lowercase().contains("authorization: bearer public-fixture-secret-9f31"));

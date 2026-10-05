@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-broker-egress.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - 'testdata/**'
+      - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/cmd/cligap/**'
       - 'scripts/rust-port/egress_contract*'
       - 'scripts/rust-port/http_tls_identity.go.txt'
       - 'docs/adr/0015-egress-broker-runtime-boundaries.md'
@@ -89,12 +91,13 @@ jobs:
           rust_cli=target/debug/symvault
           rust_probe=target/debug/examples/egress_contract_probe
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; rust_probe+=.exe; fi
-          python3 scripts/rust-port/egress_contract.py --rust-cli "$rust_cli" --rust-probe "$rust_probe" --receipt native-egress.json
+          python3 scripts/rust-port/egress_contract.py --rust-cli "$rust_cli" --rust-probe "$rust_probe" --receipt target/native-egress.json
           python3 - <<'PY'
           import json, subprocess
           from pathlib import Path
-          receipt = json.loads(Path('native-egress.json').read_bytes())
+          receipt = json.loads(Path('target/native-egress.json').read_bytes())
           assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end']
+          assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal']).strip()
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           runtime = {'tls-auth-bearer','tls-auth-basic','tls-auth-header','tls-auth-query_param','tls-auth-none','tls-all-substitution-surfaces','method-denied','endpoint-denied','encoded-endpoint-allowed','encoded-endpoint-denied','dot-segment-policy','unmatched-forwarded','unmatched-strict','passthrough-preserves-upstream-tls','untrusted-upstream-tls','template-port-binding','template-plaintext-binding','connect-inner-authority-binding','redirect-authority-binding'}
@@ -118,7 +121,7 @@ jobs:
         with:
           name: egress-broker-${{ matrix.os }}
           path: |
-            native-egress.json
+            target/native-egress.json
             target/native-egress-tests.txt
             target/native-broker-gaps.json
           if-no-files-found: error

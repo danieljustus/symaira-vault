@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Retained real Go timeout capture plus explicitly synthetic guard controls."""
+import ast
 import base64
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
+import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -139,6 +144,34 @@ class DefaultDeadlineContract(unittest.TestCase):
         self.assertEqual(observations[0]['elapsed_seconds'], 5)
         self.assertIs(observations[0]['peer_eof'], True)
         self.assertIs(observations[0]['passed'], False)
+
+    def test_receipt_finalization_rejects_unignored_output(self):
+        tree = ast.parse(Path(contract.__file__).read_text())
+        main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'main')
+        final = next(node for node in main.body if isinstance(node, ast.Try)).finalbody
+        code = compile(ast.Module(body=final, type_ignores=[]), '<actual HTTP receipt finalization>', 'exec')
+        env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+        for location, expected_clean in [('target/control.json', True), ('root-control.json', False)]:
+            with self.subTest(location=location), tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                subprocess.run(['git', 'init', '-q', str(root)], env=env, check=True)
+                (root / '.git/info/exclude').write_text('target/\n')
+                receipt_path = root / location
+                receipt_path.parent.mkdir(parents=True, exist_ok=True)
+                # Algorithm unit state only, not native HTTP observations.
+                receipt = {'passed': True, 'candidate_worktree_clean': True}
+                scope = {'args': SimpleNamespace(receipt=receipt_path, allow_dirty_for_development=False),
+                         'json': json, 'receipt': receipt,
+                         'checked': lambda args: subprocess.check_output(args, cwd=root, env=env)}
+                rejected = False
+                try:
+                    exec(code, scope)
+                except AssertionError:
+                    rejected = True
+                result = json.loads(receipt_path.read_text())
+                self.assertIs(result['candidate_worktree_clean_at_end'], expected_clean)
+                self.assertIs(result['passed'], expected_clean)
+                self.assertIs(rejected, not expected_clean)
 
 
 if __name__ == '__main__':

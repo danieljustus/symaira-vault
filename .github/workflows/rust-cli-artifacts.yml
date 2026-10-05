@@ -5,15 +5,20 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-cli-artifacts.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
       - 'scripts/rust-port/cli_artifacts*'
+      - 'scripts/rust-port/test_cli_artifacts_contract.py'
+      - 'scripts/rust-port/manual_path*'
+      - 'scripts/rust-port/cmd/portgen/**'
       - 'scripts/rust-port/cmd/cligap/**'
-      - 'testdata/port/cli/**'
-      - 'third_party/cobra-completion/**'
+      - 'testdata/**'
+      - 'third_party/**'
       - 'docs/adr/0011-cli-artifacts-and-completion-protocol.md'
   workflow_dispatch:
 
@@ -83,6 +88,18 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           go test ./scripts/rust-port/cmd/cligap -count=1
+          mkdir -p target
+          go test ./internal/manpages ./scripts/rust-port/cmd/portgen -count=1 -v > target/native-go-manual-tests.txt 2>&1
+          cat target/native-go-manual-tests.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('target/native-go-manual-tests.txt').read_text()
+          for name in ['TestManpageLiteralText', 'TestManualConfigPathIsLiteralAndDescriptionsAreRestored', 'TestManualLiteralPathDoesNotRewriteOtherDescriptions']:
+              assert '--- PASS: ' + name + ' ' in text, name
+          PY
+          make port-fixtures-check
+          python3 scripts/rust-port/manual_path_contract_test.py
+          python3 scripts/rust-port/test_cli_artifacts_contract.py
           cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings
           python3 scripts/run_go_tests.py cargo -- cargo test -p symvault-cli --locked --bin symvault actual_go_protocol_queries_replay_through_real_rust_sessions_and_store
           python3 scripts/run_go_tests.py cargo -- cargo test -p symvault-cli --locked --test completions --test cli_generate_manpages --test cli_help --test cli_help_subcommand --test cli_update_help --test cli_get_list_help_differential --test cli_dynamic_setup_help
@@ -99,8 +116,10 @@ jobs:
           receipt = json.loads(Path('native-cli-artifacts.json').read_text())
           assert receipt['passed'] and receipt['candidate_worktree_clean']
           assert receipt['candidate_commit'] == subprocess.check_output(['git','rev-parse','HEAD'], text=True).strip()
-          assert receipt['actual_counts'] == {'help_pages':140,'scripts':8,'manuals':119,'actual_cli_queries':421}
-          assert len(receipt['go_protocol_observations']) == 455
+          assert receipt['actual_counts'] == {'help_pages':140,'scripts':8,'manuals':119,'actual_cli_queries':503}
+          assert len(receipt['go_protocol_observations']) == 537
+          assert sum(row['name'].startswith('parser/') for row in receipt['go_protocol_observations']) == 82
+          assert sum('-quoted-' in row['name'] for row in receipt['go_protocol_observations']) == 18
           expected = {'bash','powershell'} if receipt['native_os'] == 'Windows' else {'bash','zsh','fish'}
           assert expected <= receipt['actual_shells'].keys()
           PY
@@ -121,5 +140,8 @@ jobs:
             native-cli-artifacts.json
             native-cli-go-artifacts.json
             target/native-cli-artifact-gaps.json
+            target/native-go-manual-tests.txt
+            target/cli-artifacts-captures/
+            target/cli-artifacts-failures/
           if-no-files-found: error
           retention-days: 14

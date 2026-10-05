@@ -5,10 +5,13 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-serve-cli.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - 'testdata/**'
+      - 'third_party/**'
+      - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/serve_contract.py'
       - 'docs/adr/0013-deprecated-serve-and-locked-stdio.md'
   workflow_dispatch:
