@@ -720,6 +720,13 @@ fn runtime_config(
     }
     let secure_input_available = transport == "stdio" && is_tty_present();
     let mut unavailable_tools = Vec::new();
+    if !profile.can_run_commands {
+        unavailable_tools.push(unavailable_tool(
+            "execute_api_request",
+            "not_available",
+            "tool \"execute_api_request\" is not available in the current environment",
+        ));
+    }
     if secure_input_available {
         available_tools.push("secure_input".into());
         available_tools.push("request_credential".into());
@@ -748,17 +755,14 @@ fn runtime_config(
         unavailable_tools.push(unavailable_tool(
             "generate_totp",
             "not_available",
-            "mcp.Tool is not available in the current environment",
+            "tool \"generate_totp\" is not available in the current environment",
         ));
     }
     if !expose_value_tools {
         unavailable_tools.push(unavailable_tool(
             "get_entry_value",
             "blocked_by_agent",
-            format!(
-                "Tool \"get_entry_value\" requires tier {:?}",
-                profile.tier.as_deref().unwrap_or("standard")
-            ),
+            "Tool \"get_entry_value\" requires tier \"standard\"",
         ));
     }
     ReadOnlyRuntimeConfig {
@@ -786,6 +790,7 @@ fn runtime_config(
         max_secrets_in_session: profile.max_secrets_in_session,
         available_tools,
         unavailable_tools,
+        tool_list_config: Some(tool_list_config(profile, secure_input_available)),
         vault_dir: root.to_string_lossy().into_owned(),
         vault_unlocked: true,
         ..ReadOnlyRuntimeConfig::default()
@@ -812,6 +817,7 @@ fn tool_list_config(profile: &AgentProfile, secure_input_available: bool) -> Too
         generate_totp_available: profile.can_read_values
             || profile.can_use_clipboard
             || profile.can_use_autotype,
+        allowed_tools: profile.allowed_tools.clone(),
     }
 }
 

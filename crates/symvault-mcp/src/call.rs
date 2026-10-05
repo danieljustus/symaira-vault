@@ -16,6 +16,9 @@ pub struct ToolCallResult {
     pub text: String,
     pub is_error: bool,
     pub structured_content: Option<Value>,
+    /// Preserve the actual Go JSON-RPC classification of command-capability
+    /// denials while rejecting before any handler or executor side effect.
+    pub authorization_internal_error: bool,
 }
 
 impl ToolCallResult {
@@ -98,7 +101,8 @@ fn format_go_general_float(value: f64) -> String {
 /// deliberately a separate step and happens before `call` can touch storage.
 pub trait ToolCallRuntime: Send + Sync {
     /// Return a tool-result error for a denied call, matching Go's
-    /// `validateToolAccess` path. This is not a JSON-RPC transport error.
+    /// `validateToolAccess` path. Command-capability denials preserve Go's
+    /// JSON-RPC internal-error classification without executing the handler.
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult>;
 
     /// Execute an authorized tool. Handler failures become JSON-RPC internal
@@ -240,6 +244,9 @@ pub struct ReadOnlyRuntimeConfig {
     pub secrets_used: i64,
     pub available_tools: Vec<String>,
     pub unavailable_tools: Vec<ReadOnlyUnavailableTool>,
+    /// Profile-aware registry metadata supplied by the application. Injected
+    /// runtimes without a registry keep their explicit fixture metadata.
+    pub tool_list_config: Option<crate::tools::ToolListConfig>,
     pub vault_dir: String,
     pub vault_unlocked: bool,
     /// Authentication/session status supplied by the owning session layer.
@@ -281,6 +288,7 @@ impl Default for ReadOnlyRuntimeConfig {
             secrets_used: 0,
             available_tools: Vec::new(),
             unavailable_tools: Vec::new(),
+            tool_list_config: None,
             vault_dir: String::new(),
             vault_unlocked: false,
             auth_method: "passphrase".into(),
@@ -440,26 +448,41 @@ fn collect_string_values(value: &Value, values: &mut Vec<String>) {
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
-        if self.config.tier == "read-only" && name == "set_entry_field" {
-            return Err(ToolCallResult::error(
-                "Tool \"set_entry_field\" requires tier \"standard\"",
-            ));
-        }
-        if self.config.tier == "read-only" && matches!(name, "secure_input" | "request_credential")
+        if let Some(config) = &self.config.tool_list_config
+            && !config.allowed_tools.is_empty()
+            && !config.allowed_tools.iter().any(|allowed| allowed == name)
         {
             return Err(ToolCallResult::error(format!(
-                "Tool \"{name}\" requires tier \"standard\""
+                "tool {name:?} is not allowed"
             )));
         }
-        let deletes = name == "delete_entry" || name == "symaira_delete";
-        if self.config.tier == "read-only" && deletes {
-            return Err(ToolCallResult::error(format!(
-                "Tool \"{name}\" requires tier \"standard\""
-            )));
+        // Availability precedes profile authorization in the actual Go
+        // dispatcher. Store-backed construction also removes these names from
+        // the configured dispatch set, so capability overrides cannot revive
+        // an unavailable provider.
+        if let Some(tool) = self
+            .config
+            .unavailable_tools
+            .iter()
+            .find(|tool| tool.name == name && tool.code == "not_available")
+        {
+            return Err(ToolCallResult::error(tool.reason.clone()));
         }
-        if self.config.tier == "standard" && deletes {
+        // Keep the deprecated delete alias subject to the canonical tier
+        // restriction. Go's alias bypass is an already documented divergence.
+        let canonical = if name == "symaira_delete" {
+            "delete_entry"
+        } else {
+            name
+        };
+        if crate::tools::blocked_by_tier(Some(&self.config.tier), canonical) {
+            let required = if self.config.tier == "read-only" {
+                "standard"
+            } else {
+                "admin"
+            };
             return Err(ToolCallResult::error(format!(
-                "Tool \"{name}\" requires tier \"admin\""
+                "Tool \"{name}\" requires tier \"{required}\""
             )));
         }
         if matches!(
@@ -473,9 +496,11 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             } else {
                 &self.config.agent_name
             };
-            return Err(ToolCallResult::error(format!(
+            let mut error = ToolCallResult::error(format!(
                 "command execution not permitted for this agent: set \"canRunCommands: true\" in its profile (symvault config set agents.{agent}.canRunCommands true), or add \"{name}\" to allowed_tools if tier-based scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, or request_credential instead"
-            )));
+            ));
+            error.authorization_internal_error = true;
+            return Err(error);
         }
         if self.config.available_tools.iter().any(|tool| tool == name) {
             let approval_mode =
@@ -1267,11 +1292,16 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 })
             })
             .collect::<Vec<_>>();
+        let tools = if let Some(config) = &self.config.tool_list_config {
+            crate::tools::profile_metadata(config)?
+        } else {
+            serde_json::json!({"available": self.config.available_tools, "unavailable": unavailable})
+        };
         let info = serde_json::json!({
             "agent": self.config.agent_name,
             "symaira_version": self.config.server_version,
             "profile": profile,
-            "tools": {"available": self.config.available_tools, "unavailable": unavailable},
+            "tools": tools,
             "quotas": {
                 "reads_per_hour": {"used": self.config.reads_used, "limit": self.config.max_reads_per_hour},
                 "reads_per_day": {"used": self.config.reads_used, "limit": self.config.max_reads_per_day},
@@ -1472,8 +1502,14 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
 
         let sanitized_id = crate::render::sanitize_for_mcp(id);
         let mut metadata = Map::new();
-        metadata.insert("created".into(), Value::String(entry.created.clone()));
-        metadata.insert("updated".into(), Value::String(entry.updated.clone()));
+        metadata.insert(
+            "created".into(),
+            Value::String(go_seconds_timestamp(&entry.created)),
+        );
+        metadata.insert(
+            "updated".into(),
+            Value::String(go_seconds_timestamp(&entry.updated)),
+        );
         metadata.insert("version".into(), Value::from(entry.version));
         metadata.insert("type".into(), Value::String(entry.secret_type.clone()));
         let mut response = Map::new();
@@ -1866,6 +1902,18 @@ fn redact_value(field: &str, value: Value, patterns: &[String]) -> Value {
             }
         }
     }
+}
+
+fn go_seconds_timestamp(value: &str) -> String {
+    if let Ok(parsed) = OffsetDateTime::parse(value, &Rfc3339)
+        && let Ok(whole_seconds) = parsed.replace_nanosecond(0)
+        && let Ok(formatted) = whole_seconds.format(&Rfc3339)
+    {
+        return formatted;
+    }
+    // Injected stores may contain authored fixture metadata rather than a
+    // native time. Retain it instead of manufacturing a timestamp.
+    value.to_owned()
 }
 
 fn wrap_data_field(label: &str, value: Value) -> Result<Value, String> {

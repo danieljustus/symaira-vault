@@ -33,6 +33,24 @@ mod go_unicode_15;
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
 
+fn runtime_vault_dir(root: &Path) -> String {
+    let directory = root.to_string_lossy();
+    // Windows canonicalization uses verbatim paths for I/O. Expose the ordinary
+    // drive/UNC spelling in runtime metadata, as Go does, without changing I/O.
+    #[cfg(windows)]
+    {
+        if let Some(rest) = directory.strip_prefix(r"\\?\UNC\") {
+            return format!(r"\\{rest}");
+        }
+        if let Some(rest) = directory.strip_prefix(r"\\?\")
+            && rest.as_bytes().get(1) == Some(&b':')
+        {
+            return rest.to_owned();
+        }
+    }
+    directory.into_owned()
+}
+
 const MAX_API_TEMPLATE_BYTES: u64 = 64 * 1024;
 
 /// Load one API template at request time so on-disk endpoint, method,
@@ -493,11 +511,14 @@ impl StoreReadOnlyRuntime {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
         }
+        let reported_root = runtime_vault_dir(root.as_ref());
         let adapter = StoreReadOnlyAdapter::open(root, identity)?;
         let root = adapter.root().to_path_buf();
         let share_store = ShareStore::read(root.join(SHARE_STORE_FILE))
             .map_err(|error| format!("load share store: {error}"))?;
-        config.vault_dir = root.to_string_lossy().into_owned();
+        // Go reports the configured path spelling. Canonical roots remain
+        // authoritative for all I/O, including Windows short-name expansion.
+        config.vault_dir = reported_root;
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
@@ -565,7 +586,7 @@ impl StoreReadOnlyRuntime {
         let adapter = StoreReadOnlyAdapter { store, identity };
         let share_store = ShareStore::read(adapter.root().join(SHARE_STORE_FILE))
             .map_err(|error| format!("load share store: {error}"))?;
-        config.vault_dir = adapter.root().to_string_lossy().into_owned();
+        config.vault_dir = runtime_vault_dir(adapter.root());
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
         let transport = config.transport.clone();
