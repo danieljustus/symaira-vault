@@ -27,12 +27,13 @@ pub fn generate(_command: clap::Command, requested_dir: &Path) -> Result<PathBuf
 
 /// Write actual generated Go pages, substituting the live date and config path.
 fn write_pages(output_dir: &Path, date: &str) -> io::Result<()> {
-    // Go's md2man paragraph renderer doubles backslashes in a live Windows
-    // config path. Help uses the unescaped path; roff must preserve its syntax.
-    let config_path = symvault_core::config::PathResolver::new()
-        .config_path()
-        .to_string_lossy()
-        .replace('\\', "\\\\");
+    // The revised Go renderer treats only the live config path as literal
+    // text after Markdown rendering. Help still uses the unescaped path.
+    let config_path = literal_roff_text(
+        &symvault_core::config::PathResolver::new()
+            .config_path()
+            .to_string_lossy(),
+    );
     for (name, page) in &crate::cli_artifacts::DATA.manpages {
         let rendered = page.replace("__CONFIG_PATH__", &config_path).replacen(
             "\"Jan 1970\"",
@@ -42,6 +43,38 @@ fn write_pages(output_dir: &Path, date: &str) -> io::Result<()> {
         std::fs::write(output_dir.join(name), rendered)?;
     }
     Ok(())
+}
+
+/// Keep path data out of roff syntax. Controls have visible Go-style escapes,
+/// never physical line breaks or tabs; printable Unicode and spaces survive.
+fn literal_roff_text(text: &str) -> String {
+    use std::fmt::Write as _;
+
+    let mut output = String::new();
+    if text.starts_with(['.', '\'']) {
+        output.push_str("\\&");
+    }
+    for character in text.chars() {
+        match character {
+            '\\' => output.push_str("\\\\"),
+            '\u{7}' => output.push_str("\\\\a"),
+            '\u{8}' => output.push_str("\\\\b"),
+            '\t' => output.push_str("\\\\t"),
+            '\n' => output.push_str("\\\\n"),
+            '\u{b}' => output.push_str("\\\\v"),
+            '\u{c}' => output.push_str("\\\\f"),
+            '\r' => output.push_str("\\\\r"),
+            c if c.is_control() || matches!(c, '\u{2028}' | '\u{2029}') => {
+                if u32::from(c) <= 0x7f {
+                    write!(output, "\\\\x{:02x}", u32::from(c)).expect("writing to String");
+                } else {
+                    write!(output, "\\\\u{:04x}", u32::from(c)).expect("writing to String");
+                }
+            }
+            other => output.push(other),
+        }
+    }
+    output
 }
 
 /// Render the page date the way cobra's `fillHeader` does: local time, using
@@ -101,5 +134,34 @@ fn create_directory(path: &Path) -> io::Result<()> {
     #[cfg(not(unix))]
     {
         std::fs::create_dir_all(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::literal_roff_text;
+
+    #[test]
+    fn configuration_paths_are_literal_roff_not_markdown() {
+        for path in [
+            "/ordinary/config.yaml",
+            "/s__b0nk_/a__b__c/a`b`c/a[b](c)d/a![b](c)d/a<b>c/a&amp;b/é space",
+        ] {
+            assert_eq!(literal_roff_text(path), path);
+        }
+        assert_eq!(
+            literal_roff_text(r"C:\ordinary\config.yaml"),
+            r"C:\\ordinary\\config.yaml"
+        );
+        assert_eq!(literal_roff_text(".request"), r"\&.request");
+        assert_eq!(literal_roff_text("'request"), r"\&'request");
+    }
+
+    #[test]
+    fn configuration_path_controls_cannot_inject_roff_requests() {
+        assert_eq!(
+            literal_roff_text("a\n.PS\r\t\0\u{7}\u{8}\u{b}\u{c}\u{1b}\u{7f}\u{85}\u{2028}\u{2029}"),
+            r"a\\n.PS\\r\\t\\x00\\a\\b\\v\\f\\x1b\\x7f\\u0085\\u2028\\u2029"
+        );
     }
 }
