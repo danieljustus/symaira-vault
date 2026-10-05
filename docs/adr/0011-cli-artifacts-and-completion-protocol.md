@@ -183,3 +183,23 @@ Local macOS execution proves the focused literal path correction and unchanged
 ordinary payloads. Fresh candidate-bound native macOS/Linux/Windows receipts,
 shared CLI-001 provenance refresh and independent review remain separate gates.
 No migration, release or broader CLI row is promoted by this correction alone.
+
+## Completion parser correction and retained failures
+
+The completion parser correction appends 64 actual-Go controls to the historical
+455 observations. The inventory now contains 519 observations, of which 485
+are exercised through the standalone CLI with an absent session. Existing
+stateful controls, help pages, scripts and manuals are retained unchanged.
+The added controls cover command discovery before leaf and nested flags,
+typed-value diagnostics, literal equals signs, separators and short clusters.
+Expected stdout, stderr and exit status come from the same pinned Go binary,
+not from the Rust parser. The capture validator rejects missing, duplicated,
+reordered or mutated request identities before accepting a replay.
+
+The driver retains raw stdin/stdout/stderr and command/exit metadata before
+child failures or later comparison assertions can discard the disposable
+oracle directory. Native jobs upload these isolated public-fixture captures
+on failure as well as success. The owning workflow checks the expanded counts
+and executes the capture/inventory negative controls. Fresh native receipts
+and independent candidate review remain required; this correction does not
+advance other historical oracle pins or promote a broader migration row.
