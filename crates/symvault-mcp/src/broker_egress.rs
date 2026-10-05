@@ -274,18 +274,18 @@ impl<'a> EgressBroker<'a> {
         if !request.body.is_empty() {
             return write_error(&mut transport, 400, "CONNECT body is unsupported");
         }
-        let Some(upstream) = addresses
-            .iter()
-            .find_map(|a| TcpStream::connect_timeout(a, Duration::from_secs(10)).ok())
-        else {
-            return write_error(&mut transport, 502, "cannot reach upstream");
-        };
         if self
             .options
             .passthrough
             .iter()
             .any(|p| connect::host_matches(p, &host))
         {
+            let Some(upstream) = addresses
+                .iter()
+                .find_map(|a| TcpStream::connect_timeout(a, Duration::from_secs(10)).ok())
+            else {
+                return write_error(&mut transport, 502, "cannot reach upstream");
+            };
             let Transport::Plain(mut client) = transport else {
                 unreachable!()
             };
@@ -315,8 +315,7 @@ impl<'a> EgressBroker<'a> {
             });
             return Ok(());
         }
-        // The reachability probe is closed immediately, including before TLS errors.
-        drop(upstream);
+        // Interception admits the inner request in forward before any upstream dial.
         let tls = self.leaf(&host)?;
         transport
             .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
