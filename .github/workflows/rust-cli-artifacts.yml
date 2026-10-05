@@ -5,20 +5,20 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-cli-artifacts.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
       - 'scripts/rust-port/cli_artifacts*'
       - 'scripts/rust-port/test_cli_artifacts_contract.py'
       - 'scripts/rust-port/manual_path*'
       - 'scripts/rust-port/cmd/portgen/**'
       - 'scripts/rust-port/cmd/cligap/**'
-      - 'cmd/manpages.go'
-      - 'internal/manpages/**'
-      - 'testdata/port/cli/**'
-      - 'third_party/cobra-completion/**'
+      - 'testdata/**'
+      - 'third_party/**'
       - 'docs/adr/0011-cli-artifacts-and-completion-protocol.md'
   workflow_dispatch:
 
