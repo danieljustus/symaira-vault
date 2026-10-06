@@ -237,9 +237,9 @@ struct HttpTimeouts {
 impl Default for HttpTimeouts {
     fn default() -> Self {
         Self {
-            // Keep the existing 10-second bounded request-read behavior;
-            // only an idle keep-alive wait adopts Go's longer idle timeout.
-            initial_read: Duration::from_secs(10),
+            // Match Go's five-second initial/header admission wait. Body reads
+            // retain ten seconds; an idle keep-alive has its separate bound.
+            initial_read: Duration::from_secs(5),
             request_read: Duration::from_secs(10),
             keep_alive_idle: Duration::from_secs(120),
             write: Duration::from_secs(10),
@@ -662,6 +662,7 @@ where
                         response,
                         &request.http_version,
                         keep_alive,
+                        request.method == "HEAD",
                     )?,
                     crate::oauth::OAuthResponse::Redirect(location) => write_http_redirect(
                         reader.get_mut(),
@@ -729,9 +730,16 @@ where
                 Ok(None) => return Ok(()),
                 Err(read_error) if read_error.kind() == std::io::ErrorKind::InvalidData => {
                     if read_error.to_string().contains("request body too large") {
+                        let response =
+                            error(413, None, error_code::PARSE_ERROR, "request body too large")
+                                .map_err(std::io::Error::other)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
+                        return Ok(());
+                    }
+                    if read_error.to_string() == "invalid JSON" {
                         let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
                             .map_err(std::io::Error::other)?;
-                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
                         return Ok(());
                     }
                     let (status, message) = if read_error.to_string().contains("too large") {
@@ -767,13 +775,16 @@ where
             || connection_tokens
                 .iter()
                 .any(|value| value.eq_ignore_ascii_case("keep-alive"));
-        let keep_alive = requested_keep_alive && !closes;
+        // A rejected bounded body may leave unsent/unread bytes. Never treat
+        // those bytes as a subsequent keep-alive request.
+        let keep_alive = requested_keep_alive && !closes && request.body_error.is_none();
         if let Some(response) = well_known_response(&request, local, reader.get_ref().is_tls()) {
             write_http_response(
                 reader.get_mut(),
                 response,
                 &request.http_version,
                 keep_alive,
+                request.method == "HEAD",
             )?;
             if !keep_alive {
                 return Ok(());
@@ -820,6 +831,24 @@ where
             },
             response_version,
             keep_alive,
+            false,
+        )?;
+        return Ok(keep_alive);
+    }
+    if request.path.split('?').next() != Some("/mcp") {
+        write_http_response(
+            stream,
+            HttpResponse {
+                status: 404,
+                headers: vec![
+                    ("Content-Type", "text/plain; charset=utf-8"),
+                    ("X-Content-Type-Options", "nosniff"),
+                ],
+                body: b"404 page not found\n".to_vec(),
+            },
+            response_version,
+            keep_alive,
+            false,
         )?;
         return Ok(keep_alive);
     }
@@ -854,6 +883,16 @@ where
             return Ok(keep_alive);
         }
     };
+    if request.agent.is_empty() {
+        write_request_error(
+            stream,
+            403,
+            "forbidden: missing X-Symaira-Agent header",
+            response_version,
+            keep_alive,
+        )?;
+        return Ok(keep_alive);
+    }
     if !token.agent_name.is_empty() && token.agent_name != request.agent {
         write_request_error(
             stream,
@@ -864,14 +903,25 @@ where
         )?;
         return Ok(keep_alive);
     }
-    if request.agent.is_empty() {
-        write_request_error(
-            stream,
-            403,
-            "forbidden: missing X-Symaira-Agent header",
-            response_version,
-            keep_alive,
-        )?;
+    let http_request = HttpRequest {
+        method: &request.method,
+        path: &request.path,
+        content_type: &request.content_type,
+        accept: &request.accept,
+        protocol_version: &request.protocol_version,
+        body: &request.body,
+    };
+    let response = if let Some(response) =
+        request_metadata_error(&http_request).map_err(std::io::Error::other)?
+    {
+        Some(response)
+    } else if let Some((status, message)) = request.body_error {
+        Some(error(status, None, error_code::PARSE_ERROR, message).map_err(std::io::Error::other)?)
+    } else {
+        None
+    };
+    if let Some(response) = response {
+        write_http_response(stream, response, response_version, keep_alive, false)?;
         return Ok(keep_alive);
     }
     let handler = {
@@ -935,20 +985,10 @@ where
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
         handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
-        handle_request(
-            HttpRequest {
-                method: &request.method,
-                path: &request.path,
-                content_type: &request.content_type,
-                accept: &request.accept,
-                protocol_version: &request.protocol_version,
-                body: &request.body,
-            },
-            &mut handler,
-        )
-        .map_err(|error| std::io::Error::other(error.to_string()))?
+        handle_request(http_request, &mut handler)
+            .map_err(|error| std::io::Error::other(error.to_string()))?
     };
-    write_http_response(stream, response, response_version, keep_alive)?;
+    write_http_response(stream, response, response_version, keep_alive, false)?;
     Ok(keep_alive)
 }
 
@@ -967,6 +1007,7 @@ struct WireRequest {
     enroll_proof: String,
     connection: String,
     body: String,
+    body_error: Option<(u16, &'static str)>,
 }
 
 fn read_wire_request(
@@ -1003,7 +1044,7 @@ fn read_wire_request(
     }
     let method = method.to_owned();
     let path = path.to_owned();
-    let mut headers = BTreeMap::new();
+    let mut headers: BTreeMap<String, String> = BTreeMap::new();
     let mut header_bytes = first.len();
     loop {
         let Some(line) = read_bounded_line(reader, MAX_HTTP_HEADERS)? else {
@@ -1033,11 +1074,15 @@ fn read_wire_request(
             return Err(invalid_http("invalid HTTP header value"));
         }
         let name = name.to_ascii_lowercase();
-        if headers
-            .insert(name, value.trim_matches([' ', '\t']).to_owned())
-            .is_some()
-        {
-            return Err(invalid_http("duplicate HTTP header"));
+        let value = value.trim_matches([' ', '\t']);
+        if let Some(previous) = headers.get_mut(&name) {
+            if name != "accept" {
+                return Err(invalid_http("duplicate HTTP header"));
+            }
+            previous.push(',');
+            previous.push_str(value);
+        } else {
+            headers.insert(name, value.to_owned());
         }
     }
     if headers.get("host").is_none_or(String::is_empty) {
@@ -1052,14 +1097,39 @@ fn read_wire_request(
             .map_err(|_| invalid_http("invalid Content-Length"))?,
         None => 0,
     };
-    if length > MAX_HTTP_BODY {
-        return Err(invalid_http("request body too large"));
-    }
-    let mut body = vec![0; length];
-    reader.read_exact(&mut body)?;
-    let body = String::from_utf8(body).map_err(|_| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, "request body is not UTF-8")
-    })?;
+    let (body, body_error) = if length > MAX_HTTP_BODY {
+        // Only MCP owns the measured streaming body classification. Other
+        // routes keep accepted main's immediate invalid-JSON 400, without
+        // waiting for oversized input or changing their error envelope.
+        if path.split('?').next() != Some("/mcp") {
+            return Err(invalid_http("invalid JSON"));
+        }
+        // Let the existing streaming parser reject definitive syntax errors
+        // without waiting for an oversized peer to send the remaining body.
+        // Take still bounds consumption; incomplete/valid prefixes need the
+        // same lookahead before Go's measured 413 can be returned.
+        let failure = match serde_json::from_reader::<_, Message>(reader.take(MAX_HTTP_BODY as u64))
+        {
+            Err(error) if error.is_io() => return Err(error.into()),
+            Err(error) if !error.is_eof() => (400, "invalid JSON"),
+            _ => {
+                // Consume one lookahead byte, like Go's MaxBytesReader. The
+                // one-byte-over response must not race an unread TCP byte.
+                let mut lookahead = [0; 1];
+                reader.read_exact(&mut lookahead)?;
+                (413, "request body too large")
+            }
+        };
+        // Defer MCP body errors until its existing admission/content checks.
+        (String::new(), Some(failure))
+    } else {
+        let mut body = vec![0; length];
+        reader.read_exact(&mut body)?;
+        let body = String::from_utf8(body).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "request body is not UTF-8")
+        })?;
+        (body, None)
+    };
     let get = |name: &str| headers.get(name).cloned().unwrap_or_default();
     Ok(Some(WireRequest {
         method,
@@ -1076,6 +1146,7 @@ fn read_wire_request(
         enroll_proof: get("x-enroll-proof"),
         connection: get("connection"),
         body,
+        body_error,
     }))
 }
 
@@ -1300,6 +1371,7 @@ fn write_http_response(
     response: HttpResponse,
     version: &str,
     keep_alive: bool,
+    head: bool,
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
@@ -1312,7 +1384,7 @@ fn write_http_response(
         405 => "Method Not Allowed",
         406 => "Not Acceptable",
         409 => "Conflict",
-        413 => "Payload Too Large",
+        413 => "Request Entity Too Large",
         415 => "Unsupported Media Type",
         429 => "Too Many Requests",
         _ => "Internal Server Error",
@@ -1321,10 +1393,24 @@ fn write_http_response(
     for (name, value) in response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    let chunked = !head && version == "HTTP/1.1" && response.body.len() > 2048;
+    if chunked {
+        stream.write_all(b"Transfer-Encoding: chunked\r\n")?;
+    } else {
+        write!(stream, "Content-Length: {}\r\n", response.body.len())?;
+    }
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
-    stream.write_all(&response.body)
+    if head {
+        return Ok(());
+    }
+    if chunked {
+        write!(stream, "{:x}\r\n", response.body.len())?;
+        stream.write_all(&response.body)?;
+        stream.write_all(b"\r\n0\r\n\r\n")
+    } else {
+        stream.write_all(&response.body)
+    }
 }
 
 fn write_http_redirect(
@@ -1358,8 +1444,11 @@ fn well_known_response(
     local: std::net::SocketAddr,
     secure: bool,
 ) -> Option<HttpResponse> {
-    if request.method != "GET" || request.path != "/.well-known/oauth-protected-resource" {
+    if request.path.split('?').next() != Some("/.well-known/oauth-protected-resource") {
         return None;
+    }
+    if !matches!(request.method.as_str(), "GET" | "HEAD") {
+        return Some(method_not_allowed("GET, HEAD"));
     }
     let scheme = if secure { "https" } else { "http" };
     let resource = format!("{scheme}://{local}/mcp");
@@ -1375,6 +1464,18 @@ fn well_known_response(
         headers: vec![("Content-Type", "application/json")],
         body,
     })
+}
+
+pub(super) fn method_not_allowed(allow: &'static str) -> HttpResponse {
+    HttpResponse {
+        status: 405,
+        headers: vec![
+            ("Allow", allow),
+            ("Content-Type", "text/plain; charset=utf-8"),
+            ("X-Content-Type-Options", "nosniff"),
+        ],
+        body: b"Method Not Allowed\n".to_vec(),
+    }
 }
 
 fn write_plain_error(
@@ -1437,7 +1538,7 @@ fn write_json_error_for_request(
     keep_alive: bool,
 ) -> Result<(), std::io::Error> {
     let body = format!(
-        "{{\"jsonrpc\":\"2.0\",\"error\":{{\"code\":-32600,\"message\":{}}}}}\n",
+        "{{\"error\":{{\"message\":{},\"code\":-32600}},\"jsonrpc\":\"2.0\"}}\n",
         serde_json::to_string(message).unwrap_or_else(|_| "\"invalid request\"".into())
     );
     write!(
@@ -1449,24 +1550,19 @@ fn write_json_error_for_request(
     write!(stream, "\r\n{body}")
 }
 
-/// Handles the initialize-sized `/mcp` HTTP slice using the shared JSON-RPC
-/// handler. The caller owns TCP, authentication, and connection lifecycle.
-pub fn handle_request(
-    request: HttpRequest<'_>,
-    handler: &mut ProtocolHandler,
-) -> Result<HttpResponse, Error> {
+fn request_metadata_error(request: &HttpRequest<'_>) -> Result<Option<HttpResponse>, Error> {
     if request.method != "POST" {
-        return error(405, None, error_code::INVALID_REQUEST, "method not allowed");
+        return error(405, None, error_code::INVALID_REQUEST, "method not allowed").map(Some);
     }
-    if request.path != "/mcp" {
-        return Ok(HttpResponse {
+    if request.path.split('?').next() != Some("/mcp") {
+        return Ok(Some(HttpResponse {
             status: 404,
             headers: vec![
                 ("Content-Type", "text/plain; charset=utf-8"),
                 ("X-Content-Type-Options", "nosniff"),
             ],
             body: b"404 page not found\n".to_vec(),
-        });
+        }));
     }
     if !is_json_content_type(request.content_type) {
         return error(
@@ -1474,7 +1570,8 @@ pub fn handle_request(
             None,
             error_code::INVALID_REQUEST,
             "Content-Type must be application/json",
-        );
+        )
+        .map(Some);
     }
     if !accepts_response(request.accept) {
         return error(
@@ -1482,9 +1579,33 @@ pub fn handle_request(
             None,
             error_code::INVALID_REQUEST,
             "Accept must include application/json and text/event-stream",
-        );
+        )
+        .map(Some);
     }
-    if request.body.len() > 1_048_576 {
+    Ok(None)
+}
+
+/// Handles the initialize-sized `/mcp` HTTP slice using the shared JSON-RPC
+/// handler. The caller owns TCP, authentication, and connection lifecycle.
+pub fn handle_request(
+    request: HttpRequest<'_>,
+    handler: &mut ProtocolHandler,
+) -> Result<HttpResponse, Error> {
+    if let Some(response) = request_metadata_error(&request)? {
+        return Ok(response);
+    }
+    if request.body.len() > MAX_HTTP_BODY {
+        // Match the socket parser's bounded prefix classification. Byte slicing
+        // also remains safe when the budget ends within a UTF-8 character.
+        if let Err(error) =
+            serde_json::from_slice::<Message>(&request.body.as_bytes()[..MAX_HTTP_BODY])
+            && !error.is_eof()
+        {
+            return self::error(400, None, error_code::PARSE_ERROR, "invalid JSON");
+        }
+        return error(413, None, error_code::PARSE_ERROR, "request body too large");
+    }
+    if serde_json::from_str::<Message>(request.body).is_err() {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
     }
 
@@ -2162,6 +2283,197 @@ mod tests {
         let path = dir.join("mcp-tokens.json");
         fs::write(&path, bytes).expect("write token registry");
         path
+    }
+
+    #[test]
+    fn oversized_body_errors_follow_admission_without_creating_sessions() {
+        let directory = tempfile::tempdir().expect("temporary registry");
+        let registry_path = registry(directory.path());
+        let state = Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| -> Result<ProtocolHandler, String> {
+                panic!("rejected body must not create an agent handler")
+            },
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        });
+        let valid = format!("Authorization: Bearer {BEARER}\r\n");
+        for (auth, origin, agent, content_type, accept, expected) in [
+            (
+                "",
+                "",
+                "default",
+                "application/json",
+                "application/json, text/event-stream",
+                401,
+            ),
+            (
+                "Authorization: Bearer public-invalid\r\n",
+                "",
+                "default",
+                "application/json",
+                "application/json, text/event-stream",
+                401,
+            ),
+            (
+                valid.as_str(),
+                "Origin: https://foreign.example\r\n",
+                "default",
+                "application/json",
+                "application/json, text/event-stream",
+                403,
+            ),
+            (
+                "",
+                "Origin: https://foreign.example\r\n",
+                "default",
+                "application/json",
+                "application/json, text/event-stream",
+                403,
+            ),
+            (
+                valid.as_str(),
+                "",
+                "",
+                "application/json",
+                "application/json, text/event-stream",
+                403,
+            ),
+            (
+                valid.as_str(),
+                "",
+                "other",
+                "application/json",
+                "application/json, text/event-stream",
+                403,
+            ),
+            (
+                valid.as_str(),
+                "",
+                "default",
+                "text/plain",
+                "application/json, text/event-stream",
+                415,
+            ),
+            (
+                valid.as_str(),
+                "",
+                "default",
+                "application/json",
+                "text/html",
+                406,
+            ),
+            (
+                valid.as_str(),
+                "",
+                "default",
+                "application/json",
+                "application/json, text/event-stream",
+                400,
+            ),
+        ] {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("loopback listener");
+            let address = listener.local_addr().unwrap();
+            thread::scope(|scope| {
+                let server = scope.spawn(|| {
+                    let (stream, _) = listener.accept().unwrap();
+                    serve_connection_shared(
+                        stream,
+                        &registry_path,
+                        &state,
+                        None,
+                        None,
+                        HttpTimeouts::default(),
+                    )
+                    .unwrap();
+                });
+                let mut client = TcpStream::connect(address).unwrap();
+                client
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                write!(client, "POST /mcp HTTP/1.1\r\nHost: {address}\r\n{auth}{origin}X-Symaira-Agent: {agent}\r\nContent-Type: {content_type}\r\nAccept: {accept}\r\nContent-Length: 1048577\r\nConnection: keep-alive\r\n\r\nx").unwrap();
+                let mut response = String::new();
+                client
+                    .read_to_string(&mut response)
+                    .expect("prompt complete response and EOF without remainder");
+                assert_eq!(raw_status(&response), expected, "{response}");
+                assert!(response.contains("Connection: close\r\n"), "{response}");
+                server.join().unwrap();
+            });
+        }
+        let state = state.lock().unwrap();
+        assert!(state.handlers.is_empty() && state.sessions.is_empty());
+    }
+
+    #[test]
+    fn nonmcp_oversized_prefixes_preserve_accepted_main_wire_response() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../testdata/nonmcp-oversized-main.json"))
+                .expect("real accepted-main capture");
+        assert_eq!(
+            fixture["source_commit"],
+            "746c7c66f84cf322b85e3ebeba5b9ea1036ab3b7"
+        );
+        let expected = fixture["wire_response"].as_str().unwrap();
+        assert_eq!(
+            symvault_store::sha256_hex(expected.as_bytes()),
+            "14462e4afd734b60846ac8d8fc376427fb8a043bcb2efe1ebb34930de2575271"
+        );
+        assert_eq!(fixture["declared_body_bytes"], MAX_HTTP_BODY + 1);
+        let observations = fixture["observations"].as_array().unwrap();
+        assert_eq!(observations.len(), 2);
+        let state = Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| -> Result<ProtocolHandler, String> {
+                panic!("non-MCP rejected body must not create a handler")
+            },
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        });
+        for (observation, expected_path) in observations
+            .iter()
+            .zip(["/oauth/register", "/public-missing"])
+        {
+            let path = observation["path"].as_str().unwrap();
+            assert_eq!(path, expected_path);
+            let listener = TcpListener::bind("127.0.0.1:0").expect("loopback listener");
+            let address = listener.local_addr().unwrap();
+            thread::scope(|scope| {
+                let server = scope.spawn(|| {
+                    let (stream, _) = listener.accept().unwrap();
+                    serve_connection_shared(
+                        stream,
+                        Path::new("nonmcp-unused-token-registry.json"),
+                        &state,
+                        None,
+                        None,
+                        HttpTimeouts::default(),
+                    )
+                    .unwrap();
+                });
+                let mut client = TcpStream::connect(address).unwrap();
+                client
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                // Match the capture's contiguous send buffer. Formatting into
+                // the socket writes the prefix after complete headers, racing
+                // the accepted immediate rejection with unread late bytes.
+                let request = format!(
+                    "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    fixture["declared_body_bytes"].as_u64().unwrap(),
+                    fixture["sent_body"].as_str().unwrap()
+                );
+                client
+                    .write_all(request.as_bytes())
+                    .expect("send complete preregistered prefix without remaining body");
+                let mut response = String::new();
+                client.read_to_string(&mut response).expect(
+                    "complete baseline response and EOF without waiting for remaining body",
+                );
+                assert_eq!(response, expected, "{path}");
+                server.join().unwrap();
+            });
+        }
+        let state = state.lock().unwrap();
+        assert!(state.handlers.is_empty() && state.sessions.is_empty());
     }
 
     fn round_trip_wire(request: &str) -> String {
@@ -3040,6 +3352,108 @@ mod tests {
             .find(|case| case["name"] == name)
             .unwrap_or_else(|| panic!("missing Go HTTP case {name}"))
             .clone()
+    }
+
+    #[test]
+    fn public_http_adapter_bounds_oversized_json_before_deserialization() {
+        let prefix = r#"{"jsonrpc":"2.0","id":2,"method":"ping","params":{"payload":""#;
+        let large = format!("{prefix}{}\"}}}}", "x".repeat(2 * MAX_HTTP_BODY));
+        let mut invalid_after_limit = large.clone();
+        invalid_after_limit.pop();
+        invalid_after_limit.push('x');
+        let invalid_prefix = format!("x{}", " ".repeat(MAX_HTTP_BODY));
+        let split_utf8 = format!(
+            "{prefix}{}é\"}}}}",
+            "x".repeat(MAX_HTTP_BODY - prefix.len() - 1)
+        );
+        assert!(!split_utf8.is_char_boundary(MAX_HTTP_BODY));
+        let accept = "application/json, text/event-stream";
+        let mut handler = ProtocolHandler::new("diagnostic", "0");
+        for (name, body, path, content_type, accepted, status) in [
+            (
+                "large params",
+                large.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "invalid beyond budget",
+                invalid_after_limit.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "invalid prefix",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                400,
+            ),
+            (
+                "split UTF-8 prefix",
+                split_utf8.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "query variant",
+                large.as_str(),
+                "/mcp?control=1",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "content before body",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "text/plain",
+                accept,
+                415,
+            ),
+            (
+                "accept before body",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "application/json",
+                "text/html",
+                406,
+            ),
+            (
+                "route before body",
+                invalid_prefix.as_str(),
+                "/other",
+                "application/json",
+                accept,
+                404,
+            ),
+        ] {
+            assert!(body.len() > MAX_HTTP_BODY);
+            let response = handle_request(
+                HttpRequest {
+                    method: "POST",
+                    path,
+                    content_type,
+                    accept: accepted,
+                    protocol_version: "",
+                    body,
+                },
+                &mut handler,
+            )
+            .expect("bounded public adapter request");
+            assert_eq!(response.status, status, "{name}");
+            assert!(
+                !handler.initialized,
+                "rejected body must not initialize a session"
+            );
+        }
     }
 
     #[test]

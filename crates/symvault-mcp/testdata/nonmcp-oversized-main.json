@@ -1,0 +1,27 @@
+{
+  "evidence_class": "actual accepted Rust main preservation, not Go parity or whole HTTP acceptance",
+  "source_commit": "746c7c66f84cf322b85e3ebeba5b9ea1036ab3b7",
+  "source_digest": "d7032eef2d0f5d9baede09046130434ab682c36dcd2598d9a45e63ac6ba62a30",
+  "source_digest_rule": "path NUL raw-bytes NUL ordered by tracked pathname",
+  "binary_sha256": "07e66db31d09793814008ca210888fe107c9709351847c49a0fac16a9982b416",
+  "native_os": "Darwin",
+  "architecture": "arm64",
+  "capture_sha256": "131c7076dd045041ba3e87cc6774dac38a9cf9df5d4c5ebb355c98b24f3ce73e",
+  "declared_body_bytes": 1048577,
+  "sent_body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}",
+  "observations": [
+    {
+      "case": "oauth-prefix-valid-only",
+      "path": "/oauth/register",
+      "request_sha256": "3cb72ea1a62dde238377380f368c7e648180d78ccc14f662a529f01b5cc41ba3",
+      "response_sha256": "14462e4afd734b60846ac8d8fc376427fb8a043bcb2efe1ebb34930de2575271"
+    },
+    {
+      "case": "unknown-prefix-valid-only",
+      "path": "/public-missing",
+      "request_sha256": "802d8394ac5c225a99d2156c7f885b27b4ea5d9992452fa5d607afdb9e5266e9",
+      "response_sha256": "14462e4afd734b60846ac8d8fc376427fb8a043bcb2efe1ebb34930de2575271"
+    }
+  ],
+  "wire_response": "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: 67\r\nConnection: close\r\n\r\n{\"error\":{\"message\":\"invalid JSON\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n"
+}

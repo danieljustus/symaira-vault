@@ -84,12 +84,21 @@ pub(super) fn handle(
     let (path, query) = path_and_query
         .split_once('?')
         .map_or((path_and_query, ""), |(path, query)| (path, query));
+    let method = if method == "HEAD"
+        && matches!(
+            path,
+            "/.well-known/oauth-authorization-server" | "/mcp/oauth/authorize"
+        ) {
+        "GET"
+    } else {
+        method
+    };
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
         return Some(if method == "GET" {
             OAuthResponse::Http(discovery_response(local, secure))
         } else {
-            OAuthResponse::Http(error(405, "invalid_request"))
+            OAuthResponse::Http(super::http::method_not_allowed("GET, HEAD"))
         });
     }
     if !matches!(
@@ -100,6 +109,20 @@ pub(super) fn handle(
             | "/mcp/oauth/token"
     ) {
         return None;
+    }
+    let required_method = if path == "/mcp/oauth/authorize" {
+        "GET"
+    } else {
+        "POST"
+    };
+    if method != required_method {
+        return Some(OAuthResponse::Http(super::http::method_not_allowed(
+            if required_method == "GET" {
+                "GET, HEAD"
+            } else {
+                "POST"
+            },
+        )));
     }
     if !super::http::allowed_origin_for_transport(origin, host, secure) {
         return Some(OAuthResponse::Http(origin_error()));
@@ -155,10 +178,18 @@ fn authorize(state: &OAuthState, query: &str, now: OffsetDateTime) -> OAuthRespo
         || redirect_uri.is_empty()
         || challenge.is_empty()
     {
-        return OAuthResponse::Http(error(400, "invalid_request"));
+        return OAuthResponse::Http(error_description(
+            400,
+            "invalid_request",
+            "response_type=code, client_id, redirect_uri and code_challenge are required",
+        ));
     }
     if parameters.get("code_challenge_method").map(String::as_str) != Some("S256") {
-        return OAuthResponse::Http(error(400, "invalid_request"));
+        return OAuthResponse::Http(error_description(
+            400,
+            "invalid_request",
+            "only S256 code_challenge_method is supported",
+        ));
     }
     if parameters
         .get("scope")
@@ -168,13 +199,25 @@ fn authorize(state: &OAuthState, query: &str, now: OffsetDateTime) -> OAuthRespo
     }
     let client = match token_registry::get_oauth_client(&state.root, client_id, now) {
         Ok(Some(client)) => client,
-        Ok(None) | Err(_) => return OAuthResponse::Http(error(400, "invalid_client")),
+        Ok(None) | Err(_) => {
+            let mut response = error_description(
+                400,
+                "invalid_client",
+                "unknown client_id; register via POST /oauth/register first",
+            );
+            response.headers.push(("WWW-Authenticate", "Bearer realm=\"symaira\",error=\"invalid_client\",error_description=\"unknown client_id; register via POST /oauth/register first\""));
+            return OAuthResponse::Http(response);
+        }
     };
     if client.client_id != client_id || !valid_client_id(client_id) {
         return OAuthResponse::Http(error(400, "invalid_client"));
     }
     if !is_allowed_redirect_uri(redirect_uri, &client.redirect_uris) {
-        return OAuthResponse::Http(error(400, "invalid_redirect_uri"));
+        return OAuthResponse::Http(error_description(
+            400,
+            "invalid_redirect_uri",
+            "redirect_uri does not match registered redirect URIs",
+        ));
     }
     let decision = (state.consent)(client_id, redirect_uri);
     match decision {
@@ -418,8 +461,15 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
             }
         }
         Some("refresh_token") => {
-            let Some(refresh) = parameters.get("refresh_token") else {
-                return OAuthResponse::Http(error(400, "invalid_request"));
+            let Some(refresh) = parameters
+                .get("refresh_token")
+                .filter(|refresh| !refresh.is_empty())
+            else {
+                return OAuthResponse::Http(error_description(
+                    400,
+                    "invalid_request",
+                    "refresh_token is required",
+                ));
             };
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
@@ -583,17 +633,22 @@ fn discovery_response(local: std::net::SocketAddr, secure: bool) -> HttpResponse
 }
 
 fn origin_error() -> HttpResponse {
-    json_response(
-        403,
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "error": {"code": -32600, "message": "invalid Origin header"},
-        }),
-    )
+    HttpResponse {
+        status: 403,
+        headers: vec![("Content-Type", "application/json")],
+        body: b"{\"error\":{\"message\":\"invalid Origin header\",\"code\":-32600},\"jsonrpc\":\"2.0\"}\n".to_vec(),
+    }
 }
 
 fn error(status: u16, message: &str) -> HttpResponse {
     json_response(status, serde_json::json!({ "error": message }))
+}
+
+fn error_description(status: u16, message: &str, description: &str) -> HttpResponse {
+    json_response(
+        status,
+        serde_json::json!({ "error": message, "error_description": description }),
+    )
 }
 
 fn json_response(status: u16, body: serde_json::Value) -> HttpResponse {

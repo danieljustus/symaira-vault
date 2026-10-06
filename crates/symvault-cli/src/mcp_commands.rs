@@ -8,7 +8,6 @@
 #[path = "mcp_tls_cert.rs"]
 mod mcp_tls_cert;
 
-#[cfg(unix)]
 use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::sync::OnceLock;
@@ -133,6 +132,13 @@ pub fn run(
     let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
     if !stdio {
+        if config
+            .mcp
+            .as_ref()
+            .is_some_and(|mcp| mcp.allow_insecure_bind)
+        {
+            confirm_insecure_bind(io::stdin().lock(), &mut io::stderr().lock())?;
+        }
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -485,6 +491,30 @@ fn effective_tls<'a>(
     };
     let mtls = !ca_flag.is_empty() || config.is_some_and(|mcp| mcp.mtls_enabled);
     (cert, key, ca, mtls)
+}
+
+fn confirm_insecure_bind(input: impl BufRead, output: &mut impl Write) -> Result<(), String> {
+    writeln!(output, "MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.")
+        .map_err(|error| format!("write insecure bind confirmation: {error}"))?;
+    write!(output, "Bind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] ")
+        .and_then(|()| output.flush())
+        .map_err(|error| format!("write insecure bind confirmation: {error}"))?;
+    // Bound confirmation input independently of the HTTP request limits.
+    let mut reply = String::new();
+    let count = input
+        .take(256)
+        .read_line(&mut reply)
+        .map_err(|error| format!("read insecure bind confirmation: {error}"))?;
+    if count == 256 && !reply.ends_with('\n') {
+        return Err("read insecure bind confirmation: input exceeds 256 bytes".to_owned());
+    }
+    if count == 0 || !reply.ends_with('\n') {
+        return Err("read insecure bind confirmation: EOF".to_owned());
+    }
+    if !matches!(reply.trim().to_ascii_lowercase().as_str(), "y" | "yes") {
+        return Err("insecure bind not confirmed; set MCP.allow_insecure_bind=false to use TLS (auto-generated self-signed certificate)".to_owned());
+    }
+    Ok(())
 }
 
 fn validate_tls(
