@@ -1098,6 +1098,12 @@ fn read_wire_request(
         None => 0,
     };
     let (body, body_error) = if length > MAX_HTTP_BODY {
+        // Only MCP owns the measured streaming body classification. Other
+        // routes keep accepted main's immediate invalid-JSON 400, without
+        // waiting for oversized input or changing their error envelope.
+        if path.split('?').next() != Some("/mcp") {
+            return Err(invalid_http("invalid JSON"));
+        }
         // Let the existing streaming parser reject definitive syntax errors
         // without waiting for an oversized peer to send the remaining body.
         // Take still bounds consumption; incomplete/valid prefixes need the
@@ -1115,10 +1121,6 @@ fn read_wire_request(
             }
         };
         // Defer MCP body errors until its existing admission/content checks.
-        // Other transports retain their existing bounded-body error behavior.
-        if path.split('?').next() != Some("/mcp") {
-            return Err(invalid_http(failure.1));
-        }
         (String::new(), Some(failure))
     } else {
         let mut body = vec![0; length];
@@ -2387,6 +2389,68 @@ mod tests {
                     .expect("prompt complete response and EOF without remainder");
                 assert_eq!(raw_status(&response), expected, "{response}");
                 assert!(response.contains("Connection: close\r\n"), "{response}");
+                server.join().unwrap();
+            });
+        }
+        let state = state.lock().unwrap();
+        assert!(state.handlers.is_empty() && state.sessions.is_empty());
+    }
+
+    #[test]
+    fn nonmcp_oversized_prefixes_preserve_accepted_main_wire_response() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../testdata/nonmcp-oversized-main.json"))
+                .expect("real accepted-main capture");
+        assert_eq!(
+            fixture["source_commit"],
+            "746c7c66f84cf322b85e3ebeba5b9ea1036ab3b7"
+        );
+        let expected = fixture["wire_response"].as_str().unwrap();
+        assert_eq!(
+            symvault_store::sha256_hex(expected.as_bytes()),
+            "14462e4afd734b60846ac8d8fc376427fb8a043bcb2efe1ebb34930de2575271"
+        );
+        assert_eq!(fixture["declared_body_bytes"], MAX_HTTP_BODY + 1);
+        let observations = fixture["observations"].as_array().unwrap();
+        assert_eq!(observations.len(), 2);
+        let state = Mutex::new(HttpServerState {
+            handler_for_agent: |_: &str| -> Result<ProtocolHandler, String> {
+                panic!("non-MCP rejected body must not create a handler")
+            },
+            handlers: HashMap::new(),
+            sessions: HashMap::new(),
+        });
+        for (observation, expected_path) in observations
+            .iter()
+            .zip(["/oauth/register", "/public-missing"])
+        {
+            let path = observation["path"].as_str().unwrap();
+            assert_eq!(path, expected_path);
+            let listener = TcpListener::bind("127.0.0.1:0").expect("loopback listener");
+            let address = listener.local_addr().unwrap();
+            thread::scope(|scope| {
+                let server = scope.spawn(|| {
+                    let (stream, _) = listener.accept().unwrap();
+                    serve_connection_shared(
+                        stream,
+                        Path::new("nonmcp-unused-token-registry.json"),
+                        &state,
+                        None,
+                        None,
+                        HttpTimeouts::default(),
+                    )
+                    .unwrap();
+                });
+                let mut client = TcpStream::connect(address).unwrap();
+                client
+                    .set_read_timeout(Some(Duration::from_secs(3)))
+                    .unwrap();
+                write!(client, "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", fixture["declared_body_bytes"].as_u64().unwrap(), fixture["sent_body"].as_str().unwrap()).unwrap();
+                let mut response = String::new();
+                client.read_to_string(&mut response).expect(
+                    "complete baseline response and EOF without waiting for remaining body",
+                );
+                assert_eq!(response, expected, "{path}");
                 server.join().unwrap();
             });
         }

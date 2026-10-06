@@ -8,8 +8,8 @@ HTTP-001..004 remain in progress; this slice does not establish full acceptance.
 
 ## Decisions and rationale
 
-Route unknown paths to Go's unauthenticated 404 before selecting an agent or
-token session. Match known-route method failures, complete Allow headers,
+At dispatch, route unknown paths to Go's unauthenticated 404 before selecting
+an agent or token session. Match known-route method failures, complete Allow headers,
 missing-agent diagnostics and OAuth validation descriptions. Preserve Origin
 error field order on the wire. Equivalent JSON objects do not establish the
 body-byte parity required by the HTTP contract.
@@ -45,8 +45,25 @@ Content-Type and Accept checks. Only then write the parse/size error, before
 constructing an agent handler or token session. Share the method/content checks
 with the in-memory HTTP adapter, rather than maintaining a second policy.
 Close the connection on these errors because the body can remain unread;
-never parse the remainder as another keep-alive request. Other transports keep
-their existing bounded-body behavior; this is not full hostile-route acceptance.
+never parse the remainder as another keep-alive request. Restrict streaming body
+classification to `/mcp`, including query variants. Other routes retain the
+accepted-main behavior: reject a declared oversized body immediately with the
+HTTP 400 invalid-JSON envelope, without waiting for body bytes. This baseline
+is accepted main `746c7c66f84cf322b85e3ebeba5b9ea1036ab3b7`, not the immediately
+preceding PR candidate, which already contained the broader parser change.
+
+The crate-local [preservation fixture](../../crates/symvault-mcp/testdata/nonmcp-oversized-main.json)
+derives unchanged complete wire responses from an actual clean Darwin/arm64
+accepted-main CLI capture for `/oauth/register` and an unknown path. Its source,
+binary, original-capture and response digests remain explicit. The native TCP
+regression consumes those bytes, checks the fixed response digest and both
+routes, and requires complete response plus EOF within three seconds while the
+remaining declared body is unsent. This is a preserved Rust-baseline boundary,
+not Go parity: actual Go returns 400 on the tested OAuth route and 404 on the
+unknown route. The ordinary 65-case Go/Rust corpus and its four declared
+differences are unchanged; full hostile-route acceptance remains open. With a
+fully delivered oversized body, unread input can still cause transport reset;
+neither the fixture nor this repair establishes a drain guarantee.
 
 Combine repeated Accept fields, a standard comma-separated HTTP list. Keep
 duplicate authentication, Host and Content-Length rejection. Use chunked
