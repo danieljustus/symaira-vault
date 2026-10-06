@@ -1594,11 +1594,19 @@ pub fn handle_request(
     if let Some(response) = request_metadata_error(&request)? {
         return Ok(response);
     }
+    if request.body.len() > MAX_HTTP_BODY {
+        // Match the socket parser's bounded prefix classification. Byte slicing
+        // also remains safe when the budget ends within a UTF-8 character.
+        if let Err(error) =
+            serde_json::from_slice::<Message>(&request.body.as_bytes()[..MAX_HTTP_BODY])
+            && !error.is_eof()
+        {
+            return self::error(400, None, error_code::PARSE_ERROR, "invalid JSON");
+        }
+        return error(413, None, error_code::PARSE_ERROR, "request body too large");
+    }
     if serde_json::from_str::<Message>(request.body).is_err() {
         return error(400, None, error_code::PARSE_ERROR, "invalid JSON");
-    }
-    if request.body.len() > MAX_HTTP_BODY {
-        return error(413, None, error_code::PARSE_ERROR, "request body too large");
     }
 
     let version = request.protocol_version.trim();
@@ -2445,7 +2453,17 @@ mod tests {
                 client
                     .set_read_timeout(Some(Duration::from_secs(3)))
                     .unwrap();
-                write!(client, "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", fixture["declared_body_bytes"].as_u64().unwrap(), fixture["sent_body"].as_str().unwrap()).unwrap();
+                // Match the capture's contiguous send buffer. Formatting into
+                // the socket writes the prefix after complete headers, racing
+                // the accepted immediate rejection with unread late bytes.
+                let request = format!(
+                    "POST {path} HTTP/1.1\r\nHost: {address}\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    fixture["declared_body_bytes"].as_u64().unwrap(),
+                    fixture["sent_body"].as_str().unwrap()
+                );
+                client
+                    .write_all(request.as_bytes())
+                    .expect("send complete preregistered prefix without remaining body");
                 let mut response = String::new();
                 client.read_to_string(&mut response).expect(
                     "complete baseline response and EOF without waiting for remaining body",
@@ -3334,6 +3352,108 @@ mod tests {
             .find(|case| case["name"] == name)
             .unwrap_or_else(|| panic!("missing Go HTTP case {name}"))
             .clone()
+    }
+
+    #[test]
+    fn public_http_adapter_bounds_oversized_json_before_deserialization() {
+        let prefix = r#"{"jsonrpc":"2.0","id":2,"method":"ping","params":{"payload":""#;
+        let large = format!("{prefix}{}\"}}}}", "x".repeat(2 * MAX_HTTP_BODY));
+        let mut invalid_after_limit = large.clone();
+        invalid_after_limit.pop();
+        invalid_after_limit.push('x');
+        let invalid_prefix = format!("x{}", " ".repeat(MAX_HTTP_BODY));
+        let split_utf8 = format!(
+            "{prefix}{}é\"}}}}",
+            "x".repeat(MAX_HTTP_BODY - prefix.len() - 1)
+        );
+        assert!(!split_utf8.is_char_boundary(MAX_HTTP_BODY));
+        let accept = "application/json, text/event-stream";
+        let mut handler = ProtocolHandler::new("diagnostic", "0");
+        for (name, body, path, content_type, accepted, status) in [
+            (
+                "large params",
+                large.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "invalid beyond budget",
+                invalid_after_limit.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "invalid prefix",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                400,
+            ),
+            (
+                "split UTF-8 prefix",
+                split_utf8.as_str(),
+                "/mcp",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "query variant",
+                large.as_str(),
+                "/mcp?control=1",
+                "application/json",
+                accept,
+                413,
+            ),
+            (
+                "content before body",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "text/plain",
+                accept,
+                415,
+            ),
+            (
+                "accept before body",
+                invalid_prefix.as_str(),
+                "/mcp",
+                "application/json",
+                "text/html",
+                406,
+            ),
+            (
+                "route before body",
+                invalid_prefix.as_str(),
+                "/other",
+                "application/json",
+                accept,
+                404,
+            ),
+        ] {
+            assert!(body.len() > MAX_HTTP_BODY);
+            let response = handle_request(
+                HttpRequest {
+                    method: "POST",
+                    path,
+                    content_type,
+                    accept: accepted,
+                    protocol_version: "",
+                    body,
+                },
+                &mut handler,
+            )
+            .expect("bounded public adapter request");
+            assert_eq!(response.status, status, "{name}");
+            assert!(
+                !handler.initialized,
+                "rejected body must not initialize a session"
+            );
+        }
     }
 
     #[test]

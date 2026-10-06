@@ -27,7 +27,7 @@ TLS flags, as actual Go does. EOF, refusal, blank/other input and an unterminate
 affirmative fail closed. Bound confirmation at 256 bytes. Stdio never reads
 this confirmation, preserving protocol input ownership.
 
-Validate the entire JSON body before MCP dispatch. Invalid JSON returns HTTP
+Validate each in-budget JSON body before MCP dispatch. Invalid JSON returns HTTP
 400 with Go's HTTP parse-error envelope rather than a 200 with stdio parser
 details. Retain the one-MiB request bound: use the existing streaming JSON
 parser through a bounded reader, rejecting definitive syntax errors before
@@ -38,6 +38,14 @@ response to an unread TCP byte. This is not an RSS or arbitrary oversized-peer
 drain guarantee. Match Go's five-second initial wait; retain the ten-second
 body wait and separate keep-alive idle bound. Complete deadlines across a
 continuously progressing slow peer remain separate acceptance work.
+
+The public in-memory HTTP adapter enforces the same parsing budget after its
+existing route/method/content checks. For a known oversized string, classify only
+the first one-MiB byte slice: return 400 for a definitive invalid prefix and 413
+otherwise, without deserializing the remainder or copying an oversized RawValue.
+Slice bytes rather than UTF-8 text so a split character stays a bounded EOF.
+Syntax beyond that budget is not examined; this is resource-bound enforcement,
+not a new complete-HTTP parity claim.
 
 For `/mcp`, carry a classified oversized body failure with its request metadata
 through the existing route, admission/rate, Origin, bearer, agent, method,
@@ -57,13 +65,18 @@ derives unchanged complete wire responses from an actual clean Darwin/arm64
 accepted-main CLI capture for `/oauth/register` and an unknown path. Its source,
 binary, original-capture and response digests remain explicit. The native TCP
 regression consumes those bytes, checks the fixed response digest and both
-routes, and requires complete response plus EOF within three seconds while the
+routes, and sends headers plus captured prefix from one contiguous buffer, as
+the process capture did. Formatting directly into the socket performs multiple
+writes and can deliver the prefix after the immediate header-time rejection,
+racing unread late input with close. The regression requires complete response
+plus EOF within three seconds while the
 remaining declared body is unsent. This is a preserved Rust-baseline boundary,
 not Go parity: actual Go returns 400 on the tested OAuth route and 404 on the
 unknown route. The ordinary 65-case Go/Rust corpus and its four declared
 differences are unchanged; full hostile-route acceptance remains open. With a
 fully delivered oversized body, unread input can still cause transport reset;
-neither the fixture nor this repair establishes a drain guarantee.
+neither the fixture nor this repair establishes a drain guarantee or acceptance
+of arbitrary request fragmentation. Resets are still failing observations.
 
 Combine repeated Accept fields, a standard comma-separated HTTP list. Keep
 duplicate authentication, Host and Content-Length rejection. Use chunked
