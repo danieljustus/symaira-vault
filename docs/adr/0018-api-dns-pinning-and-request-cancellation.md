@@ -158,3 +158,23 @@ actual exchanges, positive TLS/redaction controls, encrypted-state and DNS
 observations, cancellation/deadline bounds and seven declared differences
 remain required on each native target. Regression mutations execute the same
 production validator; no transport result is normalized or suppressed.
+
+## Accepted-main integration
+
+Integrate on accepted main `52de16d0508d64a31053984f111f75bcab5795ed` without
+restoring the older branch's CLI artifacts, HTTP admission/wire behavior,
+CONNECT/egress checks or native evidence assertions. The context change is
+threaded through the existing authenticated connection/session path. Preserve
+the accepted non-MCP wire fixture and the bounded public HTTP adapter.
+
+The integrated Darwin owning suites execute 238 MCP tests with zero ignored and
+491 CLI tests with six existing dedicated helpers ignored, with no failures.
+These are development checks of the dirty integration snapshot, not clean
+current-head native receipts. All six API regressions and the three accepted
+HTTP follow-up regressions execute. The final Unix/Windows native expectations
+are 238/236; Windows execution remains a required independent gate.
+Cargo reconciles the lockfile from accepted main by adding 22 resolver-graph
+packages without removing or changing any existing pinned package/checksum.
+Strict owning Clippy, probe/CLI builds, the five trust-validator controls,
+the 135-command generated fixture check and dependency policy checks pass.
+The earlier 235/487 counts above are historical pre-integration results.

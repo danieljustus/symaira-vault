@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-mcp-process.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
+      - 'testdata/**'
+      - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/mcp_process*'
       - 'docs/adr/0016-mcp-discovery-and-call-authorization.md'
@@ -66,6 +66,51 @@ jobs:
           python-version: '3.13'
       - name: Install pinned Rust
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Check narrow diagnostic and receipt evidence boundaries
+        run: |
+          python3 - <<'PY'
+          import ast, json, os, runpy, subprocess, tempfile
+          from pathlib import Path
+          from types import SimpleNamespace
+          module = runpy.run_path('scripts/rust-port/mcp_process_contract.py')
+          plain = '2026/10/05 01:24:19 WARN anomaly detected type=off_hours severity=low agent=fixture description="Entry access during off-hours by agent fixture"'
+          contextual = plain.replace(' description=', ' path=public/fixture request_id=0000000000000001 description=')
+          def check(line, implementation='go'):
+              module['protocol_bytes'](SimpleNamespace(stdout=b'', stderr=(line+'\n').encode()), Path('__HOME__'), 'diagnostic-unit-control', implementation, 'fixture')
+          for line in [plain, contextual, contextual.replace('public/fixture', 'public/missing')]:
+              check(line)
+          for line, implementation in [(contextual.replace('severity=low', 'severity=high'), 'go'), (contextual.replace('type=off_hours', 'type=tool_chain'), 'go'), (contextual.replace('agent=fixture', 'agent=other'), 'go'), (contextual.replace('public/fixture', 'private/other'), 'go'), (contextual.replace('0000000000000001', 'invalid'), 'go'), (plain+'\naudit log write failed err="audit logger is closed"', 'go'), (contextual, 'rust')]:
+              try:
+                  check(line, implementation)
+              except AssertionError:
+                  pass
+              else:
+                  raise AssertionError('unexpected diagnostic accepted')
+          tree = ast.parse(Path('scripts/rust-port/mcp_process_contract.py').read_text())
+          main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name=='main')
+          final = next(n for n in main.body if isinstance(n, ast.Try)).finalbody
+          code = compile(ast.Module(body=final, type_ignores=[]), '<actual receipt finalization>', 'exec')
+          env = {k:v for k,v in os.environ.items() if not k.startswith('GIT_')}
+          for location, expected_clean in [('target/control.json', True), ('root-control.json', False)]:
+              with tempfile.TemporaryDirectory() as raw:
+                  root = Path(raw)
+                  subprocess.run(['git','init','-q',str(root)], env=env, check=True)
+                  (root/'.git/info/exclude').write_text('target/\n')
+                  receipt_path = root/location
+                  receipt_path.parent.mkdir(parents=True, exist_ok=True)
+                  # Algorithm unit state only, never native process observations.
+                  receipt = {'passed':True, 'candidate_worktree_clean':True}
+                  scope = {'args':SimpleNamespace(receipt=receipt_path, allow_dirty_for_development=False), 'json':json, 'receipt':receipt, 'checked':lambda args:subprocess.check_output(args, cwd=root, env=env)}
+                  rejected = False
+                  try:
+                      exec(code, scope)
+                  except AssertionError:
+                      rejected = True
+                  result = json.loads(receipt_path.read_text())
+                  assert result['candidate_worktree_clean_at_end']==expected_clean
+                  assert result['passed']==expected_clean and rejected!=expected_clean
+          print('PASS narrow diagnostic and post-output receipt unit controls')
+          PY
       - name: Test the owning runtime and production CLI assembly
         run: |
           set -euo pipefail
@@ -79,12 +124,12 @@ jobs:
           text = Path('target/native-mcp-tests.txt').read_text()
           results = re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored', text)
           # Two existing host-specific tests are Unix-only: symlink template
-          # rejection and clipboard signal clearing. All six new regressions
-          # below must execute on every OS.
-          expected_count = 233 if os.environ['RUNNER_OS']=='Windows' else 235
+          # rejection and clipboard signal clearing. The stdio and HTTP
+          # regressions below must execute on every OS.
+          expected_count = 236 if os.environ['RUNNER_OS']=='Windows' else 238
           assert results and sum(int(n) for n,_ in results)==expected_count
           assert all(int(ignored)==0 for _,ignored in results)
-          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract']:
+          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions']:
               assert f'{case} ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
@@ -94,12 +139,13 @@ jobs:
           set -euo pipefail
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 scripts/rust-port/mcp_process_contract.py --rust "$rust_cli" --receipt native-mcp-process.json
+          python3 scripts/rust-port/mcp_process_contract.py --rust "$rust_cli" --receipt target/native-mcp-process.json
           python3 - <<'PY'
           import json, subprocess
           from pathlib import Path
-          receipt = json.loads(Path('native-mcp-process.json').read_bytes())
-          assert receipt['passed'] and receipt['candidate_worktree_clean'] and not receipt['differences']
+          receipt = json.loads(Path('target/native-mcp-process.json').read_bytes())
+          assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end'] and not receipt['differences']
+          assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal']).strip()
           assert receipt['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           expected_profiles = {'legacy','tier-read-only','tier-standard','tier-admin','admin-value-hidden','admin-value-visible','standard-command-override','readonly-capability-overrides','admin-command-disabled','admin-tools-health-only','admin-tools-self-only','admin-api-explicit','standard-no-value-capabilities','builtin-default','builtin-claude-code','builtin-codex','builtin-hermes','builtin-openclaw','builtin-opencode','tier-read-only-real-child','tier-standard-real-child','tier-admin-real-child'}
@@ -124,7 +170,7 @@ jobs:
         with:
           name: mcp-process-${{ matrix.os }}
           path: |
-            native-mcp-process.json
+            target/native-mcp-process.json
             target/native-mcp-tests.txt
           if-no-files-found: error
           retention-days: 14

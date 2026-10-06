@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+
+	"github.com/danieljustus/symaira-vault/internal/manpages"
 )
 
 // rootForManpages carries the package-level rootCmd for the manpages
@@ -50,7 +52,7 @@ func newManpagesCmd() *cobra.Command {
 				Source:  "Symaira Vault",
 			}
 			rootForManpages.DisableAutoGenTag = true
-			if err := doc.GenManTree(rootForManpages, header, dir); err != nil {
+			if err := manpages.GenerateTree(rootForManpages, header, dir); err != nil {
 				return fmt.Errorf("generate manpages: %w", err)
 			}
 

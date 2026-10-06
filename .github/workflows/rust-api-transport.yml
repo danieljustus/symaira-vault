@@ -5,12 +5,12 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-api-transport.yml'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-crypto/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.cargo/**'
+      - 'rust-toolchain.toml'
+      - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/api_transport*'
       - 'scripts/rust-port/test_api_transport_contract.py'
@@ -81,7 +81,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-api-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          expected=233 if os.environ['RUNNER_OS']=='Windows' else 235
+          expected=236 if os.environ['RUNNER_OS']=='Windows' else 238
           assert results and sum(int(n) for n,_ in results)==expected
           assert all(int(ignored)==0 for _,ignored in results)
           for name in ['actual_dns_accepts_public_answers_and_rejects_mixed_private_and_oversize', 'cancelled_dns_releases_the_actual_owned_udp_socket', 'cancelling_pending_api_headers_closes_upstream_and_joins', 'progressing_api_body_still_reaches_absolute_deadline', 'actual_dns_https_verifies_chain_hostname_and_redacts_positive_control', 'protocol_context_cancels_actual_encrypted_api_request']:
