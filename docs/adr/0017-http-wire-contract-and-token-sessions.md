@@ -14,6 +14,13 @@ missing-agent diagnostics and OAuth validation descriptions. Preserve Origin
 error field order on the wire. Equivalent JSON objects do not establish the
 body-byte parity required by the HTTP contract.
 
+For protected-resource discovery, authorization-server discovery and authorize,
+route HEAD through the existing GET validation and suppress the entity on the
+wire while retaining its representation length. The native corpus checks both
+discovery responses, missing authorization parameters and hostile-Origin denial.
+This bounded correction does not establish full HEAD consent/redirect/framing
+acceptance for the remaining routes.
+
 Require stdin confirmation before creating an HTTP listener whenever
 MCP.allow_insecure_bind is enabled, including mixed configurations with explicit
 TLS flags, as actual Go does. EOF, refusal, blank/other input and an unterminated
@@ -22,9 +29,11 @@ this confirmation, preserving protocol input ownership.
 
 Validate the entire JSON body before MCP dispatch. Invalid JSON returns HTTP
 400 with Go's HTTP parse-error envelope rather than a 200 with stdio parser
-details. Retain the one-MiB request bound: read a bounded prefix and one
-lookahead byte, distinguish already-invalid JSON from exceeded input, and
-emit the measured 413 response. The lookahead prevents losing the one-byte-over
+details. Retain the one-MiB request bound: use the existing streaming JSON
+parser through a bounded reader, rejecting definitive syntax errors before
+waiting for unsent oversized input. A still-valid/incomplete bounded prefix
+requires one lookahead byte before the measured 413 response. The lookahead
+prevents losing the one-byte-over
 response to an unread TCP byte. This is not an RSS or arbitrary oversized-peer
 drain guarantee. Match Go's five-second initial wait; retain the ten-second
 body wait and separate keep-alive idle bound. Complete deadlines across a
@@ -150,6 +159,10 @@ assertions, the exact two-case inventory and identical request hashes. A reset,
 local socket timeout, partial 400, unexpected output or a subsequent unusable
 listener still fails. Preserve partial bytes and elapsed time on failure.
 The actual post-timeout ping, all 51 ordinary transcripts, five startup denials
-and four explicitly declared semantic differences remain mandatory on every
-native target. Mutation tests reject changed real response bytes, missing/
+and four explicitly declared semantic differences are preserved. Four HEAD
+controls and two early-invalid oversized prefixes extend the total to 57
+transcripts on every native target. Each invalid prefix declares a body above
+one MiB, sends only the prefix and holds the connection open; its complete
+400 must arrive within three seconds without the remaining input. Mutation
+tests reject changed real response bytes, missing/
 false/type-substituted success, wrong cases/hashes and out-of-bound times.

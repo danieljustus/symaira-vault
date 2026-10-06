@@ -3,6 +3,7 @@
 import ast
 import base64
 import copy
+import fnmatch
 import hashlib
 import json
 import os
@@ -144,6 +145,19 @@ class DefaultDeadlineContract(unittest.TestCase):
         self.assertEqual(observations[0]['elapsed_seconds'], 5)
         self.assertIs(observations[0]['peer_eof'], True)
         self.assertIs(observations[0]['passed'], False)
+
+    def test_head_framing_and_workflow_source_inventory(self):
+        # Synthetic framing unit input, not a native server observation.
+        raw = b'HTTP/1.1 200 OK\r\nContent-Length: 123\r\n\r\n'
+        self.assertEqual(contract.parse_response(raw, request_method='HEAD')['body_base64'], '')
+        with self.assertRaisesRegex(AssertionError, 'HEAD must not transmit'):
+            contract.parse_response(raw + b'x', request_method='HEAD')
+        with self.assertRaisesRegex(AssertionError, 'complete HTTP framing'):
+            contract.parse_response(raw)
+        workflow = (contract.ROOT / '.github/workflows/rust-mcp-http-process.yml').read_text()
+        paths = [line.strip()[3:-1] for line in workflow.split('    paths:\n', 1)[1].split('  workflow_dispatch:', 1)[0].splitlines()]
+        uncovered = [path for path in contract.candidate_paths() if not any(fnmatch.fnmatchcase(path, pattern) for pattern in paths)]
+        self.assertEqual(uncovered, [], 'every fingerprinted candidate input must trigger its native gate')
 
     def test_receipt_finalization_rejects_unignored_output(self):
         tree = ast.parse(Path(contract.__file__).read_text())

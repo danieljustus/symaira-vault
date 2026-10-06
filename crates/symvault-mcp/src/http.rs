@@ -662,6 +662,7 @@ where
                         response,
                         &request.http_version,
                         keep_alive,
+                        request.method == "HEAD",
                     )?,
                     crate::oauth::OAuthResponse::Redirect(location) => write_http_redirect(
                         reader.get_mut(),
@@ -732,13 +733,13 @@ where
                         let response =
                             error(413, None, error_code::PARSE_ERROR, "request body too large")
                                 .map_err(std::io::Error::other)?;
-                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
                         return Ok(());
                     }
                     if read_error.to_string() == "invalid JSON" {
                         let response = error(400, None, error_code::PARSE_ERROR, "invalid JSON")
                             .map_err(std::io::Error::other)?;
-                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false)?;
+                        write_http_response(reader.get_mut(), response, "HTTP/1.1", false, false)?;
                         return Ok(());
                     }
                     let (status, message) = if read_error.to_string().contains("too large") {
@@ -781,6 +782,7 @@ where
                 response,
                 &request.http_version,
                 keep_alive,
+                request.method == "HEAD",
             )?;
             if !keep_alive {
                 return Ok(());
@@ -827,6 +829,7 @@ where
             },
             response_version,
             keep_alive,
+            false,
         )?;
         return Ok(keep_alive);
     }
@@ -843,6 +846,7 @@ where
             },
             response_version,
             keep_alive,
+            false,
         )?;
         return Ok(keep_alive);
     }
@@ -971,7 +975,7 @@ where
         )
         .map_err(|error| std::io::Error::other(error.to_string()))?
     };
-    write_http_response(stream, response, response_version, keep_alive)?;
+    write_http_response(stream, response, response_version, keep_alive, false)?;
     Ok(keep_alive)
 }
 
@@ -1080,22 +1084,20 @@ fn read_wire_request(
         None => 0,
     };
     if length > MAX_HTTP_BODY {
-        // Retain at most the declared bound. An already-invalid JSON prefix is
-        // Go's 400; a bounded prefix that needs more input is the actual 413.
-        let mut prefix = vec![0; MAX_HTTP_BODY];
-        reader.read_exact(&mut prefix)?;
+        // Let the existing streaming parser reject definitive syntax errors
+        // without waiting for an oversized peer to send the remaining body.
+        // Take still bounds consumption; incomplete/valid prefixes need the
+        // same lookahead before Go's measured 413 can be returned.
+        match serde_json::from_reader::<_, Message>(reader.take(MAX_HTTP_BODY as u64)) {
+            Err(error) if error.is_io() => return Err(error.into()),
+            Err(error) if !error.is_eof() => return Err(invalid_http("invalid JSON")),
+            _ => {}
+        }
         // Consume one lookahead byte, like Go's MaxBytesReader. In particular,
         // the one-byte-over-limit response must not race an unread TCP byte.
         let mut lookahead = [0; 1];
         reader.read_exact(&mut lookahead)?;
-        let invalid = serde_json::from_slice::<Message>(&prefix)
-            .err()
-            .is_some_and(|error| !error.is_eof());
-        return Err(invalid_http(if invalid {
-            "invalid JSON"
-        } else {
-            "request body too large"
-        }));
+        return Err(invalid_http("request body too large"));
     }
     let mut body = vec![0; length];
     reader.read_exact(&mut body)?;
@@ -1342,6 +1344,7 @@ fn write_http_response(
     response: HttpResponse,
     version: &str,
     keep_alive: bool,
+    head: bool,
 ) -> Result<(), std::io::Error> {
     let reason = match response.status {
         200 => "OK",
@@ -1363,7 +1366,7 @@ fn write_http_response(
     for (name, value) in response.headers {
         write!(stream, "{name}: {value}\r\n")?;
     }
-    let chunked = version == "HTTP/1.1" && response.body.len() > 2048;
+    let chunked = !head && version == "HTTP/1.1" && response.body.len() > 2048;
     if chunked {
         stream.write_all(b"Transfer-Encoding: chunked\r\n")?;
     } else {
@@ -1371,6 +1374,9 @@ fn write_http_response(
     }
     write_connection_header(stream, version, keep_alive)?;
     stream.write_all(b"\r\n")?;
+    if head {
+        return Ok(());
+    }
     if chunked {
         write!(stream, "{:x}\r\n", response.body.len())?;
         stream.write_all(&response.body)?;
@@ -1414,7 +1420,7 @@ fn well_known_response(
     if request.path.split('?').next() != Some("/.well-known/oauth-protected-resource") {
         return None;
     }
-    if request.method != "GET" {
+    if !matches!(request.method.as_str(), "GET" | "HEAD") {
         return Some(method_not_allowed("GET, HEAD"));
     }
     let scheme = if secure { "https" } else { "http" };

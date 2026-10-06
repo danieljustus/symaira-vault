@@ -58,7 +58,7 @@ class ProcessCapture:
         return bytes(self.buffers['stdout']), bytes(self.buffers['stderr']), complete
 
 
-def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fixture', headers=()):
+def request(path, port, tokens, method='POST', body=b'', auth: str | None='full', agent: str | None='fixture', headers=()):
     fields = [('Host',f'127.0.0.1:{port}'),('Connection','close')]
     if auth is not None:
         fields.append(('Authorization','Bearer '+tokens.get(auth,auth)))
@@ -73,10 +73,11 @@ def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fix
     return (f'{method} {path} HTTP/1.1\r\n'+''.join(f'{k}: {v}\r\n' for k,v in fields)+'\r\n').encode()+body
 
 
-def exchange(port, data, retained):
+def exchange(port, data, retained, timeout=15):
     result = bytearray()
     send_reset = False
-    with socket.create_connection(('127.0.0.1',port),timeout=15) as connection:
+    started = time.monotonic()
+    with socket.create_connection(('127.0.0.1',port),timeout=timeout) as connection:
         try:
             try:
                 connection.sendall(data)
@@ -95,10 +96,11 @@ def exchange(port, data, retained):
             # Also preserve actual partial bytes when recv times out or fails.
             retained['raw_base64']=base64.b64encode(result).decode()
             retained['send_reset']=send_reset
-    return parse_response(bytes(result), send_reset)
+            retained['elapsed_seconds']=time.monotonic()-started
+    return parse_response(bytes(result), send_reset, data.split(b' ',1)[0].decode('ascii'))
 
 
-def parse_response(raw, send_reset=False):
+def parse_response(raw, send_reset=False, request_method='POST'):
     head,body = raw.split(b'\r\n\r\n',1)
     lines = head.decode('latin1').split('\r\n')
     fields = [tuple(line.split(':',1)) for line in lines[1:]]
@@ -106,7 +108,10 @@ def parse_response(raw, send_reset=False):
     wire_body = body
     lengths = [value for name,value in fields if name=='content-length']
     transfers = [value for name,value in fields if name=='transfer-encoding']
-    if transfers:
+    if request_method=='HEAD':
+        assert not body, 'HEAD must not transmit entity or chunk bytes'
+        assert len(lengths)==1 and int(lengths[0])>=0 and not transfers, 'measured HEAD representation length'
+    elif transfers:
         assert not lengths and transfers==['chunked'], 'unambiguous actual chunk framing'
         chunks = bytearray()
         while True:
@@ -139,6 +144,8 @@ def cases(port,tokens):
     result = [
         ('resource-discovery',request('/.well-known/oauth-protected-resource',port,tokens,method='GET',auth=None,agent=None)),
         ('authorization-discovery',request('/.well-known/oauth-authorization-server',port,tokens,method='GET',auth=None,agent=None)),
+        ('resource-discovery-head',request('/.well-known/oauth-protected-resource',port,tokens,method='HEAD',auth=None,agent=None)),
+        ('authorization-discovery-head',request('/.well-known/oauth-authorization-server',port,tokens,method='HEAD',auth=None,agent=None)),
         ('unknown-route',request('/public-missing',port,tokens,method='GET',auth=None,agent=None)),
         ('unknown-route-foreign-origin',request('/public-missing',port,tokens,method='GET',auth=None,agent=None,headers=[('Origin','https://foreign.example')])),
         ('unknown-route-authenticated',request('/public-missing',port,tokens,body=ping)),
@@ -180,6 +187,8 @@ def cases(port,tokens):
         ('oauth-register-no-redirect',request('/oauth/register',port,tokens,body=b'{}',auth=None,agent=None)),
         ('oauth-register-foreign-redirect',request('/oauth/register',port,tokens,body=b'{"redirect_uris":["https://foreign.example/callback"]}',auth=None,agent=None)),
         ('oauth-authorize-invalid',request('/mcp/oauth/authorize',port,tokens,method='GET',auth=None,agent=None)),
+        ('oauth-authorize-invalid-head',request('/mcp/oauth/authorize',port,tokens,method='HEAD',auth=None,agent=None)),
+        ('oauth-authorize-foreign-origin-head',request('/mcp/oauth/authorize',port,tokens,method='HEAD',auth=None,agent=None,headers=[('Origin','https://foreign.example')])),
         ('oauth-authorize-unsupported-pkce',request('/mcp/oauth/authorize?'+challenge.replace('S256','plain'),port,tokens,method='GET',auth=None,agent=None)),
         ('oauth-authorize-unknown-client',request('/mcp/oauth/authorize?'+challenge,port,tokens,method='GET',auth=None,agent=None)),
         ('oauth-register-wrong-method',request('/oauth/register',port,tokens,method='GET',auth=None,agent=None)),
@@ -188,6 +197,10 @@ def cases(port,tokens):
         ('oauth-token-missing-refresh',request('/mcp/oauth/token',port,tokens,body=b'grant_type=refresh_token',auth=None,agent=None,headers=[('Content-Type','application/x-www-form-urlencoded')])),
         ('oauth-token-invalid-refresh',request('/mcp/oauth/token',port,tokens,body=b'grant_type=refresh_token&refresh_token=public-invalid-refresh',auth=None,agent=None,headers=[('Content-Type','application/x-www-form-urlencoded')])),
     ]
+    for name, prefix in [('invalid-byte',b'x'),('invalid-object',b'{"extra":]')]:
+        data=request('/mcp',port,tokens,body=prefix)
+        data=data.replace(f'Content-Length: {len(prefix)}\r\n'.encode(),f'Content-Length: {1024*1024+1}\r\n'.encode())
+        result.append(('mcp-early-invalid-oversized-'+name,data))
     return result
 
 
@@ -342,7 +355,10 @@ def observe(binary,home,port,tokens,rows,process_record,transport_rows,implement
             row = {'case':name,'request_sha256':hashlib.sha256(data).hexdigest()}
             rows.append(row)
             row['response'] = {}
-            row['response'].update(exchange(port,data,row['response']))
+            timeout=3 if name.startswith('mcp-early-invalid-oversized-') else 15
+            row['response'].update(exchange(port,data,row['response'],timeout=timeout))
+            if timeout==3:
+                assert row['response']['elapsed_seconds']<3, 'early-invalid peer must receive a complete response without sending the remaining body'
             assert SECRET not in row['response']['body_utf8']
             assert not any(token in row['response']['body_utf8'] for token in tokens.values())
         stalled_connections(port,tokens,transport_rows,implementation)
@@ -431,7 +447,10 @@ def main():
                         else:receipt['differences'].append(difference)
                 expected={'mcp-initialize':200,'mcp-ping':200,'mcp-body-exact-limit':200,'mcp-body-over-limit':413,
                     'health-token-call':200,'metadata-token-permitted-call':200,'metadata-token-health-denied':200,
-                    'mcp-invalid-json':400,'mcp-repeated-accept':200}
+                    'mcp-invalid-json':400,'mcp-repeated-accept':200,
+                    'resource-discovery-head':200,'authorization-discovery-head':200,
+                    'oauth-authorize-invalid-head':400,'oauth-authorize-foreign-origin-head':403,
+                    'mcp-early-invalid-oversized-invalid-byte':400,'mcp-early-invalid-oversized-invalid-object':400}
                 for implementation in ['go','rust']:
                     responses={r['case']:r['response'] for r in receipt[implementation]}
                     for name,status in expected.items():

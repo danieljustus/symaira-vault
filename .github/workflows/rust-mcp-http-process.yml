@@ -5,16 +5,15 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-mcp-http-process.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'third_party/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/test_http_process_contract.py'
-      - 'testdata/http-default-deadline/**'
+      - 'testdata/**'
       - 'scripts/rust-port/mcp_process_contract.py'
       - 'docs/adr/0017-http-wire-contract-and-token-sessions.md'
   workflow_dispatch:
@@ -106,7 +105,8 @@ jobs:
           assert len(receipt['declared_differences'])==4 and {r['decision'] for r in receipt['declared_differences']}==decisions
           for implementation in ['go','rust']:
               rows=receipt[implementation]
-              assert len(rows)==51 and len({r['case'] for r in rows})==51
+              assert len(rows)==57 and len({r['case'] for r in rows})==57
+              assert {'resource-discovery-head','authorization-discovery-head','oauth-authorize-invalid-head','oauth-authorize-foreign-origin-head','mcp-early-invalid-oversized-invalid-byte','mcp-early-invalid-oversized-invalid-object'}<={r['case'] for r in rows}
               assert rows[-1]['case']=='mcp-ping-after-stalled-clients'
               assert all({'status_line','headers','body_base64','wire_body_base64','raw_base64'}<=r['response'].keys() for r in rows)
               assert {r['case'] for r in receipt[implementation+'_startup_denials']}=={'eof','no','blank','not-affirmative','unterminated-yes'}

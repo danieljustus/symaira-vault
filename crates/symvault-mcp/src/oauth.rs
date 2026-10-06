@@ -84,6 +84,15 @@ pub(super) fn handle(
     let (path, query) = path_and_query
         .split_once('?')
         .map_or((path_and_query, ""), |(path, query)| (path, query));
+    let method = if method == "HEAD"
+        && matches!(
+            path,
+            "/.well-known/oauth-authorization-server" | "/mcp/oauth/authorize"
+        ) {
+        "GET"
+    } else {
+        method
+    };
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
         return Some(if method == "GET" {
