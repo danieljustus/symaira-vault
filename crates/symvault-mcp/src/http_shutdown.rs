@@ -17,11 +17,13 @@ struct State {
 
 /// Cancels socket I/O and wakes the HTTP accept loop.
 ///
-/// This is transport cancellation, not graceful draining or cancellation of an
-/// executing application callback. The server still joins its scoped workers.
+/// Cooperative API network callbacks share this cancellation context. Other
+/// callbacks still own their lifecycle; this is not a graceful-drain API.
+/// The server joins its scoped workers.
 #[derive(Clone, Default)]
 pub struct HttpShutdown {
     state: Arc<(Mutex<State>, Condvar)>,
+    request_context: crate::RequestContext,
 }
 
 fn close_transport(socket: &TcpStream) -> io::Result<()> {
@@ -75,6 +77,7 @@ impl HttpShutdown {
 
     /// Prevents new admissions and interrupts every registered transport.
     pub fn cancel(&self) -> io::Result<()> {
+        self.request_context.cancel();
         let (lock, changed) = &*self.state;
         let mut state = lock
             .lock()
@@ -90,6 +93,10 @@ impl HttpShutdown {
             }
         }
         first_error.map_or(Ok(()), Err)
+    }
+
+    pub(crate) fn request_context(&self) -> crate::RequestContext {
+        self.request_context.clone()
     }
 
     pub(crate) fn is_cancelled(&self) -> io::Result<bool> {

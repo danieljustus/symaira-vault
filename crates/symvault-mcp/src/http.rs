@@ -425,8 +425,8 @@ where
 }
 
 /// Serves the same authenticated loopback transport with explicit cancellation.
-/// Cancellation interrupts socket I/O, but callbacks already executing must
-/// finish before this function returns. It is not a graceful-drain API.
+/// Cancellation interrupts socket I/O and cooperative API network callbacks.
+/// Other callbacks must finish before return. This is not a graceful-drain API.
 pub fn serve_loopback_until_cancelled<F>(
     listener: TcpListener,
     registry_path: impl AsRef<Path>,
@@ -571,16 +571,21 @@ where
             let active_for_thread = Arc::clone(&active);
             let registry_path = registry_path.clone();
             let local_approval = local_approval.clone();
+            let request_context = shutdown
+                .as_ref()
+                .map(HttpShutdown::request_context)
+                .unwrap_or_default();
             if let Err(error) = thread::Builder::new().spawn_scoped(scope, move || {
                 let _connection = connection;
                 let _active = ActiveHttpConnection(active_for_thread);
-                let _ = serve_connection_shared(
+                let _ = serve_connection_shared_with_context(
                     stream,
                     &registry_path,
                     &state,
                     oauth.as_deref(),
                     local_approval.as_deref(),
                     HttpTimeouts::default(),
+                    request_context,
                 );
             }) {
                 active.fetch_sub(1, Ordering::AcqRel);
@@ -616,6 +621,7 @@ struct HttpServerState<F> {
     sessions: HashMap<String, Arc<Mutex<ProtocolHandler>>>,
 }
 
+#[cfg(test)]
 fn serve_connection_shared<F>(
     stream: impl Into<HttpStream>,
     registry_path: &Path,
@@ -623,6 +629,29 @@ fn serve_connection_shared<F>(
     oauth_state: Option<&crate::oauth::OAuthState>,
     local_approval: Option<&LocalApprovalApi>,
     timeouts: HttpTimeouts,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String>,
+{
+    serve_connection_shared_with_context(
+        stream,
+        registry_path,
+        state,
+        oauth_state,
+        local_approval,
+        timeouts,
+        crate::RequestContext::default(),
+    )
+}
+
+fn serve_connection_shared_with_context<F>(
+    stream: impl Into<HttpStream>,
+    registry_path: &Path,
+    state: &Mutex<HttpServerState<F>>,
+    oauth_state: Option<&crate::oauth::OAuthState>,
+    local_approval: Option<&LocalApprovalApi>,
+    timeouts: HttpTimeouts,
+    request_context: crate::RequestContext,
 ) -> Result<(), std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -681,6 +710,7 @@ where
             registry_path,
             state,
             local_approval,
+            &request_context,
         )
     })
 }
@@ -804,6 +834,7 @@ fn serve_one_authenticated<F>(
     registry_path: &Path,
     state: &Mutex<HttpServerState<F>>,
     local_approval: Option<&LocalApprovalApi>,
+    request_context: &crate::RequestContext,
 ) -> Result<bool, std::io::Error>
 where
     F: FnMut(&str) -> Result<ProtocolHandler, String>,
@@ -985,6 +1016,7 @@ where
             .lock()
             .map_err(|_| std::io::Error::other("MCP HTTP session poisoned"))?;
         handler.set_token_scope(token.allowed_tools.as_deref().unwrap_or_default());
+        handler.set_request_context(request_context.clone());
         handle_request(http_request, &mut handler)
             .map_err(|error| std::io::Error::other(error.to_string()))?
     };

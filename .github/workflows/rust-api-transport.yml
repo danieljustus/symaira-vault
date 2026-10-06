@@ -1,0 +1,120 @@
+name: Rust API DNS and cancellation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-api-transport.yml'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/**'
+      - 'rust-toolchain.toml'
+      - '.gitattributes'
+      - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/api_transport*'
+      - 'scripts/rust-port/test_api_transport_contract.py'
+      - 'testdata/api-darwin-trust/**'
+      - 'docs/adr/0018-api-dns-pinning-and-request-cancellation.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-transport:
+    name: API transport (${{ matrix.os }})
+    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.6
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      TZ: UTC
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Assert actual native macOS arm64
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$RUNNER_OS" = macOS
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          sw_vers
+      - name: Checkout immutable oracle and candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+      - name: Set up pinned Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Test actual DNS sockets TLS and request context
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          python3 scripts/rust-port/test_api_transport_contract.py -v
+          cargo clippy -p symvault-mcp --all-targets --all-features --locked -- -D warnings
+          cargo test -p symvault-mcp --all-targets --locked > target/native-api-tests.txt 2>&1
+          cat target/native-api-tests.txt
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          text=Path('target/native-api-tests.txt').read_text()
+          results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
+          expected=236 if os.environ['RUNNER_OS']=='Windows' else 238
+          assert results and sum(int(n) for n,_ in results)==expected
+          assert all(int(ignored)==0 for _,ignored in results)
+          for name in ['actual_dns_accepts_public_answers_and_rejects_mixed_private_and_oversize', 'cancelled_dns_releases_the_actual_owned_udp_socket', 'cancelling_pending_api_headers_closes_upstream_and_joins', 'progressing_api_body_still_reaches_absolute_deadline', 'actual_dns_https_verifies_chain_hostname_and_redacts_positive_control', 'protocol_context_cancels_actual_encrypted_api_request']:
+              assert name+' ... ok' in text
+          PY
+          cargo build -p symvault-mcp --example api_transport_probe --locked
+      - name: Compare actual immutable Go and Rust encrypted API handlers
+        run: |
+          set -euo pipefail
+          rust_probe=target/debug/examples/api_transport_probe
+          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_probe+=.exe; fi
+          python3 scripts/rust-port/api_transport_contract.py --rust-probe "$rust_probe" --receipt native-api-transport.json
+          python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          r=json.loads(Path('native-api-transport.json').read_bytes())
+          assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
+          assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert r['native_os'] in {'Linux','Darwin','Windows'}
+          expected={'verified-dns-https','wrong-hostname','untrusted-root','private-answer','mixed-family-answer','pending-headers-cancel','progressing-body-deadline','pending-dns-cancel'}
+          for implementation in ['go','rust']:
+              rows=r[implementation]
+              assert len(rows)==8 and {row['case'] for row in rows}==expected
+              assert all(row['exit_code']==0 and row['seeded_files'] and row['dns'] for row in rows)
+          assert len(r['declared_differences'])==7
+          PY
+      - name: Retain complete actual native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: api-transport-${{ matrix.os }}
+          path: |
+            native-api-transport.json
+            target/native-api-tests.txt
+          if-no-files-found: error
+          retention-days: 14

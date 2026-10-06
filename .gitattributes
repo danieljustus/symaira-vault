@@ -59,3 +59,8 @@ scripts/rust-port/test_http_process_contract.py text eol=lf
 testdata/http-default-deadline/** text eol=lf
 .github/workflows/rust-mcp-http-process.yml text eol=lf
 scripts/rust-port/http_tls_identity.go.txt text eol=lf
+
+/scripts/rust-port/api_transport_contract.py text eol=lf
+/scripts/rust-port/test_api_transport_contract.py text eol=lf
+/testdata/api-darwin-trust/** text eol=lf
+/.github/workflows/rust-api-transport.yml text eol=lf
