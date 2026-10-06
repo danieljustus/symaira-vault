@@ -159,6 +159,18 @@ class DefaultDeadlineContract(unittest.TestCase):
         uncovered = [path for path in contract.candidate_paths() if not any(fnmatch.fnmatchcase(path, pattern) for pattern in paths)]
         self.assertEqual(uncovered, [], 'every fingerprinted candidate input must trigger its native gate')
 
+    def test_early_invalid_admission_corpus_retains_partial_input(self):
+        # Request-shape unit control; native responses come from the real CLIs.
+        rows=dict(contract.cases(48175, {}))
+        self.assertEqual(len(contract.EARLY_INVALID_ADMISSION_CASES), 8)
+        for name, _, status in contract.EARLY_INVALID_ADMISSION_CASES:
+            with self.subTest(name=name):
+                data=rows['mcp-early-invalid-oversized-'+name]
+                headers,body=data.split(b'\r\n\r\n',1)
+                self.assertEqual(body,b'x')
+                self.assertIn(b'Content-Length: 1048577\r\n',headers+b'\r\n')
+                self.assertIn(status,{401,403,415,406})
+
     def test_receipt_finalization_rejects_unignored_output(self):
         tree = ast.parse(Path(contract.__file__).read_text())
         main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'main')

@@ -39,6 +39,15 @@ drain guarantee. Match Go's five-second initial wait; retain the ten-second
 body wait and separate keep-alive idle bound. Complete deadlines across a
 continuously progressing slow peer remain separate acceptance work.
 
+For `/mcp`, carry a classified oversized body failure with its request metadata
+through the existing route, admission/rate, Origin, bearer, agent, method,
+Content-Type and Accept checks. Only then write the parse/size error, before
+constructing an agent handler or token session. Share the method/content checks
+with the in-memory HTTP adapter, rather than maintaining a second policy.
+Close the connection on these errors because the body can remain unread;
+never parse the remainder as another keep-alive request. Other transports keep
+their existing bounded-body behavior; this is not full hostile-route acceptance.
+
 Combine repeated Accept fields, a standard comma-separated HTTP list. Keep
 duplicate authentication, Host and Content-Length rejection. Use chunked
 HTTP/1.1 framing above 2048 response bytes, matching actual Go; small responses
@@ -160,9 +169,12 @@ local socket timeout, partial 400, unexpected output or a subsequent unusable
 listener still fails. Preserve partial bytes and elapsed time on failure.
 The actual post-timeout ping, all 51 ordinary transcripts, five startup denials
 and four explicitly declared semantic differences are preserved. Four HEAD
-controls and two early-invalid oversized prefixes extend the total to 57
-transcripts on every native target. Each invalid prefix declares a body above
-one MiB, sends only the prefix and holds the connection open; its complete
-400 must arrive within three seconds without the remaining input. Mutation
+controls and two early-invalid oversized prefixes extend the initial total to
+57. Eight additional combined-invalid MCP controls bring the total to 65 on
+every native target: missing/invalid bearer, foreign Origin with/without bearer,
+missing/mismatched agent, wrong Content-Type and denied Accept. Every invalid
+prefix declares a body above one MiB, sends only the prefix and holds the
+connection open; its complete Go-matching 400, 401, 403, 415 or 406 must arrive
+within three seconds without the remaining input. Mutation
 tests reject changed real response bytes, missing/
 false/type-substituted success, wrong cases/hashes and out-of-bound times.

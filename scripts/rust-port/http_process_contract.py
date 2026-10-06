@@ -132,6 +132,18 @@ def parse_response(raw, send_reset=False, request_method='POST'):
             'send_reset':send_reset}
 
 
+EARLY_INVALID_ADMISSION_CASES = [
+    ('missing-bearer', {'auth': None}, 401),
+    ('invalid-bearer', {'auth': 'public-invalid-admission-token'}, 401),
+    ('foreign-origin', {'headers': [('Origin', 'https://foreign.example')]}, 403),
+    ('foreign-origin-missing-bearer', {'auth': None, 'headers': [('Origin', 'https://foreign.example')]}, 403),
+    ('missing-agent', {'agent': None}, 403),
+    ('mismatched-agent', {'agent': 'other'}, 403),
+    ('wrong-content-type', {'headers': [('Content-Type', 'text/plain')]}, 415),
+    ('denied-accept', {'headers': [('Accept', 'text/html')]}, 406),
+]
+
+
 def cases(port,tokens):
     initialize = b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"public-fixture","version":"1"},"capabilities":{}}}'
     ping = b'{"jsonrpc":"2.0","id":2,"method":"ping"}'
@@ -200,6 +212,10 @@ def cases(port,tokens):
     for name, prefix in [('invalid-byte',b'x'),('invalid-object',b'{"extra":]')]:
         data=request('/mcp',port,tokens,body=prefix)
         data=data.replace(f'Content-Length: {len(prefix)}\r\n'.encode(),f'Content-Length: {1024*1024+1}\r\n'.encode())
+        result.append(('mcp-early-invalid-oversized-'+name,data))
+    for name, options, _ in EARLY_INVALID_ADMISSION_CASES:
+        data=request('/mcp',port,tokens,body=b'x',**options)
+        data=data.replace(b'Content-Length: 1\r\n',b'Content-Length: 1048577\r\n')
         result.append(('mcp-early-invalid-oversized-'+name,data))
     return result
 
@@ -451,6 +467,7 @@ def main():
                     'resource-discovery-head':200,'authorization-discovery-head':200,
                     'oauth-authorize-invalid-head':400,'oauth-authorize-foreign-origin-head':403,
                     'mcp-early-invalid-oversized-invalid-byte':400,'mcp-early-invalid-oversized-invalid-object':400}
+                expected.update(('mcp-early-invalid-oversized-'+name,status) for name,_,status in EARLY_INVALID_ADMISSION_CASES)
                 for implementation in ['go','rust']:
                     responses={r['case']:r['response'] for r in receipt[implementation]}
                     for name,status in expected.items():
