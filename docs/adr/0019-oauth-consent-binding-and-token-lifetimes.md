@@ -38,6 +38,10 @@ the defaults; invalid duration syntax fails. The effective defaults remain
 configuration projection; runtime defaults do not depend on serializing it.
 Expose positive TTL inputs at the library boundary without changing existing
 serve function signatures. Reject zero or unsupported explicit library TTLs.
+Duration conversion alone is insufficient: validate that both lifetimes produce
+representable expiry timestamps with checked addition before accepting them.
+Recheck at token issuance and access renewal before calling the token store so
+clock advancement cannot turn a lifetime accepted at startup into a panic.
 
 A still-valid refresh token can renew an expired access token with the effective
 configured positive access TTL. Keep the original refresh deadline and revoke

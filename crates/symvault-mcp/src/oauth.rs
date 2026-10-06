@@ -74,6 +74,7 @@ impl OAuthState {
         mut self,
         ttls: crate::http::OAuthTokenTtls,
     ) -> Result<Self, std::io::Error> {
+        let now = OffsetDateTime::now_utc();
         let convert = |ttl: std::time::Duration| {
             if ttl.is_zero() {
                 return Err(std::io::Error::new(
@@ -81,12 +82,19 @@ impl OAuthState {
                     "OAuth token TTL must be positive",
                 ));
             }
-            Duration::try_from(ttl).map_err(|_| {
+            let ttl = Duration::try_from(ttl).map_err(|_| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "OAuth token TTL exceeds supported duration",
                 )
-            })
+            })?;
+            if now.checked_add(ttl).is_none() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL exceeds supported expiry timestamp",
+                ));
+            }
+            Ok(ttl)
         };
         self.access_token_ttl = convert(ttls.access_token_ttl)?;
         self.refresh_token_ttl = convert(ttls.refresh_token_ttl)?;
@@ -467,6 +475,11 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
             {
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             }
+            if now.checked_add(state.access_token_ttl).is_none()
+                || now.checked_add(state.refresh_token_ttl).is_none()
+            {
+                return OAuthResponse::Http(error(500, "server_error"));
+            }
             let label = format!("oauth-{}", &pending.client_id[..8]);
             let new = NewToken {
                 label: &label,
@@ -498,6 +511,9 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                     "refresh_token is required",
                 ));
             };
+            if now.checked_add(state.access_token_ttl).is_none() {
+                return OAuthResponse::Http(error(500, "server_error"));
+            }
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
                 refresh,
@@ -867,11 +883,16 @@ mod tests {
         assert_eq!(defaults.access_token_ttl, ACCESS_TOKEN_TTL);
         assert_eq!(defaults.refresh_token_ttl, REFRESH_TOKEN_TTL);
         let positive = std::time::Duration::from_secs(1);
+        let timestamp_overflow = std::time::Duration::from_secs(i64::MAX as u64);
+        let converted = Duration::try_from(timestamp_overflow).unwrap();
+        assert!(OffsetDateTime::UNIX_EPOCH.checked_add(converted).is_none());
         for (access_token_ttl, refresh_token_ttl) in [
             (std::time::Duration::ZERO, positive),
             (positive, std::time::Duration::ZERO),
             (std::time::Duration::MAX, positive),
             (positive, std::time::Duration::MAX),
+            (timestamp_overflow, positive),
+            (positive, timestamp_overflow),
         ] {
             let result = state().with_token_ttls(crate::http::OAuthTokenTtls {
                 access_token_ttl,
@@ -881,6 +902,41 @@ mod tests {
                 panic!("invalid explicit OAuth lifetime must be rejected");
             };
             assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        }
+        // A lifetime valid at startup must also be checked at token issuance/rotation.
+        let directory = tempfile::tempdir().unwrap();
+        let mut configured = state()
+            .with_token_ttls(crate::http::OAuthTokenTtls {
+                access_token_ttl: positive,
+                refresh_token_ttl: positive,
+            })
+            .unwrap();
+        configured.root = directory.path().to_path_buf();
+        let last_timestamp = time::Date::MAX.with_time(time::Time::MAX).assume_utc();
+        configured.codes.lock().unwrap().insert(
+            "expiry-boundary-code".into(),
+            PendingCode {
+                client_id: "0".repeat(32),
+                code_challenge: CHALLENGE.into(),
+                expires_at: last_timestamp,
+            },
+        );
+        for request in [
+            format!(
+                "grant_type=authorization_code&code=expiry-boundary-code&code_verifier={VERIFIER}"
+            ),
+            "grant_type=refresh_token&refresh_token=invalid".into(),
+        ] {
+            assert_eq!(
+                response_body(token(&configured, &request, last_timestamp)).0,
+                500
+            );
+            assert!(
+                !directory
+                    .path()
+                    .join(token_registry::TOKEN_REGISTRY_FILE)
+                    .exists()
+            );
         }
     }
 
