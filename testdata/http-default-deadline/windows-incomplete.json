@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "source_class": "extracted unchanged observation from genuine native GitHub Actions Windows Go CLI capture",
+  "full_capture_sha256": "a5039d6e57180434587259ee5ae1c7d7c9ee0a093ded60b6938622016569a555",
+  "run_id": 37214402152,
+  "job_id": 111471877187,
+  "candidate_commit": "a8da4aac4ab427f7df351591ded08dc1bf01d012",
+  "oracle_commit": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+  "go_binary_sha256": "c79e1542da3450ab488f50d50f5ecb55bcb7b5ec4ffd9916f4377718d3fc5183",
+  "oracle_source_digest": "315a85951be1ce30d1083c3d66393f4cfba62a56461864d0397e3f0e72eccea8",
+  "driver_sha256": "9aa8dac5db3568f9b2987373a11910f3cf7fcad2ddd0150f09933e79a91e90db",
+  "native_os": "Windows",
+  "architecture": "AMD64",
+  "original_full_capture_passed": false,
+  "observation": {
+    "case": "incomplete-request-body",
+    "request_sha256": "e8f19516960e1aff9d86b31d7bab60a949e241f72d8a1715cdacce72ef5a0827",
+    "received_base64": "SFRUUC8xLjEgNDAwIEJhZCBSZXF1ZXN0DQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL2pzb24NCkRhdGU6IFN1biwgMDQgT2N0IDIwMjYgMTY6NTE6NTUgR01UDQpDb250ZW50LUxlbmd0aDogNjcNCkNvbm5lY3Rpb246IGNsb3NlDQoNCnsiZXJyb3IiOnsibWVzc2FnZSI6ImludmFsaWQgSlNPTiIsImNvZGUiOi0zMjcwMH0sImpzb25ycGMiOiIyLjAifQo=",
+    "elapsed_seconds": 9.990889700000025
+  }
+}

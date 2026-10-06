@@ -30,62 +30,303 @@ impl Completion {
     }
 }
 
-pub fn complete(args: &[String], mut dynamic: impl FnMut(&str, &str) -> Vec<String>) -> Completion {
+// Cobra first finds the final command, removing only command words. Discovery
+// skips flag values even for flags not known until that final command is found.
+fn command_args(args: &[String]) -> (&'static artifact::Command, Vec<&str>) {
+    let mut command = artifact::root();
+    let mut remaining: Vec<_> = args.iter().map(String::as_str).collect();
+    loop {
+        let mut i = 0;
+        let mut next = None;
+        while let Some(word) = remaining.get(i) {
+            if *word == "--" {
+                break;
+            }
+            if word.starts_with('-') {
+                if !word.contains('=')
+                    && (word.starts_with("--") || word.len() == 2)
+                    && artifact::flag(command, word).is_none_or(|f| f.no_opt_default.is_empty())
+                {
+                    i += 1;
+                }
+            } else if !word.is_empty() {
+                next = artifact::child(command, word).map(|child| (i, child));
+                break;
+            }
+            i += 1;
+        }
+        let Some((index, child)) = next else {
+            return (command, remaining);
+        };
+        remaining.remove(index);
+        command = child;
+    }
+}
+
+fn validate_value(flag: &artifact::Flag, value: &str) -> Result<(), String> {
+    let cause = match flag.kind.as_str() {
+        "bool" => crate::intake_commands::parse_bool(value).map(|_| ()),
+        "int" | "int64" => validate_integer(value),
+        "duration" => symvault_core::config::parse_go_duration(value).map(|_| ()),
+        _ => Ok(()),
+    };
+    cause.map_err(|cause| {
+        let name = if flag.shorthand.is_empty() {
+            format!("--{}", flag.name)
+        } else {
+            format!("-{}, --{}", flag.shorthand, flag.name)
+        };
+        format!(
+            "invalid argument {} for {} flag: {cause}",
+            artifact::quote_go_string(value),
+            artifact::quote_go_string(&name)
+        )
+    })
+}
+
+// pflag's int and int64 both use strconv.ParseInt(value, 0, 64), not decimal
+// Rust parsing. Preserve Go's base prefixes, underscore syntax and range error.
+fn validate_integer(value: &str) -> Result<(), String> {
+    let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let (radix, digits, prefixed) = if unsigned.starts_with("0x") || unsigned.starts_with("0X") {
+        (16, &unsigned[2..], true)
+    } else if unsigned.starts_with("0b") || unsigned.starts_with("0B") {
+        (2, &unsigned[2..], true)
+    } else if unsigned.starts_with("0o") || unsigned.starts_with("0O") {
+        (8, &unsigned[2..], true)
+    } else if unsigned.starts_with('0') {
+        (8, unsigned, false)
+    } else {
+        (10, unsigned, false)
+    };
+    let digits = if prefixed {
+        digits.strip_prefix('_').unwrap_or(digits)
+    } else {
+        digits
+    };
+    let mut previous_digit = false;
+    let mut valid = !digits.is_empty();
+    for character in digits.chars() {
+        if character == '_' {
+            valid &= previous_digit;
+            previous_digit = false;
+        } else {
+            valid &= character.is_ascii() && character.is_digit(radix);
+            previous_digit = true;
+        }
+    }
+    valid &= previous_digit;
+    let error = if !valid {
+        Some("invalid syntax")
+    } else {
+        let magnitude = u64::from_str_radix(&digits.replace('_', ""), radix);
+        let limit = if value.starts_with('-') {
+            1_u64 << 63
+        } else {
+            i64::MAX as u64
+        };
+        match magnitude {
+            Ok(magnitude) if magnitude <= limit => None,
+            _ => Some("value out of range"),
+        }
+    };
+    match error {
+        Some(error) => Err(format!(
+            "strconv.ParseInt: parsing {}: {error}",
+            artifact::quote_go_string(value)
+        )),
+        None => Ok(()),
+    }
+}
+
+pub fn complete(
+    args: &[String],
+    globals: &[String],
+    dynamic: impl FnMut(&str, &str) -> Vec<String>,
+) -> Result<Completion, String> {
     let Some((prefix, typed)) = args.split_last() else {
-        return Completion {
+        return Ok(Completion {
             candidates: vec![],
             directive: 0,
-        };
+        });
     };
-    let mut command = artifact::root();
+    let (command, mut typed) = command_args(typed);
     let mut positionals = Vec::new();
     let mut used = BTreeSet::new();
     let mut local_changed = false;
     let mut separator = false;
     let mut pending = None;
-    let mut i = 0;
-    while let Some(word) = typed.get(i) {
-        if word == "--" {
-            separator = true;
-        } else if !separator && word.starts_with('-') && !command.disable_flag_parsing {
-            let Some(flag) = artifact::flag(command, word) else {
-                return Completion {
-                    candidates: vec![],
-                    directive: 0,
-                };
+    let mut value_prefix = prefix.as_str();
+    let mut flag_error = None;
+    if !command.disable_flag_parsing {
+        let inline = prefix
+            .starts_with('-')
+            .then(|| prefix.split_once('='))
+            .flatten();
+        let previous = (!prefix.starts_with('-'))
+            .then(|| typed.last().copied())
+            .flatten()
+            .filter(|word| {
+                word.starts_with('-') && word.len() >= 2 && *word != "--" && !word.contains('=')
+            });
+        if let Some((word, value)) = inline.or_else(|| previous.map(|word| (word, prefix.as_str())))
+        {
+            let name = if let Some(name) = word.strip_prefix("--") {
+                name
+            } else {
+                word.get(word.len() - 1..).unwrap_or(word)
             };
-            used.insert(flag.name.as_str());
-            local_changed |= command.local_flags.iter().any(|f| f.name == flag.name);
-            if flag.name == "help" {
-                return Completion {
-                    candidates: vec![],
-                    directive: 4,
-                };
-            }
-            if !word.contains('=') && flag.no_opt_default.is_empty() {
-                if i + 1 == typed.len() {
+            let flag = artifact::flags(command)
+                .into_iter()
+                .find(|f| f.name == name || f.shorthand == name);
+            if let Some(flag) = flag {
+                if inline.is_some() || flag.no_opt_default.is_empty() {
                     pending = Some(flag);
+                    value_prefix = value;
+                    if inline.is_none() {
+                        typed.pop();
+                    }
+                }
+            } else {
+                flag_error = Some(format!(
+                    "Subcommand '{}' does not support flag '{name}'",
+                    command.name
+                ));
+            }
+        }
+    }
+    let parsed: Vec<_> = globals
+        .iter()
+        .map(String::as_str)
+        .chain(typed.iter().copied())
+        .collect();
+    let parse_error = |error| {
+        format!(
+            "Error while parsing flags from args [{}]: {error}",
+            parsed.join(" ")
+        )
+    };
+    let mut parsing_flags = !command.disable_flag_parsing;
+    let mut help = false;
+    let mut i = 0;
+    while let Some(word) = parsed.get(i) {
+        if parsing_flags && *word == "--" {
+            parsing_flags = false;
+            separator = true;
+        } else if parsing_flags && word.starts_with('-') && *word != "-" {
+            let mut short = word.strip_prefix('-').unwrap_or_default();
+            loop {
+                let (flag, inline) = if word.starts_with("--") {
+                    let flag = artifact::flag(command, word).ok_or_else(|| {
+                        parse_error(format!(
+                            "unknown flag: {}",
+                            word.split('=').next().unwrap_or(word)
+                        ))
+                    })?;
+                    (flag, word.split_once('=').map(|(_, value)| value))
+                } else {
+                    let name = short.get(..1).ok_or_else(|| {
+                        parse_error(format!(
+                            "unknown shorthand flag: {:?} in -{short}",
+                            char::from(short.as_bytes()[0])
+                        ))
+                    })?;
+                    let flag = artifact::flags(command)
+                        .into_iter()
+                        .find(|f| f.shorthand == name)
+                        .ok_or_else(|| {
+                            parse_error(format!("unknown shorthand flag: '{name}' in -{short}"))
+                        })?;
+                    short = &short[1..];
+                    let inline = short.strip_prefix('=').or_else(|| {
+                        flag.no_opt_default
+                            .is_empty()
+                            .then_some(short)
+                            .filter(|v| !v.is_empty())
+                    });
+                    (flag, inline)
+                };
+                let value = if let Some(value) = inline {
+                    value
+                } else if !flag.no_opt_default.is_empty() {
+                    &flag.no_opt_default
                 } else {
                     i += 1;
+                    parsed.get(i).copied().ok_or_else(|| {
+                        parse_error(if word.starts_with("--") {
+                            format!("flag needs an argument: --{}", flag.name)
+                        } else {
+                            format!("flag needs an argument: '{}' in {word}", flag.shorthand)
+                        })
+                    })?
+                };
+                validate_value(flag, value).map_err(&parse_error)?;
+                used.insert(flag.name.as_str());
+                local_changed |= command.local_flags.iter().any(|f| f.name == flag.name);
+                if flag.name == "help" {
+                    help = true;
+                }
+                if word.starts_with("--") || inline.is_some() || short.is_empty() {
+                    break;
                 }
             }
-        } else if positionals.is_empty()
-            && let Some(next) = artifact::child(command, word)
-        {
-            command = next;
         } else {
-            positionals.push(word.as_str());
+            positionals.push(*word);
         }
         i += 1;
     }
-    let mut value_prefix = prefix.as_str();
-    if !separator
-        && !command.disable_flag_parsing
-        && let Some((name, value)) = prefix.split_once('=')
-    {
-        pending = artifact::flag(command, name);
-        value_prefix = value;
+    if !separator && let Some(error) = flag_error {
+        return Err(error);
     }
+    if help {
+        return Ok(Completion {
+            candidates: vec![],
+            directive: 4,
+        });
+    }
+    if separator {
+        pending = None;
+    }
+    Ok(complete_resolved(
+        Resolved {
+            command,
+            prefix,
+            value_prefix,
+            positionals,
+            used,
+            local_changed,
+            separator,
+            pending,
+        },
+        dynamic,
+    ))
+}
+
+struct Resolved<'a> {
+    command: &'static artifact::Command,
+    prefix: &'a str,
+    value_prefix: &'a str,
+    positionals: Vec<&'a str>,
+    used: BTreeSet<&'static str>,
+    local_changed: bool,
+    separator: bool,
+    pending: Option<&'static artifact::Flag>,
+}
+
+fn complete_resolved(
+    resolved: Resolved<'_>,
+    mut dynamic: impl FnMut(&str, &str) -> Vec<String>,
+) -> Completion {
+    let Resolved {
+        command,
+        prefix,
+        value_prefix,
+        positionals,
+        used,
+        local_changed,
+        separator,
+        pending,
+    } = resolved;
     if let Some(flag) = pending {
         if flag.name == "profile" {
             return Completion {
@@ -267,10 +508,10 @@ pub fn run(args: &[OsString], index: usize) -> ExitCode {
         .filter_map(|a| a.to_str().map(str::to_owned))
         .collect();
     let mut line = globals.clone();
-    line.extend(raw);
+    line.extend(raw.iter().cloned());
     let vault = option(&line, "--vault");
     let profile = option(&line, "--profile");
-    let result = complete(&line, |kind, prefix| match kind {
+    let result = complete(&raw, &globals, |kind, prefix| match kind {
         "config" => artifact::DATA
             .config_keys
             .iter()
@@ -298,6 +539,13 @@ pub fn run(args: &[OsString], index: usize) -> ExitCode {
         }
         "entries" => entry_paths(vault.as_deref(), profile.as_deref(), prefix),
         _ => vec![],
+    })
+    .unwrap_or_else(|error| {
+        eprintln!("[Debug] [Error] {error}");
+        Completion {
+            candidates: vec![],
+            directive: 0,
+        }
     });
     let descriptions = args[index] != "__completeNoDesc"
         && std::env::var("SYMVAULT_COMPLETION_DESCRIPTIONS")
@@ -397,7 +645,22 @@ mod tests {
             serde_json::from_str(include_str!("../../../testdata/port/cli/artifacts.json"))
                 .unwrap();
         let cases = fixture["entry_completions"].as_array().unwrap();
-        assert_eq!(cases.len(), 455);
+        assert_eq!(cases.len(), 537);
+        assert_eq!(
+            cases
+                .iter()
+                .filter(|c| c["name"].as_str().unwrap().starts_with("parser/"))
+                .count(),
+            82
+        );
+        assert_eq!(
+            cases
+                .iter()
+                .map(|c| c["name"].as_str().unwrap())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            cases.len()
+        );
         for case in cases {
             let temp = tempfile::tempdir().unwrap();
             let root = temp.path().join("vault");
@@ -452,7 +715,15 @@ mod tests {
                         .unwrap();
                 }
             }
-            let mut args = vec!["--vault".to_owned(), root.to_str().unwrap().to_owned()];
+            let globals = vec![
+                "--vault".to_owned(),
+                if case["name"].as_str().unwrap().starts_with("parser/") {
+                    "absent-vault".to_owned()
+                } else {
+                    root.to_str().unwrap().to_owned()
+                },
+            ];
+            let mut args = Vec::new();
             args.extend(
                 case["args"]
                     .as_array()
@@ -460,7 +731,7 @@ mod tests {
                     .iter()
                     .map(|a| a.as_str().unwrap().to_owned()),
             );
-            let actual = complete(&args, |kind, prefix| match kind {
+            let actual = complete(&args, &globals, |kind, prefix| match kind {
                 "entries" => cached_entry_paths(&root, &manager, prefix),
                 "config" => artifact::DATA
                     .config_keys
@@ -470,6 +741,16 @@ mod tests {
                     .collect(),
                 _ => vec![],
             });
+            let (actual, diagnostic) = match actual {
+                Ok(actual) => (actual, String::new()),
+                Err(error) => (
+                    Completion {
+                        candidates: vec![],
+                        directive: 0,
+                    },
+                    format!("[Debug] [Error] {error}\n"),
+                ),
+            };
             assert_eq!(
                 actual.stdout(true),
                 case["stdout"].as_str().unwrap(),
@@ -477,6 +758,18 @@ mod tests {
                 case["name"]
             );
             assert!(!actual.stdout(true).contains("public-fixture"));
+            let label = match actual.directive {
+                4 => "ShellCompDirectiveNoFileComp",
+                8 => "ShellCompDirectiveFilterFileExt",
+                16 => "ShellCompDirectiveFilterDirs",
+                _ => "ShellCompDirectiveDefault",
+            };
+            assert_eq!(
+                format!("{diagnostic}Completion ended with directive: {label}\n"),
+                case["stderr"].as_str().unwrap(),
+                "{}",
+                case["name"]
+            );
         }
     }
 }

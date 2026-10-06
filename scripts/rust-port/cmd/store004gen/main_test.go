@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,15 +26,20 @@ func TestCheckFixtureRejectsDriftWithoutRewriting(t *testing.T) {
 	if err := os.WriteFile(path, want, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	if err := checkFixture(root, path); err != nil {
+		t.Fatalf("check rejected unchanged fixture: %v", err)
+	}
 	original, _ := os.ReadFile(path)
-	mutated := append([]byte(nil), original...)
-	mutated[len(mutated)-2] ^= 1
+	mutated := bytes.Replace(original, []byte(`"entry_exists": true`), []byte(`"entry_exists": false`), 1)
+	if bytes.Equal(mutated, original) {
+		t.Fatal("fixture mutation did not change the frozen outcome")
+	}
 	if err := os.WriteFile(path, mutated, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := os.ReadFile(path)
-	if err := checkFixture(root, path); err == nil {
-		t.Fatal("check accepted modified fixture")
+	if err := checkFixture(root, path); err == nil || err.Error() != "fixture differs from regenerated oracle" {
+		t.Fatalf("fixture mutation rejection = %v", err)
 	}
 	after, _ := os.ReadFile(path)
 	if !bytes.Equal(after, before) {
@@ -81,7 +87,11 @@ func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(source, append(original, '\n'), 0o600); err != nil {
+	mutated := bytes.Replace(original, []byte("syscall.SIGKILL"), []byte("syscall.SIGTERM"), 1)
+	if bytes.Equal(mutated, original) {
+		t.Fatal("source mutation did not change process termination")
+	}
+	if err := os.WriteFile(source, mutated, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	tracked, err := os.ReadFile(filepath.Join(rootDir(), "scripts/rust-port/cmd/store004gen/process_group_unix.go"))
@@ -96,8 +106,12 @@ func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
 		t.Log("STORE004_ISOLATED_DRIFT_READY")
 		select {}
 	}
-	if err := checkFixture(root, fixture); err == nil {
-		t.Fatal("check accepted process-group source drift")
+	if err := checkFixture(root, fixture); err == nil || err.Error() != "fixture differs from regenerated oracle" {
+		t.Fatalf("source mutation rejection = %v", err)
+	}
+	after, err := os.ReadFile(fixture)
+	if err != nil || !bytes.Equal(after, want) {
+		t.Fatalf("source drift check rewrote fixture: %v", err)
 	}
 }
 
@@ -159,7 +173,10 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 			stubDir := t.TempDir()
 			goStub := filepath.Join(stubDir, "go-stub")
 			readyPath := filepath.Join(stubDir, "descendant-ready")
-			if err := os.WriteFile(goStub, []byte(fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then echo 'go version go1.26.6 darwin/arm64'; exit 0; fi\n(trap '' TERM INT; while :; do sleep 60; done) &\nchild=$!\nprintf '%%s\\n' \"$child\" > %q\nwait \"$child\"\n", readyPath)), 0o700); err != nil {
+			// Publish the deepest descendant only after it exists, via an atomic
+			// rename. Reading a partially written PID used to fail this test and
+			// restore globals while the oracle goroutine was still running.
+			if err := os.WriteFile(goStub, []byte(fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then echo 'go version go1.26.6'; exit 0; fi\n(trap '' TERM INT; sleep 60 &\nleaf=$!\nprintf '%%s\\n' \"$leaf\" > %q\nmv %q %q\nwait \"$leaf\") &\nwait \"$!\"\n", readyPath+".tmp", readyPath+".tmp", readyPath)), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			oldGo, oldTimeout := goExecutable, oracleTimeout
@@ -174,14 +191,27 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 
 			started := time.Now()
 			result := make(chan error, 1)
+			joined := false
 			go func() {
 				_, err := runOracle(rootDir(), false)
 				result <- err
 			}()
+			t.Cleanup(func() {
+				cancel()
+				if !joined {
+					select {
+					case <-result:
+					case <-time.After(5 * time.Second):
+						t.Error("oracle did not join before restoring test globals")
+					}
+				}
+			})
 
 			var descendantPID int
 			readyDeadline := time.NewTimer(5 * time.Second)
 			readyTicker := time.NewTicker(10 * time.Millisecond)
+			defer readyDeadline.Stop()
+			defer readyTicker.Stop()
 			for descendantPID == 0 {
 				select {
 				case <-readyTicker.C:
@@ -202,17 +232,23 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 			if parentCancel {
 				cancel()
 			}
-			if !readyDeadline.Stop() {
-				<-readyDeadline.C
-			}
+			readyDeadline.Stop()
 
 			select {
 			case err := <-result:
-				if err == nil {
-					t.Fatal("timeout stub unexpectedly succeeded")
+				joined = true
+				want := context.DeadlineExceeded
+				if parentCancel {
+					want = context.Canceled
+				}
+				if !errors.Is(err, want) {
+					t.Fatalf("oracle error = %v, want %v", err, want)
 				}
 			case <-time.After(5 * time.Second):
-				t.Fatal("runOracle did not return within cleanup bound")
+				stacks := make([]byte, 1<<20)
+				stacks = stacks[:runtime.Stack(stacks, true)]
+				state, stateErr := exec.Command("ps", "-o", "pid,ppid,pgid,state", "-p", strconv.Itoa(descendantPID)).CombinedOutput()
+				t.Fatalf("runOracle did not return within cleanup bound; descendant state: %s (%v)\n%s", state, stateErr, stacks)
 			}
 			if elapsed := time.Since(started); elapsed > 5*time.Second {
 				t.Fatalf("timeout cleanup exceeded bound: %v", elapsed)
@@ -234,4 +270,115 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Reap the leader before cancellation while a separately owned process retains
+// its output handles. This makes the observed blocked pipe join deterministic;
+// it does not assert which process retained the hosted failure's pipes.
+func TestRunOracleCancellationJoinsInheritedPipes(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("separate Unix process-group pipe holder; Windows job ownership is tested separately")
+	}
+	root := t.TempDir()
+	ready, stub := filepath.Join(root, "holder.pid"), filepath.Join(root, "go-stub")
+	script := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = version ]; then echo 'go version go1.26.6'; exit 0; fi\nexec %q -test.run='^TestStore004InheritedPipeHelper$' -- leader %q\n", os.Args[0], ready)
+	if err := os.WriteFile(stub, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	oldGo, oldTimeout, oldContext := goExecutable, oracleTimeout, oracleContext
+	ctx, cancel := context.WithCancel(context.Background())
+	goExecutable, oracleTimeout, oracleContext = stub, 2*time.Minute, ctx
+	result := make(chan error, 1)
+	go func() { _, err := runOracle(rootDir(), false); result <- err }()
+	var holderPID, leaderPID int
+	joined := false
+	t.Cleanup(func() {
+		cancel()
+		if holderPID > 0 {
+			if output, err := exec.Command("kill", "-KILL", strconv.Itoa(holderPID)).CombinedOutput(); err != nil {
+				t.Errorf("kill test-owned pipe holder: %v: %s", err, output)
+			}
+		}
+		if !joined {
+			select {
+			case <-result:
+			case <-time.After(5 * time.Second):
+				t.Error("oracle did not join after releasing test-owned pipes")
+			}
+		}
+		goExecutable, oracleTimeout, oracleContext = oldGo, oldTimeout, oldContext
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if holderPID == 0 {
+			if data, err := os.ReadFile(ready); err == nil {
+				if _, err = fmt.Sscanf(string(data), "%d %d", &holderPID, &leaderPID); err != nil || holderPID <= 0 || leaderPID <= 0 {
+					t.Fatalf("invalid holder readiness: %q: %v", data, err)
+				}
+			}
+		}
+		// A missing leader proves Process.Wait has reaped it before cancel.
+		if leaderPID > 0 && exec.Command("kill", "-0", strconv.Itoa(leaderPID)).Run() != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if leaderPID == 0 || exec.Command("kill", "-0", strconv.Itoa(leaderPID)).Run() == nil {
+		t.Fatal("holder and reaped leader did not reach readiness")
+	}
+	cancel()
+	select {
+	case err := <-result:
+		joined = true
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("oracle cancellation = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("oracle did not join inherited pipes within cleanup bound")
+	}
+	stacks := make([]byte, 1<<20)
+	stacks = stacks[:runtime.Stack(stacks, true)]
+	if bytes.Contains(stacks, []byte("os/exec.(*Cmd).awaitGoroutines")) || bytes.Contains(stacks, []byte("os/exec.(*Cmd).writerDescriptor.func")) {
+		t.Fatalf("oracle returned with unjoined process I/O goroutines:\n%s", stacks)
+	}
+}
+
+func TestStore004InheritedPipeHelper(t *testing.T) {
+	if len(os.Args) < 4 || os.Args[len(os.Args)-3] != "--" {
+		return
+	}
+	mode, ready := os.Args[len(os.Args)-2], os.Args[len(os.Args)-1]
+	if mode == "holder" {
+		data := []byte(fmt.Sprintf("%d %d", os.Getpid(), os.Getppid()))
+		if err := os.WriteFile(ready+".tmp", data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(ready+".tmp", ready); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			time.Sleep(time.Minute)
+		}
+	}
+	if mode != "leader" {
+		t.Fatalf("unknown helper mode: %s", mode)
+	}
+	child := exec.Command(os.Args[0], "-test.run=^TestStore004InheritedPipeHelper$", "--", "holder", ready)
+	child.Stdout, child.Stderr = os.Stdout, os.Stderr
+	configureProcessGroup(child)
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// The test owns the separate group. Keep the leader until the original PPID
+	// is published, then exit without closing the holder's inherited handles.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(ready); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = child.Process.Kill()
+	_ = child.Wait()
+	t.Fatal("holder failed to publish readiness")
 }

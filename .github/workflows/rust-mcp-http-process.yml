@@ -5,14 +5,15 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-mcp-http-process.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'third_party/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/http_process*'
+      - 'scripts/rust-port/test_http_process_contract.py'
+      - 'testdata/**'
       - 'scripts/rust-port/mcp_process_contract.py'
       - 'docs/adr/0017-http-wire-contract-and-token-sessions.md'
   workflow_dispatch:
@@ -71,15 +72,21 @@ jobs:
         run: |
           set -euo pipefail
           cargo fmt --all --check
+          python3 scripts/rust-port/test_http_process_contract.py
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
           cargo test -p symvault-mcp --all-targets --locked > target/native-http-tests.txt 2>&1
           cat target/native-http-tests.txt
           python3 - <<'PY'
           import os,re
           from pathlib import Path
-          results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',Path('target/native-http-tests.txt').read_text())
-          assert results and sum(int(n) for n,_ in results)==(227 if os.environ['RUNNER_OS']=='Windows' else 229)
+          log=Path('target/native-http-tests.txt').read_text()
+          results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',log)
+          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
           assert all(int(ignored)==0 for _,ignored in results)
+          assert 'explicit_token_ttls_preserve_defaults_and_reject_invalid_library_values ... ok' in log
+          assert 'test http::tests::oversized_body_errors_follow_admission_without_creating_sessions ... ok' in log
+          assert 'test http::tests::nonmcp_oversized_prefixes_preserve_accepted_main_wire_response ... ok' in log
+          assert 'test http::tests::public_http_adapter_bounds_oversized_json_before_deserialization ... ok' in log
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
@@ -88,26 +95,31 @@ jobs:
           set -euo pipefail
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
-          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt native-http-process.json
+          python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-http-process.json
           python3 - <<'PY'
-          import json,subprocess
+          import json,subprocess,sys
           from pathlib import Path
-          receipt=json.loads(Path('native-http-process.json').read_bytes())
-          assert receipt['passed'] and receipt['candidate_worktree_clean'] and not receipt['differences']
+          sys.path.insert(0,'scripts/rust-port')
+          from http_process_contract import EARLY_INVALID_ADMISSION_CASES, validate_stalled_observations
+          receipt=json.loads(Path('target/native-http-process.json').read_bytes())
+          assert receipt['passed'] and receipt['candidate_worktree_clean'] and receipt['candidate_worktree_clean_at_end'] and not receipt['differences']
+          assert not subprocess.check_output(['git','status','--porcelain=v1','--untracked-files=normal']).strip()
           assert receipt['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert receipt['native_os'] in {'Linux','Darwin','Windows'}
           decisions={'token-session-isolation','complete-json-body-required','valid-utf8-required','metadata-fresh-marker-semantic-control'}
           assert len(receipt['declared_differences'])==4 and {r['decision'] for r in receipt['declared_differences']}==decisions
           for implementation in ['go','rust']:
               rows=receipt[implementation]
-              assert len(rows)==51 and len({r['case'] for r in rows})==51
+              assert len(rows)==65 and len({r['case'] for r in rows})==65
+              assert {'resource-discovery-head','authorization-discovery-head','oauth-authorize-invalid-head','oauth-authorize-foreign-origin-head','mcp-early-invalid-oversized-invalid-byte','mcp-early-invalid-oversized-invalid-object'}<={r['case'] for r in rows}
+              assert {'mcp-early-invalid-oversized-'+name for name,_,_ in EARLY_INVALID_ADMISSION_CASES}<={r['case'] for r in rows}
               assert rows[-1]['case']=='mcp-ping-after-stalled-clients'
               assert all({'status_line','headers','body_base64','wire_body_base64','raw_base64'}<=r['response'].keys() for r in rows)
               assert {r['case'] for r in receipt[implementation+'_startup_denials']}=={'eof','no','blank','not-affirmative','unterminated-yes'}
               assert {r['case'] for r in receipt[implementation+'_stalled_clients']}=={'idle-before-request','incomplete-request-body'}
               assert receipt[implementation+'_process']['forced_cleanup_not_graceful_evidence']
           assert receipt['go_startup_denials']==receipt['rust_startup_denials']
-          assert all(a['request_sha256']==b['request_sha256'] and not a['received_base64'] and not b['received_base64'] for a,b in zip(receipt['go_stalled_clients'],receipt['rust_stalled_clients'],strict=True))
+          validate_stalled_observations(receipt)
           PY
       - name: Upload complete actual native observations
         if: always()
@@ -115,7 +127,7 @@ jobs:
         with:
           name: http-process-${{ matrix.os }}
           path: |
-            native-http-process.json
+            target/native-http-process.json
             target/native-http-tests.txt
           if-no-files-found: error
           retention-days: 14

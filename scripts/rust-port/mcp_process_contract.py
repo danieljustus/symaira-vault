@@ -129,6 +129,7 @@ def protocol_bytes(r, home, name, implementation, agent):
     # desktop UI through Go's supported opt-out; retain and validate every log.
     pattern = (r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} WARN anomaly detected '
                r'type=off_hours severity=low agent='+re.escape(agent)+
+               r'(?: path=public/(?:fixture|missing) request_id=[0-9a-f]{16})?'
                r' description="Entry access during off-hours by agent '+re.escape(agent)+r'"')
     assert len(stderr)<65536 and all(implementation=='go' and re.fullmatch(pattern,line)
                                   for line in stderr.splitlines()), (name,'unexpected stderr retained')
@@ -417,6 +418,12 @@ def main():
                 checked(['git','worktree','remove','--force',tree])
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        receipt['candidate_worktree_clean_at_end'] = not checked(
+            ['git','status','--porcelain=v1','--untracked-files=normal']).strip()
+        if not receipt['candidate_worktree_clean_at_end'] and not args.allow_dirty_for_development:
+            receipt['passed'] = False
+        args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
     print(f"PASS: {len(receipt['go'])} actual Go/Rust native MCP profiles and {len(receipt['go_hostile'])} hostile stdio cases on {platform.system()}")
 
 

@@ -5,15 +5,17 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-http-oauth.yml'
-      - 'crates/symvault-cli/**'
-      - 'crates/symvault-mcp/**'
-      - 'crates/symvault-core/**'
-      - 'crates/symvault-store/**'
-      - 'crates/symvault-platform/**'
+      - 'crates/**'
+      - 'third_party/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
       - 'scripts/rust-port/http_oauth*'
       - 'scripts/rust-port/http_process*'
+      - 'scripts/rust-port/test_http_process_contract.py'
+      - 'testdata/**'
       - 'scripts/rust-port/mcp_process_contract.py'
       - 'docs/adr/0019-oauth-consent-binding-and-token-lifetimes.md'
   workflow_dispatch:
@@ -84,9 +86,10 @@ jobs:
           assert 'mcp_tls_settings_survive_config_roundtrip ... ok' in config
           text=Path('target/native-oauth-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(227 if os.environ['RUNNER_OS']=='Windows' else 229)
+          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'consent_pkce_access_and_refresh_are_connected_and_single_use ... ok' in text
+          assert 'explicit_token_ttls_preserve_defaults_and_reject_invalid_library_values ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
@@ -123,11 +126,14 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/http_process_contract.py --rust "$rust_cli" --receipt target/native-http-process.json
           python3 - <<'PY'
-          import json
+          import json,subprocess
           from pathlib import Path
           r=json.loads(Path('target/native-http-process.json').read_bytes())
-          assert r['passed'] and r['candidate_worktree_clean'] and not r['differences']
-          assert len(r['go'])==len(r['rust'])==51 and len(r['declared_differences'])==4
+          assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end'] and not r['differences']
+          assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert len(r['go'])==len(r['rust'])==65
+          decisions={'token-session-isolation','complete-json-body-required','valid-utf8-required','metadata-fresh-marker-semantic-control'}
+          assert len(r['declared_differences'])==4 and {x['decision'] for x in r['declared_differences']}==decisions
           PY
       - name: Retain complete actual native observations
         if: always()

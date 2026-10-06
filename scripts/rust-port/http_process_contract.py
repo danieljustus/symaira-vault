@@ -58,7 +58,7 @@ class ProcessCapture:
         return bytes(self.buffers['stdout']), bytes(self.buffers['stderr']), complete
 
 
-def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fixture', headers=()):
+def request(path, port, tokens, method='POST', body=b'', auth: str | None='full', agent: str | None='fixture', headers=()):
     fields = [('Host',f'127.0.0.1:{port}'),('Connection','close')]
     if auth is not None:
         fields.append(('Authorization','Bearer '+tokens.get(auth,auth)))
@@ -73,10 +73,11 @@ def request(path, port, tokens, method='POST', body=b'', auth='full', agent='fix
     return (f'{method} {path} HTTP/1.1\r\n'+''.join(f'{k}: {v}\r\n' for k,v in fields)+'\r\n').encode()+body
 
 
-def exchange(port, data, retained):
+def exchange(port, data, retained, timeout=15):
     result = bytearray()
     send_reset = False
-    with socket.create_connection(('127.0.0.1',port),timeout=15) as connection:
+    started = time.monotonic()
+    with socket.create_connection(('127.0.0.1',port),timeout=timeout) as connection:
         try:
             try:
                 connection.sendall(data)
@@ -95,14 +96,22 @@ def exchange(port, data, retained):
             # Also preserve actual partial bytes when recv times out or fails.
             retained['raw_base64']=base64.b64encode(result).decode()
             retained['send_reset']=send_reset
-    head,body = bytes(result).split(b'\r\n\r\n',1)
+            retained['elapsed_seconds']=time.monotonic()-started
+    return parse_response(bytes(result), send_reset, data.split(b' ',1)[0].decode('ascii'))
+
+
+def parse_response(raw, send_reset=False, request_method='POST'):
+    head,body = raw.split(b'\r\n\r\n',1)
     lines = head.decode('latin1').split('\r\n')
     fields = [tuple(line.split(':',1)) for line in lines[1:]]
     fields = [(name.lower(),value.strip()) for name,value in fields]
     wire_body = body
     lengths = [value for name,value in fields if name=='content-length']
     transfers = [value for name,value in fields if name=='transfer-encoding']
-    if transfers:
+    if request_method=='HEAD':
+        assert not body, 'HEAD must not transmit entity or chunk bytes'
+        assert len(lengths)==1 and int(lengths[0])>=0 and not transfers, 'measured HEAD representation length'
+    elif transfers:
         assert not lengths and transfers==['chunked'], 'unambiguous actual chunk framing'
         chunks = bytearray()
         while True:
@@ -119,8 +128,20 @@ def exchange(port, data, retained):
         assert len(lengths)==1 and int(lengths[0])==len(body), 'complete HTTP framing'
     return {'status_line':lines[0],'headers':fields,'headers_without_date':sorted((k,v) for k,v in fields if k!='date'),
             'body_base64':base64.b64encode(body).decode(),'body_utf8':body.decode('utf-8'),
-            'raw_base64':base64.b64encode(result).decode(),'wire_body_base64':base64.b64encode(wire_body).decode(),
+            'raw_base64':base64.b64encode(raw).decode(),'wire_body_base64':base64.b64encode(wire_body).decode(),
             'send_reset':send_reset}
+
+
+EARLY_INVALID_ADMISSION_CASES = [
+    ('missing-bearer', {'auth': None}, 401),
+    ('invalid-bearer', {'auth': 'public-invalid-admission-token'}, 401),
+    ('foreign-origin', {'headers': [('Origin', 'https://foreign.example')]}, 403),
+    ('foreign-origin-missing-bearer', {'auth': None, 'headers': [('Origin', 'https://foreign.example')]}, 403),
+    ('missing-agent', {'agent': None}, 403),
+    ('mismatched-agent', {'agent': 'other'}, 403),
+    ('wrong-content-type', {'headers': [('Content-Type', 'text/plain')]}, 415),
+    ('denied-accept', {'headers': [('Accept', 'text/html')]}, 406),
+]
 
 
 def cases(port,tokens):
@@ -135,6 +156,8 @@ def cases(port,tokens):
     result = [
         ('resource-discovery',request('/.well-known/oauth-protected-resource',port,tokens,method='GET',auth=None,agent=None)),
         ('authorization-discovery',request('/.well-known/oauth-authorization-server',port,tokens,method='GET',auth=None,agent=None)),
+        ('resource-discovery-head',request('/.well-known/oauth-protected-resource',port,tokens,method='HEAD',auth=None,agent=None)),
+        ('authorization-discovery-head',request('/.well-known/oauth-authorization-server',port,tokens,method='HEAD',auth=None,agent=None)),
         ('unknown-route',request('/public-missing',port,tokens,method='GET',auth=None,agent=None)),
         ('unknown-route-foreign-origin',request('/public-missing',port,tokens,method='GET',auth=None,agent=None,headers=[('Origin','https://foreign.example')])),
         ('unknown-route-authenticated',request('/public-missing',port,tokens,body=ping)),
@@ -176,6 +199,8 @@ def cases(port,tokens):
         ('oauth-register-no-redirect',request('/oauth/register',port,tokens,body=b'{}',auth=None,agent=None)),
         ('oauth-register-foreign-redirect',request('/oauth/register',port,tokens,body=b'{"redirect_uris":["https://foreign.example/callback"]}',auth=None,agent=None)),
         ('oauth-authorize-invalid',request('/mcp/oauth/authorize',port,tokens,method='GET',auth=None,agent=None)),
+        ('oauth-authorize-invalid-head',request('/mcp/oauth/authorize',port,tokens,method='HEAD',auth=None,agent=None)),
+        ('oauth-authorize-foreign-origin-head',request('/mcp/oauth/authorize',port,tokens,method='HEAD',auth=None,agent=None,headers=[('Origin','https://foreign.example')])),
         ('oauth-authorize-unsupported-pkce',request('/mcp/oauth/authorize?'+challenge.replace('S256','plain'),port,tokens,method='GET',auth=None,agent=None)),
         ('oauth-authorize-unknown-client',request('/mcp/oauth/authorize?'+challenge,port,tokens,method='GET',auth=None,agent=None)),
         ('oauth-register-wrong-method',request('/oauth/register',port,tokens,method='GET',auth=None,agent=None)),
@@ -184,6 +209,14 @@ def cases(port,tokens):
         ('oauth-token-missing-refresh',request('/mcp/oauth/token',port,tokens,body=b'grant_type=refresh_token',auth=None,agent=None,headers=[('Content-Type','application/x-www-form-urlencoded')])),
         ('oauth-token-invalid-refresh',request('/mcp/oauth/token',port,tokens,body=b'grant_type=refresh_token&refresh_token=public-invalid-refresh',auth=None,agent=None,headers=[('Content-Type','application/x-www-form-urlencoded')])),
     ]
+    for name, prefix in [('invalid-byte',b'x'),('invalid-object',b'{"extra":]')]:
+        data=request('/mcp',port,tokens,body=prefix)
+        data=data.replace(f'Content-Length: {len(prefix)}\r\n'.encode(),f'Content-Length: {1024*1024+1}\r\n'.encode())
+        result.append(('mcp-early-invalid-oversized-'+name,data))
+    for name, options, _ in EARLY_INVALID_ADMISSION_CASES:
+        data=request('/mcp',port,tokens,body=b'x',**options)
+        data=data.replace(b'Content-Length: 1\r\n',b'Content-Length: 1048577\r\n')
+        result.append(('mcp-early-invalid-oversized-'+name,data))
     return result
 
 
@@ -253,27 +286,69 @@ def startup_denials(binary,home,port,tokens,observations):
         assert b'insecure bind' in stderr and not any(value.encode() in stderr for value in [SECRET]+list(tokens.values()))
 
 
-def stalled_connections(port,tokens,observations):
+def stalled_response_class(row, implementation):
+    assert implementation in {'go','rust'}, 'known timeout implementation'
+    bounds={'idle-before-request':(4,8),'incomplete-request-body':(9,15)}
+    assert row['case'] in bounds, 'known stalled-client case'
+    minimum,maximum=bounds[row['case']]
+    elapsed=row['elapsed_seconds']
+    assert type(elapsed) in {int,float} and minimum<=elapsed<maximum, 'actual bounded transport closure'
+    received=base64.b64decode(row['received_base64'],validate=True)
+    if not received:
+        return 'silent-eof'
+    assert implementation=='go' and row['case']=='incomplete-request-body', 'unexpected stalled-client response'
+    # Go's equal default read/write deadlines can race after header acquisition.
+    # Preserve and validate the complete measured error, never normalize it away.
+    response=parse_response(received)
+    body=b'{"error":{"message":"invalid JSON","code":-32700},"jsonrpc":"2.0"}\n'
+    assert response['status_line']=='HTTP/1.1 400 Bad Request', 'timeout parse-error status'
+    assert base64.b64decode(response['body_base64'])==body, 'timeout parse-error body'
+    assert response['headers_without_date']==sorted([
+        ('connection','close'),('content-length',str(len(body))),('content-type','application/json')
+    ]), 'complete timeout parse-error headers'
+    dates=[value for name,value in response['headers'] if name=='date']
+    assert len(dates)==1 and re.fullmatch(r'[A-Z][a-z]{2}, \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT',dates[0]), 'one HTTP Date'
+    return 'complete-invalid-json-400'
+
+
+def validate_stalled_observations(receipt):
+    for implementation in ['go','rust']:
+        rows=receipt[implementation+'_stalled_clients']
+        assert [row['case'] for row in rows]==['idle-before-request','incomplete-request-body'], 'exact stalled-case inventory'
+        for row in rows:
+            assert row['passed'] is True and row['peer_eof'] is True, 'executed successful EOF assertion'
+            assert row['response_class']==stalled_response_class(row,implementation), 'derived timeout response class'
+    for left,right in zip(receipt['go_stalled_clients'],receipt['rust_stalled_clients'],strict=True):
+        assert re.fullmatch(r'[0-9a-f]{64}',left['request_sha256']) and left['request_sha256']==right['request_sha256'], 'same complete stalled request'
+
+
+def stalled_connections(port,tokens,observations,implementation):
     incomplete=request('/mcp',port,tokens,body=b' '*64)[:-63]
-    for name,data,minimum in [('idle-before-request',b'',4),('incomplete-request-body',incomplete,9)]:
-        row={'case':name,'request_sha256':hashlib.sha256(data).hexdigest(),'received_base64':''}
+    for name,data in [('idle-before-request',b''),('incomplete-request-body',incomplete)]:
+        row={'case':name,'request_sha256':hashlib.sha256(data).hexdigest(),'received_base64':'','peer_eof':False,'passed':False}
         observations.append(row)
         with socket.create_connection(('127.0.0.1',port),timeout=15) as connection:
             started=time.monotonic()
-            connection.sendall(data)
             received=bytearray()
-            while True:
-                part=connection.recv(4096)
-                if not part:break
-                received+=part
+            try:
+                connection.sendall(data)
+                while True:
+                    part=connection.recv(4096)
+                    if not part:
+                        row['peer_eof']=True
+                        break
+                    received+=part
+                    row['received_base64']=base64.b64encode(received).decode()
+                    assert len(received)<65536
+            finally:
                 row['received_base64']=base64.b64encode(received).decode()
-                assert len(received)<65536
-            row['elapsed_seconds']=time.monotonic()-started
-        maximum=8 if name=='idle-before-request' else 15
-        assert not received and minimum<=row['elapsed_seconds']<maximum, 'actual bounded transport closure, no reconstructed response'
+                row['elapsed_seconds']=time.monotonic()-started
+        assert row['peer_eof'] is True, 'actual peer EOF, not socket timeout/reset'
+        row['response_class']=stalled_response_class(row,implementation)
+        row['passed']=True
 
 
-def observe(binary,home,port,tokens,rows,process_record,transport_rows):
+def observe(binary,home,port,tokens,rows,process_record,transport_rows,implementation):
     process = subprocess.Popen([str(binary),'--quiet','mcp','--bind','127.0.0.1','--port',str(port)],
         cwd=home,env=isolated(home),stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     capture = ProcessCapture(process)
@@ -296,10 +371,13 @@ def observe(binary,home,port,tokens,rows,process_record,transport_rows):
             row = {'case':name,'request_sha256':hashlib.sha256(data).hexdigest()}
             rows.append(row)
             row['response'] = {}
-            row['response'].update(exchange(port,data,row['response']))
+            timeout=3 if name.startswith('mcp-early-invalid-oversized-') else 15
+            row['response'].update(exchange(port,data,row['response'],timeout=timeout))
+            if timeout==3:
+                assert row['response']['elapsed_seconds']<3, 'early-invalid peer must receive a complete response without sending the remaining body'
             assert SECRET not in row['response']['body_utf8']
             assert not any(token in row['response']['body_utf8'] for token in tokens.values())
-        stalled_connections(port,tokens,transport_rows)
+        stalled_connections(port,tokens,transport_rows,implementation)
         data=request('/mcp',port,tokens,body=b'{"jsonrpc":"2.0","id":6,"method":"ping"}')
         row={'case':'mcp-ping-after-stalled-clients','request_sha256':hashlib.sha256(data).hexdigest(),'response':{}}
         rows.append(row)
@@ -323,7 +401,7 @@ def candidate_paths():
         if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
         or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-mcp-http-process.yml',
             'scripts/rust-port/http_process_contract.py','scripts/rust-port/http_process_seed.go.txt',
-            'scripts/rust-port/mcp_process_contract.py'})
+            'scripts/rust-port/mcp_process_contract.py','scripts/rust-port/test_http_process_contract.py'})
 
 
 def main():
@@ -373,7 +451,8 @@ def main():
                     assert vault_snapshot(home/'vault')==snapshot
                     receipt[implementation+'_process']={}
                     startup_denials(binary,home,port,tokens,receipt[implementation+'_startup_denials'])
-                    observe(binary,home,port,tokens,receipt[implementation],receipt[implementation+'_process'],receipt[implementation+'_stalled_clients'])
+                    observe(binary,home,port,tokens,receipt[implementation],receipt[implementation+'_process'],receipt[implementation+'_stalled_clients'],implementation)
+                validate_stalled_observations(receipt)
                 for a,b in zip(receipt['go'],receipt['rust'],strict=True):
                     assert a['case']==b['case'] and a['request_sha256']==b['request_sha256']
                     left,right=a['response'],b['response']
@@ -384,7 +463,11 @@ def main():
                         else:receipt['differences'].append(difference)
                 expected={'mcp-initialize':200,'mcp-ping':200,'mcp-body-exact-limit':200,'mcp-body-over-limit':413,
                     'health-token-call':200,'metadata-token-permitted-call':200,'metadata-token-health-denied':200,
-                    'mcp-invalid-json':400,'mcp-repeated-accept':200}
+                    'mcp-invalid-json':400,'mcp-repeated-accept':200,
+                    'resource-discovery-head':200,'authorization-discovery-head':200,
+                    'oauth-authorize-invalid-head':400,'oauth-authorize-foreign-origin-head':403,
+                    'mcp-early-invalid-oversized-invalid-byte':400,'mcp-early-invalid-oversized-invalid-object':400}
+                expected.update(('mcp-early-invalid-oversized-'+name,status) for name,_,status in EARLY_INVALID_ADMISSION_CASES)
                 for implementation in ['go','rust']:
                     responses={r['case']:r['response'] for r in receipt[implementation]}
                     for name,status in expected.items():
@@ -407,6 +490,12 @@ def main():
                 checked(['git','worktree','remove','--force',tree])
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        receipt['candidate_worktree_clean_at_end'] = not checked(
+            ['git','status','--porcelain=v1','--untracked-files=normal']).strip()
+        if not receipt['candidate_worktree_clean_at_end'] and not args.allow_dirty_for_development:
+            receipt['passed'] = False
+        args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+        assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
     print(f"PASS: {len(receipt['go'])} actual Go/Rust HTTP CLI transcripts and five startup denials on {platform.system()}")
 
 

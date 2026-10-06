@@ -257,6 +257,22 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	configureProcessGroup(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	// CommandContext owns cancellation and Wait joins its watcher. Cancel the
+	// whole tree instead of racing the default direct-child kill against it.
+	// WaitDelay also closes and joins inherited output pipes after leader exit.
+	cmd.WaitDelay = 2 * time.Second
+	var cancellationErr error
+	cmd.Cancel = func() error {
+		var killed bool
+		killed, cancellationErr = killProcessGroup(cmd)
+		if cancellationErr != nil {
+			return cancellationErr
+		}
+		if !killed {
+			return os.ErrProcessDone
+		}
+		return nil
+	}
 	defer func() {
 		if closeErr := closeProcessGroup(cmd); closeErr != nil {
 			err = errors.Join(err, fmt.Errorf("close oracle process group: %w", closeErr))
@@ -265,20 +281,20 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	if err = startProcessGroup(cmd); err != nil {
 		return nil, fmt.Errorf("start oracle: %w", err)
 	}
-	waitErr := make(chan error, 1)
-	go func() { waitErr <- cmd.Wait() }()
-	select {
-	case err = <-waitErr:
-	case <-ctx.Done():
+	// Never return (or remove the runtime/source directories) while os/exec is
+	// still copying output. WaitDelay bounds that join even when a pipe holder
+	// outlives the group leader. Windows setup failures retain their own Wait.
+	err = cmd.Wait()
+	if cancellationErr != nil {
+		err = errors.Join(err, fmt.Errorf("oracle cancellation cleanup: %w", cancellationErr))
+	}
+	if errors.Is(err, exec.ErrWaitDelay) {
 		if _, killErr := killProcessGroup(cmd); killErr != nil {
-			return nil, fmt.Errorf("oracle timeout cleanup: %w", killErr)
+			err = errors.Join(err, fmt.Errorf("oracle inherited-pipe cleanup: %w", killErr))
 		}
-		select {
-		case <-waitErr:
-		case <-time.After(5 * time.Second):
-			return nil, errors.New("oracle timeout cleanup exceeded 5s")
-		}
-		return nil, fmt.Errorf("oracle timed out after %s: %w", oracleTimeout, ctx.Err())
+	}
+	if ctx.Err() != nil {
+		return nil, errors.Join(fmt.Errorf("oracle timed out after %s: %w", oracleTimeout, ctx.Err()), err)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("oracle: %w: %s", err, stderr.Bytes())

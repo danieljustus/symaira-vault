@@ -111,6 +111,15 @@ pub(super) fn handle(
     let (path, query) = path_and_query
         .split_once('?')
         .map_or((path_and_query, ""), |(path, query)| (path, query));
+    let method = if method == "HEAD"
+        && matches!(
+            path,
+            "/.well-known/oauth-authorization-server" | "/mcp/oauth/authorize"
+        ) {
+        "GET"
+    } else {
+        method
+    };
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
         return Some(if method == "GET" {
@@ -840,6 +849,39 @@ mod tests {
             response.status,
             serde_json::from_slice(&response.body).unwrap(),
         )
+    }
+
+    #[test]
+    fn explicit_token_ttls_preserve_defaults_and_reject_invalid_library_values() {
+        let state = || {
+            OAuthState::new(
+                PathBuf::new(),
+                "default".into(),
+                Box::new(|_, _| crate::http::OAuthConsentDecision::Denied),
+                Box::new(|_| false),
+            )
+        };
+        let defaults = state()
+            .with_token_ttls(crate::http::OAuthTokenTtls::default())
+            .unwrap();
+        assert_eq!(defaults.access_token_ttl, ACCESS_TOKEN_TTL);
+        assert_eq!(defaults.refresh_token_ttl, REFRESH_TOKEN_TTL);
+        let positive = std::time::Duration::from_secs(1);
+        for (access_token_ttl, refresh_token_ttl) in [
+            (std::time::Duration::ZERO, positive),
+            (positive, std::time::Duration::ZERO),
+            (std::time::Duration::MAX, positive),
+            (positive, std::time::Duration::MAX),
+        ] {
+            let result = state().with_token_ttls(crate::http::OAuthTokenTtls {
+                access_token_ttl,
+                refresh_token_ttl,
+            });
+            let Err(error) = result else {
+                panic!("invalid explicit OAuth lifetime must be rejected");
+            };
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        }
     }
 
     #[test]

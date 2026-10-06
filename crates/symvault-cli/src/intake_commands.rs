@@ -45,7 +45,8 @@ pub fn parse_bool(value: &str) -> Result<bool, String> {
         "1" | "t" | "T" | "true" | "TRUE" | "True" => Ok(true),
         "0" | "f" | "F" | "false" | "FALSE" | "False" => Ok(false),
         _ => Err(format!(
-            "strconv.ParseBool: parsing {value:?}: invalid syntax"
+            "strconv.ParseBool: parsing {}: invalid syntax",
+            crate::cli_artifacts::quote_go_string(value)
         )),
     }
 }

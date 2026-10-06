@@ -91,7 +91,7 @@ lifetimes per implementation do not prove graceful shutdown. Inventory sources,
 driver/helper, embedded assets and executable hashes throughout a clean run.
 
 The required Linux/macOS/Windows workflow runs the same real corpus, owning
-runtime/config tests and the original 51-case HTTP corpus. Native gates, HEAD,
+runtime/config tests and the accepted 65-case HTTP corpus. Broader native gates,
 the full hostile origin/Host/framing/slow-peer matrix, complete token storage
 and expiration boundaries, TLS/mTLS acceptance and GUI/TTY/device consent remain
 separate required work. HTTP-001..004 and #1249 stay open until full acceptance.
@@ -105,3 +105,12 @@ and all corpus assertions unchanged. An earlier corpus must not invalidate
 the next one's source provenance merely by retaining its observations; nor
 does this failure count as original-corpus acceptance. Fresh native evidence
 on the corrected workflow is required.
+
+Integration retains the accepted HTTP HEAD/admission/body bounds and non-MCP
+wire fixture, shared request cancellation, pinned API DNS/TLS transport, broker
+CONNECT/egress and CLI artifact contracts. Consent binding and finite store
+rotation already exist on the accepted foundation; this change adds configured
+TTL routing and fresh OAuth lifecycle evidence without replacing those paths.
+The MCP gates retain every foundation test and add one explicit library-TTL
+validation regression: 239 native tests on Unix and 237 on Windows. No existing
+HTTP, API or broker work item is marked complete by these additive controls.
