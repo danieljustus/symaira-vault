@@ -20,6 +20,7 @@ on:
       - 'scripts/rust-port/http_tls_identity.go.txt'
       - 'scripts/rust-port/http_write_contract.py'
       - 'scripts/rust-port/test_http_write_contract.py'
+      - 'scripts/rust-port/http_winsock_metadata.py'
       - 'scripts/rust-port/http_oauth*'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/mcp_process_contract.py'
@@ -164,8 +165,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW session stop failed' }
           $traces = @(Get-ChildItem target/native-winsock*.etl)
           if ($traces.Count -ne 1) { throw 'Expected exactly one bounded Winsock ETL file' }
-          tracerpt $traces[0].FullName -y -of XML -o target/native-winsock.xml -summary target/native-winsock-summary.txt -export target/native-winsock-schema.man
+          tracerpt $traces[0].FullName -y -of XML -o target/native-winsock.xml -summary target/native-winsock-summary.txt
           if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW decode failed' }
+          python3 scripts/rust-port/http_winsock_metadata.py --trace target/native-winsock.xml --receipt target/native-http-write.json --summary target/native-winsock-summary.txt --output target/native-winsock-metadata.json
+          if ($LASTEXITCODE -ne 0) { throw 'Winsock metadata privacy filter failed' }
       - name: Retain complete actual native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -175,8 +178,5 @@ jobs:
             target/native-http-write.json
             target/native-write-tests.txt
             target/native-write-cli-owner.txt
-            target/native-winsock*.etl
-            target/native-winsock*.xml
-            target/native-winsock*.txt
-            target/native-winsock*.man
+            target/native-winsock-metadata.json
           if-no-files-found: error

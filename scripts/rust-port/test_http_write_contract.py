@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic socket-error controls, not native deadline acceptance evidence."""
+import copy
+import io
 import ssl
 import unittest
 from unittest import mock
@@ -8,9 +10,82 @@ import http_write_contract as contract
 import http_tls_contract
 import http_framing_contract
 import http_process_contract
+import http_winsock_metadata as winsock
 
 
 class WriteDeadlineSocketErrors(unittest.TestCase):
+    def test_winsock_export_is_scoped_numeric_and_fails_closed(self):
+        # Synthetic privacy/identity checks only, not actual ETW or Windows evidence.
+        canary = 'synthetic-authorization-canary'
+        root = winsock.ET.Element('Events')
+        receipt = {name: {'tcp-output': {'server_process_id': pid}}
+                   for name, pid in [('go', 101), ('rust', 102)]}
+        def event(process, endpoint, fields, creation=False):
+            node = winsock.ET.SubElement(root, winsock.NAMESPACE + 'Event')
+            system = winsock.ET.SubElement(node, winsock.NAMESPACE + 'System')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Provider', Name=winsock.PROVIDER)
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'TimeCreated', SystemTime='2026-10-07T14:00:00.1234567Z')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Execution', ProcessID='4')
+            for key in ('EventID', 'Version', 'Level', 'Task', 'Opcode'):
+                winsock.ET.SubElement(system, winsock.NAMESPACE + key).text = '1'
+            data = winsock.ET.SubElement(node, winsock.NAMESPACE + 'EventData')
+            values = {'Process': process, 'Endpoint': endpoint, **fields}
+            if creation:
+                values.update(SocketType=1, Protocol=6)
+            for key, value in values.items():
+                winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name=key).text = str(value)
+            winsock.ET.SubElement(node, winsock.NAMESPACE + 'RenderingInfo').text = canary
+            return node
+        event('0x111', '0x777', {'UserModePid': 101}, True)
+        event('0x111', '0x777', {'BufferLength': 123, 'Buffer': canary, 'Payload': canary})
+        event('0x111', '0x777', {'UserModePid': 101}, True)  # Reused address, distinct lifetime.
+        event('0x222', '0x888', {'UserModePid': 102}, True)
+        event('0x222', '0x888', {'BufferLength': 456})
+        event('0x111', '0x999', {'UserModePid': 999}, True)  # Reused kernel process address.
+        event('0x111', '0x999', {'BufferLength': 789})
+        def export(tree=root, summary='Events Lost: 0\nBuffers Lost: 0\n' + canary):
+            return winsock.metadata(io.BytesIO(winsock.ET.tostring(tree)), receipt, summary)
+        report = export()
+        with contract.tempfile.TemporaryDirectory(prefix='symvault-winsock-privacy-') as raw:
+            base = contract.Path(raw)
+            trace, receipt_path, summary_path, output = [base / name for name in ('trace.xml', 'receipt.json', 'summary.txt', 'metadata.json')]
+            trace.write_bytes(winsock.ET.tostring(root))
+            receipt_path.write_text(contract.json.dumps(receipt), encoding='utf-8')
+            summary_path.write_text('Events Lost: 0\nBuffers Lost: 0\n' + canary, encoding='utf-16')
+            contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
+                              '--receipt', receipt_path, '--summary', summary_path, '--output', output])
+            self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
+        encoded = contract.json.dumps(report)
+        self.assertNotIn(canary, encoded)
+        self.assertNotIn('0x111', encoded)
+        self.assertNotIn('0x777', encoded)
+        self.assertEqual({row['pid'] for row in report['events']}, {101, 102})
+        self.assertEqual([row['data']['BufferLength'] for row in report['events'] if 'BufferLength' in row['data']], [123, 456])
+        self.assertNotEqual(report['events'][0]['endpoint_id'], report['events'][2]['endpoint_id'])
+        self.assertTrue(report['loss_verified'])
+        self.assertFalse(export(summary=canary)['loss_verified'])
+        self.assertFalse(export(summary='Events Lost: 1\nBuffers Lost: 0')['loss_verified'])
+        for value in [canary, str(1 << 64), '1.2', '']:
+            invalid = copy.deepcopy(root)
+            field = next(node for node in invalid[1].iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'BufferLength')
+            field.text = value
+            with self.assertRaises(ValueError) as failure:
+                export(invalid)
+            self.assertNotIn(canary, str(failure.exception))
+        duplicate = copy.deepcopy(root)
+        winsock.ET.SubElement(next(duplicate[1].iter(winsock.NAMESPACE + 'EventData')), winsock.NAMESPACE + 'Data', Name='BufferLength').text = '123'
+        with self.assertRaises(ValueError):
+            export(duplicate)
+        missing = copy.deepcopy(root)
+        next(node for node in missing[1].iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'Endpoint').text = '0x999'
+        with self.assertRaises(ValueError):
+            export(missing)
+        one_server = copy.deepcopy(root)
+        one_server.remove(one_server[4])
+        one_server.remove(one_server[3])
+        with self.assertRaises(ValueError):
+            export(one_server)
+
     def test_receiver_observation_decodes_fixed_width_abi_and_fails_closed(self):
         # Synthetic ABI/failure checks only; this is not native Windows evidence.
         self.assertEqual(contract.TCP_INFO_V0.size, 88)

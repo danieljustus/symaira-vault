@@ -110,15 +110,25 @@ application write remains pending: sender-side acceptance times are still missin
 Windows CI additionally brackets the unchanged native corpus with a temporary
 `Microsoft-Windows-Winsock-AFD` ETW session using built-in `logman` and `tracerpt`,
 with a 64 MB non-circular file limit. Stop the owned session even when the corpus
-fails, and retain the actual ETL, decoded events, native schema and loss summary.
+fails. Raw ETL, full event XML and summary stay on the ephemeral runner;
+none is included in uploaded artifacts. `http_winsock_metadata.py` publishes only
+explicitly allowlisted integer fields and validated timestamps for the two actual
+output server PIDs. Resolve ownership through socket-creation records and replace
+kernel process/endpoint addresses with creation-relative identifiers. Exclude
+`Buffer`, payload fields, rendered messages and unknown fields entirely; invalid,
+duplicate or uncorrelated metadata fails closed without publishing raw values.
+Retain only recognized numeric loss counters; missing/unrecognized counters mark
+loss status unverified, never zero. A synthetic canary/identity regression exercises
+the actual filter CLI, including UTF-16 summaries, not native Windows tracing.
 This does not enable packet capture or alter socket, firewall or TCP settings.
 Record the output server PID and client/server endpoints to identify the specific
 connection. Wall-clock brackets around its monotonic request/receive timestamps
 allow checking clock correlation; clock discontinuity or lost/missing events
 invalidate timing conclusions. Resolve kernel `Process` identifiers through
 socket-creation `UserModePid`, not by assuming the ETW execution PID owns every
-completion. Use the native schema and documented send-posted/send-completed/close
-semantics; transport consumption is not remote delivery or an exact language-level
+completion. Use the decoded numeric descriptors/fields and documented
+send-posted/send-completed/close semantics; transport consumption is not remote
+delivery or an exact language-level
 write-return/deadline-arm timestamp. Trace failures never make the corpus pass.
 See Microsoft's [trace control](https://learn.microsoft.com/en-us/windows/win32/winsock/control-of-winsock-tracing)
 and [event details](https://learn.microsoft.com/en-us/windows/win32/winsock/winsock-tracing-event-details).
