@@ -47,7 +47,11 @@ def metadata(trace, receipt, summary) -> dict:
                 continue
             if key in data or len(item):
                 raise ValueError('ambiguous Winsock metadata field')
-            data[key] = number(item.text)
+            try:
+                data[key] = number(item.text)
+            except ValueError:
+                # Only a fixed allowlisted field name, never the rejected value.
+                raise ValueError(f'unsupported Winsock integer field: {key}') from None
         process = data.get('Process')
         event_id = number(system.findtext(NAMESPACE + 'EventID'))
         # Microsoft AFD Event ID 1 is socket creation; field presence is not authority.

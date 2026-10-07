@@ -80,6 +80,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                                   '--receipt', receipt_path, '--summary', summary_path, '--output', rejected_output])
             self.assertFalse(rejected_output.exists())
             self.assertNotIn(canary, str(failure.exception))
+            self.assertIn('unsupported Winsock integer field: BufferLength', str(failure.exception))
         encoded = contract.json.dumps(report)
         self.assertNotIn(canary, encoded)
         self.assertNotIn('0x111', encoded)
@@ -97,6 +98,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             with self.assertRaises(ValueError) as failure:
                 export(invalid)
             self.assertNotIn(canary, str(failure.exception))
+            self.assertEqual(str(failure.exception), 'unsupported Winsock integer field: BufferLength')
         duplicate = copy.deepcopy(root)
         winsock.ET.SubElement(next(duplicate[1].iter(winsock.NAMESPACE + 'EventData')), winsock.NAMESPACE + 'Data', Name='BufferLength').text = '123'
         with self.assertRaises(ValueError):
