@@ -149,7 +149,10 @@ class Upstream:
                     self.records.append(record)
                     self.request.set()
                     if self.mode == 'pending-headers-cancel':
-                        assert stream.recv(1) == b'', 'cancelled upstream did not receive EOF'
+                        try:
+                            assert stream.recv(1) == b'', 'cancelled upstream sent unexpected bytes'
+                        except (ConnectionResetError, ConnectionAbortedError):
+                            pass
                         record['upstream_eof'] = True
                         self.eof.set()
                     elif self.mode == 'progressing-body-deadline':

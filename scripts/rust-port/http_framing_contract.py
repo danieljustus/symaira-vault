@@ -103,12 +103,12 @@ def exchange(port,data,retained):
             try:
                 stream.sendall(data)
                 stream.shutdown(socket.SHUT_WR)
-            except (ConnectionResetError,BrokenPipeError):
+            except (ConnectionResetError,ConnectionAbortedError,BrokenPipeError):
                 retained['send_reset']=True
             while True:
                 try:
                     part=stream.recv(65536)
-                except ConnectionResetError:
+                except (ConnectionResetError,ConnectionAbortedError):
                     retained['receive_reset']=True
                     break
                 if not part:

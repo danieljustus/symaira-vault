@@ -59,9 +59,9 @@ def progressing_peer(port,tokens,body,row):
                     part=stream.recv(4096)
                 except socket.timeout:
                     continue
-                except ConnectionResetError:
+                except (ConnectionResetError,ConnectionAbortedError) as error:
                     row['peer_terminal_observed']=True
-                    row['peer_terminal_kind']='connection-reset'
+                    row['peer_terminal_kind']='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset'
                     break
                 if not part:
                     row['peer_terminal_observed']=True

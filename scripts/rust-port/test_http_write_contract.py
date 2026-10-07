@@ -5,6 +5,9 @@ import unittest
 from unittest import mock
 
 import http_write_contract as contract
+import http_tls_contract
+import http_framing_contract
+import http_process_contract
 
 
 class WriteDeadlineSocketErrors(unittest.TestCase):
@@ -48,6 +51,42 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                     self.assertEqual(row['post_tls_error_wire_base64'], '')
                 self.assertEqual(len(row['tls_read_errors']), 1)
                 stream.detach.assert_called_once()
+
+    def test_other_observers_keep_abort_narrow_and_validate_received_bytes(self):
+        response = b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok'
+        outcomes = [b'', ConnectionResetError(104, 'synthetic reset'),
+                    ConnectionAbortedError(10053, 'synthetic Windows abort'),
+                    PermissionError(13, 'synthetic unrelated error'), TimeoutError('synthetic timeout')]
+        for observer in [http_framing_contract, http_process_contract]:
+            for outcome in outcomes:
+                for data in [response, response[:-1]]:
+                    with self.subTest(observer=observer.__name__, outcome=type(outcome).__name__, complete=data==response):
+                        stream = mock.MagicMock()
+                        stream.__enter__.return_value = stream
+                        stream.recv.side_effect = [data, outcome]
+                        with mock.patch.object(observer.socket, 'create_connection', return_value=stream):
+                            if isinstance(outcome, (PermissionError, TimeoutError)):
+                                with self.assertRaises(type(outcome)):
+                                    observer.exchange(1, b'GET / HTTP/1.1\r\n\r\n', {})
+                            elif data!=response:
+                                with self.assertRaises(AssertionError):
+                                    observer.exchange(1, b'GET / HTTP/1.1\r\n\r\n', {})
+                            else:
+                                self.assertEqual(observer.exchange(1, b'GET / HTTP/1.1\r\n\r\n', {})['status_line'], 'HTTP/1.1 200 OK')
+        for outcome in outcomes[1:]:
+            for received in ['', 'eA==']:
+                with self.subTest(denial=type(outcome).__name__, application_bytes=bool(received)):
+                    row = {'received_base64': received}
+                    with mock.patch.object(http_tls_contract, 'exchange', side_effect=outcome):
+                        if isinstance(outcome, (PermissionError, TimeoutError)):
+                            with self.assertRaises(type(outcome)):
+                                http_tls_contract.denied(1, b'public-fixture', None, row)
+                        elif received:
+                            with self.assertRaises(AssertionError):
+                                http_tls_contract.denied(1, b'public-fixture', None, row)
+                        else:
+                            http_tls_contract.denied(1, b'public-fixture', None, row)
+                            self.assertIs(row['rejected'], True)
 
 
 if __name__ == '__main__':

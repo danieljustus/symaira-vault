@@ -107,7 +107,7 @@ def exchange(port,data,tls,row,server_name='localhost',head=False):
 def denied(port,data,tls,row,server_name='localhost'):
     try:
         row['unexpected_response']=exchange(port,data,tls,row,server_name)
-    except (ssl.SSLError,ConnectionResetError,BrokenPipeError,EmptyTLSResponse) as error:
+    except (ssl.SSLError,ConnectionResetError,ConnectionAbortedError,BrokenPipeError,EmptyTLSResponse) as error:
         row.update(rejected=True,error_type=type(error).__name__,error_reason=getattr(error,'reason',None),
                    verification_code=getattr(error,'verify_code',None))
     else:
@@ -170,8 +170,8 @@ def encrypted_peer(port,tokens,tls,body,row):
             while time.monotonic()-started<maximum:
                 try:part=receive()
                 except socket.timeout:continue
-                except ConnectionResetError:
-                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-reset');break
+                except (ConnectionResetError,ConnectionAbortedError) as error:
+                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset');break
                 if not part:
                     row.update(peer_terminal_observed=True,peer_terminal_kind='eof');break
                 if decrypt_failed:continue
