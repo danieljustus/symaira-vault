@@ -77,6 +77,7 @@ TCP_INFO_FIELDS=('state','mss','connection_time_ms','timestamps_enabled','rtt_us
 
 def socket_observation(stream,started):
     row=dict(started_seconds=time.monotonic()-started,
+             client_endpoint=stream.getsockname(),server_endpoint=stream.getpeername(),
              client_so_rcvbuf=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF),
              client_so_sndbuf=stream.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF))
     if os.name=='nt':
@@ -110,7 +111,11 @@ def slow_output(port,tokens,row):
     with socket.socket() as stream:
         stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,4096);stream.settimeout(.25)
         row['client_so_rcvbuf_before_connect']=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
-        stream.connect(('127.0.0.1',port));started=time.monotonic();stream.sendall(data)
+        stream.connect(('127.0.0.1',port))
+        row['request_start_wall_ns_before']=time.time_ns()
+        started=time.monotonic()
+        row['request_start_wall_ns_after']=time.time_ns()
+        stream.sendall(data)
         def observe_socket(phase):
             nonlocal observation_error
             if row['peer_terminal_observed'] or observation_error is not None:return
@@ -145,7 +150,9 @@ def slow_output(port,tokens,row):
                     if part:observed+=part
                     assert len(observed)<40*1024*1024
         finally:
+            row['receive_end_wall_ns_before']=time.time_ns()
             row.update(elapsed_seconds=time.monotonic()-started,received_base64=base64.b64encode(observed).decode())
+            row['receive_end_wall_ns_after']=time.time_ns()
             row['forced_client_close']=not row['peer_terminal_observed']
     if observation_error is not None:raise observation_error
     if observed:
@@ -205,6 +212,7 @@ def observe(binary,home,port,tokens,identities,profile,version,result):
     tls=context(identities,version) if version else None
     server=NativeServer(binary,home,port,identities,False,result['processes'],list(tokens.values())) if tls else Server(binary,home,port,result['processes'],list(tokens.values()))
     try:
+        if profile=='tcp-output':result['server_process_id']=server.child.pid
         for name,body in [('initialize',INITIALIZE),('ping-before',PING)]:
             data=request('/mcp',port,tokens,body=body)
             row=dict(case=name,request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})

@@ -101,6 +101,28 @@ Its synthetic ABI and lifecycle tests are not Windows evidence.
 Native observations must distinguish already queued data from an actual
 pending sender write before changing production semantics or the control.
 
+The exact `05f352e1` Windows receipt confirms a 4,096-byte native dynamic receive
+buffer and zero receive-window samples before 30 seconds for both implementations.
+It still returns the complete response after draining and fails the unchanged
+output assertion. A closed receive window does not prove that the sender's
+application write remains pending: sender-side acceptance times are still missing.
+
+Windows CI additionally brackets the unchanged native corpus with a temporary
+`Microsoft-Windows-Winsock-AFD` ETW session using built-in `logman` and `tracerpt`,
+with a 64 MB non-circular file limit. Stop the owned session even when the corpus
+fails, and retain the actual ETL, decoded events, native schema and loss summary.
+This does not enable packet capture or alter socket, firewall or TCP settings.
+Record the output server PID and client/server endpoints to identify the specific
+connection. Wall-clock brackets around its monotonic request/receive timestamps
+allow checking clock correlation; clock discontinuity or lost/missing events
+invalidate timing conclusions. Resolve kernel `Process` identifiers through
+socket-creation `UserModePid`, not by assuming the ETW execution PID owns every
+completion. Use the native schema and documented send-posted/send-completed/close
+semantics; transport consumption is not remote delivery or an exact language-level
+write-return/deadline-arm timestamp. Trace failures never make the corpus pass.
+See Microsoft's [trace control](https://learn.microsoft.com/en-us/windows/win32/winsock/control-of-winsock-tracing)
+and [event details](https://learn.microsoft.com/en-us/windows/win32/winsock/winsock-tracing-event-details).
+
 An initial one-second output probe returned no bytes while constructing this
 large response and therefore did not prove progressing output. Preserve that
 development receipt and replace the control with the separate fixed 30-second

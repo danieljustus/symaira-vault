@@ -19,6 +19,8 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         payload = contract.TCP_INFO_V0.pack(*values)
         stream = mock.MagicMock()
         stream.fileno.return_value = 123
+        stream.getsockname.return_value = ('127.0.0.1', 40000)
+        stream.getpeername.return_value = ('127.0.0.1', 30000)
         stream.getsockopt.side_effect = lambda level, option: 4096 if option == contract.socket.SO_RCVBUF else 65536
         for code, returned in [(0, 88), (-1, 0), (0, 87), (0, 89)]:
             with self.subTest(code=code, returned=returned):
@@ -44,6 +46,8 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                             contract.socket_observation(stream, 1)
                     else:
                         row = contract.socket_observation(stream, 1)
+                        self.assertEqual(row['client_endpoint'], ('127.0.0.1', 40000))
+                        self.assertEqual(row['server_endpoint'], ('127.0.0.1', 30000))
                         self.assertEqual(row['client_so_rcvbuf'], 4096)
                         self.assertEqual(row['client_so_sndbuf'], 65536)
                         self.assertEqual(row['started_seconds'], .25)
@@ -68,6 +72,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                          mock.patch.object(contract, 'socket_observation', side_effect=diagnostic,
                                            return_value={'completed_seconds': 0}) as observe, \
                          mock.patch.object(contract.time, 'monotonic', return_value=0), \
+                         mock.patch.object(contract.time, 'time_ns', side_effect=[100, 120, 200, 220]), \
                          mock.patch.object(contract.time, 'sleep'), \
                          mock.patch.object(contract, 'request', return_value=b'public-request'):
                         if terminal is None:
@@ -79,6 +84,9 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                         else:
                             contract.slow_output(1, {}, row)
                     self.assertIs(row['peer_terminal_observed'], terminal is not None)
+                    self.assertEqual([row[k] for k in ['request_start_wall_ns_before', 'request_start_wall_ns_after',
+                                                      'receive_end_wall_ns_before', 'receive_end_wall_ns_after']],
+                                     [100, 120, 200, 220])
                     self.assertIs(row['forced_client_close'], terminal is None)
                     if terminal:
                         self.assertEqual(row['peer_terminal_kind'], terminal)

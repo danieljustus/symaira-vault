@@ -105,6 +105,16 @@ jobs:
           OWNER
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
+      - name: Start bounded Windows Winsock boundary observation
+        id: winsock_trace
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $session = "symvault-write-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          logman query providers Microsoft-Windows-Winsock-AFD > target/native-winsock-provider.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW provider discovery failed' }
+          logman start -ets $session -o target/native-winsock.etl -f bin -max 64 -ct perf -nb 16 256 -bs 64 -p Microsoft-Windows-Winsock-AFD 0xffffffffffffffff 5
+          if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW session start failed' }
       - name: Execute actual native absolute writes and separate TLS admission
         run: |
           set -euo pipefail
@@ -145,6 +155,17 @@ jobs:
                   assert observed['rows'][-1]['case']=='ping-after'
                   assert observed['rows'][-1]['response']['status_line']=='HTTP/1.1 200 OK'
           CHECK
+      - name: Stop and retain Windows Winsock boundary observation
+        if: always() && steps.winsock_trace.outcome == 'success'
+        shell: pwsh
+        run: |
+          $session = "symvault-write-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          logman stop -ets $session
+          if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW session stop failed' }
+          $traces = @(Get-ChildItem target/native-winsock*.etl)
+          if ($traces.Count -ne 1) { throw 'Expected exactly one bounded Winsock ETL file' }
+          tracerpt $traces[0].FullName -y -of XML -o target/native-winsock.xml -summary target/native-winsock-summary.txt -export target/native-winsock-schema.man
+          if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW decode failed' }
       - name: Retain complete actual native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -154,4 +175,8 @@ jobs:
             target/native-http-write.json
             target/native-write-tests.txt
             target/native-write-cli-owner.txt
+            target/native-winsock*.etl
+            target/native-winsock*.xml
+            target/native-winsock*.txt
+            target/native-winsock*.man
           if-no-files-found: error
