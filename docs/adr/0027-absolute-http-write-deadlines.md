@@ -32,6 +32,15 @@ TLS identity lifecycle, ALPN and the remaining parser/budget cases stay open.
 
 ## Actual evidence and boundaries
 
+Native owning suites run one test at a time so unrelated CPU-heavy fixture
+construction does not contaminate wall-clock deadline assertions. Individual
+tests still exercise concurrent workers; no timing bounds or case-count gates
+are relaxed. The small socket test observes real bytes before expiry, explicitly
+expires that phase, then proves rejected bytes are absent after the next phase
+is reset. It does not assume that a fixed response size fills every operating
+system's send buffers; progressing backpressure remains owned by the full
+native control with an explicitly bounded receive window.
+
 `http_write_contract.py` rebuilds immutable production Go
 `d1cd0f97ac550bc3020bc86b0514989f8d28d95c`, generates encrypted fixtures through
 its actual vault/config/token APIs and runs the actual Rust CLI. Both use the
