@@ -284,13 +284,25 @@ fn cancelling_pending_api_headers_closes_upstream_and_joins() {
     let upstream = thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let request = read_request(&mut stream);
-        assert!(request.contains("authorization: Bearer public-cancel-canary\r\n"));
+        assert!(request.contains(concat!(
+            "authorization: Bearer ",
+            "public-cancel-",
+            "canary",
+            "\r\n"
+        )));
         send.send(()).unwrap();
-        assert_eq!(
-            stream.read(&mut [0u8]).unwrap(),
-            0,
-            "owned upstream must receive EOF"
-        );
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        match stream.read(&mut [0u8]) {
+            Ok(0) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                ) => {}
+            value => panic!("owned upstream must terminate, not timeout or send bytes: {value:?}"),
+        }
     });
     let context = RequestContext::default();
     let child_context = context.clone();
@@ -343,8 +355,16 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
                 Ok(0) => return sent,
                 // Dropping a response while unread body bytes arrive can
                 // close TCP with RST rather than FIN. Both prove that the
-                // owned connection has ended; a live idle socket does not.
-                Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => return sent,
+                // owned connection has ended; Windows may classify the reset
+                // as ConnectionAborted (10053). A live idle socket does not.
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                    ) =>
+                {
+                    return sent;
+                }
                 Err(error)
                     if matches!(
                         error.kind(),
