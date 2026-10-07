@@ -27,7 +27,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             winsock.ET.SubElement(system, winsock.NAMESPACE + 'TimeCreated', SystemTime='2026-10-07T14:00:00.1234567Z')
             winsock.ET.SubElement(system, winsock.NAMESPACE + 'Execution', ProcessID='4')
             for key in ('EventID', 'Version', 'Level', 'Task', 'Opcode'):
-                winsock.ET.SubElement(system, winsock.NAMESPACE + key).text = '1'
+                winsock.ET.SubElement(system, winsock.NAMESPACE + key).text = '18' if key == 'EventID' and not creation else '1'
             data = winsock.ET.SubElement(node, winsock.NAMESPACE + 'EventData')
             values = {'Process': process, 'Endpoint': endpoint, **fields}
             if creation:
@@ -46,6 +46,22 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         def export(tree=root, summary='Events Lost: 0\nBuffers Lost: 0\n' + canary):
             return winsock.metadata(io.BytesIO(winsock.ET.tostring(tree)), receipt, summary)
         report = export()
+        with self.subTest(boundary='unrelated unknown fields cannot affect report'):
+            unrelated = copy.deepcopy(root)
+            winsock.ET.SubElement(next(unrelated[-1].iter(winsock.NAMESPACE + 'EventData')),
+                                 winsock.NAMESPACE + 'Data', Name='UnrelatedPayload').text = canary
+            self.assertEqual(export(unrelated), report)
+            self.assertNotIn('discarded_field_count', report)
+        with self.subTest(boundary='non-creation identity fields cannot remap or reset'):
+            spoofed = copy.deepcopy(root)
+            fake_creation = copy.deepcopy(root[0])
+            next(fake_creation.iter(winsock.NAMESPACE + 'EventID')).text = '18'
+            next(node for node in fake_creation.iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'UserModePid').text = '999'
+            spoofed.insert(2, fake_creation)
+            checked = export(spoofed)
+            self.assertEqual(checked['events'][2]['pid'], 101)
+            self.assertEqual(checked['events'][2]['endpoint_id'], checked['events'][0]['endpoint_id'])
+            self.assertNotEqual(checked['events'][3]['endpoint_id'], checked['events'][0]['endpoint_id'])
         with contract.tempfile.TemporaryDirectory(prefix='symvault-winsock-privacy-') as raw:
             base = contract.Path(raw)
             trace, receipt_path, summary_path, output = [base / name for name in ('trace.xml', 'receipt.json', 'summary.txt', 'metadata.json')]
@@ -55,6 +71,15 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
                               '--receipt', receipt_path, '--summary', summary_path, '--output', output])
             self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
+            invalid_cli = copy.deepcopy(root)
+            next(node for node in invalid_cli[1].iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'BufferLength').text = canary
+            trace.write_bytes(winsock.ET.tostring(invalid_cli))
+            rejected_output = base / 'rejected.json'
+            with self.assertRaises(RuntimeError) as failure:
+                contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
+                                  '--receipt', receipt_path, '--summary', summary_path, '--output', rejected_output])
+            self.assertFalse(rejected_output.exists())
+            self.assertNotIn(canary, str(failure.exception))
         encoded = contract.json.dumps(report)
         self.assertNotIn(canary, encoded)
         self.assertNotIn('0x111', encoded)
@@ -85,6 +110,11 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         one_server.remove(one_server[3])
         with self.assertRaises(ValueError):
             export(one_server)
+        incomplete_creation = copy.deepcopy(root)
+        fields = next(incomplete_creation[0].iter(winsock.NAMESPACE + 'EventData'))
+        fields.remove(next(node for node in fields if node.get('Name') == 'Protocol'))
+        with self.assertRaises(ValueError):
+            export(incomplete_creation)
 
     def test_receiver_observation_decodes_fixed_width_abi_and_fails_closed(self):
         # Synthetic ABI/failure checks only; this is not native Windows evidence.

@@ -29,7 +29,6 @@ def metadata(trace, receipt, summary) -> dict:
     if len(pids) != 2 or any(type(pid) is not int or not 0 < pid < 1 << 32 for pid in pids):
         raise ValueError('missing distinct output-server process IDs')
     owners, endpoints, records, seen = {}, {}, [], set()
-    dropped = 0
     for _, event in ET.iterparse(trace, events=('end',)):
         if event.tag != NAMESPACE + 'Event':
             continue
@@ -45,13 +44,16 @@ def metadata(trace, receipt, summary) -> dict:
         for item in event.findall(NAMESPACE + 'EventData/' + NAMESPACE + 'Data'):
             key = item.get('Name')
             if key not in FIELDS:
-                dropped += 1
                 continue
             if key in data or len(item):
                 raise ValueError('ambiguous Winsock metadata field')
             data[key] = number(item.text)
         process = data.get('Process')
-        if {'Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protocol'} <= data.keys():
+        event_id = number(system.findtext(NAMESPACE + 'EventID'))
+        # Microsoft AFD Event ID 1 is socket creation; field presence is not authority.
+        if event_id == 1:
+            if not {'Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protocol'} <= data.keys():
+                raise ValueError('incomplete Winsock socket-creation event')
             owners[process] = data['UserModePid']
             if owners[process] in pids:
                 endpoints[process, data['Endpoint']] = len(records) + 1
@@ -69,8 +71,8 @@ def metadata(trace, receipt, summary) -> dict:
         if not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z', stamp):
             raise ValueError('invalid Winsock event timestamp')
         datetime.fromisoformat(stamp.replace('Z', '+00:00'))
-        descriptor = {key: number(system.findtext(NAMESPACE + key))
-                      for key in ('EventID', 'Version', 'Level', 'Task', 'Opcode')}
+        descriptor = dict(EventID=event_id, **{key: number(system.findtext(NAMESPACE + key))
+                                             for key in ('Version', 'Level', 'Task', 'Opcode')})
         # Kernel addresses never leave the runner; creation-relative IDs retain joins.
         data.pop('Process', None)
         data.pop('Endpoint', None)
@@ -86,7 +88,7 @@ def metadata(trace, receipt, summary) -> dict:
             raise ValueError('ambiguous trace-loss summary')
         losses[key] = number(value)
     return dict(provider=PROVIDER, server_pids=sorted(pids), events=records,
-                discarded_field_count=dropped, loss_counts=losses,
+                loss_counts=losses,
                 loss_verified=set(losses) == {'eventslost', 'bufferslost'} and not any(losses.values()),
                 interpretation='Metadata only; missing/lost events or clock discontinuity invalidate timing conclusions.')
 
