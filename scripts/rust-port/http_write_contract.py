@@ -2,6 +2,7 @@
 """Actual absolute HTTP writes and separate TLS admission against production Go."""
 import argparse
 import base64
+import ctypes
 import hashlib
 import json
 import os
@@ -10,6 +11,7 @@ import platform
 import shutil
 import socket
 import ssl
+import struct
 import sys
 import tempfile
 import threading
@@ -62,15 +64,52 @@ def handshake_peer(port,tls,row):
             stop.set();worker.join(timeout=5);row['sender_joined']=not worker.is_alive()
 
 
+# Microsoft WinSDK mstcpip.h TCP_INFO_v0: fixed-width ABI, including padding.
+# SIO_TCP_INFO is observational and requires neither elevated privileges nor
+# changing TCP settings. These receiver statistics are not sender-write traces.
+TCP_INFO_V0=struct.Struct('<IIQ?3x7IQQ5IB3x')
+TCP_INFO_FIELDS=('state','mss','connection_time_ms','timestamps_enabled','rtt_us',
+                 'min_rtt_us','bytes_in_flight','congestion_window_bytes',
+                 'send_window_bytes','receive_window_bytes','receive_buffer_bytes',
+                 'bytes_out','bytes_in','bytes_reordered','bytes_retransmitted',
+                 'fast_retransmits','duplicate_acks_in','timeout_episodes','syn_retransmits')
+
+
+def socket_observation(stream,started):
+    row=dict(started_seconds=time.monotonic()-started,
+             client_so_rcvbuf=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF),
+             client_so_sndbuf=stream.getsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF))
+    if os.name=='nt':
+        ws2=ctypes.WinDLL('Ws2_32.dll')
+        ws2.WSAIoctl.argtypes=[ctypes.c_size_t,ctypes.c_uint32,ctypes.c_void_p,ctypes.c_uint32,
+                              ctypes.c_void_p,ctypes.c_uint32,ctypes.POINTER(ctypes.c_uint32),
+                              ctypes.c_void_p,ctypes.c_void_p]
+        ws2.WSAIoctl.restype=ctypes.c_int
+        ws2.WSAGetLastError.argtypes=[];ws2.WSAGetLastError.restype=ctypes.c_int
+        version,returned=ctypes.c_uint32(0),ctypes.c_uint32()
+        output=ctypes.create_string_buffer(TCP_INFO_V0.size)
+        if ws2.WSAIoctl(stream.fileno(),0xC0000000|0x18000000|39,
+                       ctypes.byref(version),ctypes.sizeof(version),output,len(output),
+                       ctypes.byref(returned),None,None)!=0:
+            raise OSError(ws2.WSAGetLastError(),'SIO_TCP_INFO receiver observation failed')
+        assert returned.value==TCP_INFO_V0.size,'incomplete native TCP_INFO_v0'
+        row['windows_tcp_info_v0']=dict(zip(TCP_INFO_FIELDS,TCP_INFO_V0.unpack(output.raw),strict=True))
+    row['completed_seconds']=time.monotonic()-started
+    return row
+
+
 def slow_output(port,tokens,row):
     body=b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_entry_metadata","arguments":{"path":"public/bulk"}}}'
     data=request('/mcp',port,tokens,body=body)
     row.update(request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),
-               peer_terminal_observed=False,forced_client_close=False,slow_read_calls=0,slow_received_bytes=0)
+               peer_terminal_observed=False,forced_client_close=False,slow_read_calls=0,slow_received_bytes=0,
+               socket_observations=[])
     observed=bytearray()
     with socket.socket() as stream:
         stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,4096);stream.settimeout(.25)
+        row['client_so_rcvbuf_before_connect']=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         stream.connect(('127.0.0.1',port));started=time.monotonic();stream.sendall(data)
+        row['socket_observations'].append(dict(phase='request-sent',**socket_observation(stream,started)))
         def receive(limit):
             try:part=stream.recv(limit)
             except socket.timeout:return None
@@ -80,12 +119,15 @@ def slow_output(port,tokens,row):
             return part
         try:
             while time.monotonic()-started<34 and not row['peer_terminal_observed']:
+                row['socket_observations'].append(dict(phase='slow-read',**socket_observation(stream,started)))
                 part=receive(1024)
                 if part:
                     observed+=part;row['slow_read_calls']+=1;row['slow_received_bytes']+=len(part)
                     time.sleep(.15)
             row['fast_drain_started_seconds']=time.monotonic()-started
+            row['socket_observations'].append(dict(phase='before-fast-drain',**socket_observation(stream,started)))
             stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,256*1024)
+            row['socket_observations'].append(dict(phase='after-receive-buffer-change',**socket_observation(stream,started)))
             while not row['peer_terminal_observed'] and time.monotonic()-started<59:
                 part=receive(65536)
                 if part:observed+=part

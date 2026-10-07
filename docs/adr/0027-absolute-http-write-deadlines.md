@@ -39,7 +39,8 @@ are relaxed. The small socket test observes real bytes before expiry, explicitly
 expires that phase, then proves rejected bytes are absent after the next phase
 is reset. It does not assume that a fixed response size fills every operating
 system's send buffers; progressing backpressure remains owned by the full
-native control with an explicitly bounded receive window.
+native control. A requested socket receive-buffer size alone does not prove
+that the TCP receive window is bounded or that the sender remains blocked.
 
 `http_write_contract.py` rebuilds immutable production Go
 `d1cd0f97ac550bc3020bc86b0514989f8d28d95c`, generates encrypted fixtures through
@@ -75,6 +76,25 @@ then drain quickly. Require at least four real reads and 4 KiB of progress,
 complete specific HTTP headers and a declared chunk above 10 MiB. Actual peer
 EOF/reset must arrive while that chunk remains incomplete; client disposal
 cannot count as timeout evidence. Preserve all received bytes and lengths.
+
+The integrated Windows observation returned the complete chunk for both the
+immutable Go oracle and Rust after the fast drain. That failed control is not
+native acceptance, nor does late client consumption alone establish a socket
+write after expiry. The original receipt has no sender-write timestamps or
+effective socket-buffer observations; pre-expiry queueing remains an unproved
+alternative to late writes. Keep the original byte, progress, deadline and
+suite-count assertions unchanged while collecting evidence.
+
+Receiver-only diagnostics read back `SO_RCVBUF` and `SO_SNDBUF` without changing
+their requested values. Windows also reads `SIO_TCP_INFO` version 0 before
+slow reads and the existing fast-drain buffer change, recording native TCP
+state, cumulative inbound bytes, receive window and dynamic receive buffer
+with monotonic sample start/end times. These are client socket statistics,
+not server send-buffer or transport-write traces. The fixed-width 88-byte
+layout follows Microsoft WinSDK `mstcpip.h`; unavailable or incomplete native
+observations fail closed. Its synthetic ABI test is not Windows evidence.
+Native observations must distinguish already queued data from an actual
+pending sender write before changing production semantics or the control.
 
 An initial one-second output probe returned no bytes while constructing this
 large response and therefore did not prove progressing output. Preserve that

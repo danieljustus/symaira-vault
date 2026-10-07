@@ -11,6 +11,45 @@ import http_process_contract
 
 
 class WriteDeadlineSocketErrors(unittest.TestCase):
+    def test_receiver_observation_decodes_fixed_width_abi_and_fails_closed(self):
+        # Synthetic ABI/failure checks only; this is not native Windows evidence.
+        self.assertEqual(contract.TCP_INFO_V0.size, 88)
+        values = list(range(len(contract.TCP_INFO_FIELDS)))
+        values[0], values[3], values[12] = 7, True, 25613736
+        payload = contract.TCP_INFO_V0.pack(*values)
+        stream = mock.MagicMock()
+        stream.fileno.return_value = 123
+        stream.getsockopt.side_effect = lambda level, option: 4096 if option == contract.socket.SO_RCVBUF else 65536
+        for code, returned in [(0, 88), (-1, 0), (0, 87), (0, 89)]:
+            with self.subTest(code=code, returned=returned):
+                ws2 = mock.MagicMock()
+                ws2.WSAGetLastError.return_value = 10022
+                def ioctl(handle, command, version, size, output, capacity, length, overlapped, completion):
+                    self.assertEqual((handle, command, size, capacity), (123, 0xC0000000 | 0x18000000 | 39, 4, 88))
+                    self.assertIsNone(overlapped)
+                    self.assertIsNone(completion)
+                    self.assertEqual(contract.ctypes.cast(version, contract.ctypes.POINTER(contract.ctypes.c_uint32))[0], 0)
+                    contract.ctypes.memmove(output, payload, len(payload))
+                    contract.ctypes.cast(length, contract.ctypes.POINTER(contract.ctypes.c_uint32))[0] = returned
+                    return code
+                ws2.WSAIoctl.side_effect = ioctl
+                with mock.patch.object(contract.os, 'name', 'nt'), \
+                     mock.patch.object(contract.ctypes, 'WinDLL', create=True, return_value=ws2), \
+                     mock.patch.object(contract.time, 'monotonic', return_value=1.25):
+                    if code:
+                        with self.assertRaises(OSError):
+                            contract.socket_observation(stream, 1)
+                    elif returned != 88:
+                        with self.assertRaises(AssertionError):
+                            contract.socket_observation(stream, 1)
+                    else:
+                        row = contract.socket_observation(stream, 1)
+                        self.assertEqual(row['client_so_rcvbuf'], 4096)
+                        self.assertEqual(row['client_so_sndbuf'], 65536)
+                        self.assertEqual(row['started_seconds'], .25)
+                        self.assertEqual(row['completed_seconds'], .25)
+                        self.assertEqual(row['windows_tcp_info_v0'], dict(zip(contract.TCP_INFO_FIELDS, values, strict=True)))
+
     def test_raw_tls_observer_requires_a_terminal_socket_outcome(self):
         outcomes = [
             (b'', 'eof'),
