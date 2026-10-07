@@ -253,7 +253,7 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install Rust verification tools
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2.87.24
         with:
           tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0
           fallback: none
