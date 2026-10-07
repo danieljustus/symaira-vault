@@ -126,7 +126,7 @@ jobs:
           # Two existing host-specific tests are Unix-only: symlink template
           # rejection and clipboard signal clearing. The stdio and HTTP
           # regressions below must execute on every OS.
-          expected_count = 237 if os.environ['RUNNER_OS']=='Windows' else 239
+          expected_count = 238 if os.environ['RUNNER_OS']=='Windows' else 240
           assert results and sum(int(n) for n,_ in results)==expected_count
           assert all(int(ignored)==0 for _,ignored in results)
           for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions']:

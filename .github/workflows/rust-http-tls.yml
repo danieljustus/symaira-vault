@@ -84,7 +84,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-tls-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
+          assert results and sum(int(n) for n,_ in results)==(238 if os.environ['RUNNER_OS']=='Windows' else 240)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'mtls_listener_requires_valid_client_certificate ... ok' in text
           PY

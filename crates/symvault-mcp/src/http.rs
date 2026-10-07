@@ -60,6 +60,7 @@ enum HttpTransport {
 
 struct DeadlineSocket {
     stream: TcpStream,
+    nonblocking: Cell<bool>,
     configured_timeout: Cell<Option<Duration>>,
     deadline: Cell<Option<Instant>>,
     configured_write_timeout: Cell<Option<Duration>>,
@@ -70,6 +71,7 @@ impl DeadlineSocket {
     fn new(stream: TcpStream) -> Self {
         Self {
             stream,
+            nonblocking: Cell::new(false),
             configured_timeout: Cell::new(None),
             deadline: Cell::new(None),
             configured_write_timeout: Cell::new(None),
@@ -86,7 +88,9 @@ impl DeadlineSocket {
     }
 
     fn set_nonblocking(&self, value: bool) -> Result<(), std::io::Error> {
-        self.stream.set_nonblocking(value)
+        self.stream.set_nonblocking(value)?;
+        self.nonblocking.set(value);
+        Ok(())
     }
 
     fn set_read_timeout(&self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
@@ -158,7 +162,41 @@ impl Write for DeadlineSocket {
             None => self.configured_write_timeout.get(),
         };
         self.stream.set_write_timeout(timeout)?;
-        self.stream.write(buffer)
+        if self.nonblocking.get() {
+            // HttpShutdown owns cancellable retry waits; retain its WouldBlock.
+            return self.stream.write(buffer);
+        }
+        // A progressing blocking send can outlive SO_SNDTIMEO on Darwin.
+        // ponytail: reuse bounded socket polling, not another reactor; upgrade
+        // to platform readiness waits if measured polling overhead warrants it.
+        self.stream.set_nonblocking(true)?;
+        let deadline = self
+            .write_deadline
+            .get()
+            .or_else(|| timeout.and_then(|timeout| Instant::now().checked_add(timeout)));
+        let result = loop {
+            let remaining =
+                deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
+            if remaining.is_some_and(|remaining| remaining.is_zero()) {
+                break Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "HTTP write deadline",
+                ));
+            }
+            match self.stream.write(buffer) {
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    let poll = Duration::from_millis(10);
+                    thread::sleep(remaining.map_or(poll, |remaining| poll.min(remaining)));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                result => break result,
+            }
+        };
+        let restored = self.stream.set_nonblocking(false);
+        match result {
+            Ok(count) => restored.map(|()| count),
+            Err(error) => Err(error),
+        }
     }
 
     fn flush(&mut self) -> Result<(), std::io::Error> {
@@ -3762,6 +3800,56 @@ mod tests {
         drop(reader);
         server.join().expect("server thread");
         responses
+    }
+
+    #[test]
+    fn absolute_write_deadline_stops_progressing_bulk_send_before_fast_drain() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let (socket, _) = listener.accept().unwrap();
+        let peer = thread::spawn(move || {
+            let mut buffer = [0; 4096];
+            let mut received = 0;
+            let mut first_read = None;
+            loop {
+                let count = match client.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(count) => count,
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => break,
+                    Err(error) => panic!("bounded native peer read: {error}"),
+                };
+                received += count;
+                let started = first_read.get_or_insert_with(Instant::now);
+                if started.elapsed() < Duration::from_millis(400) {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            }
+            received
+        });
+        let mut stream = DeadlineSocket::new(socket);
+        let body = vec![b'p'; 32 * 1024 * 1024];
+        stream
+            .set_write_timeout(Some(Duration::from_millis(150)))
+            .unwrap();
+        stream
+            .write_deadline
+            .set(Some(Instant::now() + Duration::from_millis(150)));
+        let result = stream.write_all(&body);
+        stream.stream.shutdown(std::net::Shutdown::Both).unwrap();
+        let received = peer.join().expect("join native peer");
+        assert_eq!(
+            result
+                .expect_err("expired write must not finish after drain")
+                .kind(),
+            std::io::ErrorKind::TimedOut
+        );
+        assert!(
+            received > 0 && received < body.len(),
+            "peer must observe partial real progress"
+        );
     }
 
     #[test]

@@ -12,6 +12,12 @@ retains Go's separate 120-second idle allowance. This follows actual Go's write
 phase: a body can finish within its read allowance but leave no time to write
 the response. A per-operation socket timeout previously allowed that response.
 
+Non-cancellable sends use nonblocking writes with bounded retry waits,
+restoring blocking mode before the next read. A progressing blocking kernel
+send can otherwise outlive its socket timeout on Darwin. Cancellable sockets
+retain their existing shutdown-owned retry waits. TCP and rustls use this same
+socket boundary.
+
 Complete TLS admission inside the already admitted connection worker, using
 one read/write deadline equal to the smallest positive effective header, read
 and write budget. After the verified handshake, clear its deadlines and begin
