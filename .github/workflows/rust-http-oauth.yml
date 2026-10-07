@@ -84,7 +84,7 @@ jobs:
           assert 'mcp_tls_settings_survive_config_roundtrip ... ok' in config
           text=Path('target/native-oauth-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(234 if os.environ['RUNNER_OS']=='Windows' else 236)
+          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'consent_pkce_access_and_refresh_are_connected_and_single_use ... ok' in text
           PY

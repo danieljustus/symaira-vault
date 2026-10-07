@@ -87,7 +87,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-write-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(234 if os.environ['RUNNER_OS']=='Windows' else 236)
+          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'keep_alive_idle_timeout_matches_go_source_and_closes_socket ... ok' in text
           PY
