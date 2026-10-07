@@ -16,6 +16,8 @@ FIELDS = frozenset(('Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protoco
 
 
 def number(value):
+    if isinstance(value, str):
+        value = value.strip(' \t\r\n')
     if not isinstance(value, str) or not re.fullmatch(r'(?:0[xX][0-9a-fA-F]{1,16}|-?[0-9]{1,20})', value):
         raise ValueError('invalid numeric Winsock metadata')
     result = int(value, 16 if value.lower().startswith('0x') else 10)

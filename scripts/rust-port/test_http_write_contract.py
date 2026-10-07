@@ -71,6 +71,15 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
                               '--receipt', receipt_path, '--summary', summary_path, '--output', output])
             self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
+            padded_cli = copy.deepcopy(root)
+            for field in padded_cli.iter(winsock.NAMESPACE + 'Data'):
+                if field.get('Name') in winsock.FIELDS and isinstance(field.text, str):
+                    field.text = ' \t' + field.text + '\r\n'
+            trace.write_bytes(winsock.ET.tostring(padded_cli))
+            padded_output = base / 'padded.json'
+            contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
+                              '--receipt', receipt_path, '--summary', summary_path, '--output', padded_output])
+            self.assertEqual(contract.json.loads(padded_output.read_text(encoding='utf-8')), report)
             invalid_cli = copy.deepcopy(root)
             next(node for node in invalid_cli[1].iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'BufferLength').text = canary
             trace.write_bytes(winsock.ET.tostring(invalid_cli))
@@ -91,7 +100,18 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         self.assertTrue(report['loss_verified'])
         self.assertFalse(export(summary=canary)['loss_verified'])
         self.assertFalse(export(summary='Events Lost: 1\nBuffers Lost: 0')['loss_verified'])
-        for value in [canary, str(1 << 64), '1.2', '']:
+        # Public AFD XML uses padded integers; synthetic cases, not runner fixtures.
+        # https://stackoverflow.com/questions/69303203
+        for value in ['       0', '\t0\r\n', ' \t0x0\r\n']:
+            with self.subTest(boundary='ASCII XML whitespace', value=value):
+                padded = copy.deepcopy(root)
+                fields = next(padded[1].iter(winsock.NAMESPACE + 'EventData'))
+                winsock.ET.SubElement(fields, winsock.NAMESPACE + 'Data', Name='EnterExit').text = value
+                checked = export(padded)
+                self.assertEqual(checked['events'][1]['data']['EnterExit'], 0)
+                self.assertEqual(checked['events'][1]['data']['BufferLength'], 123)
+        for value in [canary, str(1 << 64), '0x10000000000000000', '1.2', '',
+                      '\u00a00', '0\u00a0', '\u20030', '0 0', '0x', '0xg', '-0x1', ' \t\r\n']:
             invalid = copy.deepcopy(root)
             field = next(node for node in invalid[1].iter(winsock.NAMESPACE + 'Data') if node.get('Name') == 'BufferLength')
             field.text = value
