@@ -92,7 +92,8 @@ def socket_observation(stream,started):
                        ctypes.byref(version),ctypes.sizeof(version),output,len(output),
                        ctypes.byref(returned),None,None)!=0:
             raise OSError(ws2.WSAGetLastError(),'SIO_TCP_INFO receiver observation failed')
-        assert returned.value==TCP_INFO_V0.size,'incomplete native TCP_INFO_v0'
+        if returned.value!=TCP_INFO_V0.size:
+            raise ValueError('incomplete native TCP_INFO_v0')
         row['windows_tcp_info_v0']=dict(zip(TCP_INFO_FIELDS,TCP_INFO_V0.unpack(output.raw),strict=True))
     row['completed_seconds']=time.monotonic()-started
     return row
@@ -103,13 +104,22 @@ def slow_output(port,tokens,row):
     data=request('/mcp',port,tokens,body=body)
     row.update(request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),
                peer_terminal_observed=False,forced_client_close=False,slow_read_calls=0,slow_received_bytes=0,
-               socket_observations=[])
+               socket_observations=[],socket_observation_errors=[])
     observed=bytearray()
+    observation_error=None
     with socket.socket() as stream:
         stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,4096);stream.settimeout(.25)
         row['client_so_rcvbuf_before_connect']=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         stream.connect(('127.0.0.1',port));started=time.monotonic();stream.sendall(data)
-        row['socket_observations'].append(dict(phase='request-sent',**socket_observation(stream,started)))
+        def observe_socket(phase):
+            nonlocal observation_error
+            if row['peer_terminal_observed'] or observation_error is not None:return
+            try:row['socket_observations'].append(dict(phase=phase,**socket_observation(stream,started)))
+            except Exception as error:
+                # Preserve real peer bytes/closure first, then fail this diagnostic.
+                observation_error=error
+                row['socket_observation_errors'].append(dict(phase=phase,type=type(error).__name__,
+                    code=getattr(error,'winerror',None) or getattr(error,'errno',None)))
         def receive(limit):
             try:part=stream.recv(limit)
             except socket.timeout:return None
@@ -118,23 +128,26 @@ def slow_output(port,tokens,row):
             if not part:row.update(peer_terminal_observed=True,peer_terminal_kind='eof')
             return part
         try:
+            observe_socket('request-sent')
             while time.monotonic()-started<34 and not row['peer_terminal_observed']:
-                row['socket_observations'].append(dict(phase='slow-read',**socket_observation(stream,started)))
+                observe_socket('slow-read')
                 part=receive(1024)
                 if part:
                     observed+=part;row['slow_read_calls']+=1;row['slow_received_bytes']+=len(part)
                     time.sleep(.15)
             row['fast_drain_started_seconds']=time.monotonic()-started
-            row['socket_observations'].append(dict(phase='before-fast-drain',**socket_observation(stream,started)))
-            stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,256*1024)
-            row['socket_observations'].append(dict(phase='after-receive-buffer-change',**socket_observation(stream,started)))
-            while not row['peer_terminal_observed'] and time.monotonic()-started<59:
-                part=receive(65536)
-                if part:observed+=part
-                assert len(observed)<40*1024*1024
+            if not row['peer_terminal_observed']:
+                observe_socket('before-fast-drain')
+                stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,256*1024)
+                observe_socket('after-receive-buffer-change')
+                while not row['peer_terminal_observed'] and time.monotonic()-started<59:
+                    part=receive(65536)
+                    if part:observed+=part
+                    assert len(observed)<40*1024*1024
         finally:
             row.update(elapsed_seconds=time.monotonic()-started,received_base64=base64.b64encode(observed).decode())
             row['forced_client_close']=not row['peer_terminal_observed']
+    if observation_error is not None:raise observation_error
     if observed:
         response=parse_response(observed);row['partial_response']=response
         head,wire=bytes(observed).split(b'\r\n\r\n',1)

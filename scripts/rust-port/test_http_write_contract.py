@@ -40,7 +40,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                         with self.assertRaises(OSError):
                             contract.socket_observation(stream, 1)
                     elif returned != 88:
-                        with self.assertRaises(AssertionError):
+                        with self.assertRaises(ValueError):
                             contract.socket_observation(stream, 1)
                     else:
                         row = contract.socket_observation(stream, 1)
@@ -49,6 +49,43 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                         self.assertEqual(row['started_seconds'], .25)
                         self.assertEqual(row['completed_seconds'], .25)
                         self.assertEqual(row['windows_tcp_info_v0'], dict(zip(contract.TCP_INFO_FIELDS, values, strict=True)))
+
+    def test_diagnostic_failure_retains_peer_bytes_and_terminal_classification(self):
+        # Synthetic lifecycle controls, not a native timeout/backpressure proof.
+        outcomes = [(b'', 'eof'), (ConnectionResetError(104, 'synthetic reset'), 'connection-reset'),
+                    (ConnectionAbortedError(10053, 'synthetic abort'), 'connection-aborted'),
+                    (PermissionError(13, 'synthetic nonterminal error'), None)]
+        for diagnostic in [None, OSError(10022, 'synthetic telemetry error'), ValueError('synthetic incomplete ABI')]:
+            for outcome, terminal in outcomes:
+                with self.subTest(diagnostic=type(diagnostic).__name__, terminal=terminal):
+                    stream = mock.MagicMock()
+                    stream.__enter__.return_value = stream
+                    stream.getsockopt.return_value = 4096
+                    data = b'public-received-bytes' if diagnostic and terminal else b''
+                    stream.recv.side_effect = ([data] if data else []) + [outcome]
+                    row = {}
+                    with mock.patch.object(contract.socket, 'socket', return_value=stream), \
+                         mock.patch.object(contract, 'socket_observation', side_effect=diagnostic,
+                                           return_value={'completed_seconds': 0}) as observe, \
+                         mock.patch.object(contract.time, 'monotonic', return_value=0), \
+                         mock.patch.object(contract.time, 'sleep'), \
+                         mock.patch.object(contract, 'request', return_value=b'public-request'):
+                        if terminal is None:
+                            with self.assertRaises(PermissionError):
+                                contract.slow_output(1, {}, row)
+                        elif diagnostic:
+                            with self.assertRaises(type(diagnostic)):
+                                contract.slow_output(1, {}, row)
+                        else:
+                            contract.slow_output(1, {}, row)
+                    self.assertIs(row['peer_terminal_observed'], terminal is not None)
+                    self.assertIs(row['forced_client_close'], terminal is None)
+                    if terminal:
+                        self.assertEqual(row['peer_terminal_kind'], terminal)
+                    self.assertEqual(contract.base64.b64decode(row['received_base64']), data)
+                    self.assertEqual(len(row['socket_observation_errors']), int(diagnostic is not None))
+                    self.assertEqual(observe.call_count, 1 if diagnostic else 2)
+                    stream.setsockopt.assert_called_once_with(contract.socket.SOL_SOCKET, contract.socket.SO_RCVBUF, 4096)
 
     def test_raw_tls_observer_requires_a_terminal_socket_outcome(self):
         outcomes = [

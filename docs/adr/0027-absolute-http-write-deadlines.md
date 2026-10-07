@@ -92,7 +92,12 @@ state, cumulative inbound bytes, receive window and dynamic receive buffer
 with monotonic sample start/end times. These are client socket statistics,
 not server send-buffer or transport-write traces. The fixed-width 88-byte
 layout follows Microsoft WinSDK `mstcpip.h`; unavailable or incomplete native
-observations fail closed. Its synthetic ABI test is not Windows evidence.
+observations fail closed, including under Python optimization. Record a
+diagnostic failure by phase, error class and OS code without logging payloads.
+Stop telemetry after that failure or a classified peer closure, but preserve
+actual received bytes and the peer outcome within the unchanged read bounds
+before re-raising the diagnostic error. Telemetry failure is not EOF/reset.
+Its synthetic ABI and lifecycle tests are not Windows evidence.
 Native observations must distinguish already queued data from an actual
 pending sender write before changing production semantics or the control.
 
