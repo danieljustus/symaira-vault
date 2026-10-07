@@ -185,6 +185,80 @@ fn cancelled_dns_releases_the_actual_owned_udp_socket() {
     drop(reclaimed);
 }
 
+#[test]
+fn stopping_egress_during_dns_joins_workers_and_releases_socket() {
+    use symvault_store::Store;
+    for connect_request in [false, true] {
+        let dns = DnsFixture::new(Vec::new(), true);
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("entries")).unwrap();
+        std::fs::create_dir(root.path().join("templates")).unwrap();
+        std::fs::write(
+            root.path().join("config.yaml"),
+            "vault:\n  format_version: 2\n",
+        )
+        .unwrap();
+        std::fs::write(root.path().join("identity.age"), b"test layout marker").unwrap();
+        // A credential read before completed DNS preflight would return 500
+        // without ever sending the actual DNS packet required below.
+        std::fs::write(root.path().join("templates/fixture.yaml"),
+            "base_url: https://waiting-broker.example.test\nauth_type: bearer\nentry_ref: missing-entry\nallowed_methods: [GET]\nallowed_endpoints: [/safe/*]\n").unwrap();
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root.path(), &identity).unwrap();
+        let broker = EgressBroker::new(root.path(), &store, &identity, EgressOptions::default())
+            .unwrap()
+            .with_dns_server(dns.address);
+        let stop = broker.shutdown();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut stopped_at = None;
+        let mut dns_peer = None;
+        broker
+            .with_running(listener, || {
+                let mut client = std::net::TcpStream::connect(address).unwrap();
+                client
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .unwrap();
+                let first = if connect_request {
+                    "CONNECT waiting-broker.example.test:443 HTTP/1.1"
+                } else {
+                    "GET https://waiting-broker.example.test/safe/item HTTP/1.1"
+                };
+                write!(
+                    client,
+                    "{first}\r\nHost: waiting-broker.example.test\r\n\r\n"
+                )
+                .unwrap();
+                dns_peer = Some(dns.observed.recv_timeout(Duration::from_secs(2)).unwrap());
+                stopped_at = Some(Instant::now());
+                stop.cancel().unwrap();
+                let mut byte = [0];
+                match client.read(&mut byte) {
+                    Ok(0) => {}
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::ConnectionAborted
+                        ) => {}
+                    other => panic!("cancelled DNS client remained live: {other:?}"),
+                }
+                Ok(())
+            })
+            .unwrap();
+        assert!(stopped_at.unwrap().elapsed() < Duration::from_secs(1));
+        let reclaimed = UdpSocket::bind(dns_peer.unwrap())
+            .expect("joined broker resolver must release its UDP port");
+        drop(reclaimed);
+        assert!(
+            std::net::TcpStream::connect_timeout(&address, Duration::from_millis(100)).is_err()
+        );
+        let reclaimed_listener =
+            TcpListener::bind(address).expect("stopped broker must release its listener");
+        drop(reclaimed_listener);
+    }
+}
+
 fn read_request(stream: &mut std::net::TcpStream) -> String {
     stream
         .set_read_timeout(Some(Duration::from_secs(2)))

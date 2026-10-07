@@ -16,6 +16,7 @@ on:
       - 'scripts/rust-port/test_api_transport_contract.py'
       - 'testdata/api-darwin-trust/**'
       - 'docs/adr/0018-api-dns-pinning-and-request-cancellation.md'
+      - 'docs/adr/0028-owned-broker-dns-and-dial.md'
   workflow_dispatch:
 
 permissions:
