@@ -43,6 +43,11 @@ and actual peer EOF/reset. Retain TLS record-layer diagnostics and continue
 observing the underlying socket after a TLS error; an exception alone does not
 prove server closure. Socket ownership transfer uses Python's socket detach,
 including on Windows, rather than treating a Windows socket as a CRT descriptor.
+Classify Windows connection-aborted errors alongside connection resets as
+terminal socket outcomes, retaining their distinct diagnostic kind. A TLS
+record-layer error alone or an unrelated socket error is not closure evidence.
+The synthetic socket-error regression checks this classification separately
+from the real native deadline corpus.
 
 Two actual partial ClientHellos progress one byte every 150 milliseconds and
 must terminate at the one-second handshake budget, with joined sender threads,

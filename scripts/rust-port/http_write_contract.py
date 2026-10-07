@@ -51,8 +51,8 @@ def handshake_peer(port,tls,row):
             while time.monotonic()-started<3:
                 try:part=stream.recv(4096)
                 except socket.timeout:continue
-                except ConnectionResetError:
-                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-reset');break
+                except (ConnectionResetError, ConnectionAbortedError) as error:
+                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset');break
                 if not part:
                     row.update(peer_terminal_observed=True,peer_terminal_kind='eof');break
                 observed+=part;assert len(observed)<65536
@@ -74,8 +74,8 @@ def slow_output(port,tokens,row):
         def receive(limit):
             try:part=stream.recv(limit)
             except socket.timeout:return None
-            except ConnectionResetError:
-                row.update(peer_terminal_observed=True,peer_terminal_kind='connection-reset');return b''
+            except (ConnectionResetError, ConnectionAbortedError) as error:
+                row.update(peer_terminal_observed=True,peer_terminal_kind='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset');return b''
             if not part:row.update(peer_terminal_observed=True,peer_terminal_kind='eof')
             return part
         try:
@@ -118,8 +118,8 @@ def late_body(port,tokens,tls,row):
                 row['body_completed_seconds']=time.monotonic()-started
                 while True:
                     try:part=stream.recv(65536)
-                    except ConnectionResetError:
-                        row.update(peer_terminal_observed=True,peer_terminal_kind='connection-reset');break
+                    except (ConnectionResetError, ConnectionAbortedError) as error:
+                        row.update(peer_terminal_observed=True,peer_terminal_kind='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset');break
                     except ssl.SSLError as error:
                         row['tls_read_errors'].append(dict(type=type(error).__name__,reason=error.reason,message=str(error)))
                         wire=bytearray()
@@ -128,8 +128,8 @@ def late_body(port,tokens,tls,row):
                             while time.monotonic()<bound:
                                 try:part=observer.recv(65536)
                                 except socket.timeout:continue
-                                except ConnectionResetError:
-                                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-reset');break
+                                except (ConnectionResetError, ConnectionAbortedError) as error:
+                                    row.update(peer_terminal_observed=True,peer_terminal_kind='connection-aborted' if isinstance(error,ConnectionAbortedError) else 'connection-reset');break
                                 if not part:
                                     row.update(peer_terminal_observed=True,peer_terminal_kind='eof');break
                                 wire+=part;assert len(wire)<65536
