@@ -7,7 +7,7 @@ The AWS SDK patch update in #1233 changes `go.mod`/`go.sum`, which are explicit
 inputs to the clipboard, secure-input and five update fixtures. Preserve those
 bindings and re-observe the actual Go contracts rather than removing the
 dependency files from their digests. The immutable production source is
-`1add155a1ab213cbe8bb42a24254f972cda0ffc1`, retained on
+`1add155a1ab213cbe8bb42a24254f972cda0ffc1`, retained by tag
 `oracle/aws-dependencies-20261003`.
 
 `scripts/rust-port/refresh-update-fixtures.py` builds real Go binaries with
@@ -173,7 +173,7 @@ and requests for rejection and one of each for run allowance/no policy.
 Rust replays the same references, rule actions and side-effect counts.
 
 The immutable Go source is `34fb21a0601d6f74e4908639d9b339125a8cf230`, retained
-on `oracle/api-policy-20261003`. The fixture records Go 1.26.6, production
+by tag `oracle/api-entry-policy-20261003`. The fixture records Go 1.26.6, production
 source digests and generator digests. The HTTP, HTTPS and template corpora
 are regenerated against this source; their existing behavioral vectors stay
 unchanged. `make mcp-execute-api-policy-differential` checks freshness and the
