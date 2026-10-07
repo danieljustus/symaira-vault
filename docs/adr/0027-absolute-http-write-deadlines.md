@@ -89,8 +89,10 @@ check and rebuilds the CLI. It again sends the late ping and resumes the entire
 25,613,736-byte chunk after the fast drain. Independent expiry assertions reject
 that run. Restore the exact source bytes and rebuild before publication.
 
-The owning MCP suite passes 229 tests locally with zero ignored tests, alongside
-strict Clippy and formatting. Required Linux/macOS-arm64/Windows gates execute
+The initial slice recorded 229 passing local MCP tests with zero ignored tests,
+alongside strict Clippy and formatting. The integrated suite records 240 local
+Unix tests with zero ignored; current native gates require 240 on Unix and 238
+on Windows. Required Linux/macOS-arm64/Windows gates execute
 the same nonzero live corpus and actual CLI assembly. Inventory candidate and
 immutable sources, embedded assets, identity files, encrypted fixtures and
 executables; verify unchanged source/binary hashes and clean publication state.
@@ -98,6 +100,10 @@ Scan complete captured output for fixture secret and token canaries. Fixture
 server disposal remains distinct from graceful shutdown acceptance.
 
 Preserve the existing HTTP/OAuth/HEAD/Origin/framing/input-deadline/TLS/configured-
-input corpora at the clean publication candidate. #1249 and HTTP-001..004 remain
-in progress until complete applicable-platform acceptance, including the shared
-broker TLS test currently failing on native macOS.
+input corpora at the clean publication candidate. The initial native macOS run
+also failed the shared broker TLS test. At the integrated `a9f10688` candidate,
+the full owning MCP suite, including that test, and the actual Darwin HTTP,
+TLS/mTLS, framing, progressing-read, API and broker corpora pass. Preserve the
+earlier failure as development evidence, not current acceptance status. #1249
+and HTTP-001..004 remain in progress until complete applicable-platform CI
+acceptance on the final integrated candidate.

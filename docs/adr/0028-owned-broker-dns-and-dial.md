@@ -17,16 +17,25 @@ Resolve both address families before admission, disable caching and reject an
 empty set or more than 32 results. Reject any private/local or mapped private
 answer unless the explicit library fixture/application option allows it. Reuse
 the API's local-hostname boundary for localhost and .localhost/.local names.
-Literal addresses take the same validation path. Pin the complete admitted
-answer set for later connections; do not resolve again after credential reads.
+Literal addresses take the same validation path. Credential forwarding pins
+its complete admitted answer set before credential reads; passthrough dialing
+uses the checked CONNECT answer set. Do not resolve again after credential reads.
 The optional DNS server is an explicit in-process fixture seam, selected by the
 consuming `EgressBroker::with_dns_server` builder. Keep the existing public
 `EgressOptions` fields unchanged so downstream struct literals remain source
 compatible. The shipped CLI supplies no DNS override flag or ambient resolver
 override.
 
-CONNECT's checked address attempts also run on an owned async runtime, with one
-ten-second allowance across the complete dial sequence and the same stop
+CONNECT validates and resolves its authority before choosing passthrough or
+interception. This admission lookup does not open an upstream TCP connection.
+Only passthrough uses those checked addresses for the actual tunnel socket;
+never dial and discard a reachability-only probe in the interception branch.
+Interception admits the inner authority, template, method and endpoint first,
+then resolves and pins that request's upstream before reading credentials.
+The initial CONNECT answer set is not reused as the inner request's dial set.
+
+Passthrough's checked address attempts also run on an owned async runtime, with
+one ten-second allowance across the complete dial sequence and the same stop
 signal. Successful Tokio sockets are converted to standard sockets and reset
 to blocking mode before the existing platform cancellation adapter configures
 them. This preserves the accepted macOS socket-mode decision. DNS and dial
@@ -54,9 +63,12 @@ shared cancellation context with an unrelated default context in the real DNS
 admission helper. The worker remains until DNS expiry and fails the independent
 one-second join assertion. Restore exact original source bytes; the actual
 regression passes again. Existing complete-answer, TLS, socket, encrypted API
-and HTTP deadline regressions remain required. Local MCP has 236 passing tests
-with zero ignored; Windows has two existing Unix-only omissions, so required
-native counts are 234/236. Do not relax the exact counts or ignore the new case.
+and HTTP deadline regressions remain required. The initial slice recorded 236
+passing local MCP tests with zero ignored and native counts of 234 on Windows
+and 236 on Unix. The integrated suite records 240 local Unix tests with zero
+ignored; current native gates require 238 on Windows and 240 on Unix, retaining
+the two existing Unix-only omissions. Do not relax the exact counts or ignore
+the new case.
 
 Preserve actual immutable Go/Rust broker (19 runtime/14 CLI), API (eight cases)
 and CONNECT (three cases) corpora, plus every earlier live HTTP/OAuth/HEAD/
