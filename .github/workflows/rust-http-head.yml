@@ -121,7 +121,7 @@ jobs:
           http=json.loads(Path('target/native-head-http-process.json').read_bytes())
           oauth=json.loads(Path('target/native-head-http-oauth.json').read_bytes())
           assert all(r['passed'] and r['candidate_worktree_clean'] and not r['differences'] for r in [http,oauth])
-          assert len(http['go'])==len(http['rust'])==51 and len(http['declared_differences'])==4
+          assert len(http['go'])==len(http['rust'])==65 and len(http['declared_differences'])==4
           assert len(oauth['semantic_controls'])==26
           for implementation in ['go','rust']:
               assert len(oauth[implementation]['rows'])==35 and len(oauth[implementation]['ttl_rows'])==11

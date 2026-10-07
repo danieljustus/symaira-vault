@@ -127,7 +127,7 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('target/native-http-process.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and not r['differences']
-          assert len(r['go'])==len(r['rust'])==51 and len(r['declared_differences'])==4
+          assert len(r['go'])==len(r['rust'])==65 and len(r['declared_differences'])==4
           PY
       - name: Retain complete actual native observations
         if: always()

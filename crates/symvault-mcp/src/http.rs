@@ -1945,6 +1945,8 @@ fn write_http_response(
     keep_alive: bool,
     head: bool,
 ) -> Result<(), std::io::Error> {
+    // Parsed HEAD applies to every route, including admission and parser errors.
+    let head = head || stream.head_response;
     let reason = match response.status {
         200 => "OK",
         401 => "Unauthorized",

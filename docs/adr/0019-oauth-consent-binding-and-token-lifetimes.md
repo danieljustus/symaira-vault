@@ -91,7 +91,8 @@ lifetimes per implementation do not prove graceful shutdown. Inventory sources,
 driver/helper, embedded assets and executable hashes throughout a clean run.
 
 The required Linux/macOS/Windows workflow runs the same real corpus, owning
-runtime/config tests and the original 51-case HTTP corpus. Native gates, HEAD,
+runtime/config tests and the current 65-case HTTP corpus, including the original
+51 cases and accepted-main admission regressions. Native gates, HEAD,
 the full hostile origin/Host/framing/slow-peer matrix, complete token storage
 and expiration boundaries, TLS/mTLS acceptance and GUI/TTY/device consent remain
 separate required work. HTTP-001..004 and #1249 stay open until full acceptance.

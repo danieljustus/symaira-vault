@@ -19,8 +19,9 @@ challenge and scopes, then return without requesting human consent, checking
 a passphrase, allocating a browser flow ticket or issuing an authorization
 code. HEAD is an inspection request. Allowing probes to start authorization
 would exhaust the bounded ticket store and introduce consent side effects.
-An owning regression makes both consent and passphrase callbacks panic if
-invoked and checks that ticket/code maps remain empty.
+An owning regression exercises the HTTP method dispatcher, makes both consent
+and passphrase callbacks panic if invoked, and checks that ticket/code maps
+remain empty. Preserve the original HEAD flag before GET route normalization.
 
 For these body-free authorization HTML responses, omit Content-Length and
 Transfer-Encoding, as the actual Go server does. No representation was
@@ -66,7 +67,8 @@ Validate real client entropy/time separately and scan unrelated responses and
 process output for fixture secrets/tokens; never make issuers deterministic.
 
 The required Linux/macOS/Windows workflow runs the same HEAD corpus, owning
-tests, and the unchanged 51-case HTTP and 46-case OAuth corpora. Store all CI
+tests, and the current 65-case HTTP and 46-case OAuth corpora. The HTTP corpus
+retains the original 51 cases plus accepted-main admission regressions. Store all CI
 receipts under ignored `target/` so retained observations cannot dirty the
 source checkout between corpora. Forced fixture disposal is not graceful
 shutdown proof. This slice does not complete TLS/mTLS, the entire hostile

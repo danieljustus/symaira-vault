@@ -111,7 +111,8 @@ pub(super) fn handle(
     let (path, query) = path_and_query
         .split_once('?')
         .map_or((path_and_query, ""), |(path, query)| (path, query));
-    let method = if method == "HEAD"
+    let head_only = method == "HEAD";
+    let method = if head_only
         && matches!(
             path,
             "/.well-known/oauth-authorization-server" | "/mcp/oauth/authorize"
@@ -157,7 +158,7 @@ pub(super) fn handle(
     match (path, method) {
         ("/oauth/register", "POST") => Some(register(state, content_type, body, now)),
         ("/mcp/oauth/authorize", "GET" | "HEAD") => {
-            Some(authorize_request(state, query, now, method == "HEAD"))
+            Some(authorize_request(state, query, now, head_only))
         }
         ("/mcp/oauth/authorize/confirm", "POST") => Some(confirm(state, content_type, body, now)),
         ("/mcp/oauth/token", "POST") => Some(token(state, body, now)),
@@ -1026,7 +1027,17 @@ mod tests {
             Box::new(|_| panic!("HEAD must not verify a passphrase")),
         );
         assert!(matches!(
-            authorize_request(&head_state, &authorization, OffsetDateTime::now_utc(), true),
+            handle(
+                &head_state,
+                "HEAD",
+                &format!("/mcp/oauth/authorize?{authorization}"),
+                "",
+                "",
+                "localhost",
+                "",
+                "127.0.0.1:8787".parse().unwrap(),
+                false,
+            ).unwrap(),
             OAuthResponse::Http(response) if response.status == 200 && response.body.is_empty()
         ));
         assert!(head_state.browser_requests.lock().unwrap().is_empty());
