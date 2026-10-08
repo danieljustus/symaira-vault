@@ -27,6 +27,8 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             winsock.ET.SubElement(system, winsock.NAMESPACE + 'Execution', ProcessID='101')
             winsock.ET.SubElement(system, winsock.NAMESPACE + 'EventID').text = str(index)
             winsock.ET.SubElement(system, winsock.NAMESPACE + 'Version').text = canary
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'TimeCreated',
+                                   SystemTime='2026-10-08T07:14:00.1234567')
             data = winsock.ET.SubElement(event, winsock.NAMESPACE + 'EventData')
             winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name='Process').text = '0xabcdef'
             winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name='Payload').text = canary
@@ -42,7 +44,15 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         for forbidden in (canary, '0xabcdef', '"pid":', '"time":'):
             self.assertNotIn(forbidden, encoded)
         self.assertEqual(report['descriptors'][0], dict(implementation='go', pid_sources=['execution'],
-                                                      descriptor={'EventID': 0}, fields=['Process']))
+                                                      descriptor={'EventID': 0}, fields=['Process'],
+                                                      timestamp_shape='####-##-##T##:##:##.#######'))
+        self.assertNotIn('2026', encoded)
+        for stamp in (canary, '0xabcdef', '1' * 65, '\u2028'):
+            private_time = copy.deepcopy(root[0])
+            next(private_time.iter(winsock.NAMESPACE + 'TimeCreated')).set('SystemTime', stamp)
+            private_report = describe(private_time)
+            self.assertEqual(private_report['descriptors'][0]['timestamp_shape'], 'withheld')
+            self.assertNotIn(stamp, contract.json.dumps(private_report))
         unknown = copy.deepcopy(root[0])
         next(unknown.iter(winsock.NAMESPACE + 'Execution')).set('ProcessID', '999')
         self.assertEqual(describe(unknown)['descriptors'], [])

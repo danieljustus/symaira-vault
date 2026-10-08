@@ -168,8 +168,14 @@ def describe_schema(trace, receipt) -> dict:
                     continue
                 if 0 <= value < 1 << bits:
                     descriptor[key] = value
+            created = system.find(NAMESPACE + 'TimeCreated')
+            stamp = '' if created is None else created.get('SystemTime', '')
+            # Reveal formatting only, never timestamp values or acceptance evidence.
+            stamp_shape = 'missing' if created is None else 'withheld'
+            if stamp and len(stamp) <= 64 and re.fullmatch(r'[0-9:TZz+ .,/\-]+', stamp):
+                stamp_shape = re.sub(r'[0-9]', '#', stamp)
             row = dict(implementation=name, pid_sources=sorted(sources), descriptor=descriptor,
-                       fields=sorted(fields))
+                       fields=sorted(fields), timestamp_shape=stamp_shape)
             encoded = json.dumps(row, sort_keys=True)
             if encoded not in seen:
                 if len(descriptors) == 64:
