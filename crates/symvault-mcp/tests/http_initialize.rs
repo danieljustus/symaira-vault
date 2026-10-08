@@ -122,7 +122,7 @@ fn go_authenticated_http_session_matches_rust_adapter() {
     );
     assert_eq!(
         fixture.oracle.generator_digest,
-        "c0a20861accca99ad2af2b97338571c4e30ba861a50d69cf9f8320bd8abb4717"
+        "8e4466bf93b2cdc908c08ba95d8bb03c42c8fe449fc8c177b3f0470289b71ed3"
     );
     assert_eq!(fixture.cases.len(), 27);
 
