@@ -20,7 +20,8 @@ GO_KEYRING_FIXTURE_TARGETS := \
 	policy-fixtures-generate policy-fixtures-check \
 	mcp-init-fixtures-generate mcp-init-fixtures-check \
 	mcp-stdio-fixtures-generate mcp-stdio-fixtures-check \
-	mcp-http-init-fixtures-generate mcp-http-init-fixtures-check mcp-http-init-fixtures-run mcp-render-differential mcp-call-fixtures-check \
+	mcp-http-init-fixtures-generate mcp-http-init-fixtures-check \
+	mcp-http-init-fixtures-run mcp-http-init-differential mcp-render-differential mcp-call-fixtures-check \
 	rust-007-fixtures-generate rust-007-fixtures-check
 $(GO_KEYRING_FIXTURE_TARGETS): export SYMVAULT_TEST_KEYRING := memory
 # Keep harness binary paths aligned with Cargo's externally provided target dir.
@@ -450,7 +451,7 @@ mcp-http-init-fixtures-run:
 	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check --output $(PORT_MCP_HTTP_INIT_FIXTURE)
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
+	SYMVAULT_TEST_KEYRING=memory GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
 	$(CARGO) test -p symvault-mcp --lib http::tests --locked
 	$(CARGO) test -p symvault-mcp --test http_initialize --locked
 

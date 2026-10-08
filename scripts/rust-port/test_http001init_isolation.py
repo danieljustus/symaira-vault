@@ -32,6 +32,7 @@ def clean_env(tmpdir, log_path, inherited=None):
         "SYMVAULT_TEST_KEYRING",
         "SYMVAULT_PASSPHRASE",
         "SYMVAULT_ALLOW_ENV_PASSPHRASE",
+        "MAKEFILES",
         "MAKEFLAGS",
         "MAKEOVERRIDES",
         "MFLAGS",
@@ -158,6 +159,7 @@ def main():
             "SYMVAULT_TEST_KEYRING",
             "SYMVAULT_PASSPHRASE",
             "SYMVAULT_ALLOW_ENV_PASSPHRASE",
+            "MAKEFILES",
             "MAKEFLAGS",
             "MAKEOVERRIDES",
             "MFLAGS",
@@ -171,20 +173,20 @@ def main():
             GOTOOLCHAIN=GO_TOOLCHAIN,
             TMPDIR=str(compile_tmp),
         )
-        go_version = subprocess.check_output(
-            ["go", "version"], cwd=ROOT, env=compile_env, text=True, timeout=60
-        ).strip()
-        if not go_version.startswith("go version go1.26.6 "):
-            raise AssertionError(f"HTTP-init probe requires pinned Go 1.26.6, got {go_version!r}")
-        module_dir = subprocess.check_output(
-            ["go", "list", "-f", "{{.Dir}}", KEYRING_IMPORT],
+        toolchain_info = subprocess.check_output(
+            ["go", "env", "GOVERSION", "GOMODCACHE", "GOROOT"],
             cwd=ROOT,
             env=compile_env,
             text=True,
             timeout=60,
-        ).strip()
-        module_cache = subprocess.check_output(
-            ["go", "env", "GOMODCACHE"],
+        ).splitlines()
+        if len(toolchain_info) != 3:
+            raise AssertionError(f"unexpected Go toolchain metadata: {toolchain_info!r}")
+        go_version, module_cache, tool_root = toolchain_info
+        if go_version != GO_TOOLCHAIN:
+            raise AssertionError(f"HTTP-init probe requires pinned {GO_TOOLCHAIN}, got {go_version!r}")
+        module_dir = subprocess.check_output(
+            ["go", "list", "-f", "{{.Dir}}", KEYRING_IMPORT],
             cwd=ROOT,
             env=compile_env,
             text=True,
@@ -232,15 +234,10 @@ def main():
                 "negative control did not observe the four expected init-time OS-keyring calls "
                 f"(observed {len(control_pids)}, exit {control_rc})\n{control_output}"
             )
+        if control_rc != 0:
+            raise AssertionError(f"raw negative-control --check failed unexpectedly (exit {control_rc}): {control_output}")
         assert_helpers_exited(control_pids)
 
-        tool_root = subprocess.check_output(
-            ["go", "env", "GOROOT"],
-            cwd=ROOT,
-            env=compile_env,
-            text=True,
-            timeout=60,
-        ).strip()
         go_binary = Path(tool_root) / "bin" / "go"
         if not go_binary.is_file():
             raise AssertionError(f"selected Go toolchain executable is missing: {go_binary}")
@@ -270,6 +267,7 @@ def main():
         leaked = [
             key
             for key in (
+                "MAKEFILES",
                 "MAKEFLAGS",
                 "MAKEOVERRIDES",
                 "MFLAGS",
@@ -300,29 +298,29 @@ def main():
 
         unsafe_makefile = tmpdir / "missing-export.mk"
         unsafe_makefile.write_text(
-            "GO ?= go\n"
             "PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json\n"
             ".PHONY: unsafe\n"
             "unsafe:\n"
-            "\tGOTOOLCHAIN=go1.26.6 $(GO) run ./scripts/rust-port/cmd/http001initgen --check --output $(PORT_MCP_HTTP_INIT_FIXTURE)\n"
+            "\t@printf '%s\\n' \"$${SYMVAULT_TEST_KEYRING-unset}\" >> \"$$SYMVAULT_KEYRING_BACKEND_LOG\"\n"
+            f"\t{shlex.quote(str(binary))} --check --output $(PORT_MCP_HTTP_INIT_FIXTURE); rc=$$?; printf 'generator_rc=%s\\n' \"$$rc\" >> \"$$SYMVAULT_KEYRING_BACKEND_LOG\"; exit $$rc\n"
             "\t@test ! -s \"$$SYMVAULT_KEYRING_HELPER_LOG\"\n"
         )
         log_path.unlink(missing_ok=True)
         backend_log.unlink(missing_ok=True)
         unsafe_rc, unsafe_output = run_bounded(
-            ["make", "--no-print-directory", "-f", str(unsafe_makefile), "unsafe", f"GO={wrapper}"],
+            ["make", "--no-print-directory", "-f", str(unsafe_makefile), "unsafe"],
             make_env,
-            timeout=180,
+            timeout=60,
         )
         unsafe_pids = helper_pids(log_path)
-        if unsafe_rc == 0 or not unsafe_pids:
+        if unsafe_rc == 0 or len(unsafe_pids) != 4:
             raise AssertionError(
-                "missing-export Makefile did not fail closed despite hostile inherited MAKEFLAGS/MAKEOVERRIDES "
-                f"(exit {unsafe_rc})\n{unsafe_output}"
+                "missing-export Makefile did not fail with four helper calls despite hostile inherited "
+                f"MAKEFLAGS/MAKEOVERRIDES (exit {unsafe_rc}, helper calls {len(unsafe_pids)})\n{unsafe_output}"
             )
         unsafe_backends = backend_log.read_text().splitlines() if backend_log.exists() else []
-        if unsafe_backends != ["unset"]:
-            raise AssertionError(f"missing-export control inherited backend unexpectedly: {unsafe_backends!r}")
+        if unsafe_backends != ["unset", "generator_rc=0"]:
+            raise AssertionError(f"missing-export control backend/command result was unexpected: {unsafe_backends!r}")
         assert_helpers_exited(unsafe_pids)
         if FIXTURE.read_bytes() != fixture_before:
             raise AssertionError("HTTP initialize fixture bytes changed during isolation controls")

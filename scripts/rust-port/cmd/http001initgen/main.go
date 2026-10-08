@@ -278,8 +278,9 @@ func main() {
 	vaultDir, err := os.MkdirTemp("", "http001-init-oracle-")
 	check(err)
 	defer func() { _ = os.RemoveAll(vaultDir) }()
-	// HOME isolation does not disable an OS credential service. Select the
-	// existing memory backend explicitly before creating any server resources.
+	// In-process selection is not package-init isolation: imported packages may
+	// already have selected a backend. Make targets set memory before `go run`;
+	// this setting protects runtime lookups that happen later.
 	oldEnvironment := make(map[string]*string)
 	for key, value := range map[string]string{
 		"HOME":                  filepath.Join(vaultDir, "home"),
@@ -512,7 +513,7 @@ func main() {
 		current, readErr := os.ReadFile(*outputPath)
 		check(readErr)
 		if string(current) != string(encoded) {
-			check(fmt.Errorf("HTTP-001 fixture drift: regenerate with go run ./scripts/rust-port/cmd/http001initgen --output %s", *outputPath))
+			check(fmt.Errorf("HTTP-001 fixture drift: regenerate with make mcp-http-init-fixtures-generate (set PORT_MCP_HTTP_INIT_FIXTURE for a custom output)"))
 		}
 		return
 	}

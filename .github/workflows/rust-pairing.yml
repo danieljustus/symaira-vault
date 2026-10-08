@@ -12,6 +12,10 @@ on:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
       - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/test_http001init_isolation.py'
+      - 'scripts/rust-port/cmd/http001initgen/**'
+      - 'testdata/port/mcp/http-initialize.json'
+      - 'crates/symvault-mcp/tests/http_initialize.rs'
       - 'scripts/rust-port/cmd/nativekeyringinterop/**'
       - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
@@ -47,6 +51,10 @@ on:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
       - 'scripts/rust-port/native_closeout.py'
+      - 'scripts/rust-port/test_http001init_isolation.py'
+      - 'scripts/rust-port/cmd/http001initgen/**'
+      - 'testdata/port/mcp/http-initialize.json'
+      - 'crates/symvault-mcp/tests/http_initialize.rs'
       - 'scripts/rust-port/cmd/nativekeyringinterop/**'
       - 'scripts/rust-port/cmd/nativekeyringprobe/**'
       - 'scripts/rust-port/cmd/configprofilegen/**'
@@ -258,6 +266,11 @@ jobs:
         run: |
           set -euo pipefail
           make device-list-differential
+
+      - name: Verify HTTP-001 generator keyring isolation
+        if: runner.os == 'macOS'
+        shell: bash
+        run: PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=go1.26.6 python3 scripts/rust-port/test_http001init_isolation.py
 
       - name: Native CLI and session technical gates
         shell: bash
