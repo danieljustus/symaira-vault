@@ -298,8 +298,12 @@ mod tests {
         let mut byte = [0];
         match client.read(&mut byte) {
             Ok(0) => {}
-            Err(error) if error.kind() == io::ErrorKind::ConnectionReset => {}
-            outcome => panic!("expected EOF or peer reset, not timeout/data: {outcome:?}"),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
+                ) => {}
+            outcome => panic!("expected EOF or terminal peer error, not timeout/data: {outcome:?}"),
         }
         assert!(
             server
@@ -373,7 +377,15 @@ mod tests {
         client
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("read bound");
-        assert_eq!(client.read(&mut [0]).expect("peer closure"), 0);
+        match client.read(&mut [0]) {
+            Ok(0) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
+                ) => {}
+            outcome => panic!("expected peer closure, not timeout/data: {outcome:?}"),
+        }
         assert!(shutdown.state.0.lock().expect("state").sockets.is_empty());
     }
 

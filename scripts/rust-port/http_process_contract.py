@@ -81,12 +81,12 @@ def exchange(port, data, retained, timeout=15):
         try:
             try:
                 connection.sendall(data)
-            except (ConnectionResetError, BrokenPipeError):
+            except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
                 send_reset = True
             while True:
                 try:
                     chunk = connection.recv(65536)
-                except ConnectionResetError:
+                except (ConnectionResetError, ConnectionAbortedError):
                     break
                 if not chunk:
                     break

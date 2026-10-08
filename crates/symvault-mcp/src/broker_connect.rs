@@ -3,7 +3,7 @@
 use crate::http::{HttpShutdown, shutdown::ConnectionGuard};
 use std::{
     io::{self, Read, Write},
-    net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -193,7 +193,9 @@ fn handle_client(
         write_proxy_error(&mut client, 400, "invalid proxy request")?;
         return Ok(());
     }
-    let Some((host, addresses)) = resolve_connect_target(parts[1], allow_private) else {
+    let Some((host, addresses)) =
+        resolve_connect_target(parts[1], allow_private, cancellation, None)
+    else {
         write_proxy_error(&mut client, 403, "CONNECT target is blocked")?;
         return Ok(());
     };
@@ -209,10 +211,7 @@ fn handle_client(
         write_proxy_error(&mut client, status, message)?;
         return Ok(());
     }
-    let Some(upstream) = addresses
-        .iter()
-        .find_map(|address| TcpStream::connect_timeout(address, Duration::from_secs(10)).ok())
-    else {
+    let Some(upstream) = connect_checked_addresses(&addresses, cancellation) else {
         write_proxy_error(&mut client, 502, "cannot reach upstream")?;
         return Ok(());
     };
@@ -246,6 +245,8 @@ fn handle_client(
 pub(super) fn resolve_connect_target(
     authority: &str,
     allow_private: bool,
+    cancellation: &HttpShutdown,
+    dns_server: Option<SocketAddr>,
 ) -> Option<(String, Vec<SocketAddr>)> {
     if authority.is_empty()
         || authority.bytes().any(|byte| {
@@ -266,24 +267,68 @@ pub(super) fn resolve_connect_target(
         }
         (host, port)
     };
-    if raw_host.is_empty() || port.parse::<u16>().is_err() {
+    if raw_host.is_empty() {
         return None;
     }
+    let port = port.parse::<u16>().ok()?;
     let host = canonical_host(raw_host);
     if host.is_empty() || host.contains('%') {
         return None;
     }
-    let addresses = authority.to_socket_addrs().ok()?.collect::<Vec<_>>();
-    if addresses.is_empty()
-        || (!allow_private
-            && (matches!(host.as_str(), "localhost" | "localhost.localdomain")
-                || addresses
-                    .iter()
-                    .any(|address| private_or_local(address.ip()))))
-    {
-        return None;
-    }
+    let addresses = resolve_destination(&host, port, allow_private, cancellation, dns_server)?;
     Some((host, addresses))
+}
+
+pub(super) fn resolve_destination(
+    host: &str,
+    port: u16,
+    allow_private: bool,
+    cancellation: &HttpShutdown,
+    dns_server: Option<SocketAddr>,
+) -> Option<Vec<SocketAddr>> {
+    let context = cancellation
+        .request_context()
+        .with_timeout(Duration::from_secs(10));
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?
+        .block_on(super::resolve_host_addresses(
+            host,
+            port,
+            allow_private,
+            &context,
+            dns_server,
+        ))
+        .ok()
+}
+
+pub(super) fn connect_checked_addresses(
+    addresses: &[SocketAddr],
+    cancellation: &HttpShutdown,
+) -> Option<TcpStream> {
+    let context = cancellation
+        .request_context()
+        .with_timeout(Duration::from_secs(10));
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    let stream = runtime
+        .block_on(context.wait(async {
+            for address in addresses {
+                if let Ok(stream) = tokio::net::TcpStream::connect(address).await {
+                    return Ok(stream);
+                }
+            }
+            Err("cannot reach upstream".to_owned())
+        }))
+        .ok()?;
+    let stream = stream.into_std().ok()?;
+    // Tokio sockets remain nonblocking on conversion, including macOS. The
+    // existing transport adapter selects its own cancellable platform mode.
+    stream.set_nonblocking(false).ok()?;
+    Some(stream)
 }
 
 pub(super) fn canonical_host(value: &str) -> String {
@@ -460,9 +505,12 @@ mod tests {
 
     #[test]
     fn private_and_unlisted_targets_do_not_connect_upstream() {
-        assert!(resolve_connect_target("127.0.0.1:443", false).is_none());
-        assert!(resolve_connect_target("[::ffff:127.0.0.1]:443", false).is_none());
-        assert!(resolve_connect_target("localhost:443", false).is_none());
+        let cancellation = HttpShutdown::default();
+        assert!(resolve_connect_target("127.0.0.1:443", false, &cancellation, None).is_none());
+        assert!(
+            resolve_connect_target("[::ffff:127.0.0.1]:443", false, &cancellation, None).is_none()
+        );
+        assert!(resolve_connect_target("localhost:443", false, &cancellation, None).is_none());
         assert!(host_matches("example.com", "api.example.com"));
         assert!(!host_matches("example.com", "notexample.com"));
         assert!(!host_matches("example.com", "example.com.evil"));

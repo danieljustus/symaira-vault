@@ -220,6 +220,22 @@ pub fn run(
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
         let oauth_agent_name = oauth_agent(&config).to_owned();
+        let oauth = config.mcp.as_ref().and_then(|mcp| mcp.oauth.as_ref());
+        let token_ttls = oauth.map_or_else(symvault_mcp::http::OAuthTokenTtls::default, |oauth| {
+            symvault_mcp::http::OAuthTokenTtls {
+                access_token_ttl: oauth.access_token_ttl,
+                refresh_token_ttl: oauth.refresh_token_ttl,
+            }
+        });
+        let mut http_options = symvault_mcp::http::HttpServerOptions {
+            token_ttls,
+            ..symvault_mcp::http::HttpServerOptions::default()
+        };
+        if let Some(mcp) = config.mcp.as_ref() {
+            http_options.read_header_timeout = mcp.read_header_timeout;
+            http_options.read_timeout = mcp.read_timeout;
+            http_options.write_timeout = mcp.write_timeout;
+        }
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();
         let handler_for_agent = move |agent: &str| {
@@ -258,27 +274,17 @@ pub fn run(
                 })
             })
         };
-        let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval(
-                listener,
-                registry_path,
-                handler_for_agent,
-                oauth_agent_name,
-                consent,
-                verify_passphrase,
-                tls,
-                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
-            ),
-            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval(
-                listener,
-                registry_path,
-                handler_for_agent,
-                oauth_agent_name,
-                consent,
-                verify_passphrase,
-                symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
-            ),
-        };
+        let result = symvault_mcp::http::serve_with_oauth_and_approval_options(
+            listener,
+            registry_path,
+            handler_for_agent,
+            oauth_agent_name,
+            consent,
+            verify_passphrase,
+            tls,
+            symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+            http_options,
+        );
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         #[cfg(unix)]

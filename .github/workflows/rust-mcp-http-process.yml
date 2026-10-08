@@ -41,6 +41,7 @@ jobs:
       GOTOOLCHAIN: go1.26.6
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
+      RUST_TEST_THREADS: '1'
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -81,7 +82,7 @@ jobs:
           from pathlib import Path
           log=Path('target/native-http-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',log)
-          assert results and sum(int(n) for n,_ in results)==(236 if os.environ['RUNNER_OS']=='Windows' else 238)
+          assert results and sum(int(n) for n,_ in results)==(238 if os.environ['RUNNER_OS']=='Windows' else 240)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'test http::tests::oversized_body_errors_follow_admission_without_creating_sessions ... ok' in log
           assert 'test http::tests::nonmcp_oversized_prefixes_preserve_accepted_main_wire_response ... ok' in log

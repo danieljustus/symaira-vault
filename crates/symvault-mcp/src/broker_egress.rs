@@ -16,7 +16,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::{self, Read, Write},
-    net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
+    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     path::Path,
     sync::{Arc, Mutex, mpsc},
     thread,
@@ -70,6 +70,7 @@ pub struct EgressBroker<'a> {
     templates: BTreeMap<String, String>,
     ca: CertifiedIssuer<'static, KeyPair>,
     cancellation: HttpShutdown,
+    dns_server: Option<SocketAddr>,
 }
 
 impl<'a> EgressBroker<'a> {
@@ -107,7 +108,16 @@ impl<'a> EgressBroker<'a> {
             templates,
             ca,
             cancellation: HttpShutdown::default(),
+            dns_server: None,
         })
+    }
+
+    /// Selects an explicit in-process DNS server for an application or fixture.
+    /// The shipped CLI keeps the default system DNS configuration.
+    #[must_use]
+    pub fn with_dns_server(mut self, server: SocketAddr) -> Self {
+        self.dns_server = Some(server);
+        self
     }
 
     #[must_use]
@@ -266,9 +276,12 @@ impl<'a> EgressBroker<'a> {
         if request.method != "CONNECT" {
             return self.forward(&mut transport, request, None);
         }
-        let Some((host, addresses)) =
-            connect::resolve_connect_target(&request.target, self.options.allow_private)
-        else {
+        let Some((host, addresses)) = connect::resolve_connect_target(
+            &request.target,
+            self.options.allow_private,
+            &self.cancellation,
+            self.dns_server,
+        ) else {
             return write_error(&mut transport, 403, "CONNECT target is blocked");
         };
         if !request.body.is_empty() {
@@ -280,9 +293,9 @@ impl<'a> EgressBroker<'a> {
             .iter()
             .any(|p| connect::host_matches(p, &host))
         {
-            let Some(upstream) = addresses
-                .iter()
-                .find_map(|a| TcpStream::connect_timeout(a, Duration::from_secs(10)).ok())
+            // Checked dialing owns the complete dial sequence with cancellation;
+            // the admitted socket is used for the tunnel, never probed and dropped.
+            let Some(upstream) = connect::connect_checked_addresses(&addresses, &self.cancellation)
             else {
                 return write_error(&mut transport, 502, "cannot reach upstream");
             };
@@ -443,7 +456,12 @@ impl<'a> EgressBroker<'a> {
                 return write_error(transport, 403, "endpoint not allowed by template");
             }
         }
-        let Some(addresses) = checked_addresses(&url, self.options.allow_private) else {
+        let Some(addresses) = checked_addresses(
+            &url,
+            self.options.allow_private,
+            &self.cancellation,
+            self.dns_server,
+        ) else {
             return write_error(transport, 403, "upstream target is blocked");
         };
         let mut known = Zeroizing::new(Vec::<String>::new());
@@ -721,26 +739,18 @@ fn validate_definition(definition: &super::ApiTemplateDefinition) -> Result<(), 
     Ok(())
 }
 
-fn checked_addresses(url: &Url, allow_private: bool) -> Option<Vec<SocketAddr>> {
+fn checked_addresses(
+    url: &Url,
+    allow_private: bool,
+    cancellation: &HttpShutdown,
+    dns_server: Option<SocketAddr>,
+) -> Option<Vec<SocketAddr>> {
     let host = url
         .host_str()?
         .trim_start_matches('[')
         .trim_end_matches(']');
     let port = url.port_or_known_default()?;
-    let addresses = (host, port)
-        .to_socket_addrs()
-        .ok()?
-        .take(33)
-        .collect::<Vec<_>>();
-    if addresses.is_empty()
-        || addresses.len() > 32
-        || (!allow_private
-            && (matches!(host, "localhost" | "localhost.localdomain")
-                || addresses.iter().any(|a| connect::private_or_local(a.ip()))))
-    {
-        return None;
-    }
-    Some(addresses)
+    connect::resolve_destination(host, port, allow_private, cancellation, dns_server)
 }
 
 fn same_authority(a: &Url, b: &Url) -> bool {
