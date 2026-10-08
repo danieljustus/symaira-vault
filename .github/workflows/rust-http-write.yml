@@ -167,7 +167,7 @@ jobs:
           if ($traces.Count -ne 1) { throw 'Expected exactly one bounded Winsock ETL file' }
           tracerpt $traces[0].FullName -y -of XML -o target/native-winsock.xml -summary target/native-winsock-summary.txt
           if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW decode failed' }
-          python3 scripts/rust-port/http_winsock_metadata.py --trace target/native-winsock.xml --receipt target/native-http-write.json --summary target/native-winsock-summary.txt --output target/native-winsock-metadata.json
+          python3 scripts/rust-port/http_winsock_metadata.py --trace target/native-winsock.xml --receipt target/native-http-write.json --summary target/native-winsock-summary.txt --output target/native-winsock-metadata.json --describe-schema
           if ($LASTEXITCODE -ne 0) { throw 'Winsock metadata privacy filter failed' }
       - name: Retain complete actual native observations
         if: always()

@@ -99,15 +99,84 @@ def metadata(trace, receipt, summary) -> dict:
                 interpretation='Metadata only; missing/lost events or clock discontinuity invalidate timing conclusions.')
 
 
+def describe_schema(trace, receipt) -> dict:
+    """Bounded PID-matched descriptors only, never socket ownership/timing proof."""
+    pids = {name: receipt[name]['tcp-output']['server_process_id'] for name in ('go', 'rust')}
+    if len(set(pids.values())) != 2 or any(type(pid) is not int or not 0 < pid < 1 << 32 for pid in pids.values()):
+        raise ValueError('missing distinct output-server process IDs')
+    pid_fields = frozenset(('UserModePid', 'ProcessId', 'ProcessID', 'PID'))
+    descriptors, seen, truncated = [], set(), False
+    for _, event in ET.iterparse(trace, events=('end',)):
+        if event.tag != NAMESPACE + 'Event':
+            continue
+        system = event.find(NAMESPACE + 'System')
+        if system is None:
+            event.clear()
+            continue
+        provider = system.find(NAMESPACE + 'Provider')
+        if provider is None or not (provider.get('Name') == PROVIDER or provider.get('Guid', '').lower() == GUID):
+            event.clear()
+            continue
+        fields = {}
+        for section in ('EventData', 'UserData'):
+            payload = event.find(NAMESPACE + section)
+            if payload is not None:
+                for item in payload.iter():
+                    key = item.get('Name') if item.tag == NAMESPACE + 'Data' else item.tag.rsplit('}', 1)[-1]
+                    if key in FIELDS | pid_fields:
+                        fields.setdefault(key, []).append(item)
+        execution = system.find(NAMESPACE + 'Execution')
+        candidates = {'execution': None if execution is None else execution.get('ProcessID')}
+        candidates.update({key: items[0].text for key, items in fields.items()
+                           if key in pid_fields and len(items) == 1 and not len(items[0])})
+        matches = {}
+        for key, value in candidates.items():
+            try:
+                pid = number(value)
+            except ValueError:
+                continue
+            for name, expected in pids.items():
+                if pid == expected:
+                    matches.setdefault(name, []).append(key)
+        # Multiple contradictory PID fields are not grounds to publish a descriptor.
+        if len(matches) == 1:
+            name, sources = next(iter(matches.items()))
+            descriptor = {}
+            for key, bits in (('EventID', 16), ('Version', 8), ('Level', 8), ('Task', 16), ('Opcode', 8)):
+                try:
+                    value = number(system.findtext(NAMESPACE + key))
+                except ValueError:
+                    continue
+                if 0 <= value < 1 << bits:
+                    descriptor[key] = value
+            row = dict(implementation=name, pid_sources=sorted(sources), descriptor=descriptor,
+                       fields=sorted(fields))
+            encoded = json.dumps(row, sort_keys=True)
+            if encoded not in seen:
+                if len(descriptors) == 64:
+                    truncated = True
+                    break
+                seen.add(encoded)
+                descriptors.append(row)
+        event.clear()
+    return dict(provider=PROVIDER, descriptors=descriptors, truncated=truncated,
+                acceptance_evidence=False,
+                interpretation='PID-field matches only; no ownership, completeness or sender-write timing conclusion.')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--trace', type=Path, required=True)
     parser.add_argument('--receipt', type=Path, required=True)
     parser.add_argument('--summary', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--describe-schema', action='store_true')
     args = parser.parse_args()
+    receipt = json.loads(args.receipt.read_text(encoding='utf-8'))
+    if args.describe_schema:
+        print(json.dumps(describe_schema(args.trace, receipt), sort_keys=True), flush=True)
     raw_summary = args.summary.read_bytes()
-    report = metadata(args.trace, json.loads(args.receipt.read_text(encoding='utf-8')),
+    report = metadata(args.trace, receipt,
                       raw_summary.decode('utf-16' if raw_summary.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig'))
     with args.output.open('x', encoding='utf-8') as output:
         output.write(json.dumps(report, indent=2) + '\n')

@@ -14,6 +14,50 @@ import http_winsock_metadata as winsock
 
 
 class WriteDeadlineSocketErrors(unittest.TestCase):
+    def test_schema_diagnostic_cannot_publish_payloads_or_replace_acceptance(self):
+        # Synthetic filtering controls, not a Windows schema or native timing fixture.
+        receipt = {name: {'tcp-output': {'server_process_id': pid}}
+                   for name, pid in [('go', 101), ('rust', 102)]}
+        root = winsock.ET.Element('Events')
+        canary = 'synthetic-private-schema-canary'
+        for index in range(70):
+            event = winsock.ET.SubElement(root, winsock.NAMESPACE + 'Event')
+            system = winsock.ET.SubElement(event, winsock.NAMESPACE + 'System')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Provider', Name=winsock.PROVIDER)
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Execution', ProcessID='101')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'EventID').text = str(index)
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Version').text = canary
+            data = winsock.ET.SubElement(event, winsock.NAMESPACE + 'EventData')
+            winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name='Process').text = '0xabcdef'
+            winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name='Payload').text = canary
+            winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name=canary).text = canary
+            winsock.ET.SubElement(event, winsock.NAMESPACE + 'RenderingInfo').text = canary
+        def describe(tree=root):
+            return winsock.describe_schema(io.BytesIO(winsock.ET.tostring(tree)), receipt)
+        report = describe()
+        self.assertEqual(len(report['descriptors']), 64)
+        self.assertTrue(report['truncated'])
+        self.assertIs(report['acceptance_evidence'], False)
+        encoded = contract.json.dumps(report)
+        for forbidden in (canary, '0xabcdef', '"pid":', '"time":'):
+            self.assertNotIn(forbidden, encoded)
+        self.assertEqual(report['descriptors'][0], dict(implementation='go', pid_sources=['execution'],
+                                                      descriptor={'EventID': 0}, fields=['Process']))
+        unknown = copy.deepcopy(root[0])
+        next(unknown.iter(winsock.NAMESPACE + 'Execution')).set('ProcessID', '999')
+        self.assertEqual(describe(unknown)['descriptors'], [])
+        # Header matches do not become kernel ownership or successful export evidence.
+        with self.assertRaises(ValueError):
+            winsock.metadata(io.BytesIO(winsock.ET.tostring(root)), receipt, '')
+        user_data = winsock.ET.Element('Events')
+        event = copy.deepcopy(unknown)
+        user_data.append(event)
+        payload = winsock.ET.SubElement(event, winsock.NAMESPACE + 'UserData')
+        winsock.ET.SubElement(payload, '{synthetic-only}ProcessId').text = '102'
+        self.assertEqual(describe(user_data)['descriptors'][0]['implementation'], 'rust')
+        next(event.iter(winsock.NAMESPACE + 'Execution')).set('ProcessID', '101')
+        self.assertEqual(describe(user_data)['descriptors'], [])
+
     def test_winsock_export_is_scoped_numeric_and_fails_closed(self):
         # Synthetic privacy/identity checks only, not actual ETW or Windows evidence.
         canary = 'synthetic-authorization-canary'
@@ -68,8 +112,11 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             trace.write_bytes(winsock.ET.tostring(root))
             receipt_path.write_text(contract.json.dumps(receipt), encoding='utf-8')
             summary_path.write_text('Events Lost: 0\nBuffers Lost: 0\n' + canary, encoding='utf-16')
-            contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
-                              '--receipt', receipt_path, '--summary', summary_path, '--output', output])
+            diagnostic = contract.checked([contract.sys.executable, contract.Path(winsock.__file__), '--trace', trace,
+                                           '--receipt', receipt_path, '--summary', summary_path, '--output', output,
+                                           '--describe-schema'])
+            self.assertIs(contract.json.loads(diagnostic)['acceptance_evidence'], False)
+            self.assertNotIn(canary, diagnostic.decode('utf-8'))
             self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
             padded_cli = copy.deepcopy(root)
             for field in padded_cli.iter(winsock.NAMESPACE + 'Data'):
