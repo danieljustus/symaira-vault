@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the HTTP fixture executable selects memory before Go package init.
+"""Prove the HTTP fixture Make entrypoint selects memory before Go package init.
 
 The unsafe control uses a disposable go-keyring module copy selected by a
 temporary modfile; its absolute /usr/bin/security path is redirected to a
@@ -20,17 +20,29 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 KEYRING_IMPORT = "github.com/zalando/go-keyring"
 FIXTURE = ROOT / "testdata/port/mcp/http-initialize.json"
+GO_TOOLCHAIN = "go1.26.6"
 
 
-def clean_env(tmpdir, log_path):
-    env = os.environ.copy()
-    for key in ("CI", "GITHUB_ACTIONS", "HEADLESS", "SYMVAULT_TEST_KEYRING"):
+def clean_env(tmpdir, log_path, inherited=None):
+    env = dict(os.environ if inherited is None else inherited)
+    for key in (
+        "CI",
+        "GITHUB_ACTIONS",
+        "HEADLESS",
+        "SYMVAULT_TEST_KEYRING",
+        "SYMVAULT_PASSPHRASE",
+        "SYMVAULT_ALLOW_ENV_PASSPHRASE",
+        "MAKEFLAGS",
+        "MAKEOVERRIDES",
+        "MFLAGS",
+    ):
         env.pop(key, None)
     env.update(
         GOWORK="off",
         GOFLAGS="",
-        GOTOOLCHAIN=env.get("GOTOOLCHAIN", "go1.26.6"),
+        GOTOOLCHAIN=GO_TOOLCHAIN,
         SYMVAULT_KEYRING_HELPER_LOG=str(log_path),
+        SYMVAULT_KEYRING_BACKEND_LOG=str(tmpdir / "backend.log"),
     )
     for key, leaf in (
         ("HOME", "home"),
@@ -120,8 +132,10 @@ def main():
     target = ROOT / "target"
     target.mkdir(exist_ok=True)
     fixture_before = FIXTURE.read_bytes()
+    scratch_path = None
     with tempfile.TemporaryDirectory(prefix="http001-keyring-isolation-", dir=target) as scratch:
         tmpdir = Path(scratch)
+        scratch_path = tmpdir
         helper = tmpdir / "security-probe"
         helper.write_text(
             "#!/bin/sh\n"
@@ -137,16 +151,31 @@ def main():
         )
         helper.chmod(0o700)
         compile_env = os.environ.copy()
-        for key in ("CI", "GITHUB_ACTIONS", "HEADLESS", "SYMVAULT_TEST_KEYRING", "SYMVAULT_PASSPHRASE", "SYMVAULT_ALLOW_ENV_PASSPHRASE"):
+        for key in (
+            "CI",
+            "GITHUB_ACTIONS",
+            "HEADLESS",
+            "SYMVAULT_TEST_KEYRING",
+            "SYMVAULT_PASSPHRASE",
+            "SYMVAULT_ALLOW_ENV_PASSPHRASE",
+            "MAKEFLAGS",
+            "MAKEOVERRIDES",
+            "MFLAGS",
+        ):
             compile_env.pop(key, None)
         compile_tmp = tmpdir / "compile-tmp"
         compile_tmp.mkdir(mode=0o700)
         compile_env.update(
             GOWORK="off",
             GOFLAGS="",
-            GOTOOLCHAIN=compile_env.get("GOTOOLCHAIN", "go1.26.6"),
+            GOTOOLCHAIN=GO_TOOLCHAIN,
             TMPDIR=str(compile_tmp),
         )
+        go_version = subprocess.check_output(
+            ["go", "version"], cwd=ROOT, env=compile_env, text=True, timeout=60
+        ).strip()
+        if not go_version.startswith("go version go1.26.6 "):
+            raise AssertionError(f"HTTP-init probe requires pinned Go 1.26.6, got {go_version!r}")
         module_dir = subprocess.check_output(
             ["go", "list", "-f", "{{.Dir}}", KEYRING_IMPORT],
             cwd=ROOT,
@@ -198,10 +227,10 @@ def main():
         control_env["GOCACHE"] = str(go_cache)
         control_rc, control_output = run_bounded([str(binary), "--check"], control_env)
         control_pids = helper_pids(log_path)
-        if not control_pids:
+        if len(control_pids) != 4:
             raise AssertionError(
-                "negative control did not detect the init-time OS-keyring path "
-                f"(exit {control_rc})\n{control_output}"
+                "negative control did not observe the four expected init-time OS-keyring calls "
+                f"(observed {len(control_pids)}, exit {control_rc})\n{control_output}"
             )
         assert_helpers_exited(control_pids)
 
@@ -215,10 +244,12 @@ def main():
         go_binary = Path(tool_root) / "bin" / "go"
         if not go_binary.is_file():
             raise AssertionError(f"selected Go toolchain executable is missing: {go_binary}")
+        backend_log = tmpdir / "backend.log"
         wrapper = tmpdir / "go-wrapper"
         wrapper.write_text(
             "#!/bin/sh\n"
             "set -eu\n"
+            "printf '%s\\n' \"${SYMVAULT_TEST_KEYRING-unset}\" >> \"$SYMVAULT_KEYRING_BACKEND_LOG\"\n"
             "if [ \"${1-}\" != run ]; then echo 'unexpected Go subcommand' >&2; exit 64; fi\n"
             "shift\n"
             "exec env "
@@ -228,26 +259,81 @@ def main():
         wrapper.chmod(0o700)
 
         log_path.unlink(missing_ok=True)
-        make_env = clean_env(tmpdir, log_path)
+        backend_log.unlink(missing_ok=True)
+        hostile_parent = os.environ.copy()
+        hostile_parent.update(
+            MAKEFLAGS="SYMVAULT_TEST_KEYRING=memory",
+            MAKEOVERRIDES="SYMVAULT_TEST_KEYRING=memory",
+            SYMVAULT_TEST_KEYRING="memory",
+        )
+        make_env = clean_env(tmpdir, log_path, hostile_parent)
+        leaked = [
+            key
+            for key in (
+                "MAKEFLAGS",
+                "MAKEOVERRIDES",
+                "MFLAGS",
+                "SYMVAULT_TEST_KEYRING",
+                "SYMVAULT_PASSPHRASE",
+                "SYMVAULT_ALLOW_ENV_PASSPHRASE",
+            )
+            if key in make_env
+        ]
+        if leaked:
+            raise AssertionError(f"positive control leaked inherited override/backend variables: {leaked}")
         make_env["GOMODCACHE"] = module_cache
         make_env["GOCACHE"] = str(go_cache)
         isolated_rc, isolated_output = run_bounded(
-            ["make", "--no-print-directory", "mcp-http-init-fixtures-run", f"GO={wrapper}"],
+            ["make", "--no-print-directory", "mcp-http-init-fixtures-generate", f"GO={wrapper}"],
             make_env,
             timeout=180,
         )
         if isolated_rc != 0:
-            raise AssertionError(f"standalone Make target failed without inherited isolation flags:\n{isolated_output}")
+            raise AssertionError(f"memory-isolated Make generator failed:\n{isolated_output}")
+        safe_backends = backend_log.read_text().splitlines() if backend_log.exists() else []
+        if safe_backends != ["memory"]:
+            raise AssertionError(f"Make generator did not pass memory before Go startup: {safe_backends!r}")
         if helper_pids(log_path):
-            raise AssertionError("memory-isolated Make target invoked the instrumented OS credential helper")
+            raise AssertionError("memory-isolated Make generator invoked the instrumented OS credential helper")
         if FIXTURE.read_bytes() != fixture_before:
-            raise AssertionError("--check modified the committed HTTP initialize fixture")
+            raise AssertionError("memory-isolated Make generation changed the committed HTTP initialize fixture")
 
+        unsafe_makefile = tmpdir / "missing-export.mk"
+        unsafe_makefile.write_text(
+            "GO ?= go\n"
+            "PORT_MCP_HTTP_INIT_FIXTURE := testdata/port/mcp/http-initialize.json\n"
+            ".PHONY: unsafe\n"
+            "unsafe:\n"
+            "\tGOTOOLCHAIN=go1.26.6 $(GO) run ./scripts/rust-port/cmd/http001initgen --check --output $(PORT_MCP_HTTP_INIT_FIXTURE)\n"
+            "\t@test ! -s \"$$SYMVAULT_KEYRING_HELPER_LOG\"\n"
+        )
+        log_path.unlink(missing_ok=True)
+        backend_log.unlink(missing_ok=True)
+        unsafe_rc, unsafe_output = run_bounded(
+            ["make", "--no-print-directory", "-f", str(unsafe_makefile), "unsafe", f"GO={wrapper}"],
+            make_env,
+            timeout=180,
+        )
+        unsafe_pids = helper_pids(log_path)
+        if unsafe_rc == 0 or not unsafe_pids:
+            raise AssertionError(
+                "missing-export Makefile did not fail closed despite hostile inherited MAKEFLAGS/MAKEOVERRIDES "
+                f"(exit {unsafe_rc})\n{unsafe_output}"
+            )
+        unsafe_backends = backend_log.read_text().splitlines() if backend_log.exists() else []
+        if unsafe_backends != ["unset"]:
+            raise AssertionError(f"missing-export control inherited backend unexpectedly: {unsafe_backends!r}")
+        assert_helpers_exited(unsafe_pids)
+        if FIXTURE.read_bytes() != fixture_before:
+            raise AssertionError("HTTP initialize fixture bytes changed during isolation controls")
+
+    if scratch_path is None or scratch_path.exists():
+        raise AssertionError(f"probe scratch directory was not torn down: {scratch_path}")
     print(
-        "PASS: executable negative control detected "
-        f"{len(control_pids)} fake credential-helper call(s) (exit {control_rc}); "
-        "standalone Make check exited 0 without inherited isolation flags or helper calls; "
-        "helper processes exited cleanly; fixture bytes unchanged."
+        "PASS: Go 1.26.6 executable negative control reached the instrumented helper "
+        f"({len(control_pids)} calls, exit {control_rc}); safe Make generate selected memory before Go startup "
+        "with zero helper calls; missing-export Make control failed with inherited overrides scrubbed "
+        f"({len(unsafe_pids)} fake-helper calls); helper processes exited; fixture bytes and temp cleanup verified."
     )
     return 0
 
