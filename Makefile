@@ -10,6 +10,19 @@ GO_TEST := python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
+# These fixture generators link packages whose backend is chosen during Go
+# package initialization. Select memory in Make, before `go run` starts; setting
+# the variable from a generator's main function is too late for package init.
+GO_KEYRING_FIXTURE_TARGETS := \
+	port-fixtures-generate port-fixtures-check \
+	keyring-key-fixtures-generate keyring-key-fixtures-check \
+	quota-fixtures-generate quota-fixtures-check \
+	policy-fixtures-generate policy-fixtures-check \
+	mcp-init-fixtures-generate mcp-init-fixtures-check \
+	mcp-stdio-fixtures-generate mcp-stdio-fixtures-check \
+	mcp-http-init-fixtures-check mcp-http-init-fixtures-run mcp-render-differential mcp-call-fixtures-check \
+	rust-007-fixtures-generate rust-007-fixtures-check
+$(GO_KEYRING_FIXTURE_TARGETS): export SYMVAULT_TEST_KEYRING := memory
 # Keep harness binary paths aligned with Cargo's externally provided target dir.
 CARGO_TARGET_DIR ?= target
 # Cargo must receive command-line overrides through the environment too.
@@ -425,8 +438,12 @@ mcp-init-fixtures-check:
 mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
-.PHONY: mcp-http-init-fixtures-check mcp-http-init-differential
+.PHONY: mcp-http-init-fixtures-check mcp-http-init-fixtures-run mcp-http-init-differential
 mcp-http-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check
+	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_http001init_isolation.py
+
+mcp-http-init-fixtures-run:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
