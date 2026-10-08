@@ -101,8 +101,8 @@ make vet        # run go vet (includes passlint analyzer)
 ## Issue triage
 
 Issues are labeled with priority (`priority: urgent` through `priority: low`)
-and type (`bug`, `feature`, `documentation`). See the [Labels](#labels) section
-of the GitHub repository for the full taxonomy. To claim an issue, comment on
+and type (`bug`, `feature`, `documentation`). See the repository's
+[Labels page](https://github.com/danieljustus/symaira-vault/labels) for the full taxonomy. To claim an issue, comment on
 it — if you're an automated agent, the `auto-claimed` label is applied
 automatically.
 
