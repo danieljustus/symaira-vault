@@ -100,6 +100,34 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         def export(tree=root, summary='Events Lost: 0\nBuffers Lost: 0\n' + canary):
             return winsock.metadata(io.BytesIO(winsock.ET.tostring(tree)), receipt, summary)
         report = export()
+        # Synthetic timestamp boundaries, not native sender-timing evidence.
+        for stamp in ['2026-10-08T07:14:00Z', '2026-10-08T07:14:00.1234567Z',
+                      '2026-10-08T07:14:00.123456789+00:00',
+                      '2026-10-08T07:14:00.1+02:30',
+                      '2026-10-08T07:14:00.000000001-05:30',
+                      '2026-10-08T07:14:00+14:00', '2026-10-08T07:14:00-14:00']:
+            with self.subTest(boundary='explicit timezone and exact fractional precision', stamp=stamp):
+                stamped = copy.deepcopy(root)
+                for created in stamped.iter(winsock.NAMESPACE + 'TimeCreated'):
+                    created.set('SystemTime', stamp)
+                expected = copy.deepcopy(report)
+                for row in expected['events']:
+                    row['time'] = stamp
+                self.assertEqual(export(stamped), expected)
+        for stamp in ['2026-10-08T07:14:00.123456789',
+                      '2026-10-08T07:14:00+24:00', '2026-10-08T07:14:00+00:60',
+                      '2026-10-08T07:14:00+14:01', '2026-10-08T07:14:00-14:01',
+                      '2026-10-08T07:14:00+02:30:00',
+                      '2026-10-08T07:14:00.1234567890Z',
+                      '2026-02-30T07:14:00.1234567Z',
+                      '2026-10-08T24:01:00Z', '2026-10-08T07:14:60Z', canary]:
+            with self.subTest(boundary='invalid timestamp fails closed'):
+                stamped = copy.deepcopy(root)
+                for created in stamped.iter(winsock.NAMESPACE + 'TimeCreated'):
+                    created.set('SystemTime', stamp)
+                with self.assertRaisesRegex(ValueError, '^invalid Winsock event timestamp$') as failure:
+                    export(stamped)
+                self.assertNotIn(stamp, str(failure.exception))
         with self.subTest(boundary='unrelated unknown fields cannot affect report'):
             unrelated = copy.deepcopy(root)
             winsock.ET.SubElement(next(unrelated[-1].iter(winsock.NAMESPACE + 'EventData')),

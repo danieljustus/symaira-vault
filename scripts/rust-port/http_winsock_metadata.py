@@ -93,9 +93,16 @@ def metadata(trace, receipt, summary) -> dict:
         if created is None:
             raise ValueError('missing Winsock event timestamp')
         stamp = created.get('SystemTime', '')
-        if not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z', stamp):
+        # SystemTime is XML Schema dateTime; native tracerpt emits explicit offsets.
+        # Validate a known timezone, but retain the original fractional precision.
+        if not re.fullmatch(
+            r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?'
+            r'(?:Z|[+-](?:(?:0[0-9]|1[0-3]):[0-5][0-9]|14:00))', stamp):
             raise ValueError('invalid Winsock event timestamp')
-        datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+        try:
+            datetime.fromisoformat(stamp.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError('invalid Winsock event timestamp') from None
         descriptor = dict(EventID=event_id, **{key: number(system.findtext(NAMESPACE + key))
                                              for key in ('Version', 'Level', 'Task', 'Opcode')})
         # Kernel addresses never leave the runner; creation-relative IDs retain joins.
