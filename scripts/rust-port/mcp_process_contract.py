@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ORACLE = 'd1cd0f97ac550bc3020bc86b0514989f8d28d95c'
 PROBE = ROOT / 'scripts/rust-port/mcp_process_seed.go.txt'
 CANARIES = ['public-mcp-secret-6af2', 'public-nested-secret-88d1']
+UNICODE_FIXTURE = 'public-fixture-user\u2028line\u2029paragraph'
 
 
 def run(args, cwd, env, data=b''):
@@ -119,9 +120,10 @@ def semantic(value, home):
 
 
 def protocol_bytes(r, home, name, implementation, agent):
-    raw = r.stdout.decode('utf-8')
-    assert not raw or raw.endswith('\n'), (name,'unterminated stdout response')
-    frames = [json.loads(line) for line in raw.splitlines()]
+    stdout = r.stdout
+    raw = stdout.decode('utf-8')
+    assert not raw or stdout.endswith(b'\n'), (name,'unterminated stdout response')
+    frames = [json.loads(line.decode('utf-8')) for line in stdout[:-1].split(b'\n')] if stdout else []
     assert all(isinstance(f,dict) and f.get('jsonrpc')=='2.0' for f in frames), (name,'non-protocol stdout')
     stderr = r.stderr.decode('utf-8')
     assert not any(c in stderr for c in CANARIES), (name,'credential in stderr')
@@ -338,13 +340,24 @@ def main():
                                oracle_embedded_files=embedded,oracle_embedded_digest=inventory(embedded,tree))
                 helper = tree/'scripts/rust-port/cmd/mcpprocessseed'
                 helper.mkdir()
-                (helper/'main.go').write_bytes(PROBE.read_bytes())
+                seed_source = PROBE.read_bytes()
+                username_field = b'"username":"public-fixture-user"'
+                assert seed_source.count(username_field)==1
+                unicode_seed_source = seed_source.replace(
+                    username_field, ('"username":'+json.dumps(UNICODE_FIXTURE,ensure_ascii=True)).encode(), 1)
+                (helper/'main.go').write_bytes(seed_source)
+                unicode_helper = tree/'scripts/rust-port/cmd/mcpprocessseedunicode'
+                unicode_helper.mkdir()
+                (unicode_helper/'main.go').write_bytes(unicode_seed_source)
                 suffix = '.exe' if os.name=='nt' else ''
                 go, seed = base/('go-cli'+suffix), base/('go-seed'+suffix)
+                unicode_seed = base/('go-seed-unicode'+suffix)
                 checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
                 checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree)
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),
-                               seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
+                               seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),
+                               unicode_seed_binary_sha256=hashlib.sha256(unicode_seed.read_bytes()).hexdigest())
                 for name,profile in profiles():
                     seed_home = base/(name+'-seed')
                     seed_home.mkdir()
@@ -353,7 +366,8 @@ def main():
                     builtin = profile.pop('__builtin','')
                     agent = builtin or 'fixture'
                     profile_file.write_text(json.dumps(profile),encoding='utf-8')
-                    loaded = checked([seed,'--root',seed_home/'vault','--profile',profile_file,
+                    profile_seed = unicode_seed if name=='admin-value-visible' else seed
+                    loaded = checked([profile_seed,'--root',seed_home/'vault','--profile',profile_file,
                                       '--builtin',builtin,'--agent',agent],seed_home,isolated(seed_home))
                     receipt['loaded_go_profiles'][name] = json.loads(loaded)
                     assert receipt['loaded_go_profiles'][name]['Name']==agent
@@ -384,6 +398,11 @@ def main():
                         fetch_frame = next(frame for frame in row['frames'] if frame['id']==18)
                         assert all((c in json.dumps(fetch_frame))==(allowed_value and name!='legacy')
                                    for c in CANARIES), (implementation,name,'fetch value permission control')
+                        unicode_frames = [frame for frame in row['frames']
+                                         if UNICODE_FIXTURE in json.dumps(frame,ensure_ascii=False)]
+                        expected_unicode_frames = [value_frame,fetch_frame] if name=='admin-value-visible' else []
+                        assert unicode_frames==expected_unicode_frames, (implementation,name,'Unicode encrypted-store permission control')
+                        assert UNICODE_FIXTURE not in row['stderr_raw'], (implementation,name,'Unicode value in stderr')
                 for left,right in zip(receipt['go'],receipt['rust'],strict=True):
                     go_names = next(frame for frame in left['frames'] if frame['id']==6)['result']['content'][0]['text']['json_text']
                     for a,b in zip(left['frames'],right['frames'],strict=True):
