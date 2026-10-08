@@ -129,7 +129,19 @@ socket-creation `UserModePid`, not by assuming the ETW execution PID owns every
 completion. Use the decoded numeric descriptors/fields and documented
 send-posted/send-completed/close semantics; transport consumption is not remote
 delivery or an exact language-level
-write-return/deadline-arm timestamp. Trace failures never make the corpus pass.
+write-return/deadline-arm timestamp.
+The Windows schema diagnostic from the failing run showed the current AFD
+socket-create shape as EventID/task/opcode `1000/1000/10`, carrying `ProcessId`;
+the metadata exporter had only recognized legacy EventID 1/`UserModePid` and
+therefore failed with `trace lacks both actual output servers`. The exporter now
+correlates successful modern create completions and retains the numeric AFD send
+records without publishing kernel pointers. Its regression is synthetic, not a
+native receipt. This repairs the evidence collector only: the Windows slow-output
+assertion still fails, and received bytes after fast drain do not establish when
+server writes were accepted. Keep the byte/progress/expiry gate unchanged until a
+fresh native Windows trace establishes sender-side timing for both Go and Rust.
+
+Trace failures never make the corpus pass.
 See Microsoft's [trace control](https://learn.microsoft.com/en-us/windows/win32/winsock/control-of-winsock-tracing)
 and [event details](https://learn.microsoft.com/en-us/windows/win32/winsock/winsock-tracing-event-details).
 

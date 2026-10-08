@@ -347,5 +347,69 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                             self.assertIs(row['rejected'], True)
 
 
+    def test_modern_afd_socket_create_and_send_events_are_correlated(self):
+        # Synthetic provider-shaped controls, not a native Windows observation.
+        receipt = {name: {'tcp-output': {'server_process_id': pid}}
+                   for name, pid in [('go', 101), ('rust', 102)]}
+        root = winsock.ET.Element('Events')
+        def add(event_id, task, opcode, process, endpoint, fields):
+            node = winsock.ET.SubElement(root, winsock.NAMESPACE + 'Event')
+            system = winsock.ET.SubElement(node, winsock.NAMESPACE + 'System')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Provider', Name=winsock.PROVIDER)
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'TimeCreated',
+                                   SystemTime=f'2026-10-08T07:14:{len(root):02d}.0000000Z')
+            winsock.ET.SubElement(system, winsock.NAMESPACE + 'Execution', ProcessID='4')
+            for key, value in {'EventID': event_id, 'Version': 0, 'Level': 4,
+                               'Task': task, 'Opcode': opcode}.items():
+                winsock.ET.SubElement(system, winsock.NAMESPACE + key).text = str(value)
+            data = winsock.ET.SubElement(node, winsock.NAMESPACE + 'EventData')
+            for key, value in {'Process': process, 'Endpoint': endpoint, **fields}.items():
+                winsock.ET.SubElement(data, winsock.NAMESPACE + 'Data', Name=key).text = str(value)
+
+        # An open request and failed create do not establish endpoint ownership.
+        create = {'ProcessId': 101, 'SocketType': 1, 'Protocol': 6,
+                  'EnterExit': 0, 'Status': 0}
+        add(1000, 1000, 10, '0x111', '0x777', create)
+        failed = dict(create, EnterExit=1, Status=5)
+        add(1000, 1000, 10, '0x333', '0x999', failed)
+        add(1000, 1000, 10, '0x111', '0x777', dict(create, EnterExit=1))
+        add(1000, 1000, 10, '0x222', '0x888',
+            dict(create, ProcessId=102, EnterExit=1))
+        add(1003, 1003, 12, '0x111', '0x777',
+            {'EnterExit': 0, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
+        add(1003, 1003, 12, '0x111', '0x777',
+            {'EnterExit': 1, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
+        add(1003, 1003, 12, '0x222', '0x888',
+            {'EnterExit': 0, 'BufferCount': 1, 'BufferLength': 4096, 'Status': 0})
+        report = winsock.metadata(io.BytesIO(winsock.ET.tostring(root)), receipt,
+                                  'Events Lost: 0\nBuffers Lost: 0\n')
+        self.assertTrue(report['loss_verified'])
+        self.assertEqual({event['pid'] for event in report['events']}, {101, 102})
+        self.assertEqual(len(report['events']), 5)
+        self.assertEqual([event['descriptor']['EventID'] for event in report['events']],
+                         [1000, 1000, 1003, 1003, 1003])
+        go = [event for event in report['events'] if event['pid'] == 101]
+        rust = [event for event in report['events'] if event['pid'] == 102]
+        self.assertEqual(len({event['endpoint_id'] for event in go}), 1)
+        self.assertEqual(len({event['endpoint_id'] for event in rust}), 1)
+        self.assertNotEqual(go[0]['endpoint_id'], rust[0]['endpoint_id'])
+        go_sends = [event for event in go if event['descriptor']['EventID'] == 1003]
+        self.assertEqual([event['data']['EnterExit'] for event in go_sends], [0, 1])
+        encoded = contract.json.dumps(report)
+        for private_address in ('0x111', '0x222', '0x333', '0x777', '0x888', '0x999'):
+            self.assertNotIn(private_address, encoded)
+        with contract.tempfile.TemporaryDirectory(prefix='symvault-winsock-modern-') as raw:
+            base = contract.Path(raw)
+            trace, receipt_path, summary_path, output = [
+                base / name for name in ('trace.xml', 'receipt.json', 'summary.txt', 'metadata.json')]
+            trace.write_bytes(winsock.ET.tostring(root))
+            receipt_path.write_text(contract.json.dumps(receipt), encoding='utf-8')
+            summary_path.write_text('Events Lost: 0\nBuffers Lost: 0\n', encoding='utf-8')
+            contract.checked([contract.sys.executable, contract.Path(winsock.__file__),
+                              '--trace', trace, '--receipt', receipt_path,
+                              '--summary', summary_path, '--output', output])
+            self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 PROVIDER = 'Microsoft-Windows-Winsock-AFD'
 GUID = '{e53c6823-7bb8-44bb-90dc-3f86090d48a6}'
 NAMESPACE = '{http://schemas.microsoft.com/win/2004/08/events/event}'
-FIELDS = frozenset(('Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protocol',
+FIELDS = frozenset(('Process', 'Endpoint', 'UserModePid', 'ProcessId', 'SocketType', 'Protocol',
                     'BufferCount', 'BufferLength', 'Port', 'Error', 'Status', 'Reason',
                     'EnterExit', 'BytesIndicated', 'BytesTransferred', 'BytesSent'))
 
@@ -56,12 +56,31 @@ def metadata(trace, receipt, summary) -> dict:
                 raise ValueError(f'unsupported Winsock integer field: {key}') from None
         process = data.get('Process')
         event_id = number(system.findtext(NAMESPACE + 'EventID'))
-        # Microsoft AFD Event ID 1 is socket creation; field presence is not authority.
+        # Microsoft documents legacy AFD_EVENT_CREATE as ID 1/UserModePid.
+        # The captured provider schema uses AfdCreate/Open: ID/task/opcode
+        # 1000/1000/10 and ProcessId (Microsoft-Windows-Winsock-AFD).
+        modern_create = (event_id == 1000 and tuple(
+            number(system.findtext(NAMESPACE + key)) for key in ('Version', 'Level', 'Task', 'Opcode')
+        ) == (0, 4, 1000, 10))
         if event_id == 1:
-            if not {'Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protocol'} <= data.keys():
-                raise ValueError('incomplete Winsock socket-creation event')
-            owners[process] = data['UserModePid']
-            if owners[process] in pids:
+            required = {'Process', 'Endpoint', 'UserModePid', 'SocketType', 'Protocol'}
+            if not required <= data.keys():
+                raise ValueError('incomplete legacy Winsock socket-creation event')
+            owner_pid = data['UserModePid']
+        elif modern_create:
+            required = {'Process', 'Endpoint', 'ProcessId', 'SocketType', 'Protocol', 'EnterExit', 'Status'}
+            if not required <= data.keys():
+                raise ValueError('incomplete modern Winsock socket-creation event')
+            # Only successful completion establishes endpoint ownership.
+            if data['EnterExit'] != 1 or data['Status'] != 0:
+                event.clear()
+                continue
+            owner_pid = data['ProcessId']
+        else:
+            owner_pid = None
+        if owner_pid is not None:
+            owners[process] = owner_pid
+            if owner_pid in pids:
                 endpoints[process, data['Endpoint']] = len(records) + 1
         pid = owners.get(process)
         if pid not in pids:
