@@ -12,6 +12,9 @@ import subprocess
 import sys
 import tempfile
 
+if sys.flags.optimize:
+    raise SystemExit('Parity acceptance requires unoptimized Python; remove -O / PYTHONOPTIMIZE.')
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = 'd1cd0f97ac550bc3020bc86b0514989f8d28d95c'
 PROBE = ROOT / 'scripts/rust-port/mcp_process_seed.go.txt'
