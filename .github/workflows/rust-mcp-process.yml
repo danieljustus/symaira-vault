@@ -116,8 +116,20 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
-          cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2>&1
-          cat target/native-mcp-tests.txt
+          if cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr.txt; then
+            cargo_test_status=0
+          else
+            cargo_test_status=$?
+          fi
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.stdout.write(Path('target/native-mcp-tests.txt').read_text())
+          sys.stderr.write(Path('target/native-mcp-tests.stderr.txt').read_text())
+          PY
+          if [[ "$cargo_test_status" -ne 0 ]]; then
+            exit "$cargo_test_status"
+          fi
           python3 - <<'PY'
           import os, re
           from pathlib import Path
@@ -172,5 +184,6 @@ jobs:
           path: |
             target/native-mcp-process.json
             target/native-mcp-tests.txt
+            target/native-mcp-tests.stderr.txt
           if-no-files-found: error
           retention-days: 14
