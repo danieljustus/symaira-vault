@@ -25,6 +25,9 @@ struct Fixture {
 struct Oracle {
     commit_sha: String,
     source_hash: String,
+    source_pin_digest: String,
+    go_version: String,
+    corekit_version: String,
     generator_hash: String,
 }
 
@@ -96,7 +99,13 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
     .expect("decode actual Go copy_to_clipboard fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+        "4e9331537dbe3dbb293a3e81483b4bdf335d424b"
+    );
+    assert_eq!(fixture.oracle.source_pin_digest.len(), 64);
+    assert_eq!(fixture.oracle.go_version, "go1.26.6");
+    assert_eq!(
+        fixture.oracle.corekit_version,
+        "v0.17.1-0.20260904101640-f3d3eb79b9b1"
     );
     assert_eq!(fixture.oracle.source_hash.len(), 64);
     assert_eq!(fixture.oracle.generator_hash.len(), 64);

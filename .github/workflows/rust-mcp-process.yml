@@ -135,8 +135,11 @@ jobs:
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
       - name: Execute actual Go and Rust native profiles and hostile stdio
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/mcp_process_contract.py --rust "$rust_cli" --receipt target/native-mcp-process.json
