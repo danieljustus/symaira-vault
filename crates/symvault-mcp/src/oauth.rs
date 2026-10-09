@@ -33,6 +33,8 @@ pub(super) struct OAuthState {
     browser_requests: Mutex<HashMap<String, BrowserRequest>>,
     consent: Box<ConsentFn>,
     verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    access_token_ttl: Duration,
+    refresh_token_ttl: Duration,
 }
 
 #[derive(Clone)]
@@ -63,7 +65,40 @@ impl OAuthState {
             browser_requests: Mutex::new(HashMap::new()),
             consent,
             verify_passphrase,
+            access_token_ttl: ACCESS_TOKEN_TTL,
+            refresh_token_ttl: REFRESH_TOKEN_TTL,
         }
+    }
+
+    pub(super) fn with_token_ttls(
+        mut self,
+        ttls: crate::http::OAuthTokenTtls,
+    ) -> Result<Self, std::io::Error> {
+        let now = OffsetDateTime::now_utc();
+        let convert = |ttl: std::time::Duration| {
+            if ttl.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL must be positive",
+                ));
+            }
+            let ttl = Duration::try_from(ttl).map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL exceeds supported duration",
+                )
+            })?;
+            if now.checked_add(ttl).is_none() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL exceeds supported expiry timestamp",
+                ));
+            }
+            Ok(ttl)
+        };
+        self.access_token_ttl = convert(ttls.access_token_ttl)?;
+        self.refresh_token_ttl = convert(ttls.refresh_token_ttl)?;
+        Ok(self)
     }
 }
 
@@ -440,18 +475,23 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
             {
                 return OAuthResponse::Http(error(400, "invalid_grant"));
             }
+            if now.checked_add(state.access_token_ttl).is_none()
+                || now.checked_add(state.refresh_token_ttl).is_none()
+            {
+                return OAuthResponse::Http(error(500, "server_error"));
+            }
             let label = format!("oauth-{}", &pending.client_id[..8]);
             let new = NewToken {
                 label: &label,
                 allowed_tools: vec!["*".into()],
                 agent_name: &state.agent_name,
-                ttl: Some(ACCESS_TOKEN_TTL),
+                ttl: Some(state.access_token_ttl),
                 tool_registry_hash: "",
             };
             match token_registry::create_with_refresh(
                 &state.root,
                 &new,
-                Some(REFRESH_TOKEN_TTL),
+                Some(state.refresh_token_ttl),
                 now,
             ) {
                 Ok((record, access, refresh)) => {
@@ -471,10 +511,13 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                     "refresh_token is required",
                 ));
             };
+            if now.checked_add(state.access_token_ttl).is_none() {
+                return OAuthResponse::Http(error(500, "server_error"));
+            }
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
                 refresh,
-                ACCESS_TOKEN_TTL,
+                state.access_token_ttl,
                 now,
             ) {
                 Ok((record, access, refresh)) => {
@@ -825,6 +868,79 @@ mod tests {
     }
 
     #[test]
+    fn explicit_token_ttls_preserve_defaults_and_reject_invalid_library_values() {
+        let state = || {
+            OAuthState::new(
+                PathBuf::new(),
+                "default".into(),
+                Box::new(|_, _| crate::http::OAuthConsentDecision::Denied),
+                Box::new(|_| false),
+            )
+        };
+        let defaults = state()
+            .with_token_ttls(crate::http::OAuthTokenTtls::default())
+            .unwrap();
+        assert_eq!(defaults.access_token_ttl, ACCESS_TOKEN_TTL);
+        assert_eq!(defaults.refresh_token_ttl, REFRESH_TOKEN_TTL);
+        let positive = std::time::Duration::from_secs(1);
+        let timestamp_overflow = std::time::Duration::from_secs(i64::MAX as u64);
+        let converted = Duration::try_from(timestamp_overflow).unwrap();
+        assert!(OffsetDateTime::UNIX_EPOCH.checked_add(converted).is_none());
+        for (access_token_ttl, refresh_token_ttl) in [
+            (std::time::Duration::ZERO, positive),
+            (positive, std::time::Duration::ZERO),
+            (std::time::Duration::MAX, positive),
+            (positive, std::time::Duration::MAX),
+            (timestamp_overflow, positive),
+            (positive, timestamp_overflow),
+        ] {
+            let result = state().with_token_ttls(crate::http::OAuthTokenTtls {
+                access_token_ttl,
+                refresh_token_ttl,
+            });
+            let Err(error) = result else {
+                panic!("invalid explicit OAuth lifetime must be rejected");
+            };
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        }
+        // A lifetime valid at startup must also be checked at token issuance/rotation.
+        let directory = tempfile::tempdir().unwrap();
+        let mut configured = state()
+            .with_token_ttls(crate::http::OAuthTokenTtls {
+                access_token_ttl: positive,
+                refresh_token_ttl: positive,
+            })
+            .unwrap();
+        configured.root = directory.path().to_path_buf();
+        let last_timestamp = time::Date::MAX.with_time(time::Time::MAX).assume_utc();
+        configured.codes.lock().unwrap().insert(
+            "expiry-boundary-code".into(),
+            PendingCode {
+                client_id: "0".repeat(32),
+                code_challenge: CHALLENGE.into(),
+                expires_at: last_timestamp,
+            },
+        );
+        for request in [
+            format!(
+                "grant_type=authorization_code&code=expiry-boundary-code&code_verifier={VERIFIER}"
+            ),
+            "grant_type=refresh_token&refresh_token=invalid".into(),
+        ] {
+            assert_eq!(
+                response_body(token(&configured, &request, last_timestamp)).0,
+                500
+            );
+            assert!(
+                !directory
+                    .path()
+                    .join(token_registry::TOKEN_REGISTRY_FILE)
+                    .exists()
+            );
+        }
+    }
+
+    #[test]
     fn consent_pkce_access_and_refresh_are_connected_and_single_use() {
         let directory = tempfile::tempdir().unwrap();
         let state = OAuthState::new(
@@ -832,7 +948,12 @@ mod tests {
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
             Box::new(|_| false),
-        );
+        )
+        .with_token_ttls(crate::http::OAuthTokenTtls {
+            access_token_ttl: std::time::Duration::from_secs(42),
+            refresh_token_ttl: std::time::Duration::from_secs(84),
+        })
+        .unwrap();
         let client_id = register(&state);
         let authorization = format!(
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=st-1&code_challenge={CHALLENGE}&code_challenge_method=S256"
@@ -868,6 +989,21 @@ mod tests {
             .expect("OAuth access token persisted by its Go token ID");
         assert_eq!(access_record["agent_name"], "default");
         assert_eq!(access_record["allowed_tools"], serde_json::json!(["*"]));
+        let parse_time = |field: &str| {
+            OffsetDateTime::parse(
+                access_record[field].as_str().unwrap(),
+                &time::format_description::well_known::Rfc3339,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            parse_time("expires_at") - parse_time("created_at"),
+            Duration::seconds(42)
+        );
+        assert_eq!(
+            parse_time("refresh_expires_at") - parse_time("created_at"),
+            Duration::seconds(84)
+        );
 
         assert_eq!(
             response_body(token(&state, &token_request, OffsetDateTime::now_utc(),)).0,

@@ -64,3 +64,5 @@ scripts/rust-port/http_tls_identity.go.txt text eol=lf
 /scripts/rust-port/test_api_transport_contract.py text eol=lf
 /testdata/api-darwin-trust/** text eol=lf
 /.github/workflows/rust-api-transport.yml text eol=lf
+scripts/rust-port/http_oauth_contract.py text eol=lf
+.github/workflows/rust-http-oauth.yml text eol=lf

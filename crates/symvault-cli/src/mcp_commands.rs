@@ -220,6 +220,13 @@ pub fn run(
         let identity_text = symvault_crypto::identity_string(&identity);
         let auth_method = config.effective_auth_method().as_str().to_owned();
         let oauth_agent_name = oauth_agent(&config).to_owned();
+        let oauth = config.mcp.as_ref().and_then(|mcp| mcp.oauth.as_ref());
+        let token_ttls = oauth.map_or_else(symvault_mcp::http::OAuthTokenTtls::default, |oauth| {
+            symvault_mcp::http::OAuthTokenTtls {
+                access_token_ttl: oauth.access_token_ttl,
+                refresh_token_ttl: oauth.refresh_token_ttl,
+            }
+        });
         let runtime_status = (touch_id_available, backend, persistent, message);
         let approval_queue_for_agent = approval_queue.clone();
         let handler_for_agent = move |agent: &str| {
@@ -259,7 +266,7 @@ pub fn run(
             })
         };
         let result = match tls {
-            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval(
+            Some(tls) => symvault_mcp::http::serve_with_tls_oauth_and_approval_ttls(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -268,8 +275,9 @@ pub fn run(
                 verify_passphrase,
                 tls,
                 symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+                token_ttls,
             ),
-            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval(
+            None => symvault_mcp::http::serve_loopback_with_oauth_and_approval_ttls(
                 listener,
                 registry_path,
                 handler_for_agent,
@@ -277,6 +285,7 @@ pub fn run(
                 consent,
                 verify_passphrase,
                 symvault_mcp::http::LocalApprovalApi::new(approval_queue, enroll_secret),
+                token_ttls,
             ),
         };
         result.map_err(|error| format!("MCP HTTP: {error}"))

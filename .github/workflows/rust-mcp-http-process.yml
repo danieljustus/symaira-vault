@@ -81,8 +81,9 @@ jobs:
           from pathlib import Path
           log=Path('target/native-http-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',log)
-          assert results and sum(int(n) for n,_ in results)==(236 if os.environ['RUNNER_OS']=='Windows' else 238)
+          assert results and sum(int(n) for n,_ in results)==(237 if os.environ['RUNNER_OS']=='Windows' else 239)
           assert all(int(ignored)==0 for _,ignored in results)
+          assert 'explicit_token_ttls_preserve_defaults_and_reject_invalid_library_values ... ok' in log
           assert 'test http::tests::oversized_body_errors_follow_admission_without_creating_sessions ... ok' in log
           assert 'test http::tests::nonmcp_oversized_prefixes_preserve_accepted_main_wire_response ... ok' in log
           assert 'test http::tests::public_http_adapter_bounds_oversized_json_before_deserialization ... ok' in log

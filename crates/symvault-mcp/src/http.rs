@@ -367,6 +367,51 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_loopback_with_oauth_and_approval_ttls(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        local_approval_api,
+        OAuthTokenTtls::default(),
+    )
+}
+
+/// Positive OAuth lifetimes supplied by the owning CLI/config boundary.
+#[derive(Clone, Copy, Debug)]
+pub struct OAuthTokenTtls {
+    pub access_token_ttl: Duration,
+    pub refresh_token_ttl: Duration,
+}
+
+impl Default for OAuthTokenTtls {
+    fn default() -> Self {
+        Self {
+            access_token_ttl: Duration::from_secs(24 * 60 * 60),
+            refresh_token_ttl: Duration::from_secs(720 * 60 * 60),
+        }
+    }
+}
+
+/// Loopback MCP/OAuth/approval with explicit bounded token lifetimes.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_loopback_with_oauth_and_approval_ttls<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    local_approval_api: LocalApprovalApi,
+    token_ttls: OAuthTokenTtls,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let root = registry_path
         .as_ref()
         .parent()
@@ -376,12 +421,15 @@ where
         listener,
         registry_path.as_ref(),
         handler_for_agent,
-        Some(crate::oauth::OAuthState::new(
-            root,
-            oauth_agent_name.into(),
-            Box::new(consent),
-            Box::new(verify_passphrase),
-        )),
+        Some(
+            crate::oauth::OAuthState::new(
+                root,
+                oauth_agent_name.into(),
+                Box::new(consent),
+                Box::new(verify_passphrase),
+            )
+            .with_token_ttls(token_ttls)?,
+        ),
         None,
         Some(Arc::new(local_approval_api)),
     )
@@ -404,6 +452,37 @@ where
     C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
     V: Fn(&str) -> bool + Send + Sync + 'static,
 {
+    serve_with_tls_oauth_and_approval_ttls(
+        listener,
+        registry_path,
+        handler_for_agent,
+        oauth_agent_name,
+        consent,
+        verify_passphrase,
+        tls,
+        local_approval_api,
+        OAuthTokenTtls::default(),
+    )
+}
+
+/// TLS MCP/OAuth/approval with explicit bounded token lifetimes.
+#[allow(clippy::too_many_arguments)]
+pub fn serve_with_tls_oauth_and_approval_ttls<F, C, V>(
+    listener: TcpListener,
+    registry_path: impl AsRef<Path>,
+    handler_for_agent: F,
+    oauth_agent_name: impl Into<String>,
+    consent: C,
+    verify_passphrase: V,
+    tls: Arc<ServerConfig>,
+    local_approval_api: LocalApprovalApi,
+    token_ttls: OAuthTokenTtls,
+) -> Result<(), std::io::Error>
+where
+    F: FnMut(&str) -> Result<ProtocolHandler, String> + Send,
+    C: Fn(&str, &str) -> OAuthConsentDecision + Send + Sync + 'static,
+    V: Fn(&str) -> bool + Send + Sync + 'static,
+{
     let root = registry_path
         .as_ref()
         .parent()
@@ -413,12 +492,15 @@ where
         listener,
         registry_path.as_ref(),
         handler_for_agent,
-        Some(crate::oauth::OAuthState::new(
-            root,
-            oauth_agent_name.into(),
-            Box::new(consent),
-            Box::new(verify_passphrase),
-        )),
+        Some(
+            crate::oauth::OAuthState::new(
+                root,
+                oauth_agent_name.into(),
+                Box::new(consent),
+                Box::new(verify_passphrase),
+            )
+            .with_token_ttls(token_ttls)?,
+        ),
         Some(tls),
         Some(Arc::new(local_approval_api)),
     )
