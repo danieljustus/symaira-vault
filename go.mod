@@ -2,6 +2,10 @@ module github.com/danieljustus/symaira-vault
 
 go 1.26.6
 
+// Preserve the minimum compiler for frozen Go 1.26.6 oracle checks.
+// Product builds, tests, scans and releases use the patched toolchain.
+toolchain go1.26.9
+
 // Deferred major updates (intentionally deferred):
 // - github.com/ProtonMail/go-crypto: v1.1.6 -> v1.4.1 (major version bump, potential breaking changes in crypto APIs)
 // - github.com/golang/protobuf: v1.5.4 (deprecated, migration to google.golang.org/protobuf needed)
@@ -139,7 +143,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/mobile v0.0.0-20260821190718-4776eadac327 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect

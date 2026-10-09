@@ -9,7 +9,10 @@ CARGO := cargo
 GO_TEST := python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
+# Historical oracle generation keeps its measured compiler identity.
 GO_TOOLCHAIN ?= go1.26.6
+BUILD_GO_TOOLCHAIN ?= go1.26.9
+export GOTOOLCHAIN ?= $(BUILD_GO_TOOLCHAIN)
 # Keep harness binary paths aligned with Cargo's externally provided target dir.
 CARGO_TARGET_DIR ?= target
 # Cargo must receive command-line overrides through the environment too.
@@ -121,7 +124,7 @@ clean:
 # hundreds of bogus "could not import" typecheck errors that bury the real
 # findings -- which is exactly how a batch of misspell hits reached CI.
 lint:
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
 
 # Format code
 fmt:
@@ -149,7 +152,7 @@ fmt-check:
 
 # Run linter with auto-fix
 lint-fix:
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
 
 # Run CI-like tests (race + coverage + timeout, same as CI)
 test-ci:

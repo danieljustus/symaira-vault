@@ -20,7 +20,7 @@
       "internal/fsutil/reexport.go"
     ],
     "source_digest": "127ea70bfdddc06564981fc8e897005e44633bbcc9f1cb34fd9e68dd067145db",
-    "generator_digest": "ebc7e292ff730a67970a9275af9b69aeecf829bc022cf271915669c951054001",
+    "generator_digest": "a78309411bda4b18cf17352f43cbd9ec9bb96ae4d7cc804b81b5fa676d558cb4",
     "generator_files": [
       "scripts/rust-port/cmd/configprofilegen/archive_extract.go",
       "scripts/rust-port/cmd/configprofilegen/archive_extract_test.go",
