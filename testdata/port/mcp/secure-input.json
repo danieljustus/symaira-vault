@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "d1cd0f97",
-    "commit_sha": "d1cd0f97ac550bc3020bc86b0514989f8d28d95c",
+    "commit": "4e933153",
+    "commit_sha": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -185,9 +185,13 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "989580088e9183899632a4db3f33fa01daac3dcf6431c8bbb79b759f706bb7b4",
+    "source_hash": "b115514aca9da647dfdba0f1fae56f6d4d14f0690d1db375ce1feb9aec61b679",
+    "source_pin_digest": "09d93774de3cd2319e3ca0c64402429e5586105e678770c568a95c7145340aa1",
+    "go_version": "go1.26.6",
+    "corekit_version": "v0.17.1-0.20260904101640-f3d3eb79b9b1",
     "generator_files": [
       "internal/mcp/server/mcp_secure_input_fixture_generator_test.go",
+      "internal/mcp/server/mcp_local_fixture_provenance_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
       "internal/mcp/server/approval_test.go",
       "internal/mcp/server/tools_test_helpers.go",
@@ -195,7 +199,7 @@
       "internal/secureui/pty_test.go",
       "scripts/rust-port/cmd/secure_input_unicode/main.go"
     ],
-    "generator_hash": "2e2ea51548b6036bfbb05dbf188d0b5e31c8452777502d2fb780a92ff04531ee"
+    "generator_hash": "626de205f287a34a0c0d799a49148a855a97976d30d1ffd4ca04fcec41993d19"
   },
   "normalizations": [
     "Rust deliberately suppresses terminal echo for secure input; Go's go-tty ReadString echoes printable runes despite the hidden-input prompt."

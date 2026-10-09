@@ -9,7 +9,10 @@ CARGO := cargo
 GO_TEST := python3 scripts/run_go_tests.py $(CARGO) -- $(GO) test
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
+# Historical oracle generation keeps its measured compiler identity.
 GO_TOOLCHAIN ?= go1.26.6
+BUILD_GO_TOOLCHAIN ?= go1.26.9
+export GOTOOLCHAIN ?= $(BUILD_GO_TOOLCHAIN)
 # Keep harness binary paths aligned with Cargo's externally provided target dir.
 CARGO_TARGET_DIR ?= target
 # Cargo must receive command-line overrides through the environment too.
@@ -121,7 +124,7 @@ clean:
 # hundreds of bogus "could not import" typecheck errors that bury the real
 # findings -- which is exactly how a batch of misspell hits reached CI.
 lint:
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
 
 # Format code
 fmt:
@@ -149,7 +152,7 @@ fmt-check:
 
 # Run linter with auto-fix
 lint-fix:
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(BUILD_GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
 
 # Run CI-like tests (race + coverage + timeout, same as CI)
 test-ci:
@@ -610,7 +613,8 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 
 .PHONY: update-fixtures-check
 update-fixtures-check:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 1add155a1ab213cbe8bb42a24254f972cda0ffc1 --check
+	python3 -B scripts/rust-port/test_update_fixture_provenance.py
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 4e9331537dbe3dbb293a3e81483b4bdf335d424b --check
 port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
@@ -959,7 +963,7 @@ else
 endif
 
 mcp-copy-clipboard-fixtures-check:
-	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardFixture$$' -count=1
+	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardFixture$$' -count=1
 
 mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard-signals-differential
 	$(CARGO) test -p symvault-mcp --test tools_copy_to_clipboard_contract --locked
@@ -967,7 +971,7 @@ mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
 mcp-secure-input-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
-	SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSecureInputFixture$$' -count=1
+	SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1 GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSecureInputFixture$$' -count=1
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/secureui -run '^(TestTTYReadStringRuneEditing|TestPrompt_TTYBackend_SignalCancel)$$' -count=1

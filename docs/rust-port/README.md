@@ -52,6 +52,31 @@ passes. The measured Go baseline is in
    rewritten merely to make the repository “all Rust”.
 9. The Apache-2.0 self-hosted and standalone-first product boundary does not change.
 
+## Fixture input provenance
+
+The five update corpora and the local MCP clipboard/secure-input corpora distinguish
+two identities. Their `commit`/`commit_sha` and `source_pin_digest` identify the
+unchanged production files at a main-reachable revision, excluding only `go.mod`
+and `go.sum` from that **pin comparison**. Their full `source_digest`/`source_hash`
+still covers every declared source file and **both** module files used by the
+actual capture. Dependency changes therefore invalidate the frozen capture and
+require a real replay; they do not authorize editing an expected checksum.
+
+These bounded cases do not exercise the external `x/net` HTTP/2 implementation:
+update observations use the pinned CoreKit update path and loopback HTTP/1,
+while clipboard/input observations use local vaults and controlled UI backends.
+Captures require actual Go 1.26.6 and the exact CoreKit version without a module
+replacement. Relevant production-source changes still fail the pin check. The
+common MCP digest/inventory checks and unrelated fixture scopes are unchanged.
+Generator sources remain hashed, and update transaction checks retain the
+CoreKit source digest plus actual rollback/traversal tests.
+
+Regeneration must preserve all case payloads and security controls or receive a
+separate semantic review. Update metadata records the real capture platform;
+check mode retains that historical label while reporting the current replay
+platform. This does not change the immutable native-process oracle or exempt
+its known anomaly-ordering errors from the strict stderr gate.
+
 ## Prepared artifacts
 
 - [`architecture.md`](architecture.md) — target crate boundaries and dependency choices.

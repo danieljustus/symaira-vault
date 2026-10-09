@@ -341,11 +341,8 @@ func normalizeSaved(saved, vaultPath string) string {
 }
 
 func pinnedGoBinary() string {
-	// The generator itself must be built with the pinned toolchain. This
-	// works with setup-go as well as GOTOOLCHAIN, without a named shim.
-	if runtime.Version() != requiredGoVersion {
-		fatal("generator toolchain %s, want %s", runtime.Version(), requiredGoVersion)
-	}
+	// The driver can use the patched product compiler. Only the archived
+	// oracle's compiler is part of the frozen behavior and must match exactly.
 	name := "go"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -357,7 +354,9 @@ func pinnedGoBinary() string {
 		fatal("resolve pinned Go root: %v", err)
 	}
 	binary := filepath.Join(strings.TrimSpace(string(goRoot)), "bin", name)
-	version, err := exec.Command(binary, "version").Output() // #nosec G204 -- binary is the pinned Go toolchain resolved above
+	check := exec.Command(binary, "version") // #nosec G204 -- binary is the pinned Go toolchain resolved above
+	check.Env = append(os.Environ(), "GOTOOLCHAIN=local")
+	version, err := check.Output()
 	fields := strings.Fields(string(version))
 	if err != nil || len(fields) < 3 || fields[2] != requiredGoVersion {
 		fatal("pinned Go binary version mismatch: %s", strings.TrimSpace(string(version)))

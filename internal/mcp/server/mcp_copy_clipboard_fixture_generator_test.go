@@ -19,7 +19,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-const copyClipboardOracleCommit = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+const copyClipboardOracleCommit = "4e9331537dbe3dbb293a3e81483b4bdf335d424b"
 
 type copyClipboardFixture struct {
 	SchemaVersion int                        `json:"schema_version"`
@@ -30,12 +30,15 @@ type copyClipboardFixture struct {
 }
 
 type copyClipboardOracle struct {
-	Commit         string   `json:"commit"`
-	CommitSHA      string   `json:"commit_sha"`
-	SourceFiles    []string `json:"source_files"`
-	SourceHash     string   `json:"source_hash"`
-	GeneratorFiles []string `json:"generator_files"`
-	GeneratorHash  string   `json:"generator_hash"`
+	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
+	SourceFiles     []string `json:"source_files"`
+	SourceHash      string   `json:"source_hash"`
+	SourcePinDigest string   `json:"source_pin_digest"`
+	GoVersion       string   `json:"go_version"`
+	CorekitVersion  string   `json:"corekit_version"`
+	GeneratorFiles  []string `json:"generator_files"`
+	GeneratorHash   string   `json:"generator_hash"`
 }
 
 type copyClipboardScenario struct {
@@ -259,6 +262,7 @@ var copyClipboardSourceFiles = []string{
 
 var copyClipboardGeneratorFiles = []string{
 	"internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
+	"internal/mcp/server/mcp_local_fixture_provenance_test.go",
 	"internal/mcp/server/tools_test_helpers.go",
 	"internal/mcp/server/approval_test.go",
 	"internal/mcp/server/mcpsetentry_fixture_generator_test.go",
@@ -272,10 +276,8 @@ func TestGenerateMCPCopyClipboardFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_COPY_CLIPBOARD_FIXTURE=1 or SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_FIXTURE=1")
 	}
 	root := executeAPIRequestRepoRoot(t)
-	sourceHash := executeAPIRequestGitDigest(t, root, copyClipboardOracleCommit, copyClipboardSourceFiles)
-	if current := executeAPIRequestWorkingDigest(t, root, copyClipboardSourceFiles); current != sourceHash {
-		t.Fatalf("Go production sources differ from pinned oracle %s: got %s, want %s", copyClipboardOracleCommit, current, sourceHash)
-	}
+	sourcePin := localMCPOracleSourcePin(t, root, copyClipboardOracleCommit, copyClipboardSourceFiles)
+	sourceHash := executeAPIRequestWorkingDigest(t, root, copyClipboardSourceFiles)
 
 	path := "github"
 	scenarios := []copyClipboardScenario{
@@ -304,12 +306,15 @@ func TestGenerateMCPCopyClipboardFixture(t *testing.T) {
 	fixture := copyClipboardFixture{
 		SchemaVersion: 1,
 		Oracle: copyClipboardOracle{
-			Commit:         "d1cd0f97",
-			CommitSHA:      copyClipboardOracleCommit,
-			SourceFiles:    copyClipboardSourceFiles,
-			SourceHash:     sourceHash,
-			GeneratorFiles: copyClipboardGeneratorFiles,
-			GeneratorHash:  executeAPIRequestWorkingDigest(t, root, copyClipboardGeneratorFiles),
+			Commit:          "4e933153",
+			CommitSHA:       copyClipboardOracleCommit,
+			SourceFiles:     copyClipboardSourceFiles,
+			SourceHash:      sourceHash,
+			SourcePinDigest: sourcePin,
+			GoVersion:       localMCPOracleGoVersion,
+			CorekitVersion:  localMCPOracleCorekitVersion,
+			GeneratorFiles:  copyClipboardGeneratorFiles,
+			GeneratorHash:   executeAPIRequestWorkingDigest(t, root, copyClipboardGeneratorFiles),
 		},
 		ServerName:    "symvault",
 		ServerVersion: "0.0.0-copy-clipboard-fixture",

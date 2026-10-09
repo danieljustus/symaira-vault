@@ -21,12 +21,15 @@ type secureInputFixture struct {
 }
 
 type secureInputOracle struct {
-	Commit         string   `json:"commit"`
-	CommitSHA      string   `json:"commit_sha"`
-	SourceFiles    []string `json:"source_files"`
-	SourceHash     string   `json:"source_hash"`
-	GeneratorFiles []string `json:"generator_files"`
-	GeneratorHash  string   `json:"generator_hash"`
+	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
+	SourceFiles     []string `json:"source_files"`
+	SourceHash      string   `json:"source_hash"`
+	SourcePinDigest string   `json:"source_pin_digest"`
+	GoVersion       string   `json:"go_version"`
+	CorekitVersion  string   `json:"corekit_version"`
+	GeneratorFiles  []string `json:"generator_files"`
+	GeneratorHash   string   `json:"generator_hash"`
 }
 
 type secureInputScenario struct {
@@ -245,6 +248,7 @@ var secureInputSourceFiles = []string{
 
 var secureInputGeneratorFiles = []string{
 	"internal/mcp/server/mcp_secure_input_fixture_generator_test.go",
+	"internal/mcp/server/mcp_local_fixture_provenance_test.go",
 	"internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go",
 	"internal/mcp/server/approval_test.go",
 	"internal/mcp/server/tools_test_helpers.go",
@@ -253,7 +257,7 @@ var secureInputGeneratorFiles = []string{
 	"scripts/rust-port/cmd/secure_input_unicode/main.go",
 }
 
-const secureInputOracleCommit = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+const secureInputOracleCommit = "4e9331537dbe3dbb293a3e81483b4bdf335d424b"
 
 func TestGenerateMCPSecureInputFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_SECURE_INPUT_FIXTURE") == "1"
@@ -262,10 +266,8 @@ func TestGenerateMCPSecureInputFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_SECURE_INPUT_FIXTURE=1 or SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1")
 	}
 	root := executeAPIRequestRepoRoot(t)
-	sourceHash := executeAPIRequestGitDigest(t, root, secureInputOracleCommit, secureInputSourceFiles)
-	if current := executeAPIRequestWorkingDigest(t, root, secureInputSourceFiles); current != sourceHash {
-		t.Fatalf("Go production sources differ from pinned oracle %s: got %s, want %s", secureInputOracleCommit, current, sourceHash)
-	}
+	sourcePin := localMCPOracleSourcePin(t, root, secureInputOracleCommit, secureInputSourceFiles)
+	sourceHash := executeAPIRequestWorkingDigest(t, root, secureInputSourceFiles)
 
 	scenarios := []secureInputScenario{
 		{Name: "secure_input_success", Tool: "secure_input", Arguments: map[string]any{"path": "allowed/service", "field": "token", "description": "synthetic fixture"}, ApprovalMode: "none", CanWrite: true, AllowedPaths: []string{"allowed"}, Capability: "tty", InputValue: "synthetic-secret-one"},
@@ -286,12 +288,15 @@ func TestGenerateMCPSecureInputFixture(t *testing.T) {
 	}
 
 	oracle := secureInputOracle{
-		Commit:         "d1cd0f97",
-		CommitSHA:      secureInputOracleCommit,
-		SourceFiles:    secureInputSourceFiles,
-		SourceHash:     sourceHash,
-		GeneratorFiles: secureInputGeneratorFiles,
-		GeneratorHash:  executeAPIRequestWorkingDigest(t, root, secureInputGeneratorFiles),
+		Commit:          "4e933153",
+		CommitSHA:       secureInputOracleCommit,
+		SourceFiles:     secureInputSourceFiles,
+		SourceHash:      sourceHash,
+		SourcePinDigest: sourcePin,
+		GoVersion:       localMCPOracleGoVersion,
+		CorekitVersion:  localMCPOracleCorekitVersion,
+		GeneratorFiles:  secureInputGeneratorFiles,
+		GeneratorHash:   executeAPIRequestWorkingDigest(t, root, secureInputGeneratorFiles),
 	}
 	fixture := secureInputFixture{
 		SchemaVersion: 1,

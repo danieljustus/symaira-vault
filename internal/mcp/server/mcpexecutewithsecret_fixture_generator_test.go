@@ -23,6 +23,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -301,6 +302,10 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 	childSource := filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")
 	buildChild := exec.Command("go", "build", "-o", childBinary, childSource)
 	buildChild.Dir = root
+	// Match the production child's filtered environment, not the oracle runner's
+	// GOTOOLCHAIN/cache overrides. Prepare its real toolchain before observing
+	// strict stdout/stderr so a cold Go download is not part of the fixture.
+	secrets.PrepareCmd(buildChild)
 	if output, err := buildChild.CombinedOutput(); err != nil {
 		t.Fatalf("build fixture-local true child: %v: %s", err, output)
 	}

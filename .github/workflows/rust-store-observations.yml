@@ -37,7 +37,7 @@ jobs:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.6
+      GOTOOLCHAIN: go1.26.9
       GOWORK: 'off'
     steps:
       - name: Assert actual native macOS arm64
@@ -57,11 +57,14 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
       - name: Repeat real captures and reject semantic drift
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           go test -race ./scripts/rust-port/cmd/storegen -count=1 -json > store-observations.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("store-observations.jsonl")]; required={"TestRepeatedPinnedStoreObservationsHaveStableProjection","TestClockProjectionPreservesOtherJSONBytes"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert required <= passed, required-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in required for r in rows); print("Verified real repeated-capture and byte-preservation controls executed")'
           go run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json

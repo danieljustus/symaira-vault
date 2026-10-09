@@ -186,7 +186,23 @@ func resolveGo() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate Go executable %q: %w", goExecutable, err)
 	}
-	cmd := exec.Command(path, "version") // #nosec G204 -- path is resolved via exec.LookPath(goExecutable), a fixed name overridable only in tests
+	if goExecutable == "go" {
+		// Product tests may use a patched compiler; the archived oracle must
+		// still run with the exact compiler recorded in its fixture.
+		launcher := exec.Command(path, "env", "GOROOT") // #nosec G204 -- path is the Go launcher resolved above
+		launcher.Env = append(os.Environ(), "GOTOOLCHAIN="+requiredGoVersion)
+		goRoot, resolveErr := launcher.Output()
+		if resolveErr != nil {
+			return "", fmt.Errorf("resolve pinned Go root: %w", resolveErr)
+		}
+		name := "go"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		path = filepath.Join(strings.TrimSpace(string(goRoot)), "bin", name)
+	}
+	cmd := exec.Command(path, "version") // #nosec G204 -- path is the resolved pinned Go binary or a test-only executable
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("check Go toolchain %q: %w", path, err)
