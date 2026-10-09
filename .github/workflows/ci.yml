@@ -236,6 +236,7 @@ jobs:
     env:
       CARGO_BUILD_JOBS: '2'
       GOMAXPROCS: '2'
+      RUST_TEST_THREADS: '1'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -317,6 +318,7 @@ jobs:
     env:
       CARGO_BUILD_JOBS: '2'
       GOMAXPROCS: '2'
+      RUST_TEST_THREADS: '1'
     strategy:
       fail-fast: false
       matrix:

@@ -139,3 +139,6 @@ ARCHITEKTUR.md
 # AgentsRoom state is per-machine agent/room metadata, not repository content.
 # Keep it out of the tracked tree so consumer checkouts stay clean.
 .agentsroom/
+
+# Python bytecode caches from running the rust-port contract drivers locally.
+__pycache__/

@@ -126,7 +126,7 @@ class Peer:
                 f"X-Echo: {TOKEN}\r\nSet-Cookie: a={TOKEN}\r\nSet-Cookie: b={NESTED}\r\n"
                 f"{extra}Connection: close\r\n\r\n").encode()+response)
             stream.close()
-        except (ssl.SSLError, TimeoutError, ConnectionResetError, BrokenPipeError):
+        except (ssl.SSLError, TimeoutError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
             # TLS rejection and the Go reachability-only dial are expected;
             # an actual accepted HTTP observation is required separately.
             pass
