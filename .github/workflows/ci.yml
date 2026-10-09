@@ -490,7 +490,10 @@ jobs:
 
   macos-vaultcore:
     name: Vaultcore (macOS)
-    if: github.event_name == 'pull_request'
+    needs: [ubuntu-editors]
+    if: >-
+      github.event_name == 'pull_request' &&
+      needs.ubuntu-editors.outputs.client_changed != 'false'
     runs-on: xcode-27
     steps:
       - name: Checkout code
@@ -499,19 +502,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check if client/** changed
-        id: path-check
-        run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q '^client/'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Require Xcode 26 or newer for native icon builds
-        if: steps.path-check.outputs.run == 'true'
         run: |
           set -euo pipefail
           xcodebuild -version
@@ -522,22 +513,18 @@ jobs:
           fi
 
       - name: Set up Go
-        if: steps.path-check.outputs.run == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.6'
           cache: true
 
       - name: Build Vaultcore framework
-        if: steps.path-check.outputs.run == 'true'
         run: scripts/build-vaultcore.sh
 
       - name: Install XcodeGen
-        if: steps.path-check.outputs.run == 'true'
         run: brew install xcodegen
 
       - name: Build native Vault apps and verify icons
-        if: steps.path-check.outputs.run == 'true'
         run: |
           set -euo pipefail
           go build -o symvault .
@@ -573,12 +560,10 @@ jobs:
             "$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Symaira Vault.app"
 
       - name: Swift build
-        if: steps.path-check.outputs.run == 'true'
         working-directory: client
         run: swift build
 
       - name: Swift test
-        if: steps.path-check.outputs.run == 'true'
         working-directory: client
         run: swift test
 
@@ -586,6 +571,8 @@ jobs:
     name: Editors (Ubuntu)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    outputs:
+      client_changed: ${{ steps.path-check.outputs.client_changed }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -593,16 +580,56 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check if editors/** changed
+      - name: Check if editors/** or Vaultcore inputs changed
         id: path-check
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
-          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -q '^editors/'; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          BASE_SHA="${BASE_SHA:-}"
+          HEAD_SHA="${HEAD_SHA:-}"
+          for ref in "$BASE_SHA" "$HEAD_SHA"; do
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Pull request base/head must be a full 40-character commit SHA" >&2
+              exit 1
+            fi
+          done
+          for ref in "$BASE_SHA" "$HEAD_SHA"; do
+            if ! git cat-file -e "${ref}^{commit}"; then
+              echo "::error::Pull request commit is unavailable: $ref" >&2
+              exit 1
+            fi
+          done
+
+          changed_paths="$(mktemp "${RUNNER_TEMP}/vault-ci-changed-paths.XXXXXX")"
+          trap 'rm -f "$changed_paths"' EXIT
+          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" > "$changed_paths"
+
+          editors_changed=false
+          client_changed=false
+          while IFS= read -r -d '' path; do
+            if [[ "$path" == editors/* ]]; then
+              editors_changed=true
+            fi
+            if [[ "$path" == client/* ||
+                  "$path" == assets/branding/* ||
+                  "$path" == scripts/build-vaultcore.sh ||
+                  "$path" == scripts/verify-vault-icon.sh ||
+                  "$path" == .github/workflows/ci.yml ||
+                  "$path" == .github/workflows/release.yml ||
+                  "$path" == go.mod ||
+                  "$path" == go.sum ||
+                  "$path" == *.go ||
+                  "$path" == internal/agentskill/assets/* ||
+                  "$path" == internal/crypto/eff_large_wordlist.txt ||
+                  "$path" == internal/mcp/apitemplates/builtin/* ]]; then
+              client_changed=true
+            fi
+          done < "$changed_paths"
+
+          printf 'run=%s\nclient_changed=%s\n' "$editors_changed" "$client_changed" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js
         if: steps.path-check.outputs.run == 'true'
@@ -951,6 +978,7 @@ jobs:
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_MACOS_VAULTCORE: ${{ needs.macos-vaultcore.result }}
+          RES_VAULTCORE_CLIENT_CHANGED: ${{ needs.ubuntu-editors.outputs.client_changed }}
           RES_UBUNTU_EDITORS: ${{ needs.ubuntu-editors.result }}
         run: |
           set -euo pipefail
@@ -965,8 +993,27 @@ jobs:
           check_path_gated() {
             local result="$1" label="$2"
             case "$result" in
-              success|skipped) echo "✅ ${label} (${result})" ;;
-              *) echo "❌ ${label} (${result:-missing})" >&2; exit 1 ;;
+              success|skipped) echo "✅ ${label} (${result})"; return 0 ;;
+              *) echo "❌ ${label} (${result:-missing})" >&2; return 1 ;;
+            esac
+          }
+          check_vaultcore() {
+            local client_changed="$1" result="$2"
+            case "$client_changed" in
+              true)
+                if [ "$result" != success ]; then
+                  echo "❌ macos-vaultcore (${result:-missing}) despite client_changed=true" >&2
+                  return 1
+                fi
+                echo "✅ macos-vaultcore (${result}; client_changed=true)"
+                ;;
+              false)
+                check_path_gated "$result" macos-vaultcore
+                ;;
+              *)
+                echo "❌ Vaultcore input classification (${client_changed:-missing}) is not true or false" >&2
+                return 1
+                ;;
             esac
           }
           check_required "$RES_GOVULNCHECK" govulncheck
@@ -980,6 +1027,28 @@ jobs:
           check_required "$RES_TEST_PR" test-pr
           check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
           check_required "$RES_BUILD_PR" build-pr
-          check_path_gated "$RES_MACOS_VAULTCORE" macos-vaultcore
-          check_path_gated "$RES_UBUNTU_EDITORS" ubuntu-editors
+          expect_vaultcore() {
+            local expected="$1" client_changed="$2" result="$3" actual
+            if check_vaultcore "$client_changed" "$result" >/dev/null 2>&1; then
+              actual=accept
+            else
+              actual=reject
+            fi
+            if [ "$actual" != "$expected" ]; then
+              echo "Gate regression: client_changed=${client_changed:-missing}, result=${result:-missing} expected ${expected}, got ${actual}" >&2
+              exit 1
+            fi
+          }
+          expect_vaultcore accept true success
+          expect_vaultcore reject true skipped
+          expect_vaultcore reject true failure
+          expect_vaultcore accept false skipped
+          expect_vaultcore accept false success
+          expect_vaultcore reject false failure
+          expect_vaultcore reject unknown success
+          expect_vaultcore reject error skipped
+          expect_vaultcore reject '' skipped
+          echo "Vaultcore gate regression passed (only confirmed false permits a skip; relevant/unknown skips block)"
+          check_required "$RES_UBUNTU_EDITORS" ubuntu-editors
+          check_vaultcore "$RES_VAULTCORE_CLIENT_CHANGED" "$RES_MACOS_VAULTCORE"
           echo "✅ All applicable PR checks passed"
