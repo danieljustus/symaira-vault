@@ -362,6 +362,11 @@ jobs:
       - name: Test including doctests
         run: cargo test --workspace --all-features --locked
 
+      - name: Verify native Go/Rust CLI and authentication parity
+        if: runner.os == 'macOS'
+        shell: bash
+        run: make config-cli-differential
+
       - name: Verify real Unix MCP approval terminal
         if: runner.os != 'Windows'
         shell: bash

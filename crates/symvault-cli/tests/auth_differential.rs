@@ -657,6 +657,16 @@ fn auth_rotate_accepts_root_owned_macos_alias_and_migrates_legacy_entry() {
     let go = PathBuf::from(go);
     let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
     let home = TempDir::new("legacy-trusted-alias");
+    let home_alias = macos_var_alias(&home.0).expect(
+        "native trusted-alias fixture requires the configured temporary root (SYMVAULT_TEST_TEMP_ROOT or TMPDIR) to canonicalize below /private/var; unsupported temporary layout is not migration acceptance",
+    );
+    assert!(
+        home_alias
+            .ancestors()
+            .filter_map(|path| fs::symlink_metadata(path).ok())
+            .any(|metadata| metadata.file_type().is_symlink() && metadata.uid() == 0),
+        "native trusted-alias fixture requires a real root-owned /var system alias before vault initialization"
+    );
     let (go_real, rust_real) = legacy_vault_pair(&go, &home.0);
     let go_vault = macos_var_alias(&go_real).expect("/var alias for Go fixture");
     let rust_vault = macos_var_alias(&rust_real).expect("/var alias for Rust fixture");
