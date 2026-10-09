@@ -113,6 +113,18 @@ func TestManifestKeyTrackedSourceInventory(t *testing.T) {
 }
 
 func TestManifestKeyProductionFixture(t *testing.T) {
+	// Replay the historical fixture with its actual compiler, not the product
+	// suite's compiler. The child runs every assertion below with race detection.
+	if runtime.Version() != "go1.26.6" {
+		cmd := exec.Command("go", "test", "-race", ".", "-run", "^TestManifestKeyProductionFixture$", "-count=1", "-timeout=180s", "-v")
+		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=go1.26.6", "GOWORK=off")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("historical manifest replay: %v\n%s", err, out)
+		}
+		t.Logf("historical manifest replay:\n%s", out)
+		return
+	}
 	f, err := build(repoRoot())
 	if err != nil {
 		t.Fatal(err)

@@ -60,8 +60,11 @@ jobs:
           go-version: '1.26.9'
           cache: true
       - name: Repeat real captures and reject semantic drift
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           go test -race ./scripts/rust-port/cmd/storegen -count=1 -json > store-observations.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("store-observations.jsonl")]; required={"TestRepeatedPinnedStoreObservationsHaveStableProjection","TestClockProjectionPreservesOtherJSONBytes"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert required <= passed, required-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in required for r in rows); print("Verified real repeated-capture and byte-preservation controls executed")'
           go run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json

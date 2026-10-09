@@ -141,8 +141,11 @@ jobs:
 
       - name: Run stateful CLI differential against Go v0.22.1
         shell: bash
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           oracle_tag_commit="$(git rev-parse 'refs/tags/v0.22.1^{commit}')"
           test "$oracle_tag_commit" = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
 
@@ -166,8 +169,11 @@ jobs:
 
       - name: Run import quarantine differential against pinned Go CLI
         shell: bash
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           cli_oracle_commit="$(git rev-parse '3232e31f^{commit}')"
           test "$cli_oracle_commit" = "3232e31fb91362b6e6202774f7e95f6d477305d2"
 
