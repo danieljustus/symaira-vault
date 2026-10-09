@@ -120,6 +120,7 @@ function parseEntries(result: { content: Array<{ type: string; text: string }> }
           entries.push(...data);
         }
       } catch {
+        // Ignore non-JSON text chunks; only JSON arrays represent entries.
       }
     }
   }

@@ -149,7 +149,7 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "lint": "eslint src/",
+    "lint": "eslint --ext .ts src/",
     "clean": "rm -rf out/"
   },
   "dependencies": {
