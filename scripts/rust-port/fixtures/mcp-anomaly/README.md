@@ -43,3 +43,10 @@ The ordinary `mcpcallgen` and `http001initgen` Go tests invoke the same wrapper
 with `--generator`, requiring both immutable lanes, exact payloads and the
 actual historical compiler rather than calling a historical generator against
 the current product tree. Product builds continue to use Go 1.26.9.
+
+The separately named `mcp-historical-compiler-prerequisites-v1` adapter supplies
+resolved compiler/cache prerequisites after the unchanged historical runtime
+filter. It neither edits these originals nor changes the canonical request.
+See [execution boundary and retained proof](../../../../docs/rust-port/historical-compiler-prerequisites.md).
+Local execution and Windows cross-compilation do not clear native Windows
+acceptance; that exact-head integration gate remains separate.

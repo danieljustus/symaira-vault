@@ -19,6 +19,7 @@ import sys
 import tempfile
 
 from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, inventory, git, pinned_go, validate_reference
+import mcp_compiler_adapter as compiler_adapter
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_BASE = '2b596f916bf736250b7fd3bb4d39f5f89fb20aa2'
@@ -177,9 +178,10 @@ def candidate_fixture_payloads():
         compare_fixture(old,new,count)
 
 
-def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600):
-    row = {'name':name, 'command':command, 'exit':None, 'timed_out':False,
-           'stdout':name+'.stdout', 'stderr':name+'.stderr', 'passed':False}
+def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600, test_binary=False):
+    row = {'name':name, 'command':command, 'cwd':str(cwd), 'exit':None, 'timed_out':False,
+           'stdout':str((output/(name+'.stdout')).resolve()),
+           'stderr':str((output/(name+'.stderr')).resolve()), 'passed':False}
     steps.append(row)
     with (output/row['stdout']).open('wb') as out, (output/row['stderr']).open('wb') as err:
         child = subprocess.Popen(command, cwd=cwd, env=env, stdout=out, stderr=err,
@@ -200,7 +202,8 @@ def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600):
     if tests:
         text = (output/row['stdout']).read_text()
         actual = re.findall(r'^--- PASS: (\w+) ', text, re.M)
-        if sorted(actual) != sorted(tests) or not re.search(r'^PASS\nok\s',text,re.M):
+        trailer = r'^PASS\n\Z' if test_binary else r'^PASS\nok\s'
+        if sorted(actual) != sorted(tests) or not re.search(trailer,text,re.M):
             raise ValueError(name+' missing/extra executed generator tests: '+repr(actual))
         row['executed_tests'] = actual
     row['passed'] = True
@@ -211,7 +214,7 @@ def main():
     destinations = parser.add_mutually_exclusive_group(required=True)
     destinations.add_argument('--output', type=Path, help='new evidence directory, never overwrites a prior run')
     destinations.add_argument('--output-root', type=Path, help='parent for a fresh retained run directory')
-    parser.add_argument('--generator', choices=['tools-call','http-initialize'],
+    parser.add_argument('--generator', choices=['tools-call','http-initialize','execute-with-secret'],
                         help='bounded two-reference acceptance for ordinary Go generator tests')
     args = parser.parse_args()
     if sys.flags.optimize:
@@ -240,6 +243,7 @@ def main():
                'fixture_anchor':FIXTURE_BASE, 'candidate_commit':git(ROOT, 'rev-parse', 'HEAD').decode().strip(),
                'candidate_inputs':inventory(ROOT,[*FIXTURES,*generators,*sources,
                    *(ARCHIVE+n+'.txt' for n in ARCHIVED_INPUTS),
+                   *compiler_adapter.SOURCES,
                    'scripts/rust-port/mcp_oracle.py','scripts/rust-port/mcp_fixture_contract.py',ANCHOR.relative_to(ROOT).as_posix()]),
                'native_os':sys.platform, 'passed':False, 'lanes':[]}
     selected = {name:count for name,count in FIXTURES.items()
@@ -278,14 +282,30 @@ def main():
                     names = git(tree,'ls-files').decode().splitlines()
                     inputs = sorted((set(names) | set(generators)) - set(FIXTURES))
                     row['build_inputs'] = inventory(tree,inputs)
+                    row['build_environment'] = dict(isolated)
                     check = ['-check'] if lane=='historical' else []
                     if not args.generator or args.generator=='tools-call':
                         run_step([go,'run','./scripts/rust-port/cmd/mcpcallgen',*check],tree,isolated,lane_out,'tools-call',row['steps'])
                     if not args.generator or args.generator=='http-initialize':
                         run_step([go,'run','./scripts/rust-port/cmd/http001initgen',*check],tree,isolated,lane_out,'http-initialize',row['steps'])
-                    tests = ['TestGenerateMCP'+name+'Fixture' for name in CASES]
-                    if not args.generator:
-                        run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],tree,isolated,lane_out,'generators',row['steps'],tests)
+                    tests = ['TestGenerateMCP'+name+'Fixture' for name in CASES
+                             if not args.generator or CASES[name][1]=='execute-with-secret.json']
+                    if not args.generator or args.generator=='execute-with-secret':
+                        isolated,row['compiler_adapter'] = compiler_adapter.prepare(
+                            go,isolated,tree,lane_out/'compiler-adapter',row['steps'],run_step)
+                        row['generator_environment'] = dict(isolated)
+                        # go test prepends GOROOT/bin to PATH. Compile first,
+                        # then run the unmodified test binary from its package
+                        # directory so our separately recorded PATH is effective.
+                        binary=lane_out/('generators.test.exe' if os.name=='nt' else 'generators.test')
+                        run_step([go,'test','-c','./internal/mcp/server','-o',str(binary)],
+                                 tree,isolated,lane_out,'generators-build',row['steps'])
+                        row['generator_binary_sha256']=hashlib.sha256(binary.read_bytes()).hexdigest()
+                        run_step([str(binary),'-test.run=^('+'|'.join(tests)+')$',
+                                  '-test.count=1','-test.timeout=8m','-test.v'],
+                                 tree/'internal/mcp/server',isolated,lane_out,'generators',
+                                 row['steps'],tests,test_binary=True)
+                        compiler_adapter.verify(row['compiler_adapter'])
                     if lane=='corrected' and not args.generator:
                         regressions=['TestAnomalyDispatch'+suffix for suffix in [
                             'CompletionOrder','GenuineToolChain','EOFAuditLifetime','Timestamp',
