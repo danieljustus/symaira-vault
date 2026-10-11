@@ -981,15 +981,16 @@ mcp-write-tty-approval-differential: mcp-write-tty-approval-fixtures-check
 
 mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixtures-check mcp-execute-api-https-fixtures-check mcp-execute-with-secret-fixtures-check mcp-write-tty-approval-fixtures-check mcp-execute-api-request-fixtures-check api-templates-fixtures-check
 
-# Historical fixtures stay immutable. Execute their original reference and a
-# separately source-bound corrected reference; compare every behavior field.
+# Historical fixtures stay immutable. Execute the reviewed approval lifetime
+# generator on both source references; compare every behavior and identity field.
+# The producer's default original mode remains available for historical diagnosis.
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
 
 mcp-ordered-fixtures-check: mcp-oracle-controls
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --output-root "$(MCP_FIXTURE_EVIDENCE)"
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
 mcp-call-differential: mcp-call-fixtures-check mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
 	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked

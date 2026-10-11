@@ -547,9 +547,12 @@ func TestExecuteWithSecretFixtureGoEnvironment(t *testing.T) {
 	}
 	probe := exec.Command(executable, probeArgs[1:]...)
 	probe.Env = append(append([]string{}, build.Env...), "SYMAIRA_EXECUTE_SECRET_ENV_PROBE="+string(expectedEnv))
-	output, err := probe.CombinedOutput()
+	var probeStderr bytes.Buffer
+	probe.Stderr = &probeStderr
+	output, err := probe.Output()
+	t.Logf("build child stdout=%q stderr=%q", output, probeStderr.String())
 	if err != nil {
-		t.Fatalf("build environment child: %v: %s", err, output)
+		t.Fatalf("build environment child: %v: stdout=%q stderr=%q", err, output, probeStderr.String())
 	}
 	check("build", string(output))
 	// Negative control: the unchanged production filter still strips the cache.
@@ -574,15 +577,22 @@ func TestExecuteWithSecretFixtureGoEnvironment(t *testing.T) {
 	var observed struct {
 		ExitCode int    `json:"exit_code"`
 		Stdout   string `json:"stdout"`
+		Stderr   string `json:"stderr"`
 	}
 	if err := json.Unmarshal([]byte(result.Text), &observed); err != nil || observed.ExitCode != 0 {
 		t.Fatalf("runtime child result: %v: %s", err, result.Text)
 	}
-	start, end := strings.Index(observed.Stdout, "{"), strings.LastIndex(observed.Stdout, "}")
-	if start < 0 || end < start {
-		t.Fatal("runtime child did not return environment observation")
+	t.Logf("runtime child stdout=%q stderr=%q", observed.Stdout, observed.Stderr)
+	// Compare the entire production data envelope, normalizing only its random
+	// marker. JSON slicing would hide stray output before or after the probe.
+	for label, stream := range map[string]struct{ got, want string }{
+		"stdout": {observed.Stdout, string(output)},
+		"stderr": {observed.Stderr, probeStderr.String()},
+	} {
+		if normalizeExecuteWithSecretOutput(t, stream.got) != normalizeExecuteWithSecretOutput(t, EmbedAsData("command_output", stream.want)) {
+			t.Errorf("runtime child %s differs from observed build child stream: %q", label, stream.got)
+		}
 	}
-	check("runtime", observed.Stdout[start:end+1])
 	if len(input["env_vars"].(map[string]any)) != 1 {
 		t.Fatal("fixture setup mutated the canonical request")
 	}

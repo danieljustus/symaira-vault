@@ -5,6 +5,9 @@ package oracletest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,15 +20,35 @@ import (
 // the current product compiled under a historical revision label.
 func Check(t *testing.T, generator string, cases int) []byte {
 	t.Helper()
+	fixture, err := fixtureName(generator, cases)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate oracle acceptance helper")
 	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(filename), "../../../.."))
-	output := filepath.Join(t.TempDir(), "evidence")
+	owned := t.TempDir()
+	output := filepath.Join(owned, "evidence")
+	files, err := os.OpenRoot(owned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := files.Close(); closeErr != nil {
+			t.Errorf("close evidence root: %v", closeErr)
+		}
+	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "python3", "-B", "scripts/rust-port/mcp_fixture_contract.py", "--generator", generator, "--output", output)
+	// Fixed interpreter/script, no shell. The only variable arguments are an
+	// allowlisted generator and a private testing-owned output directory.
+	cmd := exec.CommandContext(ctx, "python3", "-B", "scripts/rust-port/mcp_fixture_contract.py")
+	if cmd.Err != nil || !filepath.IsAbs(cmd.Path) {
+		t.Fatalf("python3 must resolve to an absolute PATH executable: %v", cmd.Err)
+	}
+	cmd.Args = append(cmd.Args, "--generator", generator, "--output", output)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=go1.26.6", "GOWORK=off", "GOENV=off")
 	log, err := cmd.CombinedOutput()
@@ -33,7 +56,7 @@ func Check(t *testing.T, generator string, cases int) []byte {
 	if err != nil {
 		t.Fatalf("two-reference generator acceptance: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(output, "receipt.json"))
+	data, err := readEvidence(files, "evidence/receipt.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,9 +86,50 @@ func Check(t *testing.T, generator string, cases int) []byte {
 			t.Fatalf("incomplete %s generator acceptance", expected.lane)
 		}
 	}
-	data, err = os.ReadFile(filepath.Join(output, "historical", generator+".json"))
+	data, err = readEvidence(files, "evidence/historical/"+fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return data
+}
+
+func fixtureName(generator string, cases int) (string, error) {
+	switch {
+	case generator == "tools-call" && cases == 4:
+		return "tools-call.json", nil
+	case generator == "http-initialize" && cases == 27:
+		return "http-initialize.json", nil
+	default:
+		return "", fmt.Errorf("unsupported generator/count: %q/%d", generator, cases)
+	}
+}
+
+// Root.Open confines reads even if a generated path is replaced by a symlink.
+// The size limit bounds both the receipt and the returned fixture allocation.
+func readEvidence(root *os.Root, name string) (data []byte, err error) {
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("invalid evidence path: %q", name)
+	}
+	file, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	const limit = 16 << 20
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, fmt.Errorf("evidence must be a regular file of at most %d bytes", limit)
+	}
+	data, err = io.ReadAll(io.LimitReader(file, limit+1))
+	if len(data) > limit {
+		return nil, fmt.Errorf("evidence exceeds %d bytes", limit)
+	}
+	return data, err
 }

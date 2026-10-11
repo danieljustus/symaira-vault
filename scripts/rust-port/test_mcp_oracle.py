@@ -2,11 +2,15 @@
 """Fail-closed controls; constructed metadata here is not native evidence."""
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
+import re
+import shlex
 import subprocess
 import sys
+import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -237,6 +241,156 @@ class OracleControls(unittest.TestCase):
                     process.observe(Path('synthetic'),home,'unit','fixture','go',rows)
             self.assertEqual(rows[0]['child_markers'],{'run_command':marker,'execute_with_secret':None})
             self.assertEqual(rows[0]['stderr_raw'],'unexpected\n')
+
+
+class ApprovalProducerControls(unittest.TestCase):
+    """Real source materialization; constructed capture metadata is UNIT ONLY."""
+
+    def test_actual_native_entrypoints_select_full_corrected_mode_and_default_stays_original(self):
+        # Expand the real workflow Make dependencies, then drive the producer's
+        # actual parser. Stop before source admission: no compiler/native claim.
+        commands = [['mcp_fixture_contract.py', '--output', 'not-created']]
+        for workflow, target in [('.github/workflows/rust-mcp-process.yml', 'mcp-ordered-fixtures-check'),
+                                 ('.github/workflows/ci.yml', 'mcp-call-fixtures-check')]:
+            text = (fixtures.ROOT/workflow).read_text()
+            self.assertRegex(text, r'(?m)^\s+run: make '+re.escape(target)+r'\s*$')
+            expanded = subprocess.check_output(['make', '-n', target], cwd=fixtures.ROOT, text=True)
+            producer = [shlex.split(line) for line in expanded.splitlines()
+                        if 'scripts/rust-port/mcp_fixture_contract.py' in line]
+            self.assertEqual(len(producer), 1)
+            words = producer[0]
+            commands.append(words[words.index('scripts/rust-port/mcp_fixture_contract.py'):])
+        original_parse = fixtures.argparse.ArgumentParser.parse_args
+        selected = []
+        def observe(parser, *args, **kwargs):
+            parsed = original_parse(parser, *args, **kwargs)
+            selected.append((parsed.approval_generator, parsed.generator))
+            return parsed
+        for argv in commands:
+            with patch.object(sys, 'argv', argv), \
+                 patch.object(fixtures.argparse.ArgumentParser, 'parse_args', observe), \
+                 patch.object(fixtures, 'validate_reference', side_effect=RuntimeError('unit admission boundary')), \
+                 self.assertRaisesRegex(RuntimeError, 'unit admission boundary'):
+                fixtures.main()
+        self.assertEqual(selected, [('original', None), ('approval-lifetime-v1', None), ('approval-lifetime-v1', None)])
+        self.assertEqual((len(fixtures.FIXTURES), sum(fixtures.FIXTURES.values()),
+                          fixtures.CASES['WriteApproval'][2]), (26, 248, 14))
+
+    def test_materialization_and_exact_capture_identity_on_both_sources(self):
+        original = json.loads(fixtures.historical_file(fixtures.ROOT, fixtures.APPROVAL_FIXTURE).read_bytes())
+        generators = fixtures.generator_paths()
+        for commit in (oracle.HISTORICAL, oracle.ORDERED):
+            with self.subTest(commit=commit), tempfile.TemporaryDirectory() as raw:
+                tree = Path(raw)
+                # Read immutable Git source blobs, without creating a worktree or
+                # launching a compiler. No generated native capture is claimed.
+                archive = fixtures.git(fixtures.ROOT, 'archive', commit, *original['oracle']['source_files'])
+                with tarfile.open(fileobj=io.BytesIO(archive)) as files:
+                    for member in files.getmembers():
+                        if member.isfile():
+                            path = tree/member.name
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            data = files.extractfile(member)
+                            assert data is not None
+                            path.write_bytes(data.read())
+                mapping = fixtures.materialize_inputs(tree, generators, commit, 'approval-lifetime-v1')
+                assert mapping is not None
+                data = (tree/fixtures.APPROVAL_GENERATOR).read_bytes()
+                approved = fixtures.approval_generator_source(fixtures.ROOT)
+                expected = approved if commit == oracle.HISTORICAL else approved.replace(
+                    oracle.HISTORICAL.encode(), oracle.ORDERED.encode())
+                self.assertEqual(data, expected)
+                self.assertEqual(mapping['materialized_sha256'], hashlib.sha256(data).hexdigest())
+                self.assertEqual(mapping['corrected_sha256'], fixtures.APPROVAL_SHA256)
+                self.assertEqual(mapping['product_source_commit'], commit)
+                self.assertEqual(bool(mapping['identity_delta']), commit == oracle.ORDERED)
+                for name in [*generators, *fixtures.FIXTURES]:
+                    if name == fixtures.APPROVAL_GENERATOR:
+                        continue
+                    expected = fixtures.historical_file(fixtures.ROOT, name).read_bytes()
+                    if commit == oracle.ORDERED and name in generators and name.endswith('.go'):
+                        expected = fixtures.corrected_generator(expected)
+                    self.assertEqual((tree/name).read_bytes(), expected, name)
+                identity = fixtures.approval_capture_oracle(tree, commit)
+                self.assertNotEqual(identity['generator_hash'], original['oracle']['generator_hash'])
+                self.assertEqual(identity['commit_sha'], commit)
+                # Positive/negative structural controls, NOT fresh observations.
+                unit_capture = dict(original, oracle=identity)
+                fixtures.compare_approval_capture(unit_capture, identity)
+                with self.assertRaisesRegex(ValueError, 'identity or behavior drift'):
+                    fixtures.compare_approval_capture(original, identity)
+                for field in ('commit_sha', 'commit', 'source_hash', 'generator_hash', 'generator_files'):
+                    changed = copy.deepcopy(unit_capture)
+                    changed['oracle'][field] = original['oracle'][field] if field == 'generator_hash' else 'unit-invalid'
+                    with self.subTest(field=field), self.assertRaises(ValueError):
+                        fixtures.compare_approval_capture(changed, identity)
+                for field in ('audit_actions', 'prompt_details', 'exists', 'text', 'approval_calls'):
+                    changed = copy.deepcopy(unit_capture)
+                    changed['cases'][0][field] = None
+                    with self.subTest(field=field), self.assertRaises(ValueError):
+                        fixtures.compare_approval_capture(changed, identity)
+                changed = copy.deepcopy(unit_capture)
+                changed['cases'][0]['approval_calls'] = float(changed['cases'][0]['approval_calls'])
+                with self.assertRaises(ValueError):
+                    fixtures.compare_approval_capture(changed, identity)
+                with self.assertRaises(ValueError):
+                    fixtures.compare_approval_capture(dict(unit_capture, cases=[]), identity)
+
+    def test_original_mode_never_reads_or_falls_back_to_corrected_source(self):
+        for commit in (oracle.HISTORICAL, oracle.ORDERED):
+            with self.subTest(commit=commit), tempfile.TemporaryDirectory() as raw, patch.object(
+                    fixtures, 'approval_generator_source', side_effect=AssertionError('implicit correction')):
+                tree = Path(raw)
+                generators = fixtures.generator_paths()
+                self.assertIsNone(fixtures.materialize_inputs(tree, generators, commit, 'original'))
+                for name in [*generators, *fixtures.FIXTURES]:
+                    expected = fixtures.historical_file(fixtures.ROOT, name).read_bytes()
+                    if commit == oracle.ORDERED and name in generators and name.endswith('.go'):
+                        expected = fixtures.corrected_generator(expected)
+                    self.assertEqual((tree/name).read_bytes(), expected, name)
+
+    def test_unreviewed_source_and_widened_delta_fail_before_materialization(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)/'inputs'
+            tree = Path(raw)/'destination'
+            original = fixtures.historical_file(fixtures.ROOT, fixtures.APPROVAL_GENERATOR).read_bytes()
+            approved = fixtures.approval_generator_source(fixtures.ROOT)
+            for name, data in [(fixtures.APPROVAL_GENERATOR, original), (fixtures.APPROVAL_SOURCE, approved)]:
+                (root/name).parent.mkdir(parents=True, exist_ok=True)
+                (root/name).write_bytes(data)
+            changed = approved+b'// unreviewed\n'
+            (root/fixtures.APPROVAL_SOURCE).write_bytes(changed)
+            with patch.object(fixtures, 'ROOT', root):
+                with self.assertRaisesRegex(ValueError, 'unreviewed approval'):
+                    fixtures.materialize_inputs(tree, [fixtures.APPROVAL_GENERATOR], oracle.HISTORICAL, 'approval-lifetime-v1')
+                self.assertFalse(tree.exists())
+                # Even coordinated digest drift must not widen the exact delta.
+                with patch.object(fixtures, 'APPROVAL_SHA256', hashlib.sha256(changed).hexdigest()), \
+                     self.assertRaisesRegex(ValueError, 'delta exceeds'):
+                    fixtures.materialize_inputs(tree, [fixtures.APPROVAL_GENERATOR], oracle.HISTORICAL, 'approval-lifetime-v1')
+                self.assertFalse(tree.exists())
+
+    def test_cli_cannot_narrow_corrected_mode_or_pass_without_native_evidence(self):
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw)/'no-native-evidence'
+            argv = ['mcp_fixture_contract.py', '--approval-generator', 'approval-lifetime-v1', '--output', str(output)]
+            with patch.object(sys, 'argv', argv+['--generator', 'tools-call']), \
+                 patch.object(fixtures, 'pinned_go', side_effect=AssertionError('no compiler allowed')) as compiler, \
+                 self.assertRaises(SystemExit) as rejected:
+                fixtures.main()
+            self.assertEqual(rejected.exception.code, 2)
+            compiler.assert_not_called()
+            self.assertFalse(output.exists())
+            with patch.object(sys, 'argv', argv), patch.object(fixtures, 'pinned_go',
+                    side_effect=RuntimeError('unit-only missing native evidence')), \
+                    self.assertRaisesRegex(RuntimeError, 'missing native evidence'):
+                fixtures.main()
+            receipt = json.loads((output/'receipt.json').read_bytes())
+            self.assertFalse(receipt['passed'])
+            self.assertEqual(receipt['lanes'], [])
+            self.assertNotIn('compiler', receipt)
+            self.assertEqual(receipt['approval_generator'], 'approval-lifetime-v1')
+            self.assertEqual(receipt['candidate_inputs'][fixtures.APPROVAL_SOURCE], fixtures.APPROVAL_SHA256)
 
 
 if __name__=='__main__':

@@ -125,7 +125,7 @@ jobs:
                   assert result['passed']==expected_clean and rejected!=expected_clean
           print('PASS narrow diagnostic and post-output receipt unit controls')
           PY
-      - name: Replay historical fixtures and corrected source with race regressions
+      - name: Execute corrected approval generator on both references with race regressions
         env:
           SYMVAULT_TEST_KEYRING: memory
         run: make mcp-ordered-fixtures-check

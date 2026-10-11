@@ -7,7 +7,7 @@ import subprocess
 
 from mcp_oracle import inventory, tool_environment
 
-VERSION = 'mcp-historical-compiler-prerequisites-v1'
+VERSION = 'mcp-historical-compiler-prerequisites-v2'
 SOURCES = ('scripts/rust-port/mcp_compiler_adapter.py',
            'scripts/rust-port/mcp_compiler_adapter.go.txt')
 PREREQUISITES = ('GOCACHE', 'GOMODCACHE', 'GOPATH', 'GOROOT')
@@ -28,9 +28,13 @@ def prepare(go, env, tree, output, steps, run_step):
         raise ValueError('adapter compiler is outside resolved GOROOT')
     if subprocess.check_output([str(compiler),'env','GOVERSION'],cwd=tree,env=env).strip()!=b'go1.26.6':
         raise ValueError('adapter requires actual go1.26.6 in isolated HOME')
+    child = (tree/'scripts/rust-port/cmd/execute_secret_child/main.go').resolve(strict=True)
+    if not child.is_file() or not child.is_relative_to(tree.resolve(strict=True)):
+        raise ValueError('adapter child must be an existing file inside the oracle tree')
     config = {'compiler':str(compiler),
               'compiler_sha256':hashlib.sha256(compiler.read_bytes()).hexdigest(),
-              'child_source':str(tree/'scripts/rust-port/cmd/execute_secret_child/main.go'),
+              'child_source':str(child),
+              'child_source_sha256':hashlib.sha256(child.read_bytes()).hexdigest(),
               'environment':prerequisites, 'trace':str(output/'invocations.jsonl')}
     # Bind all toolchain files, not a selected source list. The adapter build is
     # stdlib-only (CGO disabled); no module, embed or external library is omitted.
@@ -71,8 +75,14 @@ def verify(row):
     if len(calls)!=1:
         raise ValueError('expected one real filtered compiler invocation')
     call=calls[0]
-    if call['command']!=[config['compiler'],'run',config['child_source']] or call['exit']!=0:
+    command=call['command']
+    child=Path(config['child_source'])
+    if (len(command)!=3 or command[:2]!=[config['compiler'],'run'] or call['exit']!=0
+            or not Path(command[2]).is_absolute() or not Path(command[2]).samefile(child)):
         raise ValueError('historical compiler invocation failed or changed')
+    if (hashlib.sha256(child.read_bytes()).hexdigest()!=config['child_source_sha256']
+            or call['child_source_sha256']!=config['child_source_sha256']):
+        raise ValueError('historical child source identity drift')
     if call['compiler_sha256']!=config['compiler_sha256']:
         raise ValueError('historical compiler identity drift')
     keys=set(map(str.upper,call['input_keys']))
