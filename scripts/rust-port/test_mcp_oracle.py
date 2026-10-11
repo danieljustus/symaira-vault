@@ -246,15 +246,35 @@ class OracleControls(unittest.TestCase):
 class ApprovalProducerControls(unittest.TestCase):
     """Real source materialization; constructed capture metadata is UNIT ONLY."""
 
+    def test_actual_native_entrypoints_under_non_utf8_locale(self):
+        # A fresh interpreter exercises real implicit file/subprocess decoding,
+        # not mocked workflow text. This is a locale control, not native evidence.
+        code = '''import codecs, io, locale, sys, unittest
+locale.setlocale(locale.LC_CTYPE, 'C')
+assert not sys.flags.utf8_mode
+assert codecs.lookup(locale.getpreferredencoding(False)).name != 'utf-8'
+with io.TextIOWrapper(io.BytesIO()) as stream:
+    assert codecs.lookup(stream.encoding).name != 'utf-8'
+sys.path.insert(0, 'scripts/rust-port')
+import test_mcp_oracle
+unittest.main(module=test_mcp_oracle, argv=['locale-control',
+    'ApprovalProducerControls.test_actual_native_entrypoints_select_full_corrected_mode_and_default_stays_original'], verbosity=2)
+'''
+        result = subprocess.run([sys.executable, '-B', '-X', 'utf8=0', '-c', code],
+                                cwd=fixtures.ROOT, capture_output=True, timeout=30,
+                                env=dict(os.environ, LC_ALL='C', LANG='C',
+                                         PYTHONUTF8='0', PYTHONCOERCECLOCALE='0'))
+        self.assertEqual(result.returncode, 0, (result.stdout, result.stderr))
+
     def test_actual_native_entrypoints_select_full_corrected_mode_and_default_stays_original(self):
         # Expand the real workflow Make dependencies, then drive the producer's
         # actual parser. Stop before source admission: no compiler/native claim.
         commands = [['mcp_fixture_contract.py', '--output', 'not-created']]
         for workflow, target in [('.github/workflows/rust-mcp-process.yml', 'mcp-ordered-fixtures-check'),
                                  ('.github/workflows/ci.yml', 'mcp-call-fixtures-check')]:
-            text = (fixtures.ROOT/workflow).read_text()
+            text = (fixtures.ROOT/workflow).read_text(encoding='utf-8')
             self.assertRegex(text, r'(?m)^\s+run: make '+re.escape(target)+r'\s*$')
-            expanded = subprocess.check_output(['make', '-n', target], cwd=fixtures.ROOT, text=True)
+            expanded = subprocess.check_output(['make', '-n', target], cwd=fixtures.ROOT, encoding='utf-8')
             producer = [shlex.split(line) for line in expanded.splitlines()
                         if 'scripts/rust-port/mcp_fixture_contract.py' in line]
             self.assertEqual(len(producer), 1)
