@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 import mcp_deadline_diagnostic as diagnostic
+import mcp_deadline_capture as capture
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT/'.github/workflows/rust-mcp-process.yml'
@@ -137,6 +138,108 @@ class SourceControls(unittest.TestCase):
                     source.rename(root/'retained-deleted-input.txt')
                     with self.assertRaisesRegex(ValueError,'missing compiler input'):
                         diagnostic.closure_accesses([str(source)],after,diagnostic.snapshot([root]),private)
+
+    def test_actual_descriptor_capture_survives_rename_and_binds_both_roots(self):
+        # Ordinary file IO only. No lease/ptrace/compile or invented native record.
+        with tempfile.TemporaryDirectory(prefix='deadline-source-',dir=os.environ['TMPDIR']) as raw:
+            private = Path(raw).resolve()
+            blobs = private/'blobs'
+            blobs.mkdir()
+            for directory in ('build','compiler-tmp'):
+                with self.subTest(directory=directory):
+                    root = private/directory
+                    root.mkdir()
+                    before = diagnostic.snapshot([root])
+                    source = root/'new-input.txt'
+                    content = b'actual generated file-only control\n'
+                    source.write_bytes(content)
+                    with source.open('rb') as stream:
+                        # The production copying primitive sees a real open input.
+                        row = capture.retain_fd(stream.fileno(),blobs/(directory+'.input'))
+                        capture.verify_fd(stream.fileno(),row)
+                        capture.verify_blob(blobs,row)
+                        self.assertEqual((blobs/row['blob']).read_bytes(),content)
+                        after = diagnostic.snapshot([root])
+                        self.assertEqual(diagnostic.closure_accesses([str(source)],before,after,private,
+                                         {str(source):row}),[str(source)])
+                        # Windows CRT does not share delete access. Its ordinary
+                        # workflow control reopens the same inode after rename;
+                        # Unix additionally checks the still-held descriptor.
+                        if os.name == 'nt':
+                            stream.close()
+                        source.rename(root/'moved-input.txt')
+                        with (root/'moved-input.txt').open('rb') as moved:
+                            capture.verify_fd(moved.fileno(),row)
+                        if not stream.closed:
+                            # Unlink only this test-created fixture. The retained
+                            # input is now genuinely absent from the directory.
+                            (root/'moved-input.txt').unlink()
+                            capture.verify_fd(stream.fileno(),row)
+                        after = diagnostic.snapshot([root])
+                        self.assertEqual(diagnostic.closure_accesses([str(source)],before,after,private,
+                                         {str(source):row}),[str(source)])
+                        # Reopening the pathname would capture the wrong inode.
+                        source.write_bytes(b'replacement input\n')
+                        if not stream.closed:
+                            capture.verify_fd(stream.fileno(),row)
+                        with self.assertRaisesRegex(ValueError,'captured generated input changed'):
+                            diagnostic.closure_accesses([str(source)],before,diagnostic.snapshot([root]),
+                                                        private,{str(source):row})
+
+    def test_descriptor_and_retained_blob_mutations_are_rejected(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-source-',dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            source = root/'algorithm-input'
+            source.write_bytes(b'file-only content A\n')
+            with source.open('rb') as stream:
+                blob = root/'held.input'
+                row = capture.retain_fd(stream.fileno(),blob)
+                source.write_bytes(b'file-only content B\n')
+                with self.assertRaisesRegex(ValueError,'changed'):
+                    capture.verify_fd(stream.fileno(),row)
+                blob.write_bytes(b'corrupted blob\n')
+                with self.assertRaisesRegex(ValueError,'captured blob changed'):
+                    capture.verify_blob(root,row)
+                blob.rename(root/'removed.input')
+                with self.assertRaises(FileNotFoundError):
+                    capture.verify_blob(root,row)
+                with self.assertRaisesRegex(ValueError,'invalid captured blob'):
+                    capture.verify_blob(root,{**row,'blob':'../outside.input'})
+            with self.assertRaises(OSError):
+                capture.retain_fd(-1,root/'absent.input')
+            self.assertFalse((root/'absent.input').exists())
+
+    def test_native_dispatch_source_and_unsupported_syscalls_fail_closed(self):
+        # ABI argument controls, not fabricated kernel logs or successful receipts.
+        args = [7,8,1,2,9,0]
+        for number in (0,17,19,295,327,275,326):
+            self.assertEqual(capture.input_fd(number,args),7)
+        self.assertEqual(capture.input_fd(40,args),8)
+        self.assertEqual(capture.input_fd(16,[7,0x40049409,8,0,0,0]),8)
+        with self.assertRaisesRegex(ValueError,'unsupported compiler ioctl'):
+            capture.input_fd(16,[7,0x4020940d,8,0,0,0])
+        with self.assertRaisesRegex(ValueError,'untraced/namespaced'):
+            capture.input_fd(56,[0x00800000,0,0,0,0,0])
+        with self.assertRaisesRegex(ValueError,'number/ABI'):
+            capture.input_fd(0x40000000,args)
+        self.assertEqual(capture.input_fd(9,args),9)
+        self.assertIsNone(capture.input_fd(9,[7,8,3,0x22,9,0]))
+        with self.assertRaisesRegex(ValueError,'writable shared'):
+            capture.input_fd(9,[7,8,3,1,9,0])
+        for number in (101,206,209,310,311,425,426,427):
+            with self.subTest(number=number), self.assertRaisesRegex(ValueError,'unsupported'):
+                capture.input_fd(number,args)
+        with self.assertRaisesRegex(ValueError,'unsupported compiler syscall ABI'):
+            capture.read_syscall(bytes(88),0)
+        text = Path(capture.__file__).read_text()
+        self.assertLess(text.index('fcntl.fcntl(fd,fcntl.F_SETLEASE'),text.index('row = retain_fd('))
+        self.assertIn('verify_fd(fd,row)',text)
+        self.assertIn("signal.signal(sig,interrupted)",text)
+        self.assertIn("record['complete'] = False",text)
+        producer = Path(diagnostic.__file__).read_text()
+        self.assertIn("str(ROOT/'scripts/rust-port/mcp_deadline_capture.py')",producer)
+        self.assertIn("verify_blob(directory/'blobs',row)",producer)
+        self.assertNotIn("return ['strace'",producer)
 
     def test_open_argument_grammar_only_exempts_unambiguous_output(self):
         # Lexical unit arguments, deliberately NOT strace logs or native receipts.

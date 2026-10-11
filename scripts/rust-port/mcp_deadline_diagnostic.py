@@ -26,6 +26,7 @@ from typing import Any
 
 from mcp_oracle import inventory
 from mcp_fixture_contract import confined_file
+from mcp_deadline_capture import verify_blob
 
 BASE = '01f7daae181eba3a34bc90382cfb58e7fa9925c8'
 PATCH = 'scripts/rust-port/mcp_deadline_diagnostic.patch'
@@ -238,8 +239,8 @@ def snapshot(roots):
     """Conservative complete inventories, including symlinks and file modes.
 
     Bounded to the actual offline packages/SDK and Linux native tool directories,
-    not operator homes. strace must account for every successful compiler open or
-    exec against before/after inventories. A generated pathname is not evidence
+    not operator homes. The live collector accounts for consumed descriptors and
+    exec inputs against before/after inventories. A generated pathname is not evidence
     of the bytes consumed while compilation was running.
     """
     result = {}
@@ -323,7 +324,7 @@ def accessed_files(raw):
     return sorted(paths)
 
 
-def closure_accesses(paths, before, after, private):
+def closure_accesses(paths, before, after, private, captured=None):
     private = private.resolve()
     generated = []
     special = {'/dev/null', '/dev/urandom', '/dev/random'}
@@ -332,6 +333,19 @@ def closure_accesses(paths, before, after, private):
     for raw in paths:
         path = Path(raw)
         if raw in special or raw in cargo_state:
+            continue
+        if captured is not None and raw in captured:
+            require(path.is_absolute() and '..' not in path.parts and
+                    (path.is_relative_to(private/'build') or path.is_relative_to(private/'compiler-tmp')),
+                    'captured input outside generated roots')
+            # The caller has verified the actual phase/exit/lease receipt and ALL
+            # retained blobs. A vanished ephemeral file is still bound by its
+            # held descriptor; a surviving file must match its last consumption.
+            row = captured[raw]
+            if raw in after:
+                require(all(after[raw].get(k) == row[k] for k in ('size','sha256','mode')),
+                        'captured generated input changed: '+raw)
+            generated.append(raw)
             continue
         require(path.exists(), 'unbound or missing compiler input: '+raw)
         resolved_path = path.resolve(strict=True)
@@ -346,10 +360,9 @@ def closure_accesses(paths, before, after, private):
 def compiler_capture(roots, before, generated_before, private, evidence, phase, code, error):
     """Finalize actual inventories/traces even when a compiler command failed.
 
-    ponytail: boundary snapshots cannot bind an input first created/consumed
-    inside a command, even if it survives. Refuse suite admission in that case.
-    Admitting those bytes needs separately reviewed capture at consumption;
-    neither an after-only hash nor a directory exemption is a substitute.
+    Live generated-input capture is mandatory on both compiler commands, not an
+    optional directory exemption. Its lease-protected bytes are retained before
+    read/mmap/exec, including inputs unlinked before the command exits.
     """
     record = {'complete':False, 'phase':phase, 'command_exit':code,
               'command_error':error, 'errors':[], 'acceptance':False}
@@ -369,15 +382,24 @@ def compiler_capture(roots, before, generated_before, private, evidence, phase, 
             record['errors'].append(name+': '+str(problem))
     observed = set()
     try:
-        for trace in sorted(evidence.glob('*.trace.*')):
-            require(trace.stat().st_size <= 64*1024**2, 'compiler trace size bound exceeded')
-            observed.update(accessed_files(trace.read_text()))
-        require(observed, 'empty compiler access trace')
+        captured = {}
+        for name,command in [('clippy',CLIPPY),('build-tests',NO_RUN)]:
+            directory = evidence/(name+'-capture')
+            data = json.loads((directory/'capture.json').read_bytes())
+            observed.update(data['observed'])
+            require(data['command'] == command and data['complete'] and not data['errors']
+                    and data['command_exit'] == 0, 'incomplete live compiler capture: '+name)
+            require(data['events'] > 0 and (directory/'syscalls.jsonl').stat().st_size > 0,
+                    'missing raw compiler consumption events')
+            for row in data['generated']:
+                verify_blob(directory/'blobs',row)
+                captured[row['path']] = row
+        require(observed, 'empty compiler consumption capture')
         if after is None or generated_after is None:
             raise ValueError('incomplete compiler inventories')
         require(before == after, 'compiler input closure changed during build')
         generated = closure_accesses(sorted(observed), before | generated_before,
-                                     after | generated_after, private)
+                                     after | generated_after, private, captured)
         record['generated_accesses'] = generated
     except Exception as problem:
         record['errors'].append(str(problem))
@@ -434,7 +456,6 @@ def begin():
         require(text.startswith(expected), 'installed tool identity mismatch: '+name)
         if name == 'rustc':
             require('host: x86_64-unknown-linux-gnu' in text, 'non-native Rust compiler')
-    installed(isolated, 'strace')
     installed(isolated, 'timeout')
     save(EVIDENCE/'environment.json', isolated)
     save(EVIDENCE/'paths.json', {'private':str(private),'sdk':str(sdk)})
@@ -488,8 +509,8 @@ def owning():
     generated_before = snapshot([private/'build', compiler_tmp])
     save(EVIDENCE/'generated-inputs-before.json', generated_before)
     def traced(command, name):
-        return ['strace','-ff','-z','-yy','-s','65535','-e',
-                'trace=open,openat,openat2,execve,execveat','-o',str(EVIDENCE/(name+'.trace')), *command]
+        return [sys.executable,'-B',str(ROOT/'scripts/rust-port/mcp_deadline_capture.py'),
+                str(private),str(EVIDENCE/(name+'-capture')),'--',*command]
     # Clippy can compile native dependencies/build scripts too. Bind those real
     # reads in the same closure; a later warm no-run build cannot account for them.
     phase, code, error = 'fmt', None, None
