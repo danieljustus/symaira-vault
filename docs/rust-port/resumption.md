@@ -1,6 +1,20 @@
 # Rust migration handover — 2026-09-09
 
-## Current bounded MCP package, 2026-10-11
+## Current native-prerequisite repair, 2026-10-11
+
+Task `t_c13388cd` composes the local MCP candidate `c8376fa4` with the existing
+security prerequisite `6f7864cc` and serving-budget repair `766019ad`. It repairs
+isolated Go cache resolution and the ordinary generator tests without changing
+historical oracle identities or their independently anchored bytes. Separate
+product captures bind the composed ordered source and patched module inputs.
+
+Local source/fixture, Go, Rust and lint evidence is retained in
+`native-prerequisite-repair-handoff.json`. Independent SPEC/parity and
+QUALITY/security review of the complete composition remains required. No new
+native Linux/Windows acceptance, remote integration, release, cutover or Go
+removal is claimed. The earlier package below remains historical context.
+
+## Prior bounded MCP package, 2026-10-11
 
 Task `t_22223af2` owns the local `migration/rust-final-20261011` continuation of
 PR #1321 from `2b596f916bf736250b7fd3bb4d39f5f89fb20aa2`. See ADR 0016's

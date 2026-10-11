@@ -1,6 +1,7 @@
 """The historical MCP oracle and its narrowly corrected, independent successor."""
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path
 import platform
@@ -52,6 +53,10 @@ def tool_environment(env, build=False):
 
 def pinned_go(env, cwd):
     """Resolve before HOME isolation, then prohibit automatic compiler switching."""
+    # Windows derives GOCACHE from LOCALAPPDATA, not HOME. Use these public
+    # directory hints only during resolution; never expose them to test CLIs.
+    cache_hints = {key.upper():value for key,value in env.items()
+                   if key.upper() in {'LOCALAPPDATA','APPDATA'}}
     env = tool_environment(env, build=True)
     env.update(GOENV='off',GOWORK='off')
     version = subprocess.check_output(['go', 'env', 'GOVERSION'], cwd=cwd, env=env).decode().strip()
@@ -60,6 +65,9 @@ def pinned_go(env, cwd):
     goroot = subprocess.check_output(['go', 'env', 'GOROOT'], cwd=cwd, env=env).decode().strip()
     go = Path(goroot)/'bin'/('go.exe' if os.name == 'nt' else 'go')
     local = dict(env, GOTOOLCHAIN='local', GOROOT=goroot, GOFLAGS='-p=2',GOMAXPROCS='2')
+    # Nested generators also invoke "go" by name. Bind those to the resolved
+    # compiler, not the product compiler that happened to launch this wrapper.
+    local['PATH'] = str(go.parent)+os.pathsep+env.get('PATH',os.defpath)
     if subprocess.check_output([str(go), 'env', 'GOVERSION'], cwd=cwd, env=local).decode().strip() != version:
         raise ValueError('resolved compiler identity changed')
     keys=['GOHOSTOS','GOHOSTARCH','GOOS','GOARCH','GOFLAGS','GOEXPERIMENT',
@@ -69,6 +77,14 @@ def pinned_go(env, cwd):
     native_arch={'arm64':'arm64','aarch64':'arm64','x86_64':'amd64','AMD64':'amd64'}.get(platform.machine())
     if settings['GOOS'] != native_os or settings['GOARCH'] != native_arch:
         raise ValueError('Go target is not the actual native target')
+    caches=json.loads(subprocess.check_output(
+        [str(go),'env','-json','GOCACHE','GOMODCACHE','GOPATH'],
+        cwd=cwd,env=dict(local,**cache_hints)))
+    path_module = ntpath if native_os == 'windows' else os.path
+    for key in ('GOCACHE','GOMODCACHE'):
+        if not isinstance(caches[key],str) or not path_module.isabs(caches[key]):
+            raise ValueError('Go cache must be an absolute controlled path: '+key)
+    local.update(caches)
     local.update(GOOS=settings['GOOS'],GOARCH=settings['GOARCH'])
     return str(go), local, {'version':version, 'compiler_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),
-                           'build_settings':settings}
+                           'build_settings':settings, 'cache_paths':caches}

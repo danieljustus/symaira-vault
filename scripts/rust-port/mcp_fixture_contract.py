@@ -24,6 +24,18 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_BASE = '2b596f916bf736250b7fd3bb4d39f5f89fb20aa2'
 ANCHOR = ROOT/'scripts/rust-port/fixtures/mcp-anomaly/historical-inputs.json'
 ANCHOR_SHA256 = '678531bead3d9bc4a8d754ce7996b8cd29f94d8a4dbb8ef91cef71577296394d'
+ARCHIVED_INPUTS = {
+    'internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go',
+    'internal/mcp/server/mcp_secure_input_fixture_generator_test.go',
+    'internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go',
+    'scripts/rust-port/cmd/mcpcallgen/main_test.go',
+    'scripts/rust-port/cmd/http001initgen/main_test.go',
+    'scripts/rust-port/cmd/execute_secret_provenance/main.go',
+    'testdata/port/mcp/copy-clipboard.json',
+    'testdata/port/mcp/execute-with-secret.json',
+    'testdata/port/mcp/secure-input.json',
+}
+ARCHIVE = 'scripts/rust-port/fixtures/mcp-anomaly/historical/'
 CAADD = 'caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44'
 # Explicit inventory: do not derive acceptance counts from whatever ran.
 CASES = {
@@ -137,22 +149,32 @@ def fixture_anchor(root, names):
     for name in names:
         if not isinstance(name,str) or name not in manifest['files']:
             raise ValueError('unanchored fixture input path')
-        confined_file(root,name)
+        historical_file(root,name)
     for name in names:
-        if hashlib.sha256(confined_file(root,name).read_bytes()).hexdigest() != manifest['files'][name]:
+        if hashlib.sha256(historical_file(root,name).read_bytes()).hexdigest() != manifest['files'][name]:
             raise ValueError('historical fixture/generator anchor drift: '+name)
 
 
+def historical_file(root, name):
+    # Explicit relocated originals, not an automatic fallback on checksum error.
+    # The unchanged independent anchor still authenticates every byte.
+    return confined_file(root, ARCHIVE+name+'.txt' if name in ARCHIVED_INPUTS else name)
+
+
 def generator_paths():
-    paths = set()
-    for name in FIXTURES:
-        data = json.loads((ROOT/name).read_bytes())
-        paths.update(data['oracle'].get('generator_files', []))
-    paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT/'internal/mcp/server').glob('*fixture*_test.go'))
-    for directory in ['mcpcallgen', 'http001initgen', 'execute_secret_provenance']:
-        paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT/'scripts/rust-port/cmd'/directory).glob('*.go'))
-    paths.update(p.relative_to(ROOT).as_posix() for p in (ROOT/'scripts/rust-port/internal/provenance').glob('*.go'))
-    return sorted(paths)
+    fixture_anchor(ROOT, ())
+    return sorted(set(json.loads(ANCHOR.read_bytes())['files']) - set(FIXTURES))
+
+
+def candidate_fixture_payloads():
+    # Product captures may bind patched dependencies; historical bytes may not.
+    # Their separate provenance gates check those metadata changes. No response,
+    # state, request, count or JSON type may drift from the historical contract.
+    for name, count in FIXTURES.items():
+        old=json.loads(historical_file(ROOT,name).read_bytes())
+        new=json.loads(confined_file(ROOT,name).read_bytes())
+        new['oracle']=dict(old['oracle'],commit_sha=ORDERED)
+        compare_fixture(old,new,count)
 
 
 def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600):
@@ -189,6 +211,8 @@ def main():
     destinations = parser.add_mutually_exclusive_group(required=True)
     destinations.add_argument('--output', type=Path, help='new evidence directory, never overwrites a prior run')
     destinations.add_argument('--output-root', type=Path, help='parent for a fresh retained run directory')
+    parser.add_argument('--generator', choices=['tools-call','http-initialize'],
+                        help='bounded two-reference acceptance for ordinary Go generator tests')
     args = parser.parse_args()
     if sys.flags.optimize:
         parser.error('unoptimized Python is required')
@@ -196,9 +220,14 @@ def main():
     fixture_anchor(ROOT, FIXTURES)
     generators = generator_paths()
     fixture_anchor(ROOT, [*FIXTURES, *generators])
+    candidate_fixture_payloads()
     # Every currently declared production input must equal the corrected source.
-    sources = sorted({p for name in FIXTURES for p in json.loads((ROOT/name).read_bytes())['oracle']['source_files']})
+    sources = sorted({p for name in FIXTURES for p in json.loads(historical_file(ROOT,name).read_bytes())['oracle']['source_files']})
     for name in sources:
+        # The oracle lanes build the exact immutable module files, while the
+        # product's patched dependencies are tested separately, not relabelled.
+        if name in {'go.mod','go.sum'}:
+            continue
         if (ROOT/name).read_bytes() != git(ROOT, 'show', ORDERED+':'+name):
             raise ValueError('candidate production input drift: '+name)
     if args.output_root:
@@ -209,8 +238,12 @@ def main():
         output.mkdir(parents=True, exist_ok=False)
     receipt = {'contract':CONTRACT, 'historical_oracle':HISTORICAL, 'corrected_oracle':ORDERED,
                'fixture_anchor':FIXTURE_BASE, 'candidate_commit':git(ROOT, 'rev-parse', 'HEAD').decode().strip(),
-               'candidate_inputs':inventory(ROOT,[*FIXTURES,*generators,*sources,'scripts/rust-port/mcp_oracle.py','scripts/rust-port/mcp_fixture_contract.py',ANCHOR.relative_to(ROOT).as_posix()]),
+               'candidate_inputs':inventory(ROOT,[*FIXTURES,*generators,*sources,
+                   *(ARCHIVE+n+'.txt' for n in ARCHIVED_INPUTS),
+                   'scripts/rust-port/mcp_oracle.py','scripts/rust-port/mcp_fixture_contract.py',ANCHOR.relative_to(ROOT).as_posix()]),
                'native_os':sys.platform, 'passed':False, 'lanes':[]}
+    selected = {name:count for name,count in FIXTURES.items()
+                if not args.generator or Path(name).stem==args.generator}
     try:
         go, env, compiler = pinned_go(os.environ.copy(), ROOT)
         receipt['compiler'] = compiler
@@ -227,7 +260,7 @@ def main():
                     for name in [*generators,*FIXTURES]:
                         target = tree/name
                         target.parent.mkdir(parents=True,exist_ok=True)
-                        data = (ROOT/name).read_bytes()
+                        data = historical_file(ROOT,name).read_bytes()
                         if lane=='corrected' and name in generators and name.endswith('.go'):
                             data = corrected_generator(data)
                         target.write_bytes(data)
@@ -246,41 +279,63 @@ def main():
                     inputs = sorted((set(names) | set(generators)) - set(FIXTURES))
                     row['build_inputs'] = inventory(tree,inputs)
                     check = ['-check'] if lane=='historical' else []
-                    run_step([go,'run','./scripts/rust-port/cmd/mcpcallgen',*check],tree,isolated,lane_out,'tools-call',row['steps'])
-                    run_step([go,'run','./scripts/rust-port/cmd/http001initgen',*check],tree,isolated,lane_out,'http-initialize',row['steps'])
+                    if not args.generator or args.generator=='tools-call':
+                        run_step([go,'run','./scripts/rust-port/cmd/mcpcallgen',*check],tree,isolated,lane_out,'tools-call',row['steps'])
+                    if not args.generator or args.generator=='http-initialize':
+                        run_step([go,'run','./scripts/rust-port/cmd/http001initgen',*check],tree,isolated,lane_out,'http-initialize',row['steps'])
                     tests = ['TestGenerateMCP'+name+'Fixture' for name in CASES]
-                    run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],tree,isolated,lane_out,'generators',row['steps'],tests)
-                    if lane=='corrected':
+                    if not args.generator:
+                        run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],tree,isolated,lane_out,'generators',row['steps'],tests)
+                    if lane=='corrected' and not args.generator:
                         regressions=['TestAnomalyDispatch'+suffix for suffix in [
                             'CompletionOrder','GenuineToolChain','EOFAuditLifetime','Timestamp',
                             'BusyWorkerDoesNotBlockTools','CloseDrainsAdmittedTool']]
                         run_step([go,'test','-race','./internal/mcp/server','-run','^TestAnomalyDispatch','-count=1','-timeout=8m','-v'],
                                  tree,isolated,lane_out,'anomaly-race',row['steps'],regressions)
-                    for name,count in FIXTURES.items():
+                    for name,count in selected.items():
                         captured=(tree/name).read_bytes()
                         (lane_out/Path(name).name).write_bytes(captured)
-                        old=json.loads((ROOT/name).read_bytes())
+                        old=json.loads(historical_file(ROOT,name).read_bytes())
                         if lane=='historical':
-                            if captured != (ROOT/name).read_bytes():
+                            if captured != historical_file(ROOT,name).read_bytes():
                                 raise ValueError('historical fixture changed: '+name)
                         else:
                             compare_fixture(old,json.loads(captured),count)
                     if row['build_inputs'] != inventory(tree,inputs):
                         raise ValueError('oracle build inputs changed during execution')
-                    row.update(passed=True,fixtures=len(FIXTURES),cases=sum(FIXTURES.values()),
-                               captures=inventory(lane_out,[Path(p).name for p in FIXTURES]))
+                    row.update(passed=True,fixtures=len(selected),cases=sum(selected.values()),
+                               captures=inventory(lane_out,[Path(p).name for p in selected]))
                 finally:
                     # Preserve available outputs even when a generator fails.
                     for name in FIXTURES:
                         if (tree/name).is_file():
                             (lane_out/Path(name).name).write_bytes((tree/name).read_bytes())
                     git(ROOT,'worktree','remove','--force',str(tree))
+        if not args.generator:
+            # The product captures bind patched module inputs separately from
+            # both immutable lanes. Replay, do not merely trust their metadata.
+            product_out=output/'product'
+            product_out.mkdir()
+            product={'passed':False,'steps':[]}
+            receipt['product_replay']=product
+            with tempfile.TemporaryDirectory(prefix='mcp-product-fixtures-') as raw:
+                home=Path(raw)
+                current=dict(env,HOME=str(home),USERPROFILE=str(home),
+                             XDG_CONFIG_HOME=str(home/'config'),XDG_DATA_HOME=str(home/'data'),
+                             XDG_CACHE_HOME=str(home/'cache'),SYMVAULT_TEST_KEYRING='memory',
+                             SYMVAULT_RUN_WINDOWS_CROSSLANG='1',SYMVAULT_SECUREUI='none',SYMVAULT_NO_NOTIFY='1',TZ='UTC')
+                names=['CopyClipboard','SecureInput','ExecuteWithSecret']
+                current.update({'SYMAIRA_CHECK_MCP_'+CASES[n][0]+'_FIXTURE':'1' for n in names})
+                tests=['TestGenerateMCP'+n+'Fixture' for n in names]
+                run_step([go,'test','./internal/mcp/server','-run','^('+'|'.join(tests)+')$','-count=1','-timeout=8m','-v'],
+                         ROOT,current,product_out,'generators',product['steps'],tests)
+            product['passed']=True
         if receipt['candidate_inputs'] != inventory(ROOT,receipt['candidate_inputs']):
             raise ValueError('candidate inputs changed during fixture acceptance')
         receipt['passed']=True
     finally:
         (output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
-    print(f'PASS historical replay and {CONTRACT}: {len(FIXTURES)} fixtures, {sum(FIXTURES.values())} cases per lane; {output}/receipt.json')
+    print(f'PASS historical replay and {CONTRACT}: {len(selected)} fixtures, {sum(selected.values())} cases per lane; {output}/receipt.json')
 
 
 if __name__=='__main__':

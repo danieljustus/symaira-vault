@@ -17,6 +17,13 @@ on:
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'
       - 'scripts/rust-port/test_mcp_oracle.py'
+      - 'scripts/rust-port/cmd/mcpcallgen/**'
+      - 'scripts/rust-port/cmd/http001initgen/**'
+      - 'scripts/rust-port/cmd/execute_secret_*/*'
+      - 'scripts/rust-port/internal/provenance/**'
+      - 'scripts/rust-port/internal/oracletest/**'
+      - 'go.mod'
+      - 'go.sum'
       - 'scripts/rust-port/fixtures/mcp-anomaly/**'
       - 'internal/mcp/server/**'
       - 'docs/adr/0016-mcp-discovery-and-call-authorization.md'
@@ -42,7 +49,7 @@ jobs:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.6
+      GOTOOLCHAIN: go1.26.9
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
       TZ: UTC
@@ -65,7 +72,7 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
       - name: Set up pinned Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -127,8 +134,10 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
-          cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2>&1
+          # Raw server stderr must not interleave with libtest's named verdicts.
+          cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr
           cat target/native-mcp-tests.txt
+          cat target/native-mcp-tests.stderr
           python3 - <<'PY'
           import os, re
           from pathlib import Path
@@ -143,11 +152,23 @@ jobs:
           for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions']:
               assert f'{case} ... ok' in text
           PY
-          cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
+          cargo test -p symvault-cli --test mcp_commands_contract --locked api_template_fixture > target/native-mcp-cli-tests.txt 2> target/native-mcp-cli-tests.stderr
+          cat target/native-mcp-cli-tests.txt
+          cat target/native-mcp-cli-tests.stderr
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('target/native-mcp-cli-tests.txt').read_text()
+          assert 'test result: ok. 2 passed; 0 failed; 0 ignored;' in text
+          for case in ['cli_runtime_executes_source_bound_api_template_fixture', 'api_template_fixture_slow_setup_preserves_serving_budget']:
+              assert f'test {case} ... ok' in text
+          PY
           cargo build -p symvault-cli --bin symvault --locked
       - name: Execute actual Go and Rust native profiles and hostile stdio
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           rust_cli=target/debug/symvault
           if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
           python3 scripts/rust-port/mcp_process_contract.py --reference mcp-anomaly-ordered-v1 --rust "$rust_cli" --receipt target/native-mcp-process.json
@@ -186,6 +207,9 @@ jobs:
           path: |
             target/native-mcp-process.json
             target/native-mcp-tests.txt
+            target/native-mcp-tests.stderr
+            target/native-mcp-cli-tests.txt
+            target/native-mcp-cli-tests.stderr
             target/mcp-fixture-evidence/
           if-no-files-found: error
           retention-days: 14

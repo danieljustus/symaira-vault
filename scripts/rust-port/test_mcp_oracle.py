@@ -78,6 +78,64 @@ class OracleControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'actual go1.26.6'):
                 oracle.pinned_go(dict(os.environ,GOTOOLCHAIN='go1.26.6'),fixtures.ROOT)
 
+    def test_windows_cache_paths_survive_home_isolation_without_environment_leaks(self):
+        # Exercise the real Windows cache-resolution branch and drive-qualified
+        # paths. Compiler responses are explicit unit stubs, not native evidence.
+        settings={'GOOS':'windows','GOARCH':'amd64'}
+        caches={'GOCACHE':r'D:\runner\AppData\Local\go-build',
+                'GOMODCACHE':r'D:\runner\go\pkg\mod','GOPATH':r'D:\runner\go'}
+        inherited={'PATH':os.defpath,'HOME':'before','LOCALAPPDATA':r'D:\runner\AppData\Local',
+                   'GOTOOLCHAIN':'go1.26.6','AWS_SESSION_TOKEN':'synthetic-only',
+                   'HTTPS_PROXY':'synthetic-only','GOFLAGS':'-overlay=outside.json'}
+        replies=[b'go1.26.6',b'/compiler',b'go1.26.6',json.dumps(settings).encode(),json.dumps(caches).encode()]
+        with patch.object(oracle.subprocess,'check_output',side_effect=replies) as calls, \
+             patch.object(oracle.platform,'system',return_value='Windows'), \
+             patch.object(oracle.platform,'machine',return_value='AMD64'), \
+             patch.object(oracle.Path,'read_bytes',return_value=b'unit-compiler'):
+            _,env,identity=oracle.pinned_go(inherited,fixtures.ROOT)
+        env.update(HOME=r'D:\isolated',USERPROFILE=r'D:\isolated')
+        for key,value in caches.items():
+            self.assertEqual(env[key],value)
+        self.assertEqual(identity['cache_paths'],caches)
+        self.assertEqual(calls.call_args.kwargs['env']['LOCALAPPDATA'],inherited['LOCALAPPDATA'])
+        for key in ('LOCALAPPDATA','AWS_SESSION_TOKEN','HTTPS_PROXY'):
+            self.assertNotIn(key,env)
+        self.assertEqual(env['GOFLAGS'],'-p=2')
+        self.assertEqual(env['GOTOOLCHAIN'],'local')
+        self.assertTrue(env['PATH'].startswith(str(Path('/compiler')/'bin')+os.pathsep))
+        for key in ('GOCACHE','GOMODCACHE'):
+            invalid=dict(caches,**{key:'relative-cache'})
+            with self.subTest(key=key), \
+                 patch.object(oracle.subprocess,'check_output',side_effect=replies[:-1]+[json.dumps(invalid).encode()]), \
+                 patch.object(oracle.platform,'system',return_value='Windows'), \
+                 patch.object(oracle.platform,'machine',return_value='AMD64'), \
+                 self.assertRaisesRegex(ValueError,'absolute controlled path'):
+                oracle.pinned_go(inherited,fixtures.ROOT)
+
+    def test_archived_originals_and_product_payloads_cannot_self_baseline(self):
+        fixtures.candidate_fixture_payloads()
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            name='testdata/port/mcp/copy-clipboard.json'
+            archived=root/(fixtures.ARCHIVE+name+'.txt')
+            archived.parent.mkdir(parents=True)
+            original=fixtures.historical_file(fixtures.ROOT,name).read_bytes()
+            archived.write_bytes(original)
+            fixtures.fixture_anchor(root,[name])
+            archived.write_bytes(original+b'\n')
+            with self.assertRaisesRegex(ValueError,'anchor drift'):
+                fixtures.fixture_anchor(root,[name])
+            # Mutate the product capture while retaining a valid old archive.
+            archived.write_bytes(original)
+            current=root/name
+            current.parent.mkdir(parents=True)
+            changed=json.loads((fixtures.ROOT/name).read_bytes())
+            changed['cases'][0]['name']='mutated-case'
+            current.write_text(json.dumps(changed))
+            with patch.object(fixtures,'ROOT',root), patch.object(fixtures,'FIXTURES',{name:16}), \
+                 self.assertRaisesRegex(ValueError,'fixture value drift'):
+                fixtures.candidate_fixture_payloads()
+
     def test_coordinated_fixture_and_sidecar_mutation_rejected(self):
         with tempfile.TemporaryDirectory() as raw:
             anchor=Path(raw)/'anchor.json'
