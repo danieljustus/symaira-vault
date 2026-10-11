@@ -274,13 +274,11 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_EXECUTE_WITH_SECRET_FIXTURE=1 or SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE=1")
 	}
 	root := executeWithSecretRepoRoot(t)
-	unicodeCmd := exec.Command("go", "run", "./scripts/rust-port/cmd/execute_secret_unicode")
-	unicodeCmd.Dir = root
+	unicodeCmd := executeWithSecretGoCommand(root, "run", "./scripts/rust-port/cmd/execute_secret_unicode")
 	if output, err := unicodeCmd.CombinedOutput(); err != nil {
 		t.Fatalf("verify generated Go Unicode table: %v: %s", err, output)
 	}
-	provenanceCmd := exec.Command("go", "run", "./scripts/rust-port/cmd/execute_secret_provenance")
-	provenanceCmd.Dir = root
+	provenanceCmd := executeWithSecretGoCommand(root, "run", "./scripts/rust-port/cmd/execute_secret_provenance")
 	provenanceOutput, err := provenanceCmd.Output()
 	if err != nil {
 		t.Fatalf("verify Go oracle provenance: %v", err)
@@ -300,20 +298,15 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 	}
 	childBinary := filepath.Join(fixtureBinDir, childBinaryName)
 	childSource := filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")
-	buildChild := exec.Command("go", "build", "-o", childBinary, childSource)
-	buildChild.Dir = root
-	// Match the production child's filtered environment, not the oracle runner's
-	// GOTOOLCHAIN/cache overrides. Prepare its real toolchain before observing
-	// strict stdout/stderr so a cold Go download is not part of the fixture.
-	secrets.PrepareCmd(buildChild)
+	// Compilation is fixture setup, not a secret-injection runtime child. Keep
+	// its controlled caches and actual compiler, without ambient credentials.
+	buildChild := executeWithSecretGoCommand(root, "build", "-o", childBinary, childSource)
 	if output, err := buildChild.CombinedOutput(); err != nil {
 		t.Fatalf("build fixture-local true child: %v: %s", err, output)
 	}
-	oldPath := os.Getenv("PATH")
-	if err := os.Setenv("PATH", fixtureBinDir+string(os.PathListSeparator)+oldPath); err != nil {
-		t.Fatalf("prepend fixture-local child to PATH: %v", err)
-	}
-	defer func() { _ = os.Setenv("PATH", oldPath) }()
+	// The observed "go run" must use the same compiler as preparation, even if
+	// PATH originally selected a downloading shim or a different product Go.
+	t.Setenv("PATH", strings.Join([]string{fixtureBinDir, filepath.Dir(buildChild.Path), os.Getenv("PATH")}, string(os.PathListSeparator)))
 
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{"password": "testpass123"})
 	baseProfile := config.AgentProfile{
@@ -409,12 +402,7 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		}
 		actualArgs := tc.args
 		if tc.name == "secret_injection_masks_output" {
-			actualArgs = map[string]any{}
-			for key, value := range tc.args {
-				actualArgs[key] = value
-			}
-			actualCommand := []any{"go", "run", filepath.Join(root, "scripts", "rust-port", "cmd", "execute_secret_child", "main.go")}
-			actualArgs["command"] = actualCommand
+			actualArgs = executeWithSecretFixtureGoArgs(tc.args, childSource, buildChild.Env)
 		}
 		if tc.name == "timeout_protocol_error" {
 			executable, err := os.Executable()
@@ -463,6 +451,141 @@ func TestGenerateMCPExecuteWithSecretFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("wrote %s (%d bytes)", path, len(content))
+}
+
+// executeWithSecretGoCommand prepares only the fixture's compiler environment.
+// The production runtime whitelist is deliberately unchanged. In particular,
+// Windows Go needs its resolved GOCACHE or LOCALAPPDATA, not just HOME.
+func executeWithSecretGoCommand(root string, args ...string) *exec.Cmd {
+	name := "go"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", name), args...)
+	cmd.Dir = root
+	for _, entry := range os.Environ() {
+		key, value, _ := strings.Cut(entry, "=")
+		switch strings.ToUpper(key) {
+		case "PATH", "HOME", "USERPROFILE", "LOCALAPPDATA", "TMPDIR", "TMP", "TEMP",
+			"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "LANG", "LC_ALL", "LC_CTYPE",
+			"GOCACHE", "GOMODCACHE", "GOPATH", "GOTMPDIR":
+			cmd.Env = append(cmd.Env, strings.ToUpper(key)+"="+value)
+		}
+	}
+	cmd.Env = append(cmd.Env, "GOROOT="+runtime.GOROOT(), "GOTOOLCHAIN=local",
+		"GOENV=off", "GOWORK=off", "GOFLAGS=-p=2", "GOMAXPROCS=2")
+	return cmd
+}
+
+func executeWithSecretFixtureGoArgs(input map[string]any, source string, buildEnv []string) map[string]any {
+	args := make(map[string]any, len(input))
+	for key, value := range input {
+		args[key] = value
+	}
+	// Like the concrete source path, these machine-local compiler prerequisites
+	// are fixture setup, not canonical request data. Explicit env_vars survive
+	// the real runtime filter; do not broaden that filter or inherit all of Env.
+	env := make(map[string]any)
+	for _, entry := range buildEnv {
+		key, value, _ := strings.Cut(entry, "=")
+		if key != "PATH" { // Agent-supplied PATH is correctly denied by production.
+			env[key] = value
+		}
+	}
+	for key, value := range input["env_vars"].(map[string]any) {
+		env[key] = value
+	}
+	args["env_vars"] = env
+	args["command"] = []any{"go", "run", source}
+	return args
+}
+
+func TestExecuteWithSecretFixtureGoEnvironment(t *testing.T) {
+	// Drive-qualified values exercise the real nested callers on every host.
+	// The probe is an already compiled test child, not native Windows evidence;
+	// the opt-in fixture replay separately executes the real build and go run.
+	want := map[string]string{
+		"GOCACHE": `D:\runner\AppData\Local\go-build`, "GOMODCACHE": `D:\runner\go\pkg\mod`,
+		"GOPATH": `D:\runner\go`, "USERPROFILE": `D:\isolated`, "LOCALAPPDATA": `D:\isolated\AppData\Local`,
+		"GOROOT": runtime.GOROOT(), "GOTOOLCHAIN": "local", "GOENV": "off", "GOWORK": "off", "GOFLAGS": "-p=2",
+	}
+	for key, value := range want {
+		if key != "GOROOT" {
+			t.Setenv(key, value)
+		}
+	}
+	t.Setenv("GOFLAGS", "-overlay=outside.json")
+	t.Setenv("GOTOOLCHAIN", "go9.99.9")
+	for _, key := range []string{"AWS_SESSION_TOKEN", "HTTPS_PROXY", "CGO_CFLAGS"} {
+		t.Setenv(key, "synthetic-only")
+		want[key] = ""
+	}
+	build := executeWithSecretGoCommand(t.TempDir(), "version")
+	if filepath.Dir(build.Path) != filepath.Join(runtime.GOROOT(), "bin") {
+		t.Fatal("fixture compiler is not the actual test compiler")
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	probeArgs := []string{executable, "-test.run=^TestExecuteWithSecretTimeoutChild$"}
+	expectedEnv, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(label, text string) {
+		t.Helper()
+		var got map[string]bool
+		if err := json.Unmarshal([]byte(text), &got); err != nil {
+			t.Fatalf("%s probe: %v: %s", label, err, text)
+		}
+		for key := range want {
+			if !got[key] {
+				t.Errorf("%s did not preserve controlled %s", label, key)
+			}
+		}
+	}
+	probe := exec.Command(executable, probeArgs[1:]...)
+	probe.Env = append(append([]string{}, build.Env...), "SYMAIRA_EXECUTE_SECRET_ENV_PROBE="+string(expectedEnv))
+	output, err := probe.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build environment child: %v: %s", err, output)
+	}
+	check("build", string(output))
+	// Negative control: the unchanged production filter still strips the cache.
+	secrets.PrepareCmd(probe)
+	for _, entry := range probe.Env {
+		if strings.HasPrefix(entry, "GOCACHE=") {
+			t.Fatal("production runtime whitelist was broadened for fixture setup")
+		}
+	}
+	input := map[string]any{"command": []any{"go", "run", "<fixture-child-go-source>"},
+		"secret_refs": []any{}, "env_vars": map[string]any{"SYMAIRA_EXECUTE_SECRET_ENV_PROBE": string(expectedEnv)}, "timeout": 30}
+	args := executeWithSecretFixtureGoArgs(input, "probe.go", build.Env)
+	args["command"] = []any{probeArgs[0], probeArgs[1]}
+	vaultDir, identity := mockVaultWithEntry(t, "fixture", map[string]any{"value": "synthetic-only"})
+	srv := newTestServerWithVault(t, config.AgentProfile{Name: "fixture-env", AllowedPaths: []string{"*"},
+		CanRunCommands: config.BoolPtr(true), ApprovalMode: config.StrPtr("none")}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	result, err := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{Arguments: args})
+	if err != nil || result == nil || result.IsError {
+		t.Fatalf("runtime environment child: %v, %v", result, err)
+	}
+	var observed struct {
+		ExitCode int    `json:"exit_code"`
+		Stdout   string `json:"stdout"`
+	}
+	if err := json.Unmarshal([]byte(result.Text), &observed); err != nil || observed.ExitCode != 0 {
+		t.Fatalf("runtime child result: %v: %s", err, result.Text)
+	}
+	start, end := strings.Index(observed.Stdout, "{"), strings.LastIndex(observed.Stdout, "}")
+	if start < 0 || end < start {
+		t.Fatal("runtime child did not return environment observation")
+	}
+	check("runtime", observed.Stdout[start:end+1])
+	if len(input["env_vars"].(map[string]any)) != 1 {
+		t.Fatal("fixture setup mutated the canonical request")
+	}
 }
 
 func generateExecuteWithSecretApprovalObservations(t *testing.T, vaultDir string, identity *age.X25519Identity) []executeWithSecretApprovalObservation {
@@ -603,6 +726,21 @@ func goUnicodeNameDigest() string {
 }
 
 func TestExecuteWithSecretTimeoutChild(t *testing.T) {
+	if expected := os.Getenv("SYMAIRA_EXECUTE_SECRET_ENV_PROBE"); expected != "" {
+		// Observe before output masking: toolchain paths can resemble credentials.
+		var want map[string]string
+		if err := json.Unmarshal([]byte(expected), &want); err != nil {
+			os.Exit(1)
+		}
+		values := make(map[string]bool)
+		for key, value := range want {
+			values[key] = os.Getenv(key) == value
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(values); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if os.Getenv("SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD") == "1" {
 		time.Sleep(5 * time.Second)
 	}
