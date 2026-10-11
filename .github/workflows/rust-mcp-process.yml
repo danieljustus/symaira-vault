@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/rust-mcp-process.yml'
+      - 'Makefile'
       - 'crates/**'
       - 'Cargo.toml'
       - 'Cargo.lock'

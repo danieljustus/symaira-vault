@@ -10,9 +10,10 @@ import functools
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -108,15 +109,37 @@ def compare_fixture(old, new, count):
     compare(old, new)
 
 
+def confined_file(root, name):
+    if not isinstance(name,str) or '\\' in name:
+        raise ValueError('invalid fixture input path')
+    parts=PurePosixPath(name)
+    if parts.is_absolute() or '..' in parts.parts or parts.as_posix()!=name:
+        raise ValueError('invalid fixture input path')
+    root=root.resolve()
+    path=root
+    for component in parts.parts:
+        path=path/component
+        if path.is_symlink():
+            raise ValueError('symlink fixture input')
+    if not path.resolve().is_relative_to(root) or not stat.S_ISREG(path.stat().st_mode):
+        raise ValueError('fixture input must be a contained regular file')
+    return path
+
+
 def fixture_anchor(root, names):
-    raw=ANCHOR.read_bytes()
+    raw=confined_file(ANCHOR.parent,ANCHOR.name).read_bytes()
     if hashlib.sha256(raw).hexdigest() != ANCHOR_SHA256:
         raise ValueError('independent historical input anchor drift')
     manifest=json.loads(raw)
     if manifest['source_commit'] != FIXTURE_BASE:
         raise ValueError('historical input identity drift')
+    # Validate membership and file types for ALL inputs before opening ANY.
     for name in names:
-        if hashlib.sha256((root/name).read_bytes()).hexdigest() != manifest['files'].get(name):
+        if not isinstance(name,str) or name not in manifest['files']:
+            raise ValueError('unanchored fixture input path')
+        confined_file(root,name)
+    for name in names:
+        if hashlib.sha256(confined_file(root,name).read_bytes()).hexdigest() != manifest['files'][name]:
             raise ValueError('historical fixture/generator anchor drift: '+name)
 
 
@@ -132,7 +155,7 @@ def generator_paths():
     return sorted(paths)
 
 
-def run_step(command, cwd, env, output, name, steps, tests=()):
+def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600):
     row = {'name':name, 'command':command, 'exit':None, 'timed_out':False,
            'stdout':name+'.stdout', 'stderr':name+'.stderr', 'passed':False}
     steps.append(row)
@@ -140,7 +163,7 @@ def run_step(command, cwd, env, output, name, steps, tests=()):
         child = subprocess.Popen(command, cwd=cwd, env=env, stdout=out, stderr=err,
                                  start_new_session=os.name!='nt')
         try:
-            row['exit'] = child.wait(timeout=600)
+            row['exit'] = child.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             row['timed_out'] = True
             if os.name=='nt':
@@ -170,6 +193,7 @@ def main():
     if sys.flags.optimize:
         parser.error('unoptimized Python is required')
     validate_reference(ROOT)
+    fixture_anchor(ROOT, FIXTURES)
     generators = generator_paths()
     fixture_anchor(ROOT, [*FIXTURES, *generators])
     # Every currently declared production input must equal the corrected source.

@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, pinned_go, validate_reference
+from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, pinned_go, tool_environment, validate_reference
 
 if sys.flags.optimize:
     raise SystemExit('Parity acceptance requires unoptimized Python; remove -O / PYTHONOPTIMIZE.')
@@ -38,7 +38,7 @@ def checked(args, cwd=ROOT, env=None):
 
 
 def isolated(home):
-    env = {k:v for k,v in os.environ.items() if not k.startswith('SYMVAULT_')}
+    env = tool_environment(os.environ)
     env.update(HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(home/'config'),
                XDG_DATA_HOME=str(home/'data'), XDG_CACHE_HOME=str(home/'cache'),
                SYMVAULT_VAULT=str(home/'vault'), SYMVAULT_TEST_KEYRING='memory',

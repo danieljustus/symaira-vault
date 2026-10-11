@@ -78,6 +78,30 @@ class OracleControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'actual go1.26.6'):
                 oracle.pinned_go(dict(os.environ,GOTOOLCHAIN='go1.26.6'),fixtures.ROOT)
 
+    def test_coordinated_fixture_and_sidecar_mutation_rejected(self):
+        with tempfile.TemporaryDirectory() as raw:
+            anchor=Path(raw)/'anchor.json'
+            data=json.loads(fixtures.ANCHOR.read_bytes())
+            data['files']['testdata/port/mcp/tools-call.json']='0'*64
+            anchor.write_text(json.dumps(data))
+            with patch.object(fixtures,'ANCHOR',anchor), self.assertRaisesRegex(ValueError,'independent historical input anchor drift'):
+                fixtures.fixture_anchor(fixtures.ROOT,['testdata/port/mcp/tools-call.json'])
+
+    @unittest.skipIf(os.name=='nt','native Windows taskkill cleanup remains a separate gate')
+    def test_timeout_retains_failure_and_terminates_descendant(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            rows=[]
+            code='import subprocess,sys,time; p=subprocess.Popen([sys.executable,"-c","import time; time.sleep(60)"]); print(p.pid,flush=True); time.sleep(60)'
+            with self.assertRaises(subprocess.TimeoutExpired):
+                fixtures.run_step([sys.executable,'-c',code],root,os.environ.copy(),root,'timeout',rows,timeout=1)
+            self.assertTrue(rows[0]['timed_out'])
+            self.assertFalse(rows[0]['passed'])
+            self.assertLess(rows[0]['exit'],0)
+            pid=int((root/'timeout.stdout').read_text())
+            state=subprocess.run(['ps','-p',str(pid),'-o','stat='],capture_output=True,text=True,check=False)
+            self.assertTrue(state.returncode!=0 or state.stdout.strip().startswith('Z'),state.stdout)
+
     def test_child_failure_and_zero_or_wrong_tests_retain_logs(self):
         with tempfile.TemporaryDirectory() as raw:
             root=Path(raw)
@@ -106,6 +130,43 @@ class OracleControls(unittest.TestCase):
         for data in [allowed+b'audit log write failed err="audit logger is closed"\n', allowed.replace(b'severity=low',b'severity=high')]:
             with self.assertRaisesRegex(AssertionError,'unexpected stderr retained'):
                 process.protocol_bytes(SimpleNamespace(stdout=b'',stderr=data),Path('__HOME__'),'unit','go','fixture')
+
+    def test_untrusted_paths_are_rejected_before_read(self):
+        for name in ['/dev/zero','../outside','nested/../../outside','C:\\outside',None]:
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError,'unanchored'):
+                fixtures.fixture_anchor(fixtures.ROOT,[name])
+        with tempfile.TemporaryDirectory() as raw:
+            root=Path(raw)
+            name='testdata/port/mcp/tools-call.json'
+            (root/name).parent.mkdir(parents=True)
+            (root/name).mkdir()
+            with self.assertRaisesRegex(ValueError,'regular file'):
+                fixtures.fixture_anchor(root,[name])
+            (root/name).rmdir()
+            # Portable symlink construction is native-platform dependent.
+            if os.name!='nt':
+                (root/name).symlink_to(fixtures.ROOT/name)
+                with self.assertRaisesRegex(ValueError,'symlink'):
+                    fixtures.fixture_anchor(root,[name])
+                (root/name).unlink()
+                os.mkfifo(root/name)
+                with self.assertRaisesRegex(ValueError,'regular file'):
+                    fixtures.fixture_anchor(root,[name])
+
+    def test_runtime_environment_drops_ambient_credentials_and_build_overrides(self):
+        inherited={'PATH':os.defpath,'HOME':'old','OPENAI_API_KEY':'synthetic-only',
+                   'AWS_SESSION_TOKEN':'synthetic-only','SSH_AUTH_SOCK':'synthetic-only',
+                   'HTTPS_PROXY':'synthetic-only','GIT_CONFIG_COUNT':'1',
+                   'GOFLAGS':'-overlay=outside.json','GOOS':'windows','GOARCH':'386',
+                   'CGO_CFLAGS':'synthetic-only','GOTOOLCHAIN':'go1.26.6'}
+        self.assertEqual(oracle.tool_environment(inherited),{'PATH':os.defpath,'HOME':'old'})
+        with patch.dict(os.environ,inherited,clear=True):
+            actual=process.isolated(Path('__HOME__'))
+        self.assertEqual(actual['HOME'],'__HOME__')
+        for key in set(inherited)-{'PATH','HOME'}:
+            self.assertNotIn(key,actual)
+        self.assertEqual(oracle.tool_environment(inherited,build=True),
+                         {'PATH':os.defpath,'HOME':'old','GOTOOLCHAIN':'go1.26.6'})
 
     def test_marker_observation_survives_stderr_rejection(self):
         with tempfile.TemporaryDirectory() as raw:

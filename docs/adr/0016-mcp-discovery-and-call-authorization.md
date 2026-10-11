@@ -232,6 +232,12 @@ The process runner requires an explicit `--reference historical` or
 both identities, the effective compiler and complete pre/post build inputs.
 Go 1.26.6 is resolved before HOME isolation and then run with automatic
 toolchain switching disabled. A compiler environment label alone is rejected.
+Compiler target/settings are observed after discarding ambient target, overlay,
+CGO and experiment overrides; the target must equal the actual native host.
+Only documented platform/path/cache environment keys reach builders or fixture
+processes. Host API/cloud credentials, agent sockets and proxy variables do not.
+Manifest membership, path containment, symlinks and regular-file type are checked
+before opening fixture-supplied inputs, including rejection of special files.
 Child markers are retained before validating stderr, including failed runs.
 The unchanged Darwin failure stderr in `scripts/rust-port/fixtures/mcp-anomaly/`
 still fails the real validator; its capture provenance and privacy review are

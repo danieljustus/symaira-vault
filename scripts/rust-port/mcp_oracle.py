@@ -1,7 +1,9 @@
 """The historical MCP oracle and its narrowly corrected, independent successor."""
 import hashlib
+import json
 import os
 from pathlib import Path
+import platform
 import re
 import subprocess
 
@@ -38,14 +40,35 @@ def inventory(root, names):
             for name in sorted(names)}
 
 
+def tool_environment(env, build=False):
+    # Do not expose ambient API/cloud tokens, agent sockets or proxy credentials
+    # to a fixture CLI, its executor children, Go tests or build helpers.
+    allowed = {'PATH','HOME','USERPROFILE','TMPDIR','TMP','TEMP','SYSTEMROOT',
+               'WINDIR','COMSPEC','PATHEXT','LANG','LC_ALL','LC_CTYPE'}
+    if build:
+        allowed |= {'GOTOOLCHAIN','GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR'}
+    return {key:value for key,value in env.items() if key.upper() in allowed}
+
+
 def pinned_go(env, cwd):
     """Resolve before HOME isolation, then prohibit automatic compiler switching."""
+    env = tool_environment(env, build=True)
+    env.update(GOENV='off',GOWORK='off')
     version = subprocess.check_output(['go', 'env', 'GOVERSION'], cwd=cwd, env=env).decode().strip()
     if version != 'go1.26.6':
         raise ValueError('MCP oracle requires actual go1.26.6, got '+version)
     goroot = subprocess.check_output(['go', 'env', 'GOROOT'], cwd=cwd, env=env).decode().strip()
     go = Path(goroot)/'bin'/('go.exe' if os.name == 'nt' else 'go')
-    local = dict(env, GOTOOLCHAIN='local', GOROOT=goroot, GOENV='off', GOWORK='off')
+    local = dict(env, GOTOOLCHAIN='local', GOROOT=goroot, GOFLAGS='-p=2',GOMAXPROCS='2')
     if subprocess.check_output([str(go), 'env', 'GOVERSION'], cwd=cwd, env=local).decode().strip() != version:
         raise ValueError('resolved compiler identity changed')
-    return str(go), local, {'version':version, 'compiler_sha256':hashlib.sha256(go.read_bytes()).hexdigest()}
+    keys=['GOHOSTOS','GOHOSTARCH','GOOS','GOARCH','GOFLAGS','GOEXPERIMENT',
+          'GOAMD64','GOARM64','CGO_ENABLED','CC','CXX','GOTOOLCHAIN']
+    settings=json.loads(subprocess.check_output([str(go),'env','-json',*keys],cwd=cwd,env=local))
+    native_os={'Darwin':'darwin','Linux':'linux','Windows':'windows'}.get(platform.system())
+    native_arch={'arm64':'arm64','aarch64':'arm64','x86_64':'amd64','AMD64':'amd64'}.get(platform.machine())
+    if settings['GOOS'] != native_os or settings['GOARCH'] != native_arch:
+        raise ValueError('Go target is not the actual native target')
+    local.update(GOOS=settings['GOOS'],GOARCH=settings['GOARCH'])
+    return str(go), local, {'version':version, 'compiler_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),
+                           'build_settings':settings}
