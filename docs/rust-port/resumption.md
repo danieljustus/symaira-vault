@@ -1,5 +1,15 @@
 # Rust migration handover — 2026-09-09
 
+## Current bounded MCP package, 2026-10-11
+
+Task `t_22223af2` owns the local `migration/rust-final-20261011` continuation of
+PR #1321 from `2b596f916bf736250b7fd3bb4d39f5f89fb20aa2`. See ADR 0016's
+`mcp-anomaly-ordered-v1` section for the separate corrected reference and
+unchanged historical fixture contract. No migration row is promoted here.
+Local verification/review, durable publication of the corrected oracle by the
+integration owner and exact-candidate native three-OS acceptance are distinct
+gates. No release, tag, push, merge, cutover or Go removal is performed here.
+
 ## Current continuation checkpoint, 2026-10-03
 
 Read [continuation-20261003.md](continuation-20261003.md) for the current

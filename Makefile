@@ -426,8 +426,7 @@ mcp-init-differential: mcp-init-fixtures-check
 	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
 .PHONY: mcp-http-init-fixtures-check mcp-http-init-differential
-mcp-http-init-fixtures-check:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/http001initgen --check
+mcp-http-init-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-http-init-differential: mcp-http-init-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/serverbootstrap -run '^(TestRunHTTPServer_HTTP10ErrorFramingAndKeepAlive|TestRunHTTPServer_OAuthProtectedResource)$$' -count=1
@@ -871,8 +870,7 @@ docs-check:
 	echo "Documentation check passed."
 
 .PHONY: mcp-list-fixtures-check mcp-list-differential mcp-call-fixtures-check mcp-call-differential
-mcp-list-fixtures-check:
-	SYMAIRA_CHECK_MCP_LIST_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPListFixture$$' -count=1 -v
+mcp-list-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-list-differential: mcp-list-fixtures-check
 	$(CARGO) test -p symvault-mcp --test tool_list_contract --locked
@@ -893,8 +891,7 @@ onepass-import-differential:
 	$(CARGO) test -p symvault-sync --test onepass_contract --locked
 
 .PHONY: mcp-prompts-differential
-mcp-prompts-differential:
-	SYMAIRA_CHECK_MCP_PROMPTS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPPromptsFixture$$' -count=1 -v
+mcp-prompts-differential: mcp-ordered-fixtures-check
 	$(CARGO) test -p symvault-mcp --test prompts_contract --locked
 
 .PHONY: cxf-import-differential
@@ -914,8 +911,7 @@ export-differential:
 	$(CARGO) test -p symvault-sync --test export_contract --locked
 
 .PHONY: mcp-call-fixtures-check mcp-call-differential mcp-execute-with-secret-fixtures-check mcp-execute-with-secret-differential
-mcp-execute-with-secret-fixtures-check:
-	SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteWithSecretFixture$$' -count=1
+mcp-execute-with-secret-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-execute-with-secret-differential: mcp-execute-with-secret-fixtures-check
 	$(CARGO) test -p symvault-mcp --test execute_with_secret_contract --locked
@@ -928,22 +924,19 @@ api-templates-fixtures-check:
 api-templates-differential: api-templates-fixtures-check
 	$(CARGO) test -p symvault-mcp --test api_templates_contract --locked
 
-mcp-execute-api-request-fixtures-check:
-	SYMAIRA_CHECK_MCP_EXECUTE_API_REQUEST_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteAPIRequestFixture$$' -count=1
+mcp-execute-api-request-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-execute-api-request-differential: mcp-execute-api-request-fixtures-check mcp-execute-api-policy-differential
 	$(CARGO) test -p symvault-cli --test mcp_commands_contract --locked -- cli_runtime_executes_source_bound_api_template_fixture --exact
 
 .PHONY: mcp-execute-api-policy-fixtures-check mcp-execute-api-policy-differential
-mcp-execute-api-policy-fixtures-check:
-	SYMAIRA_CHECK_MCP_EXECUTE_API_POLICY_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteAPIPolicyFixture$$' -count=1
+mcp-execute-api-policy-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-execute-api-policy-differential: mcp-execute-api-policy-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib --locked -- api_review_entry_policy_matches_corrected_go_observations
 
 .PHONY: mcp-execute-api-https-fixtures-check mcp-execute-api-https-differential
-mcp-execute-api-https-fixtures-check:
-	SYMAIRA_CHECK_MCP_EXECUTE_API_HTTPS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPExecuteAPIHTTPSFixture$$' -count=1
+mcp-execute-api-https-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::https_is_verified_for_local_targets_and_public_dns_remains_blocked --exact
@@ -958,16 +951,14 @@ else
 	$(CARGO) test -p symvault-platform --lib --locked -- approval::tests::stdio_clipboard_signal_router_process_contract --exact
 endif
 
-mcp-copy-clipboard-fixtures-check:
-	SYMAIRA_CHECK_MCP_COPY_CLIPBOARD_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPCopyClipboardFixture$$' -count=1
+mcp-copy-clipboard-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-copy-clipboard-differential: mcp-copy-clipboard-fixtures-check mcp-clipboard-signals-differential
 	$(CARGO) test -p symvault-mcp --test tools_copy_to_clipboard_contract --locked
 
 .PHONY: mcp-secure-input-fixtures-check mcp-secure-input-differential
-mcp-secure-input-fixtures-check:
+mcp-secure-input-fixtures-check: mcp-ordered-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/secure_input_unicode
-	SYMAIRA_CHECK_MCP_SECURE_INPUT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPSecureInputFixture$$' -count=1
 
 mcp-secure-input-differential: mcp-secure-input-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/secureui -run '^(TestTTYReadStringRuneEditing|TestPrompt_TTYBackend_SignalCancel)$$' -count=1
@@ -979,15 +970,22 @@ mcp-approval-pty-acceptance:
 	python3 scripts/rust-port/mcp-approval-pty.py -- $(CARGO) test -p symvault-cli --test mcp_commands_contract --locked -- --ignored --exact unix_platform_approval_pty_acceptance --nocapture
 
 .PHONY: mcp-write-tty-approval-fixtures-check mcp-write-tty-approval-differential
-mcp-write-tty-approval-fixtures-check:
-	SYMAIRA_CHECK_MCP_WRITE_APPROVAL_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPWriteApprovalFixture$$' -count=1
+mcp-write-tty-approval-fixtures-check: mcp-ordered-fixtures-check
 
 mcp-write-tty-approval-differential: mcp-write-tty-approval-fixtures-check
 	$(CARGO) test -p symvault-mcp --test write_tty_approval_contract --locked
 
 mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixtures-check mcp-execute-api-https-fixtures-check mcp-execute-with-secret-fixtures-check mcp-write-tty-approval-fixtures-check mcp-execute-api-request-fixtures-check api-templates-fixtures-check
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpcallgen -check
-	SYMAIRA_CHECK_MCP_RATE_LIMIT_FIXTURE=1 SYMAIRA_CHECK_MCP_SEARCH_FETCH_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TEMPLATE_FIXTURE=1 SYMAIRA_CHECK_MCP_SYMAIRA_SEARCH_FIXTURE=1 SYMAIRA_CHECK_MCP_SANITIZE_OUTPUT_FIXTURE=1 SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 SYMAIRA_CHECK_MCP_CALL_FIXTURE=1 SYMAIRA_CHECK_MCP_GET_VALUE_FIXTURE=1 SYMAIRA_CHECK_MCP_LIST_ENTRIES_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_PASSWORD_FIXTURE=1 SYMAIRA_CHECK_MCP_GENERATE_TOTP_FIXTURE=1 SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_DELETE_ENTRY_FIXTURE=1 SYMAIRA_CHECK_MCP_AUTH_STATUS_FIXTURE=1 SYMAIRA_CHECK_MCP_SECRET_UNSEAL_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCP(Call|GetValue|ListEntries|GeneratePassword|GenerateTOTP|SetEntry|DeleteEntry|AuthStatus|AuditSelf|SanitizeOutput|SymairaSearch|GenerateTemplate|SearchFetch|RateLimit|SecretUnseal)Fixture$$' -count=1
+
+# Historical fixtures stay immutable. Execute their original reference and a
+# separately source-bound corrected reference; compare every behavior field.
+.PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
+MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
+mcp-oracle-controls:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
+
+mcp-ordered-fixtures-check: mcp-oracle-controls
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --output-root "$(MCP_FIXTURE_EVIDENCE)"
 
 mcp-call-differential: mcp-call-fixtures-check mcp-copy-clipboard-differential mcp-secure-input-differential mcp-execute-api-https-differential mcp-execute-with-secret-differential mcp-write-tty-approval-differential mcp-execute-api-request-differential api-templates-differential
 	$(CARGO) test -p symvault-mcp --test tools_call_contract --test tools_call_fixture --test tools_call_store --test tools_get_value --test tools_list_entries --test tools_generate_password --test tools_generate_totp --test tools_set_entry --test tools_delete_entry --test tools_auth_status --test tools_audit_self --test tools_sanitize_output --test tools_symaira_search --test tools_generate_template --test tools_search_fetch --test tools_secret_unseal --locked

@@ -204,3 +204,66 @@ Require successful controls as well as zero-side-effect denials. Verify every
 stdout byte belongs to a protocol frame; retain actual stderr, and never allow
 credential canaries there. Prompt/device, clipboard/autotype and HTTP/token
 contracts keep their owning acceptance gates.
+
+## Ordered anomaly reference, 2026-10-11
+
+The historical process oracle `d1cd0f97ac550bc3020bc86b0514989f8d28d95c`
+can reorder asynchronously scheduled completion events and close its audit
+sink before the last anomaly write. A command sent before a value read can
+therefore produce a false read-then-command alert. Splitting the session
+changes its semantics and still does not join pending work at EOF. Sleeping,
+retrying until green, disabling detection or allowing these diagnostics would
+not prove the intended contract.
+
+The separately named `mcp-anomaly-ordered-v1` reference is
+`24acdb08fcc7021262717aa803d72eb8d151c66a`. Its sole parent is the historical
+oracle and its only changes are `server.go`, `server_dispatch.go` and the six
+`TestAnomalyDispatch*` regressions in `server_anomaly_test.go`, copied exactly
+from the independently reviewed production repair at `2b596f91`. It preserves
+completion publication order and dispatch timestamps, permits nonblocking
+tool execution, detects genuine chains and joins admitted tools/anomaly work
+before closing the audit sink. `mcp_oracle.py` verifies that relationship and
+exact candidate file equivalence. This is a new reference decision, not a
+retroactive approval of the historical failures. All existing response,
+permission, redaction, timing, stderr and declared-difference rules remain.
+
+The process runner requires an explicit `--reference historical` or
+`--reference mcp-anomaly-ordered-v1`. CI selects the latter. Receipts retain
+both identities, the effective compiler and complete pre/post build inputs.
+Go 1.26.6 is resolved before HOME isolation and then run with automatic
+toolchain switching disabled. A compiler environment label alone is rejected.
+Child markers are retained before validating stderr, including failed runs.
+The unchanged Darwin failure stderr in `scripts/rust-port/fixtures/mcp-anomaly/`
+still fails the real validator; its capture provenance and privacy review are
+recorded alongside it.
+
+`make mcp-ordered-fixtures-check` supplies both reference lanes for the existing
+MCP fixture targets. It keeps all 26 historical fixture files, their generators
+and pins unchanged. The historical lane replays the retained Go source with
+the original source-bound generators. The corrected lane uses the same
+generators, rebasing only exact oracle identity literals and the four legacy
+source-digest constants in a disposable tree. Those digests are computed from
+immutable Git blobs using the original algorithm. No assertion or expected
+behavior is edited. Both lanes execute 248 cases, including 24 named generator
+tests; the corrected lane also runs all six anomaly regressions under `-race`.
+Every field outside the explicitly enumerated provenance identity fields must
+match, including JSON types, array order, absent fields and nulls. Historical
+bytes must match exactly. Original generators invoked directly against changed
+production source still correctly reject it; the new wrapper, not a weakened
+source check, supplies the approved two-reference comparison.
+
+A separately reviewed, digest-anchored 71-file input manifest prevents a
+changed fixture from becoming its own expected baseline and preserves the
+original generator bytes after a squash. The historical source commit in that
+manifest is capture metadata, not a new runtime dependency. Each run retains
+compiler identity, full build-input hashes, generated outputs, command exits,
+executed test names and raw stdout/stderr, including failed output. Verification
+never writes source fixtures. No Rust fixture consumer or old payload is repinned.
+
+The corrected reference must be durably published by the integration owner
+before fresh-clone CI or squash integration. The existing reachability gate
+now checks both Python oracle pins and intentionally fails if the corrected
+commit is held only by a local detached worktree. The implementation worker
+has no authority to create/publish an oracle tag. Native Linux, Darwin arm64
+and Windows process/fixture execution on the published integration candidate,
+independent review and the separate GUI/biometric/FFI gates remain required.
