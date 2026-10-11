@@ -229,7 +229,7 @@ def run(command, env, output, name, seconds):
                     row['cleanup'] = {'complete':False, 'error':str(error)}
     finally:
         save(output/(name+'.json'), row)
-    if name != 'suite':
+    if name != 'suite' and row['exit'] == 0:
         require(row['cleanup']['complete'], 'owned descendant cleanup incomplete')
     return row['exit']
 
@@ -239,7 +239,8 @@ def snapshot(roots):
 
     Bounded to the actual offline packages/SDK and Linux native tool directories,
     not operator homes. strace must account for every successful compiler open or
-    exec against these inventories or newly produced private build/tmp outputs.
+    exec against before/after inventories. A generated pathname is not evidence
+    of the bytes consumed while compilation was running.
     """
     result = {}
     total = 0
@@ -263,6 +264,23 @@ def snapshot(roots):
                 raise ValueError('special compiler input: '+key)
             result[key] = item
     return result
+
+
+def readable_open(call):
+    """Only an unambiguously write-only open is not a potential input.
+
+    Parse the quoted pathname before flags so flag-like filename text cannot
+    exempt a read. O_RDWR, O_PATH and unfamiliar successful forms fail closed.
+    """
+    match = re.fullmatch(
+        r'(?:open|openat|openat2)\((?:[^"\n]*, )?"(?:[^"\\]|\\.)*", '
+        r'(?:\{flags=)?(O_[A-Z0-9_]+(?:\|[A-Z0-9_]+)*)(?:,.*|\}.*|\))', call)
+    if match is None:
+        raise ValueError('unknown successful open flags')
+    flags = set(match[1].split('|'))
+    modes = flags & {'O_RDONLY', 'O_WRONLY', 'O_RDWR'}
+    require(len(modes) == 1, 'ambiguous successful open access mode')
+    return modes != {'O_WRONLY'}
 
 
 def accessed_files(raw):
@@ -299,12 +317,14 @@ def accessed_files(raw):
                 raise ValueError('unknown successful open/exec trace')
             path = match[1]
         require(Path(path).is_absolute() and ' (deleted)' not in path, 'unresolved compiler path')
-        paths.add(path)
+        if not line.startswith(('open(', 'openat(', 'openat2(')) or readable_open(line.split(' = ',1)[0]):
+            paths.add(path)
     require(pending is None, 'incomplete compiler trace')
     return sorted(paths)
 
 
 def closure_accesses(paths, before, after, private):
+    private = private.resolve()
     generated = []
     special = {'/dev/null', '/dev/urandom', '/dev/random'}
     cargo_state = {str(private/'cargo'/name) for name in
@@ -313,17 +333,58 @@ def closure_accesses(paths, before, after, private):
         path = Path(raw)
         if raw in special or raw in cargo_state:
             continue
-        resolved_path = path.resolve()
-        if resolved_path.is_relative_to(private/'build') or resolved_path.is_relative_to(private/'compiler-tmp'):
-            generated.append(raw)
-            continue
-        resolved = str(path.resolve(strict=True))
-        if path.is_dir():
-            require(any(Path(p).is_relative_to(resolved) for p in before), 'unbound input directory: '+raw)
-            continue
+        require(path.exists(), 'unbound or missing compiler input: '+raw)
+        resolved_path = path.resolve(strict=True)
+        resolved = str(resolved_path)
         require(resolved in before and before[resolved] == after.get(resolved),
                 'unbound or changed compiler input: '+raw)
+        if resolved_path.is_relative_to(private/'build') or resolved_path.is_relative_to(private/'compiler-tmp'):
+            generated.append(raw)
     return generated
+
+
+def compiler_capture(roots, before, generated_before, private, evidence, phase, code, error):
+    """Finalize actual inventories/traces even when a compiler command failed.
+
+    ponytail: boundary snapshots cannot bind an input first created/consumed
+    inside a command, even if it survives. Refuse suite admission in that case.
+    Admitting those bytes needs separately reviewed capture at consumption;
+    neither an after-only hash nor a directory exemption is a substitute.
+    """
+    record = {'complete':False, 'phase':phase, 'command_exit':code,
+              'command_error':error, 'errors':[], 'acceptance':False}
+    after, generated_after = None, None
+    # Independent attempts retain whichever inventory is obtainable. A failed
+    # snapshot/trace must not suppress the original compiler's nonzero exit.
+    for name, items in [('compiler-inputs-after.json', roots),
+                        ('generated-inputs.json', [private/'build', private/'compiler-tmp'])]:
+        try:
+            captured = snapshot(items)
+            save(evidence/name, captured)
+            if name == 'compiler-inputs-after.json':
+                after = captured
+            else:
+                generated_after = captured
+        except Exception as problem:
+            record['errors'].append(name+': '+str(problem))
+    observed = set()
+    try:
+        for trace in sorted(evidence.glob('*.trace.*')):
+            require(trace.stat().st_size <= 64*1024**2, 'compiler trace size bound exceeded')
+            observed.update(accessed_files(trace.read_text()))
+        require(observed, 'empty compiler access trace')
+        if after is None or generated_after is None:
+            raise ValueError('incomplete compiler inventories')
+        require(before == after, 'compiler input closure changed during build')
+        generated = closure_accesses(sorted(observed), before | generated_before,
+                                     after | generated_after, private)
+        record['generated_accesses'] = generated
+    except Exception as problem:
+        record['errors'].append(str(problem))
+    save(evidence/'compiler-accesses.json', {'observed':sorted(observed)})
+    record['complete'] = phase == 'build-tests' and code == 0 and error is None and not record['errors']
+    save(evidence/'compiler-closure.json', record)
+    return record
 
 
 def binaries(raw, target):
@@ -424,34 +485,36 @@ def owning():
     roots.add(str(ROOT/'.git'))
     before = snapshot(roots)
     save(EVIDENCE/'compiler-inputs-before.json', before)
-    code = run(FMT,env,EVIDENCE,'fmt',120)
-    if code:
-        return code
+    generated_before = snapshot([private/'build', compiler_tmp])
+    save(EVIDENCE/'generated-inputs-before.json', generated_before)
     def traced(command, name):
         return ['strace','-ff','-z','-yy','-s','65535','-e',
                 'trace=open,openat,openat2,execve,execveat','-o',str(EVIDENCE/(name+'.trace')), *command]
     # Clippy can compile native dependencies/build scripts too. Bind those real
     # reads in the same closure; a later warm no-run build cannot account for them.
-    code = run(traced(CLIPPY,'clippy'),env,EVIDENCE,'clippy',900)
+    phase, code, error = 'fmt', None, None
+    try:
+        code = run(FMT,env,EVIDENCE,'fmt',120)
+        if code == 0:
+            phase, code = 'clippy', None
+            code = run(traced(CLIPPY,'clippy'),env,EVIDENCE,'clippy',900)
+        if code == 0:
+            # No test execution; bind the real compiler access before admission.
+            phase, code = 'build-tests', None
+            code = run(traced(NO_RUN,'build-tests'),env,EVIDENCE,'build-tests',900)
+    except Exception as problem:
+        error = str(problem)
+    try:
+        closure = compiler_capture(roots,before,generated_before,private,EVIDENCE,phase,code,error)
+    except Exception as problem:
+        print('compiler capture failed: '+str(problem), file=sys.stderr)
+        if code:
+            return code
+        raise
     if code:
         return code
-    # The no-run build records real compiler access. It does NOT execute any test.
-    code = run(traced(NO_RUN,'build-tests'),env,EVIDENCE,'build-tests',900)
-    after = snapshot(roots)
-    save(EVIDENCE/'compiler-inputs-after.json', after)
-    require(before == after, 'compiler input closure changed during build')
-    if code:
-        return code
-    observed = set()
-    for trace in sorted(EVIDENCE.glob('*.trace.*')):
-        require(trace.stat().st_size <= 64*1024**2, 'compiler trace size bound exceeded')
-        observed.update(accessed_files(trace.read_text()))
-    require(observed, 'empty compiler access trace')
-    observed = sorted(observed)
-    generated = closure_accesses(observed,before,after,private)
-    save(EVIDENCE/'compiler-accesses.json', {'observed':observed,'generated':generated})
-    generated_inputs = snapshot([private/'build'])
-    save(EVIDENCE/'generated-inputs.json', generated_inputs)
+    require(closure['complete'], 'incomplete compiler closure; see compiler-closure.json')
+    generated_inputs = json.loads((EVIDENCE/'generated-inputs.json').read_bytes())
     test_binaries = binaries((EVIDENCE/'build-tests.stdout').read_text(),private/'build')
     save(EVIDENCE/'test-binaries.json',test_binaries)
     check_staged()
@@ -472,9 +535,10 @@ def owning():
         check_staged()
         require(snapshot(roots) == before, 'compiler inputs changed during suite')
         require(all(digest(p) == h for p,h in test_binaries.items()), 'binary identity changed')
+        current_generated = snapshot([private/'build', compiler_tmp])
         for p,row in generated_inputs.items():
             if 'sha256' in row:
-                require(Path(p).is_file() and digest(p) == row['sha256'], 'generated build input changed')
+                require(current_generated.get(p) == row, 'generated build/tmp input changed')
         text = (EVIDENCE/'suite.stdout').read_text()
         final['libtest_results'] = [list(map(int,m[1:])) for m in re.findall(
             r'test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out',text)]

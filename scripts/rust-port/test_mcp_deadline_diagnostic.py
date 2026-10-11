@@ -112,6 +112,80 @@ class SourceControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'unbound'):
                 diagnostic.closure_accesses([str(escape)],before,before,private)
 
+    def test_generated_inputs_need_both_boundaries_including_compiler_tmp(self):
+        # Real algorithm files only, not compiler products or native observations.
+        with tempfile.TemporaryDirectory(prefix='deadline-source-',dir=os.environ['TMPDIR']) as raw:
+            private = Path(raw)
+            for directory in ('build','compiler-tmp'):
+                with self.subTest(directory=directory):
+                    root = private/directory
+                    root.mkdir()
+                    source = root/'input.txt'
+                    before = diagnostic.snapshot([root])
+                    with self.assertRaisesRegex(ValueError,'missing compiler input'):
+                        diagnostic.closure_accesses([str(source)],before,before,private)
+                    source.write_text('algorithm file A\n')
+                    after = diagnostic.snapshot([root])
+                    # Surviving after-only bytes do NOT bind same-command consumption.
+                    with self.assertRaisesRegex(ValueError,'unbound'):
+                        diagnostic.closure_accesses([str(source)],before,after,private)
+                    self.assertEqual(diagnostic.closure_accesses([str(source)],after,after,private),[str(source)])
+                    source.write_text('algorithm file B\n')
+                    changed = diagnostic.snapshot([root])
+                    with self.assertRaisesRegex(ValueError,'changed compiler input'):
+                        diagnostic.closure_accesses([str(source)],after,changed,private)
+                    source.rename(root/'retained-deleted-input.txt')
+                    with self.assertRaisesRegex(ValueError,'missing compiler input'):
+                        diagnostic.closure_accesses([str(source)],after,diagnostic.snapshot([root]),private)
+
+    def test_open_argument_grammar_only_exempts_unambiguous_output(self):
+        # Lexical unit arguments, deliberately NOT strace logs or native receipts.
+        for call in ('open("algorithm-output", O_WRONLY|O_CREAT, 0600)',
+                     'openat(AT_FDCWD, "algorithm-output", O_WRONLY|O_CLOEXEC)',
+                     'openat2(AT_FDCWD, "algorithm-output", {flags=O_WRONLY, resolve=0}, 24)'):
+            with self.subTest(call=call):
+                self.assertFalse(diagnostic.readable_open(call))
+        for call in ('open("algorithm-input", O_RDONLY)',
+                     'openat(AT_FDCWD, "algorithm-input", O_RDWR|O_CLOEXEC)',
+                     'open("filename, O_WRONLY", O_RDONLY)',
+                     'open("filename\\\", O_WRONLY", O_RDONLY)'):
+            with self.subTest(call=call):
+                self.assertTrue(diagnostic.readable_open(call))
+        for call in ('open("algorithm-unknown", 0x80)',
+                     'open("algorithm-unknown", O_PATH)',
+                     'open("algorithm-unknown", O_RDONLY|O_WRONLY)'):
+            with self.subTest(call=call), self.assertRaises(ValueError):
+                diagnostic.readable_open(call)
+
+    def test_failed_capture_keeps_available_inventories_and_real_child_exit(self):
+        # This is a real failing Python child, never a simulated compiler run.
+        result = subprocess.run([sys.executable,'-B','-c','raise SystemExit(37)'],check=False)
+        self.assertEqual(result.returncode,37)
+        with tempfile.TemporaryDirectory(prefix='deadline-source-',dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            private = root/'private'
+            for name in ('build','compiler-tmp'):
+                (private/name).mkdir(parents=True)
+                (private/name/'control.txt').write_text('file-only control\n')
+            source = root/'source.txt'
+            source.write_text('static file control\n')
+            before = diagnostic.snapshot([source])
+            generated = diagnostic.snapshot([private/'build',private/'compiler-tmp'])
+            for missing in (False,True):
+                with self.subTest(missing_inventory=missing):
+                    evidence = root/('missing' if missing else 'available')
+                    evidence.mkdir()
+                    inputs = [root/'absent-root'] if missing else [source]
+                    record = diagnostic.compiler_capture(inputs,before,generated,private,evidence,
+                                                         'file-only-control',result.returncode,None)
+                    self.assertFalse(record['complete'])
+                    self.assertEqual(record['command_exit'],result.returncode)
+                    self.assertEqual(json.loads((evidence/'compiler-closure.json').read_bytes()),record)
+                    self.assertEqual(json.loads((evidence/'generated-inputs.json').read_bytes()),generated)
+                    self.assertEqual((evidence/'compiler-inputs-after.json').exists(),not missing)
+                    self.assertTrue(record['errors'])
+                    self.assertFalse((evidence/'suite-started.json').exists())
+
     def test_exclusive_evidence_and_incomplete_trace_rejections(self):
         with tempfile.TemporaryDirectory(prefix='deadline-source-',dir=os.environ['TMPDIR']) as raw:
             path = Path(raw)/'source-control.json'
@@ -159,7 +233,24 @@ class SourceControls(unittest.TestCase):
         self.assertEqual(owning.count('*SUITE'),1)
         self.assertLess(owning.index('run(FMT'),owning.index("traced(CLIPPY"))
         self.assertLess(owning.index('traced(CLIPPY'),owning.index('traced(NO_RUN'))
-        self.assertLess(owning.index('closure_accesses'),owning.index('*SUITE'))
+        self.assertLess(owning.index('compiler_capture'),owning.index('*SUITE'))
+        self.assertLess(owning.index("require(closure['complete']"),owning.index("'suite-started.json'"))
+        capture = ast.get_source_segment(source,functions['compiler_capture'])
+        if capture is None:
+            self.fail('missing actual compiler capture source')
+        self.assertIn('closure_accesses',capture)
+        self.assertIn("[private/'build', private/'compiler-tmp']",capture)
+        self.assertIn("save(evidence/'compiler-closure.json', record)",capture)
+        # Both nonzero and exceptional compiler paths reach real finalization;
+        # no earlier return can lose the after-inventory on Clippy failure.
+        capture_try = next(n for n in functions['owning'].body if isinstance(n,ast.Try)
+                           and any(isinstance(c,ast.Call) and isinstance(c.func,ast.Name)
+                                   and c.func.id == 'compiler_capture' for c in ast.walk(n)))
+        preceding = functions['owning'].body[:functions['owning'].body.index(capture_try)]
+        self.assertFalse(any(isinstance(n,ast.Return) for item in preceding
+                             if not isinstance(item,ast.FunctionDef) for n in ast.walk(item)))
+        self.assertTrue(any(isinstance(n,ast.Return) and isinstance(n.value,ast.Name) and n.value.id=='code'
+                            for handler in capture_try.handlers for n in ast.walk(handler)))
         self.assertIn("'--kill-after=10s','480s'",owning)
         self.assertIn("return code",owning)
         self.assertNotIn('allow_dirty',source)
