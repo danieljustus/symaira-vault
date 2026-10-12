@@ -293,6 +293,31 @@ def run_step(command, cwd, env, output, name, steps, tests=(), timeout=600, test
     row['passed'] = True
 
 
+def run_generators(binary, tests, tree, env, output, steps):
+    command = [str(binary), '-test.run=^('+'|'.join(tests)+')$',
+               '-test.count=1', '-test.timeout=8m', '-test.v']
+    try:
+        run_step(command, tree/'internal/mcp/server', env, output, 'generators',
+                 steps, tests, test_binary=True)
+    except RuntimeError:
+        # Retain a separate real capture after a failed CHECK. This does not
+        # repair, replace or approve the failed historical execution.
+        name = 'TestGenerateMCPExecuteWithSecretFixture'
+        failed = (output/'generators.stdout').read_text()
+        if name in tests and re.search(r'^--- FAIL: '+name+r' ', failed, re.M):
+            diagnostic = dict(env)
+            diagnostic.pop('SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE', None)
+            diagnostic['SYMAIRA_GENERATE_MCP_EXECUTE_WITH_SECRET_FIXTURE'] = '1'
+            try:
+                run_step([str(binary), '-test.run=^'+name+'$', '-test.count=1',
+                          '-test.timeout=8m', '-test.v'], tree/'internal/mcp/server',
+                         diagnostic, output, 'execute-with-secret-diagnostic',
+                         steps, [name], test_binary=True)
+            except Exception as error:
+                (output/'execute-with-secret-diagnostic.error').write_text(str(error)+'\n')
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     destinations = parser.add_mutually_exclusive_group(required=True)
@@ -399,10 +424,7 @@ def main():
                         if mapping is not None:
                             run_step([go,'version','-m',str(binary)],tree,isolated,lane_out,
                                      'generators-build-info',row['steps'])
-                        run_step([str(binary),'-test.run=^('+'|'.join(tests)+')$',
-                                  '-test.count=1','-test.timeout=8m','-test.v'],
-                                 tree/'internal/mcp/server',isolated,lane_out,'generators',
-                                 row['steps'],tests,test_binary=True)
+                        run_generators(binary, tests, tree, isolated, lane_out, row['steps'])
                         compiler_adapter.verify(row['compiler_adapter'])
                         if hashlib.sha256(binary.read_bytes()).hexdigest() != row['generator_binary_sha256']:
                             raise ValueError('generator binary changed during execution')
