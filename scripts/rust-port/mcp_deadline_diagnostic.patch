@@ -119,7 +119,7 @@
      use super::*;
      use base64::{Engine, engine::general_purpose::STANDARD};
      use std::{
-@@ -873,6 +915,100 @@
+@@ -873,6 +915,108 @@
          sync::Arc,
          thread,
      };
@@ -146,7 +146,9 @@
 +                if events.len() < 4096 {
 +                    events.push((name, now));
 +                } else {
-+                    trace.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++                    trace
++                        .dropped
++                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 +                }
 +            }
 +        });
@@ -184,7 +186,10 @@
 +            phase(self.0);
 +        }
 +    }
-+    pub(super) async fn trace_polls<F: std::future::Future>(name: &'static str, future: F) -> F::Output {
++    pub(super) async fn trace_polls<F: std::future::Future>(
++        name: &'static str,
++        future: F,
++    ) -> F::Output {
 +        let mut future = std::pin::pin!(future);
 +        std::future::poll_fn(|cx| {
 +            phase(name);
@@ -205,7 +210,10 @@
 +            let events = self.0.events.lock().unwrap_or_else(|e| e.into_inner());
 +            let scheduler = self.0.scheduler.lock().unwrap_or_else(|e| e.into_inner());
 +            // Flushed after the timed call, including assertion-unwind paths.
-+            eprintln!("DEADLINE_EVENTS {}", serde_json::to_string(&*events).unwrap());
++            eprintln!(
++                "DEADLINE_EVENTS {}",
++                serde_json::to_string(&*events).unwrap()
++            );
 +            eprintln!(
 +                "DEADLINE_SCHEDULER {}",
 +                serde_json::to_string(&*scheduler).unwrap()
@@ -220,7 +228,7 @@
  
      #[test]
      fn loopback_transcript_injects_then_redacts_bearer() {
-@@ -1288,24 +1424,135 @@
+@@ -1288,24 +1432,135 @@
  
      #[test]
      fn slow_response_cannot_extend_the_request_deadline() {
@@ -358,7 +366,7 @@
          let template = ApiTemplate {
              base_url: format!("http://{address}"),
              allowed_endpoints: vec!["/safe/*".into()],
-@@ -1313,8 +1560,10 @@
+@@ -1313,8 +1568,10 @@
              default_headers: BTreeMap::new(),
              allow_private: true,
          };
@@ -370,7 +378,7 @@
              &template,
              "GET",
              "/safe/item",
-@@ -1322,9 +1571,17 @@
+@@ -1322,9 +1579,17 @@
              b"",
              None,
              Duration::from_millis(150),
@@ -390,7 +398,7 @@
          assert!(matches!(
              error.as_str(),
              "upstream request timed out" | "upstream request failed"
-@@ -1334,6 +1591,8 @@
+@@ -1334,6 +1599,8 @@
              "{error}: {elapsed:?}"
          );
          assert!(elapsed < Duration::from_millis(500), "{error}: {elapsed:?}");

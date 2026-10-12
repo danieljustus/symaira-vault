@@ -30,9 +30,9 @@ from mcp_deadline_capture import verify_blob
 
 BASE = '01f7daae181eba3a34bc90382cfb58e7fa9925c8'
 PATCH = 'scripts/rust-port/mcp_deadline_diagnostic.patch'
-PATCH_SHA = 'fce9a709c1e89d45206653eb1a860bd2db63b264e42cb98dfaf6f502211a2ce8'
+PATCH_SHA = 'ea3fc08b70f9c5217328be45abf57de8671b2eee57cd71564bdeb65198cd70ad'
 TARGETS = {
-    'crates/symvault-mcp/src/broker.rs': '40c21b44a97ac08bb62f549a79348d96af4c8d20711b3d9c24dc9e37077f84c2',
+    'crates/symvault-mcp/src/broker.rs': '0bcaa1da6ab9d4f3bd2a81cd5a40d8405d416bb43d0ed938f7b3ab0799259369',
     'crates/symvault-mcp/src/request_context.rs': 'bb1197aedd9959b901024446b0c18c2d59e2cb463d0a6c2caa05480bcdd5030a',
 }
 ROOT = Path(__file__).resolve().parents[2]
