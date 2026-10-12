@@ -1,0 +1,46 @@
+# Rust MCP deadline diagnostic continuation
+
+## Goal and source identity
+
+Repository: `danieljustus/symaira-vault`. Remote branch: `handoff/20261012-rust-wip`.
+Base code commit: `2baba416c6297837c2195ab34d9de874cb5fbd20`. Related draft PR [#1321](https://github.com/danieljustus/symaira-vault/pull/1321) remains separate and is not updated here.
+
+This preserves locale-independent fixture controls and the source-bound original Linux/x86 deadline diagnostic, including generated-input capture at consumption and its pinned-format correction. The exact diagnostic patch and source identities are versioned under `scripts/rust-port/`; the diagnostic base `01f7daae181eba3a34bc90382cfb58e7fa9925c8` remains in branch ancestry. CoreKit is pinned to public `27177f25f551cecefa7bd6c4524abf175b3a75c7`.
+
+## Concrete next task and actual checks
+
+```sh
+python3 -B -m unittest discover -s scripts/rust-port -p test_mcp_deadline_diagnostic.py -v
+```
+
+Actual prepublication result: all 12 noncompiling controls pass, exit 0. They include real file/descriptor capture, patch applicability and fail-closed entrypoints; they are not native deadline observations.
+
+Next verify the whole formatting gate on this exact source in a non-nested isolated checkout, then reconcile the retained compiler receipt and independently authorize the existing source-bound Linux/x86 diagnostic. Read `.github/workflows/rust-mcp-process.yml` and `scripts/rust-port/mcp_deadline_diagnostic.py`; do not supply invented admission hashes or dispatch before the source/compiler prerequisites pass.
+
+## Unresolved inputs and acceptance gates
+
+- The original Linux broker deadline observation was approximately 914 ms and failed the strict acceptance threshold. Keep the original failure; a diagnostic is not acceptance and a relaxed threshold is not a repair.
+- Prior local strict Clippy and no-run compiler receipts cover 36 compiled test programs, zero executed native tests. They are not a full native suite or diagnostic acceptance; raw host receipts are not published by this source-only checkpoint.
+- The diagnostic requires independently reviewed source/admission identity, full generated-input closure and its original Linux/x86 environment. Keep repository-variable names and workflow admission logic intact. Required target values/access remain unprovisioned by this handoff.
+- Existing MCP oracle/provenance correction and all required native runtime, publication, integration, release and retirement gates remain open. No actual credential-store access is needed or allowed for these fixture tests.
+- Target cloud Linux/x86 runtime, tracing rights and workflow variables: not checked.
+
+## Shared boundaries
+
+This is preserved work in progress, not migration completion or merge/release approval. Preserve exact Go/Rust byte contracts, original failed captures, source/compiler provenance, security policies and independent native-platform gates. Cross-compilation and source-only tests do not prove native execution. Never manufacture expected results, weaken a deadline, discard a mismatching row or change an oracle only to make a comparison pass. Signing, releases, productive cutover, Go retirement and destructive cleanup require separate authorization. Do not start paid models or services.
+
+Local automatic continuation has been disabled and the owned unfinished work parked. This document does not restart automation. Existing remote CI may run from the ordinary push; no workflow dispatch, merge, tag or release is requested.
+
+## Reproduction environment
+
+Start at the repository root of a direct GitHub clone and check out the immutable final HEAD provided by the external verification receipt. Do not substitute the branch's later tip. Use Python 3 (closeout host: 3.14.2), Git (closeout host: 2.54.0) and the exact Rust 1.98.0 components in `rust-toolchain.toml`. `Cargo.toml`/`Cargo.lock` and, for Go oracles, `go.mod`/`go.sum` remain authoritative. GitHub and the public package registries must be reachable. No package installation or cloud runtime is implied by these instructions.
+
+For local Mac development, respect the host's existing storage/build launcher and reserve policy. The host's mounted-drive paths and private launcher are not cloud inputs: use ordinary owned output/temp/cache directories on a suitable cloud filesystem instead, without weakening product permission checks. Use isolated HOME/XDG fixture state, never real user stores. Native Apple GUI, Keychain/Touch ID, signing and filesystem tests require the real supported OS/hardware and authorization. Native Linux and Windows observations must run on those systems.
+
+Fresh-checkout verification at the final handoff HEAD is pending until the separate PR comment is published. The external comment records exact commands, exits, failures and runtime limits without recursively changing this commit. A successful source inventory or Python test is not a full application build.
+
+## Retained and excluded inputs
+
+Build outputs, package caches, Python bytecode, local control databases, private orchestration reports and the completed local cache-cleanup script are not shipped. None is an allowed replacement for missing source. Originals remain local. Historical local acceptance receipts are not silently treated as public or independently verified by this document; any needed unpublished immutable receipt remains an explicit blocker below. No credentials, `.env` values, production data, personal memory or signing keys are included. Provision target credentials only through the operator's approved secret manager if a later explicitly authorized operation needs them.
+
+No submodules or Git LFS inputs were found in the inspected source inventory. Check locks and any downstream platform-specific dependencies again before their own gates. The portable source checkpoint is separate from native-runtime, access and acceptance readiness.
