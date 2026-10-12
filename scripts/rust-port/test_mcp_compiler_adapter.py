@@ -110,6 +110,33 @@ class CompilerVerificationControls(unittest.TestCase):
                 self.verify([dict(self.call, input_keys=keys)])
 
 
+class TimeoutChildAdmissionControl(unittest.TestCase):
+    def test_exact_entrypoint_delta_and_unrelated_mutations(self):
+        name = 'internal/mcp/server/test_main_test.go'
+        candidate = (fixtures.ROOT/name).read_bytes()
+        for commit in [fixtures.HISTORICAL, fixtures.ORDERED]:
+            original = fixtures.git(fixtures.ROOT, 'show', commit+':'+name)
+            with tempfile.TemporaryDirectory() as raw:
+                root = Path(raw)
+                source, tree = root/'candidate', root/'oracle'
+                for path, data in [(source/name, candidate), (tree/name, original)]:
+                    path.parent.mkdir(parents=True)
+                    path.write_bytes(data)
+                with patch.object(fixtures, 'ROOT', source), patch.object(fixtures, 'git', return_value=original):
+                    row = fixtures.admit_timeout_child(tree, commit)
+                    self.assertEqual((tree/name).read_bytes(), candidate)
+                    self.assertEqual(row['original_sha256'], hashlib.sha256(original).hexdigest())
+                    self.assertEqual(row['materialized_sha256'], hashlib.sha256(candidate).hexdigest())
+                    self.assertEqual(row['version'], 'windows-timeout-child-admission-v1')
+                    with self.assertRaisesRegex(ValueError, 'historical timeout entrypoint identity drift'):
+                        fixtures.admit_timeout_child(tree, commit)
+                    (tree/name).write_bytes(original)
+                    (source/name).write_bytes(candidate+b'// unrelated delta\n')
+                    with self.assertRaisesRegex(ValueError, 'exceeds the single child admission'):
+                        fixtures.admit_timeout_child(tree, commit)
+                    self.assertEqual((tree/name).read_bytes(), original)
+
+
 class FailedCaptureControl(unittest.TestCase):
     def test_diagnostic_never_replaces_original_failure_or_environment(self):
         name = 'TestGenerateMCPExecuteWithSecretFixture'
@@ -212,13 +239,16 @@ class HistoricalCompilerRegression(unittest.TestCase):
         rejected=json.loads((output/'invalid-cache/receipt.json').read_bytes())
         self.assertFalse(rejected['passed'])
         lane=rejected['lanes'][0]
-        self.assertEqual(lane['steps'][-1]['exit'],1)
+        failed = next(step for step in lane['steps'] if step['name'] == 'generators')
+        self.assertEqual(failed['exit'],1)
         log=(output/'invalid-cache/historical/generators.stdout').read_text()
         self.assertIn('--- FAIL: TestGenerateMCPExecuteWithSecretFixture',log)
         self.assertIn('execute_with_secret fixture stale',log)
-        call=json.loads(Path(lane['compiler_adapter']['configuration']['trace']).read_text())
-        self.assertNotEqual(call['exit'],0)
-        self.assertEqual(call['command'][0],lane['compiler_adapter']['configuration']['compiler'])
+        calls=[json.loads(line) for line in Path(lane['compiler_adapter']['configuration']['trace']).read_text().splitlines()]
+        self.assertEqual(len(calls),2)  # Failed check plus separately retained diagnostic.
+        for call in calls:
+            self.assertNotEqual(call['exit'],0)
+            self.assertEqual(call['command'][0],lane['compiler_adapter']['configuration']['compiler'])
         fixtures.fixture_anchor(fixtures.ROOT,[*fixtures.FIXTURES,*fixtures.generator_paths()])
 
     def identity_controls(self, output, prepare):
