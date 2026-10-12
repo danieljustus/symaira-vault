@@ -110,6 +110,34 @@ class CompilerVerificationControls(unittest.TestCase):
                 self.verify([dict(self.call, input_keys=keys)])
 
 
+class FailedCaptureControl(unittest.TestCase):
+    def test_diagnostic_never_replaces_original_failure_or_environment(self):
+        name = 'TestGenerateMCPExecuteWithSecretFixture'
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            env = {'SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE': '1', 'PLAIN': 'control'}
+            for diagnostic_fails in [False, True]:
+                with self.subTest(diagnostic_fails=diagnostic_fails):
+                    original = RuntimeError('generators failed')
+                    calls = []
+                    def execute(command, cwd, environment, output, label, *args, **kwargs):
+                        calls.append((label, dict(environment)))
+                        if label == 'generators':
+                            (output/'generators.stdout').write_text('--- FAIL: '+name+' (1.00s)\n')
+                            raise original
+                        if diagnostic_fails:
+                            raise RuntimeError('diagnostic failed')
+                    with patch.object(fixtures, 'run_step', side_effect=execute):
+                        with self.assertRaises(RuntimeError) as raised:
+                            fixtures.run_generators(root/'binary', [name], root, env, root, [])
+                    self.assertIs(raised.exception, original)
+                    self.assertEqual([label for label, _ in calls],
+                                     ['generators', 'execute-with-secret-diagnostic'])
+                    self.assertNotIn('SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE', calls[1][1])
+                    self.assertEqual(calls[1][1]['SYMAIRA_GENERATE_MCP_EXECUTE_WITH_SECRET_FIXTURE'], '1')
+                    self.assertEqual(env, {'SYMAIRA_CHECK_MCP_EXECUTE_WITH_SECRET_FIXTURE': '1', 'PLAIN': 'control'})
+
+
 class ApprovalLifetimeSourceControl(unittest.TestCase):
     def test_separate_generator_is_only_the_checked_close_insertion(self):
         name = 'internal/mcp/server/mcp_write_approval_fixture_generator_test.go'
