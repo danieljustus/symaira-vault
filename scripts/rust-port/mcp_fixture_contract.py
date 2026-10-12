@@ -228,6 +228,26 @@ def materialize_inputs(tree, generators, commit, approval_generator):
     return mapping
 
 
+def admit_timeout_child(tree, commit):
+    """Bind the separate Windows test-entrypoint repair, not historical replay."""
+    name = 'internal/mcp/server/test_main_test.go'
+    original = git(ROOT, 'show', commit+':'+name)
+    anchor = b'\tif runtime.GOOS == "windows" && os.Getenv("SYMVAULT_RUN_WINDOWS_CROSSLANG") != "1" {'
+    replacement = (b'\t// The timeout fixture\'s filtered child cannot inherit the suite opt-in.\n'
+                   + anchor[:-2] + b' && os.Getenv("SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD") != "1" {')
+    expected = original.replace(anchor, replacement, 1)
+    if original.count(anchor) != 1 or confined_file(tree, name).read_bytes() != original:
+        raise ValueError('historical timeout entrypoint identity drift')
+    if confined_file(ROOT, name).read_bytes() != expected:
+        raise ValueError('timeout entrypoint repair exceeds the single child admission')
+    (tree/name).write_bytes(expected)
+    return {'version': 'windows-timeout-child-admission-v1', 'source_commit': commit,
+            'path': name, 'original_sha256': hashlib.sha256(original).hexdigest(),
+            'materialized_sha256': hashlib.sha256(expected).hexdigest(),
+            'delta': ''.join(difflib.unified_diff(original.decode().splitlines(True),
+                expected.decode().splitlines(True), fromfile=name, tofile=name))}
+
+
 def approval_capture_oracle(tree, commit):
     """Exact metadata from admitted materialized inputs, never a native verdict."""
     fixture_anchor(ROOT, [APPROVAL_FIXTURE])
@@ -359,6 +379,7 @@ def main():
                'candidate_inputs':inventory(ROOT,[*FIXTURES,*generators,*sources,
                    *(ARCHIVE+n+'.txt' for n in ARCHIVED_INPUTS),
                    *compiler_adapter.SOURCES,
+                   'internal/mcp/server/test_main_test.go',
                    *([APPROVAL_SOURCE] if args.approval_generator != 'original' else []),
                    'scripts/rust-port/mcp_oracle.py','scripts/rust-port/mcp_fixture_contract.py',ANCHOR.relative_to(ROOT).as_posix()]),
                'approval_generator':args.approval_generator,
@@ -380,6 +401,8 @@ def main():
                 git(ROOT, 'worktree','add','--detach',str(tree),commit)
                 try:
                     mapping = materialize_inputs(tree, generators, commit, args.approval_generator)
+                    if os.name == 'nt':
+                        row['timeout_child_admission'] = admit_timeout_child(tree, commit)
                     if mapping is not None:
                         row['approval_generator'] = mapping
                         row['approval_capture_oracle'] = approval_capture_oracle(tree, commit)
@@ -480,6 +503,8 @@ def main():
     finally:
         (output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
     mode = 'historical replay' if args.approval_generator == 'original' else 'new approval-lifetime-v1 generator executions'
+    if os.name == 'nt':
+        mode += ' with separately bound windows-timeout-child-admission-v1'
     print(f'PASS {mode} and {CONTRACT}: {len(selected)} fixtures, {sum(selected.values())} cases per lane; {output}/receipt.json')
 
 

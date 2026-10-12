@@ -9,6 +9,37 @@ This preserves locale-independent fixture controls and the source-bound original
 
 ## Concrete next task and actual checks
 
+### Windows fixture CI repair
+
+The failed Windows execution at `75632b48201b41ed7b37ad8897afff0ce5c86984`
+was investigated with a separately retained real capture at
+`e76c311a28148bb6367fb327b1cc11959cb9a6e2` in
+[run 38225199721](https://github.com/danieljustus/symaira-vault/actions/runs/38225199721).
+Only `timeout_protocol_error` differed: the filtered self-child returned success
+instead of executing its existing sleeping test and reaching the one-second
+deadline. Historical `TestMain` returned immediately on Windows because the
+suite opt-in is deliberately absent from the production child's environment.
+
+The correction admits the deliberately injected timeout-child marker in the
+test entrypoint. `windows-timeout-child-admission-v1` applies only that exact
+entrypoint delta in the two disposable Windows oracle contexts, records its
+original/materialized hashes and diff, and includes it in the complete compiler
+input inventory before building. This is a separately bound test preparation,
+not unchanged historical replay. Immutable reference commits, frozen fixture
+bytes, production filtering and the one-second assertion remain unchanged.
+
+Local controls pass: eight compiler/source controls (one compiler-dependent
+case separately opt-in), 20 oracle controls and 12 diagnostic controls. A real
+macOS compiler regression also passed both 13-case lanes and the intentional
+invalid-cache rejection before this Windows-only correction; that result does
+not establish Windows acceptance. Independent review approved the source and
+provenance delta and required the deterministic adapter mutation controls in
+CI. `mcp-oracle-controls` now runs those controls; its compiler-dependent case
+remains separately opt-in. Three production Go timeout tests and package vet
+also pass locally. Native CI for the final repair is still pending. Resolve
+that gate before continuing the original formatting/compiler/diagnostic-admission
+task below.
+
 ```sh
 python3 -B -m unittest discover -s scripts/rust-port -p test_mcp_deadline_diagnostic.py -v
 ```

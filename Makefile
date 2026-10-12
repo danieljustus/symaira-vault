@@ -988,6 +988,7 @@ mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixt
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 
 mcp-ordered-fixtures-check: mcp-oracle-controls
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/mcp_fixture_contract.py --approval-generator approval-lifetime-v1 --output-root "$(MCP_FIXTURE_EVIDENCE)"
