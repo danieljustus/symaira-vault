@@ -50,6 +50,39 @@ Next verify the whole formatting gate on this exact source in a non-nested isola
 
 ## Unresolved inputs and acceptance gates
 
+### Diagnostic source repair (#1378)
+
+The admission review of `1d238722038124b00a7dbbd384782f644cbe7c30`
+returned `REQUEST_CHANGES`; that commit is not admitted. The repair preserves
+the product source, 150 ms request budget, 100/500 ms assertions, owning suite
+counts and default concurrency. Only the frozen diagnostic patch changes its
+test server: transient read timeouts retain partial headers and retry within
+the existing stop/deadline bound. The added write timeout is removed.
+
+Post-suite provenance rejection now produces a nonzero diagnostic exit while
+retaining the original suite exit independently. All diagnostic control steps
+use the admitted Python. Diagnostic-only step limits total 111 minutes inside
+a 120-minute job, including 10 minutes for upload and 9 minutes of job margin.
+The original ordinary 40-minute job limit and product timing limits are unchanged.
+These are limits, not a measured runtime or a guarantee against runner failure.
+
+Local checks: 13 noncompiling controls, 20 oracle controls, and two compiled
+Rust 1.98.0 header-reader regressions pass. The socket control waits for actual
+50 ms read timeouts and exercises delayed/partial headers, cumulative size
+limits, EOF, cancellation and deadline rejection. It compiles the exact helper
+from the pinned patch using only the standard library; it does not execute the
+owning suite or establish Linux-native acceptance. Ordinary CI runs it separately;
+the diagnostic lane excludes it to preserve compiler-input and one-shot boundaries.
+
+A new exact-commit independent review is still required, including transitive
+executed scripts and retained-output privacy. Do not reuse the rejected review
+digest. Runner tools, caches, tracing rights and capacity remain unverified and
+must fail closed. Before an authorized dispatch, record consumption of the one
+allowed attempt durably, then retain its returned run ID and exact HEAD. Never
+retry an ambiguous dispatch or a rejected/failed run. Clear the two admission
+variables after the run terminates; do not revoke them while the job is queued.
+No settings write, diagnostic dispatch, merge or release is part of this repair.
+
 - The original Linux broker deadline observation was approximately 914 ms and failed the strict acceptance threshold. Keep the original failure; a diagnostic is not acceptance and a relaxed threshold is not a repair.
 - Prior local strict Clippy and no-run compiler receipts cover 36 compiled test programs, zero executed native tests. They are not a full native suite or diagnostic acceptance; raw host receipts are not published by this source-only checkpoint.
 - The diagnostic requires independently reviewed source/admission identity, full generated-input closure and its original Linux/x86 environment. Keep repository-variable names and workflow admission logic intact. Required target values/access remain unprovisioned by this handoff.

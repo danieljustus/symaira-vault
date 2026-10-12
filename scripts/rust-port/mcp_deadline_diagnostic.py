@@ -30,9 +30,9 @@ from mcp_deadline_capture import verify_blob
 
 BASE = '01f7daae181eba3a34bc90382cfb58e7fa9925c8'
 PATCH = 'scripts/rust-port/mcp_deadline_diagnostic.patch'
-PATCH_SHA = 'ea3fc08b70f9c5217328be45abf57de8671b2eee57cd71564bdeb65198cd70ad'
+PATCH_SHA = '65841b4eccd807def6488f4bde2f6db31bd0847e488f12b33cc0bc4586ff8c92'
 TARGETS = {
-    'crates/symvault-mcp/src/broker.rs': '0bcaa1da6ab9d4f3bd2a81cd5a40d8405d416bb43d0ed938f7b3ab0799259369',
+    'crates/symvault-mcp/src/broker.rs': '07950490dd58483a91983cf1b86a5f6463c3f1b442f59454120503ce996e57d0',
     'crates/symvault-mcp/src/request_context.rs': 'bb1197aedd9959b901024446b0c18c2d59e2cb463d0a6c2caa05480bcdd5030a',
 }
 ROOT = Path(__file__).resolve().parents[2]
@@ -547,8 +547,8 @@ def owning():
     (ROOT/'target/deadline-x86-suite.exit').write_text(str(code)+'\n')
     shutil.copyfile(EVIDENCE/'suite.stdout',ROOT/'target/native-mcp-tests.txt')
     shutil.copyfile(EVIDENCE/'suite.stderr',ROOT/'target/native-mcp-tests.stderr')
-    # Failures are retained before fallible parsing. The workflow returns the
-    # original suite exit; provenance failure is separate, never a native PASS.
+    # Retain the original suite exit independently of the diagnostic verdict.
+    # Invalid provenance must fail the step even when libtest succeeded.
     final = {'suite_exit':code, 'provenance_error':None, 'acceptance':False}
     try:
         lifecycle = json.loads((EVIDENCE/'suite.json').read_bytes())
@@ -580,8 +580,9 @@ def owning():
         require(final['trace_dropped'] == ['0'], 'missing/dropped diagnostic trace')
     except Exception as error:
         final['provenance_error'] = str(error)
+    final['diagnostic_exit'] = code or int(final['provenance_error'] is not None)
     save(EVIDENCE/'observation.json', final)
-    return code
+    return final['diagnostic_exit']
 
 
 def binary(arguments):

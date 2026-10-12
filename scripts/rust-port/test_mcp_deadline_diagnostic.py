@@ -23,6 +23,22 @@ def workflow_boundaries(text):
         if not condition:
             raise ValueError('diagnostic workflow boundary drift')
     need('default: false' in text and 'deadline_review:' in text)
+    need('timeout-minutes: ${{ ('+SELECTOR+') && 120 || 40 }}' in text)
+    for name, minutes in [('Checkout retained Go oracle and candidate',5),
+                          ('Admit and stage the reviewed original-target diagnostic',10),
+                          ('Check narrow diagnostic and receipt evidence boundaries',5),
+                          ('Execute the same corrected generator with private diagnostic state',26),
+                          ('Test the owning runtime and production CLI assembly',55),
+                          ('Upload complete actual native observations',10)]:
+        block = text.split('      - name: '+name+'\n',1)[1].split('      - name:',1)[0]
+        expected = (str(minutes) if name.startswith(('Admit','Execute the same'))
+                    else '${{ ('+SELECTOR+') && '+str(minutes)+' || 40 }}')
+        need('        timeout-minutes: '+expected+'\n' in block)
+    controls = text.split('      - name: Check narrow diagnostic and receipt evidence boundaries\n',1)[1].split('      - name:',1)[0]
+    need(controls.count('"${DEADLINE_PYTHON:-python3}" -B') == 3)
+    need('          python3 ' not in controls)
+    headers = text.split('      - name: Check frozen diagnostic header reader\n',1)[1].split('      - name:',1)[0]
+    need(('        if: ${{ !('+SELECTOR+') }}') in headers)
     need("'[\"ubuntu-latest\"]' || '[\"ubuntu-latest\",\"macos-latest\",\"windows-latest\"]'" in text)
     owning = text.split('      - name: Test the owning runtime and production CLI assembly\n',1)[1]
     owning, later = owning.split('      - name: Execute actual Go and Rust native profiles and hostile stdio\n',1)
@@ -302,14 +318,42 @@ class SourceControls(unittest.TestCase):
             with self.subTest(raw=raw), self.assertRaises(ValueError):
                 diagnostic.accessed_files(raw)
 
-    def test_workflow_and_three_real_source_mutations(self):
+    def test_actual_observation_finalization_fails_on_invalid_provenance(self):
+        # Execute the actual finalization statements, not an imitation of owning().
+        # Unit arguments only: this does not create native-suite evidence.
+        tree = ast.parse(Path(diagnostic.__file__).read_text())
+        owning = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='owning')
+        unit = ast.parse('def finalize(code, final):\n    pass\n')
+        function = unit.body[0]
+        self.assertIsInstance(function,ast.FunctionDef)
+        assert isinstance(function,ast.FunctionDef)
+        function.body = owning.body[-3:]
+        with tempfile.TemporaryDirectory(prefix='deadline-finalize-',dir=os.environ['TMPDIR']) as raw:
+            for code in (0,37):
+                for error in (None,'unit provenance rejection',''):
+                    with self.subTest(code=code,error=error):
+                        evidence = Path(raw)/str(len(list(Path(raw).iterdir())))
+                        evidence.mkdir()
+                        scope = {'EVIDENCE':evidence,'save':diagnostic.save}
+                        exec(compile(ast.fix_missing_locations(unit),'<actual finalization>','exec'),scope)
+                        final = {'suite_exit':code,'provenance_error':error,'acceptance':False}
+                        expected = code or int(error is not None)
+                        self.assertEqual(scope['finalize'](code,final),expected)
+                        retained = json.loads((evidence/'observation.json').read_bytes())
+                        self.assertEqual(retained,{**final,'diagnostic_exit':expected})
+                        self.assertEqual(retained['suite_exit'],code)
+                        self.assertIs(retained['acceptance'],False)
+
+    def test_workflow_and_real_source_mutations(self):
         text = WORKFLOW.read_text()
         workflow_boundaries(text)
         for before,after in [
             ('exec "$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py owning',
              '"$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py owning'),
             ('if: ${{ success() && !('+SELECTOR+') }}','if: success()'),
-            ('if: always()','if: success()')]:
+            ('if: always()','if: success()'),
+            ('&& 120 || 40','&& 40 || 40'),
+            ('"${DEADLINE_PYTHON:-python3}" -B - <<','python3 - <<')]:
             self.assertEqual(text.count(before),1)
             with self.subTest(mutation=before), self.assertRaises(ValueError):
                 workflow_boundaries(text.replace(before,after,1))
@@ -320,7 +364,8 @@ class SourceControls(unittest.TestCase):
                           ('          python3 scripts/rust-port/test_mcp_oracle.py\n','      - name: Execute corrected'),
                           ('          test "$(go env GOVERSION)"','      - name: Upload complete')]:
             body = original.split(start,1)[1].split(end,1)[0]
-            self.assertIn(body,text)
+            # Only the interpreter selection changed in the receipt control body.
+            self.assertIn(body,text.replace('"${DEADLINE_PYTHON:-python3}" -B -','python3 -'))
 
     def test_real_command_source_and_fail_closed_staging(self):
         self.assertEqual(diagnostic.SUITE,['cargo','test','-p','symvault-mcp','--all-targets','--locked','--','--show-output'])

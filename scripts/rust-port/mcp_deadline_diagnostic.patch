@@ -119,7 +119,7 @@
      use super::*;
      use base64::{Engine, engine::general_purpose::STANDARD};
      use std::{
-@@ -873,6 +915,108 @@
+@@ -873,6 +915,145 @@
          sync::Arc,
          thread,
      };
@@ -203,6 +203,43 @@
 +        })
 +        .await
 +    }
++    fn diagnostic_read_headers(
++        reader: &mut impl BufRead,
++        stop: &std::sync::atomic::AtomicBool,
++        deadline: std::time::Instant,
++    ) -> bool {
++        let mut line = String::new();
++        let mut header_bytes = 0usize;
++        while !stop.load(std::sync::atomic::Ordering::Acquire)
++            && std::time::Instant::now() < deadline
++        {
++            let previous = line.len();
++            let result = reader.read_line(&mut line);
++            // read_line may append a partial line before a transient error.
++            header_bytes += line.len() - previous;
++            if header_bytes > 16 * 1024 {
++                return false;
++            }
++            match result {
++                Ok(0) => return false,
++                Ok(_) => {
++                    if line == "\r\n" {
++                        return true;
++                    }
++                    line.clear();
++                }
++                Err(error)
++                    if matches!(
++                        error.kind(),
++                        std::io::ErrorKind::WouldBlock
++                            | std::io::ErrorKind::TimedOut
++                            | std::io::ErrorKind::Interrupted
++                    ) => {}
++                Err(_) => return false,
++            }
++        }
++        false
++    }
 +    struct TraceSession(DeadlineTrace);
 +    impl Drop for TraceSession {
 +        fn drop(&mut self) {
@@ -228,7 +265,7 @@
  
      #[test]
      fn loopback_transcript_injects_then_redacts_bearer() {
-@@ -1288,24 +1432,135 @@
+@@ -1288,24 +1469,113 @@
  
      #[test]
      fn slow_response_cannot_extend_the_request_deadline() {
@@ -319,33 +356,16 @@
 +            stream
 +                .set_read_timeout(Some(Duration::from_millis(50)))
 +                .unwrap();
-+            stream
-+                .set_write_timeout(Some(Duration::from_millis(50)))
-+                .unwrap();
              let mut reader = BufReader::new(stream.try_clone().unwrap());
-+            let mut header_bytes = 0usize;
-             loop {
-+                if stop.load(Ordering::Acquire) || std::time::Instant::now() >= deadline {
-+                    return;
-+                }
-                 let mut line = String::new();
+-            loop {
+-                let mut line = String::new();
 -                reader.read_line(&mut line).unwrap();
-+                match reader.read_line(&mut line) {
-+                    Ok(0) | Err(_) => {
-+                        phase("server.read_end");
-+                        return;
-+                    }
-+                    Ok(n) => {
-+                        header_bytes += n;
-+                    }
-+                }
-+                if header_bytes > 16 * 1024 {
-+                    phase("server.header_limit");
-+                    return;
-+                }
-                 if line == "\r\n" {
-                     break;
-                 }
+-                if line == "\r\n" {
+-                    break;
+-                }
++            if !diagnostic_read_headers(&mut reader, &stop, deadline) {
++                phase("server.read_end");
++                return;
              }
 +            phase("server.request_read");
 +            phase("server.prefix_before");
@@ -366,7 +386,7 @@
          let template = ApiTemplate {
              base_url: format!("http://{address}"),
              allowed_endpoints: vec!["/safe/*".into()],
-@@ -1313,8 +1568,10 @@
+@@ -1313,8 +1583,10 @@
              default_headers: BTreeMap::new(),
              allow_private: true,
          };
@@ -378,7 +398,7 @@
              &template,
              "GET",
              "/safe/item",
-@@ -1322,9 +1579,17 @@
+@@ -1322,9 +1594,17 @@
              b"",
              None,
              Duration::from_millis(150),
@@ -398,7 +418,7 @@
          assert!(matches!(
              error.as_str(),
              "upstream request timed out" | "upstream request failed"
-@@ -1334,6 +1599,8 @@
+@@ -1334,6 +1614,8 @@
              "{error}: {elapsed:?}"
          );
          assert!(elapsed < Duration::from_millis(500), "{error}: {elapsed:?}");

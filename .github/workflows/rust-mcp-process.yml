@@ -53,7 +53,9 @@ jobs:
   mcp-process:
     name: MCP process (${{ matrix.os }})
     runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
-    timeout-minutes: 40
+    # Diagnostic step ceilings total 111 min; keep 9 min of job-level margin.
+    # Ordinary native acceptance retains its existing 40 min limit.
+    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 120 || 40 }}
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +80,7 @@ jobs:
           test "$(uname -m)" = arm64
           sw_vers
       - name: Checkout retained Go oracle and candidate
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 5 || 40 }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -96,6 +99,7 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
       - name: Admit and stage the reviewed original-target diagnostic
+        timeout-minutes: 10
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
         env:
           DEADLINE_REVIEWED_COMMIT: ${{ vars.DEADLINE_DIAGNOSTIC_COMMIT }}
@@ -112,10 +116,11 @@ jobs:
           "${python_paths[0]}" -B scripts/rust-port/mcp_deadline_diagnostic.py stage
           printf 'DEADLINE_PYTHON=%s\n' "${python_paths[0]}" >> "$GITHUB_ENV"
       - name: Check narrow diagnostic and receipt evidence boundaries
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 5 || 40 }}
         run: |
           TMPDIR="$RUNNER_TEMP" "${DEADLINE_PYTHON:-python3}" -B scripts/rust-port/test_mcp_deadline_diagnostic.py
-          python3 scripts/rust-port/test_mcp_oracle.py
-          python3 - <<'PY'
+          "${DEADLINE_PYTHON:-python3}" -B scripts/rust-port/test_mcp_oracle.py
+          "${DEADLINE_PYTHON:-python3}" -B - <<'PY'
           import ast, json, os, runpy, subprocess, tempfile
           from pathlib import Path
           from types import SimpleNamespace
@@ -158,15 +163,21 @@ jobs:
                   assert result['passed']==expected_clean and rejected!=expected_clean
           print('PASS narrow diagnostic and post-output receipt unit controls')
           PY
+      - name: Check frozen diagnostic header reader
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
+        # Separate helper regression, never an extra owning-suite execution.
+        run: TMPDIR="$RUNNER_TEMP" python3 -B scripts/rust-port/test_mcp_deadline_headers.py
       - name: Execute corrected approval generator on both references with race regressions
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         env:
           SYMVAULT_TEST_KEYRING: memory
         run: make mcp-ordered-fixtures-check
       - name: Execute the same corrected generator with private diagnostic state
+        timeout-minutes: 26
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
         run: exec "$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py generator > target/deadline-x86-evidence/generator-controller.stdout 2> target/deadline-x86-evidence/generator-controller.stderr
       - name: Test the owning runtime and production CLI assembly
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 55 || 40 }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}" == 'true' ]]; then
@@ -244,6 +255,7 @@ jobs:
           assert sum(len(row['frames']) for name in ['go','rust','go_hostile','rust_hostile'] for row in receipt[name])==1022
           PY
       - name: Upload complete actual native observations
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 10 || 40 }}
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
