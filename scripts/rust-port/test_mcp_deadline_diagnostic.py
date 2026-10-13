@@ -615,13 +615,26 @@ class SelfMapsRuntimeControls(unittest.TestCase):
             data['self_maps'][0]['blob'] = '../0.runtime'
         def unmarked(root, data, transcript):
             transcript[:] = [item for item in transcript if 'self_maps_entry' not in item]
+        def foreign_marker(root, data, transcript):
+            transcript[-1]['self_maps_entry'] = '/proc/11/maps'
+        def foreign_marker_pid(root, data, transcript):
+            transcript[-1]['pid'] = 11
+        def other_task_stop(root, data, transcript):
+            data['self_maps'][0]['exit_event'] = 3
+            for item in transcript:
+                if item['event'] == 2:
+                    item['event'] = 3
+            transcript.append({'event':2,'pid':11,'wait_status':0})
         cases = [('not one-to-one', unmarked), ('exit mismatch', negative_return), ('exit mismatch', error_return),
                  ('exit mismatch', longer_than_requested), ('not the recorded read', read_kind),
                  ('not the recorded read', other_buffer), ('identity mismatch', foreign_path),
                  ('unmatched self-maps event', unmatched_exit), ('intervening stop', intervening_stop),
                  ('one-to-one', no_entry_marker), ('untyped self-maps record', untyped),
                  ('self-maps blob changed', changed_blob), ('missing or symlink', missing_blob),
-                 ('invalid self-maps blob name', invalid_name)]
+                 ('invalid self-maps blob name', invalid_name),
+                 ('self-maps raw marker mismatch', foreign_marker),
+                 ('self-maps raw marker mismatch', foreign_marker_pid),
+                 ('intervening stop', other_task_stop)]
         if os.name != 'nt':
             def symlink_blob(root, data, transcript):
                 other = root/'other.bin'

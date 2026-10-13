@@ -195,10 +195,11 @@ def verify_self_maps(directory, data, transcript):
     require(len(set(names)) == len(names), 'duplicate self-maps blob name')
     readers = {row['pid'] for row in rows}
     wanted = {row[key] for row in rows for key in ('entry_event', 'exit_event')}
-    stops, syscalls, marked = {pid: set() for pid in readers}, {}, []
+    stops, syscalls, marked = {pid: set() for pid in readers}, {}, {}
     for item in transcript:
         if 'self_maps_entry' in item:
-            marked.append(item['event'])
+            require(item['event'] not in marked, 'self-maps raw entries are not one-to-one')
+            marked[item['event']] = (item['pid'],item['self_maps_entry'])
         if item.get('pid') in stops:
             stops[item['pid']].add(item['event'])
         if 'op' in item and item['event'] in wanted:
@@ -212,6 +213,7 @@ def verify_self_maps(directory, data, transcript):
                 and row['entry_event'] < row['exit_event'], 'unmatched self-maps event')
         require(entry['pid'] == done['pid'] == row['pid'] == row['tgid']
                 and row['path'] == f"/proc/{row['pid']}/maps", 'self-maps event identity mismatch')
+        require(marked[row['entry_event']] == (row['pid'],row['path']), 'self-maps raw marker mismatch')
         require(entry['values'][:4] == [0, row['fd'], row['buffer'], row['requested']],
                 'self-maps entry is not the recorded read(0)')
         require(done['values'] == [row['returned'], 0] and 0 <= row['returned'] <= row['requested'],
@@ -219,6 +221,8 @@ def verify_self_maps(directory, data, transcript):
         require(row['size'] == row['returned'] <= MAX_SELF_MAPS_READ, 'self-maps length invalid')
         between = [e for e in stops[row['pid']] if row['entry_event'] <= e <= row['exit_event']]
         require(sorted(between) == [row['entry_event'], row['exit_event']], 'intervening stop of self-maps reader')
+        # Event IDs count all traced stops, not just stops of this reader.
+        require(row['exit_event'] == row['entry_event'] + 1, 'intervening stop during self-maps read')
         total += row['size']
         require(total <= MAX_SELF_MAPS_TOTAL, 'self-maps byte bound exceeded')
         verify_runtime_blob(directory, row)
