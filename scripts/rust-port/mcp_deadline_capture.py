@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import stat
 import struct
@@ -122,6 +123,116 @@ def input_fd(number, args):
     return None
 
 
+SELF_MAPS = re.compile(r'/proc/([1-9][0-9]*)/maps')
+# Typed runtime class self_maps_runtime, version 1: bytes copied from the reader's
+# own buffer at syscall exit. They are never reopened, snapshotted, compared with
+# before/after inventories, or treated as generated lease-protected inputs.
+SELF_MAPS_KEYS = {'class','version','pid','tgid','path','fd','buffer','requested',
+                  'entry_event','exit_event','returned','size','sha256','blob'}
+CLONE_VM, CLONE_FILES, CLONE_THREAD, CLONE_VFORK = 0x100, 0x400, 0x10000, 0x4000
+MAX_SELF_MAPS_READ = 8*1024**2
+MAX_SELF_MAPS_TOTAL = 1024**3  # retained runtime bytes per capture; exceeding fails closed
+MAX_SELF_MAPS_RECORDS = 1 << 18  # typed records per capture; exceeding fails closed
+
+
+def self_maps_target(raw):
+    # Exact pathname only: /proc/self, task subpaths and other proc files do not match.
+    return raw if SELF_MAPS.fullmatch(raw) else None
+
+
+def task_state(pid):
+    # Thread-group id and task list of one stopped tracee.
+    status = Path(f'/proc/{pid}/status').read_text()
+    return int(re.search(r'^Tgid:\s*([0-9]+)$', status, re.M)[1]), sorted(os.listdir(f'/proc/{pid}/task'))
+
+
+def self_maps_entry(number, pid, tgid, tasks, target, sharers):
+    # Only the exact own read(0), by a single-task reader, with no live CLONE_VM/CLONE_FILES sharer.
+    match = SELF_MAPS.fullmatch(target)
+    require(match is not None, 'not a self-maps descriptor: '+target)
+    require(number == 0, 'unsupported self-maps read syscall: '+str(number))
+    require(int(match[1]) == tgid == pid and tasks == [str(pid)], 'foreign or multi-task self-maps read')
+    require(not sharers, 'self-maps read while a CLONE_VM/CLONE_FILES sharer is live')
+
+
+def tracee_bytes(pid, address, count):
+    # Exactly count bytes from the stopped reader's buffer, or fail.
+    require(0 <= count <= MAX_SELF_MAPS_READ, 'self-maps read bound exceeded')
+    if count == 0:
+        return b''
+    with Path(f'/proc/{pid}/mem').open('rb',buffering=0) as memory:
+        data = os.pread(memory.fileno(),count,address)
+    require(len(data) == count, 'unreadable self-maps bytes')
+    return data
+
+
+def verify_runtime_blob(directory, row):
+    name = row['blob']
+    require(Path(name).name == name and name.endswith('.runtime'), 'invalid self-maps blob name')
+    path = directory/'blobs'/name
+    require(path.is_file() and not path.is_symlink(), 'missing or symlink self-maps blob')
+    with path.open('rb') as stream:
+        require(os.fstat(stream.fileno()).st_size == row['size'] and
+                hashlib.file_digest(stream,'sha256').hexdigest() == row['sha256'], 'self-maps blob changed')
+
+
+def verify_self_maps(directory, data, transcript):
+    """Bind each typed runtime record to its own raw entry and exit events.
+
+    transcript is this capture's syscalls.jsonl, consumed once. Records are checked
+    one-to-one against the raw self_maps_entry markers, the raw syscall lines, and
+    the reader's stops between entry and exit.
+    """
+    rows, entries = data.get('self_maps'), data.get('self_maps_entries')
+    require(isinstance(rows, list) and isinstance(entries, list) and len(rows) <= MAX_SELF_MAPS_RECORDS,
+            'self-maps records absent or over bound')
+    for row in rows:
+        require(isinstance(row, dict) and set(row) == SELF_MAPS_KEYS and row['class'] == 'self_maps_runtime'
+                and row['version'] == 1, 'untyped self-maps record')
+    require(len(set(entries)) == len(entries) and sorted(entries) == sorted(row['entry_event'] for row in rows),
+            'self-maps entries and records are not one-to-one')
+    names = [row['blob'] for row in rows]
+    require(len(set(names)) == len(names), 'duplicate self-maps blob name')
+    readers = {row['pid'] for row in rows}
+    wanted = {row[key] for row in rows for key in ('entry_event', 'exit_event')}
+    stops, syscalls, marked = {pid: set() for pid in readers}, {}, []
+    for item in transcript:
+        if 'self_maps_entry' in item:
+            marked.append(item['event'])
+        if item.get('pid') in stops:
+            stops[item['pid']].add(item['event'])
+        if 'op' in item and item['event'] in wanted:
+            require(item['event'] not in syscalls, 'duplicate syscall event identity')
+            syscalls[item['event']] = item
+    require(sorted(marked) == sorted(entries), 'self-maps raw entries and records are not one-to-one')
+    total = 0
+    for row in rows:
+        entry, done = syscalls.get(row['entry_event']), syscalls.get(row['exit_event'])
+        require(entry is not None and done is not None and entry['op'] == 1 and done['op'] == 2
+                and row['entry_event'] < row['exit_event'], 'unmatched self-maps event')
+        require(entry['pid'] == done['pid'] == row['pid'] == row['tgid']
+                and row['path'] == f"/proc/{row['pid']}/maps", 'self-maps event identity mismatch')
+        require(entry['values'][:4] == [0, row['fd'], row['buffer'], row['requested']],
+                'self-maps entry is not the recorded read(0)')
+        require(done['values'] == [row['returned'], 0] and 0 <= row['returned'] <= row['requested'],
+                'self-maps exit mismatch')
+        require(row['size'] == row['returned'] <= MAX_SELF_MAPS_READ, 'self-maps length invalid')
+        between = [e for e in stops[row['pid']] if row['entry_event'] <= e <= row['exit_event']]
+        require(sorted(between) == [row['entry_event'], row['exit_event']], 'intervening stop of self-maps reader')
+        total += row['size']
+        require(total <= MAX_SELF_MAPS_TOTAL, 'self-maps byte bound exceeded')
+        verify_runtime_blob(directory, row)
+    return {row['path'] for row in rows}
+
+
+def intervention(pending, pid, status):
+    # Any stop or exit other than the pending reader's own syscall-exit stop.
+    if not pending:
+        return False
+    return not (pid in pending and os.WIFSTOPPED(status)
+                and os.WSTOPSIG(status) == signal.SIGTRAP | 0x80 and status >> 16 == 0)
+
+
 def trace(command, private, output):
     require(platform.system() == 'Linux' and platform.machine() == 'x86_64',
             'consumption capture requires native Linux/x86_64')
@@ -135,8 +246,11 @@ def trace(command, private, output):
     generated_roots = (private/'build',private/'compiler-tmp')
     leases, consumed, active, newborn = {}, set(), set(), set()
     early_stops, pending, exec_inputs = set(), {}, {}
+    sharers, clone_intent, self_pending = set(), {}, {}
+    self_bytes = 0
     record = {'complete':False, 'command':command, 'command_exit':None,
-              'errors':[], 'generated':[], 'observed':[], 'acceptance':False}
+              'errors':[], 'generated':[], 'observed':[], 'acceptance':False,
+              'self_maps':[], 'self_maps_entries':[]}
     libc = ctypes.CDLL(None, use_errno=True)
     libc.ptrace.restype = ctypes.c_long
     libc.ptrace.argtypes = [ctypes.c_uint,ctypes.c_int,ctypes.c_void_p,ctypes.c_void_p]
@@ -256,6 +370,8 @@ def trace(command, private, output):
             events = 0
             while active:
                 pid,status = os.waitpid(-1,0x40000000)  # __WALL: all owned tracee threads
+                require(not intervention(self_pending,pid,status),
+                        'intervening event, signal or exit during self-maps read')
                 if pid not in active:
                     # A newborn SIGSTOP can arrive before its parent's FORK
                     # event. Leave it stopped until that kernel event binds it.
@@ -265,9 +381,11 @@ def trace(command, private, output):
                     continue
                 events += 1
                 require(events <= 10000000, 'compiler syscall bound exceeded')
-                raw.write(json.dumps({'pid':pid,'wait_status':status})+'\n')
+                raw.write(json.dumps({'event':events,'pid':pid,'wait_status':status})+'\n')
                 if os.WIFEXITED(status) or os.WIFSIGNALED(status):
                     active.remove(pid)
+                    sharers.discard(pid)
+                    require(pid not in self_pending, 'self-maps read interrupted by exit')
                     if pid == child:
                         result = os.waitstatus_to_exitcode(status)
                         record['command_exit'] = result if result >= 0 else 128-result
@@ -277,6 +395,9 @@ def trace(command, private, output):
                 if event in (1,2,3):
                     message = ctypes.c_ulong()
                     ptrace(0x4201,pid,0,ctypes.addressof(message))
+                    flags = clone_intent.get(pid,(0,0))[1]
+                    if flags & (CLONE_VM|CLONE_FILES) and not flags & CLONE_THREAD:
+                        sharers.add(message.value)  # shares memory or descriptors until exec or exit
                     active.add(message.value)
                     if message.value in early_stops:
                         early_stops.remove(message.value)
@@ -286,6 +407,7 @@ def trace(command, private, output):
                 elif event == 4:
                     message = ctypes.c_ulong()
                     ptrace(0x4201,pid,0,ctypes.addressof(message))
+                    sharers.discard(pid)  # exec gives the image its own memory and descriptor table
                     require(exec_inputs.pop(message.value,False), 'successful exec lacked a captured input')
                     # The kernel may select an interpreter for a static script.
                     # Bind its actual installed image, not just the script name.
@@ -302,21 +424,36 @@ def trace(command, private, output):
                     buffer = ctypes.create_string_buffer(88)
                     count = ptrace(0x420e,pid,88,ctypes.addressof(buffer))
                     op, values = read_syscall(buffer.raw,count)
-                    raw.write(json.dumps({'pid':pid,'op':op,'values':values})+'\n')
+                    marker = events
+                    raw.write(json.dumps({'event':marker,'pid':pid,'op':op,'values':values})+'\n')
                     if op == 1:
                         number,*args = values
+                        require(pid not in self_pending, 'overlapping self-maps read')
                         if number == 435:  # clone3 struct starts with u64 flags.
                             require(args[1] >= 8, 'short clone3 arguments')
                             with Path(f'/proc/{pid}/mem').open('rb',buffering=0) as memory:
                                 flags = os.pread(memory.fileno(),8,args[0])
                             require(len(flags) == 8 and not struct.unpack('=Q',flags)[0] & 0x7e820080,
                                     'untraced/namespaced compiler child')
+                            clone_intent[pid] = (number, struct.unpack('=Q',flags)[0])
+                        elif number in (56,57,58):
+                            clone_intent[pid] = (number, {56:args[0],57:0,58:CLONE_VM|CLONE_VFORK}[number])
                         fd = input_fd(number,args)
                         if fd is not None:
                             operand = Path(f'/proc/{pid}/fd/{fd}')
-                            row = capture(pid,operand)
-                            if row is not None:
-                                pending[pid] = (operand,row)
+                            target = self_maps_target(os.readlink(operand)) if operand.is_symlink() else None
+                            if target is not None:
+                                consumed.add(target)  # observed before any rejection
+                                raw.write(json.dumps({'event':marker,'pid':pid,'self_maps_entry':target})+'\n')
+                                record['self_maps_entries'].append(marker)
+                                tgid, tasks = task_state(pid)
+                                self_maps_entry(number,pid,tgid,tasks,target,sharers)
+                                self_pending[pid] = {'path':target,'fd':fd,'tgid':tgid,'buffer':args[1],
+                                                     'requested':args[2],'entry_event':marker}
+                            else:
+                                row = capture(pid,operand)
+                                if row is not None:
+                                    pending[pid] = (operand,row)
                         elif number in (59,322):
                             operand = exec_path(pid,number,args)
                             exec_inputs[pid] = operand.exists()
@@ -324,6 +461,28 @@ def trace(command, private, output):
                                 row = capture(pid,operand,executable=True)
                                 if row is not None:
                                     pending[pid] = (operand,row)
+                    elif pid in self_pending:
+                        entry = self_pending.pop(pid)
+                        returned, is_error = values
+                        require(is_error == 0 and 0 <= returned <= entry['requested'],
+                                'self-maps read failed or returned out of bounds')
+                        tgid, tasks = task_state(pid)
+                        require(tgid == entry['tgid'], 'self-maps reader changed at exit')
+                        self_maps_entry(0,pid,tgid,tasks,entry['path'],sharers)
+                        require(os.readlink(f"/proc/{pid}/fd/{entry['fd']}") == entry['path'],
+                                'self-maps descriptor changed at exit')
+                        data = tracee_bytes(pid,entry['buffer'],returned)
+                        require(len(record['self_maps']) < MAX_SELF_MAPS_RECORDS and
+                                self_bytes + len(data) <= MAX_SELF_MAPS_TOTAL,
+                                'self-maps record or byte bound exceeded')
+                        self_bytes += len(data)
+                        name = str(len(record['self_maps']))+'.runtime'
+                        with (blobs/name).open('xb') as stream:
+                            stream.write(data)
+                        record['self_maps'].append({'class':'self_maps_runtime','version':1,'pid':pid,'tgid':tgid,
+                            'path':entry['path'],'fd':entry['fd'],'buffer':entry['buffer'],'requested':entry['requested'],
+                            'entry_event':entry['entry_event'],'exit_event':marker,'returned':returned,'size':len(data),
+                            'sha256':hashlib.sha256(data).hexdigest(),'blob':name})
                     elif pid in pending:
                         operand,row = pending.pop(pid)
                         actual = operand.stat()
@@ -331,6 +490,7 @@ def trace(command, private, output):
                                 'consumed descriptor identity changed')
                     if op == 2:
                         exec_inputs.pop(pid,None)
+                        clone_intent.pop(pid,None)
                 elif sig == signal.SIGSTOP and pid in newborn:
                     newborn.remove(pid)
                 else:
@@ -341,6 +501,7 @@ def trace(command, private, output):
                 ptrace(24,pid)
             require(not early_stops and record['command_exit'] is not None and consumed,
                     'missing command exit, child ownership or consumption')
+            require(not self_pending, 'self-maps read pending at termination')
             for fd,row in leases.values():
                 require(fcntl.fcntl(fd,fcntl.F_GETLEASE) == fcntl.F_RDLCK, 'lost generated input lease')
                 verify_fd(fd,row)

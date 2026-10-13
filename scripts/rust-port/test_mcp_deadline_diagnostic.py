@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import shutil
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -525,6 +526,341 @@ class SourceControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'clean checkout/index'):
                 diagnostic.stage(root,root/'not-created')
             self.assertFalse((root/'not-created').exists())
+
+
+class SelfMapsRuntimeControls(unittest.TestCase):
+    """Typed self_maps_runtime controls: pure record checks plus real Linux children.
+
+    Native children prove only the tests' own reads. They are not product evidence.
+    """
+
+    def fixture(self, root, returned=4, data=b'abcd'):
+        (root/'blobs').mkdir(exist_ok=True)
+        (root/'blobs/0.runtime').write_bytes(data)
+        row = {'class':'self_maps_runtime','version':1,'pid':10,'tgid':10,'path':'/proc/10/maps',
+               'fd':3,'buffer':4096,'requested':8,'entry_event':1,'exit_event':2,'returned':returned,
+               'size':len(data),'sha256':hashlib.sha256(data).hexdigest(),'blob':'0.runtime'}
+        transcript = [{'event':1,'pid':10,'wait_status':0},
+                      {'event':1,'pid':10,'op':1,'values':[0,3,4096,8,0,0,0]},
+                      {'event':2,'pid':10,'wait_status':0},
+                      {'event':2,'pid':10,'op':2,'values':[returned,0]}]
+        transcript.append({'event':1,'pid':10,'self_maps_entry':'/proc/10/maps'})
+        return {'self_maps':[row], 'self_maps_entries':[1]}, transcript
+
+    def test_exact_path_and_read_kind_are_the_only_admitted_shape(self):
+        for raw in ('/proc/10/smaps', '/proc/10/task/10/maps', '/proc/self/maps',
+                    '/proc/10/status', '/proc/10/mem'):
+            with self.subTest(raw=raw):
+                self.assertIsNone(capture.self_maps_target(raw))
+        self.assertEqual(capture.self_maps_target('/proc/10/maps'), '/proc/10/maps')
+        capture.self_maps_entry(0, 10, 10, ['10'], '/proc/10/maps', set())
+        for number, pid, tgid, tasks, target, sharers, message in [
+                (17, 10, 10, ['10'], '/proc/10/maps', set(), 'unsupported self-maps read'),
+                (0, 10, 10, ['10'], '/proc/11/maps', set(), 'foreign or multi-task'),
+                (0, 10, 11, ['10'], '/proc/11/maps', set(), 'foreign or multi-task'),
+                (0, 10, 10, ['10', '11'], '/proc/10/maps', set(), 'foreign or multi-task'),
+                (0, 10, 10, ['10'], '/proc/10/maps', {12}, 'CLONE_VM/CLONE_FILES sharer')]:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                capture.self_maps_entry(number, pid, tgid, tasks, target, sharers)
+
+    def test_repeated_reads_and_zero_length_eof_are_each_retained(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-selfmaps-', dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            data, transcript = self.fixture(root, returned=0, data=b'')
+            (root/'blobs/1.runtime').write_bytes(b'abcd')
+            data['self_maps'].append({**data['self_maps'][0], 'returned':4, 'size':4,
+                                      'sha256':hashlib.sha256(b'abcd').hexdigest(),
+                                      'blob':'1.runtime', 'entry_event':3, 'exit_event':4})
+            data['self_maps_entries'] = [1, 3]
+            transcript += [{'event':3,'pid':10,'wait_status':0},
+                           {'event':3,'pid':10,'op':1,'values':[0,3,4096,8,0,0,0]},
+                           {'event':4,'pid':10,'wait_status':0},
+                           {'event':4,'pid':10,'op':2,'values':[4,0]},
+                           {'event':3,'pid':10,'self_maps_entry':'/proc/10/maps'}]
+            self.assertEqual(capture.verify_self_maps(root, data, transcript), {'/proc/10/maps'})
+
+    def test_runtime_record_binds_exact_bytes_and_rejects_every_mismatch(self):
+        def negative_return(root, data, transcript):
+            data['self_maps'][0].update(returned=-1, size=0)
+            transcript[3]['values'] = [-1, 0]
+        def error_return(root, data, transcript):
+            transcript[3]['values'] = [4, 1]
+        def longer_than_requested(root, data, transcript):
+            data['self_maps'][0]['returned'] = 9
+        def read_kind(root, data, transcript):
+            transcript[1]['values'][0] = 17
+        def other_buffer(root, data, transcript):
+            transcript[1]['values'][2] = 4097
+        def foreign_path(root, data, transcript):
+            data['self_maps'][0]['path'] = '/proc/11/maps'
+        def unmatched_exit(root, data, transcript):
+            transcript[:] = [item for item in transcript if item.get('op') != 2]
+        def intervening_stop(root, data, transcript):
+            data['self_maps'][0]['exit_event'] = 3
+            transcript[:] = [{'event':1,'pid':10,'wait_status':0},
+                             {'event':1,'pid':10,'op':1,'values':[0,3,4096,8,0,0,0]},
+                             {'event':2,'pid':10,'wait_status':0},
+                             {'event':3,'pid':10,'wait_status':0},
+                             {'event':3,'pid':10,'op':2,'values':[4,0]},
+                             {'event':1,'pid':10,'self_maps_entry':'/proc/10/maps'}]
+        def no_entry_marker(root, data, transcript):
+            data['self_maps_entries'] = []
+        def untyped(root, data, transcript):
+            data['self_maps'][0]['class'] = 'self_maps'
+        def changed_blob(root, data, transcript):
+            (root/'blobs/0.runtime').write_bytes(b'wxyz')
+        def missing_blob(root, data, transcript):
+            (root/'blobs/0.runtime').unlink()
+        def invalid_name(root, data, transcript):
+            data['self_maps'][0]['blob'] = '../0.runtime'
+        def unmarked(root, data, transcript):
+            transcript[:] = [item for item in transcript if 'self_maps_entry' not in item]
+        cases = [('not one-to-one', unmarked), ('exit mismatch', negative_return), ('exit mismatch', error_return),
+                 ('exit mismatch', longer_than_requested), ('not the recorded read', read_kind),
+                 ('not the recorded read', other_buffer), ('identity mismatch', foreign_path),
+                 ('unmatched self-maps event', unmatched_exit), ('intervening stop', intervening_stop),
+                 ('one-to-one', no_entry_marker), ('untyped self-maps record', untyped),
+                 ('self-maps blob changed', changed_blob), ('missing or symlink', missing_blob),
+                 ('invalid self-maps blob name', invalid_name)]
+        if os.name != 'nt':
+            def symlink_blob(root, data, transcript):
+                other = root/'other.bin'
+                other.write_bytes(b'abcd')
+                (root/'blobs/0.runtime').unlink()
+                os.symlink(other, root/'blobs/0.runtime')
+            cases.append(('missing or symlink', symlink_blob))
+        for index, (message, mutate) in enumerate(cases):
+            with self.subTest(case=index, message=message):
+                with tempfile.TemporaryDirectory(prefix='deadline-selfmaps-', dir=os.environ['TMPDIR']) as raw:
+                    root = Path(raw)
+                    data, transcript = self.fixture(root)
+                    mutate(root, data, transcript)
+                    with self.assertRaisesRegex(ValueError, message):
+                        capture.verify_self_maps(root, data, transcript)
+
+    def test_runtime_bytes_are_bound_only_by_their_verified_record(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-selfmaps-', dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw).resolve()
+            source = root/'static.txt'
+            source.write_text('static control\n')
+            private = root/'private'
+            (private/'build').mkdir(parents=True)
+            (private/'compiler-tmp').mkdir()
+            before = diagnostic.snapshot([source])
+            with self.assertRaisesRegex(ValueError, 'unbound self-maps runtime input'):
+                diagnostic.closure_accesses(['/proc/10/maps'], before, before, private)
+            self.assertEqual(diagnostic.closure_accesses(['/proc/10/maps', str(source)], before, before,
+                                                         private, None, {'/proc/10/maps'}), [])
+            with self.assertRaisesRegex(ValueError, 'unbound self-maps runtime input'):
+                diagnostic.closure_accesses(['/proc/11/maps'], before, before, private, None, {'/proc/10/maps'})
+
+    def test_gitconfig_root_is_identity_bound_and_never_exempt(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-gitconfig-', dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw).resolve()
+            config = root/'gitconfig'
+            config.write_text('[fixture]\n\tvalue = before\n')
+            before = diagnostic.snapshot([config])
+            self.assertEqual(diagnostic.closure_accesses([str(config)], before, before, root/'private'), [])
+            config.write_text('[fixture]\n\tvalue = after\n')
+            after = diagnostic.snapshot([config])
+            with self.assertRaisesRegex(ValueError, 'changed compiler input'):
+                diagnostic.closure_accesses([str(config)], before, after, root/'private')
+            config.unlink()
+            with self.assertRaisesRegex(ValueError, 'missing compiler input'):
+                diagnostic.closure_accesses([str(config)], before, after, root/'private')
+
+    def synthetic_capture(self, evidence, name, command, runtime=True, corrupt=False, complete=True):
+        """File-only capture shape for compiler_capture. Not a native observation."""
+        directory = evidence/(name+'-capture')
+        (directory/'blobs').mkdir(parents=True)
+        data = b'abcd'
+        (directory/'blobs/0.runtime').write_bytes(b'wxyz' if corrupt else data)
+        rows, entries = [], []
+        if runtime:
+            rows = [{'class':'self_maps_runtime','version':1,'pid':10,'tgid':10,'path':'/proc/10/maps',
+                     'fd':3,'buffer':4096,'requested':8,'entry_event':1,'exit_event':2,'returned':4,
+                     'size':4,'sha256':hashlib.sha256(data).hexdigest(),'blob':'0.runtime'}]
+            entries = [1]
+        transcript = [{'event':1,'pid':10,'wait_status':0},
+                      {'event':1,'pid':10,'op':1,'values':[0,3,4096,8,0,0,0]},
+                      {'event':2,'pid':10,'wait_status':0},
+                      {'event':2,'pid':10,'op':2,'values':[4,0]}]
+        if runtime:
+            transcript.append({'event':1,'pid':10,'self_maps_entry':'/proc/10/maps'})
+        (directory/'syscalls.jsonl').write_text(''.join(json.dumps(item)+'\n' for item in transcript))
+        record = {'complete':complete, 'command':command, 'command_exit':0,
+                  'errors':[] if complete else ['historical incomplete capture'],
+                  'generated':[], 'observed':['/proc/10/maps'], 'acceptance':False, 'events':2,
+                  'self_maps':rows, 'self_maps_entries':entries}
+        (directory/'capture.json').write_text(json.dumps(record))
+
+    def test_admission_requires_a_bound_complete_runtime_record(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-selfmaps-', dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw).resolve()
+            source = root/'source'
+            source.mkdir()
+            (source/'lib.txt').write_text('static\n')
+            private = root/'private'
+            (private/'build').mkdir(parents=True)
+            (private/'compiler-tmp').mkdir()
+            before = diagnostic.snapshot([source])
+            generated = diagnostic.snapshot([private/'build', private/'compiler-tmp'])
+            cases = [(True, False, True, True),    # bound runtime record, both captures complete
+                     (False, False, True, False),  # observed maps read without its record
+                     (True, True, True, False),    # corrupt blob
+                     (True, False, False, False)]  # historical incomplete capture
+            for index, (runtime, corrupt, complete, admitted) in enumerate(cases):
+                with self.subTest(case=index):
+                    evidence = root/('evidence-'+str(index))
+                    evidence.mkdir()
+                    self.synthetic_capture(evidence, 'clippy', diagnostic.CLIPPY, runtime, corrupt, complete)
+                    self.synthetic_capture(evidence, 'build-tests', diagnostic.NO_RUN, runtime, corrupt, complete)
+                    record = diagnostic.compiler_capture([source], before, generated, private, evidence,
+                                                         'build-tests', 0, None)
+                    self.assertIs(record['complete'], admitted, record['errors'])
+                    if admitted:
+                        self.assertEqual(record['self_maps_runtime'], ['/proc/10/maps'])
+
+    def test_legacy_capture_without_runtime_record_stays_rejected(self):
+        # Shape of a retained capture from before the typed class: observed maps, no records.
+        legacy = {'complete':True, 'command':diagnostic.CLIPPY, 'command_exit':0, 'errors':[], 'events':2,
+                  'generated':[], 'observed':['/proc/23166/maps','/etc/gitconfig']}
+        with tempfile.TemporaryDirectory(prefix='deadline-legacy-', dir=os.environ['TMPDIR']) as raw:
+            with self.assertRaisesRegex(ValueError, 'self-maps records absent'):
+                capture.verify_self_maps(Path(raw), legacy, [])
+
+    def test_non_maps_proc_reads_are_unbound_by_closure(self):
+        with tempfile.TemporaryDirectory(prefix='deadline-proc-', dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw).resolve()
+            source = root/'static.txt'
+            source.write_text('static control\n')
+            before = diagnostic.snapshot([source])
+            for proc in ('/proc/10/status', '/proc/10/smaps', '/proc/self/maps'):
+                with self.subTest(proc=proc), self.assertRaisesRegex(ValueError, 'unbound'):
+                    diagnostic.closure_accesses([proc], before, before, root/'private', None, {'/proc/10/maps'})
+
+    def test_owning_roots_include_gitconfig_but_closure_never_exempts_it(self):
+        source = Path(diagnostic.__file__).read_text()
+        functions = {n.name: n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)}
+        self.assertIn("'/etc/gitconfig'", ast.get_source_segment(source, functions['owning']))
+        self.assertNotIn('gitconfig', ast.get_source_segment(source, functions['closure_accesses']))
+
+    @unittest.skipUnless(hasattr(os, 'WSTOPSIG'), 'POSIX wait-status encoding only')
+    def test_any_other_stop_or_exit_while_a_self_maps_read_is_pending_is_intervention(self):
+        # Raw wait statuses only; the wiring into the tracer is checked from source.
+        syscall_stop = (0x85 << 8) | 0x7f
+        clone_event = (signal.SIGTRAP << 8) | 0x7f | (3 << 16)
+        sigstop = (signal.SIGSTOP << 8) | 0x7f
+        self.assertFalse(capture.intervention({}, 11, sigstop))
+        self.assertFalse(capture.intervention({10: {}}, 10, syscall_stop))
+        for pid, status in [(10, clone_event), (10, sigstop), (10, 0), (11, syscall_stop),
+                            (11, sigstop), (11, clone_event)]:
+            with self.subTest(pid=pid, status=status):
+                self.assertTrue(capture.intervention({10: {}}, pid, status))
+        source = Path(capture.__file__).read_text()
+        self.assertLess(source.index('pid,status = os.waitpid(-1'), source.index('require(not intervention(self_pending'))
+        self.assertNotIn('vfork_child', source)
+
+    def native_capture(self, root, child):
+        (root/'build').mkdir()
+        (root/'compiler-tmp').mkdir()
+        result = subprocess.run([sys.executable, '-B', str(Path(capture.__file__)), str(root),
+                                 str(root/'capture'), '--', sys.executable, '-B', '-c', child],
+                                capture_output=True, text=True, timeout=120)
+        directory = root/'capture'
+        record = json.loads((directory/'capture.json').read_bytes())
+        transcript = [json.loads(line) for line in (directory/'syscalls.jsonl').read_text().splitlines()]
+        return result, record, transcript, directory
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_reader_bytes_equal_the_retained_runtime_blobs(self):
+        child = ('import hashlib, os\n'
+                 'fd = os.open("/proc/self/maps", os.O_RDONLY)\n'
+                 'data = b""\n'
+                 'reads = 0\n'
+                 'while True:\n'
+                 '    chunk = os.read(fd, 4096)\n'
+                 '    reads += 1\n'
+                 '    if not chunk:\n'
+                 '        break\n'
+                 '    data += chunk\n'
+                 'os.close(fd)\n'
+                 'print(os.getpid(), reads, len(data), hashlib.sha256(data).hexdigest())\n')
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            result, record, transcript, directory = self.native_capture(Path(raw).resolve(), child)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            pid, reads, length, digest = result.stdout.split()
+            self.assertTrue(record['complete'], record['errors'])
+            self.assertIn(f'/proc/{pid}/maps', record['observed'])
+            rows = [row for row in record['self_maps'] if row['path'] == f'/proc/{pid}/maps']
+            own = rows[-int(reads):]  # earlier startup reads, if any, precede the child's own reads
+            self.assertEqual(own[-1]['returned'], 0)
+            content = b''.join((directory/'blobs'/row['blob']).read_bytes() for row in own)
+            self.assertEqual((len(content), hashlib.sha256(content).hexdigest()), (int(length), digest))
+            self.assertEqual(capture.verify_self_maps(directory, record, transcript), {f'/proc/{pid}/maps'})
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_second_thread_rejects_self_maps_read(self):
+        child = ('import os, threading, time\n'
+                 'threading.Thread(target=time.sleep, args=(60,), daemon=True).start()\n'
+                 'fd = os.open("/proc/self/maps", os.O_RDONLY)\n'
+                 'print(os.getpid(), flush=True)\n'
+                 'os.read(fd, 4096)\n')
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            result, record, _, _ = self.native_capture(Path(raw).resolve(), child)
+            pid = result.stdout.split()[0]
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(record['complete'])
+            self.assertIn('foreign or multi-task self-maps read', record['errors'])
+            self.assertIn(f'/proc/{pid}/maps', record['observed'])
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_foreign_maps_read_is_rejected(self):
+        child = ('import os\n'
+                 'print(os.getpid(), os.getppid(), flush=True)\n'
+                 'fd = os.open("/proc/%d/maps" % os.getppid(), os.O_RDONLY)\n'
+                 'os.read(fd, 4096)\n')
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            result, record, _, _ = self.native_capture(Path(raw).resolve(), child)
+            _, parent = result.stdout.split()[:2]
+            self.assertFalse(record['complete'])
+            self.assertIn('foreign or multi-task self-maps read', record['errors'])
+            self.assertIn(f'/proc/{parent}/maps', record['observed'])
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_pread_of_own_maps_is_rejected(self):
+        child = ('import os\n'
+                 'print(os.getpid(), flush=True)\n'
+                 'fd = os.open("/proc/self/maps", os.O_RDONLY)\n'
+                 'os.pread(fd, 4096, 0)\n')
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            result, record, _, _ = self.native_capture(Path(raw).resolve(), child)
+            pid = result.stdout.split()[0]
+            self.assertFalse(record['complete'])
+            self.assertIn('unsupported self-maps read syscall: 17', record['errors'])
+            self.assertIn(f'/proc/{pid}/maps', record['observed'])
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_vfork_child_that_execs_does_not_reject_later_reads(self):
+        child = ('import hashlib, os, subprocess, sys\n'
+                 'subprocess.run([sys.executable, "-B", "-c", "pass"], check=True)\n'
+                 'fd = os.open("/proc/self/maps", os.O_RDONLY)\n'
+                 'data = b""\n'
+                 'while chunk := os.read(fd, 4096):\n'
+                 '    data += chunk\n'
+                 'print(os.getpid(), len(data), hashlib.sha256(data).hexdigest(), flush=True)\n')
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            result, record, transcript, directory = self.native_capture(Path(raw).resolve(), child)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            pid = result.stdout.split()[0]
+            self.assertTrue(record['complete'], record['errors'])
+            self.assertIn(f'/proc/{pid}/maps', record['observed'])
+            self.assertIn(f'/proc/{pid}/maps', capture.verify_self_maps(directory, record, transcript))
 
 
 if __name__ == '__main__':

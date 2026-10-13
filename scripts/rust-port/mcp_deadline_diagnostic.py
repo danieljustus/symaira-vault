@@ -26,7 +26,7 @@ from typing import Any
 
 from mcp_oracle import inventory
 from mcp_fixture_contract import confined_file
-from mcp_deadline_capture import verify_blob
+from mcp_deadline_capture import SELF_MAPS, verify_blob, verify_self_maps
 
 BASE = '01f7daae181eba3a34bc90382cfb58e7fa9925c8'
 PATCH = 'scripts/rust-port/mcp_deadline_diagnostic.patch'
@@ -330,7 +330,7 @@ def accessed_files(raw):
     return sorted(paths)
 
 
-def closure_accesses(paths, before, after, private, captured=None):
+def closure_accesses(paths, before, after, private, captured=None, runtime=None):
     private = private.resolve()
     generated = []
     special = {'/dev/null', '/dev/urandom', '/dev/random'}
@@ -338,6 +338,11 @@ def closure_accesses(paths, before, after, private, captured=None):
                    ('.global-cache','.global-cache-journal','.package-cache','.package-cache-mutate')}
     for raw in paths:
         path = Path(raw)
+        if SELF_MAPS.fullmatch(raw):
+            # Runtime bytes are bound only by this run's verified record. They are never
+            # compared with before/after inventories or treated as generated files.
+            require(runtime is not None and raw in runtime, 'unbound self-maps runtime input: '+raw)
+            continue
         if raw in special or raw in cargo_state:
             continue
         if captured is not None and raw in captured:
@@ -386,7 +391,7 @@ def compiler_capture(roots, before, generated_before, private, evidence, phase, 
                 generated_after = captured
         except Exception as problem:
             record['errors'].append(name+': '+str(problem))
-    observed = set()
+    observed, runtime = set(), set()
     try:
         captured = {}
         for name,command in [('clippy',CLIPPY),('build-tests',NO_RUN)]:
@@ -400,13 +405,19 @@ def compiler_capture(roots, before, generated_before, private, evidence, phase, 
             for row in data['generated']:
                 verify_blob(directory/'blobs',row)
                 captured[row['path']] = row
+            with (directory/'syscalls.jsonl').open('rb') as stream:
+                verified = verify_self_maps(directory,data,(json.loads(line) for line in stream))
+            require(verified == {p for p in data['observed'] if SELF_MAPS.fullmatch(p)},
+                    'self-maps observation without its runtime record: '+name)
+            runtime.update(verified)
         require(observed, 'empty compiler consumption capture')
         if after is None or generated_after is None:
             raise ValueError('incomplete compiler inventories')
         require(before == after, 'compiler input closure changed during build')
         generated = closure_accesses(sorted(observed), before | generated_before,
-                                     after | generated_after, private, captured)
+                                     after | generated_after, private, captured, runtime)
         record['generated_accesses'] = generated
+        record['self_maps_runtime'] = sorted(runtime)
     except Exception as problem:
         record['errors'].append(str(problem))
     save(evidence/'compiler-accesses.json', {'observed':sorted(observed)})
@@ -501,6 +512,7 @@ def owning():
     roots.update(str(Path(p['manifest_path']).parent) for p in metadata['packages']
                  if not Path(p['manifest_path']).is_relative_to(ROOT))
     roots.add(paths['sdk'])
+    roots.update(p for p in ['/etc/gitconfig'] if Path(p).exists())  # identity-bound, never exempt
     # Conservative full native linker/header/library closure. No SDK download or
     # inference from a compiler version; unexpected successful reads fail closed.
     roots.update(p for p in ['/usr/bin','/usr/lib','/usr/lib64','/usr/include','/lib','/lib64',
