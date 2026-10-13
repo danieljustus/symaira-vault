@@ -371,8 +371,8 @@ class SourceControls(unittest.TestCase):
             result = subprocess.run([sys.executable,'-B',str(Path(capture.__file__)),
                 str(root),str(root/'capture'),'--',sys.executable,'-B','-c',child,str(source)],
                 capture_output=True,text=True,timeout=60)
-            self.assertEqual(result.returncode,0,result.stderr)
             record = json.loads((root/'capture/capture.json').read_bytes())
+            self.assertEqual(result.returncode,0,str(record['errors'])+result.stderr)
             self.assertTrue(record['complete'],record['errors'])
             self.assertEqual(record['command_exit'],0)
             self.assertIn(str(source),record['observed'])
@@ -797,6 +797,9 @@ class SelfMapsRuntimeControls(unittest.TestCase):
         directory = root/'capture'
         record = json.loads((directory/'capture.json').read_bytes())
         transcript = [json.loads(line) for line in (directory/'syscalls.jsonl').read_text().splitlines()]
+        # Each child prints its identity/result. Surface capture failures before
+        # stdout parsing hides them behind an IndexError or empty assertion.
+        self.assertTrue(result.stdout.strip(),str(record['errors'])+result.stderr)
         return result, record, transcript, directory
 
     @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
