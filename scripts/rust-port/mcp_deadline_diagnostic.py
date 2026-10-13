@@ -127,6 +127,8 @@ def private_environment(root, env):
     """Resolve installed tools first; copy only dependency caches, not credentials."""
     rustup = installed(env, 'rustup')
     resolution = {k:env[k] for k in ('PATH','HOME','RUSTUP_HOME') if k in env}
+    # Discovery must not install a missing toolchain, even with rustup defaults.
+    resolution['RUSTUP_AUTO_INSTALL'] = '0'
     def rust_tool(name):
         return Path(subprocess.check_output([rustup,'which','--toolchain','1.98.0',name],
                     env=resolution, text=True, timeout=30).strip()).resolve(strict=True)
@@ -143,14 +145,17 @@ def private_environment(root, env):
     for leaf in ('registry','git'):
         require((original_cargo/leaf).is_dir(), 'installed offline Cargo cache missing: '+leaf)
         shutil.copytree(original_cargo/leaf, root/'cargo'/leaf, symlinks=True)
+    prepared_go = Path(env['RUNNER_TEMP'])/'deadline-prepared-go-mod'
+    require(prepared_go.is_dir(), 'prepared offline Go module cache missing')
+    shutil.copytree(prepared_go, root/'gopath/pkg/mod', symlinks=True)
     private = dict(PATH=os.pathsep.join([str(cargo.parent),str(go.parent),str(Path(sys.executable).parent),'/usr/bin','/bin']),
         HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(root/'config'),
         XDG_DATA_HOME=str(root/'data'), XDG_CACHE_HOME=str(root/'cache'), XDG_RUNTIME_DIR=str(root/'runtime'),
         TMPDIR=str(root/'tmp'), TMP=str(root/'tmp'), TEMP=str(root/'tmp'),
         CARGO_HOME=str(root/'cargo'), CARGO_TARGET_DIR=str(root/'build'), CARGO_NET_OFFLINE='true',
-        CARGO_INCREMENTAL='0', CARGO_BUILD_JOBS='2', RUSTUP_TOOLCHAIN='1.98.0',
+        CARGO_INCREMENTAL='0', CARGO_BUILD_JOBS='2', RUSTUP_TOOLCHAIN='1.98.0', RUSTUP_AUTO_INSTALL='0',
         RUSTC=str(rustc), RUSTDOC=str(rustdoc), GOROOT=str(go.parent.parent), GOTOOLCHAIN='local',
-        GOENV='off', GOWORK='off', GOPATH=str(root/'gopath'), GOCACHE=str(root/'gocache'),
+        GOENV='off', GOWORK='off', GOPROXY='off', GOSUMDB='off', GOPATH=str(root/'gopath'), GOCACHE=str(root/'gocache'),
         GOMODCACHE=str(root/'gopath/pkg/mod'), GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull,
         PYTHONDONTWRITEBYTECODE='1', LANG='C.UTF-8', LC_ALL='C.UTF-8', TZ='UTC',
         SYMVAULT_TEST_KEYRING='memory', SYMVAULT_SECUREUI='none', SYMVAULT_NO_NOTIFY='1')

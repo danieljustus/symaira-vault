@@ -53,9 +53,9 @@ jobs:
   mcp-process:
     name: MCP process (${{ matrix.os }})
     runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
-    # Diagnostic step ceilings total 111 min; keep 9 min of job-level margin.
+    # Diagnostic ceilings: 111 min execution + 31 min preparation + 8 min margin.
     # Ordinary native acceptance retains its existing 40 min limit.
-    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 120 || 40 }}
+    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 150 || 40 }}
     strategy:
       fail-fast: false
       matrix:
@@ -98,7 +98,62 @@ jobs:
       - name: Install pinned Rust
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Verify diagnostic preparation authorization
+        timeout-minutes: 1
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        env:
+          DEADLINE_REVIEWED_COMMIT: ${{ vars.DEADLINE_DIAGNOSTIC_COMMIT }}
+          DEADLINE_REVIEW_SHA256: ${{ vars.DEADLINE_DIAGNOSTIC_REVIEW_SHA256 }}
+          DEADLINE_REVIEW: ${{ inputs.deadline_review }}
+        run: |
+          python3 -B - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/rust-port')
+          import mcp_deadline_diagnostic as diagnostic
+          diagnostic.admission(os.environ, diagnostic.git(diagnostic.ROOT, 'rev-parse', 'HEAD').decode().strip(), os.environ['DEADLINE_REVIEW'])
+          PY
+      - name: Prepare diagnostic Python
+        timeout-minutes: 5
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Prepare diagnostic Go
+        timeout-minutes: 5
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: false
+      - name: Prepare diagnostic tools and dependency caches
+        timeout-minutes: 20
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        env:
+          GOTOOLCHAIN: local
+          GOMODCACHE: ${{ runner.temp }}/deadline-prepared-go-mod
+        run: |
+          set -euo pipefail
+          mkdir -p target/deadline-preparation
+          exec > target/deadline-preparation/stdout 2> target/deadline-preparation/stderr
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+          export RUSTUP_AUTO_INSTALL=0
+          cargo fetch --locked
+          test "$(go env GOVERSION)" = go1.26.6
+          go mod download
+          deps_dir=$(mktemp -d "$RUNNER_TEMP/deadline-modules.XXXXXX")
+          for ref in d1cd0f97ac550bc3020bc86b0514989f8d28d95c 24acdb08fcc7021262717aa803d72eb8d151c66a; do
+            git archive "$ref" go.mod go.sum | tar -x -C "$deps_dir"
+            (cd "$deps_dir" && go mod download)
+          done
+          # Actual native kernel/filesystem preflight, not a product test run.
+          probe="$RUNNER_TEMP/deadline-capability"
+          mkdir -p "$probe/build" "$probe/compiler-tmp"
+          printf 'capability probe only\n' > "$probe/build/input"
+          timeout --kill-after=10s 60s python3 -B scripts/rust-port/mcp_deadline_capture.py "$probe" target/deadline-preparation/capture -- python3 -B -c 'import ctypes, os, pathlib, sys; assert ctypes.CDLL(None).prctl(36,1,0,0,0)==0; fd=os.pidfd_open(os.getpid()); os.close(fd); assert pathlib.Path(sys.argv[1]).read_bytes()==b"capability probe only\n"' "$probe/build/input"
+          git diff --exit-code -- go.mod go.sum Cargo.lock
       - name: Admit and stage the reviewed original-target diagnostic
+        # Preparation is explicit and separately authorized, never a fallback
+        # inside installed-only diagnostic discovery or measured execution.
         timeout-minutes: 10
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
         env:
@@ -110,11 +165,10 @@ jobs:
           mkdir -p target
           exec > target/deadline-x86-admission.stdout 2> target/deadline-x86-admission.stderr
           # Use an already installed pinned Python, never an installer fallback.
-          python_paths=("$RUNNER_TOOL_CACHE"/Python/3.13.*/x64/bin/python3)
-          test "${#python_paths[@]}" -eq 1
-          test -x "${python_paths[0]}"
-          "${python_paths[0]}" -B scripts/rust-port/mcp_deadline_diagnostic.py stage
-          printf 'DEADLINE_PYTHON=%s\n' "${python_paths[0]}" >> "$GITHUB_ENV"
+          python_path=$(command -v python3)
+          test -x "$python_path"
+          "$python_path" -B scripts/rust-port/mcp_deadline_diagnostic.py stage
+          printf 'DEADLINE_PYTHON=%s\n' "$python_path" >> "$GITHUB_ENV"
       - name: Check narrow diagnostic and receipt evidence boundaries
         timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 5 || 40 }}
         run: |
@@ -268,6 +322,7 @@ jobs:
             target/deadline-x86-admission.stdout
             target/deadline-x86-admission.stderr
             target/deadline-x86-evidence/
+            target/deadline-preparation/
             target/native-mcp-cli-tests.txt
             target/native-mcp-cli-tests.stderr
             target/mcp-fixture-evidence/

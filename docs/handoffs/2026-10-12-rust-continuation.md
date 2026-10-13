@@ -91,6 +91,32 @@ No settings write, diagnostic dispatch, merge or release is part of this repair.
 
 ## Shared boundaries
 
+### Explicit runner preparation after the first admitted attempt (#1379)
+
+Run `38312126593` at `6173807fa7e2a1f00fef3b79c8d5029df120c646`
+failed before generator or owning-suite execution. Rustup discovery unexpectedly
+installed the absent toolchain, then rejected missing rustfmt. Its attempt is
+consumed; its evidence and reviewed source remain historical, not acceptance.
+
+The follow-up separates explicitly authorized preparation from execution:
+the exact commit/review/attempt admission is checked before preparation;
+Python 3.13, Go 1.26.6, Rust 1.98.0 with rustfmt/Clippy and locked Cargo/Go
+dependencies are prepared before staging. Both immutable Go reference module
+sets and the product module set are downloaded. A separate file-only native
+capture checks ptrace/read leases, pidfd and subreaper facilities without
+compiling or running product tests. Preparation output is retained separately.
+The job ceiling is now 150 minutes: existing execution ceilings 111 minutes,
+preparation ceilings 31 minutes and 8 minutes of margin. Ordinary jobs retain
+40 minutes; all product timing budgets and test invocations are unchanged.
+
+Discovery sets `RUSTUP_AUTO_INSTALL=0` explicitly, including against an inherited
+opt-in. Execution copies only prepared dependency caches into private state;
+Cargo is offline and Go child builds preserve `GOPROXY=off`/`GOSUMDB=off`.
+A real-rustup regression uses an empty home and a rejecting loopback distribution
+server to verify no requests, downloads or installed toolchains. This is a
+lookup regression, not native timing evidence. A changed source still requires
+a fresh exact-commit independent review before the newly authorized single run.
+
 This is preserved work in progress, not migration completion or merge/release approval. Preserve exact Go/Rust byte contracts, original failed captures, source/compiler provenance, security policies and independent native-platform gates. Cross-compilation and source-only tests do not prove native execution. Never manufacture expected results, weaken a deadline, discard a mismatching row or change an oracle only to make a comparison pass. Signing, releases, productive cutover, Go retirement and destructive cleanup require separate authorization. Do not start paid models or services.
 
 Local automatic continuation has been disabled and the owned unfinished work parked. This document does not restart automation. Existing remote CI may run from the ordinary push; no workflow dispatch, merge, tag or release is requested.

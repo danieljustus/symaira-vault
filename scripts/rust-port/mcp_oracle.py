@@ -47,7 +47,7 @@ def tool_environment(env, build=False):
     allowed = {'PATH','HOME','USERPROFILE','TMPDIR','TMP','TEMP','SYSTEMROOT',
                'WINDIR','COMSPEC','PATHEXT','LANG','LC_ALL','LC_CTYPE'}
     if build:
-        allowed |= {'GOTOOLCHAIN','GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR'}
+        allowed |= {'GOTOOLCHAIN','GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR','GOPROXY','GOSUMDB'}
     return {key:value for key,value in env.items() if key.upper() in allowed}
 
 

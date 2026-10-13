@@ -2,13 +2,17 @@
 """Noncompiling source/file controls, never a simulated native observation."""
 import ast
 import hashlib
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
+from unittest.mock import patch
 
 import mcp_deadline_diagnostic as diagnostic
 import mcp_deadline_capture as capture
@@ -23,7 +27,20 @@ def workflow_boundaries(text):
         if not condition:
             raise ValueError('diagnostic workflow boundary drift')
     need('default: false' in text and 'deadline_review:' in text)
-    need('timeout-minutes: ${{ ('+SELECTOR+') && 120 || 40 }}' in text)
+    need('timeout-minutes: ${{ ('+SELECTOR+') && 150 || 40 }}' in text)
+    preparation = [('Verify diagnostic preparation authorization',1),
+                   ('Prepare diagnostic Python',5), ('Prepare diagnostic Go',5),
+                   ('Prepare diagnostic tools and dependency caches',20)]
+    previous = -1
+    for name, minutes in preparation:
+        marker = '      - name: '+name+'\n'
+        position = text.index(marker)
+        need(previous < position < text.index('      - name: Admit and stage'))
+        previous = position
+        block = text.split(marker,1)[1].split('      - name:',1)[0]
+        need('        if: ${{ '+SELECTOR+' }}\n' in block)
+        need('        timeout-minutes: '+str(minutes)+'\n' in block)
+    need('target/deadline-preparation/' in text)
     for name, minutes in [('Checkout retained Go oracle and candidate',5),
                           ('Admit and stage the reviewed original-target diagnostic',10),
                           ('Check narrow diagnostic and receipt evidence boundaries',5),
@@ -58,6 +75,50 @@ def workflow_boundaries(text):
 
 
 class SourceControls(unittest.TestCase):
+    def test_absent_real_rustup_toolchain_never_downloads_or_installs(self):
+        from mcp_oracle import tool_environment
+        offline = {'GOPROXY':'off','GOSUMDB':'off'}
+        self.assertEqual(tool_environment(offline, build=True), offline)
+        self.assertEqual(tool_environment(offline), {})
+        self.assertIsNotNone(shutil.which('rustup'), 'real rustup required for this regression')
+        requests = []
+        class RejectDownload(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                self.send_error(503)
+            def log_message(self, format, *args):
+                pass
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            env = {'PATH':os.environ['PATH'], 'HOME':raw, 'RUSTUP_HOME':str(root/'rustup'),
+                   'RUSTUP_AUTO_INSTALL':'1'}
+            for key in ('SYSTEMROOT','WINDIR'):
+                if key in os.environ:
+                    env[key] = os.environ[key]
+            server = ThreadingHTTPServer(('127.0.0.1',0),RejectDownload)
+            thread = threading.Thread(target=server.serve_forever,daemon=True)
+            thread.start()
+            actual = subprocess.check_output
+            def guarded(command, **kwargs):
+                # Real rustup, with an observed loopback distribution endpoint.
+                # The control prevents an unfixed implementation downloading Rust.
+                kwargs['env'] = dict(kwargs['env'], RUSTUP_DIST_SERVER=f'http://127.0.0.1:{server.server_port}')
+                kwargs['stderr'] = subprocess.PIPE
+                return actual(command, **kwargs)
+            try:
+                with patch.object(diagnostic.subprocess,'check_output',side_effect=guarded):
+                    with self.assertRaises(subprocess.CalledProcessError) as failed:
+                        diagnostic.private_environment(root/'private',env)
+                self.assertIn('not installed',failed.exception.stderr)
+                self.assertEqual(requests,[])
+                self.assertFalse(any((root/'rustup/toolchains').glob('*')))
+                self.assertFalse(any((root/'rustup/downloads').glob('*')))
+                self.assertFalse((root/'private').exists())
+            finally:
+                server.shutdown()
+                thread.join()
+                server.server_close()
+
     def test_real_entrypoint_refuses_missing_admission_and_optimization(self):
         script = ROOT/'scripts/rust-port/mcp_deadline_diagnostic.py'
         env = {k:v for k,v in os.environ.items() if k in ('PATH','TMPDIR','SYSTEMROOT','WINDIR')}
@@ -352,7 +413,7 @@ class SourceControls(unittest.TestCase):
              '"$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py owning'),
             ('if: ${{ success() && !('+SELECTOR+') }}','if: success()'),
             ('if: always()','if: success()'),
-            ('&& 120 || 40','&& 40 || 40'),
+            ('&& 150 || 40','&& 40 || 40'),
             ('"${DEADLINE_PYTHON:-python3}" -B - <<','python3 - <<')]:
             self.assertEqual(text.count(before),1)
             with self.subTest(mutation=before), self.assertRaises(ValueError):
