@@ -323,7 +323,7 @@ class SourceControls(unittest.TestCase):
             capture.input_fd(0x40000000,args)
         self.assertEqual(capture.input_fd(9,args),9)
         self.assertIsNone(capture.input_fd(9,[7,8,3,0x22,9,0]))
-        with self.assertRaisesRegex(ValueError,'writable shared'):
+        with self.assertRaisesRegex(ValueError,'shared mapping'):
             capture.input_fd(9,[7,8,3,1,9,0])
         for number in (101,206,209,310,311,425,426,427):
             with self.subTest(number=number), self.assertRaisesRegex(ValueError,'unsupported'):
@@ -339,6 +339,20 @@ class SourceControls(unittest.TestCase):
         self.assertIn("str(ROOT/'scripts/rust-port/mcp_deadline_capture.py')",producer)
         self.assertIn("verify_blob(directory/'blobs',row)",producer)
         self.assertNotIn("return ['strace'",producer)
+
+    def test_shared_memory_and_remote_advice_are_rejected(self):
+        # ABI argument controls, not native observations. Read-only shared maps
+        # must also fail: a later mprotect could make the inherited buffer writable.
+        for flags in (1,3,0x21,0x23):
+            for protection in (1,3):
+                with self.subTest(flags=flags,protection=protection):
+                    with self.assertRaisesRegex(ValueError,'shared mapping'):
+                        capture.input_fd(9,[0,4096,protection,flags,7,0])
+        for number in (29,30,440):  # shmget, shmat, process_madvise
+            with self.subTest(number=number), self.assertRaisesRegex(ValueError,'unsupported'):
+                capture.input_fd(number,[0,0,0,0,0,0])
+        self.assertIsNone(capture.input_fd(9,[0,4096,3,0x22,0,0]))
+        self.assertEqual(capture.input_fd(9,[0,4096,1,2,7,0]),7)
 
     @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
                          'requires the real Linux/x86_64 tracer ABI')

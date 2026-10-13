@@ -113,12 +113,15 @@ def input_fd(number, args):
         # FIONBIO changes descriptor flags, without consuming file bytes.
         require(args[1] in (0x5401,0x5413,0x541b,0x5421,0x5451,0x5450),
                 'unsupported compiler ioctl input')
-    if number == 9 and not args[3] & 0x20:  # mmap, not MAP_ANONYMOUS
-        require(not (args[2] & 2 and args[3] & 1), 'writable shared file mapping unsupported')
-        return args[4]
+    if number == 9:  # mmap: shared buffers survive fork without CLONE_VM.
+        # Reject read-only mappings too: later mprotect can make them writable.
+        require(not args[3] & 1, 'shared mapping unsupported')
+        if not args[3] & 0x20:  # not MAP_ANONYMOUS
+            return args[4]
     # Async input, remote memory, namespace changes and trace manipulation cannot
     # be silently omitted. None is needed for ordinary native Rust compilation.
-    require(number not in (101,165,161,206,209,246,272,298,304,308,310,311,323,425,426,427),
+    # SysV shmget/shmat and remote process_madvise are outside this evidence model.
+    require(number not in (29,30,101,165,161,206,209,246,272,298,304,308,310,311,323,425,426,427,440),
             'unsupported compiler input/namespace syscall: '+str(number))
     return None
 
