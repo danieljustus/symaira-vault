@@ -98,7 +98,7 @@ def read_syscall(raw, count):
     return op, struct.unpack_from('=qB',raw,24)
 
 
-def input_fd(number, args):
+def input_fd(number, args, pid=None):
     require(0 <= number < 512, 'unsupported compiler syscall number/ABI')
     if number == 56:  # clone: no untraced or foreign-namespace descendants.
         require(not args[0] & 0x7e820000, 'untraced/namespaced compiler child')
@@ -114,8 +114,15 @@ def input_fd(number, args):
         require(args[1] in (0x5401,0x5413,0x541b,0x5421,0x5451,0x5450),
                 'unsupported compiler ioctl input')
     if number == 9:  # mmap: shared buffers survive fork without CLONE_VM.
-        # Reject read-only mappings too: later mprotect can make them writable.
-        require(not args[3] & 1, 'shared mapping unsupported')
+        if args[3] & 1:
+            require(not args[3] & 0x20 and not args[2] & 2 and pid is not None,
+                    'shared mapping lacks a read-only file descriptor')
+            # PROT_READ alone is insufficient. Linux clears VM_MAYWRITE for a
+            # shared map of an O_RDONLY descriptor, preventing mprotect upgrades.
+            info = Path(f'/proc/{pid}/fdinfo/{args[4]}').read_text()
+            flags = re.findall(r'^flags:[ \t]+([0-7]+)$',info,re.M)
+            require(len(flags) == 1 and int(flags[0],8) & 3 == 0,
+                    'shared mapping descriptor is not verified O_RDONLY')
         if not args[3] & 0x20:  # not MAP_ANONYMOUS
             return args[4]
     # Async input, remote memory, namespace changes and trace manipulation cannot
@@ -445,7 +452,7 @@ def trace(command, private, output):
                             clone_intent[pid] = (number, struct.unpack('=Q',flags)[0])
                         elif number in (56,57,58):
                             clone_intent[pid] = (number, {56:args[0],57:0,58:CLONE_VM|CLONE_VFORK}[number])
-                        fd = input_fd(number,args)
+                        fd = input_fd(number,args,pid)
                         if fd is not None:
                             operand = Path(f'/proc/{pid}/fd/{fd}')
                             target = self_maps_target(os.readlink(operand)) if operand.is_symlink() else None

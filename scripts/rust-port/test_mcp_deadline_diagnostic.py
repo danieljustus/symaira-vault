@@ -354,6 +354,49 @@ class SourceControls(unittest.TestCase):
         self.assertIsNone(capture.input_fd(9,[0,4096,3,0x22,0,0]))
         self.assertEqual(capture.input_fd(9,[0,4096,1,2,7,0]),7)
 
+    def test_shared_file_mapping_requires_readonly_descriptor_evidence(self):
+        # Injected fdinfo only, not a kernel observation.
+        for flags in (1,3):
+            args = [0,4096,1,flags,7,0]
+            with patch.object(capture.Path,'read_text',return_value='flags:\t02000000\n'):
+                self.assertEqual(capture.input_fd(9,args,pid=10),7)
+            for info in ('flags:\t02000002\n','flags:\t02000001\n',
+                         'flags:\t02000003\n','flags:\tinvalid\n','pos:\t0\n',
+                         'flags:\t0\nflags:\t0\n'):
+                with self.subTest(flags=flags,info=info):
+                    with patch.object(capture.Path,'read_text',return_value=info):
+                        with self.assertRaisesRegex(ValueError,'shared mapping'):
+                            capture.input_fd(9,args,pid=10)
+            with patch.object(capture.Path,'read_text',side_effect=FileNotFoundError):
+                with self.assertRaises(FileNotFoundError):
+                    capture.input_fd(9,args,pid=10)
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires real Linux mapping and fdinfo semantics')
+    def test_native_readonly_shared_mapping_cannot_gain_write_permission(self):
+        import ctypes
+        import errno
+        libc = ctypes.CDLL(None,use_errno=True)
+        libc.mmap.restype = ctypes.c_void_p
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            source = Path(raw)/'mapping-input'
+            source.write_bytes(b'x'*4096)
+            with source.open('rb') as readonly, source.open('r+b') as writable:
+                for flags in (1,3):
+                    args = [0,4096,1,flags,readonly.fileno(),0]
+                    self.assertEqual(capture.input_fd(9,args,pid=os.getpid()),readonly.fileno())
+                    with self.assertRaisesRegex(ValueError,'not verified O_RDONLY'):
+                        capture.input_fd(9,[0,4096,1,flags,writable.fileno(),0],pid=os.getpid())
+                    address = libc.mmap(ctypes.c_void_p(),ctypes.c_size_t(4096),
+                                        1,flags,readonly.fileno(),ctypes.c_long(0))
+                    self.assertNotIn(address,(None,ctypes.c_void_p(-1).value))
+                    try:
+                        self.assertEqual(ctypes.string_at(address,4096),b'x'*4096)
+                        self.assertEqual(libc.mprotect(ctypes.c_void_p(address),ctypes.c_size_t(4096),3),-1)
+                        self.assertEqual(ctypes.get_errno(),errno.EACCES)
+                    finally:
+                        self.assertEqual(libc.munmap(ctypes.c_void_p(address),ctypes.c_size_t(4096)),0)
+
     @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
                          'requires the real Linux/x86_64 tracer ABI')
     def test_native_fionbio_capture_keeps_file_consumption(self):
