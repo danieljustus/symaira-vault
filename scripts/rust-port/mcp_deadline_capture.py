@@ -109,7 +109,8 @@ def input_fd(number, args):
     if number == 16:  # ioctl: reflink consumes a source descriptor too.
         if args[1] == 0x40049409:  # FICLONE
             return args[2]
-        require(args[1] in (0x5401,0x5413,0x541b,0x5451,0x5450),
+        # FIONBIO changes descriptor flags, without consuming file bytes.
+        require(args[1] in (0x5401,0x5413,0x541b,0x5421,0x5451,0x5450),
                 'unsupported compiler ioctl input')
     if number == 9 and not args[3] & 0x20:  # mmap, not MAP_ANONYMOUS
         require(not (args[2] & 2 and args[3] & 1), 'writable shared file mapping unsupported')

@@ -5,6 +5,7 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import platform
 import shutil
 from pathlib import Path
 import subprocess
@@ -310,6 +311,9 @@ class SourceControls(unittest.TestCase):
             self.assertEqual(capture.input_fd(number,args),7)
         self.assertEqual(capture.input_fd(40,args),8)
         self.assertEqual(capture.input_fd(16,[7,0x40049409,8,0,0,0]),8)
+        # Exact FIONBIO operands retained from native run 38409669738.
+        self.assertIsNone(capture.input_fd(16,[4,21537,140731676179844,
+                                             93851314414128,93851312766992,7]))
         with self.assertRaisesRegex(ValueError,'unsupported compiler ioctl'):
             capture.input_fd(16,[7,0x4020940d,8,0,0,0])
         with self.assertRaisesRegex(ValueError,'untraced/namespaced'):
@@ -334,6 +338,36 @@ class SourceControls(unittest.TestCase):
         self.assertIn("str(ROOT/'scripts/rust-port/mcp_deadline_capture.py')",producer)
         self.assertIn("verify_blob(directory/'blobs',row)",producer)
         self.assertNotIn("return ['strace'",producer)
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires the real Linux/x86_64 tracer ABI')
+    def test_native_fionbio_capture_keeps_file_consumption(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw).resolve()
+            (root/'build').mkdir()
+            (root/'compiler-tmp').mkdir()
+            source = root/'build/input'
+            source.write_bytes(b'native FIONBIO fixture\n')
+            child = ('import fcntl, os, struct, sys; '
+                     'fd=os.open(sys.argv[1],os.O_RDONLY); '
+                     'fcntl.ioctl(fd,0x5421,struct.pack("i",1)); '
+                     'assert fcntl.fcntl(fd,fcntl.F_GETFL)&os.O_NONBLOCK; '
+                     'assert os.read(fd,128)==b"native FIONBIO fixture\\n"; os.close(fd)')
+            result = subprocess.run([sys.executable,'-B',str(Path(capture.__file__)),
+                str(root),str(root/'capture'),'--',sys.executable,'-B','-c',child,str(source)],
+                capture_output=True,text=True,timeout=60)
+            self.assertEqual(result.returncode,0,result.stderr)
+            record = json.loads((root/'capture/capture.json').read_bytes())
+            self.assertTrue(record['complete'],record['errors'])
+            self.assertEqual(record['command_exit'],0)
+            self.assertIn(str(source),record['observed'])
+            rows = [row for row in record['generated'] if row['path']==str(source)]
+            self.assertEqual(len(rows),1)
+            capture.verify_blob(root/'capture/blobs',rows[0])
+            self.assertEqual((root/'capture/blobs'/rows[0]['blob']).read_bytes(),source.read_bytes())
+            calls = [json.loads(line) for line in (root/'capture/syscalls.jsonl').read_text().splitlines()]
+            self.assertTrue(any(row.get('op')==1 and row['values'][0]==16
+                                and row['values'][2]==0x5421 for row in calls))
 
     def test_open_argument_grammar_only_exempts_unambiguous_output(self):
         # Lexical unit arguments, deliberately NOT strace logs or native receipts.
