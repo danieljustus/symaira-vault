@@ -80,7 +80,18 @@ class SourceControls(unittest.TestCase):
         offline = {'GOPROXY':'off','GOSUMDB':'off'}
         self.assertEqual(tool_environment(offline, build=True), offline)
         self.assertEqual(tool_environment(offline), {})
-        self.assertIsNotNone(shutil.which('rustup'), 'real rustup required for this regression')
+        credentialed = 'https://user:synthetic-only@proxy.example.invalid'
+        for key in ('GOPROXY','GOSUMDB','goproxy','gosumdb'):
+            for value in (credentialed,'sum.golang.org','direct','OFF','off,direct',''):
+                with self.subTest(key=key,value=value):
+                    self.assertEqual(tool_environment({key:value},build=True),{})
+            self.assertEqual(tool_environment({key:'off'},build=True),{key:'off'})
+            self.assertEqual(tool_environment({key:'off'}),{})
+        self.assertEqual(tool_environment({'PATH':os.defpath,'GOPROXY':credentialed,
+                         'GOSUMDB':'off'},build=True),{'PATH':os.defpath,'GOSUMDB':'off'})
+        rustup = shutil.which('rustup')
+        if rustup is None:
+            self.fail('real rustup required for this regression')
         requests = []
         class RejectDownload(BaseHTTPRequestHandler):
             def do_GET(self):
@@ -92,6 +103,12 @@ class SourceControls(unittest.TestCase):
             root = Path(raw)
             env = {'PATH':os.environ['PATH'], 'HOME':raw, 'RUSTUP_HOME':str(root/'rustup'),
                    'RUSTUP_AUTO_INSTALL':'1'}
+            if os.name != 'nt':
+                # Exercise actual multicall dispatch, as on Homebrew CI runners.
+                shutil.copy2(rustup,root/'rustup-init')
+                (root/'bin').mkdir()
+                (root/'bin/rustup').symlink_to(root/'rustup-init')
+                env['PATH'] = str(root/'bin')+os.pathsep+env['PATH']
             for key in ('SYSTEMROOT','WINDIR'):
                 if key in os.environ:
                     env[key] = os.environ[key]

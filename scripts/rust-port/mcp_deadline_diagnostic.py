@@ -120,7 +120,8 @@ def admission(env, head, review):
 def installed(env, name):
     path = shutil.which(name, path=env['PATH'])
     require(path is not None, 'required installed tool missing: '+name)
-    return str(Path(path).resolve(strict=True))
+    # Multicall tools dispatch on argv[0]: rustup may link to rustup-init.
+    return str(Path(path).absolute())
 
 
 def private_environment(root, env):
