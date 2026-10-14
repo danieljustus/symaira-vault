@@ -1,0 +1,39 @@
+name: Rejected FD native controls
+
+on:
+  push:
+    branches: ['test/fd-observation-native-20261014']
+
+permissions:
+  contents: read
+
+jobs:
+  controls:
+    name: Native Linux x86_64 controls only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact control candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up control Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - name: Run control tests without compiler or diagnostic
+        timeout-minutes: 6
+        env:
+          CONTROL_EXPECTED_SHA: ${{ github.sha }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 -B scripts/rust-port/check_rejected_fd_native.py
+      - name: Retain actual native control evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: rejected-fd-native-controls
+          path: ${{ runner.temp }}/rejected-fd-controls/
+          if-no-files-found: error
+          retention-days: 14
