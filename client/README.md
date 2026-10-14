@@ -9,13 +9,18 @@ client is split into `SymvaultKit` (CLI contract) and `SymvaultFeature`
 ```bash
 cd ..
 make build
+bash scripts/build-vaultcore.sh
 cd client
 xcodegen generate
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer \
-  xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
+xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
 ```
 
-For the reusable packages and unit tests:
+The package manifest requires `client/.build/mobilecore/Vaultcore.xcframework`
+even when resolving the macOS packages. Generate it from the repository root
+with `bash scripts/build-vaultcore.sh` before package resolution or builds; this
+requires full Xcode with the iOS SDK.
+
+For the reusable packages and unit tests (from `client/`, after that step):
 
 ```bash
 swift build

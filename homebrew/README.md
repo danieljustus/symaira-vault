@@ -8,25 +8,31 @@ Use the release binaries from GitHub or install from source with Go. The formula
 in this directory is intended for local formula validation and future tap
 publishing.
 
-## Testing the v0.9.0 formula locally
+## Testing the formula template locally
 
-The checked-in formula builds from the `v0.9.0` source tag and is intended for local formula testing.
+The checked-in formula is a reference template, not an installable release
+formula. Before copying it into a tap, render or replace every `{{ ... }}`
+placeholder with the intended source tag, version, source archive SHA-256,
+commit and date. Verify the resulting URL (the template already prefixes the
+tag with `v`). Only `main.version`, `main.commit` and `main.date` exist in
+`main.go`; remove the unsupported `main.builtBy` assignment from the rendered
+copy. See `.goreleaser.yml` for the current release formula configuration.
 
-Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install from it:
+Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install the prepared formula from it:
 
 ```bash
 brew tap-new local/symvault || true
-cp homebrew/Formula/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
+cp /path/to/rendered/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
 brew install --build-from-source local/symvault/symvault
 brew test local/symvault/symvault
 symvault version
 ```
 
-To reinstall after editing the formula:
+To reinstall after editing the rendered formula:
 
 ```bash
 brew uninstall symvault
-cp homebrew/Formula/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
+cp /path/to/rendered/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
 brew install --build-from-source local/symvault/symvault
 brew test local/symvault/symvault
 ```
