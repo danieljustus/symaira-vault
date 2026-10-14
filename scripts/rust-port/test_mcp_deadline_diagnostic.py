@@ -29,6 +29,11 @@ def workflow_boundaries(text):
         if not condition:
             raise ValueError('diagnostic workflow boundary drift')
     need('default: false' in text and 'deadline_review:' in text)
+    preflight = text.split('  compiler-capture-preflight:\n',1)[1].split('  mcp-process:\n',1)[0]
+    need('    if: ${{ !('+SELECTOR+') }}\n' in preflight)
+    need('    runs-on: ubuntu-latest\n' in preflight)
+    need('          ref: ${{ github.event.pull_request.head.sha || github.sha }}' in preflight)
+    need('run: python3 -B scripts/rust-port/mcp_deadline_preflight.py' in preflight)
     need('timeout-minutes: ${{ ('+SELECTOR+') && 150 || 40 }}' in text)
     preparation = [('Verify diagnostic preparation authorization',1),
                    ('Prepare diagnostic Python',5), ('Prepare diagnostic Go',5),
@@ -147,6 +152,19 @@ class SourceControls(unittest.TestCase):
                                         cwd=ROOT,env=env,capture_output=True,text=True)
                 self.assertNotEqual(result.returncode,0)
                 self.assertIn(reason,result.stderr)
+                self.assertEqual(result.stdout,'')
+
+    def test_compiler_preflight_refuses_nonhosted_and_optimized_execution(self):
+        script = ROOT/'scripts/rust-port/mcp_deadline_preflight.py'
+        env = {k:v for k,v in os.environ.items() if k in ('PATH','TMPDIR','SYSTEMROOT','WINDIR')}
+        reason = ('hosted runner required' if platform.system() == 'Linux' and platform.machine() == 'x86_64'
+                  else 'native Linux/x86_64 preflight required')
+        for flags,message in [([],reason),(['-O'],'unoptimized Python required')]:
+            with self.subTest(flags=flags):
+                result = subprocess.run([sys.executable,'-B',*flags,str(script)],
+                                        env=env,capture_output=True,text=True,timeout=30)
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn(message,result.stderr)
                 self.assertEqual(result.stdout,'')
 
     def test_frozen_patch_and_actual_git_applicability(self):
@@ -341,8 +359,8 @@ class SourceControls(unittest.TestCase):
         self.assertNotIn("return ['strace'",producer)
 
     def test_shared_memory_and_remote_advice_are_rejected(self):
-        # ABI argument controls, not native observations. Read-only shared maps
-        # must also fail: a later mprotect could make the inherited buffer writable.
+        # ABI argument controls, not native observations. Without a bound reader
+        # and verified descriptor mode, even PROT_READ shared maps fail closed.
         for flags in (1,3,0x21,0x23):
             for protection in (1,3):
                 with self.subTest(flags=flags,protection=protection):
@@ -356,6 +374,11 @@ class SourceControls(unittest.TestCase):
 
     def test_shared_file_mapping_requires_readonly_descriptor_evidence(self):
         # Injected fdinfo only, not a kernel observation.
+        for flags,protection in ((0x21,1),(0x23,1),(1,3)):
+            with self.subTest(flags=flags,protection=protection):
+                with patch.object(capture.Path,'read_text',return_value='flags:\t02000000\n'):
+                    with self.assertRaisesRegex(ValueError,'shared mapping'):
+                        capture.input_fd(9,[0,4096,protection,flags,7,0],pid=10)
         for flags in (1,3):
             args = [0,4096,1,flags,7,0]
             with patch.object(capture.Path,'read_text',return_value='flags:\t02000000\n'):
@@ -902,6 +925,37 @@ class SelfMapsRuntimeControls(unittest.TestCase):
             self.assertFalse(record['complete'])
             self.assertIn('foreign or multi-task self-maps read', record['errors'])
             self.assertIn(f'/proc/{parent}/maps', record['observed'])
+
+    @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
+                         'requires real Linux memfd, shm and capture semantics')
+    def test_native_memfd_and_shm_mappings_remain_observed_and_unbound(self):
+        for kind in ('memfd','shm','unlinked-shm'):
+            with self.subTest(kind=kind):
+                with tempfile.TemporaryDirectory(dir='/dev/shm',prefix='vault-capture-') as shared:
+                    name = str(Path(shared)/'input')
+                    child = ('import mmap, os\n'
+                             f'name = {name!r}\n'
+                             + ('fd = os.memfd_create("deadline-control")\n' if kind == 'memfd'
+                                else 'fd = os.open(name, os.O_RDWR|os.O_CREAT|os.O_EXCL, 0o600)\n')
+                             + 'os.write(fd, b"native closure fixture")\n'
+                             'rd = os.open("/proc/self/fd/%d" % fd, os.O_RDONLY)\n'
+                             'target = os.readlink("/proc/self/fd/%d" % rd).removesuffix(" (deleted)")\n'
+                             'view = mmap.mmap(rd, 0, flags=mmap.MAP_SHARED, prot=mmap.PROT_READ)\n'
+                             'assert view[:] == b"native closure fixture"\n'
+                             'view.close()\n'
+                             + ('os.unlink(name)\n' if kind == 'unlinked-shm' else '')
+                             + 'print(target, flush=True)\n')
+                    with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+                        root = Path(raw).resolve()
+                        result, record, _, _ = self.native_capture(root,child)
+                        self.assertEqual(result.returncode,0,str(record['errors'])+result.stderr)
+                        self.assertTrue(record['complete'],record['errors'])
+                        target = result.stdout.strip()
+                        self.assertIn(target,record['observed'])
+                        self.assertTrue(target.startswith('/memfd:') if kind == 'memfd' else target == name)
+                        self.assertFalse(any(row['path'] == target for row in record['generated']))
+                        with self.assertRaisesRegex(ValueError,'unbound'):
+                            diagnostic.closure_accesses([target],{},{},root,{},set())
 
     @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'x86_64',
                          'requires the real Linux/x86_64 tracer ABI')
