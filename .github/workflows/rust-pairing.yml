@@ -88,7 +88,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOTOOLCHAIN: go1.26.6
+  GOTOOLCHAIN: go1.26.9
   RUSTUP_TOOLCHAIN: 1.98.0
   CARGO_BUILD_JOBS: '2'
   GOMAXPROCS: '2'
@@ -125,7 +125,7 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install pinned Rust toolchain
@@ -136,13 +136,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.6"
+          test "$(go env GOVERSION)" = "go1.26.9"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
 
       - name: Run stateful CLI differential against Go v0.22.1
         shell: bash
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           oracle_tag_commit="$(git rev-parse 'refs/tags/v0.22.1^{commit}')"
           test "$oracle_tag_commit" = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
 
@@ -166,8 +169,11 @@ jobs:
 
       - name: Run import quarantine differential against pinned Go CLI
         shell: bash
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           cli_oracle_commit="$(git rev-parse '3232e31f^{commit}')"
           test "$cli_oracle_commit" = "3232e31fb91362b6e6202774f7e95f6d477305d2"
 
