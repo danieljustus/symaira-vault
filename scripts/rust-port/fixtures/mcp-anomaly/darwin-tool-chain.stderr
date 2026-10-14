@@ -1,0 +1,4 @@
+2026/10/09 16:50:40 WARN anomaly detected type=tool_chain severity=high agent=fixture description="Tool-chain: agent fixture read a large field (548 bytes) then invoked run_command"
+2026/10/09 16:50:40 WARN anomaly detected type=tool_chain severity=high agent=fixture path="" request_id=39b8554e4ba84111 description="Tool-chain: agent fixture read a large field (548 bytes) then invoked run_command"
+2026/10/09 16:50:40 WARN anomaly detected type=tool_chain severity=high agent=fixture description="Tool-chain: agent fixture read a large field (548 bytes) then invoked execute_with_secret"
+2026/10/09 16:50:40 WARN anomaly detected type=tool_chain severity=high agent=fixture path="" request_id=1105754abee3b870 description="Tool-chain: agent fixture read a large field (548 bytes) then invoked execute_with_secret"

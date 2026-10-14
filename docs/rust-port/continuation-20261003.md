@@ -1,5 +1,10 @@
 # Vault continuation checkpoint, 2026-10-03
 
+> Historical checkpoint, retained for reproducibility. The continuation branch
+> was integrated in #1276 and no longer exists; start current work from `main`.
+> The branch, worktree and clone instructions below describe the original
+> checkpoint, not the current integration state.
+
 ## Goal and exact source
 
 Continue the remaining bounded fixes in `danieljustus/symaira-vault` without needing a previous chat, local machine, or agent skill installation. Preserve the standalone Apache-2.0 credential service and the production Go fallback. This checkpoint is not a release, cutover, complete migration, or management-UI retirement.

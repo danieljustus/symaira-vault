@@ -185,8 +185,8 @@ If you use the VS Code, Cursor, or Neovim extensions:
 1. Uninstall the old extension (e.g., `symaira-vscode` or `openpass-vscode`)
 2. Install the new one from the marketplace or build from source:
    ```bash
-   make package-vscode
-   code --install-extension dist/symvault-vscode-*.vsix
+   make editors-package
+   code --install-extension editors/vscode/symvault-vscode-*.vsix
    ```
 
 ### 9. Update CI / automation scripts

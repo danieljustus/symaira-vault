@@ -43,7 +43,7 @@ jobs:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.6
+      GOTOOLCHAIN: go1.26.9
       GOWORK: 'off'
     steps:
       - name: Assert actual native macOS arm64
@@ -63,11 +63,14 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
       - name: Repeat real captures and reject semantic drift
+        env:
+          GOTOOLCHAIN: go1.26.6
         run: |
           set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
           go test -race ./scripts/rust-port/cmd/syncgen -count=1 -json > sync-observations.jsonl
           go test -race ./cmd/admin -run '^TestCreateBackup_NormalizesTarMemberSeparators$' -count=1 -json >> sync-observations.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("sync-observations.jsonl")]; required={"TestPinnedSyncOracleIsRepeatable","TestPinnedSyncArchiveContract","TestCreateBackup_NormalizesTarMemberSeparators"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass"}; assert required <= passed, required-passed; assert not any(r.get("Action")=="skip" and r.get("Test") in required for r in rows); print("Verified six real repeated cases, explicit archive contract and current backup roundtrip executed")'

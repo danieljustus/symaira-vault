@@ -313,7 +313,7 @@ Shared utilities for testing.
 
 ### `internal/clipboard/` — Clipboard Application Logic
 
-Application-level clipboard utilities: auto-clear timer, countdown display, and cross-platform clipboard integration. Imported by CLI commands (e.g., `cmd/get.go`) as `clipboardapp`.
+Application-level clipboard utilities: auto-clear timer, countdown display, and cross-platform clipboard integration. Imported by CLI commands (e.g., `cmd/crud/get.go`) as `clipboardapp`.
 
 ### Additional `internal/` Packages
 
@@ -558,7 +558,8 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
      and redaction policy lives in `internal/audit/` and is specific to
      this tool's entry-path semantics.
 
-   `docs/repo-konsolidierung.md` §9 records the triple-audit
+   Earlier consolidation notes referenced `docs/repo-konsolidierung.md` §9
+   (a source not included in this repository) as recording the triple-audit
    consolidation (brain 1,751 / guard 483 / room 12k → `corekit/auditkit`)
    as complete for `symbrain` and `symguard`; Vault's audit layer was
    consciously left out because the HMAC variant is the stronger
