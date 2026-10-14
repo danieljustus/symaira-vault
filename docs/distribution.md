@@ -8,7 +8,7 @@ Symaira Vault is distributed through multiple channels to support different plat
 |----|------|---------|
 | Linux | amd64, arm64 | tar.gz, deb, rpm, apk, mcpb |
 | macOS | amd64, arm64 | tar.gz, Homebrew, mcpb |
-| Windows | amd64 | zip |
+| Windows | amd64, arm64 | zip |
 | FreeBSD | amd64, arm64 | tar.gz |
 | NixOS / Nix | amd64, arm64 | Nix flake |
 
@@ -147,7 +147,7 @@ go install github.com/danieljustus/symaira-vault@latest
 
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
-cd Symaira Vault
+cd symaira-vault
 make build
 sudo mv symvault /usr/local/bin/
 ```
@@ -286,10 +286,18 @@ symvault version
 symvault --help | head -5
 
 # 3. Can initialize a test vault
-TMPDIR=$(mktemp -d)
-SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init --non-interactive
-rm -rf "$TMPDIR"
+SMOKE_DIR=$(mktemp -d)
+SYMVAULT_VAULT="$SMOKE_DIR/test-vault" \
+  SYMVAULT_PASSPHRASE=synthetic-smoke-passphrase \
+  symvault init --auth passphrase
+# Inspect the isolated test vault, then remove only this disposable directory
+rm -rf "$SMOKE_DIR"
 ```
+
+`init` has no `--non-interactive` flag. It reads a passphrase from a TTY or
+from `SYMVAULT_PASSPHRASE` (at least 12 characters). The example uses only a
+synthetic test passphrase; subsequent non-interactive unlocks also require
+`SYMVAULT_ALLOW_ENV_PASSPHRASE=1`. Do not use the sample for real credentials.
 
 For package-based installs, also verify:
 

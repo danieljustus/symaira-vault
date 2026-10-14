@@ -2,6 +2,10 @@
 
 This guide covers common issues you may encounter when using Symaira Vault and provides diagnostic steps and solutions.
 
+The `~/.symvault` paths below are legacy examples. For new installations, use
+the XDG config/data paths in [Configuration](configuration.md); substitute your
+selected vault directory in file commands.
+
 ## Table of Contents
 
 1. [Quick Fixes](#quick-fixes)
@@ -312,12 +316,12 @@ ls -la ~/.symvault/
 
 **Session caching uses in-memory fallback in prebuilt binaries:**
 
-Symaira Vault release binaries (including those from GitHub Releases and `go install`) are built with `CGO_ENABLED=0`. On FreeBSD, the `zalando/go-keyring` dependency requires CGO to access the D-Bus Secret Service API. When CGO is disabled, Symaira Vault falls back to an **in-memory encrypted session cache**.
+The FreeBSD prebuilt release binaries use `CGO_ENABLED=0`. A local `go install` uses your build environment. On FreeBSD, the `zalando/go-keyring` dependency requires CGO to access the D-Bus Secret Service API. When CGO is disabled, Symaira Vault falls back to an **in-memory encrypted session cache**.
 
 **Behavior:**
 
 - **`symvault unlock`** caches the passphrase in process memory (encrypted with AES-256-GCM)
-- **Subsequent commands** use the cached passphrase without prompting (within the TTL period)
+- **Requests within the same long-running process** can reuse the cached session within its TTL. Separate CLI processes cannot share it.
 - **Cache TTL** defaults to 15 minutes; override with `--ttl` flag or config
 - **`symvault lock`** clears the in-memory cache and securely zeroes the memory
 - **Process exit** clears all cached sessions automatically
@@ -333,18 +337,16 @@ For higher security, build from source with CGO enabled to use the native OS key
 
 | Scenario | Behavior |
 |----------|----------|
-| `symvault unlock` | Caches passphrase in memory; prompts again after TTL expires |
-| `symvault lock` | Clears cached passphrase from memory |
-| `symvault get <entry>` | Uses cached passphrase if within TTL; prompts otherwise |
+| `symvault unlock` | Caches in this process only; the cache is lost when the command exits |
+| `symvault lock` | Clears this process's cache; cannot clear another process's memory cache |
+| `symvault get <entry>` | Requires its own passphrase input; a previous CLI unlock does not supply it |
 | MCP server | Uses cached passphrase across requests while process is running |
 
 **Options:**
 
-1. **Use the prebuilt binary with in-memory cache** (default, works out of the box):
-   ```bash
-   symvault unlock
-   symvault get github.password  # uses cached passphrase
-   ```
+1. **Use the prebuilt binary with process-local caching**: provide passphrase
+   input to each CLI process, or unlock within the long-running MCP process.
+   `symvault unlock` followed by a separate `symvault get` does not reuse a cache.
 
 2. **Build from source with CGO enabled** (requires a FreeBSD desktop environment with D-Bus and a Secret Service provider such as GNOME Keyring or KWallet):
    ```bash
@@ -353,7 +355,9 @@ For higher security, build from source with CGO enabled to use the native OS key
 
 **Verification status:**
 
-The in-memory fallback is implemented in `internal/session/memory.go` (build tag `//go:build !cgo`). We do not have a physical FreeBSD environment to test runtime behavior; if you observe different behavior on FreeBSD, please open an issue.
+The fallback is selected in `internal/session/memory_init.go` on platforms
+other than Darwin, Linux, Windows, NetBSD and OpenBSD, and on FreeBSD/DragonFly
+when CGO is disabled. Its backend is `internal/session/memory_keyring.go`. We do not have a physical FreeBSD environment to test runtime behavior; if you observe different behavior on FreeBSD, please open an issue.
 
 ### Windows
 
