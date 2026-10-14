@@ -27,7 +27,7 @@
           doCheck = false;
 
           # Resolved via `go mod vendor; nix hash path --sri vendor/`
-          vendorHash = "sha256-Xq3LHHADKCE0VRNbq2K79VzVTY2y41SWex/IdksEPl8=";
+          vendorHash = "sha256-5nz4BL+q1szPvEKOo9qi3Jt1LZPxO6xKaK0odd7H8Ek=";
 
           # Disable CGO for Linux — reduces distributability and is not needed
           # (keyring integration requires CGO only on darwin).
