@@ -13,6 +13,7 @@ compiler wrappers, build warm-up, or changes to libtest scheduling are needed.
 """
 import ctypes
 import hashlib
+from itertools import islice
 import json
 import os
 from pathlib import Path
@@ -131,6 +132,78 @@ def input_fd(number, args, pid=None):
     require(number not in (29,30,101,165,161,206,209,246,272,298,304,308,310,311,323,425,426,427,440),
             'unsupported compiler input/namespace syscall: '+str(number))
     return None
+
+
+def observe_rejected_fd(record, pid, values, event, active, sharers, reason):
+    """Failure-only metadata, never a pinned descriptor or ownership proof."""
+    row = {'class':'rejected_fd_observation', 'version':1, 'event':event,
+           'pid':pid, 'fd':values[5], 'values':list(values), 'reason':reason,
+           'evidence_role':'diagnostic_only', 'ownership_proven':False,
+           'snapshot_consistency':'incomplete', 'errors':[], 'truncated':[]}
+    # Retain the original rejection even if a signal interrupts observation.
+    record['rejected_fd_observation'] = row
+    base = dict(row)
+    operand = f'/proc/{pid}/fd/{row["fd"]}'
+
+    def attempt(operation, read):
+        try:
+            return read()
+        except OSError as error:
+            row['errors'].append({'operation':operation, 'errno':error.errno})
+            return None
+
+    def snapshot(label):
+        raw = attempt(label+'.readlink', lambda: os.readlink(os.fsencode(operand)))
+        st = attempt(label+'.stat', lambda: os.stat(operand))
+        if raw is not None and len(raw) > 8192:
+            row['truncated'].append(label+'.path')
+        return {'path_hex':None if raw is None else raw[:8192].hex(),
+                'stat':None if st is None else {
+                    key:getattr(st,attr) for key,attr in (
+                        ('device','st_dev'),('inode','st_ino'),('mode','st_mode'),
+                        ('nlink','st_nlink'),('size','st_size'),
+                        ('mtime_ns','st_mtime_ns'),('ctime_ns','st_ctime_ns'))}}
+
+    def fields(path, patterns):
+        def read():
+            with Path(path).open('rb') as stream:
+                return stream.read(16385)
+        data = attempt(path,read)
+        result = {}
+        if data is None:
+            return result
+        if len(data) > 16384:
+            row['truncated'].append(path)
+            return result  # No parsing a potentially partial field as complete.
+        for key,pattern in patterns:
+            matches = re.findall(pattern,data,re.M)
+            field = b'Tgid' if key == 'tgid' else key.encode('ascii')
+            occurrences = re.findall(rb'^'+field+rb':',data,re.M)
+            if len(matches) == len(occurrences) == 1:
+                result[key] = matches[0].decode('ascii')
+            else:
+                row['errors'].append({'operation':path+':'+key, 'errno':None,
+                                      'error':'missing_or_ambiguous_field'})
+        return result
+
+    row['snapshot_a'] = snapshot('a')
+    row['fdinfo'] = fields(f'/proc/{pid}/fdinfo/{row["fd"]}', (
+        ('flags',rb'^flags:[ \t]+([0-7]+)$'),
+        ('mnt_id',rb'^mnt_id:[ \t]+([0-9]+)$'),
+        ('ino',rb'^ino:[ \t]+([0-9]+)$')))
+    row['task'] = fields(f'/proc/{pid}/status', (('tgid',rb'^Tgid:[ \t]+([0-9]+)$'),))
+    for name,ids in (('active',active),('sharers',sharers)):
+        row[name] = sorted(islice(ids,256))
+        if len(ids) > 256:
+            row['truncated'].append(name)
+    row['snapshot_b'] = snapshot('b')
+    # ponytail: equal samples cannot exclude ABA or FD-table races; a future
+    # ownership design needs separate proof, never promotion of this record.
+    if not row['errors'] and not row['truncated']:
+        row['snapshot_consistency'] = ('equal' if row['snapshot_a'] == row['snapshot_b'] else 'changed')
+    if len(json.dumps(row,indent=2).encode('ascii')) > 65536:
+        record['rejected_fd_observation'] = {
+            **base, 'errors':[], 'truncated':['record'], 'record_overflow':True}
 
 
 SELF_MAPS = re.compile(r'/proc/([1-9][0-9]*)/maps')
@@ -452,7 +525,12 @@ def trace(command, private, output):
                             clone_intent[pid] = (number, struct.unpack('=Q',flags)[0])
                         elif number in (56,57,58):
                             clone_intent[pid] = (number, {56:args[0],57:0,58:CLONE_VM|CLONE_VFORK}[number])
-                        fd = input_fd(number,args,pid)
+                        try:
+                            fd = input_fd(number,args,pid)
+                        except (ValueError,OSError) as error:
+                            if number == 9 and args[3] & 1 and not args[3] & 0x20:
+                                observe_rejected_fd(record,pid,values,marker,active,sharers,str(error))
+                            raise
                         if fd is not None:
                             operand = Path(f'/proc/{pid}/fd/{fd}')
                             target = self_maps_target(os.readlink(operand)) if operand.is_symlink() else None
@@ -524,7 +602,14 @@ def trace(command, private, output):
             record['events'] = events
     except BaseException as error:
         record['complete'] = False
-        record['errors'].append(str(error))
+        # Exception context survives an interrupt even before the observer has
+        # stored its row. Keep the initiating rejection, not only the interrupt.
+        problems, seen = [], set()
+        while error is not None and id(error) not in seen:
+            seen.add(id(error))
+            problems.append(str(error))
+            error = error.__context__
+        record['errors'].extend(reversed(problems))
     finally:
         signal.alarm(0)
         signal.signal(signal.SIGIO,signal.SIG_IGN)

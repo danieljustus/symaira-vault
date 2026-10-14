@@ -3,6 +3,7 @@
 import ast
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import io
 import json
 import os
 import platform
@@ -13,8 +14,9 @@ import subprocess
 import sys
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import mcp_deadline_diagnostic as diagnostic
 import mcp_deadline_capture as capture
@@ -606,6 +608,182 @@ class SourceControls(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'clean checkout/index'):
                 diagnostic.stage(root,root/'not-created')
             self.assertFalse((root/'not-created').exists())
+
+
+class RejectedFDObservationControls(unittest.TestCase):
+    """Injected metadata/ptrace unit controls, never native evidence."""
+
+    values = [9,0,1,3,0x4001,3,0]
+    reason = 'shared mapping lacks a read-only file descriptor'
+
+    def observe(self, record, pid=10, values=None, event=7708, active=None,
+                sharers=None, reason=None, case='equal', observe=capture.observe_rejected_fd):
+        attrs = dict(st_dev=1,st_ino=2,st_mode=0o100600,st_nlink=1,
+                     st_size=1,st_mtime_ns=3,st_ctime_ns=4)
+        first, second = SimpleNamespace(**attrs), SimpleNamespace(**attrs)
+        if case == 'changed':
+            second.st_ino = 5
+        target = b'/fixture/\xff (deleted)'
+        if case == 'path-overflow':
+            target = b'x'*8193
+        def opened(path,mode):
+            self.assertEqual(mode,'rb')
+            self.assertIn(str(path),(f'/proc/{pid}/fdinfo/3',f'/proc/{pid}/status'))
+            if case == 'denied':
+                raise PermissionError(13,'unit denied')
+            data = (b'flags:\t02000002\nmnt_id:\t4\nino:\t2\n'
+                    if str(path).endswith('fdinfo/3') else b'Tgid:\t10\n')
+            if case == 'text-overflow':
+                data = b'x'*16385
+            if case == 'ambiguous' and str(path).endswith('fdinfo/3'):
+                data += b'flags:\t0\n'
+            if case == 'malformed-duplicate' and str(path).endswith('fdinfo/3'):
+                data += b'flags:\tinvalid\n'
+            return io.BytesIO(data)
+        stat_effect = ([first,second] if case != 'missing' else FileNotFoundError(2,'unit missing'))
+        link_effect = ValueError('unit interrupt') if case == 'interrupt' else None
+        with patch.object(capture.os,'readlink',return_value=target,side_effect=link_effect), \
+                patch.object(capture.os,'stat',side_effect=stat_effect), \
+                patch.object(capture.Path,'open',opened):
+            observe(record,pid,self.values if values is None else values,event,
+                                        {pid} if active is None else active,
+                                        set() if sharers is None else sharers,
+                                        self.reason if reason is None else reason)
+
+    def test_bounded_metadata_and_interrupts_never_claim_ownership(self):
+        for case in ('equal','changed','missing','denied','ambiguous','malformed-duplicate','path-overflow',
+                     'text-overflow','tasks-overflow','record-overflow','interrupt'):
+            with self.subTest(case=case):
+                record = {}
+                ids = set(range(257)) if case == 'tasks-overflow' else None
+                def run():
+                    self.observe(record,case=case,active=ids,sharers=ids)
+                # Force the serializer guard with a unit-only inflated encoding.
+                if case == 'record-overflow':
+                    with patch.object(capture.json,'dumps',return_value='x'*65537):
+                        run()
+                elif case == 'interrupt':
+                    with self.assertRaisesRegex(ValueError,'unit interrupt'):
+                        run()
+                else:
+                    run()
+                row = record['rejected_fd_observation']
+                self.assertEqual(row['reason'],self.reason)
+                self.assertEqual(row['values'],self.values)
+                self.assertEqual((row['pid'],row['fd'],row['event']),(10,3,7708))
+                self.assertEqual(row['evidence_role'],'diagnostic_only')
+                self.assertIs(row['ownership_proven'],False)
+                self.assertLessEqual(len(json.dumps(row,indent=2).encode('ascii')),65536)
+                self.assertEqual(row['snapshot_consistency'],
+                                 case if case in ('equal','changed') else 'incomplete')
+                if case == 'equal':
+                    self.assertEqual(bytes.fromhex(row['snapshot_a']['path_hex']),b'/fixture/\xff (deleted)')
+                    self.assertEqual(row['snapshot_a']['stat']['mode'],0o100600)
+                    self.assertEqual(row['fdinfo'],{'flags':'02000002','mnt_id':'4','ino':'2'})
+                if case in ('missing','denied','ambiguous','malformed-duplicate'):
+                    self.assertTrue(row['errors'])
+                if case.endswith('overflow'):
+                    self.assertTrue(row['truncated'])
+                if case == 'tasks-overflow':
+                    self.assertEqual(len(row['active']),256)
+                    self.assertEqual(len(row['sharers']),256)
+
+    def test_actual_classifier_hook_only_observes_rejected_file_shared_maps(self):
+        tree = ast.parse(Path(capture.__file__).read_text())
+        trace = next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='trace')
+        hook = next(n for n in ast.walk(trace) if isinstance(n,ast.Try)
+                    and len(n.body)==1 and isinstance(n.body[0],ast.Assign)
+                    and isinstance(n.body[0].value,ast.Call) and
+                    isinstance(n.body[0].value.func,ast.Name) and n.body[0].value.func.id=='input_fd')
+        for values,observed,rejected in (
+                (self.values,True,True), ([9,0,1,1,1,3,0],False,False),
+                ([9,0,1,3,0x21,3,0],False,True), ([425,0,0,0,0,0,0],False,True)):
+            with self.subTest(values=values):
+                scope = dict(vars(capture),number=values[0],args=values[1:],pid=10,
+                             values=values,marker=1,active={10},sharers=set(),record={})
+                observer = Mock()
+                scope['observe_rejected_fd'] = observer
+                with patch.object(capture.Path,'read_text',return_value='flags:\t02000000\n'):
+                    code = compile(ast.fix_missing_locations(ast.Module(body=[hook],type_ignores=[])),
+                                   '<actual rejection hook>','exec')
+                    if rejected:
+                        with self.assertRaises(ValueError):
+                            exec(code,scope)
+                    else:
+                        exec(code,scope)
+                        self.assertEqual(scope['fd'],3)
+                self.assertEqual(observer.called,observed)
+
+    @unittest.skipUnless(hasattr(os,'fork'), 'mocked POSIX trace control flow')
+    def test_actual_trace_never_resumes_after_rejection_even_when_observation_fails(self):
+        import fcntl
+        for failure in ('none','entry-interrupt','interrupt','save'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+                root = Path(raw)
+                ptrace = Mock(return_value=0)
+                libc = SimpleNamespace(ptrace=ptrace)
+                def observer(*args):
+                    if failure == 'entry-interrupt':
+                        raise ValueError('unit entry interrupt')
+                    self.observe(*args,case='interrupt' if failure=='interrupt' else 'equal')
+                with patch.object(capture.platform,'system',return_value='Linux'), \
+                        patch.object(capture.platform,'machine',return_value='x86_64'), \
+                        patch.object(fcntl,'F_SETLEASE',1024,create=True), \
+                        patch.object(capture.ctypes,'CDLL',return_value=libc), \
+                        patch.object(capture.os,'fork',return_value=10), \
+                        patch.object(capture.os,'waitpid',side_effect=[
+                            (10,(signal.SIGSTOP<<8)|0x7f),(10,0x857f)]), \
+                        patch.object(capture.os,'kill') as kill, \
+                        patch.object(capture.signal,'signal'), patch.object(capture.signal,'alarm'), \
+                        patch.object(capture,'read_syscall',return_value=(1,self.values)), \
+                        patch.object(capture,'observe_rejected_fd',side_effect=observer):
+                    if failure == 'save':
+                        with patch.object(capture.json,'dump',side_effect=OSError('unit disk failure')):
+                            with self.assertRaisesRegex(OSError,'unit disk failure'):
+                                capture.trace(['unit-only-not-executed'],root,root/'capture')
+                    else:
+                        self.assertEqual(capture.trace(['unit-only-not-executed'],root,root/'capture'),1)
+                        record = json.loads((root/'capture/capture.json').read_bytes())
+                        self.assertFalse(record['complete'])
+                        self.assertFalse(record['acceptance'])
+                        self.assertIn(self.reason,record['errors'])
+                        self.assertEqual(record['generated'],[])
+                        if failure == 'entry-interrupt':
+                            self.assertNotIn('rejected_fd_observation',record)
+                            self.assertIn('unit entry interrupt',record['errors'])
+                        if failure == 'interrupt':
+                            self.assertIn('unit interrupt',record['errors'])
+                    # The one resume is initial startup, before the rejected entry.
+                    self.assertEqual([c.args for c in ptrace.call_args_list if c.args[0]==24],[(24,10,0,0)])
+                    kill.assert_called_once_with(10,signal.SIGKILL)
+
+    def test_observation_cannot_admit_an_incomplete_capture(self):
+        # Deliberately incomplete algorithm fixtures, not compiler receipts.
+        observation = {}
+        self.observe(observation)
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            for name in ('build','compiler-tmp'):
+                (root/name).mkdir()
+            for name,command in (('clippy',diagnostic.CLIPPY),('build-tests',diagnostic.NO_RUN)):
+                directory = root/(name+'-capture')
+                directory.mkdir()
+                data = dict(observation,command=command,command_exit=0,complete=False,
+                            errors=[self.reason],observed=[],generated=[],acceptance=False)
+                (directory/'capture.json').write_text(json.dumps(data))
+            result = diagnostic.compiler_capture([],{}, {},root,root,'build-tests',0,None)
+            self.assertFalse(result['complete'])
+            self.assertTrue(any('incomplete live compiler capture' in e for e in result['errors']))
+            # Execute the unchanged preflight admission expression without running
+            # rustc, the preflight workflow, or the one-shot diagnostic.
+            source = ast.parse((ROOT/'scripts/rust-port/mcp_deadline_preflight.py').read_text())
+            gate = next(n for n in ast.walk(source) if isinstance(n,ast.Call)
+                        and isinstance(n.func,ast.Name) and n.func.id=='require'
+                        and len(n.args)==2 and isinstance(n.args[1],ast.Constant)
+                        and n.args[1].value=='compiler capture incomplete')
+            with self.assertRaisesRegex(ValueError,'compiler capture incomplete'):
+                eval(compile(ast.Expression(body=gate),'<actual preflight gate>','eval'),
+                     {'require':capture.require,'data':data,'command':command,'row':{'exit':0}})
 
 
 class SelfMapsRuntimeControls(unittest.TestCase):
