@@ -7,7 +7,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "4c7387d3b0eafd912057a609b390b31a7bdc80c3303b887c16136f16e45d081d",
+    "source_digest": "b00a385b2ebb617a9c0e3c07b6a794dd188bdb6f216012a9b12d895dea898e4c",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
     "go_tests": [
       "TestCheckerReportsAvailableUpdate",
@@ -19,14 +19,15 @@
       "TestCheckerReturnsHTTPError",
       "TestCheckerReturnsDecodeError"
     ],
-    "commit": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
+    "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
     "go_version": "go1.26.6",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
-    "generator_digest": "f5a39f43d363ee447e6d9f10eb1423aeff32788f0df7b00ff76433d808aea866",
-    "generated_on": "linux",
-    "captured": "2026-10-03"
+    "generator_digest": "767fb3635dc92fa966eaaa5f7180b1fa92fe08ae92cc1bcd1ecc8e14ddd20a50",
+    "generated_on": "darwin",
+    "captured": "2026-10-09",
+    "source_pin_digest": "4e54346eb7f33f5a06b6408e747ae55269dffca3e37ff07c3b61673acacb5e2c"
   },
   "cases": [
     {
