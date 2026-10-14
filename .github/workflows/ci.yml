@@ -358,6 +358,16 @@ jobs:
       - name: Check and lint
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      - name: Verify isolated MCP probe child environments
+        shell: bash
+        env:
+          SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
+          SYMVAULT_TEST_KEYRING: memory
+        run: |
+          set -euo pipefail
+          go test ./internal/mcp/server -run '^TestExecuteWithSecretFixtureGoEnvironment$' -count=1 -json | tee mcp-environment-probe.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("mcp-environment-probe.jsonl")]; name="TestExecuteWithSecretFixtureGoEnvironment"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "environment probe did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "environment probe was skipped"; print("Verified both isolated MCP probe children")'
+
       - name: Verify native Go MCP handler fixtures
         shell: bash
         run: make mcp-call-fixtures-check
