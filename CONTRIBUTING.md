@@ -80,10 +80,11 @@ symaira-vault/
 ├── main.go              # Entry point
 ├── cmd/                 # CLI commands (Cobra)
 │   ├── root.go          # Root command
-│   ├── crud/            # Get, set, list, find, generate, delete, edit, add
+│   ├── crud/            # Get, set, list, find, delete, edit, add
 │   ├── admin/           # Initialize vault and administration
 │   ├── auth/            # Lock, unlock and authentication
 │   ├── mcp/             # MCP server and client configuration
+│   ├── generate.go      # Generate password
 │   ├── git.go           # Git operations
 │   └── recipients.go    # Manage recipients
 ├── internal/

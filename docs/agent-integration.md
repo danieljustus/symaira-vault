@@ -225,9 +225,14 @@ the CLI twin of the same mechanism — no manual `base64 -d` or temp-file
 bookkeeping required:
 
 ```bash
-ELSTER_PIN=$(symvault get elster/cert.pin --print) \
-  symvault file use elster/cert -- sh -c 'exec java -jar elstertool.jar --cert "$SYMVAULT_FILE_CERT_P12"'
+symvault file use elster/cert -- sh -c 'exec java -jar elstertool.jar --cert "$SYMVAULT_FILE_CERT_P12"'
 ```
+
+This illustrates certificate materialization only, not a complete certificate
+and PIN workflow. `file use` filters the parent environment and does not forward
+`ELSTER_PIN`; prefixing the command with that variable does not inject it into
+the consumer. Use the combined MCP `run_command` `files` and `env` example above
+when the consumer needs both, with the existing approval and executable policy.
 
 `file use` auto-detects the field when the entry has exactly one recorded
 attachment (add `--field cert_p12` explicitly if it has more than one), and
