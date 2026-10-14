@@ -11,9 +11,9 @@
 set -euo pipefail
 
 # Configuration
-GO_VERSION="1.26"
+GO_VERSION="1.26.9"
 GOLANGCI_LINT_VERSION="v2.11.4"
-MINIMUM_GO_VERSION="1.25"
+MINIMUM_GO_VERSION="1.26.9"
 
 # Colors for output
 RED='\033[0;31m'
