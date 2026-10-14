@@ -35,6 +35,14 @@ generator_sources=$(find scripts/rust-port/cmd -name '*.go' ! -name '*_test.go')
 pins=$(
     {
         collect_pins $generator_sources
+        python3 - <<'PY'
+import ast
+from pathlib import Path
+tree = ast.parse(Path('scripts/rust-port/mcp_oracle.py').read_text())
+for node in tree.body:
+    if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in {'HISTORICAL', 'ORDERED'} for t in node.targets):
+        print(ast.literal_eval(node.value))
+PY
         grep -hoE '^[A-Z_]*ORACLE_COMMIT[[:space:]]*[:?]?=[[:space:]]*[0-9a-f]{7,40}' Makefile 2>/dev/null || true
     } | grep -oE '[0-9a-f]{7,40}' | sort -u
 )

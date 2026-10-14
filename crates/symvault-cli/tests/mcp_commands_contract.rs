@@ -666,6 +666,18 @@ fn unix_platform_approval_stdio_worker() {
 
 #[test]
 fn cli_runtime_executes_source_bound_api_template_fixture() {
+    run_source_bound_api_template_fixture(|| {});
+}
+
+#[test]
+fn api_template_fixture_slow_setup_preserves_serving_budget() {
+    run_source_bound_api_template_fixture(|| {
+        // Preparation may take longer than the entire ten-second serving budget.
+        std::thread::sleep(std::time::Duration::from_secs(11));
+    });
+}
+
+fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
     use serde::Deserialize;
     use serde_json::{Value, json};
     use std::{
@@ -749,7 +761,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     let observed_requests = Arc::new(std::sync::Mutex::new(Vec::<ExpectedRequest>::new()));
     let server_hits = Arc::clone(&hits);
     let observed_server_requests = Arc::clone(&observed_requests);
-    let server = thread::spawn(move || {
+    let serve = move || {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         while server_hits.load(Ordering::SeqCst) < 7 && std::time::Instant::now() < deadline {
             let (mut stream, _) = match listener.accept() {
@@ -766,6 +778,9 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             stream
                 .set_read_timeout(Some(std::time::Duration::from_secs(2)))
                 .expect("bound API request read");
+            stream
+                .set_write_timeout(Some(std::time::Duration::from_secs(2)))
+                .expect("bound API response write");
             let mut reader = BufReader::new(stream.try_clone().expect("clone API request stream"));
             let mut first_line = String::new();
             reader
@@ -875,14 +890,18 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             7,
             "expected two bearer cases and five API-template semantic requests"
         );
-    });
+    };
     let keyring = MemoryKeyring::new();
     let cases_by_name = fixture
         .cases
         .iter()
         .map(|case| (case.name.as_str(), case))
         .collect::<std::collections::BTreeMap<_, _>>();
-    let execute_case = |case: &Case, profile: AgentProfile, with_entry: bool| {
+    let mut before_setup = Some(before_setup);
+    let mut prepare_case = |case: &Case, profile: AgentProfile, with_entry: bool| {
+        if let Some(before_setup) = before_setup.take() {
+            before_setup();
+        }
         let temporary = tempdir().expect("private API case directory");
         let root = temporary.path().join("vault");
         fs::create_dir(&root).expect("create synthetic vault");
@@ -939,11 +958,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         .expect("initialize response");
         assert!(initialized.contains("\"result\""));
         let request = json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"execute_api_request","arguments":case.arguments}}).to_string();
-        let wire = handle_line(&request, &mut handler)
-            .expect("dispatch production tools/call")
-            .expect("tool call response");
-        let response: Value = serde_json::from_str(&wire).expect("decode MCP response");
-        (temporary, handler, response)
+        (temporary, handler, request)
     };
 
     let success_profile = AgentProfile {
@@ -955,10 +970,74 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         ..AgentProfile::default()
     };
     let status_case = cases_by_name["bearer_get_response_redaction"];
+    let negative_profiles = [
+        ("endpoint_denied_no_request", success_profile.clone(), false),
+        ("method_denied_no_request", success_profile.clone(), false),
+        (
+            "capability_denied_no_request",
+            AgentProfile {
+                can_run_commands: false,
+                allowed_paths: vec!["*".into()],
+                allowed_tools: vec!["execute_api_request".into()],
+                ..AgentProfile::default()
+            },
+            false,
+        ),
+        (
+            "approval_denied_no_request",
+            AgentProfile {
+                can_run_commands: true,
+                allowed_paths: vec!["*".into()],
+                allowed_tools: vec!["execute_api_request".into()],
+                approval_mode: Some("deny".into()),
+                ..AgentProfile::default()
+            },
+            false,
+        ),
+        (
+            "scope_denied_no_request",
+            AgentProfile {
+                can_run_commands: true,
+                allowed_paths: vec!["elsewhere/*".into()],
+                allowed_tools: vec!["execute_api_request".into()],
+                approval_mode: Some("none".into()),
+                ..AgentProfile::default()
+            },
+            false,
+        ),
+    ];
+    // Finish encrypted stores, entries and handler assembly before starting
+    // the single bounded serving phase, including setup for denial cases.
+    let mut prepared_cases = fixture
+        .cases
+        .iter()
+        .map(|case| {
+            let (profile, with_entry) = negative_profiles
+                .iter()
+                .find(|(name, _, _)| *name == case.name)
+                .map(|(_, profile, with_entry)| (profile.clone(), *with_entry))
+                .unwrap_or_else(|| (success_profile.clone(), true));
+            (case.name.as_str(), prepare_case(case, profile, with_entry))
+        })
+        .collect::<BTreeMap<_, _>>();
     for tier in ["read-only", "standard"] {
         let mut restricted = success_profile.clone();
         restricted.tier = Some(tier.into());
-        let (_, _, denied) = execute_case(status_case, restricted, true);
+        prepared_cases.insert(tier, prepare_case(status_case, restricted, true));
+    }
+    let server = thread::spawn(serve);
+    let mut execute_case = |name: &str| {
+        let (temporary, mut handler, request) = prepared_cases
+            .remove(name)
+            .expect("case prepared before API server startup");
+        let wire = handle_line(&request, &mut handler)
+            .expect("dispatch production tools/call")
+            .expect("tool call response");
+        let response: Value = serde_json::from_str(&wire).expect("decode MCP response");
+        (temporary, handler, response)
+    };
+    for tier in ["read-only", "standard"] {
+        let (_, _, denied) = execute_case(tier);
         let required = if tier == "read-only" {
             "standard"
         } else {
@@ -975,8 +1054,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             "tier denial contacted upstream"
         );
     }
-    let (status_vault, mut status_handler, status_response) =
-        execute_case(status_case, success_profile.clone(), true);
+    let (status_vault, mut status_handler, status_response) = execute_case(&status_case.name);
     assert_eq!(
         status_response["result"]["isError"], false,
         "{status_response}"
@@ -1035,8 +1113,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     );
 
     let large_case = cases_by_name["response_truncated_invalid_utf8"];
-    let (_large_vault, _large_handler, large_response) =
-        execute_case(large_case, success_profile.clone(), true);
+    let (_large_vault, _large_handler, large_response) = execute_case(&large_case.name);
     assert_eq!(
         large_response["result"]["isError"], false,
         "{large_response}"
@@ -1058,7 +1135,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
             "Go oracle should send one {} request",
             case.name
         );
-        let (_vault, _handler, response) = execute_case(case, success_profile.clone(), true);
+        let (_vault, _handler, response) = execute_case(&case.name);
         assert_eq!(
             response["result"]["isError"], false,
             "{}: {response}",
@@ -1089,50 +1166,14 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         "Rust request wire must match the production Go handler's captured method, URL, headers and body"
     );
 
-    let negative_profiles = [
-        ("endpoint_denied_no_request", success_profile.clone(), false),
-        ("method_denied_no_request", success_profile.clone(), false),
-        (
-            "capability_denied_no_request",
-            AgentProfile {
-                can_run_commands: false,
-                allowed_paths: vec!["*".into()],
-                allowed_tools: vec!["execute_api_request".into()],
-                ..AgentProfile::default()
-            },
-            false,
-        ),
-        (
-            "approval_denied_no_request",
-            AgentProfile {
-                can_run_commands: true,
-                allowed_paths: vec!["*".into()],
-                allowed_tools: vec!["execute_api_request".into()],
-                approval_mode: Some("deny".into()),
-                ..AgentProfile::default()
-            },
-            false,
-        ),
-        (
-            "scope_denied_no_request",
-            AgentProfile {
-                can_run_commands: true,
-                allowed_paths: vec!["elsewhere/*".into()],
-                allowed_tools: vec!["execute_api_request".into()],
-                approval_mode: Some("none".into()),
-                ..AgentProfile::default()
-            },
-            false,
-        ),
-    ];
-    for (name, profile, with_entry) in negative_profiles {
+    for (name, _, _) in negative_profiles {
         let case = cases_by_name[name];
         assert_eq!(case.requests, 0, "Go oracle must not send {name}");
         assert!(
             case.is_error || case.error.is_some(),
             "Go fixture must capture an error for {name}"
         );
-        let (_vault, _handler, response) = execute_case(case, profile, with_entry);
+        let (_vault, _handler, response) = execute_case(name);
         // The source fixture invokes the Go handler directly. The complete
         // production registry denies an unavailable API tool before reaching
         // that handler, as measured by the native MCP process contract.
@@ -1156,7 +1197,7 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
     ] {
         let case = cases_by_name[name];
         assert_eq!(case.requests, 0, "Go oracle must not send {name}");
-        let (_vault, _handler, response) = execute_case(case, success_profile.clone(), true);
+        let (_vault, _handler, response) = execute_case(name);
         let expected_error = case.error.as_deref().unwrap_or(&case.text);
         let actual_error = response["result"]["content"][0]["text"]
             .as_str()
@@ -1169,6 +1210,10 @@ fn cli_runtime_executes_source_bound_api_template_fixture() {
         "only the seven Go-approved calls may reach the API"
     );
     server.join().expect("bounded local API server");
+    assert!(
+        prepared_cases.is_empty(),
+        "every prepared case must execute"
+    );
 }
 
 #[test]

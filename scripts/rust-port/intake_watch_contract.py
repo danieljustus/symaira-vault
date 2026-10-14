@@ -19,9 +19,29 @@ ORACLE = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
 PASSPHRASE = "correct horse battery staple"
 
 
-def run(args, cwd=ROOT, env=None, timeout=120):
-    result = subprocess.run([str(x) for x in args], cwd=cwd, env=env,
-                            capture_output=True, timeout=timeout)
+def run(args, cwd=ROOT, env=None, timeout=120, evidence=None):
+    command = [str(x) for x in args]
+    started = time.monotonic()
+    if evidence is not None:
+        evidence.update(command=command, cwd=str(cwd), timeout_seconds=timeout,
+                        exit=None, timed_out=False, passed=False)
+    try:
+        result = subprocess.run(command, cwd=cwd, env=env,
+                                capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        if evidence is not None:
+            evidence.update(timed_out=True,
+                            stdout_base64=base64.b64encode(error.stdout or b'').decode('ascii'),
+                            stderr_base64=base64.b64encode(error.stderr or b'').decode('ascii'))
+        raise
+    else:
+        if evidence is not None:
+            evidence.update(exit=result.returncode, passed=result.returncode == 0,
+                            stdout_base64=base64.b64encode(result.stdout).decode('ascii'),
+                            stderr_base64=base64.b64encode(result.stderr).decode('ascii'))
+    finally:
+        if evidence is not None:
+            evidence['elapsed_seconds'] = time.monotonic() - started
     return result
 
 
@@ -301,38 +321,58 @@ def main():
     candidate_digest = hashlib.sha256()
     for path in candidate_sources:
         candidate_digest.update(path.encode()+b"\0"+(ROOT/path).read_bytes()+b"\0")
+    receipt = {"oracle_commit": ORACLE,
+               "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
+               "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
+               "candidate_worktree_clean": clean,
+               "candidate_source_files": candidate_sources,
+               "candidate_source_digest": candidate_digest.hexdigest(),
+               "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+               "native_os": platform.system(), "architecture": platform.machine(),
+               "keyring": "memory", "go": [], "rust": [], "passed": False,
+               "stage": "oracle-checkout"}
+    # The existing CI upload path must exist even if checkout/build fails before
+    # any comparison. A failed prerequisite is never a parity observation.
+    args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
     with tempfile.TemporaryDirectory(prefix="symvault-intake-contract-") as raw:
         base = Path(raw)
         tree = base / "oracle"
         checked(["git", "worktree", "add", "--detach", tree, ORACLE])
         try:
             go = base / ("go.exe" if os.name == "nt" else "go")
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree)
             sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
                              if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
             digest = hashlib.sha256()
             for path in sources:
                 digest.update(path.encode()+b"\0"+(tree/path).read_bytes()+b"\0")
+            receipt.update(oracle_source_files=sources, oracle_source_digest=digest.hexdigest(),
+                           stage="oracle-compiler-preflight")
+            # Observe the effective compiler/cache paths without warming caches,
+            # downloading modules separately, or changing the 120-second limit.
+            receipt['compiler'] = json.loads(checked(["go", "env", "-json", "GOVERSION", "GOROOT",
+                "GOOS", "GOARCH", "GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS", "GOTOOLCHAIN"], cwd=tree))
+            receipt.update(stage="oracle-build", oracle_build={})
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."],
+                    cwd=tree, evidence=receipt['oracle_build'])
+            receipt['go_binary_sha256'] = hashlib.sha256(go.read_bytes()).hexdigest()
             go_root, rust_root = base / "go-roots", base / "rust-roots"
             go_root.mkdir(); rust_root.mkdir()
-            observed_go = exercise(go, go, go_root)
-            observed_rust = exercise(rust, go, rust_root)
-            compare(observed_go, observed_rust)
-            receipt = {"oracle_commit": ORACLE, "oracle_source_files": sources,
-                       "oracle_source_digest": digest.hexdigest(),
-                       "go_binary_sha256": hashlib.sha256(go.read_bytes()).hexdigest(),
-                       "rust_binary_sha256": hashlib.sha256(rust.read_bytes()).hexdigest(),
-                       "candidate_commit": checked(["git", "rev-parse", "HEAD"]).decode().strip(),
-                       "candidate_worktree_clean": clean,
-                       "candidate_source_files": candidate_sources,
-                       "candidate_source_digest": candidate_digest.hexdigest(),
-                       "driver_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                       "native_os": platform.system(), "architecture": platform.machine(),
-                       "keyring": "memory", "go": observed_go, "rust": observed_rust, "passed": True}
-            args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
-            print(f"PASS: {len(observed_go)} actual Go/Rust intake CLI observations on {platform.system()}")
+            receipt['stage'] = 'go-exercise'
+            receipt['go'] = exercise(go, go, go_root)
+            receipt['stage'] = 'rust-exercise'
+            receipt['rust'] = exercise(rust, go, rust_root)
+            receipt['stage'] = 'comparison'
+            compare(receipt['go'], receipt['rust'])
+            receipt.update(passed=True, stage='complete')
         finally:
-            checked(["git", "worktree", "remove", tree])
+            try:
+                checked(["git", "worktree", "remove", tree])
+            except Exception:
+                receipt.update(passed=False, cleanup_failed=True)
+                raise
+            finally:
+                args.receipt.write_text(json.dumps(receipt, indent=2)+"\n")
+    print(f"PASS: {len(receipt['go'])} actual Go/Rust intake CLI observations on {platform.system()}")
 
 
 if __name__ == "__main__":

@@ -96,6 +96,18 @@ type Server struct {
 	hookRegistry    *HookRegistry
 	sessionID       string
 	anomalyDetector *anomaly.AnomalyDetector
+	// anomalyLaunch is an instance-local scheduler seam; nil uses a goroutine.
+	anomalyLaunch func(func())
+
+	// Admission and anomaly chaining share a lock so Close cannot race Add.
+	anomalyMu     sync.Mutex
+	anomalyTail   <-chan struct{}
+	anomalyWork   sync.WaitGroup
+	activeTools   sync.WaitGroup
+	closing       bool
+	anomalyClosed bool
+	closeOnce     sync.Once
+	closeErr      error
 
 	biometricChallenger *authguard.Challenger
 
@@ -343,13 +355,24 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
-	if s.clipboardCancel != nil {
-		close(s.clipboardCancel)
-	}
-	if s.auditLog == nil {
-		return nil
-	}
-	return s.auditLog.Close()
+	s.closeOnce.Do(func() {
+		s.anomalyMu.Lock()
+		s.closing = true
+		s.anomalyMu.Unlock()
+		// Admitted tools can still publish their completion events while closing.
+		s.activeTools.Wait()
+		s.anomalyMu.Lock()
+		s.anomalyClosed = true
+		s.anomalyMu.Unlock()
+		s.anomalyWork.Wait()
+		if s.clipboardCancel != nil {
+			close(s.clipboardCancel)
+		}
+		if s.auditLog != nil {
+			s.closeErr = s.auditLog.Close()
+		}
+	})
+	return s.closeErr
 }
 
 // getBiometricChallenger returns the server's biometric challenger, falling
