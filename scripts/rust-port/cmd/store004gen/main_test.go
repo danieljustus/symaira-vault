@@ -259,7 +259,11 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 			defer goneDeadline.Stop()
 			defer goneTicker.Stop()
 			for {
-				if err := exec.Command("kill", "-0", strconv.Itoa(descendantPID)).Run(); err != nil {
+				exited, err := oracleProcessExited(descendantPID)
+				if err != nil {
+					t.Fatalf("observe descendant exit: %v", err)
+				}
+				if exited {
 					return
 				}
 				select {
@@ -269,6 +273,81 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func oracleProcessExited(pid int) (bool, error) {
+	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).CombinedOutput()
+	state := strings.TrimSpace(string(out))
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && state == "" {
+			return true, nil // No matching process remains.
+		}
+		return false, fmt.Errorf("read process state: %w: %s", err, state)
+	}
+	fields := strings.Fields(state)
+	if len(fields) != 1 {
+		return false, fmt.Errorf("unexpected process state: %q", state)
+	}
+	// A zombie has terminated but its parent has not reaped it yet. kill -0
+	// still succeeds; that does not mean process-group termination failed.
+	return strings.HasPrefix(fields[0], "Z"), nil
+}
+
+func TestOracleProcessExitedDistinguishesUnreapedChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix process-state observation; Windows uses native process handles")
+	}
+	cmd := exec.Command("sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	waited := false
+	t.Cleanup(func() {
+		if !waited {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
+	pid := cmd.Process.Pid
+	if exited, err := oracleProcessExited(pid); err != nil || exited {
+		t.Fatalf("live child exit = %t, %v", exited, err)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	// Retain the direct child without Wait so its PID cannot be reused and its
+	// terminated state remains observable independently of orphan-reaping speed.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+		if err != nil {
+			t.Fatalf("observe controlled child state: %v", err)
+		}
+		if strings.HasPrefix(strings.TrimSpace(string(out)), "Z") {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("killed child did not reach unreaped state: %q", out)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := exec.Command("kill", "-0", strconv.Itoa(pid)).Run(); err != nil {
+		t.Fatalf("kill -0 did not observe the controlled unreaped child: %v", err)
+	}
+	t.Log("CONTROL: terminated unreaped child remains visible to kill -0")
+	if exited, err := oracleProcessExited(pid); err != nil || !exited {
+		t.Fatalf("terminated unreaped child reported alive: exited=%t, err=%v", exited, err)
+	}
+	_ = cmd.Wait()
+	waited = true
+	if exited, err := oracleProcessExited(pid); err != nil || !exited {
+		t.Fatalf("reaped child exit = %t, %v", exited, err)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if exited, err := oracleProcessExited(pid); err == nil || exited {
+		t.Fatalf("missing observer must not prove exit: exited=%t, err=%v", exited, err)
 	}
 }
 

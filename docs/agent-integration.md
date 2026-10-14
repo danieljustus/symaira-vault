@@ -160,6 +160,11 @@ agents:
     max_secrets_in_session: 1
 ```
 
+This retained runner profile uses `approvalMode: deny` and cannot execute
+commands under the current approval contract: `run_command` rejects operations
+when approval is required. Treat it as a disabled starting profile, not a
+runnable smoke-test setup; do not relax its policy just to run an example.
+
 See [`docs/hermes-safe-adoption.md`](hermes-safe-adoption.md) § "Separate
 runner profile after masking review" for the full runner-profile rules
 (narrow `allowedPaths`, tight `allowed_tools`, session/rate caps).
@@ -195,12 +200,16 @@ An agent with `canRunCommands: true` invokes `run_command` with both `env`
 {
   "tool": "run_command",
   "arguments": {
-    "command": ["java", "-jar", "elstertool.jar", "--cert", "$SYMVAULT_FILE_CERT", "--pin-env", "ELSTER_PIN"],
+    "command": ["sh", "-c", "exec java -jar elstertool.jar --cert \"$SYMVAULT_FILE_CERT\" --pin-env ELSTER_PIN"],
     "env": {"ELSTER_PIN": "elster/cert.pin"},
     "files": {"CERT": {"ref": "elster/cert.cert_p12", "encoding": "base64"}}
   }
 }
 ```
+
+The command array is direct argv, so this example explicitly invokes a shell
+to expand the materialized path. It requires that shell to be permitted by the
+existing executable policy and the runner to pass the approval check.
 
 SymVault decodes `cert_p12` (base64) into a private 0600 file exposed to the
 child process as `$SYMVAULT_FILE_CERT`, and injects `ELSTER_PIN` into its
@@ -216,9 +225,14 @@ the CLI twin of the same mechanism — no manual `base64 -d` or temp-file
 bookkeeping required:
 
 ```bash
-ELSTER_PIN=$(symvault get elster/cert.pin --print) \
-  symvault file use elster/cert -- java -jar elstertool.jar --cert "$SYMVAULT_FILE_CERT_P12"
+symvault file use elster/cert -- sh -c 'exec java -jar elstertool.jar --cert "$SYMVAULT_FILE_CERT_P12"'
 ```
+
+This illustrates certificate materialization only, not a complete certificate
+and PIN workflow. `file use` filters the parent environment and does not forward
+`ELSTER_PIN`; prefixing the command with that variable does not inject it into
+the consumer. Use the combined MCP `run_command` `files` and `env` example above
+when the consumer needs both, with the existing approval and executable policy.
 
 `file use` auto-detects the field when the entry has exactly one recorded
 attachment (add `--field cert_p12` explicitly if it has more than one), and
@@ -650,7 +664,8 @@ summary, model used, citation count, and success status.
 ## Metrics and Observability
 
 Symaira Vault exposes Prometheus metrics for monitoring MCP server health, request
-patterns, and security events.
+patterns, and security events when built with `-tags metrics`. Default builds
+return HTTP 501 at `/metrics`; OpenTelemetry tracing also requires this tag.
 
 ### Endpoints
 
@@ -668,7 +683,9 @@ curl -s http://127.0.0.1:8080/health | jq .
 }
 ```
 
-**`/metrics`** — Prometheus metrics (no auth required)
+**`/metrics`** — Prometheus metrics in a metrics-enabled build. Loopback binds
+do not require auth; non-loopback binds require bearer authentication by default
+(`mcp.metrics_auth_required: true`).
 
 ```bash
 curl -s http://127.0.0.1:8080/metrics
