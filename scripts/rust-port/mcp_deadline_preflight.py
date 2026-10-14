@@ -46,9 +46,10 @@ def main():
                        TMP=str(private/'compiler-tmp'), TEMP=str(private/'compiler-tmp'),
                        LANG='C.UTF-8', LC_ALL='C.UTF-8', TZ='UTC', PYTHONDONTWRITEBYTECODE='1')
             source = private/'probe.rs'
-            source.write_text('fn main() {}\n')
+            source.write_text('pub fn probe() {}\n' if phase == 'metadata' else 'fn main() {}\n')
             product = private/'build'/('probe.rmeta' if phase == 'metadata' else 'probe')
-            command = [str(rustc),'--crate-name','deadline_capture_preflight','--edition=2021',
+            command = [str(rustc),'--crate-type='+('lib' if phase == 'metadata' else 'bin'),
+                       '--crate-name','deadline_capture_preflight','--edition=2021',
                        str(source),'--emit='+phase,'-o',str(product)]
             row = {'phase':phase,'command':command,'source_sha256':diagnostic.digest(source),
                    'passed':False,'errors':[]}
