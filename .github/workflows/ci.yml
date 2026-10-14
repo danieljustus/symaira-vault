@@ -367,6 +367,8 @@ jobs:
           set -euo pipefail
           go test ./internal/mcp/server -run '^TestExecuteWithSecretFixtureGoEnvironment$' -count=1 -json | tee mcp-environment-probe.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("mcp-environment-probe.jsonl")]; name="TestExecuteWithSecretFixtureGoEnvironment"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "environment probe did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "environment probe was skipped"; print("Verified both isolated MCP probe children")'
+          CGO_ENABLED=0 go test ./scripts/rust-port/cmd/manifestkeygen -run '^TestManifestKeyProductionFixture$' -count=1 -json | tee manifest-race-replay.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("manifest-race-replay.jsonl")]; name="TestManifestKeyProductionFixture"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "historical manifest replay did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "historical manifest replay was skipped"; print("Verified historical manifest race replay with a CGO-disabled parent")'
 
       - name: Verify native Go MCP handler fixtures
         shell: bash
