@@ -41,7 +41,8 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
-    "test": "jest"
+    "test": "jest",
+    "lint": "eslint --ext .ts src/ tests/"
   },
   "dependencies": {
     "@symaira/mcp-client": "^1.0.0"
