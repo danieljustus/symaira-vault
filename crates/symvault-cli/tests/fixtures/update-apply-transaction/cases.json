@@ -3,9 +3,10 @@
     "go_version": "go1.26.6",
     "source_files": [
       "internal/update/apply.go",
-      "go.mod"
+      "go.mod",
+      "go.sum"
     ],
-    "source_digest": "2398531f9ba2769211753f260284ae44cb10a8d7b8a769f85f86cbb9c942d756",
+    "source_digest": "310191827b2f4f20231a2aff700536a41d8657de33d98a856eadbea04fec39c6",
     "corekit_pin": "v0.17.1-0.20260904101640-f3d3eb79b9b1",
     "corekit_revision": "f3d3eb79b9b1",
     "corekit_source_files": [
@@ -14,13 +15,14 @@
       "updatecheck/cosign/cosign.go"
     ],
     "corekit_source_digest": "f17ed1f441ab19902dac8f63f7850f734bcac0c28ca51a5fc022698e2a23acbd",
-    "captured": "2026-10-03",
-    "commit": "1add155a1ab213cbe8bb42a24254f972cda0ffc1",
+    "captured": "2026-10-09",
+    "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
-    "generator_digest": "f5a39f43d363ee447e6d9f10eb1423aeff32788f0df7b00ff76433d808aea866",
-    "generated_on": "linux"
+    "generator_digest": "767fb3635dc92fa966eaaa5f7180b1fa92fe08ae92cc1bcd1ecc8e14ddd20a50",
+    "generated_on": "darwin",
+    "source_pin_digest": "2069e2312a542bd951026b13547ec242c104cda5dd8526950b5646e26e0be3c6"
   },
   "cases": [
     {
