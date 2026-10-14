@@ -29,4 +29,31 @@ env -i PATH="$PATH" HOME="$context/home" \
     assert(require("symaira.masking").mask_value("synthetic") == "***")
     assert(type(vim.fn.SymairaCurlRequest) == "function")
     assert(type(vim.fn.SymairaCurlGet) == "function")
+    -- Synthetic UI boundaries, not live MCP/credential execution.
+    local client = require("symaira.client")
+    local original_call, original_notify = client.call_tool, vim.notify
+    local notices = 0
+    vim.notify = function(message)
+      assert(not message:find("synthetic-unmasked-response", 1, true))
+      notices = notices + 1
+    end
+    local windows = #vim.api.nvim_list_wins()
+    for _, payload in ipairs({"synthetic-unmasked-response", vim.json.encode("synthetic-unmasked-response"), "123"}) do
+      client.call_tool = function(_, _, callback)
+        callback(nil, {content = {{type = "text", text = payload}}})
+      end
+      require("symaira.picker").show_entry_detail("synthetic")
+      assert(#vim.api.nvim_list_wins() == windows, "invalid response opened a raw detail window")
+    end
+    assert(notices == 3, "invalid response did not fail closed")
+    client.call_tool = function(_, _, callback)
+      callback(nil, {content = {{type = "text", text = vim.json.encode({path = "synthetic", data = {password = "synthetic-unmasked-response"}})}}})
+    end
+    require("symaira.picker").show_entry_detail("synthetic")
+    assert(#vim.api.nvim_list_wins() == windows + 1, "valid entry details were rejected")
+    local shown = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n")
+    assert(not shown:find("synthetic-unmasked-response", 1, true))
+    assert(shown:find("***", 1, true), "valid secret field was not masked")
+    client.call_tool, vim.notify = original_call, original_notify
+    print("Synthetic response masking controls passed")
   end); if not ok then io.stderr:write(tostring(err) .. "\n"); vim.cmd("cquit 1") else print("Symaira loader/setup smoke passed"); vim.cmd("qa!") end'

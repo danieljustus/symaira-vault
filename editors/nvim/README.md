@@ -94,6 +94,10 @@ Run `:checkhealth symaira` to verify:
 
 Run `PLENARY_PATH=/path/to/plenary.nvim ./editors/nvim/smoke.sh` from the repository root. This real headless loader/setup check uses disposable HOME/XDG directories beneath `TMPDIR` and makes no vault or network requests. It requires Neovim in `PATH` (or `NVIM_BIN`) and the existing plenary dependency; no machine-specific launcher is required.
 
+The same smoke checks constructed malformed/non-object responses fail closed
+without opening a raw detail window, and a constructed valid entry still masks
+its secret field. These are UI regression controls, not live MCP acceptance.
+
 The plugin uses `plenary.curl` for HTTP and Lua's `vim.json` for JSON-RPC 2.0 encoding. Key modules:
 
 ```
