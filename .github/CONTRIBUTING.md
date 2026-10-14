@@ -8,7 +8,9 @@ submit changes.
 
 ## Prerequisites
 
-- **Go:** 1.24.4 or later (see `.go-version`)
+- **Go:** use the version declared in `go.mod`
+- **Python 3:** required by the Makefile test wrapper
+- **Rust/Cargo:** use `rust-toolchain.toml`; test targets build the Rust CLI unless `SYMVAULT_RUST_BINARY` supplies an existing binary
 - **Git:** for building and version stamping
 - **Make:** to use the provided targets
 - **On macOS:** Xcode Command Line Tools for CGO (keyring integration)
@@ -24,8 +26,9 @@ submit changes.
 # Build the CLI binary
 make build
 
-# Build the macOS client (requires Xcode-beta)
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer swift build
+# Build the macOS client (requires full Xcode with the iOS SDK)
+bash scripts/build-vaultcore.sh
+swift build --package-path client
 ```
 
 ## Testing
@@ -43,7 +46,7 @@ make test-config  # internal/config tests
 
 # Run tests with coverage
 make test-coverage
-make test-coverage-html  # opens HTML report in browser
+make test-coverage-html  # generates coverage/coverage.html
 
 # Run the full CI-like suite (race + coverage + 30m timeout)
 make test-ci
