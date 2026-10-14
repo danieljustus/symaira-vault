@@ -100,6 +100,7 @@ pass. No account or hosted service is required.
 
 ```bash
 make build
+bash scripts/build-vaultcore.sh  # requires full Xcode with the iOS SDK
 cd client
 xcodegen generate
 xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
@@ -121,11 +122,10 @@ echo "mysecretpassword" | symvault set github.password --stdin-value
 # Add TOTP metadata
 symvault add github --totp-secret JBSWY3DPEHPK3PXP --totp-issuer GitHub
 
-# Retrieve (auto-copies to clipboard with 45s timeout)
-symvault get github.password --clip
+# Retrieve (default: copies to clipboard on a TTY, clears after 30s)
+symvault get github.password
 
-# Autotype password into focused application (macOS/Linux/Windows)
-symvault get github.password --autotype
+# Autotype is available through the MCP autotype tool (see docs/mcp-api.md)
 
 # Show entry details, including the current TOTP code when configured
 symvault get github
@@ -157,7 +157,7 @@ symvault git pull
 symvault git push
 
 # Secret execution (injects vault secrets as env vars)
-symvault run --env API_KEY=api.kimi-key -- curl -H "Authorization: Bearer $API_KEY" https://api.example.com
+symvault run --env API_KEY=api.kimi-key -- sh -c 'exec curl -H "Authorization: Bearer $API_KEY" https://api.example.com'
 
 # Load mappings from a file (each line: NAME=path.field)
 symvault run --env-file .env.symvault -- npm run dev
@@ -290,7 +290,7 @@ Symaira Vault (`symvault`) serves as the credential management and secret-resolu
 
 ## Configuration
 
-Global config lives in the XDG config directory: `$XDG_CONFIG_HOME/symaira-vault/config.yaml` (default `~/.config/symaira-vault/config.yaml`). Installs created before the XDG layout continue to read from the legacy `~/.symvault/config.yaml`. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
+Global config lives in the XDG config directory: `$XDG_CONFIG_HOME/symaira-vault/config.yaml` (default `~/.config/symaira-vault/config.yaml`). The legacy `~/.symvault/config.yaml` is used when `~/.symvault` exists and the XDG data directory does not; when both data directories exist, XDG takes precedence. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
 
 For the full configuration reference, see [docs/configuration.md](docs/configuration.md).
 
@@ -383,7 +383,7 @@ vault clears the in-memory index; the persisted index remains encrypted.
 
 ## Dependencies
 
-- Go 1.26.5 or later
+- Go: use the version declared in [`go.mod`](go.mod)
 - [filippo.io/age](https://pkg.go.dev/filippo.io/age) — encryption
 - [spf13/cobra](https://github.com/spf13/cobra) — CLI framework
 - [zalando/go-keyring](https://github.com/zalando/go-keyring) — OS keyring

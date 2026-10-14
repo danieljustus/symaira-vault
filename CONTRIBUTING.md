@@ -8,9 +8,9 @@ Contributions to this public repository are made under the Apache-2.0 License us
 Symaira Vault self-hosted. The self-hosted product must remain buildable,
 testable, and runnable without any private commercial code.
 
-Commercial hosted-service code is kept in a separate private repository. See
-`docs/commercial-boundary.md` for the boundary between the public self-hosted
-core and the private cloud layer.
+Symaira Vault ships as one self-hosted product, with no separate Pro edition or
+private counterpart repository. Hosted-account, billing and tenant-management
+code are out of scope. See [the commercial boundary](docs/commercial-boundary.md).
 
 ## Development Setup
 
@@ -30,7 +30,9 @@ The script is idempotent and safe to run multiple times. Use `./scripts/setup-de
 
 If you prefer manual setup, ensure you have:
 
-- **Go 1.26.4 or later** (CI and release workflows currently validate with Go 1.26.5)
+- **Go:** use the version declared in `go.mod`
+- **Python 3:** required by the Makefile test wrapper
+- **Rust/Cargo:** use the toolchain pinned in `rust-toolchain.toml`; the test wrapper builds the Rust CLI unless `SYMVAULT_RUST_BINARY` supplies an existing binary
 - **git**
 - **make**
 - **golangci-lint** v2.11.4: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4`
@@ -63,7 +65,7 @@ Symaira Vault uses a two-tier testing approach:
 | `make test-fast` | Local iteration, pre-commit hook | All tests without race detector |
 | `make test` | CI gate, before pushing shared branches | All tests with race detector |
 
-Use `make test-fast` during development for fast feedback. Run `make test` before pushing a PR to catch concurrency issues that only the race detector surfaces. CI always runs `make test`.
+Use `make test-fast` during development for fast feedback. Run `make test` before pushing a PR to catch concurrency issues that only the race detector surfaces. CI runs explicit Go commands with platform-specific race and skip flags; the main matrix skips flow, binary E2E and integration tests, with separate jobs covering additional suites. See `.github/workflows/ci.yml` for the current flags.
 
 ### Running from Source
 
@@ -78,21 +80,13 @@ symaira-vault/
 ├── main.go              # Entry point
 ├── cmd/                 # CLI commands (Cobra)
 │   ├── root.go          # Root command
-│   ├── get.go           # Get entry
-│   ├── set.go           # Set entry
-│   ├── list.go          # List entries
-│   ├── find.go          # Find entries
+│   ├── crud/            # Get, set, list, find, delete, edit, add
+│   ├── admin/           # Initialize vault and administration
+│   ├── auth/            # Lock, unlock and authentication
+│   ├── mcp/             # MCP server and client configuration
 │   ├── generate.go      # Generate password
-│   ├── delete.go        # Delete entry
-│   ├── init.go          # Initialize vault
-│   ├── lock.go          # Lock vault
-│   ├── unlock.go        # Unlock vault
-│   ├── edit.go          # Edit entry
-│   ├── add.go           # Add entry
 │   ├── git.go           # Git operations
-│   ├── serve.go         # MCP server
-│   ├── recipients.go    # Manage recipients
-│   └── mcp_config.go    # MCP config generation
+│   └── recipients.go    # Manage recipients
 ├── internal/
 │   ├── vault/           # Core vault logic
 │   ├── crypto/          # Age encryption layer
@@ -382,7 +376,7 @@ Include in your PR description:
 ### Merge Requirements
 
 - All CI checks must pass
-- At least one approval required
+- Maintainer review; `main` currently requires zero GitHub approving reviews for the solo-maintained repository (GitHub does not count the author's own review)
 - No unresolved discussions
 
 ## Issue Reporting Guidelines

@@ -14,7 +14,7 @@ Execute a command on the host with secrets injected as environment variables. Re
 - The command doesn't need vault secrets → consider if this is the right approach
 
 ## INPUT
-- command (array, required): command and arguments as strings (e.g. `["curl", "-H", "Authorization: Bearer $API_KEY", "https://api.github.com/user"]`)
+- command (array, required): command and arguments as strings (e.g. `["gh", "api", "user"]` with `GH_TOKEN` injected)
 - env (object, optional): map of env var names to vault secret references (e.g. `{"API_KEY": "github.api_key"}`)
 - working_dir (string, optional): working directory for the command
 - timeout (number, optional, default 30): timeout in seconds
@@ -31,6 +31,7 @@ Execute a command on the host with secrets injected as environment variables. Re
 
 ## NOTES
 - Requires `canRunCommands: true` in agent profile
+- Arguments are passed directly to the executable; `$VAR` is not expanded. Prefer tools that read their environment. An explicit shell must already be permitted by the executable policy and can expose expanded secrets in subprocess argv.
 - Each secret ref is scope-checked individually
 - Secret values are never exposed in the MCP response or audit logs
 - Output is capped at 100KB per stream
@@ -44,9 +45,9 @@ Execute a command on the host with secrets injected as environment variables. Re
 ## EXAMPLE
 ```json
 {
-  "command": ["curl", "-s", "-H", "Authorization: Bearer $GITHUB_TOKEN", "https://api.github.com/user"],
-  "env": {"GITHUB_TOKEN": "github.api_key"},
+  "command": ["gh", "api", "user"],
+  "env": {"GH_TOKEN": "github.api_key"},
   "timeout": 15
 }
 ```
-→ Executes curl with the token injected as GITHUB_TOKEN environment variable
+→ Executes gh, which reads the token from GH_TOKEN environment variable

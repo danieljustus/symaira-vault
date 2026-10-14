@@ -1,11 +1,16 @@
 # Configuration Reference
 
-Global config is stored at `~/.symvault/config.yaml`. Vault-specific config is stored in the vault directory.
+Global config is stored at `$XDG_CONFIG_HOME/symaira-vault/config.yaml`
+(default `~/.config/symaira-vault/config.yaml`). The default vault directory is
+`$XDG_DATA_HOME/symaira-vault` (default `~/.local/share/symaira-vault`).
+When `~/.symvault` exists and the XDG data directory does not, both config and
+data fall back to `~/.symvault`; when both data directories exist, XDG takes
+precedence. Vault-specific config is stored in the selected vault directory.
 Use [`config.yaml.example`](../config.yaml.example) as a commented starting point.
 
 ## Environment Variables
 
-- `SYMVAULT_VAULT` — Path to vault directory (default: `~/.symvault`)
+- `SYMVAULT_VAULT` — Path to vault directory (default: XDG data path above, with conditional legacy fallback)
 
 Or use the `--vault` flag to override for any command:
 ```bash
@@ -15,10 +20,10 @@ symvault --vault ~/work-vault get aws.secret
 ## config.yaml
 
 ```yaml
-# ~/.symvault/config.yaml — Global configuration
+# ~/.config/symaira-vault/config.yaml — Global configuration (XDG default)
 
 # Default vault directory
-vaultDir: ~/.symvault
+vaultDir: ~/.local/share/symaira-vault
 
 # Default agent for MCP (can be overridden via --agent flag)
 defaultAgent: default
@@ -67,7 +72,7 @@ mcp:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `vaultDir` | `~/.symvault` | Default vault directory |
+| `vaultDir` | XDG data path above | Default vault directory, with conditional legacy fallback |
 | `defaultAgent` | `default` | Default MCP agent profile |
 | `sessionTimeout` | `15m` | OS keyring cache TTL |
 | `sessionMaxLifetime` | `8h` | Absolute maximum lifetime of an OS keyring session |
@@ -209,7 +214,7 @@ Vault selection follows this priority, from highest to lowest:
 3. `--profile` flag
 4. `SYMVAULT_PROFILE` environment variable
 5. `defaultProfile` from config
-6. Default `~/.symvault`
+6. Resolved XDG data path (or conditional legacy fallback)
 
 ### Commands
 
@@ -275,14 +280,7 @@ first line is a document start, not a second document, and is fine.)
 
 ### JSON Schema
 
-A JSON Schema for editor autocompletion is available at `docs/symvault-config.schema.json`.
-
-For VS Code with the Red Hat YAML extension, add this to `.vscode/settings.json`:
-
-```json
-{
-  "yaml.schemas": {
-    "docs/symvault-config.schema.json": "config.yaml"
-  }
-}
-```
+The checked-in `docs/symvault-config.schema.json` does not currently match the
+serialized YAML contract (including key casing, optional sections and duration
+strings). Do not use it to validate YAML configuration. Use
+`config.yaml.example` and `symvault config validate` until the schema is corrected.
