@@ -43,13 +43,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
-          go-version-input: '1.26.6'
+          go-version-input: '1.26.9'
           go-package: ./...
 
   dependency-scan:
@@ -64,7 +64,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Run OSV Scanner
@@ -120,8 +120,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
+
+      - name: Verify product and historical oracle toolchains
+        run: python3 scripts/test_go_toolchains.py
 
       - name: Check formatting
         run: make fmt-check
@@ -342,7 +345,7 @@ jobs:
       - name: Set up Go for embedded production-handler tests
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install pinned Rust toolchain
@@ -354,6 +357,16 @@ jobs:
       # Clippy checks the same targets; cargo test already includes doctests.
       - name: Check and lint
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Verify isolated MCP probe child environments
+        shell: bash
+        env:
+          SYMVAULT_RUN_WINDOWS_CROSSLANG: '1'
+          SYMVAULT_TEST_KEYRING: memory
+        run: |
+          set -euo pipefail
+          go test ./internal/mcp/server -run '^TestExecuteWithSecretFixtureGoEnvironment$' -count=1 -json | tee mcp-environment-probe.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("mcp-environment-probe.jsonl")]; name="TestExecuteWithSecretFixtureGoEnvironment"; assert any(row.get("Test")==name and row.get("Action")=="pass" for row in rows), "environment probe did not execute"; assert not any(row.get("Test")==name and row.get("Action")=="skip" for row in rows), "environment probe was skipped"; print("Verified both isolated MCP probe children")'
 
       - name: Verify native Go MCP handler fixtures
         shell: bash
@@ -383,7 +396,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install dependencies
@@ -419,7 +432,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install dependencies
@@ -470,7 +483,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Build binary
@@ -515,7 +528,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Build Vaultcore framework
@@ -663,7 +676,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.26.6']
+        go-version: ['1.26.9']
       fail-fast: false
     steps:
       - name: Assert actual native macOS arm64
@@ -748,7 +761,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Run fuzz tests
@@ -797,7 +810,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Build binary
@@ -834,7 +847,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.6'
+          go-version: '1.26.9'
           cache: true
 
       - name: Install dependencies

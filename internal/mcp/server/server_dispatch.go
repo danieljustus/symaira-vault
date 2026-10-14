@@ -72,6 +72,15 @@ func toolActionType(toolName string) string {
 }
 
 func (s *Server) executeTool(ctx context.Context, name string, args json.RawMessage) (map[string]any, error) {
+	s.anomalyMu.Lock()
+	if s.closing {
+		s.anomalyMu.Unlock()
+		return nil, errors.New("MCP server is closed")
+	}
+	s.activeTools.Add(1)
+	s.anomalyMu.Unlock()
+	defer s.activeTools.Done()
+
 	start := time.Now()
 	agentName := ""
 	if s.agent != nil {
@@ -226,30 +235,41 @@ func (s *Server) validateToolAccess(ctx context.Context, def toolDefinition, nam
 	return nil
 }
 
-// detectAnomalyAsync runs anomaly detection in a separate goroutine so it
-// NEVER blocks tool execution. It checks all detection patterns and handles
-// any alerts that are generated (logging, notifications, cache invalidation).
+// detectAnomalyAsync captures a completion event before scheduling background
+// work. Chained workers preserve publication order without making tool dispatch
+// wait for detector hooks, desktop notifications or audit IO.
 func (s *Server) detectAnomalyAsync(_ context.Context, toolName, entryPath, reqID, agentName string, duration time.Duration, ok bool, fieldLength int) {
-	if s == nil || s.anomalyDetector == nil {
+	if s == nil || s.anomalyDetector == nil || agentName == "" {
 		return
 	}
-	if agentName == "" {
+	s.anomalyMu.Lock()
+	if s.anomalyClosed {
+		s.anomalyMu.Unlock()
 		return
 	}
+	event := anomaly.ToolCallEvent{
+		Timestamp:   time.Now(),
+		Agent:       agentName,
+		Tool:        toolName,
+		Path:        entryPath,
+		Duration:    duration,
+		OK:          ok,
+		IsCanary:    entryPath != "" && vault.IsCanaryPath(entryPath),
+		RequestID:   reqID,
+		FieldLength: fieldLength,
+	}
+	previous := s.anomalyTail
+	done := make(chan struct{})
+	s.anomalyTail = done
+	s.anomalyWork.Add(1)
+	s.anomalyMu.Unlock()
 
-	go func() {
-		event := anomaly.ToolCallEvent{
-			Timestamp:   time.Now(),
-			Agent:       agentName,
-			Tool:        toolName,
-			Path:        entryPath,
-			Duration:    duration,
-			OK:          ok,
-			IsCanary:    entryPath != "" && vault.IsCanaryPath(entryPath),
-			RequestID:   reqID,
-			FieldLength: fieldLength,
+	s.launchAnomaly(func() {
+		defer s.anomalyWork.Done()
+		defer close(done)
+		if previous != nil {
+			<-previous
 		}
-
 		alert := s.anomalyDetector.Check(context.Background(), event)
 		if alert == nil {
 			return
@@ -277,7 +297,7 @@ func (s *Server) detectAnomalyAsync(_ context.Context, toolName, entryPath, reqI
 
 		// Invalidate approval cache for any anomaly to force re-approval
 		s.invalidateApprovalCache()
-	}()
+	})
 }
 
 // challengeBiometric performs a biometric identity verification challenge in
@@ -304,4 +324,12 @@ func (s *Server) challengeBiometric(ctx context.Context, toolName string) error 
 		return fmt.Errorf("biometric verification failed for tool %q: %w", toolName, err)
 	}
 	return nil
+}
+
+func (s *Server) launchAnomaly(work func()) {
+	if s.anomalyLaunch != nil {
+		s.anomalyLaunch(work)
+		return
+	}
+	go work()
 }
