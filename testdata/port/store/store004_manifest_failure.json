@@ -21,7 +21,7 @@
       "scripts/rust-port/cmd/store004gen/process_group_windows.go",
       "scripts/rust-port/cmd/store004gen/process_group_windows_test.go"
     ],
-    "generator_digest": "aae34a1fc0005ac747a53e5df11e3ccb9dfa4dced15151a1e2131b9967a6430e"
+    "generator_digest": "b29130c94af427bb1e96ae0577d664d51617dd80cd3f1451c148eceb094fda42"
   },
   "cases": [
     {

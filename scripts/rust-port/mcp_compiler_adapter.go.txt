@@ -1,0 +1,126 @@
+// mcp-historical-compiler-prerequisites-v2 is fixture execution preparation,
+// not an oracle or a product executable. configJSON is compiled in separately.
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type configuration struct {
+	Compiler       string            `json:"compiler"`
+	CompilerSHA256 string            `json:"compiler_sha256"`
+	ChildSource    string            `json:"child_source"`
+	ChildSHA256    string            `json:"child_source_sha256"`
+	Environment    map[string]string `json:"environment"`
+	Trace          string            `json:"trace"`
+}
+
+func run() (int, error) {
+	var config configuration
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return 1, err
+	}
+	compiler, err := os.ReadFile(config.Compiler)
+	if err != nil {
+		return 1, err
+	}
+	digest := fmt.Sprintf("%x", sha256.Sum256(compiler))
+	if digest != config.CompilerSHA256 {
+		return 1, errors.New("fixture compiler identity changed")
+	}
+	args := os.Args[1:]
+	adapted := false
+	if len(args) == 2 && args[0] == "run" && filepath.IsAbs(args[1]) {
+		// Git and the platform may spell one file differently (/var aliases,
+		// Windows short names/case). Bind the existing file, not its spelling.
+		expected, err := os.Stat(config.ChildSource)
+		if err != nil {
+			return 1, err
+		}
+		actual, err := os.Stat(args[1])
+		adapted = err == nil && expected.Mode().IsRegular() && os.SameFile(expected, actual)
+		if adapted {
+			source, err := os.ReadFile(args[1])
+			if err != nil {
+				return 1, err
+			}
+			if fmt.Sprintf("%x", sha256.Sum256(source)) != config.ChildSHA256 {
+				return 1, errors.New("fixture child source identity changed")
+			}
+		}
+	}
+	cmd := exec.Command(config.Compiler, args...)
+	cmd.Env = os.Environ()
+	var before []string
+	if adapted {
+		// Preserve intentional secret injection and safe runtime variables. Only
+		// compiled-in compiler prerequisites are replaced, never ambient values.
+		env := make([]string, 0, len(cmd.Env)+len(config.Environment))
+		for _, item := range cmd.Env {
+			key, _, _ := strings.Cut(item, "=")
+			before = append(before, key)
+			if _, replace := config.Environment[strings.ToUpper(key)]; !replace {
+				env = append(env, item)
+			}
+		}
+		sort.Strings(before)
+		var keys []string
+		for key := range config.Environment {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			env = append(env, key+"="+config.Environment[key])
+		}
+		cmd.Env = env
+	}
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	runErr := cmd.Run()
+	code := 0
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) {
+			return 1, runErr
+		}
+		code = exitErr.ExitCode()
+	}
+	if adapted {
+		// No environment values, captured stdout, secret material or fabricated
+		// response is written here. The real compiler owns the inherited streams.
+		trace, err := os.OpenFile(config.Trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			return 1, err
+		}
+		err = json.NewEncoder(trace).Encode(struct {
+			Command        []string `json:"command"`
+			CompilerSHA256 string   `json:"compiler_sha256"`
+			ChildSHA256    string   `json:"child_source_sha256"`
+			InputKeys      []string `json:"input_keys"`
+			Exit           int      `json:"exit"`
+		}{append([]string{config.Compiler}, args...), digest, config.ChildSHA256, before, code})
+		closeErr := trace.Close()
+		if err != nil {
+			return 1, err
+		}
+		if closeErr != nil {
+			return 1, closeErr
+		}
+	}
+	return code, nil
+}
+
+func main() {
+	code, err := run()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	os.Exit(code)
+}

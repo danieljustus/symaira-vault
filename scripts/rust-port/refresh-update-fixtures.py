@@ -19,6 +19,9 @@ FIXTURES = ROOT / "crates/symvault-cli/tests/fixtures"
 SCRIPT = Path(__file__).relative_to(ROOT).as_posix()
 NAMES = ["update-apply-unsupported", "update-apply-stable",
          "update-check-cache", "update-check-http", "update-apply-transaction"]
+ORACLE_GO = "go1.26.6"
+COREKIT = "github.com/danieljustus/symaira-corekit"
+COREKIT_VERSION = "v0.17.1-0.20260904101640-f3d3eb79b9b1"
 
 HTTP_HELPER = r'''
 package main
@@ -80,21 +83,43 @@ def verify_tests(packages, names, env):
                            str(set(names) - passed))
 
 
+def source_pin_files(files):
+    # The pin identifies unchanged production code, not unrelated dependencies.
+    # The full capture digest still enforces BOTH module files in every corpus.
+    return [name for name in files if name not in {"go.mod", "go.sum"}]
+
+
+def check_build_identity(version, corekit):
+    if version != ORACLE_GO:
+        raise RuntimeError(f"oracle requires {ORACLE_GO}, got {version}")
+    if corekit.get("Version") != COREKIT_VERSION or corekit.get("Replace") is not None:
+        raise RuntimeError("oracle requires the exact CoreKit module without replacement")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--commit", required=True, help="immutable Go source revision")
+    parser.add_argument("--commit", required=True, help="immutable production-Go source revision")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     commit = run(["git", "rev-parse", args.commit + "^{commit}"]).stdout.decode().strip()
     fixtures = {name: json.loads((FIXTURES / name / "cases.json").read_text())
                 for name in NAMES}
+    version = run(["go", "env", "GOVERSION"]).stdout.decode().strip()
+    corekit_module = json.loads(run(["go", "list", "-mod=readonly", "-m", "-json", COREKIT]).stdout)
+    check_build_identity(version, corekit_module)
+    if run(["go", "env", "GOWORK"]).stdout.decode().strip() not in {"", "off"}:
+        raise RuntimeError("oracle capture must not use a Go workspace")
+    generated_on = run(["go", "env", "GOOS"]).stdout.decode().strip()
     for name, fixture in fixtures.items():
         files = fixture["oracle"]["source_files"]
-        if digest(files) != digest(files, commit):
+        for module_file in ["go.mod", "go.sum"]:
+            if module_file not in files:
+                files.append(module_file)
+        pinned = source_pin_files(files)
+        if digest(pinned) != digest(pinned, commit):
             raise RuntimeError(f"{name}: working sources differ from {commit}")
 
     generator_hash = digest([SCRIPT])
-    version = run(["go", "env", "GOVERSION"]).stdout.decode().strip()
     with tempfile.TemporaryDirectory(prefix="update-fixture-") as temporary:
         temp = Path(temporary)
         test_env = dict(os.environ, XDG_CACHE_HOME=str(temp / "test-cache"),
@@ -160,8 +185,7 @@ def main():
         verify_tests(["github.com/danieljustus/symaira-corekit/updatecheck/updateapply",
                       "github.com/danieljustus/symaira-corekit/updatecheck/extract"],
                      [case["go_test"] for case in transaction["cases"]], test_env)
-        corekit = Path(run(["go", "list", "-m", "-f", "{{.Dir}}",
-                            "github.com/danieljustus/symaira-corekit"]).stdout.decode().strip())
+        corekit = Path(corekit_module["Dir"])
         core_hash = hashlib.sha256()
         for name in transaction["oracle"]["corekit_source_files"]:
             core_hash.update(name.encode() + b"\0" + (corekit / name).read_bytes() + b"\0")
@@ -173,9 +197,11 @@ def main():
     for name, fixture in fixtures.items():
         oracle = fixture["oracle"]
         oracle.update(commit=commit, go_version=version,
+                      source_pin_digest=digest(source_pin_files(oracle["source_files"]), commit),
                       source_digest=digest(oracle["source_files"]),
                       generator_files=[SCRIPT], generator_digest=generator_hash,
-                      generated_on="linux", captured=(oracle.get("captured", "2026-10-03")
+                      generated_on=(oracle["generated_on"] if args.check else generated_on),
+                      captured=(oracle.get("captured", "2026-10-03")
                                                      if args.check else datetime.date.today().isoformat()))
         outputs[name] = json.dumps(fixture, ensure_ascii=False, indent=2) + "\n"
     for name, data in outputs.items():
@@ -185,7 +211,7 @@ def main():
                 raise RuntimeError(f"{path}: fixture is stale")
         else:
             path.write_text(data)
-        print(f"PASS actual Go {name} ({len(fixtures[name]['cases'])} cases)")
+        print(f"PASS actual {version}/{generated_on} {name} ({len(fixtures[name]['cases'])} cases)")
 
 
 if __name__ == "__main__":

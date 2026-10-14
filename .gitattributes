@@ -81,3 +81,11 @@ scripts/rust-port/test_http_write_contract.py text eol=lf
 .github/workflows/rust-http-origin.yml text eol=lf
 .github/workflows/rust-http-framing.yml text eol=lf
 .github/workflows/rust-http-read-deadlines.yml text eol=lf
+
+# Independently anchored MCP evidence and its input manifest are exact bytes.
+scripts/rust-port/fixtures/mcp-anomaly/** text eol=lf
+scripts/rust-port/mcp_oracle.py text eol=lf
+scripts/rust-port/mcp_fixture_contract.py text eol=lf
+scripts/rust-port/mcp_process_contract.py text eol=lf
+scripts/rust-port/test_mcp_oracle.py text eol=lf
+crates/symvault-mcp/tests/fixtures/tls-* text eol=lf

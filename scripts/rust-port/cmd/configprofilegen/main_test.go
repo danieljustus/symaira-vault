@@ -127,6 +127,7 @@ func TestArchiveIgnoresCheckoutLineEndingPolicy(t *testing.T) {
 func TestPinnedGoDoesNotRequireNamedShim(t *testing.T) {
 	binary := pinnedGoBinary()
 	cmd := exec.Command(binary, "version")
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN=local")
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatal(err)

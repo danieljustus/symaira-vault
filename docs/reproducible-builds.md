@@ -1,6 +1,43 @@
 # Reproducible Builds & Signed Releases
 
-This document describes how to create reproducible builds and cryptographically signed releases of Symaira Vault.
+Current releases use the tracked [release workflow](../.github/workflows/release.yml)
+and [GoReleaser configuration](../.goreleaser.yml), including Cosign signing.
+For download verification, use [the distribution guide](distribution.md#cosign-signature-verification).
+
+## Current Build Inputs
+
+Use the Go version declared in `go.mod`. The executable package is the repository
+root (`.`); the linker metadata variables are `main.version`, `main.commit` and
+`main.date`. To compare builds, keep the source revision, toolchain, platform,
+CGO setting, build tags, flags and all three metadata values identical. Release
+reproduction must match the values and flags from the actual release build;
+a source commit timestamp is not necessarily the release's `.Date` value.
+
+For a local repeatability comparison from the repository root:
+
+```bash
+BUILD_VERSION=$(git describe --tags --always)
+BUILD_COMMIT=$(git rev-parse HEAD)
+BUILD_DATE=$(git log -1 --format=%cI)
+BUILD_LDFLAGS="-s -w -X main.version=$BUILD_VERSION -X main.commit=$BUILD_COMMIT -X main.date=$BUILD_DATE -buildid="
+CGO_ENABLED=0 go build -trimpath -ldflags "$BUILD_LDFLAGS" -o symvault-first .
+CGO_ENABLED=0 go build -trimpath -ldflags "$BUILD_LDFLAGS" -o symvault-second .
+shasum -a 256 symvault-first symvault-second
+```
+
+This is a comparison procedure, not evidence that all release artifacts are
+reproducible. Match `.goreleaser.yml` for release/platform-specific flags.
+
+## Obsolete Examples (Retained for Historical Context)
+
+Everything below through Security Considerations is a superseded proposal,
+not current build, signing, verification or publishing instructions. In
+particular, the GPG key, required secrets and displayed workflow are not the
+repository's release pipeline; the build scripts, Dockerfile and `./cmd/symvault`
+target shown below are absent. The old `main.buildTime` examples do not set the
+current `main.date` variable. Do not execute these examples to reproduce or
+verify current releases. Historical examples below are retained, with the clone-directory typo corrected.
+
 
 ## Overview
 
@@ -465,7 +502,7 @@ Advanced users can reproduce the build independently:
 ```bash
 # Clone the repository at the release tag
 git clone https://github.com/danieljustus/symaira-vault.git
-cd Symaira Vault
+cd symaira-vault
 git checkout v1.2.3
 
 # Build with the same flags
