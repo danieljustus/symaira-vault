@@ -1152,6 +1152,10 @@ Store or update a single field in an entry. Requires write permission.
 ### run_command
 
 Execute a command on the host with secrets injected as environment variables.
+Arguments are passed directly to the executable; `$VAR` is not expanded. Prefer
+a consumer that reads its environment, or explicitly invoke a shell when
+permitted by the existing executable policy. A shell may put expanded secrets
+in a subprocess argv; use `execute_api_request` for template-based HTTP access.
 
 **Request**:
 
@@ -1159,9 +1163,9 @@ Execute a command on the host with secrets injected as environment variables.
 {
   "tool": "run_command",
   "arguments": {
-    "command": ["curl", "-H", "Authorization: Bearer $API_KEY", "https://api.github.com/user"],
+    "command": ["gh", "api", "user"],
     "env": {
-      "API_KEY": "github.api_key"
+      "GH_TOKEN": "github.api_key"
     },
     "working_dir": "/tmp",
     "timeout": 30
@@ -1182,7 +1186,7 @@ content (e.g. a PKCS#12 certificate) before it is written to disk:
 {
   "tool": "run_command",
   "arguments": {
-    "command": ["ericctl", "send", "--cert", "$SYMVAULT_FILE_CERT"],
+    "command": ["sh", "-c", "exec ericctl send --cert \"$SYMVAULT_FILE_CERT\""],
     "files": {
       "CERT": {"ref": "elster/org-zertifikat.pfx", "encoding": "base64"}
     },
