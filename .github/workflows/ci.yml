@@ -70,7 +70,7 @@ jobs:
       - name: Run OSV Scanner
         id: osv_scan
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
         with:
           scan-args: >-
             --lockfile=go.mod
@@ -256,7 +256,7 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install Rust verification tools
-        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
         with:
           tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0
           fallback: none
@@ -376,6 +376,11 @@ jobs:
 
       - name: Test including doctests
         run: cargo test --workspace --all-features --locked
+
+      - name: Verify native Go/Rust CLI and authentication parity
+        if: runner.os == 'macOS'
+        shell: bash
+        run: make config-cli-differential
 
       - name: Verify real Unix MCP approval terminal
         if: runner.os != 'Windows'

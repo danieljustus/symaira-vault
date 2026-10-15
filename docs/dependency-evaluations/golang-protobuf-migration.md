@@ -4,6 +4,36 @@
 **Date:** 2026-04-27  
 **Status:** Deferred — Accept Status Quo with Monitoring
 
+## Current reassessment, 2026-10-14
+
+Rechecked [#1327](https://github.com/danieljustus/symaira-vault/issues/1327)
+against source `4e9331537dbe3dbb293a3e81483b4bdf335d424b`, using the pinned
+Go 1.26.6 toolchain, `GOWORK=off` and read-only module resolution.
+
+| Check | Observed result |
+| --- | --- |
+| `go mod graph` | `go-git/v5@v5.19.2` still requires groupcache at `v0.0.0-20241129210726-2c02b8208cf8`; both groupcache and `grpc@v1.83.2` require `golang/protobuf@v1.5.4`. The modern protobuf module at `v1.36.12` also retains an older compatibility edge. |
+| `go list -deps ./...` | No package under `github.com/golang/protobuf` appears in the dependency set on macOS arm64. `github.com/golang/groupcache/lru` does appear. This is package-resolution evidence for this host, not a cross-platform build or test result. |
+| `go list -m -versions github.com/golang/protobuf` | The latest published version returned is `v1.5.4`; there is no newer shim version to upgrade to. |
+| Official groupcache source | [Commit `2c02b8208cf8`](https://github.com/golang/groupcache/commit/2c02b8208cf8c02a3e358cb1d9b60950647543fc) remains the latest commit. Its `go.mod` directly requires `github.com/golang/protobuf v1.5.4`. |
+| Migration discussion | [golang/groupcache#150](https://github.com/golang/groupcache/issues/150) is still open. The [existing upstream response](https://github.com/golang/groupcache/issues/150#issuecomment-894461332) explains that migration would break `groupcache.ProtoGetter`; the earlier claim of zero maintainer engagement below was incorrect. |
+
+The pinned parent manifests confirm the independent edges:
+[go-git v5.19.2](https://github.com/go-git/go-git/blob/v5.19.2/go.mod) and
+[grpc v1.83.2](https://github.com/grpc/grpc-go/blob/v1.83.2/go.mod).
+A direct shim update cannot remove these requirements. Keep the existing
+deferral rather than introducing a fork, a `replace` directive or an unrelated
+major-version migration. Reassess when the actual pinned parents change.
+
+This completes the requested reassessment, not removal of the module or a
+clean security-scan claim. The separate Go HTTP/2 findings in
+[#1364](https://github.com/danieljustus/symaira-vault/issues/1364) remain outside
+this dependency decision.
+
+The numbered sections and dated log below retain the earlier assessments.
+Their version numbers, release-status statements and scan claims describe
+those historical checks, not the current manifest or current CI acceptance.
+
 ---
 
 ## 1. Current Dependency Chain Analysis

@@ -1,7 +1,6 @@
-local config = require("symvault.config")
-local commands = require("symvault.commands")
-local client = require("symvault.client")
-local health = require("symvault.health")
+local config = require("symaira.config")
+local commands = require("symaira.commands")
+local client = require("symaira.client")
 
 local M = {}
 
@@ -14,7 +13,7 @@ local function setup_curl_helpers()
       body = body,
       headers = headers,
       timeout = config.get("timeout_ms"),
-      raw = { "--max-time", tostring(config.get("timeout_ms") // 1000) },
+      raw = { "--max-time", tostring(math.floor(config.get("timeout_ms") / 1000)) },
     })
 
     vim.schedule(function()
@@ -51,7 +50,7 @@ local function setup_curl_helpers()
     local response = curl.get(url, {
       headers = headers,
       timeout = config.get("timeout_ms"),
-      raw = { "--max-time", tostring(config.get("timeout_ms") // 1000) },
+      raw = { "--max-time", tostring(math.floor(config.get("timeout_ms") / 1000)) },
     })
 
     vim.schedule(function()
@@ -71,7 +70,7 @@ local function setup_curl_helpers()
 end
 
 --- Setup the plugin. Must be called by the user.
----@param opts table|nil Configuration overrides (see symvault.config.defaults).
+---@param opts table|nil Configuration overrides (see symaira.config.defaults).
 function M.setup(opts)
   config.setup(opts)
 
@@ -94,8 +93,6 @@ function M.setup(opts)
       client.close()
     end,
   })
-
-  vim.health._symvault = health.check
 end
 
 return M

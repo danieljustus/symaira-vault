@@ -1,5 +1,5 @@
-local config = require("symvault.config")
-local auth = require("symvault.auth")
+local config = require("symaira.config")
+local auth = require("symaira.auth")
 
 local M = {}
 
