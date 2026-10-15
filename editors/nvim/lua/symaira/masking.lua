@@ -1,4 +1,4 @@
-local config = require("symvault.config")
+local config = require("symaira.config")
 
 local M = {}
 
