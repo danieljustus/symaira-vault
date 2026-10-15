@@ -26,7 +26,32 @@ def number(value):
     return result
 
 
-def metadata(trace, receipt, summary) -> dict:
+def unique_loss_fields(pairs):
+    fields = dict(pairs)
+    if len(fields) != len(pairs):
+        raise ValueError('duplicate native loss field')
+    return fields
+
+
+def final_loss_counters(record, session):
+    keys = {'source', 'session', 'session_stopped', 'events_lost',
+            'log_buffers_lost', 'real_time_buffers_lost', 'buffers_written'}
+    if (not isinstance(record, dict) or set(record) != keys or
+            record['source'] != 'ControlTraceW(EVENT_TRACE_CONTROL_STOP)' or
+            record['session_stopped'] is not True or
+            not isinstance(session, str) or
+            not re.fullmatch(r'symvault-write-[0-9]+-[0-9]+', session) or
+            record['session'] != session):
+        raise ValueError('invalid stopped-session loss provenance')
+    counters = {key: record[key] for key in keys - {'source', 'session', 'session_stopped'}}
+    if any(type(value) is not int or not 0 <= value < 1 << 32 for value in counters.values()):
+        raise ValueError('invalid native loss counter')
+    if counters['buffers_written'] == 0:
+        raise ValueError('no file-backed trace buffers recorded')
+    return counters
+
+
+def metadata(trace, receipt, summary, loss_record=None, session=None) -> dict:
     pids = {receipt[name]['tcp-output']['server_process_id'] for name in ('go', 'rust')}
     if len(pids) != 2 or any(type(pid) is not int or not 0 < pid < 1 << 32 for pid in pids):
         raise ValueError('missing distinct output-server process IDs')
@@ -114,14 +139,22 @@ def metadata(trace, receipt, summary) -> dict:
     if seen != pids:
         raise ValueError('trace lacks both actual output servers')
     losses = {}
-    for key, value in re.findall(r'(?im)^\s*(Events\s*Lost|Buffers\s*Lost)\s*:\s*([0-9]+)\s*$', summary):
+    for key, value in re.findall(r'(?im)^\s*(?:Total\s+)?(Events\s*Lost|Buffers\s*Lost)(?:\s*:\s*|\s+)([0-9]+)\s*$', summary):
         key = re.sub(r'\s+', '', key).lower()
         if key in losses:
             raise ValueError('ambiguous trace-loss summary')
         losses[key] = number(value)
+    counters = final_loss_counters(loss_record, session) if loss_record is not None else {}
+    if counters and 'eventslost' in losses and losses['eventslost'] != counters['events_lost']:
+        raise ValueError('conflicting event loss counters')
+    if counters and losses.get('bufferslost', 0) and not (
+            counters['log_buffers_lost'] or counters['real_time_buffers_lost']):
+        raise ValueError('conflicting buffer loss counters')
     return dict(provider=PROVIDER, server_pids=sorted(pids), events=records,
-                loss_counts=losses,
-                loss_verified=set(losses) == {'eventslost', 'bufferslost'} and not any(losses.values()),
+                summary_loss_counts=losses, loss_counts=counters,
+                loss_source=loss_record['source'] if loss_record is not None else None,
+                loss_verified=bool(counters) and not any(counters[key] for key in
+                    ('events_lost', 'log_buffers_lost', 'real_time_buffers_lost')),
                 interpretation='Metadata only; missing/lost events or clock discontinuity invalidate timing conclusions.')
 
 
@@ -203,13 +236,21 @@ def main():
     parser.add_argument('--summary', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--describe-schema', action='store_true')
+    parser.add_argument('--loss-counters', type=Path)
+    parser.add_argument('--session')
     args = parser.parse_args()
+    if bool(args.loss_counters) != bool(args.session):
+        parser.error('--loss-counters and --session must be supplied together')
     receipt = json.loads(args.receipt.read_text(encoding='utf-8'))
     if args.describe_schema:
         print(json.dumps(describe_schema(args.trace, receipt), sort_keys=True), flush=True)
     raw_summary = args.summary.read_bytes()
+    loss_record = (json.loads(args.loss_counters.read_text(encoding='utf-8-sig'),
+                              object_pairs_hook=unique_loss_fields)
+                   if args.loss_counters else None)
     report = metadata(args.trace, receipt,
-                      raw_summary.decode('utf-16' if raw_summary.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig'))
+                      raw_summary.decode('utf-16' if raw_summary.startswith((b'\xff\xfe', b'\xfe\xff')) else 'utf-8-sig'),
+                      loss_record, args.session)
     with args.output.open('x', encoding='utf-8') as output:
         output.write(json.dumps(report, indent=2) + '\n')
 

@@ -182,7 +182,7 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         self.assertEqual({row['pid'] for row in report['events']}, {101, 102})
         self.assertEqual([row['data']['BufferLength'] for row in report['events'] if 'BufferLength' in row['data']], [123, 456])
         self.assertNotEqual(report['events'][0]['endpoint_id'], report['events'][2]['endpoint_id'])
-        self.assertTrue(report['loss_verified'])
+        self.assertFalse(report['loss_verified'])  # Summary text alone has no native provenance.
         self.assertFalse(export(summary=canary)['loss_verified'])
         self.assertFalse(export(summary='Events Lost: 1\nBuffers Lost: 0')['loss_verified'])
         # Public AFD XML uses padded integers; synthetic cases, not runner fixtures.
@@ -421,7 +421,37 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             {'EnterExit': 0, 'BufferCount': 1, 'BufferLength': 4096, 'Status': 0})
         report = winsock.metadata(io.BytesIO(winsock.ET.tostring(root)), receipt,
                                   'Events Lost: 0\nBuffers Lost: 0\n')
-        self.assertTrue(report['loss_verified'])
+        self.assertFalse(report['loss_verified'])
+        # Synthetic records exercise validation only; native SDK execution is a separate gate.
+        session = 'symvault-write-123-1'
+        counters = dict(source='ControlTraceW(EVENT_TRACE_CONTROL_STOP)', session=session,
+                        session_stopped=True, events_lost=0, log_buffers_lost=0,
+                        real_time_buffers_lost=0, buffers_written=4)
+        def measured(record=counters, summary='Total events lost 0\n'):
+            return winsock.metadata(io.BytesIO(winsock.ET.tostring(root)), receipt,
+                                    summary, record, session)
+        self.assertTrue(measured()['loss_verified'])
+        self.assertEqual(measured()['loss_counts']['buffers_written'], 4)
+        for key in ('events_lost', 'log_buffers_lost', 'real_time_buffers_lost'):
+            self.assertFalse(measured(dict(counters, **{key: 1}), '')['loss_verified'])
+        for key in counters:
+            incomplete = dict(counters)
+            del incomplete[key]
+            with self.assertRaises(ValueError):
+                measured(incomplete)
+        for changes in ({'session': 'symvault-write-124-1'}, {'session_stopped': 1},
+                        {'source': 'summary'}, {'events_lost': True}, {'events_lost': -1},
+                        {'log_buffers_lost': 1 << 32}, {'buffers_written': 0},
+                        {'real_time_buffers_lost': '0'}, {'private_payload': 'canary'}):
+            with self.assertRaises(ValueError):
+                measured(dict(counters, **changes))
+        for summary in ('Total events lost 1\n', 'Buffers Lost: 1\n',
+                        'Events Lost: 0\nEvents Lost: 1\n'):
+            with self.assertRaises(ValueError):
+                measured(summary=summary)
+        with self.assertRaisesRegex(ValueError, 'duplicate native loss field'):
+            winsock.json.loads('{"events_lost":0,"events_lost":1}',
+                               object_pairs_hook=winsock.unique_loss_fields)
         self.assertEqual({event['pid'] for event in report['events']}, {101, 102})
         self.assertEqual(len(report['events']), 5)
         self.assertEqual([event['descriptor']['EventID'] for event in report['events']],
@@ -447,6 +477,19 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                               '--trace', trace, '--receipt', receipt_path,
                               '--summary', summary_path, '--output', output])
             self.assertEqual(contract.json.loads(output.read_text(encoding='utf-8')), report)
+            loss_path = base / 'loss.json'
+            loss_path.write_text(contract.json.dumps(counters), encoding='utf-8-sig')
+            native_output = base / 'native-metadata.json'
+            command = [contract.sys.executable, contract.Path(winsock.__file__),
+                       '--trace', trace, '--receipt', receipt_path, '--summary', summary_path,
+                       '--loss-counters', loss_path, '--session', session, '--output', native_output]
+            contract.checked(command)
+            self.assertTrue(contract.json.loads(native_output.read_text())['loss_verified'])
+            loss_path.write_text('{"events_lost":0,"events_lost":1}', encoding='utf-8')
+            rejected = base / 'invalid-loss.json'
+            with self.assertRaisesRegex(RuntimeError, 'duplicate native loss field'):
+                contract.checked(command[:-1] + [rejected])
+            self.assertFalse(rejected.exists())
 
 
 if __name__ == '__main__':

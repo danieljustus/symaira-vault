@@ -21,9 +21,14 @@ on:
       - 'scripts/rust-port/http_write_contract.py'
       - 'scripts/rust-port/test_http_write_contract.py'
       - 'scripts/rust-port/http_winsock_metadata.py'
+      - 'scripts/rust-port/http_winsock_stop.cpp'
       - 'scripts/rust-port/http_oauth*'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/mcp_process_contract.py'
+      - 'scripts/rust-port/oracle_build.py'
+      - 'scripts/rust-port/test_oracle_build.py'
+      - 'scripts/rust-port/cmd/oraclebuild/**'
+      - 'scripts/rust-port/internal/diff/**'
       - 'docs/adr/0027-absolute-http-write-deadlines.md'
   workflow_dispatch:
 
@@ -78,6 +83,16 @@ jobs:
           python-version: '3.13'
       - name: Install pinned Rust
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Verify owned compiler process trees and build the oracle runner
+        run: |
+          set -euo pipefail
+          mkdir -p target
+          go test -count=1 -v ./scripts/rust-port/internal/diff > target/native-oracle-process-tests.txt 2>&1 || { cat target/native-oracle-process-tests.txt; exit 1; }
+          cat target/native-oracle-process-tests.txt
+          runner=target/oraclebuild
+          if [[ "$RUNNER_OS" == "Windows" ]]; then runner+=.exe; fi
+          go build -trimpath -o "$runner" ./scripts/rust-port/cmd/oraclebuild
+          python3 -B scripts/rust-port/test_oracle_build.py
       - name: Test owning runtime and CLI assembly
         run: |
           set -euo pipefail
@@ -106,6 +121,16 @@ jobs:
           OWNER
           cargo test -p symvault-cli --test mcp_commands_contract --locked cli_runtime_executes_source_bound_api_template_fixture
           cargo build -p symvault-cli --bin symvault --locked
+      - name: Build SDK-native stopped-session counter reader
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vcvars = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find 'VC\Auxiliary\Build\vcvars64.bat'
+          if ($LASTEXITCODE -ne 0 -or -not $vcvars -or -not (Test-Path $vcvars)) { throw 'MSVC SDK environment unavailable' }
+          $build = 'call "{0}" && cl.exe /nologo /std:c++17 /W4 /WX /EHsc scripts\rust-port\http_winsock_stop.cpp /Fotarget\http-winsock-stop.obj /Fetarget\http-winsock-stop.exe /link advapi32.lib' -f $vcvars
+          & cmd.exe /d /c $build
+          if ($LASTEXITCODE -ne 0) { throw 'Native counter reader build failed' }
       - name: Start bounded Windows Winsock boundary observation
         id: winsock_trace
         if: matrix.os == 'windows-latest'
@@ -161,14 +186,16 @@ jobs:
         shell: pwsh
         run: |
           $session = "symvault-write-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
-          logman stop -ets $session
-          if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW session stop failed' }
+          & target/http-winsock-stop.exe $session | Out-File -Encoding utf8 target/native-winsock-loss.json
+          if ($LASTEXITCODE -ne 0) { throw 'Native stopped-session counters unavailable' }
           $traces = @(Get-ChildItem target/native-winsock*.etl)
           if ($traces.Count -ne 1) { throw 'Expected exactly one bounded Winsock ETL file' }
           tracerpt $traces[0].FullName -y -of XML -o target/native-winsock.xml -summary target/native-winsock-summary.txt
           if ($LASTEXITCODE -ne 0) { throw 'Winsock ETW decode failed' }
-          python3 scripts/rust-port/http_winsock_metadata.py --trace target/native-winsock.xml --receipt target/native-http-write.json --summary target/native-winsock-summary.txt --output target/native-winsock-metadata.json --describe-schema > target/native-winsock-schema.json
+          python3 scripts/rust-port/http_winsock_metadata.py --trace target/native-winsock.xml --receipt target/native-http-write.json --summary target/native-winsock-summary.txt --loss-counters target/native-winsock-loss.json --session $session --output target/native-winsock-metadata.json --describe-schema > target/native-winsock-schema.json
           if ($LASTEXITCODE -ne 0) { throw 'Winsock metadata privacy filter failed' }
+          python3 -c "import json; from pathlib import Path; assert json.loads(Path('target/native-winsock-metadata.json').read_text())['loss_verified'], 'native trace loss is not verified'"
+          if ($LASTEXITCODE -ne 0) { throw 'Native trace loss gate failed' }
       - name: Retain complete actual native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -178,6 +205,8 @@ jobs:
             target/native-http-write.json
             target/native-write-tests.txt
             target/native-write-cli-owner.txt
+            target/native-oracle-process-tests.txt
             target/native-winsock-metadata.json
             target/native-winsock-schema.json
+            target/native-winsock-loss.json
           if-no-files-found: error

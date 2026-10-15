@@ -25,6 +25,7 @@ from http_process_contract import SECRET, request
 from http_tls_contract import IDENTITY, NativeServer, context, exchange as tls_exchange
 from http_head_contract import exchange as tcp_exchange
 from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from oracle_build import build_go, remove_oracle_worktree
 
 PROFILES=[('tcp-five','5s',None),('tcp-short','1s',None),
           ('tls12-short','1s',ssl.TLSVersion.TLSv1_2),('tls13-short','1s',ssl.TLSVersion.TLSv1_3),
@@ -269,7 +270,8 @@ def main():
                     helper=tree/'scripts/rust-port/cmd'/name;helper.mkdir();(helper/'main.go').write_bytes(source)
                 suffix='.exe' if os.name=='nt' else ''
                 go,seed,identity=[base/(name+suffix) for name in ['go-cli','go-seed','go-identity']]
-                for binary,package in [(go,'.'),(seed,'./scripts/rust-port/cmd/httpwriteseed'),(identity,'./scripts/rust-port/cmd/httpwriteidentity')]:checked(['go','build','-trimpath','-buildvcs=false','-o',binary,package],tree)
+                builds=receipt.setdefault('oracle_builds',[])
+                for binary,package in [(go,'.'),(seed,'./scripts/rust-port/cmd/httpwriteseed'),(identity,'./scripts/rust-port/cmd/httpwriteidentity')]:build_go(tree,binary,package,builds)
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),identity_binary_sha256=hashlib.sha256(identity.read_bytes()).hexdigest())
                 identities=base/'identities';checked([identity,'--root',identities],base)
                 identity_paths=sorted(p.name for p in identities.iterdir());receipt['identity_inventory']=inventory(identity_paths,identities)
@@ -320,7 +322,11 @@ def main():
                 assert hashlib.sha256(rust.read_bytes()).hexdigest()==receipt['rust_binary_sha256']
                 receipt['candidate_worktree_clean_at_end']=not checked(['git','status','--porcelain=v1']).strip();assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
                 receipt['passed']=True
-            finally:checked(['git','worktree','remove','--force',tree])
+            finally:remove_oracle_worktree(tree,receipt,checked)
+    except BaseException as error:
+        receipt['passed']=False
+        receipt.setdefault('primary_failure',{'type':type(error).__name__,'message':str(error)[-2000:]})
+        raise
     finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f'PASS: fifteen runtime response pairs, five admitted-body write controls, two progressing TLS handshakes and one progressing output control per implementation on {platform.system()}')
 

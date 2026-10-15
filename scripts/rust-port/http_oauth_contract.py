@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 sys.dont_write_bytecode = True
 from http_process_contract import ProcessCapture, SECRET, exchange, request
 from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from oracle_build import build_go, remove_oracle_worktree
 
 PROBE = ROOT / 'scripts/rust-port/http_oauth_seed.go.txt'
 PASSPHRASE = 'correct horse battery staple'
@@ -441,7 +442,7 @@ def main():
     paths = sorted(p for p in checked(['git', 'ls-files', '--cached', '--others', '--exclude-standard']).decode().splitlines()
                    if p.startswith(('crates/', 'third_party/', 'testdata/', 'internal/mcp/apitemplates/builtin/', 'scripts/rust-port/'))
                    or p in {'Cargo.toml', 'Cargo.lock', '.gitattributes', '.github/workflows/rust-http-oauth.yml'})
-    result = dict(passed=False, candidate_commit=checked(['git', 'rev-parse', 'HEAD']).decode().strip(), candidate_worktree_clean=clean,
+    result: dict = dict(passed=False, candidate_commit=checked(['git', 'rev-parse', 'HEAD']).decode().strip(), candidate_worktree_clean=clean,
                   candidate_source_files=paths, candidate_source_digest=inventory(paths, ROOT), oracle_commit=ORACLE,
                   native_os=platform.system(), architecture=platform.machine(), rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),
                   driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), seed_probe_sha256=hashlib.sha256(PROBE.read_bytes()).hexdigest(),
@@ -464,8 +465,9 @@ def main():
                 (helper / 'main.go').write_bytes(PROBE.read_bytes())
                 suffix = '.exe' if os.name == 'nt' else ''
                 go, seed = base / ('go-cli' + suffix), base / ('go-seed' + suffix)
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], tree)
-                checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', seed, './scripts/rust-port/cmd/httpoauthseed'], tree)
+                builds = result.setdefault('oracle_builds', [])
+                build_go(tree, go, '.', builds)
+                build_go(tree, seed, './scripts/rust-port/cmd/httpoauthseed', builds)
                 result.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(), seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 seed_home = base / 'seed'
                 seed_home.mkdir()
@@ -515,7 +517,11 @@ def main():
                 assert result['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
                 result['passed'] = True
             finally:
-                checked(['git', 'worktree', 'remove', '--force', tree])
+                remove_oracle_worktree(tree, result, checked)
+    except BaseException as error:
+        result['passed'] = False
+        result.setdefault('primary_failure', {'type': type(error).__name__, 'message': str(error)[-2000:]})
+        raise
     finally:
         args.receipt.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
     print(f"PASS: {len(result['go']['rows']) + len(result['go']['ttl_rows'])} actual OAuth HTTP cases per implementation and three owned process lifetimes on {platform.system()}")
