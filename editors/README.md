@@ -66,6 +66,8 @@ With lazy.nvim:
 ```lua
 {
   dir = "/path/to/symvault/editors/nvim",
+  main = "symaira",
+  dependencies = { "nvim-lua/plenary.nvim" },
   opts = {},
   cmd = { "SymairaList", "SymairaGet", "SymairaCopy", "SymairaGenerate" }
 }
@@ -79,9 +81,10 @@ Commands:
 
 ## Security
 
-- All secret values are displayed as `***` in editor UI
-- Actual values are only retrieved via MCP `copy_to_clipboard` or `autotype` tools
-- Never stored in editor state or logs
+- Neovim entry details mask secret fields as `***`
+- Neovim insertion commands retrieve passwords/generated secrets and intentionally put plaintext in buffers
+- Inserted values can enter undo history, swap files, registers, or saved files
+- Clipboard operations use the MCP `copy_to_clipboard` tool
 
 ## Development
 
