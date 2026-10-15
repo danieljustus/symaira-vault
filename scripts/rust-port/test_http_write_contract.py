@@ -414,9 +414,9 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         add(1000, 1000, 10, '0x222', '0x888',
             dict(create, ProcessId=102, EnterExit=1))
         add(1003, 1003, 12, '0x111', '0x777',
-            {'EnterExit': 0, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
+            {'EnterExit': 0, 'Location': 0, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
         add(1003, 1003, 12, '0x111', '0x777',
-            {'EnterExit': 1, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
+            {'EnterExit': 1, 'Location': 4294967295, 'BufferCount': 1, 'BufferLength': 25613736, 'Status': 0})
         add(1003, 1003, 12, '0x222', '0x888',
             {'EnterExit': 0, 'BufferCount': 1, 'BufferLength': 4096, 'Status': 0})
         report = winsock.metadata(io.BytesIO(winsock.ET.tostring(root)), receipt,
@@ -463,6 +463,14 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
         self.assertNotEqual(go[0]['endpoint_id'], rust[0]['endpoint_id'])
         go_sends = [event for event in go if event['descriptor']['EventID'] == 1003]
         self.assertEqual([event['data']['EnterExit'] for event in go_sends], [0, 1])
+        self.assertEqual([event['data']['Location'] for event in go_sends], [0, 4294967295])
+        location = root.find('.//' + winsock.NAMESPACE + 'Data[@Name="Location"]')
+        assert location is not None
+        for invalid in ('-1', '4294967296', 'synthetic-private-location'):
+            location.text = invalid
+            with self.assertRaisesRegex(ValueError, '^unsupported Winsock integer field: Location$'):
+                measured()
+        location.text = '0'
         encoded = contract.json.dumps(report)
         for private_address in ('0x111', '0x222', '0x333', '0x777', '0x888', '0x999'):
             self.assertNotIn(private_address, encoded)

@@ -12,7 +12,7 @@ GUID = '{e53c6823-7bb8-44bb-90dc-3f86090d48a6}'
 NAMESPACE = '{http://schemas.microsoft.com/win/2004/08/events/event}'
 FIELDS = frozenset(('Process', 'Endpoint', 'UserModePid', 'ProcessId', 'SocketType', 'Protocol',
                     'BufferCount', 'BufferLength', 'Port', 'Error', 'Status', 'Reason',
-                    'EnterExit', 'BytesIndicated', 'BytesTransferred', 'BytesSent'))
+                    'EnterExit', 'Location', 'BytesIndicated', 'BytesTransferred', 'BytesSent'))
 
 
 def number(value):
@@ -76,6 +76,10 @@ def metadata(trace, receipt, summary, loss_record=None, session=None) -> dict:
                 raise ValueError('ambiguous Winsock metadata field')
             try:
                 data[key] = number(item.text)
+                # Modern AFD events distinguish instrumentation sites with a
+                # UInt32 Location, not a pointer or a language-level return time.
+                if key == 'Location' and not 0 <= data[key] < 1 << 32:
+                    raise ValueError('out-of-range AFD location')
             except ValueError:
                 # Only a fixed allowlisted field name, never the rejected value.
                 raise ValueError(f'unsupported Winsock integer field: {key}') from None
