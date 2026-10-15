@@ -64,8 +64,12 @@ def main():
         # rather than silently regenerating a mislabeled fixture.
         generator = ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(native_fixture), "--oracle-commit", "f195aab", "--oracle-release", "unreleased"]
         report["policy_generator"] = generator
-        checked(generator, root, env)
-        checked(generator + ["--check"], root, env)
+        # Set the test backend in the child environment before Go initializes
+        # packages that capture their keyring backend.
+        generator_env = env.copy()
+        generator_env["SYMVAULT_TEST_KEYRING"] = "memory"
+        checked(generator, root, generator_env)
+        checked(generator + ["--check"], root, generator_env)
         native_bytes = native_fixture.read_bytes()
         report["policy_fixture_sha256"] = hashlib.sha256(native_bytes).hexdigest()
         # The policy contract is defined over slash-separated logical paths and is

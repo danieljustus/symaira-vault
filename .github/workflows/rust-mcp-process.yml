@@ -74,7 +74,7 @@ jobs:
         with:
           go-version: '1.26.9'
       - name: Set up pinned Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
       - name: Install pinned Rust
@@ -134,10 +134,21 @@ jobs:
           set -euo pipefail
           cargo fmt --all --check
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
-          # Raw server stderr must not interleave with libtest's named verdicts.
-          cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr
-          cat target/native-mcp-tests.txt
-          cat target/native-mcp-tests.stderr
+          # Keep raw stderr separate from libtest's named verdicts.
+          if cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr.txt; then
+            cargo_test_status=0
+          else
+            cargo_test_status=$?
+          fi
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.stdout.write(Path('target/native-mcp-tests.txt').read_text())
+          sys.stderr.write(Path('target/native-mcp-tests.stderr.txt').read_text())
+          PY
+          if [[ "$cargo_test_status" -ne 0 ]]; then
+            exit "$cargo_test_status"
+          fi
           python3 - <<'PY'
           import os, re
           from pathlib import Path
@@ -207,7 +218,7 @@ jobs:
           path: |
             target/native-mcp-process.json
             target/native-mcp-tests.txt
-            target/native-mcp-tests.stderr
+            target/native-mcp-tests.stderr.txt
             target/native-mcp-cli-tests.txt
             target/native-mcp-cli-tests.stderr
             target/mcp-fixture-evidence/

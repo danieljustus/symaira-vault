@@ -1,6 +1,6 @@
-local auth = require("symvault.auth")
-local config = require("symvault.config")
-local client = require("symvault.client")
+local auth = require("symaira.auth")
+local config = require("symaira.config")
+local client = require("symaira.client")
 
 local M = {}
 
@@ -52,9 +52,15 @@ function M.check()
   end
 
   -- Test server connectivity (async - reports after delay)
-  client.health(function(health_status)
-    if health_status then
+  if not rawget(vim.fn, "SymairaCurlGet") then
+    warn("Run require('symaira').setup() before testing server connectivity")
+    return
+  end
+  client.health(function(err, health_data)
+    if not err and health_data then
       ok("MCP server is reachable and healthy")
+    elseif err then
+      error("MCP server health check failed: " .. tostring(err))
     end
   end)
 end
