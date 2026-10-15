@@ -191,10 +191,10 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "0b2567b6d0faa10ef560f027a386ea261bfd98d5153fd054bce4e78a5751869b",
+    "source_hash": "2a563ff822e7a4dce25a73f2a548e96f2932c4a7b3f845759e4f8fbe141be456",
     "source_pin_digest": "32555195c08c2791272ae6a20af758cad0a7298118ff94d48cef9249d658bb55",
     "go_version": "go1.26.6",
-    "corekit_version": "v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "corekit_version": "v0.18.2",
     "generator_files": [
       "internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go",
       "internal/mcp/server/mcp_local_fixture_provenance_test.go",
@@ -203,7 +203,7 @@
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "f7c6d86574a72c9610023ce5206c319e79e7081480484c3d54dbafc47e81aab7"
+    "generator_hash": "a573d1d46ce239bf9038adacc9799e1178df4f3db07b430c4e3bd45c375b035d"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-copy-clipboard-fixture",

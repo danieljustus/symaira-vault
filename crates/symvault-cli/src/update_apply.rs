@@ -647,6 +647,77 @@ mod tests {
     use std::io::Write;
 
     #[test]
+    fn interrupted_download_rejects_partial_archive() {
+        use std::net::TcpListener;
+        use std::time::Instant;
+
+        let client = reqwest::blocking::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let url = reqwest::Url::parse(&format!("http://{}/asset", listener.local_addr().unwrap()))
+            .unwrap();
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "download never connected");
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("accept download: {error}"),
+                }
+            };
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            stream
+                .set_write_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0; 4096];
+            assert!(stream.read(&mut request).unwrap() > 0);
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\npartial",
+                )
+                .unwrap();
+        });
+        let asset = CachedAsset {
+            name: "symvault.tar.gz".into(),
+            browser_download_url: url.to_string(),
+            size: 100,
+        };
+        // Downloads live only in memory; extraction/staging must not receive a partial body.
+        let result = download_hashed(&client, &asset, &url);
+        server.join().unwrap();
+        let error = result.unwrap_err();
+        assert!(
+            error.contains("read asset body") || error.contains("incomplete download"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn failed_extraction_removes_staging_and_preserves_installed_binary() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("symvault");
+        fs::write(&target, b"old binary").unwrap();
+        assert!(
+            extract_binary(b"broken archive", "symvault.tar.gz", "symvault", dir.path()).is_err()
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"old binary");
+        let entries: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, [target.file_name().unwrap()]);
+    }
+
+    #[test]
     fn checksum_parser_matches_goreleaser_lines_and_ignores_noise() {
         let sums = parse_checksums(b"# release\n0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  symvault_linux_amd64.tar.gz\ninvalid line with extras\n").unwrap();
         assert_eq!(
@@ -1057,11 +1128,14 @@ mod tests {
         );
         let go_mod = fs::read_to_string(root.join("go.mod")).unwrap();
         assert!(go_mod.contains(&fixture.oracle.corekit_pin));
-        assert_eq!(fixture.oracle.corekit_revision.len(), 12);
-        assert_eq!(fixture.oracle.corekit_revision, "f3d3eb79b9b1");
+        assert_eq!(fixture.oracle.corekit_revision.len(), 40);
+        assert_eq!(
+            fixture.oracle.corekit_revision,
+            "98aed77ceeaba5a5d2fc4668acac50a073e55d99"
+        );
         assert_eq!(
             fixture.oracle.corekit_source_digest,
-            "f17ed1f441ab19902dac8f63f7850f734bcac0c28ca51a5fc022698e2a23acbd"
+            "3580bee12d7e912129adbc2b9150bfd2458816828c25f047ec009b342848d832"
         );
         assert_eq!(
             fixture.oracle.corekit_source_files,
@@ -1071,8 +1145,11 @@ mod tests {
                 "updatecheck/cosign/cosign.go"
             ]
         );
-        assert_eq!(fixture.cases.len(), 3);
+        assert_eq!(fixture.cases.len(), 4);
         assert!(fixture.cases.iter().all(|case| !case.id.is_empty()));
+        assert!(fixture.cases.iter().any(|case| case.go_test
+            == "TestCancelledDownloadClosesBeforeRemovingStagingFile"
+            && case.expected == "cancelled partial download leaves only the unchanged old binary"));
         assert!(fixture.cases.iter().any(|case| case.go_test
             == "TestAtomicSwapRollsBackOnFailedRename"
             && case.expected == "old binary restored; backup removed"));

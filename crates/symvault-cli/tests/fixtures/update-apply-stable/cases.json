@@ -3,7 +3,7 @@
     "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
     "binary": "go build with main.version set by ldflags",
     "go_version": "go1.26.6",
-    "captured": "2026-10-09",
+    "captured": "2026-10-15",
     "source_files": [
       "main.go",
       "cmd/admin/update.go",
@@ -13,15 +13,16 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "677d08d808c061024911081d0ebb9dce97acdaac541d7a42a19baedcb5bf99eb",
-    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "source_digest": "199590e047774ebb011fde3ca5790ccd4f9739b0743b62e5871815524703cfa6",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
-    "generator_digest": "767fb3635dc92fa966eaaa5f7180b1fa92fe08ae92cc1bcd1ecc8e14ddd20a50",
+    "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
     "generated_on": "darwin",
-    "source_pin_digest": "e23da33a4a0019bb0c6c56e4561d1b28b8a5cd6ab9f87754205543a9bcb0845d"
+    "source_pin_digest": "e23da33a4a0019bb0c6c56e4561d1b28b8a5cd6ab9f87754205543a9bcb0845d",
+    "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
   "cases": [
     {
