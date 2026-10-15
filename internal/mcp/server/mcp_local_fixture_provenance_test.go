@@ -12,7 +12,7 @@ import (
 )
 
 const localMCPOracleGoVersion = "go1.26.6"
-const localMCPOracleCorekitVersion = "v0.17.1-0.20260904101640-f3d3eb79b9b1"
+const localMCPOracleCorekitVersion = "v0.18.2"
 
 func localMCPOracleSourceFiles(files []string) []string {
 	return slices.DeleteFunc(slices.Clone(files), func(name string) bool {

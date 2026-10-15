@@ -354,9 +354,8 @@ fn progressing_api_body_still_reaches_absolute_deadline() {
             match stream.read(&mut [0u8]) {
                 Ok(0) => return sent,
                 // Dropping a response while unread body bytes arrive can
-                // close TCP with RST rather than FIN. Both prove that the
-                // owned connection has ended; Windows may classify the reset
-                // as ConnectionAborted (10053). A live idle socket does not.
+                // reset or abort TCP rather than sending FIN. All three prove
+                // the owned connection ended; a live idle socket does not.
                 Err(error)
                     if matches!(
                         error.kind(),

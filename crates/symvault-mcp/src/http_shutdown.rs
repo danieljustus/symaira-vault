@@ -303,7 +303,7 @@ mod tests {
                     error.kind(),
                     io::ErrorKind::ConnectionReset | io::ErrorKind::ConnectionAborted
                 ) => {}
-            outcome => panic!("expected EOF or terminal peer error, not timeout/data: {outcome:?}"),
+            outcome => panic!("expected EOF or peer reset/abort, not timeout/data: {outcome:?}"),
         }
         assert!(
             server

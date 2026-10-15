@@ -7,8 +7,8 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "b00a385b2ebb617a9c0e3c07b6a794dd188bdb6f216012a9b12d895dea898e4c",
-    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1",
+    "source_digest": "a2b7e2bc519b349f7def8839262e0f47b8e750108fddd3d21708ef0d62474b24",
+    "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "go_tests": [
       "TestCheckerReportsAvailableUpdate",
       "TestCheckerReportsUpToDate",
@@ -24,10 +24,11 @@
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
-    "generator_digest": "767fb3635dc92fa966eaaa5f7180b1fa92fe08ae92cc1bcd1ecc8e14ddd20a50",
+    "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
     "generated_on": "darwin",
-    "captured": "2026-10-09",
-    "source_pin_digest": "4e54346eb7f33f5a06b6408e747ae55269dffca3e37ff07c3b61673acacb5e2c"
+    "captured": "2026-10-15",
+    "source_pin_digest": "4e54346eb7f33f5a06b6408e747ae55269dffca3e37ff07c3b61673acacb5e2c",
+    "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
   "cases": [
     {

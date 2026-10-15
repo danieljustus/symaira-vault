@@ -21,7 +21,7 @@ NAMES = ["update-apply-unsupported", "update-apply-stable",
          "update-check-cache", "update-check-http", "update-apply-transaction"]
 ORACLE_GO = "go1.26.6"
 COREKIT = "github.com/danieljustus/symaira-corekit"
-COREKIT_VERSION = "v0.17.1-0.20260904101640-f3d3eb79b9b1"
+COREKIT_VERSION = "v0.18.2"
 
 HTTP_HELPER = r'''
 package main
@@ -107,6 +107,13 @@ def main():
     version = run(["go", "env", "GOVERSION"]).stdout.decode().strip()
     corekit_module = json.loads(run(["go", "list", "-mod=readonly", "-m", "-json", COREKIT]).stdout)
     check_build_identity(version, corekit_module)
+    run(["go", "mod", "verify"])
+    corekit_download = json.loads(run([
+        "go", "mod", "download", "-json", f"{COREKIT}@{COREKIT_VERSION}",
+    ]).stdout)
+    if (corekit_download["Sum"] != corekit_module["Sum"] or
+            corekit_download["Origin"]["Ref"] != f"refs/tags/{COREKIT_VERSION}"):
+        raise RuntimeError("CoreKit download identity differs from the selected release")
     if run(["go", "env", "GOWORK"]).stdout.decode().strip() not in {"", "off"}:
         raise RuntimeError("oracle capture must not use a Go workspace")
     generated_on = run(["go", "env", "GOOS"]).stdout.decode().strip()
@@ -182,20 +189,39 @@ def main():
         verify_tests(["./internal/update"], http_tests, test_env)
         fixtures["update-check-http"]["oracle"]["go_tests"] = http_tests
         transaction = fixtures["update-apply-transaction"]
+        cleanup_case = {
+            "id": "cancelled-download-removes-staging",
+            "go_test": "TestCancelledDownloadClosesBeforeRemovingStagingFile",
+            "expected": "cancelled partial download leaves only the unchanged old binary",
+        }
+        if not any(case["id"] == cleanup_case["id"] for case in transaction["cases"]):
+            transaction["cases"].append(cleanup_case)
         verify_tests(["github.com/danieljustus/symaira-corekit/updatecheck/updateapply",
                       "github.com/danieljustus/symaira-corekit/updatecheck/extract"],
                      [case["go_test"] for case in transaction["cases"]], test_env)
+        verify_tests([COREKIT + "/updatecheck"], [
+            "TestSecureClientRedirectRefusesHTTPDowngrade",
+            "TestPersistentCacheMatchesContractFixture",
+            "TestCheckFailureBehaviorMatchesContractFixture",
+        ], test_env)
         corekit = Path(corekit_module["Dir"])
         core_hash = hashlib.sha256()
         for name in transaction["oracle"]["corekit_source_files"]:
             core_hash.update(name.encode() + b"\0" + (corekit / name).read_bytes() + b"\0")
-        if core_hash.hexdigest() != transaction["oracle"]["corekit_source_digest"]:
+        if args.check and core_hash.hexdigest() != transaction["oracle"]["corekit_source_digest"]:
             raise RuntimeError("corekit transaction implementation changed")
+        transaction["oracle"]["corekit_source_digest"] = core_hash.hexdigest()
+        transaction["oracle"]["corekit_revision"] = corekit_download["Origin"]["Hash"]
 
     # Do not publish new provenance unless every actual observation above passes.
     outputs = {}
     for name, fixture in fixtures.items():
         oracle = fixture["oracle"]
+        oracle["corekit_pin"] = (
+            f"{COREKIT} {COREKIT_VERSION}" if " " in oracle["corekit_pin"]
+            else COREKIT_VERSION
+        )
+        oracle["corekit_sum"] = corekit_module["Sum"]
         oracle.update(commit=commit, go_version=version,
                       source_pin_digest=digest(source_pin_files(oracle["source_files"]), commit),
                       source_digest=digest(oracle["source_files"]),
