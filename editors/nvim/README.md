@@ -2,7 +2,7 @@
 
 Neovim plugin for [(Symaira Vault)](https://github.com/danieljustus/symaira-vault) — a modern, secure command-line password manager.
 
-Browse, search, copy, and insert secrets from your (Symaira Vault) vault without leaving Neovim. All secret values are masked as `***` in the UI.
+Browse, search, copy, and insert secrets from your (Symaira Vault) vault without leaving Neovim. Entry details mask secret fields as `***`; insertion commands put plaintext in buffers.
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ Browse, search, copy, and insert secrets from your (Symaira Vault) vault without
 ```lua
 {
   dir = "/path/to/symvault/editors/nvim",
+  main = "symaira",
   dependencies = { "nvim-lua/plenary.nvim" },
   cmd = { "SymairaList", "SymairaGet", "SymairaCopy", "SymairaGenerate", "SymairaFind", "SymairaGenerateTOTP" },
   opts = {},
@@ -31,7 +32,7 @@ use {
   "/path/to/symvault/editors/nvim",
   requires = { "nvim-lua/plenary.nvim" },
   config = function()
-    require("symvault").setup()
+    require("symaira").setup()
   end,
 }
 ```
@@ -41,13 +42,13 @@ use {
 ```lua
 -- Add to your init.lua
 vim.opt.runtimepath:append("/path/to/symvault/editors/nvim")
-require("symvault").setup()
+require("symaira").setup()
 ```
 
 ## Configuration
 
 ```lua
-require("symvault").setup({
+require("symaira").setup({
   base_url = "http://127.0.0.1:8080",  -- MCP server URL
   agent_name = "nvim",                  -- Agent identifier sent to server
   timeout_ms = 30000,                   -- HTTP request timeout
@@ -69,7 +70,7 @@ require("symvault").setup({
 
 ## Health Check
 
-Run `:checkhealth symvault` to verify:
+Run `:checkhealth symaira` to verify:
 - MCP token is present
 - plenary.nvim is installed
 - Symaira Vault CLI is in PATH
@@ -84,17 +85,23 @@ Run `:checkhealth symvault` to verify:
 
 ## Security
 
-- All secret values displayed as `***` in the UI
-- Secrets never stored in Neovim state, registers, or logs
+- Entry details mask secret fields as `***`
+- Password and TOTP insertion intentionally puts plaintext in buffers; values can enter undo history, swap files, registers, or saved files
 - Clipboard operations go through `copy_to_clipboard` MCP tool (server-side auto-clear)
 - Token read from `~/.symvault/mcp-token` each session; never cached in plugin state
 
 ## Development
 
+Run `PLENARY_PATH=/path/to/plenary.nvim ./editors/nvim/smoke.sh` from the repository root. This real headless loader/setup check uses disposable HOME/XDG directories beneath `TMPDIR` and makes no vault or network requests. It requires Neovim in `PATH` (or `NVIM_BIN`) and the existing plenary dependency; no machine-specific launcher is required.
+
+The same smoke checks constructed malformed/non-object responses fail closed
+without opening a raw detail window, and a constructed valid entry still masks
+its secret field. These are UI regression controls, not live MCP acceptance.
+
 The plugin uses `plenary.curl` for HTTP and Lua's `vim.json` for JSON-RPC 2.0 encoding. Key modules:
 
 ```
-lua/symvault/
+lua/symaira/
   init.lua        -- Entry point, setup(), curl helper registration
   config.lua      -- Default configuration
   client.lua      -- JSON-RPC 2.0 client using plenary.curl

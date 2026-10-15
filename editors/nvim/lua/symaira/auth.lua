@@ -18,7 +18,7 @@ end
 --- Build auth headers for MCP HTTP requests.
 ---@return table Headers map.
 function M.build_headers()
-  local config = require("symvault.config")
+  local config = require("symaira.config")
   local token = M.read_token()
   return {
     ["Content-Type"] = "application/json",
