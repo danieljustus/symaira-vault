@@ -1,5 +1,5 @@
-local client = require("symvault.client")
-local masking = require("symvault.masking")
+local client = require("symaira.client")
+local masking = require("symaira.masking")
 
 local M = {}
 
@@ -104,7 +104,8 @@ function M.show_entry_detail(path)
       local masked = masking.mask_entry(parsed)
       masked_text = vim.json.encode(masked)
     else
-      masked_text = text
+      vim.notify("Symaira: Invalid entry details; response was not displayed", vim.log.levels.ERROR)
+      return
     end
 
     local buf = vim.api.nvim_create_buf(false, true)
