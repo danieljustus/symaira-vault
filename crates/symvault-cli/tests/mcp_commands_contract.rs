@@ -67,12 +67,15 @@ fn unix_platform_approval_pty_acceptance() {
         .expect("write synthetic entry");
 
     let executable = std::env::current_exe().expect("locate MCP test helper binary");
+    // Threaded libtest framing keeps the status prefix off protocol stdout.
+    // Each child still selects exactly one worker, regardless of suite policy.
     let mut worker = Command::new(&executable)
         .args([
             "--ignored",
             "--exact",
             "unix_platform_approval_stdio_worker",
             "--nocapture",
+            "--test-threads=2",
         ])
         .env("SYMVAULT_PTY_STDIO_WORKER", "1")
         .env("SYMVAULT_PTY_VAULT", &vault)
@@ -342,6 +345,7 @@ fn unix_platform_approval_pty_acceptance() {
             "--exact",
             "unix_platform_approval_stdio_worker",
             "--nocapture",
+            "--test-threads=2",
         ])
         .env("SYMVAULT_PTY_STDIO_WORKER", "1")
         .env("SYMVAULT_PTY_VAULT", &vault)
@@ -461,6 +465,7 @@ fn unix_platform_approval_pty_acceptance() {
             "--exact",
             "unix_platform_approval_stdio_worker",
             "--nocapture",
+            "--test-threads=2",
         ])
         .env("SYMVAULT_PTY_STDIO_WORKER", "1")
         .env("SYMVAULT_PTY_VAULT", &vault)
@@ -535,6 +540,7 @@ fn unix_platform_approval_pty_acceptance() {
             "--exact",
             "unix_platform_approval_stdio_worker",
             "--nocapture",
+            "--test-threads=2",
         ])
         .env("SYMVAULT_PTY_STDIO_WORKER", "1")
         .env("SYMVAULT_PTY_VAULT", &vault)
