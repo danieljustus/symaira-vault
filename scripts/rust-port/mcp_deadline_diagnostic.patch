@@ -1,0 +1,489 @@
+--- a/crates/symvault-mcp/src/broker.rs
++++ b/crates/symvault-mcp/src/broker.rs
+@@ -228,6 +228,10 @@
+     context: &RequestContext,
+     dns_server: Option<SocketAddr>,
+ ) -> Result<ApiResponse, String> {
++    #[cfg(test)]
++    let _call_trace = tests::PhaseOnDrop("execute_http_inner.exit");
++    #[cfg(test)]
++    tests::phase("execute_http_inner.enter");
+     if body.len() > MAX_BODY_BYTES {
+         return Err("request body too large".into());
+     }
+@@ -322,15 +326,41 @@
+         add_header_bytes(&mut total_header_bytes, size)?;
+     }
+ 
++    #[cfg(test)]
++    tests::phase("deadline.before");
+     let context = context.with_timeout(timeout);
++    #[cfg(test)]
++    tests::phase_deadline(context.diagnostic_deadline());
++    #[cfg(test)]
++    tests::phase("deadline.after");
+     context.check()?;
++    #[cfg(test)]
++    let _runtime_trace = tests::PhaseOnDrop("runtime.dropped");
++    #[cfg(test)]
++    tests::phase("runtime.before");
++    #[cfg(test)]
++    tests::scheduler_snapshot("runtime.before");
+     let runtime = tokio::runtime::Builder::new_current_thread()
+         .enable_all()
+         .build()
+         .map_err(|_| "cannot configure upstream runtime")?;
++    #[cfg(test)]
++    tests::phase("runtime.after");
++    #[cfg(test)]
++    tests::scheduler_snapshot("runtime.after");
+     let (status, raw_response_headers, mut response_body) = runtime.block_on(async {
++        #[cfg(test)]
++        let _block_trace = tests::PhaseOnDrop("block_on.future_dropped");
++        #[cfg(test)]
++        tests::phase("resolve.before");
+         let addresses =
+             resolve_addresses(&target, template.allow_private, &context, dns_server).await?;
++        #[cfg(test)]
++        tests::phase("resolve.after");
++        #[cfg(test)]
++        tests::phase("client.before");
++        #[cfg(test)]
++        tests::scheduler_snapshot("client.before");
+         let mut builder = reqwest::Client::builder()
+             .timeout(timeout)
+             .connect_timeout(timeout.min(Duration::from_secs(10)))
+@@ -345,18 +375,25 @@
+         let client = builder
+             .build()
+             .map_err(|_| "cannot configure upstream connection")?;
++        #[cfg(test)]
++        tests::phase("client.after");
++        #[cfg(test)]
++        tests::scheduler_snapshot("client.after");
+         let method = Method::from_bytes(method.as_bytes()).map_err(|_| "invalid request method")?;
+-        let mut response = context
+-            .wait(async {
+-                client
+-                    .request(method, target.url)
+-                    .headers(request_headers)
+-                    .body(body.to_vec())
+-                    .send()
+-                    .await
+-                    .map_err(network_error)
+-            })
+-            .await?;
++        let pending = async {
++            client
++                .request(method, target.url)
++                .headers(request_headers)
++                .body(body.to_vec())
++                .send()
++                .await
++                .map_err(network_error)
++        };
++        #[cfg(test)]
++        let pending = tests::trace_polls("send.poll", pending);
++        let mut response = context.wait(pending).await?;
++        #[cfg(test)]
++        tests::phase("send.headers_received");
+         let status = response.status().as_u16();
+         let raw_headers = response.headers().clone();
+         let header_bytes = raw_headers
+@@ -369,10 +406,15 @@
+             return Err("upstream response headers too large".into());
+         }
+         let mut bytes = Vec::new();
+-        while let Some(chunk) = context
+-            .wait(async { response.chunk().await.map_err(network_error) })
+-            .await?
+-        {
++        loop {
++            let pending = async { response.chunk().await.map_err(network_error) };
++            #[cfg(test)]
++            let pending = tests::trace_polls("body.poll", pending);
++            let Some(chunk) = context.wait(pending).await? else {
++                break;
++            };
++            #[cfg(test)]
++            tests::phase("body.chunk_received");
+             let remaining = (response_limit + 1).saturating_sub(bytes.len());
+             bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+             if bytes.len() > response_limit {
+@@ -864,7 +906,7 @@
+ }
+ 
+ #[cfg(test)]
+-mod tests {
++pub(crate) mod tests {
+     use super::*;
+     use base64::{Engine, engine::general_purpose::STANDARD};
+     use std::{
+@@ -873,6 +915,145 @@
+         sync::Arc,
+         thread,
+     };
++
++    // Diagnostic only, derived from run261. Active only in the exact broker test.
++    type PhaseEvent = (&'static str, u128);
++    type SchedulerEvent = (&'static str, u128, Option<String>);
++
++    #[derive(Clone)]
++    struct DeadlineTrace {
++        started: std::time::Instant,
++        events: Arc<std::sync::Mutex<Vec<PhaseEvent>>>,
++        scheduler: Arc<std::sync::Mutex<Vec<SchedulerEvent>>>,
++        dropped: Arc<std::sync::atomic::AtomicUsize>,
++    }
++    thread_local! {
++        static DEADLINE_TRACE: std::cell::RefCell<Option<DeadlineTrace>> = const { std::cell::RefCell::new(None) };
++    }
++    pub(crate) fn phase(name: &'static str) {
++        DEADLINE_TRACE.with_borrow(|trace| {
++            if let Some(trace) = trace {
++                let now = trace.started.elapsed().as_nanos();
++                let mut events = trace.events.lock().unwrap_or_else(|e| e.into_inner());
++                if events.len() < 4096 {
++                    events.push((name, now));
++                } else {
++                    trace
++                        .dropped
++                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++                }
++            }
++        });
++    }
++    pub(crate) fn phase_deadline(deadline: Option<std::time::Instant>) {
++        DEADLINE_TRACE.with_borrow(|trace| {
++            if let (Some(trace), Some(deadline)) = (trace, deadline) {
++                let ns = deadline.saturating_duration_since(trace.started).as_nanos();
++                trace
++                    .events
++                    .lock()
++                    .unwrap_or_else(|e| e.into_inner())
++                    .push(("absolute_deadline.target", ns));
++            }
++        });
++    }
++    pub(super) fn scheduler_snapshot(name: &'static str) {
++        DEADLINE_TRACE.with_borrow(|trace| {
++            if let Some(trace) = trace {
++                let now = trace.started.elapsed().as_nanos();
++                // Linux schedstat: CPU runtime ns, runqueue wait ns, timeslices.
++                // No scheduler inference when procfs is unavailable; no fallback.
++                let raw = std::fs::read_to_string("/proc/thread-self/schedstat").ok();
++                trace
++                    .scheduler
++                    .lock()
++                    .unwrap_or_else(|e| e.into_inner())
++                    .push((name, now, raw));
++            }
++        });
++    }
++    pub(crate) struct PhaseOnDrop(pub(crate) &'static str);
++    impl Drop for PhaseOnDrop {
++        fn drop(&mut self) {
++            phase(self.0);
++        }
++    }
++    pub(super) async fn trace_polls<F: std::future::Future>(
++        name: &'static str,
++        future: F,
++    ) -> F::Output {
++        let mut future = std::pin::pin!(future);
++        std::future::poll_fn(|cx| {
++            phase(name);
++            let result = future.as_mut().poll(cx);
++            phase(if result.is_ready() {
++                "poll.ready"
++            } else {
++                "poll.pending"
++            });
++            result
++        })
++        .await
++    }
++    fn diagnostic_read_headers(
++        reader: &mut impl BufRead,
++        stop: &std::sync::atomic::AtomicBool,
++        deadline: std::time::Instant,
++    ) -> bool {
++        let mut line = String::new();
++        let mut header_bytes = 0usize;
++        while !stop.load(std::sync::atomic::Ordering::Acquire)
++            && std::time::Instant::now() < deadline
++        {
++            let previous = line.len();
++            let result = reader.read_line(&mut line);
++            // read_line may append a partial line before a transient error.
++            header_bytes += line.len() - previous;
++            if header_bytes > 16 * 1024 {
++                return false;
++            }
++            match result {
++                Ok(0) => return false,
++                Ok(_) => {
++                    if line == "\r\n" {
++                        return true;
++                    }
++                    line.clear();
++                }
++                Err(error)
++                    if matches!(
++                        error.kind(),
++                        std::io::ErrorKind::WouldBlock
++                            | std::io::ErrorKind::TimedOut
++                            | std::io::ErrorKind::Interrupted
++                    ) => {}
++                Err(_) => return false,
++            }
++        }
++        false
++    }
++    struct TraceSession(DeadlineTrace);
++    impl Drop for TraceSession {
++        fn drop(&mut self) {
++            phase("test.trace_end");
++            let events = self.0.events.lock().unwrap_or_else(|e| e.into_inner());
++            let scheduler = self.0.scheduler.lock().unwrap_or_else(|e| e.into_inner());
++            // Flushed after the timed call, including assertion-unwind paths.
++            eprintln!(
++                "DEADLINE_EVENTS {}",
++                serde_json::to_string(&*events).unwrap()
++            );
++            eprintln!(
++                "DEADLINE_SCHEDULER {}",
++                serde_json::to_string(&*scheduler).unwrap()
++            );
++            eprintln!(
++                "DEADLINE_DROPPED {}",
++                self.0.dropped.load(std::sync::atomic::Ordering::Relaxed)
++            );
++            DEADLINE_TRACE.set(None);
++        }
++    }
+ 
+     #[test]
+     fn loopback_transcript_injects_then_redacts_bearer() {
+@@ -1288,24 +1469,113 @@
+ 
+     #[test]
+     fn slow_response_cannot_extend_the_request_deadline() {
++        use std::sync::atomic::{AtomicBool, Ordering};
++        let trace = DeadlineTrace {
++            started: std::time::Instant::now(),
++            events: Arc::default(),
++            scheduler: Arc::default(),
++            dropped: Arc::default(),
++        };
++        DEADLINE_TRACE.set(Some(trace.clone()));
++        let _trace_session = TraceSession(trace.clone());
++        phase("test.start");
++        eprintln!(
++            "DEADLINE_CONTEXT os={} arch={} parallelism={:?} test_threads_env={:?}",
++            std::env::consts::OS,
++            std::env::consts::ARCH,
++            thread::available_parallelism(),
++            std::env::var("RUST_TEST_THREADS")
++        );
++        scheduler_snapshot("test.entry");
++        phase("listener.bind_before");
+         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+         let address = listener.local_addr().unwrap();
++        phase("listener.bound");
++        listener.set_nonblocking(true).unwrap();
++        let stopping = Arc::new(AtomicBool::new(false));
++        struct ServerCleanup(Arc<AtomicBool>, Option<thread::JoinHandle<()>>);
++        impl ServerCleanup {
++            fn finish(&mut self) -> bool {
++                let Some(server) = self.1.take() else {
++                    return true;
++                };
++                phase("server.cleanup_before");
++                self.0.store(true, Ordering::Release);
++                let until = std::time::Instant::now() + Duration::from_secs(3);
++                while !server.is_finished() && std::time::Instant::now() < until {
++                    thread::sleep(Duration::from_millis(1));
++                }
++                if !server.is_finished() {
++                    // Never join a live unbounded worker or call this a clean run.
++                    // The owning workflow's process deadline contains the process.
++                    phase("server.cleanup_timeout");
++                    return false;
++                }
++                let ok = server.join().is_ok();
++                phase(if ok {
++                    "server.joined"
++                } else {
++                    "server.panicked"
++                });
++                ok
++            }
++        }
++        impl Drop for ServerCleanup {
++            fn drop(&mut self) {
++                let _ = self.finish();
++            }
++        }
++        let stop = Arc::clone(&stopping);
++        let server_trace = trace.clone();
++        phase("server.spawn_before");
+         let server = thread::spawn(move || {
+-            let (mut stream, _) = listener.accept().unwrap();
++            DEADLINE_TRACE.set(Some(server_trace));
++            let _server_exit = PhaseOnDrop("server.exit");
++            phase("server.thread_enter");
++            scheduler_snapshot("server.entry");
++            phase("server.ready");
++            let deadline = std::time::Instant::now() + Duration::from_secs(2);
++            let (mut stream, _) = loop {
++                if stop.load(Ordering::Acquire) || std::time::Instant::now() >= deadline {
++                    phase("server.accept_cancelled");
++                    return;
++                }
++                match listener.accept() {
++                    Ok(pair) => break pair,
++                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
++                        thread::sleep(Duration::from_millis(1))
++                    }
++                    Err(_) => {
++                        phase("server.accept_error");
++                        return;
++                    }
++                }
++            };
++            phase("server.accepted");
++            stream
++                .set_read_timeout(Some(Duration::from_millis(50)))
++                .unwrap();
+             let mut reader = BufReader::new(stream.try_clone().unwrap());
+-            loop {
+-                let mut line = String::new();
+-                reader.read_line(&mut line).unwrap();
+-                if line == "\r\n" {
+-                    break;
+-                }
++            if !diagnostic_read_headers(&mut reader, &stop, deadline) {
++                phase("server.read_end");
++                return;
+             }
++            phase("server.request_read");
++            phase("server.prefix_before");
+             stream
+                 .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nx")
+                 .unwrap();
++            phase("server.prefix_written");
+             thread::sleep(Duration::from_millis(400));
++            phase("server.remainder_before");
+             let _ = stream.write_all(b"xxxxxxx");
++            phase("server.remainder_after");
++            scheduler_snapshot("server.exit");
+         });
++        // Registered immediately after spawn, before any subsequent fallible assertion.
++        let mut server = ServerCleanup(stopping, Some(server));
++        phase("server.spawn_after");
++        // Deliberately NO ready barrier or priming: observe original scheduling.
+         let template = ApiTemplate {
+             base_url: format!("http://{address}"),
+             allowed_endpoints: vec!["/safe/*".into()],
+@@ -1313,8 +1583,10 @@
+             default_headers: BTreeMap::new(),
+             allow_private: true,
+         };
++        scheduler_snapshot("test.call_before");
+         let started = std::time::Instant::now();
+-        let error = execute_http_with_timeout(
++        phase("test.call_before");
++        let result = execute_http_with_timeout(
+             &template,
+             "GET",
+             "/safe/item",
+@@ -1322,9 +1594,17 @@
+             b"",
+             None,
+             Duration::from_millis(150),
+-        )
+-        .unwrap_err();
++        );
+         let elapsed = started.elapsed();
++        phase("test.call_after");
++        scheduler_snapshot("test.call_after");
++        eprintln!(
++            "DEADLINE_RESULT elapsed_ns={} result={result:?}",
++            elapsed.as_nanos()
++        );
++        let server_ok = server.finish();
++        phase("test.server_cleanup_complete");
++        let error = result.unwrap_err();
+         assert!(matches!(
+             error.as_str(),
+             "upstream request timed out" | "upstream request failed"
+@@ -1334,6 +1614,8 @@
+             "{error}: {elapsed:?}"
+         );
+         assert!(elapsed < Duration::from_millis(500), "{error}: {elapsed:?}");
+-        server.join().unwrap();
+-    }
+-}
++        assert!(server_ok, "diagnostic server did not terminate cleanly");
++        // Phase reachability is evidence, NOT a prerequisite that hides a setup timeout.
++        // The packet classifier retains a strict failure or missing body as inconclusive.
++    }
++}
+--- a/crates/symvault-mcp/src/request_context.rs
++++ b/crates/symvault-mcp/src/request_context.rs
+@@ -16,6 +16,11 @@
+ }
+ 
+ impl RequestContext {
++    #[cfg(test)]
++    pub(crate) fn diagnostic_deadline(&self) -> Option<Instant> {
++        self.deadline
++    }
++
+     pub fn cancel(&self) {
+         self.cancelled.store(true, Ordering::Release);
+     }
+@@ -33,11 +38,15 @@
+ 
+     pub fn check(&self) -> Result<(), String> {
+         if self.cancelled.load(Ordering::Acquire) {
++            #[cfg(test)]
++            crate::broker::tests::phase("context.cancelled_return");
+             Err("upstream request cancelled".into())
+         } else if self
+             .deadline
+             .is_some_and(|deadline| Instant::now() >= deadline)
+         {
++            #[cfg(test)]
++            crate::broker::tests::phase("context.absolute_timeout_return");
+             Err("upstream request timed out".into())
+         } else {
+             Ok(())
+@@ -48,15 +57,25 @@
+         &self,
+         future: impl Future<Output = Result<T, String>>,
+     ) -> Result<T, String> {
++        #[cfg(test)]
++        let _wait_trace = crate::broker::tests::PhaseOnDrop("context.wait.return");
++        #[cfg(test)]
++        crate::broker::tests::phase("context.wait.enter");
+         let mut future = std::pin::pin!(future);
+         loop {
+             self.check()?;
+             match tokio::time::timeout(Duration::from_millis(10), &mut future).await {
+                 Ok(result) => {
++                    #[cfg(test)]
++                    crate::broker::tests::phase("context.future_ready");
+                     self.check()?;
+                     return result;
+                 }
+-                Err(_) => continue,
++                Err(_) => {
++                    #[cfg(test)]
++                    crate::broker::tests::phase("context.ten_ms_timer_elapsed");
++                    continue;
++                }
+             }
+         }
+     }
