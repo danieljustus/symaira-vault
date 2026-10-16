@@ -307,6 +307,41 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
                     self.assertEqual(observe.call_count, 1 if diagnostic else 2)
                     stream.setsockopt.assert_called_once_with(contract.socket.SOL_SOCKET, contract.socket.SO_RCVBUF, 4096)
 
+    def test_tls_output_requires_verified_handshake_and_real_peer_closure(self):
+        # Synthetic resource/error controls, not native backpressure evidence.
+        for failure in (None, ssl.SSLCertVerificationError(1, 'synthetic certificate'),
+                        ssl.SSLError(1, 'synthetic record error')):
+            raw, stream, tls = mock.MagicMock(), mock.MagicMock(), mock.MagicMock()
+            raw.__enter__.return_value = raw
+            stream.__enter__.return_value = stream
+            raw.getsockopt.return_value = 4096
+            stream.getpeercert.return_value = b'synthetic-public-certificate'
+            stream.version.return_value = 'TLSv1.3'
+            stream.recv.return_value = b''
+            tls.wrap_socket.return_value = stream
+            certificate_failure = isinstance(failure, ssl.SSLCertVerificationError)
+            if certificate_failure:
+                tls.wrap_socket.side_effect = failure
+            elif failure:
+                stream.recv.side_effect = failure
+            row = {}
+            with mock.patch.object(contract.socket, 'socket', return_value=raw), \
+                 mock.patch.object(contract, 'request', return_value=b'synthetic-request'), \
+                 mock.patch.object(contract, 'socket_observation', return_value={}), \
+                 mock.patch.object(contract.time, 'monotonic', return_value=0):
+                if failure:
+                    with self.assertRaises(type(failure)):
+                        contract.slow_output(1, {}, row, tls)
+                else:
+                    contract.slow_output(1, {}, row, tls)
+            raw.__exit__.assert_called_once()
+            tls.wrap_socket.assert_called_once_with(raw, server_hostname='localhost')
+            self.assertIs(row['peer_terminal_observed'], failure is None)
+            if not certificate_failure:
+                stream.__exit__.assert_called_once()
+                self.assertEqual(row['tls_version'], 'TLSv1.3')
+                self.assertEqual(row['server_certificate_sha256'], contract.hashlib.sha256(b'synthetic-public-certificate').hexdigest())
+
     def test_raw_tls_observer_requires_a_terminal_socket_outcome(self):
         outcomes = [
             (b'', 'eof'),

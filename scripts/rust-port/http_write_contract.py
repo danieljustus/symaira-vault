@@ -3,6 +3,7 @@
 import argparse
 import base64
 import ctypes
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -27,9 +28,10 @@ from http_head_contract import exchange as tcp_exchange
 from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
 from oracle_build import build_go, remove_oracle_worktree
 
+TLS_OUTPUT=('tls-output','30s',ssl.TLSVersion.TLSv1_3)
 PROFILES=[('tcp-five','5s',None),('tcp-short','1s',None),
           ('tls12-short','1s',ssl.TLSVersion.TLSv1_2),('tls13-short','1s',ssl.TLSVersion.TLSv1_3),
-          ('tcp-output','30s',None)]
+          TLS_OUTPUT,('tcp-output','30s',None)]
 
 
 def handshake_peer(port,tls,row):
@@ -101,7 +103,7 @@ def socket_observation(stream,started):
     return row
 
 
-def slow_output(port,tokens,row):
+def slow_output(port,tokens,row,tls=None):
     body=b'{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_entry_metadata","arguments":{"path":"public/bulk"}}}'
     data=request('/mcp',port,tokens,body=body)
     row.update(request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),
@@ -109,10 +111,16 @@ def slow_output(port,tokens,row):
                socket_observations=[],socket_observation_errors=[])
     observed=bytearray()
     observation_error=None
-    with socket.socket() as stream:
+    with ExitStack() as sockets:
+        stream=sockets.enter_context(socket.socket())
         stream.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,4096);stream.settimeout(.25)
         row['client_so_rcvbuf_before_connect']=stream.getsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF)
         stream.connect(('127.0.0.1',port))
+        if tls:
+            stream.settimeout(5)
+            stream=sockets.enter_context(tls.wrap_socket(stream,server_hostname='localhost'))
+            row.update(tls_version=stream.version(),server_certificate_sha256=hashlib.sha256(stream.getpeercert(binary_form=True)).hexdigest())
+            stream.settimeout(.25)
         row['request_start_wall_ns_before']=time.time_ns()
         started=time.monotonic()
         row['request_start_wall_ns_after']=time.time_ns()
@@ -213,7 +221,7 @@ def observe(binary,home,port,tokens,identities,profile,version,result):
     tls=context(identities,version) if version else None
     server=NativeServer(binary,home,port,identities,False,result['processes'],list(tokens.values())) if tls else Server(binary,home,port,result['processes'],list(tokens.values()))
     try:
-        if profile=='tcp-output':result['server_process_id']=server.child.pid
+        if profile in {'tcp-output','tls-output'}:result['server_process_id']=server.child.pid
         for name,body in [('initialize',INITIALIZE),('ping-before',PING)]:
             data=request('/mcp',port,tokens,body=body)
             row=dict(case=name,request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
@@ -221,8 +229,8 @@ def observe(binary,home,port,tokens,identities,profile,version,result):
             row['response'].update(tls_exchange(port,data,tls,row) if tls else tcp_exchange(port,data,row))
             assert row['response']['status_line']=='HTTP/1.1 200 OK'
         late_body(port,tokens,tls,result['late_body'])
-        if tls:handshake_peer(port,tls,result['handshake_peer'])
-        if profile=='tcp-output':slow_output(port,tokens,result['slow_output'])
+        if tls and profile!='tls-output':handshake_peer(port,tls,result['handshake_peer'])
+        if profile in {'tcp-output','tls-output'}:slow_output(port,tokens,result['slow_output'],tls)
         data=request('/mcp',port,tokens,body=PING)
         row=dict(case='ping-after',request_sha256=hashlib.sha256(data).hexdigest(),request_base64=base64.b64encode(data).decode(),response={})
         result['rows'].append(row);row['response'].update(tls_exchange(port,data,tls,row) if tls else tcp_exchange(port,data,row))
@@ -239,15 +247,18 @@ def main():
     parser.add_argument('--rust',type=Path,required=True)
     parser.add_argument('--receipt',type=Path,required=True)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
+    parser.add_argument('--tls-output-probe-only',action='store_true',help='Run only the additional TLS backpressure probe, not full HTTP acceptance')
     args=parser.parse_args()
+    profiles=[TLS_OUTPUT] if args.tls_output_probe_only else PROFILES
     clean=not checked(['git','status','--porcelain=v1']).strip();assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
     paths=sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
                  if p.startswith(('crates/','third_party/','testdata/','scripts/rust-port/','internal/mcp/apitemplates/builtin/'))
                  or p in {'Cargo.toml','Cargo.lock','.gitattributes','.github/workflows/rust-http-write.yml'})
-    receipt=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,
+    receipt: dict=dict(passed=False,candidate_commit=checked(['git','rev-parse','HEAD']).decode().strip(),candidate_worktree_clean=clean,
                  candidate_sources=inventory(paths,ROOT),native_os=platform.system(),architecture=platform.machine(),
                  rust_binary_sha256=hashlib.sha256(rust.read_bytes()).hexdigest(),oracle_commit=ORACLE,
+                 scope='tls-output-probe-only' if args.tls_output_probe_only else 'full',
                  go={},rust={},profiles={},differences=[],declared_differences=[])
     try:
         with tempfile.TemporaryDirectory(prefix='symvault-http-write-') as raw:
@@ -278,7 +289,7 @@ def main():
                 certificate_sha=hashlib.sha256(ssl.PEM_cert_to_DER_cert((identities/'server.pem').read_text())).hexdigest();receipt['server_certificate_sha256']=certificate_sha
                 with socket.socket() as selection:selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
                 receipt['port']=port
-                for profile,budget,version in PROFILES:
+                for profile,budget,version in profiles:
                     seed_home=base/('seed-'+profile);seed_home.mkdir()
                     tokens=json.loads(checked([seed,'--root',seed_home/'vault','--write-timeout',budget,'--secure='+('true' if version else 'false')],seed_home,isolated(seed_home)))
                     snapshot=vault_snapshot(seed_home/'vault');receipt['profiles'][profile]=dict(write_budget=budget,fixture_snapshot=snapshot)
@@ -286,7 +297,7 @@ def main():
                         home=base/(implementation+'-'+profile);home.mkdir();shutil.copytree(seed_home/'vault',home/'vault');assert vault_snapshot(home/'vault')==snapshot
                         result=dict(rows=[],processes=[],late_body={},handshake_peer={},slow_output={});receipt[implementation][profile]=result
                         observe(binary,home,port,tokens,identities,profile,version,result)
-                for profile,budget,version in PROFILES:
+                for profile,budget,version in profiles:
                     a,b=receipt['go'][profile],receipt['rust'][profile]
                     assert len(a['rows'])==len(b['rows'])==3
                     for left,right in zip(a['rows'],b['rows'],strict=True):
@@ -298,15 +309,18 @@ def main():
                         assert row['sent_body_suffix_bytes']==16 and row['body_completed_seconds']>=2.4
                         assert row['peer_terminal_observed'] and not row['forced_client_close']
                         if version:assert row['server_certificate_sha256']==certificate_sha
-                        if profile in {'tcp-five','tcp-output'}:assert_response(row['response'],200,PING_BODY)
+                        if profile in {'tcp-five','tcp-output','tls-output'}:assert_response(row['response'],200,PING_BODY)
                         else:assert not base64.b64decode(row['received_base64']),'expired absolute write budget produced a late HTTP response'
                         observed=receipt[implementation][profile]
-                        if version:
+                        if version and profile!='tls-output':
                             peer=observed['handshake_peer']
                             assert peer['sender_joined'] and peer['peer_terminal_observed'] and not peer['forced_client_close']
                             assert 9<=peer['sent_hello_bytes']<peer['client_hello_length'] and .6<=peer['elapsed_seconds']<=2
-                        if profile=='tcp-output':
+                        if profile in {'tcp-output','tls-output'}:
                             output=observed['slow_output']
+                            if version:
+                                assert output['tls_version']=='TLSv1.3'
+                                assert output['server_certificate_sha256']==certificate_sha
                             assert output['peer_terminal_observed'] and not output['forced_client_close']
                             assert output['slow_read_calls']>=4 and output['slow_received_bytes']>=4096,'actual progressing output required'
                             assert output['fast_drain_started_seconds']>=34
@@ -328,7 +342,7 @@ def main():
         receipt.setdefault('primary_failure',{'type':type(error).__name__,'message':str(error)[-2000:]})
         raise
     finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
-    print(f'PASS: fifteen runtime response pairs, five admitted-body write controls, two progressing TLS handshakes and one progressing output control per implementation on {platform.system()}')
+    print(f'PASS: {receipt["scope"]}: {3*len(profiles)} runtime response pairs, {len(profiles)} admitted-body controls and verified output controls on {platform.system()}')
 
 
 if __name__=='__main__':main()

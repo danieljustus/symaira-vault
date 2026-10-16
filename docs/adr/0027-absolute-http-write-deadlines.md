@@ -49,7 +49,7 @@ same sequential native loopback port and byte-identical fixture clones, with
 isolated HOME/XDG directories and the test memory keyring. Fresh private P-256
 identities use ADR 0025's verified TLS contexts and remain outside system trust.
 
-Five profiles cover five-second TCP, one-second TCP/TLS 1.2/TLS 1.3 and a separate
+The original five profiles cover five-second TCP, one-second TCP/TLS 1.2/TLS 1.3 and a separate
 30-second TCP output budget. Fifteen complete ordinary response pairs compare
 the entire status, headers and entity, excluding only Date. In each profile,
 deliver sixteen final body bytes at 150-millisecond intervals. The body completes
@@ -176,3 +176,34 @@ TLS/mTLS, framing, progressing-read, API and broker corpora pass. Preserve the
 earlier failure as development evidence, not current acceptance status. #1249
 and HTTP-001..004 remain in progress until complete applicable-platform CI
 acceptance on the final integrated candidate.
+
+## Additional TLS backpressure control
+
+The loss-verified Windows observations at `be4243dc` distinguish early AFD
+Location 3051 send records from Location 3073 successful-status records after fast
+drain. Both Go and Rust still fail the original incomplete TCP output assertion.
+These records do not establish a late application-level write; do not change
+production timeout behavior merely to make this receiver-only control pass.
+
+Add a sixth profile, `tls-output`, with verified TLS 1.3 and the same 30-second
+write budget, encrypted fixture, 4 KiB requested receive buffer, 34-second slow
+read phase and bounded fast drain. It must retain real progress, peer closure,
+the exact server certificate fingerprint and an incomplete declared HTTP chunk.
+This tests whether TLS record writes produce an actual blocked writer instead
+of permitting the entire single large plaintext send to be queued early.
+It is a hypothesis requiring native execution, not an assumed Windows result.
+
+`--tls-output-probe-only` records its narrow scope explicitly and cannot satisfy
+the full-corpus workflow gate. The full corpus includes all six profiles with
+18 ordinary response pairs; both original short TLS handshake controls remain.
+The original TCP incomplete-output assertion remains enabled on every OS while
+the additional control is evaluated.
+
+`http_write_mutation.py` temporarily disables the actual underlying socket's
+write deadline and timeout before every write, builds the real Rust CLI and
+runs that isolated TLS output profile against unchanged immutable Go. Success
+requires the specific incomplete-output assertion to reject Rust's complete
+post-drain response while Go stays incomplete, not an unrelated failure. The
+runner restores and hashes the original source and executable even on failure.
+Keep baseline and mutant receipts separately; native acceptance cannot be
+changed until the real native positive and negative controls are established.

@@ -19,6 +19,7 @@ on:
       - 'scripts/rust-port/http_tls_contract.py'
       - 'scripts/rust-port/http_tls_identity.go.txt'
       - 'scripts/rust-port/http_write_contract.py'
+      - 'scripts/rust-port/http_write_mutation.py'
       - 'scripts/rust-port/test_http_write_contract.py'
       - 'scripts/rust-port/http_winsock_metadata.py'
       - 'scripts/rust-port/http_winsock_stop.cpp'
@@ -131,6 +132,14 @@ jobs:
           $build = 'call "{0}" && cl.exe /nologo /std:c++17 /W4 /WX /EHsc scripts\rust-port\http_winsock_stop.cpp /Fotarget\http-winsock-stop.obj /Fetarget\http-winsock-stop.exe /link advapi32.lib' -f $vcvars
           & cmd.exe /d /c $build
           if ($LASTEXITCODE -ne 0) { throw 'Native counter reader build failed' }
+      - name: Verify actual TLS backpressure and reject a disabled deadline
+        run: |
+          set -euo pipefail
+          rust_cli=target/debug/symvault
+          if [[ "$RUNNER_OS" == "Windows" ]]; then rust_cli+=.exe; fi
+          python3 -B scripts/rust-port/http_write_contract.py --rust "$rust_cli" --receipt target/native-tls-output.json --tls-output-probe-only
+          python3 -B scripts/rust-port/http_write_mutation.py --rust "$rust_cli" --receipt target/native-tls-output-mutation.json
+          git diff --exit-code -- crates/symvault-mcp/src/http.rs
       - name: Start bounded Windows Winsock boundary observation
         id: winsock_trace
         if: matrix.os == 'windows-latest'
@@ -152,15 +161,16 @@ jobs:
           from pathlib import Path
           r=json.loads(Path('target/native-http-write.json').read_bytes())
           assert r['passed'] and r['candidate_worktree_clean'] and r['candidate_worktree_clean_at_end']
+          assert r['scope']=='full'
           assert r['candidate_commit']==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert r['native_os'] in {'Linux','Darwin','Windows'} and not r['differences'] and not r['declared_differences']
-          profiles={'tcp-five','tcp-short','tls12-short','tls13-short','tcp-output'}
+          profiles={'tcp-five','tcp-short','tls12-short','tls13-short','tcp-output','tls-output'}
           assert set(r['profiles'])==profiles
           for implementation in ['go','rust']:
               assert set(r[implementation])==profiles
-              assert sum(len(p['rows']) for p in r[implementation].values())==15
+              assert sum(len(p['rows']) for p in r[implementation].values())==18
               assert sum(bool(p['handshake_peer']) for p in r[implementation].values())==2
-              assert sum(bool(p['slow_output']) for p in r[implementation].values())==1
+              assert sum(bool(p['slow_output']) for p in r[implementation].values())==2
               for profile,observed in r[implementation].items():
                   assert len(observed['rows'])==3 and len(observed['processes'])==1
                   assert all(p['output_capture_complete'] and not p['output_capture_errors'] and p['forced_cleanup_not_graceful_evidence'] for p in observed['processes'])
@@ -203,6 +213,9 @@ jobs:
           name: http-write-${{ matrix.os }}
           path: |
             target/native-http-write.json
+            target/native-tls-output.json
+            target/native-tls-output-mutation.json
+            target/native-tls-output-mutation.mutant.json
             target/native-write-tests.txt
             target/native-write-cli-owner.txt
             target/native-oracle-process-tests.txt

@@ -16,6 +16,9 @@ on:
       - 'scripts/rust-port/http_oauth*'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/mcp_process_contract.py'
+      - 'scripts/rust-port/oracle_build.py'
+      - 'scripts/rust-port/cmd/oraclebuild/**'
+      - 'scripts/rust-port/internal/diff/**'
       - 'docs/adr/0021-http-head-responses-and-consent.md'
   workflow_dispatch:
 
@@ -70,6 +73,13 @@ jobs:
           python-version: '3.13'
       - name: Install pinned Rust
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Build the owned oracle compiler runner
+        run: |
+          set -euo pipefail
+          mkdir -p target
+          runner=target/oraclebuild
+          if [[ "$RUNNER_OS" == "Windows" ]]; then runner+=.exe; fi
+          go build -trimpath -o "$runner" ./scripts/rust-port/cmd/oraclebuild
       - name: Test owning runtime and CLI assembly
         run: |
           set -euo pipefail
