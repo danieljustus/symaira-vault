@@ -103,7 +103,7 @@ Tokio, HTTP, keyring, TUI, git, or Swift binding crates.
 | Secret memory | `zeroize` + `secrecy` | Use at domain boundaries | No accidental `Debug`, clone, or error exposure |
 | Async runtime | Tokio vs sync threads | Tokio only in MCP HTTP/SSE and cancellation boundaries | Keep file/crypto/CLI core synchronous |
 | Swift bridge | UniFFI vs narrow C ABI | Spike both; choose from measured iOS/RSS/binding evidence | Preserve the existing JSON bridge contract |
-| TUI | ratatui/crossterm vs minimal port | Decide when TUI slice begins | Existing keyboard/render/accessibility behavior is the oracle |
+| TUI | ratatui/crossterm vs minimal port | Pin ratatui 0.30.2/crossterm 0.29.0 in the CLI; use the existing Store and platform boundaries (ADR 0029) | Actual Go browser behavior and native PTY/console evidence are required; rendering bytes may differ |
 
 All dependency versions are exact-pinned in `Cargo.lock`. Application crates use
 `edition = "2024"`, `rust-version = "1.98"`, and `#![deny(unsafe_code)]`.

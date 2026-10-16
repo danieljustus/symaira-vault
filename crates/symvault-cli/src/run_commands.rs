@@ -266,7 +266,7 @@ fn format_go_map(values: &BTreeMap<String, Value>) -> String {
     rendered
 }
 
-fn format_go_value(value: &Value) -> String {
+pub(crate) fn format_go_value(value: &Value) -> String {
     match value {
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),

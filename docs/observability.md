@@ -4,7 +4,11 @@ Symaira Vault provides opt-in observability through Prometheus metrics and OpenT
 
 ## Metrics
 
-Prometheus metrics are exposed when running the HTTP MCP server on `/metrics`.
+Prometheus metrics are exposed by the HTTP MCP server on `/metrics` only
+when built with `-tags metrics` (for example, `go build -tags metrics -o symvault .`
+from the repository root). Default builds return HTTP 501 at this endpoint.
+Loopback binds do not require metrics authentication; non-loopback binds require
+bearer authentication by default (`mcp.metrics_auth_required: true`).
 
 ### MCP Metrics
 
@@ -41,15 +45,13 @@ Result types: `up_to_date`, `update_available`, `error`, `cache_hit`
 
 ## Local Debugging
 
-View current metric values without running the HTTP server:
-
-```bash
-symvault diag metrics
-```
+Use the metrics-enabled HTTP server's `/metrics` endpoint to inspect current
+values. The executable does not register a `diag metrics` command.
 
 ## Tracing
 
-OpenTelemetry tracing is available for MCP request lifecycle observability.
+OpenTelemetry tracing requires the same `metrics` build tag; without it,
+tracing initialization is a no-op.
 
 ### Configuration
 
@@ -82,7 +84,7 @@ The following spans are emitted when tracing is enabled:
 
 ### Privacy
 
-Entry paths are hashed before being added as span attributes. Only the first 8 bytes of the SHA-256 hash are used, making it impossible to recover the original path from the trace data.
+Entry paths are hashed before being added as span attributes. Only the first 8 bytes of the SHA-256 hash are used. This obscures paths but does not prevent offline dictionary guessing: candidate paths can be hashed and compared.
 
 ### Performance
 

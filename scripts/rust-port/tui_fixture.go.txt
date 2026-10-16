@@ -1,0 +1,168 @@
+// Fixture-only Go producer/reader; all vault operations use the real oracle.
+package main
+
+import (
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
+ "flag"
+ "fmt"
+ "os"
+ "os/exec"
+ "path/filepath"
+ "reflect"
+ "runtime"
+ "time"
+
+ "golang.org/x/term"
+ "gopkg.in/yaml.v3"
+
+ "github.com/danieljustus/symaira-vault/internal/config"
+ "github.com/danieljustus/symaira-vault/internal/ui"
+ "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+const passphrase = "public-tui-passphrase-782a"
+func main() {
+ if len(os.Args)==2 {
+  executable,err:=os.Executable();if err!=nil {panic(err)}
+  if data,e:=os.ReadFile(executable+".editor.json");e==nil {
+   var spec struct{Mode,Ready,Release,Console string}
+   if err=json.Unmarshal(data,&spec);err!=nil {panic(err)}
+   editor(spec.Mode,os.Args[1],spec.Ready,spec.Release,spec.Console);return
+  }
+ }
+ root:=flag.String("root","","private disposable vault")
+ snapshot:=flag.Bool("snapshot",false,"read actual encrypted entries")
+ configReceipt:=flag.String("config-receipt","","private actual open and persisted configuration readback")
+ clipboardTTL:=flag.Int("clipboard-seconds",2,"private fixture clipboard lifetime")
+ consoleBinary:=flag.String("console-binary","","run actual CLI under this native console, then check modes")
+ consoleReceipt:=flag.String("console-receipt","","private native-console receipt")
+ flag.Parse()
+ if *consoleBinary!="" {
+  beforeIn,err:=term.GetState(int(os.Stdin.Fd()));if err!=nil {panic(err)}
+  beforeOut,err:=term.GetState(int(os.Stdout.Fd()));if err!=nil {panic(err)}
+  beforeJSON,err:=json.Marshal(map[string]any{"input":consoleState(reflect.ValueOf(beforeIn),""),"output":consoleState(reflect.ValueOf(beforeOut),"")});if err!=nil {panic(err)}
+  if err=os.WriteFile(*consoleReceipt+".before",beforeJSON,0600);err!=nil {panic(err)}
+  command:=exec.Command(*consoleBinary,"--vault",*root,"ui")
+  command.Stdin=os.Stdin;command.Stdout=os.Stdout;command.Stderr=os.Stderr
+  err=command.Run();code:=0
+  if err!=nil {if exit,ok:=err.(*exec.ExitError);ok {code=exit.ExitCode()} else {panic(err)}}
+  afterIn,e:=term.GetState(int(os.Stdin.Fd()));if e!=nil {panic(e)}
+  afterOut,e:=term.GetState(int(os.Stdout.Fd()));if e!=nil {panic(e)}
+  data,e:=json.Marshal(map[string]any{"exit_code":code,"input_restored":reflect.DeepEqual(consoleState(reflect.ValueOf(beforeIn),""),consoleState(reflect.ValueOf(afterIn),"")),"output_restored":reflect.DeepEqual(consoleState(reflect.ValueOf(beforeOut),""),consoleState(reflect.ValueOf(afterOut),""))})
+  if e!=nil {panic(e)}
+  if e=os.WriteFile(*consoleReceipt+".tmp",data,0600);e!=nil {panic(e)}
+  if e=os.Rename(*consoleReceipt+".tmp",*consoleReceipt);e!=nil {panic(e)}
+  // Retain the controlling session while the parent independently checks modes.
+  deadline:=time.Now().Add(15*time.Second)
+  for {if _,e=os.Stat(*consoleReceipt+".release");e==nil {break};if time.Now().After(deadline){panic("console mode rendezvous expired")};time.Sleep(10*time.Millisecond)}
+  os.Exit(code)
+ }
+ if *snapshot {
+  v,err:=vault.OpenWithPassphrase(*root,[]byte(passphrase));if err!=nil {panic(err)}
+  if *configReceipt!="" {
+   persisted,e:=config.Load(filepath.Join(*root,"config.yaml"));if e!=nil {panic(e)}
+   data,e:=json.Marshal(map[string]any{"vault_clipboard_seconds":v.Config.Clipboard.AutoClearDuration,"persisted_clipboard_seconds":persisted.Clipboard.AutoClearDuration});if e!=nil {panic(e)}
+   if e=os.WriteFile(*configReceipt,data,0600);e!=nil {panic(e)}
+  }
+  paths,err:=vault.List(*root,"",v.Identity);if err!=nil {panic(err)}
+  rows:=[]map[string]any{}
+  for _,path:=range paths {
+   entry,e:=vault.ReadEntry(*root,path,v.Identity);if e!=nil {panic(e)}
+   data,e:=json.Marshal(entry.Data);if e!=nil {panic(e)};sum:=sha256.Sum256(data)
+   rows=append(rows,map[string]any{"path":path,"data_sha256":hex.EncodeToString(sum[:]),"tags":entry.Metadata.Tags,"version":entry.Metadata.Version})
+  }
+  if err=json.NewEncoder(os.Stdout).Encode(rows);err!=nil {panic(err)}
+  return
+ }
+ cfg:=config.Default()
+ legacyMode:=false
+ cfg.Vault=&config.VaultConfig{FormatVersion:2,AuthMethod:"passphrase",Argon2idTime:2,Argon2idMemory:19456,Argon2idThreads:1,LegacyMode:&legacyMode}
+ cfg.Clipboard=&config.ClipboardConfig{AutoClearDuration:*clipboardTTL}
+ identity,err:=vault.InitWithPassphrase(*root,[]byte(passphrase),cfg);if err!=nil {panic(err)}
+ // Production serialization omits a numeric zero, which reloads as 30.
+ // This scenario requires an explicit, genuine YAML configured-zero input.
+ configPath:=filepath.Join(*root,"config.yaml")
+ initial,err:=config.Load(configPath);if err!=nil {panic(err)}
+ if *clipboardTTL==0 {
+  data,e:=os.ReadFile(configPath);if e!=nil {panic(e)}
+  var document map[string]any
+  if e=yaml.Unmarshal(data,&document);e!=nil {panic(e)}
+  section,ok:=document["clipboard"].(map[string]any);if !ok {panic("missing fixture clipboard config")}
+  section["auto_clear_duration"]=0
+  data,e=yaml.Marshal(document);if e!=nil {panic(e)}
+  if e=os.WriteFile(configPath,data,0600);e!=nil {panic(e)}
+ }
+ for _,spec:=range []struct{path,field,value,tag,kind string}{
+  {"alpha/login","password","public-tui-secret-alpha-782a","work","password"},
+  {"beta/api","token","public-tui-secret-beta-782a","home","api_key"},
+  {"gamma/control","private_key","public-tui-secret-gamma-782a","work","ssh_key"},
+ } {
+  entry:=&vault.Entry{Data:map[string]any{spec.field:spec.value,"username":"public-tui-user"}}
+  entry.Metadata.Tags=[]string{spec.tag}
+  entry.SecretMetadata.Type=vault.SecretType(spec.kind)
+  if err=vault.WriteEntry(*root,spec.path,entry,identity);err!=nil {panic(err)}
+ }
+ // Opening is part of the real reader chain, not merely config.Load. Without
+ // explicit nonlegacy metadata its first-open SaveTo would omit zero again.
+ opened,err:=vault.OpenWithPassphrase(*root,[]byte(passphrase));if err!=nil {panic(err)}
+ effective,err:=config.Load(configPath);if err!=nil {panic(err)}
+ if effective.Clipboard.AutoClearDuration!=*clipboardTTL || opened.Config.Clipboard.AutoClearDuration!=*clipboardTTL {panic("fixture clipboard duration did not survive real vault open")}
+ if err=json.NewEncoder(os.Stdout).Encode(map[string]any{"seeded_entries":3,"keybindings":ui.Keybindings(),"requested_clipboard_seconds":*clipboardTTL,"initial_roundtrip_clipboard_seconds":initial.Clipboard.AutoClearDuration,"effective_clipboard_seconds":effective.Clipboard.AutoClearDuration});err!=nil {panic(err)}
+}
+
+// Darwin PENDIN is kernel bookkeeping for reprocessing pending input, not an
+// application terminal mode. Compare every other native field, without unsafe
+// access or writing/restoring the terminal to make this observation pass.
+func consoleState(value reflect.Value,name string) any {
+ switch value.Kind() {
+ case reflect.Pointer:return consoleState(value.Elem(),name)
+ case reflect.Struct:
+  fields:=map[string]any{}
+  for i:=0;i<value.NumField();i++ {n:=value.Type().Field(i).Name;fields[n]=consoleState(value.Field(i),n)}
+  return fields
+ case reflect.Array:
+  fields:=[]any{};for i:=0;i<value.Len();i++ {fields=append(fields,consoleState(value.Index(i),""))};return fields
+ case reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64:
+  number:=value.Uint();if runtime.GOOS=="darwin" && name=="Lflag" {number &^= 0x20000000};return number
+ case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64:return value.Int()
+ default:panic("unsupported native console state field")
+ }
+}
+
+// A real child editor receives the actual private JSON document. It pauses on
+// a private rendezvous so the driver can observe terminal modes and clipboard
+// expiry while the browser is waiting for this foreground process.
+func editor(mode,path,ready,release,console string) {
+ info,err:=os.Stat(path);if err!=nil {panic(err)}
+ receipt:=map[string]any{"input_is_terminal":term.IsTerminal(int(os.Stdin.Fd())),"output_is_terminal":term.IsTerminal(int(os.Stdout.Fd())),"mode":uint32(info.Mode().Perm()),"document_bytes":info.Size()}
+ before,err:=os.ReadFile(console);if err!=nil {panic(err)}
+ in,err:=term.GetState(int(os.Stdin.Fd()));if err!=nil {panic(err)}
+ out,err:=term.GetState(int(os.Stdout.Fd()));if err!=nil {panic(err)}
+ current,err:=json.Marshal(map[string]any{"input":consoleState(reflect.ValueOf(in),""),"output":consoleState(reflect.ValueOf(out),"")});if err!=nil {panic(err)}
+ receipt["foreground_terminal_restored"]=string(before)==string(current)
+ receipt["environment_filtered"]=os.Getenv("TUI_PRIVATE_ENV")=="" && os.Getenv("SYMVAULT_TEST_KEYRING")=="" && os.Getenv("SYMVAULT_PASSPHRASE")==""
+ data,err:=json.Marshal(receipt);if err!=nil {panic(err)}
+ if err=os.WriteFile(ready+".tmp",data,0600);err!=nil {panic(err)}
+ if err=os.Rename(ready+".tmp",ready);err!=nil {panic(err)}
+ fmt.Fprintln(os.Stdout,"TUI_EDITOR_READY")
+ deadline:=time.Now().Add(20*time.Second)
+ for {if _,err=os.Stat(release);err==nil {break};if time.Now().After(deadline){panic("private editor rendezvous expired")};time.Sleep(20*time.Millisecond)}
+ switch mode {
+ case "invalid":err=os.WriteFile(path,[]byte("invalid-json"),0600)
+ case "empty":err=os.WriteFile(path,nil,0600)
+ case "failure":os.Exit(23)
+ case "valid":
+  var entry vault.Entry
+  data,err=os.ReadFile(path);if err!=nil {panic(err)}
+  if err=json.Unmarshal(data,&entry);err!=nil {panic(err)}
+  if entry.Data==nil {entry.Data=map[string]any{}}
+  entry.Data["password"]="public-tui-edited-secret-782a"
+  entry.Data["username"]="public-tui-edited-user"
+  data,err=json.Marshal(entry);if err!=nil {panic(err)}
+  err=os.WriteFile(path,data,0600)
+ default:panic("unknown private editor mode")
+ }
+ if err!=nil {panic(err)}
+}

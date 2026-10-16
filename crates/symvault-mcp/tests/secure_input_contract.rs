@@ -111,10 +111,7 @@ fn secure_input_contract_replays_source_bound_go_handlers() {
     );
     assert_eq!(fixture.oracle.source_pin_digest.len(), 64);
     assert_eq!(fixture.oracle.go_version, "go1.26.6");
-    assert_eq!(
-        fixture.oracle.corekit_version,
-        "v0.17.1-0.20260904101640-f3d3eb79b9b1"
-    );
+    assert_eq!(fixture.oracle.corekit_version, "v0.18.2");
     assert!(!fixture.oracle.source_hash.is_empty());
     assert!(!fixture.oracle.generator_hash.is_empty());
     assert_eq!(

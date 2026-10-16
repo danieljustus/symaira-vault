@@ -694,6 +694,29 @@ async fn resolve_addresses(
         validate_addresses(&target.host, &target.addresses, allow_private)?;
         return Ok(target.addresses.clone());
     }
+    let port = target
+        .url
+        .port_or_known_default()
+        .ok_or("invalid template URL")?;
+    resolve_host_addresses(&target.host, port, allow_private, context, dns_server).await
+}
+
+pub(super) async fn resolve_host_addresses(
+    host: &str,
+    port: u16,
+    allow_private: bool,
+    context: &RequestContext,
+    dns_server: Option<SocketAddr>,
+) -> Result<Vec<SocketAddr>, String> {
+    context.check()?;
+    if !allow_private && private_hostname(host) {
+        return Err("blocked private or local upstream host".into());
+    }
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        let addresses = vec![SocketAddr::new(ip, port)];
+        validate_addresses(host, &addresses, allow_private)?;
+        return Ok(addresses);
+    }
     use hickory_resolver::{
         Resolver,
         config::{LookupIpStrategy, NameServerConfig, ResolverConfig},
@@ -721,21 +744,17 @@ async fn resolve_addresses(
     let lookup = dns_context
         .wait(async {
             resolver
-                .lookup_ip(target.host.as_str())
+                .lookup_ip(host)
                 .await
                 .map_err(|_| "cannot resolve upstream host".to_owned())
         })
         .await?;
-    let port = target
-        .url
-        .port_or_known_default()
-        .ok_or("invalid template URL")?;
     let addresses = lookup
         .iter()
         .take(33)
         .map(|ip| SocketAddr::new(ip, port))
         .collect::<Vec<_>>();
-    validate_addresses(&target.host, &addresses, allow_private)?;
+    validate_addresses(host, &addresses, allow_private)?;
     Ok(addresses)
 }
 

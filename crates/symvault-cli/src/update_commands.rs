@@ -1249,7 +1249,7 @@ mod http_tests {
         let fixture = fixture();
         assert_eq!(
             fixture.oracle.corekit_pin,
-            "github.com/danieljustus/symaira-corekit v0.17.1-0.20260904101640-f3d3eb79b9b1"
+            "github.com/danieljustus/symaira-corekit v0.18.2"
         );
         let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let mut hasher = Sha256::new();

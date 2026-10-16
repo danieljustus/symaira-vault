@@ -546,7 +546,7 @@ func TestExecuteWithSecretFixtureGoEnvironment(t *testing.T) {
 		}
 	}
 	probe := exec.Command(executable, probeArgs[1:]...)
-	probe.Env = append(append([]string{}, build.Env...), "SYMAIRA_EXECUTE_SECRET_ENV_PROBE="+string(expectedEnv))
+	probe.Env = append(append([]string{}, build.Env...), "SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD=1", "SYMAIRA_EXECUTE_SECRET_ENV_PROBE="+string(expectedEnv))
 	var probeStderr bytes.Buffer
 	probe.Stderr = &probeStderr
 	output, err := probe.Output()
@@ -565,6 +565,8 @@ func TestExecuteWithSecretFixtureGoEnvironment(t *testing.T) {
 	input := map[string]any{"command": []any{"go", "run", "<fixture-child-go-source>"},
 		"secret_refs": []any{}, "env_vars": map[string]any{"SYMAIRA_EXECUTE_SECRET_ENV_PROBE": string(expectedEnv)}, "timeout": 30}
 	args := executeWithSecretFixtureGoArgs(input, "probe.go", build.Env)
+	// Admit the filtered Windows test child without changing the canonical request.
+	args["env_vars"].(map[string]any)["SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD"] = "1"
 	args["command"] = []any{probeArgs[0], probeArgs[1]}
 	vaultDir, identity := mockVaultWithEntry(t, "fixture", map[string]any{"value": "synthetic-only"})
 	srv := newTestServerWithVault(t, config.AgentProfile{Name: "fixture-env", AllowedPaths: []string{"*"},

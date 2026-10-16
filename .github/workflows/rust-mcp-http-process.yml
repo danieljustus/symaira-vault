@@ -42,6 +42,7 @@ jobs:
       GOTOOLCHAIN: go1.26.9
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
+      RUST_TEST_THREADS: '1'
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -64,7 +65,7 @@ jobs:
         with:
           go-version: '1.26.9'
       - name: Set up pinned Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
       - name: Install pinned Rust
@@ -82,7 +83,7 @@ jobs:
           from pathlib import Path
           log=Path('target/native-http-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',log)
-          assert results and sum(int(n) for n,_ in results)==(236 if os.environ['RUNNER_OS']=='Windows' else 238)
+          assert results and sum(int(n) for n,_ in results)==(238 if os.environ['RUNNER_OS']=='Windows' else 240)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'test http::tests::oversized_body_errors_follow_admission_without_creating_sessions ... ok' in log
           assert 'test http::tests::nonmcp_oversized_prefixes_preserve_accepted_main_wire_response ... ok' in log

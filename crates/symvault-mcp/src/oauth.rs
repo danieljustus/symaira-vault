@@ -33,6 +33,8 @@ pub(super) struct OAuthState {
     browser_requests: Mutex<HashMap<String, BrowserRequest>>,
     consent: Box<ConsentFn>,
     verify_passphrase: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    access_token_ttl: Duration,
+    refresh_token_ttl: Duration,
 }
 
 #[derive(Clone)]
@@ -63,7 +65,32 @@ impl OAuthState {
             browser_requests: Mutex::new(HashMap::new()),
             consent,
             verify_passphrase,
+            access_token_ttl: ACCESS_TOKEN_TTL,
+            refresh_token_ttl: REFRESH_TOKEN_TTL,
         }
+    }
+
+    pub(super) fn with_token_ttls(
+        mut self,
+        ttls: crate::http::OAuthTokenTtls,
+    ) -> Result<Self, std::io::Error> {
+        let convert = |ttl: std::time::Duration| {
+            if ttl.is_zero() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL must be positive",
+                ));
+            }
+            Duration::try_from(ttl).map_err(|_| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "OAuth token TTL exceeds supported duration",
+                )
+            })
+        };
+        self.access_token_ttl = convert(ttls.access_token_ttl)?;
+        self.refresh_token_ttl = convert(ttls.refresh_token_ttl)?;
+        Ok(self)
     }
 }
 
@@ -84,7 +111,8 @@ pub(super) fn handle(
     let (path, query) = path_and_query
         .split_once('?')
         .map_or((path_and_query, ""), |(path, query)| (path, query));
-    let method = if method == "HEAD"
+    let head_only = method == "HEAD";
+    let method = if head_only
         && matches!(
             path,
             "/.well-known/oauth-authorization-server" | "/mcp/oauth/authorize"
@@ -95,7 +123,7 @@ pub(super) fn handle(
     };
     let now = OffsetDateTime::now_utc();
     if path == "/.well-known/oauth-authorization-server" {
-        return Some(if method == "GET" {
+        return Some(if matches!(method, "GET" | "HEAD") {
             OAuthResponse::Http(discovery_response(local, secure))
         } else {
             OAuthResponse::Http(super::http::method_not_allowed("GET, HEAD"))
@@ -129,7 +157,9 @@ pub(super) fn handle(
     }
     match (path, method) {
         ("/oauth/register", "POST") => Some(register(state, content_type, body, now)),
-        ("/mcp/oauth/authorize", "GET") => Some(authorize(state, query, now)),
+        ("/mcp/oauth/authorize", "GET" | "HEAD") => {
+            Some(authorize_request(state, query, now, head_only))
+        }
         ("/mcp/oauth/authorize/confirm", "POST") => Some(confirm(state, content_type, body, now)),
         ("/mcp/oauth/token", "POST") => Some(token(state, body, now)),
         _ => Some(OAuthResponse::Http(error(405, "invalid_request"))),
@@ -165,7 +195,17 @@ fn register(
     OAuthResponse::Http(json_response(201, body))
 }
 
+#[cfg(test)]
 fn authorize(state: &OAuthState, query: &str, now: OffsetDateTime) -> OAuthResponse {
+    authorize_request(state, query, now, false)
+}
+
+fn authorize_request(
+    state: &OAuthState,
+    query: &str,
+    now: OffsetDateTime,
+    head_only: bool,
+) -> OAuthResponse {
     let Some(parameters) = parse_form(query) else {
         return OAuthResponse::Http(error(400, "invalid_request"));
     };
@@ -218,6 +258,12 @@ fn authorize(state: &OAuthState, query: &str, now: OffsetDateTime) -> OAuthRespo
             "invalid_redirect_uri",
             "redirect_uri does not match registered redirect URIs",
         ));
+    }
+    // HEAD inspects the validated route without prompting, registering a
+    // browser ticket or issuing an authorization code. HTML HEAD framing
+    // omits Content-Length because this route supplies no representation.
+    if head_only {
+        return OAuthResponse::Http(html_response(200, ""));
     }
     let decision = (state.consent)(client_id, redirect_uri);
     match decision {
@@ -445,13 +491,13 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
                 label: &label,
                 allowed_tools: vec!["*".into()],
                 agent_name: &state.agent_name,
-                ttl: Some(ACCESS_TOKEN_TTL),
+                ttl: Some(state.access_token_ttl),
                 tool_registry_hash: "",
             };
             match token_registry::create_with_refresh(
                 &state.root,
                 &new,
-                Some(REFRESH_TOKEN_TTL),
+                Some(state.refresh_token_ttl),
                 now,
             ) {
                 Ok((record, access, refresh)) => {
@@ -474,7 +520,7 @@ fn token(state: &OAuthState, body: &str, now: OffsetDateTime) -> OAuthResponse {
             match token_registry::rotate_via_refresh_token_with_access_ttl(
                 &state.root,
                 refresh,
-                ACCESS_TOKEN_TTL,
+                state.access_token_ttl,
                 now,
             ) {
                 Ok((record, access, refresh)) => {
@@ -832,7 +878,12 @@ mod tests {
             "default".into(),
             Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
             Box::new(|_| false),
-        );
+        )
+        .with_token_ttls(crate::http::OAuthTokenTtls {
+            access_token_ttl: std::time::Duration::from_secs(42),
+            refresh_token_ttl: std::time::Duration::from_secs(84),
+        })
+        .unwrap();
         let client_id = register(&state);
         let authorization = format!(
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=st-1&code_challenge={CHALLENGE}&code_challenge_method=S256"
@@ -868,6 +919,21 @@ mod tests {
             .expect("OAuth access token persisted by its Go token ID");
         assert_eq!(access_record["agent_name"], "default");
         assert_eq!(access_record["allowed_tools"], serde_json::json!(["*"]));
+        let parse_time = |field: &str| {
+            OffsetDateTime::parse(
+                access_record[field].as_str().unwrap(),
+                &time::format_description::well_known::Rfc3339,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            parse_time("expires_at") - parse_time("created_at"),
+            Duration::seconds(42)
+        );
+        assert_eq!(
+            parse_time("refresh_expires_at") - parse_time("created_at"),
+            Duration::seconds(84)
+        );
 
         assert_eq!(
             response_body(token(&state, &token_request, OffsetDateTime::now_utc(),)).0,
@@ -954,6 +1020,28 @@ mod tests {
         let authorization = format!(
             "response_type=code&client_id={client_id}&redirect_uri={REDIRECT}&state=browser-state&code_challenge={CHALLENGE}&code_challenge_method=S256"
         );
+        let head_state = OAuthState::new(
+            directory.path().to_path_buf(),
+            "default".into(),
+            Box::new(|_, _| panic!("HEAD must not request human consent")),
+            Box::new(|_| panic!("HEAD must not verify a passphrase")),
+        );
+        assert!(matches!(
+            handle(
+                &head_state,
+                "HEAD",
+                &format!("/mcp/oauth/authorize?{authorization}"),
+                "",
+                "",
+                "localhost",
+                "",
+                "127.0.0.1:8787".parse().unwrap(),
+                false,
+            ).unwrap(),
+            OAuthResponse::Http(response) if response.status == 200 && response.body.is_empty()
+        ));
+        assert!(head_state.browser_requests.lock().unwrap().is_empty());
+        assert!(head_state.codes.lock().unwrap().is_empty());
         let OAuthResponse::Http(page) =
             authorize(&state, &authorization, OffsetDateTime::now_utc())
         else {
