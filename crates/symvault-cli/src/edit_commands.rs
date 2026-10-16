@@ -43,6 +43,46 @@ pub fn edit(root: &Path, identity: &Identity, options: &EditOptions) -> Result<E
             error => format!("cannot read entry {}: {error}", options.path),
         })?;
 
+    edit_document(&store, identity, options, entry, "Edit")
+}
+
+pub(crate) fn add_from_editor(
+    root: &Path,
+    identity: &Identity,
+    path: &str,
+) -> Result<EditResult, String> {
+    let store = symvault_store::Store::open_with_legacy_migration(root, identity)
+        .map_err(|error| error.to_string())?;
+    let mut entry = Entry {
+        path: path.to_owned(),
+        ..Entry::default()
+    };
+    entry
+        .data
+        .insert("password".into(), serde_json::Value::String(String::new()));
+    let now = GoTime::now().to_rfc3339_nano();
+    entry.metadata.created = now.clone();
+    entry.metadata.updated = now;
+    entry.metadata.version = 1;
+    edit_document(
+        &store,
+        identity,
+        &EditOptions {
+            path: path.to_owned(),
+            editor: String::new(),
+        },
+        entry,
+        "Add",
+    )
+}
+
+fn edit_document(
+    store: &symvault_store::Store,
+    identity: &Identity,
+    options: &EditOptions,
+    entry: Entry,
+    action: &str,
+) -> Result<EditResult, String> {
     let initial =
         serde_json::to_vec_pretty(&entry).map_err(|error| format!("encode entry: {error}"))?;
     let mut initial = initial;
@@ -82,7 +122,7 @@ pub fn edit(root: &Path, identity: &Identity, options: &EditOptions) -> Result<E
                 None,
             )
             .map_err(|error| format!("cannot save entry: {error}"))?;
-        crate::write_commands::auto_commit(&store, identity, &options.path, "Edit");
+        crate::write_commands::auto_commit(store, identity, &options.path, action);
         Ok(EditResult {
             path: options.path.clone(),
         })
