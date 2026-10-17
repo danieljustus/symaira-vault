@@ -341,6 +341,7 @@ func TestDeleteEntryRemovesFile(t *testing.T) {
 
 func TestMergeEntryPreservesUnknownFieldsAndIncrementsVersion(t *testing.T) {
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	id := testutil.TempIdentity(t)
 
 	original := &Entry{
@@ -572,6 +573,7 @@ func TestDeepCloneValueWithSlice(t *testing.T) {
 
 func TestMergeEntryRecursiveMerge(t *testing.T) {
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	id := testutil.TempIdentity(t)
 
 	original := &Entry{
@@ -655,6 +657,7 @@ func TestGetEntryMetadataReturnsErrorForNonexistentEntry(t *testing.T) {
 
 func TestGetEntryMetadataReturnsUpdatedMetadataAfterMerge(t *testing.T) {
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	id := testutil.TempIdentity(t)
 
 	original := &Entry{
