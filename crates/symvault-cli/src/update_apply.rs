@@ -517,7 +517,10 @@ fn extract_zip(archive: &[u8], expected: &str, destination: &Path) -> Result<boo
         let entry = zip
             .by_index(index)
             .map_err(|error| format!("updateapply: read zip entry: {error}"))?;
-        let path = Path::new(entry.name());
+        let name = entry
+            .name()
+            .map_err(|error| format!("updateapply: read zip entry: {error}"))?;
+        let path = Path::new(name.as_ref());
         safe_archive_path(path)?;
         if entry.is_dir()
             || entry
