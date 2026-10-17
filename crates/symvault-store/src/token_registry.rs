@@ -414,7 +414,8 @@ pub fn create_with_refresh(
     record.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
     record.refresh_expires_at = refresh_ttl
         .filter(|ttl| *ttl > time::Duration::ZERO)
-        .map(|ttl| go_rfc3339(now + ttl));
+        .map(|ttl| expiry_after(now, ttl))
+        .transpose()?;
     entries.insert(record.id.clone(), record.clone());
     write(&root_cap, &target, &entries)?;
     Ok((record, raw_access, raw_refresh))
@@ -504,7 +505,8 @@ fn rotate_via_refresh_token_inner(
     rotated.refresh_token_hash = sha256_hex(raw_refresh.as_bytes());
     rotated.refresh_expires_at = refresh_ttl
         .filter(|ttl| *ttl > time::Duration::ZERO)
-        .map(|ttl| go_rfc3339(now + ttl));
+        .map(|ttl| expiry_after(now, ttl))
+        .transpose()?;
     let old_entry = entries
         .get_mut(&old.id)
         .expect("old refresh token remains in locked registry");
@@ -651,7 +653,8 @@ fn new_record(
     let expires_at = new
         .ttl
         .filter(|ttl| *ttl > time::Duration::ZERO)
-        .map(|ttl| go_rfc3339(now + ttl));
+        .map(|ttl| expiry_after(now, ttl))
+        .transpose()?;
 
     let record = TokenRecord {
         id,
@@ -748,6 +751,14 @@ fn encode_hex(bytes: &[u8]) -> String {
 /// RFC3339 with trailing fraction zeros stripped and the fraction omitted
 /// entirely when it is zero. `now` is always UTC here (`time.Now().UTC()` in
 /// Go), so the zone is always `Z`.
+/// Formats `now + ttl`, rejecting expiries outside the representable range
+/// before any registry mutation.
+fn expiry_after(now: OffsetDateTime, ttl: time::Duration) -> Result<String, StoreError> {
+    now.checked_add(ttl)
+        .map(go_rfc3339)
+        .ok_or_else(|| StoreError::Config("create token: expiry outside supported range".into()))
+}
+
 fn go_rfc3339(value: OffsetDateTime) -> String {
     let value = value.to_offset(time::UtcOffset::UTC);
     let mut out = format!(
@@ -975,6 +986,21 @@ mod tests {
         assert!(!stored[&rotated.id].revoked);
         assert!(rotate_via_refresh_token(&path, &raw_refresh, later).is_err());
         assert!(rotate_via_refresh_token(&path, &new_refresh, later).is_ok());
+    }
+
+    #[test]
+    fn unrepresentable_expiry_is_rejected_without_registry_mutation() {
+        let (_root, path) = vault_dir();
+        let now = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+        assert!(
+            create_with_refresh(&path, &new_token("oauth"), Some(time::Duration::MAX), now)
+                .is_err()
+        );
+        assert!(!path.join(TOKEN_REGISTRY_FILE).exists());
+        let mut access = new_token("oauth");
+        access.ttl = Some(time::Duration::MAX);
+        assert!(create_with_refresh(&path, &access, None, now).is_err());
+        assert!(!path.join(TOKEN_REGISTRY_FILE).exists());
     }
 
     #[test]

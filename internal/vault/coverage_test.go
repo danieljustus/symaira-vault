@@ -688,6 +688,7 @@ func TestRecipientsManagerRejectsTraversalVaultDir(t *testing.T) {
 
 func TestWriteEntryWithRecipientsNilData(t *testing.T) {
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	identity := testutil.TempIdentity(t)
 
 	if err := WriteEntryWithRecipients(vaultDir, "empty", &Entry{}, identity); err != nil {
