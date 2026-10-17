@@ -141,16 +141,49 @@ agents:
     canManageConfig: false
     canUseClipboard: false
     canUseAutotype: false
-    approvalMode: deny
+    # Attended runner: every execute_with_secret call asks the person at the
+    # terminal or GUI dialog. Headless sessions fail closed.
+    approvalMode: prompt
+    allowedExecutables:
+      - provider-smoke
     allowed_tools:
       - health
       - get_entry_metadata
-      - run_command
       - execute_with_secret
     max_reads_per_hour: 5
     max_reads_per_day: 20
     max_secrets_in_session: 1
 ```
+
+How `approvalMode` gates the two runner tools (runtime behavior, not policy
+intent):
+
+| `approvalMode` | `execute_with_secret` | `run_command` |
+|---|---|---|
+| `deny` | rejected | rejected |
+| `prompt` | asks via TTY or GUI dialog; rejected when neither is available | rejected (no interactive approval path) |
+| `none` | runs without approval | runs without approval |
+
+A metadata-only profile keeps `approvalMode: deny`; do not loosen it to make a
+runner work. `run_command` therefore needs a separate profile with
+`approvalMode: none`, which means no human approves individual commands. Only
+use that for an unattended runner whose executable allowlist, path prefixes,
+token lifetime and OS-level isolation have been reviewed on their own.
+
+### What the runner boundary does and does not enforce
+
+- `allowedExecutables` compares only `filepath.Base(command[0])`. It does not
+  bind the name to a canonical path, owner, signature or argument list: any
+  executable with an allowed basename (for example `./provider-smoke` written
+  by the agent itself) passes. It is a typo guard, not a trusted-wrapper
+  boundary. Point trusted wrappers at root-owned, non-writable locations and
+  enforce that with OS controls.
+- `allowedPaths` limits which vault entries MCP tools may resolve. It does not
+  restrict what a spawned process can read, write or reach on the host.
+- An agent that also has a general shell with access to the same user account,
+  vault directory or decrypted session can bypass every MCP restriction. Run
+  unattended runners as a separate OS user or sandbox with no shell access to
+  the vault owner's files.
 
 Runner-profile operating rules:
 
