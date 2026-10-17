@@ -32,7 +32,6 @@ ARCHIVED_INPUTS = {
     'internal/mcp/server/mcp_copy_clipboard_fixture_generator_test.go',
     'internal/mcp/server/mcp_secure_input_fixture_generator_test.go',
     'internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go',
-    'internal/mcp/server/tools_run_test.go',
     'scripts/rust-port/cmd/mcpcallgen/main_test.go',
     'scripts/rust-port/cmd/http001initgen/main_test.go',
     'scripts/rust-port/cmd/execute_secret_provenance/main.go',
