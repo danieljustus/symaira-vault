@@ -12,7 +12,9 @@ const IDENTITY: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5
 fn deletion_stays_in_retained_root_and_rejects_special_targets() {
     use symvault_store::StoreError;
     for legacy in [false, true] {
-        let temp = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
+        // Socket paths are bounded by SUN_LEN, so a long TMPDIR cannot be used.
+        let temp =
+            tempfile::tempdir_in(std::path::Path::new("/tmp").canonicalize().unwrap()).unwrap();
         let root = temp.path().join("vault");
         let moved = temp.path().join("moved");
         fs::create_dir_all(root.join("entries")).unwrap();
