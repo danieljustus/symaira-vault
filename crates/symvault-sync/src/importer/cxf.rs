@@ -243,12 +243,15 @@ fn read_payload<R: Read + std::io::Seek>(
         let file = archive
             .by_index(index)
             .map_err(|error| ImportError::Parse(format!("inspect cxf zip: {error}")))?;
-        if file.is_dir() || !file.name().to_ascii_lowercase().ends_with(".json") {
+        let name = file
+            .name()
+            .map_err(|error| ImportError::Parse(format!("inspect cxf zip: {error}")))?;
+        if file.is_dir() || !name.to_ascii_lowercase().ends_with(".json") {
             continue;
         }
         candidates.push(JsonCandidate {
             index,
-            name: file.name().to_owned(),
+            name: name.into_owned(),
             size: file.size(),
         });
     }
