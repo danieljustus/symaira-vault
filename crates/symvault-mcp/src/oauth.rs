@@ -81,12 +81,15 @@ impl OAuthState {
                     "OAuth token TTL must be positive",
                 ));
             }
-            Duration::try_from(ttl).map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "OAuth token TTL exceeds supported duration",
-                )
-            })
+            Duration::try_from(ttl)
+                .ok()
+                .filter(|ttl| OffsetDateTime::now_utc().checked_add(*ttl).is_some())
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "OAuth token TTL exceeds supported duration",
+                    )
+                })
         };
         self.access_token_ttl = convert(ttls.access_token_ttl)?;
         self.refresh_token_ttl = convert(ttls.refresh_token_ttl)?;
@@ -868,6 +871,28 @@ mod tests {
             response.status,
             serde_json::from_slice(&response.body).unwrap(),
         )
+    }
+
+    #[test]
+    fn token_ttls_with_unrepresentable_expiry_are_rejected() {
+        let huge = std::time::Duration::from_secs(i64::MAX as u64);
+        let ok = std::time::Duration::from_secs(60);
+        for (access_token_ttl, refresh_token_ttl) in [(huge, ok), (ok, huge)] {
+            let directory = tempfile::tempdir().unwrap();
+            let error = OAuthState::new(
+                directory.path().to_path_buf(),
+                "default".into(),
+                Box::new(|_, _| crate::http::OAuthConsentDecision::Approved),
+                Box::new(|_| false),
+            )
+            .with_token_ttls(crate::http::OAuthTokenTtls {
+                access_token_ttl,
+                refresh_token_ttl,
+            })
+            .err()
+            .expect("unrepresentable expiry must be rejected");
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        }
     }
 
     #[test]
