@@ -138,7 +138,8 @@ fn parse_1pux_with_limits(
         let file = zip
             .by_index(index)
             .map_err(|e| ImportError::Parse(e.to_string()))?;
-        if file.name() != "export.json" && !file.name().ends_with("/export.json") {
+        let name = file.name().map_err(|e| ImportError::Parse(e.to_string()))?;
+        if name != "export.json" && !name.ends_with("/export.json") {
             continue;
         }
         let mut data = Vec::new();
