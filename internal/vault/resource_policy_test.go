@@ -202,6 +202,9 @@ func TestResourcePolicyCoversWholeEnvelopeMetadata(t *testing.T) {
 
 func TestResourcePolicySharedWriterCannotPublishUnreadableEntry(t *testing.T) {
 	root := t.TempDir()
+	// WriteEntryWithRecipients queues a manifest update; drain it before
+	// t.TempDir removes the vault (cleanups run last-registered first).
+	t.Cleanup(FlushManifestUpdates)
 	identity := testutil.TempIdentity(t)
 	entry := &Entry{Data: map[string]any{"public_fixture": strings.Repeat("x", maxEntryValueBytes+1)}}
 	err := WriteEntryWithRecipients(root, "over-limit", entry, identity)
