@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.23.1] - 2026-10-18
+
+### Fixed
+- Release distribution: the Homebrew formula and Scoop manifest are now
+  published as pull requests to the PR-protected tap and bucket. v0.23.0's
+  GitHub release was published, but its Homebrew/Scoop update, macOS
+  notarization, MCPB bundles and macOS app DMG did not complete; v0.23.1
+  supersedes it with the same code.
+
 ## [v0.23.0] - 2026-10-18
 
 ### Security
@@ -1191,7 +1200,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.1...HEAD
+[v0.23.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.1
 [v0.23.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.0
 [v0.22.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.1
 [v0.22.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.0

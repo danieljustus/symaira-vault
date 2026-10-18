@@ -737,7 +737,9 @@ jobs:
 
       - name: Fetch Homebrew formula
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symvault.rb" -o symvault.rb
+          # GoReleaser publishes on the PR branch symvault-<version> (tap main is PR-protected).
+          TAG="${{ steps.tag.outputs.tag }}"
+          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/symvault-${TAG#v}/Formula/symvault.rb" -o symvault.rb
 
       - name: Verify formula exists and has correct version
         run: |
