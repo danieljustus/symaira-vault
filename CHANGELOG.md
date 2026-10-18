@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.23.0] - 2026-10-18
+
+### Security
+- Upgraded the `zip` dependency of the Rust CLI and importers to 9.0.5
+  (RUSTSEC-2026-0367, -0368, -0369). SymVault never called the affected
+  `ZipArchive::extract`, so no exposure was demonstrated (#1408).
+
+### Fixed
+- OAuth token issuance and refresh now reject lifetimes whose expiry cannot be
+  represented instead of panicking, and fail before any token-registry write
+  (#1332).
+
 ### Changed (breaking)
 - `symvault get --output json` now masks sensitive fields (`password`,
   `token`, `secret`, `key`, `passwd`, `pwd`) as `***` unless `--print` is
@@ -1179,7 +1191,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.0...HEAD
+[v0.23.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.0
 [v0.22.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.1
 [v0.22.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.0
 [v0.21.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.21.1
