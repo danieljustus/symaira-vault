@@ -182,7 +182,15 @@ brews:
     repository:
       owner: danieljustus
       name: homebrew-tap
+      # main is PR-protected; publish on a branch and open a pull request.
+      branch: "symvault-{{ .Version }}"
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: danieljustus
+          name: homebrew-tap
+          branch: main
     directory: Formula
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
@@ -213,7 +221,15 @@ scoops:
     repository:
       owner: danieljustus
       name: scoop-bucket
+      # main is PR-protected; publish on a branch and open a pull request.
+      branch: "symvault-{{ .Version }}"
       token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: danieljustus
+          name: scoop-bucket
+          branch: main
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
     license: Apache-2.0
