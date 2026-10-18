@@ -78,7 +78,11 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test -v -race -timeout=30m ./...
+        # TestReencryptJournalGoRustIntegration needs SYMVAULT_RUST_BINARY and
+        # fails without it by design; its gate is `make port-contract` (CI "Rust
+        # port contract"). This job has no Rust toolchain, same as CI's
+        # integration job.
+        run: go test -v -race -timeout=30m -skip 'ReencryptJournalGoRustIntegration' ./...
 
   govulncheck:
     name: govulncheck
@@ -315,7 +319,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" && !seen { split($2, v, "."); print v[1]; seen = 1 }')"
           if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
             echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
             exit 1
