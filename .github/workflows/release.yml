@@ -319,7 +319,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" && !seen { split($2, v, "."); print v[1]; seen = 1 }')"
           if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
             echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
             exit 1
