@@ -78,7 +78,11 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test -v -race -timeout=30m ./...
+        # TestReencryptJournalGoRustIntegration needs SYMVAULT_RUST_BINARY and
+        # fails without it by design; its gate is `make port-contract` (CI "Rust
+        # port contract"). This job has no Rust toolchain, same as CI's
+        # integration job.
+        run: go test -v -race -timeout=30m -skip 'ReencryptJournalGoRustIntegration' ./...
 
   govulncheck:
     name: govulncheck
