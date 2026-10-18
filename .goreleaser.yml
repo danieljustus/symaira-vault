@@ -218,6 +218,8 @@ brews:
 
 scoops:
   - name: symvault
+    # SCOOP_BUCKET_GITHUB_TOKEN is rejected (401); re-enable with #1413.
+    skip_upload: true
     repository:
       owner: danieljustus
       name: scoop-bucket

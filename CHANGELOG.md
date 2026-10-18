@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   GitHub release was published, but its Homebrew/Scoop update, macOS
   notarization, MCPB bundles and macOS app DMG did not complete; v0.23.1
   supersedes it with the same code.
+- The Scoop bucket is not updated for v0.23.1 (expired publishing
+  credential, #1413); install via Homebrew, the release archives or packages.
 
 ## [v0.23.0] - 2026-10-18
 
