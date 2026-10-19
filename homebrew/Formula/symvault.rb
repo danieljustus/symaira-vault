@@ -1,5 +1,5 @@
-# This formula is a reference template. GoReleaser generates the actual
-# formula with correct version/SHA at release time (see .goreleaser.yml brews).
+# This formula is a reference template. The release workflow generates the actual
+# formula with correct version/SHA at release time (see scripts/homebrew-formula.sh).
 # To test locally, use the instructions in homebrew/README.md.
 
 class Symvault < Formula

@@ -40,6 +40,8 @@ jobs:
         with:
           version: v2.11.4
           install-mode: binary
+          # Skip `config verify`: it downloads the JSON schema and times out (#1407).
+          verify: false
           args: --timeout=5m --verbose
 
       - name: Run gosec SAST scanner
@@ -222,8 +224,27 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+
+      - name: Open Homebrew tap pull request
+        # Tap main is PR-protected; publish on branch symvault-<version> and open a PR.
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          BRANCH="symvault-${VERSION}"
+          TAP="$RUNNER_TEMP/homebrew-tap"
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/danieljustus/homebrew-tap.git" "$TAP"
+          scripts/homebrew-formula.sh "$VERSION" "dist/symaira-vault_${VERSION}_checksums.txt" > "$TAP/Formula/symvault.rb"
+          git -C "$TAP" switch -c "$BRANCH"
+          git -C "$TAP" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -am "Brew formula update for symvault version ${TAG}"
+          git -C "$TAP" push --force origin "$BRANCH"
+          gh pr view "$BRANCH" --repo danieljustus/homebrew-tap >/dev/null 2>&1 ||
+            gh pr create --repo danieljustus/homebrew-tap --base main --head "$BRANCH" \
+              --title "Brew formula update for symvault version ${TAG}" \
+              --body "Automated update from danieljustus/symaira-vault release ${TAG}."
 
       - name: Notarize macOS binaries
         if: steps.signing.outputs.signed == 'true'
@@ -749,8 +770,9 @@ jobs:
             echo "Homebrew formula not found or empty"
             exit 1
           fi
-          if ! grep -q "version \"${VERSION}\"" symvault.rb; then
-            echo "Version mismatch: expected ${VERSION} in formula"
+          # No `version` line (strict tap audit rejects it); Homebrew scans it from the URL.
+          if ! grep -q "releases/download/v${VERSION}/symaira-vault_${VERSION}_" symvault.rb; then
+            echo "Version mismatch: expected ${VERSION} in formula URLs"
             exit 1
           fi
 
