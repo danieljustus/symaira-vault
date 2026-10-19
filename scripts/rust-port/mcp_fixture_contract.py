@@ -25,6 +25,7 @@ from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, inventory, git, pinned_go,
 import mcp_compiler_adapter as compiler_adapter
 
 ROOT = Path(__file__).resolve().parents[2]
+PRODUCT_SOURCE = '1a815b23c42a6236101c50c22167c639a3018a8e'
 FIXTURE_BASE = '2b596f916bf736250b7fd3bb4d39f5f89fb20aa2'
 ANCHOR = ROOT/'scripts/rust-port/fixtures/mcp-anomaly/historical-inputs.json'
 ANCHOR_SHA256 = '678531bead3d9bc4a8d754ce7996b8cd29f94d8a4dbb8ef91cef71577296394d'
@@ -79,33 +80,39 @@ APPROVAL_SHA256 = '91e62899d00eecb039d93bc4630c762b213d49798fbf9ae82c8a595d2a036
 APPROVAL_FIXTURE = 'testdata/port/mcp/write-tty-approval.json'
 
 
-def corrected_generator(data):
+def corrected_generator(data, commit=ORDERED):
+    if commit not in (ORDERED, PRODUCT_SOURCE):
+        raise ValueError('unknown corrected generator identity')
     for old in [HISTORICAL, 'd1cd0f97', CAADD, 'caadd5e']:
         for suffix in ['"', ':"']:
-            data = data.replace(('"'+old+suffix).encode(), ('"'+ORDERED+suffix).encode())
-    old_hash,new_hash = legacy_hashes()
+            data = data.replace(('"'+old+suffix).encode(), ('"'+commit+suffix).encode())
+    old_hash,new_hash = legacy_hashes(commit)
     return data.replace(('"'+old_hash+'"').encode(),('"'+new_hash+'"').encode())
 
 
 @functools.cache
-def legacy_hashes():
+def legacy_hashes(commit=ORDERED):
+    if commit not in (ORDERED, PRODUCT_SOURCE):
+        raise ValueError('unknown legacy source identity')
     # Four legacy generators independently pin this hash. Recompute from Git
     # blobs with their actual name/NUL/bytes algorithm, never the working tree.
-    names = json.loads((ROOT/'testdata/port/mcp/prompts.json').read_bytes())['oracle']['source_files']
+    fixture_anchor(ROOT, ['testdata/port/mcp/prompts.json'])
+    original = json.loads(historical_file(ROOT, 'testdata/port/mcp/prompts.json').read_bytes())['oracle']
+    names = original['source_files']
     digests=[]
-    for commit in [HISTORICAL, ORDERED]:
+    for commit in [HISTORICAL, commit]:
         digest=hashlib.sha256()
         for name in names:
             if name not in {'go.mod','go.sum'}:
                 digest.update(name.encode()+b'\0'+git(ROOT,'show',commit+':'+name))
         digests.append(digest.hexdigest())
-    expected=json.loads((ROOT/'testdata/port/mcp/prompts.json').read_bytes())['oracle']['source_hash']
+    expected=original['source_hash']
     if digests[0] != expected:
         raise ValueError('legacy generator source-hash algorithm drift')
     return digests
 
 
-def compare_fixture(old, new, count):
+def compare_fixture(old, new, count, expected_commit=ORDERED):
     # JSON numeric equality must not accept bool/int or int/float substitution.
     def compare(a, b, path=''):
         if type(a) is not type(b):
@@ -126,7 +133,7 @@ def compare_fixture(old, new, count):
             raise ValueError('fixture value drift: '+path)
     if len(old['cases']) != count or len(new['cases']) != count:
         raise ValueError('fixture case inventory drift')
-    if new['oracle']['commit_sha'] != ORDERED:
+    if expected_commit not in (ORDERED, PRODUCT_SOURCE) or new['oracle']['commit_sha'] != expected_commit:
         raise ValueError('corrected fixture is not bound to the corrected oracle')
     compare(old, new)
 
@@ -193,9 +200,73 @@ def approval_generator_source(root):
     return data
 
 
+def validate_product_source(root):
+    # Fixed admission, never a caller-selected revision. Modules remain recorded
+    # inputs but excluded from production byte equality, as in both old lanes.
+    if PRODUCT_SOURCE != '1a815b23c42a6236101c50c22167c639a3018a8e':
+        raise ValueError('invalid product source pin')
+    resolved = git(ROOT, 'rev-parse', '--verify', PRODUCT_SOURCE+'^{commit}').decode().strip()
+    if resolved != PRODUCT_SOURCE:
+        raise ValueError('unresolved product source pin')
+    fixture_anchor(root, FIXTURES)
+    sources = sorted({p for name in FIXTURES for p in
+        json.loads(historical_file(root, name).read_bytes())['oracle']['source_files']})
+    for name in sources:
+        if name not in {'go.mod', 'go.sum'} and confined_file(root, name).read_bytes() != git(ROOT, 'show', PRODUCT_SOURCE+':'+name):
+            raise ValueError('candidate production input drift: '+name)
+    return sources
+
+
+def product_capture_identity(tree, name):
+    """Bind P metadata to actual overlaid inputs before any generator executes."""
+    fixture_anchor(ROOT, [name])
+    old = json.loads(historical_file(ROOT, name).read_bytes())
+    oracle = old['oracle']
+    trailing = Path(name).name in {'execute-with-secret.json', 'http-initialize.json', 'tools-call.json'}
+    def digest(names, nul=False):
+        value = hashlib.sha256()
+        for path in names:
+            value.update(path.encode()+b'\0'+confined_file(tree, path).read_bytes()+(b'\0' if nul else b''))
+        return value.hexdigest()
+    # prompts alone records modules while its legacy hash excludes them.
+    sources = [p for p in oracle['source_files'] if name != 'testdata/port/mcp/prompts.json' or p not in {'go.mod', 'go.sum'}]
+    # Approval derives its short label at runtime; other overlaid producers
+    # carry the full replacement literal. Keep the producer's actual shape.
+    label = PRODUCT_SOURCE[:8] if name == APPROVAL_FIXTURE else PRODUCT_SOURCE
+    identity = dict(oracle, commit=label, commit_sha=PRODUCT_SOURCE)
+    source_key = 'source_digest' if 'source_digest' in oracle else 'source_hash'
+    identity[source_key] = digest(sources, trailing)
+    if 'generator_files' in oracle:
+        key = 'generator_digest' if 'generator_digest' in oracle else 'generator_hash'
+        identity[key] = digest(oracle['generator_files'], trailing)
+    elif 'generator_hash' in oracle:
+        # Legacy single-file SHA256: identify its unique anchored producer,
+        # never a current fixture's self-declared generator inventory/hash.
+        producers = [p for p in generator_paths() if hashlib.sha256(
+            historical_file(ROOT, p).read_bytes()).hexdigest() == oracle['generator_hash']]
+        if len(producers) != 1:
+            raise ValueError('legacy generator identity inventory drift')
+        identity['generator_hash'] = hashlib.sha256(confined_file(tree, producers[0]).read_bytes()).hexdigest()
+    result = {'oracle': identity}
+    if 'generator_digest' in old:
+        result['generator_digest'] = digest(['scripts/rust-port/cmd/mcpcallgen/main.go'], True)
+    return result
+
+
+def compare_product_capture(old, captured, count, identity):
+    # Validate every identity field and inventory BEFORE semantic exemptions.
+    label = PRODUCT_SOURCE[:8] if APPROVAL_GENERATOR in old['oracle'].get('generator_files', []) else PRODUCT_SOURCE
+    if identity['oracle']['commit_sha'] != PRODUCT_SOURCE or identity['oracle']['commit'] != label:
+        raise ValueError('wrong product capture identity')
+    for key, expected in identity.items():
+        if json.dumps(captured[key], sort_keys=True) != json.dumps(expected, sort_keys=True):
+            raise ValueError('product capture identity drift: '+key)
+    compare_fixture(old, captured, count, PRODUCT_SOURCE)
+
+
 def materialize_inputs(tree, generators, commit, approval_generator):
     """The real producer's source-only materialization, before compiler inventory."""
-    if commit not in (HISTORICAL, ORDERED) or approval_generator not in ('original', 'approval-lifetime-v1'):
+    if commit not in (HISTORICAL, ORDERED, PRODUCT_SOURCE) or approval_generator not in ('original', 'approval-lifetime-v1'):
         raise ValueError('unknown fixture execution identity')
     corrected = approval_generator_source(ROOT) if approval_generator != 'original' else None
     mapping = None
@@ -203,12 +274,12 @@ def materialize_inputs(tree, generators, commit, approval_generator):
         original = historical_file(ROOT, name).read_bytes()
         data = corrected if name == APPROVAL_GENERATOR and corrected is not None else original
         before_identity = data
-        if commit == ORDERED and name in generators and name.endswith('.go'):
-            data = corrected_generator(data)
+        if commit != HISTORICAL and name in generators and name.endswith('.go'):
+            data = corrected_generator(data, commit)
         if name == APPROVAL_GENERATOR and corrected is not None:
             literal = ('const writeApprovalOracleCommit = "'+HISTORICAL+'"').encode()
             expected = corrected if commit == HISTORICAL else corrected.replace(
-                literal, ('const writeApprovalOracleCommit = "'+ORDERED+'"').encode(), 1)
+                literal, ('const writeApprovalOracleCommit = "'+commit+'"').encode(), 1)
             if corrected.count(literal) != 1 or data != expected:
                 raise ValueError('unexpected approval identity-literal transform')
             mapping = {
@@ -233,6 +304,12 @@ def admit_timeout_child(tree, commit):
     """Bind the separate Windows test-entrypoint repair, not historical replay."""
     name = 'internal/mcp/server/test_main_test.go'
     original = git(ROOT, 'show', commit+':'+name)
+    if commit == PRODUCT_SOURCE:
+        if confined_file(tree, name).read_bytes() != original or confined_file(ROOT, name).read_bytes() != original:
+            raise ValueError('product timeout entrypoint identity drift')
+        return {'version': 'product-timeout-child-admission-v1', 'source_commit': commit,
+                'path': name, 'original_sha256': hashlib.sha256(original).hexdigest(),
+                'materialized_sha256': hashlib.sha256(original).hexdigest(), 'delta': ''}
     anchor = b'\tif runtime.GOOS == "windows" && os.Getenv("SYMVAULT_RUN_WINDOWS_CROSSLANG") != "1" {'
     replacement = (b'\t// The timeout fixture\'s filtered child cannot inherit the suite opt-in.\n'
                    + anchor[:-2] + b' && os.Getenv("SYMAIRA_EXECUTE_SECRET_TIMEOUT_CHILD") != "1" {')
@@ -360,15 +437,7 @@ def main():
     if args.approval_generator != 'original':
         approval_generator_source(ROOT)  # reject changed/unreviewed bytes before any compiler
     candidate_fixture_payloads()
-    # Every currently declared production input must equal the corrected source.
-    sources = sorted({p for name in FIXTURES for p in json.loads(historical_file(ROOT,name).read_bytes())['oracle']['source_files']})
-    for name in sources:
-        # The oracle lanes build the exact immutable module files, while the
-        # product's patched dependencies are tested separately, not relabelled.
-        if name in {'go.mod','go.sum'}:
-            continue
-        if (ROOT/name).read_bytes() != git(ROOT, 'show', ORDERED+':'+name):
-            raise ValueError('candidate production input drift: '+name)
+    sources = validate_product_source(ROOT)
     if args.output_root:
         args.output_root.mkdir(parents=True,exist_ok=True)
         output=Path(tempfile.mkdtemp(prefix='run-',dir=args.output_root)).resolve()
@@ -390,12 +459,15 @@ def main():
     try:
         go, env, compiler = pinned_go(os.environ.copy(), ROOT)
         receipt['compiler'] = compiler
-        for lane,commit in [('historical',HISTORICAL),('corrected',ORDERED)]:
+        for lane,commit in [('historical',HISTORICAL),('corrected',ORDERED),('product-source',PRODUCT_SOURCE)]:
             execution = lane if args.approval_generator == 'original' else lane+'-'+args.approval_generator
             lane_out = output/execution
             lane_out.mkdir()
             row = {'lane':execution,'source_commit':commit,'passed':False,'steps':[]}
-            receipt['lanes'].append(row)
+            if lane == 'product-source':
+                receipt['product_source_replay'] = row
+            else:
+                receipt['lanes'].append(row)
             with tempfile.TemporaryDirectory(prefix='mcp-fixtures-'+lane+'-') as raw:
                 base = Path(raw)
                 tree = base/'oracle'
@@ -407,6 +479,9 @@ def main():
                     if mapping is not None:
                         row['approval_generator'] = mapping
                         row['approval_capture_oracle'] = approval_capture_oracle(tree, commit)
+                    if lane == 'product-source':
+                        validate_product_source(tree)
+                        row['capture_identities'] = {name: product_capture_identity(tree, name) for name in selected}
                     home=base/'home'
                     home.mkdir(mode=0o700)
                     isolated={k:v for k,v in env.items() if not k.startswith(('SYMVAULT_','SYMAIRA_'))}
@@ -462,7 +537,9 @@ def main():
                         captured=(tree/name).read_bytes()
                         (lane_out/Path(name).name).write_bytes(captured)
                         old=json.loads(historical_file(ROOT,name).read_bytes())
-                        if mapping is not None and name == APPROVAL_FIXTURE:
+                        if lane == 'product-source':
+                            compare_product_capture(old, json.loads(captured), count, row['capture_identities'][name])
+                        elif mapping is not None and name == APPROVAL_FIXTURE:
                             compare_approval_capture(json.loads(captured), row['approval_capture_oracle'])
                         elif lane=='historical':
                             if captured != historical_file(ROOT,name).read_bytes():

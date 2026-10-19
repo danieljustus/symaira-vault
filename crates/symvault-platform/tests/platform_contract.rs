@@ -43,11 +43,11 @@ fn platform_fixture_has_provenance_and_explicit_native_blocker() {
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
         fixture.oracle.commit,
-        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+        "1a815b23c42a6236101c50c22167c639a3018a8e"
     );
     assert_eq!(
         fixture.oracle.commit_sha,
-        "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+        "1a815b23c42a6236101c50c22167c639a3018a8e"
     );
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
