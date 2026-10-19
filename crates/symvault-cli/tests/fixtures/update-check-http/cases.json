@@ -7,7 +7,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "a2b7e2bc519b349f7def8839262e0f47b8e750108fddd3d21708ef0d62474b24",
+    "source_digest": "663b0ed21c41b840fc992a2ca71c34e7e44b7174380f8a0f125f7b48211bf551",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "go_tests": [
       "TestCheckerReportsAvailableUpdate",
@@ -26,7 +26,7 @@
     ],
     "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
     "generated_on": "darwin",
-    "captured": "2026-10-15",
+    "captured": "2026-10-19",
     "source_pin_digest": "4e54346eb7f33f5a06b6408e747ae55269dffca3e37ff07c3b61673acacb5e2c",
     "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
