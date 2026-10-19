@@ -140,7 +140,8 @@ type UpdateConfig struct {
 
 // ClipboardConfig holds clipboard-related configuration.
 type ClipboardConfig struct {
-	AutoClearDuration int  `yaml:"auto_clear_duration,omitempty"`
+	// Zero disables the timer; omission would restore the loader's default.
+	AutoClearDuration int  `yaml:"auto_clear_duration"`
 	CopyByDefault     bool `yaml:"copyByDefault,omitempty"`
 	PrintByDefault    bool `yaml:"printByDefault,omitempty"`
 }
