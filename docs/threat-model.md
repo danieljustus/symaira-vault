@@ -216,14 +216,14 @@ MCP server could in principle alter them. See backlog item O-10.
 ### In-memory passphrase security and Go runtime constraints
 
 - **Passphrase Wiping:** The unlock passphrase is treated as a `[]byte` slice and zeroed out using `crypto.Wipe` immediately after use (such as deriving the `age` key or identity).
-- **Go GC Copies:** Because Go's garbage collector manages allocations, it may copy or move slices in memory during compaction. Go does not currently guarantee single-copy semantics.
-- **Practical Impact:** Temporary copies of the passphrase created by the Go runtime may persist in process memory until overwritten or until the process exits. This is not remotely exploitable under normal circumstances (requiring root-level memory dump capabilities).
+- **Copies and retention:** `crypto.Wipe` overwrites only the supplied byte slice. String conversions, library calls and OS interfaces can retain other copies; wiping one buffer does not erase those copies.
+- **Practical Impact:** Plaintext may remain in process memory until overwritten or process exit. Memory dumps, debugger access and compromised code in the process are outside this protection.
 - **Mitigations:**
   - **Active sessions use a 15-minute idle TTL and an 8-hour absolute maximum
     lifetime by default.** Activity refreshes both cache entries together but
     cannot extend the absolute limit.
   - OS-keyring caching is used where available to avoid repeated passphrase entry and decryption.
-  - The `SYMVAULT_PASSPHRASE` environment variable is cleared in memory immediately on startup.
+  - At startup, `SniffAndClearEnvPassphrase` copies `SYMVAULT_PASSPHRASE` into a process-local byte buffer and unsets the environment variable to prevent child-process inheritance. The buffer remains until consumed or explicitly cleared; unsetting the variable does not guarantee erasure of the original environment string.
 
 ---
 
