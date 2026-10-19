@@ -1583,20 +1583,20 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "libc",
- "wasi 0.11.1+wasi-snapshot-preview1",
+ "wasi",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "getrandom"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26145e563e54f2cadc477553f1ec5ee650b00862f0a58bcd12cbdc5f0ea2d2f4"
+checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
  "libc",
  "r-efi 5.3.0",
- "wasi 0.14.7+wasi-0.2.4",
+ "wasip2",
 ]
 
 [[package]]
@@ -2477,7 +2477,7 @@ checksum = "4b18443e9c262bfe8fa82f51666e2642c53393f7e5c27b3e1aeab922cff5b9d8"
 dependencies = [
  "libc",
  "log",
- "wasi 0.11.1+wasi-snapshot-preview1",
+ "wasi",
  "windows-sys 0.61.2",
 ]
 
@@ -3219,7 +3219,7 @@ version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
- "getrandom 0.3.3",
+ "getrandom 0.3.4",
 ]
 
 [[package]]
@@ -4030,7 +4030,7 @@ dependencies = [
  "ctrlc",
  "flate2",
  "getifaddrs",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "hmac 0.12.1",
  "qrcode",
  "ratatui",
@@ -4071,7 +4071,7 @@ dependencies = [
  "base32",
  "base64 0.22.1",
  "fs4",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "hmac 0.12.1",
  "regex",
  "serde",
@@ -4094,7 +4094,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "chacha20poly1305",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "hkdf 0.12.4",
  "hmac 0.12.1",
  "proptest",
@@ -4117,7 +4117,7 @@ name = "symvault-mcp"
 version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "hickory-resolver",
  "hmac 0.12.1",
  "http",
@@ -4164,7 +4164,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "fs4",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "hmac 0.12.1",
  "rustix",
  "serde",
@@ -4187,7 +4187,7 @@ dependencies = [
  "base64 0.22.1",
  "csv",
  "flate2",
- "getrandom 0.3.3",
+ "getrandom 0.4.3",
  "rustix",
  "serde",
  "serde_json",
@@ -4765,15 +4765,6 @@ name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
-
-[[package]]
-name = "wasi"
-version = "0.14.7+wasi-0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "883478de20367e224c0090af9cf5f9fa85bed63a95c1abf3afc5c083ebc06e8c"
-dependencies = [
- "wasip2",
-]
 
 [[package]]
 name = "wasip2"
