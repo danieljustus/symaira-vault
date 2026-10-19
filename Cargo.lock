@@ -3844,13 +3844,13 @@ dependencies = [
 
 [[package]]
 name = "sha1"
-version = "0.10.6"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
+checksum = "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
 dependencies = [
  "cfg-if",
- "cpufeatures 0.2.17",
- "digest 0.10.7",
+ "cpufeatures 0.3.1",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -4072,13 +4072,13 @@ dependencies = [
  "base64 0.22.1",
  "fs4",
  "getrandom 0.3.3",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "regex",
  "serde",
  "serde_json",
  "serde_yaml_ng",
  "sha1",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "symaira-core-version",
  "thiserror 2.0.18",
  "unicode_categories",
