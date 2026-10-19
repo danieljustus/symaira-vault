@@ -25,7 +25,8 @@ STRUCTURAL_SHA = hashlib.sha256(STRUCTURAL_BYTES).hexdigest()
 class HarnessTests(unittest.TestCase):
     def test_owned_build_path_and_strict_caller_input_structural(self):
         # Mocked build bytes exercise structure only; never native evidence.
-        for mode in ['owned', 'caller', 'owned-mismatch', 'caller-mismatch']:
+        for mode in ['owned', 'caller', 'owned-mismatch', 'caller-mismatch',
+                     'owned-relative', 'caller-relative']:
             with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix='tui-build-structural-') as raw:
                 root = Path(raw)
                 evidence = root/'evidence'; evidence.mkdir()
@@ -51,7 +52,8 @@ class HarnessTests(unittest.TestCase):
                     return b''
                 with tempfile.TemporaryDirectory(dir=root) as temporary:
                     base = Path(temporary)
-                    with patch.object(tui, 'checked', side_effect=checked), patch.object(tui, 'COMMAND_OUTPUT', evidence):
+                    output = Path(os.path.relpath(evidence)) if mode.endswith('relative') else evidence
+                    with patch.object(tui, 'checked', side_effect=checked), patch.object(tui, 'COMMAND_OUTPUT', output):
                         if mode.endswith('mismatch'):
                             with self.assertRaisesRegex(AssertionError, 'source/binary mismatch'):
                                 tui.build_source_bound_rust(None if owned else caller, base, receipt)
@@ -59,8 +61,15 @@ class HarnessTests(unittest.TestCase):
                         else:
                             proven = tui.build_source_bound_rust(None if owned else caller, base, receipt)
                             self.assertIs(receipt['binary_source_verified'], True)
+                            self.assertTrue(proven.is_absolute(), 'verified binary crosses into an isolated cwd')
                             self.assertEqual(proven.read_bytes(), STRUCTURAL_BYTES)
                             self.assertTrue(proven.stat().st_mode & 0o111)
+                            # Real child/path lookup, still only structural build evidence.
+                            readback = tui.subprocess.run(
+                                [tui.sys.executable, '-c',
+                                 'import pathlib,sys;sys.stdout.buffer.write(pathlib.Path(sys.argv[1]).read_bytes())',
+                                 str(proven)], cwd=base, capture_output=True, check=True, timeout=5)
+                            self.assertEqual(readback.stdout, STRUCTURAL_BYTES)
                     self.assertEqual(len(builds), 2 if owned else 1)
                     if owned:
                         self.assertEqual(builds[0], builds[1])

@@ -688,6 +688,7 @@ def build_source_bound_rust(rust, base, receipt):
     candidate_bytes = rust.read_bytes()
     checked(command, env=env, timeout=900)
     receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
+    retained = rebuilt
     if COMMAND_OUTPUT is not None:
         retained = COMMAND_OUTPUT/('source-rebuild.exe' if os.name == 'nt' else 'source-rebuild')
         shutil.copy2(rebuilt, retained)
@@ -695,7 +696,7 @@ def build_source_bound_rust(rust, base, receipt):
         receipt['rebuilt_binary_bytes'] = retained.stat().st_size
     assert rebuilt.read_bytes() == candidate_bytes and digest(rust) == receipt['rebuilt_rust_executable_sha256'], 'source/binary mismatch'
     receipt['binary_source_verified'] = True
-    return retained if COMMAND_OUTPUT is not None else rebuilt
+    return retained.resolve()
 
 
 def validate_receipt(receipt, candidate, native_os, architecture, sources, binary_sha256, evidence_root=None):
