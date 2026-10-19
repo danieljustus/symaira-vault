@@ -52,7 +52,7 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: '0'
       CARGO_PROFILE_TEST_DEBUG: '0'
       # Acceptance-only byte reproducibility, preserving native UUID/signing.
-      # Native opt-level 1 smoke builds are byte-identical across target paths;
+      # Owned clean builds use the same absolute output path;
       # disabling UUIDs is invalid on Darwin 27. Release packaging is unchanged.
       CARGO_PROFILE_DEV_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
       CARGO_PROFILE_TEST_OPT_LEVEL: ${{ matrix.os == 'macos-latest' && '1' || '0' }}
@@ -123,28 +123,20 @@ jobs:
           Path('target/tui-evidence/test-counts.json').write_text(json.dumps({'passed':sum(int(n) for n,_ in rows),'ignored':sum(int(n) for _,n in rows),'required_browser_cases':names},indent=2)+'\n')
           PY
           cargo clippy --manifest-path "$manifest" -p symvault-cli -p symvault-platform --all-targets --all-features --locked -- -D warnings > target/tui-evidence/clippy.txt 2>&1
-          cargo build --manifest-path "$manifest" -p symvault-cli --bin symvault --locked > target/tui-evidence/build.txt 2>&1
-          python3 - <<'BINARY'
-          import os,shutil
-          from pathlib import Path
-          name='symvault.exe' if os.name=='nt' else 'symvault'
-          shutil.copy2(Path(os.environ['CARGO_TARGET_DIR'])/'debug'/name,Path('target/tui-evidence')/name)
-          BINARY
           python3 scripts/rust-port/tui_harness_test.py > target/tui-evidence/harness-tests.txt 2>&1
       - name: Complete clean fifteen-case actual Go and Rust terminal comparison
         run: |
           set -euo pipefail
-          binary="$CARGO_TARGET_DIR/debug/symvault"
-          if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
-          python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json > target/tui-evidence/native-tui.txt 2>&1
+          python3 scripts/rust-port/tui_contract.py --build-owned --receipt target/tui-evidence/native-tui.json > target/tui-evidence/native-tui.txt 2>&1
+          binary=$(python3 -c 'import json; from pathlib import Path; p=Path("target/tui-evidence/native-tui.json"); print((p.parent/json.loads(p.read_text())["rebuilt_binary_artifact"]).resolve())')
+          echo "TUI_VERIFIED_BINARY=$binary" >> "$GITHUB_ENV"
           head=$(git rev-parse HEAD)
           digest=$(python3 -c 'import hashlib; from pathlib import Path; print(hashlib.sha256(Path("target/tui-evidence/native-tui.json").read_bytes()).hexdigest())')
           python3 scripts/rust-port/tui_contract.py --rust-cli "$binary" --receipt target/tui-evidence/native-tui.json --validate-receipt --candidate "$head" --expected-receipt-sha256 "$digest"
       - name: Reject dirty source, foreign binary and actual production reveal mutation
         run: |
           set -euo pipefail
-          binary="$CARGO_TARGET_DIR/debug/symvault"
-          if [[ "$RUNNER_OS" == Windows ]]; then binary+=.exe; fi
+          binary="$TUI_VERIFIED_BINARY"
           python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
       - name: Retain all native receipts and failures
         if: always()

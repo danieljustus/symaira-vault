@@ -23,6 +23,56 @@ STRUCTURAL_SHA = hashlib.sha256(STRUCTURAL_BYTES).hexdigest()
 
 
 class HarnessTests(unittest.TestCase):
+    def test_owned_build_path_and_strict_caller_input_structural(self):
+        # Mocked build bytes exercise structure only; never native evidence.
+        for mode in ['owned', 'caller', 'owned-mismatch', 'caller-mismatch']:
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix='tui-build-structural-') as raw:
+                root = Path(raw)
+                evidence = root/'evidence'; evidence.mkdir()
+                receipt = {}
+                builds = []
+                caller = root/'caller-target/debug/symvault'
+                caller.parent.mkdir(parents=True)
+                caller.write_bytes(STRUCTURAL_BYTES)
+                caller.chmod(0o755)
+                sentinel = caller.parent/'caller-owned'; sentinel.write_bytes(b'do not touch')
+                owned = mode.startswith('owned')
+                def checked(argv, **kwargs):
+                    if argv[1] == 'metadata':
+                        return json.dumps({'workspace_root': str(tui.ROOT), 'packages': []}).encode()
+                    target = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                    self.assertFalse(target.exists(), 'every build must start with a fresh owned target')
+                    binary = target/'debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+                    builds.append(binary.resolve())
+                    binary.parent.mkdir(parents=True)
+                    mismatch = mode.endswith('mismatch') and (not owned or len(builds) == 2)
+                    binary.write_bytes(b'structural mismatch' if mismatch else STRUCTURAL_BYTES)
+                    binary.chmod(0o755)
+                    return b''
+                with tempfile.TemporaryDirectory(dir=root) as temporary:
+                    base = Path(temporary)
+                    with patch.object(tui, 'checked', side_effect=checked), patch.object(tui, 'COMMAND_OUTPUT', evidence):
+                        if mode.endswith('mismatch'):
+                            with self.assertRaisesRegex(AssertionError, 'source/binary mismatch'):
+                                tui.build_source_bound_rust(None if owned else caller, base, receipt)
+                            self.assertNotIn('binary_source_verified', receipt)
+                        else:
+                            proven = tui.build_source_bound_rust(None if owned else caller, base, receipt)
+                            self.assertIs(receipt['binary_source_verified'], True)
+                            self.assertEqual(proven.read_bytes(), STRUCTURAL_BYTES)
+                            self.assertTrue(proven.stat().st_mode & 0o111)
+                    self.assertEqual(len(builds), 2 if owned else 1)
+                    if owned:
+                        self.assertEqual(builds[0], builds[1])
+                        self.assertEqual((base/'rust-candidate-build/debug'/builds[0].name).read_bytes(), STRUCTURAL_BYTES)
+                # Retained proof survives removal of the complete build tree,
+                # even on mismatch; no caller-owned bytes or siblings change.
+                retained = root/receipt['rebuilt_binary_artifact']
+                self.assertEqual(tui.digest(retained), receipt['rebuilt_rust_executable_sha256'])
+                self.assertEqual(retained.stat().st_size, receipt['rebuilt_binary_bytes'])
+                self.assertEqual(caller.read_bytes(), STRUCTURAL_BYTES)
+                self.assertEqual(sentinel.read_bytes(), b'do not touch')
+
     def test_exit_observation_precedes_console_wrapper_release(self):
         # Structural lifecycle test only, no native or clipboard claim.
         with tempfile.TemporaryDirectory(prefix='tui-exit-order-') as raw:
