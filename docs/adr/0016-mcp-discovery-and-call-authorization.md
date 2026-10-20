@@ -275,7 +275,7 @@ and Windows process/fixture execution on the published integration candidate,
 independent review and the separate GUI/biometric/FFI gates remain required.
 
 For #1320, fixture admission additionally executes a fixed product-source replay
-at `1a815b23c42a6236101c50c22167c639a3018a8e`. The separately named
+at `e485a815e4be7af238df24b61b1bd09134c443f9`. The separately named
 `product_source_replay` receipt is mandatory for full and bounded generator
 runs; the historical/corrected lanes and returned historical bytes remain.
 Before compilation, all declared non-module production bytes must equal that

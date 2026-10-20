@@ -149,7 +149,7 @@ type ClipboardConfig struct {
 // AuditConfig holds audit log rotation configuration.
 type AuditConfig struct {
 	MaxFileSize int64 `yaml:"maxSizeMb,omitempty"`
-	MaxBackups  int   `yaml:"maxBackups,omitempty"`
+	MaxBackups  int   `yaml:"maxBackups"`
 	MaxAgeDays  int   `yaml:"maxAgeDays,omitempty"`
 }
 
