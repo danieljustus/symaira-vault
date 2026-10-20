@@ -104,7 +104,7 @@ env:
 jobs:
   pairing-native:
     name: Pairing differential (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false

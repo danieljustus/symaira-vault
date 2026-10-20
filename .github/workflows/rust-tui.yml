@@ -31,7 +31,7 @@ concurrency:
 jobs:
   browser:
     name: Native browser (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 65
     strategy:
       fail-fast: false

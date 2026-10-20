@@ -22,7 +22,7 @@ concurrency:
 jobs:
   connect:
     name: CONNECT (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
