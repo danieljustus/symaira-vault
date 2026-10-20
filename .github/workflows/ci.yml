@@ -70,7 +70,7 @@ jobs:
       - name: Run OSV Scanner
         id: osv_scan
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: >-
             --lockfile=go.mod
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload OSV SARIF to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: osv-results.sarif
 
@@ -166,7 +166,7 @@ jobs:
 
       - name: Upload gosec results to code scanning
         if: always() && github.event_name == 'push'
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: gosec.sarif
 
