@@ -16,6 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Configuration: an explicit `clipboard.autoClearDuration: 0` (auto-clear
+  disabled) is no longer rewritten to 30 seconds when the configuration is
+  saved or the vault is first opened (#1320).
+- Configuration: an explicit `audit.maxBackups: 0` (retain no rotated audit
+  backups) survives a configuration save instead of reverting to 5 (#1430).
+- Release distribution: the Scoop manifest is published again with a
+  refreshed bucket credential (#1413).
+
+### Changed
+- Dependencies: Rust (chacha20poly1305 0.11, getrandom 0.4, thiserror 2,
+  time, clap, zeroize, rustix, tokio and others), Go (prometheus/common,
+  golang.org/x/tools) and pinned GitHub Actions updated. `yaml-edit` and
+  `unicode-normalization` stay on versions that keep Go-oracle parity
+  (#1433).
+- Documentation: setup, command and memory-security guidance aligned with
+  the implementation (#1383); audit retention docs name the real
+  `maxSizeMb` key.
+
 ## [v0.23.1] - 2026-10-18
 
 ### Fixed
