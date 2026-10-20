@@ -26,10 +26,15 @@ The audit section in `~/.symvault/config.yaml` can also set these values:
 
 ```yaml
 audit:
-  maxFileSize: 200   # MB, overrides env var
+  maxSizeMb: 200   # MB
   maxBackups: 10
   maxAgeDays: 90
 ```
+
+`maxBackups: 0` is valid and means "retain no rotated backups": every rotated
+file of that agent is deleted on the next retention pass, while the active log
+and unrelated files are left alone. An explicit `0` is preserved when the
+configuration is saved; an absent `maxBackups` keeps the default of `5`.
 
 Environment variables always take precedence over config file values.
 

@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "1a815b23",
-    "commit_sha": "1a815b23c42a6236101c50c22167c639a3018a8e",
+    "commit": "e485a815",
+    "commit_sha": "e485a815e4be7af238df24b61b1bd09134c443f9",
     "source_files": [
       "go.mod",
       "go.sum",
@@ -191,8 +191,8 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "7a2c7187a6137b06ed6081a76d93cd4aff714cedc326df6c5c22bcd8272b8d93",
-    "source_pin_digest": "25b872b281f1581da54f3b6438da5e8b2984e80138894675bc30697c9f2f8540",
+    "source_hash": "1beb33c1011c71aa0dceb43bcbe47c0c38132cb6e523f9071b0f10896d3a2ed4",
+    "source_pin_digest": "bbefa7a068ad805f26d1ce34811794d8b12f53cb92e393496b2e12540c4a7aee",
     "go_version": "go1.26.6",
     "corekit_version": "v0.18.2",
     "generator_files": [
@@ -203,7 +203,7 @@
       "internal/mcp/server/mcpsetentry_fixture_generator_test.go",
       "internal/mcp/server/mcp_execute_api_request_fixture_generator_test.go"
     ],
-    "generator_hash": "22762b456bca3c1aef2231230a9ae756bef66ea8a1a7fa43286508a5769083f4"
+    "generator_hash": "a3102514d5ffa7ab0bcce8f42929bcb809d4bb65d9c9e7b4e3a7ebff22e50cff"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-copy-clipboard-fixture",

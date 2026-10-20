@@ -105,7 +105,7 @@ type productReceipt struct {
 }
 
 func validateProductReceipt(product productReceipt, cases int) error {
-	if product.SourceCommit != "1a815b23c42a6236101c50c22167c639a3018a8e" || !product.Passed || product.Cases != cases || product.Fixtures != 1 {
+	if product.SourceCommit != "e485a815e4be7af238df24b61b1bd09134c443f9" || !product.Passed || product.Cases != cases || product.Fixtures != 1 {
 		return fmt.Errorf("missing passing pinned product-source generator acceptance")
 	}
 	return nil

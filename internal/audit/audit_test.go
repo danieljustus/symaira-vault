@@ -541,6 +541,61 @@ func TestEnforceRetentionMaxBackups(t *testing.T) {
 	}
 }
 
+// TestEnforceRetentionZeroBackupsFromConfig documents what an explicit
+// config.yaml `audit.maxBackups: 0` means once it reaches the logger through
+// SetConfig (#1430): no rotated backups are retained, while the active log
+// and unrelated files in the directory stay untouched.
+func TestEnforceRetentionZeroBackupsFromConfig(t *testing.T) {
+	t.Cleanup(ReloadConfig)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, name := range []string{"SYMVAULT_AUDIT_MAX_SIZE_MB", "SYMVAULT_AUDIT_MAX_BACKUPS", "SYMVAULT_AUDIT_MAX_AGE_DAYS",
+		"OPENPASS_AUDIT_MAX_SIZE_MB", "OPENPASS_AUDIT_MAX_BACKUPS", "OPENPASS_AUDIT_MAX_AGE_DAYS"} {
+		t.Setenv(name, "")
+	}
+	SetConfig(&Config{MaxFileSize: 100 * 1024 * 1024, MaxBackups: 0, MaxAgeDays: 365})
+	if got := GetConfig().MaxBackups; got != 0 {
+		t.Fatalf("SetConfig MaxBackups = %d, want 0", got)
+	}
+
+	logger, err := New("zero-backups-test", "", nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
+	for i := 0; i < 3; i++ {
+		name := filepath.Join(auditDir, fmt.Sprintf("audit-zero-backups-test.log.rotated.2026010%d-000000", i+1))
+		if err := os.WriteFile(name, []byte("rotated"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+	}
+	sentinels := []string{
+		filepath.Join(auditDir, "audit-other-agent.log.rotated.20260101-000000"),
+		filepath.Join(auditDir, "unrelated-sentinel.txt"),
+	}
+	for _, name := range sentinels {
+		if err := os.WriteFile(name, []byte("keep"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+	}
+
+	if err := logger.EnforceRetention(); err != nil {
+		t.Fatalf("EnforceRetention() error = %v", err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(auditDir, "audit-zero-backups-test.log.rotated.*"))
+	if len(matches) != 0 {
+		t.Fatalf("rotated backups retained with maxBackups 0: %v", matches)
+	}
+	for _, name := range append(sentinels, filepath.Join(auditDir, "audit-zero-backups-test.log")) {
+		if _, err := os.Stat(name); err != nil {
+			t.Fatalf("file outside the retention set was touched: %s: %v", name, err)
+		}
+	}
+}
+
 func TestEnforceRetentionMaxAge(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
