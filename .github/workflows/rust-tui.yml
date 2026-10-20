@@ -93,7 +93,7 @@ jobs:
         with:
           go-version: '1.26.6'
       - name: Set up pinned Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
       - name: Install pinned Rust and terminal validation tools
@@ -148,7 +148,7 @@ jobs:
           python3 scripts/rust-port/tui_mutation_test.py --rust-cli "$binary" --native-receipt target/tui-evidence/native-tui.json --receipt target/tui-evidence/native-mutation.json > target/tui-evidence/native-mutation.txt 2>&1
       - name: Retain all native receipts and failures
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: tui-${{ matrix.os }}
           path: target/tui-evidence/

@@ -87,7 +87,7 @@ jobs:
           python3 -c 'from pathlib import Path; required={"rust-read-store.log":["actual_go_resource_policy_observations_match_rust","recovery_resource_failures_preserve_journal_and_originals"],"rust-read-template.log":["template_resolutions_share_the_operation_allowance"],"rust-read-mcp.log":["run_command_secret_refs_share_one_resource_allowance"]}; [(__import__("re").search(r"test .*"+name+r" \.\.\. ok",Path(path).read_text()) or (_ for _ in ()).throw(AssertionError(name))) for path,names in required.items() for name in names]'
       - name: Upload native policy evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: read-policy-${{ matrix.os }}
           path: |
