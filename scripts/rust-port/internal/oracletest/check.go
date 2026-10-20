@@ -87,7 +87,7 @@ func Check(t *testing.T, generator string, cases int) []byte {
 			t.Fatalf("incomplete %s generator acceptance", expected.lane)
 		}
 	}
-	if err := validateProductReceipt(receipt.ProductSourceReplay, cases); err != nil {
+	if err = validateProductReceipt(receipt.ProductSourceReplay, cases); err != nil {
 		t.Fatal(err)
 	}
 	data, err = readEvidence(files, "evidence/historical/"+fixture)
