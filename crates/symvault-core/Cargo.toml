@@ -12,7 +12,7 @@ base32 = "=0.5.1"
 base64 = "=0.22.1"
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"] }
 thiserror = "=2.0.18"
-getrandom = "=0.3.3"
+getrandom = "=0.4.3"
 hmac = "=0.13.0"
 serde.workspace = true
 serde_json.workspace = true
