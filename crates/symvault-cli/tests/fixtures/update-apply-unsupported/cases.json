@@ -1,9 +1,9 @@
 {
   "oracle": {
-    "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
+    "commit": "1a815b23c42a6236101c50c22167c639a3018a8e",
     "binary": "GOTOOLCHAIN=go1.26.6 go build -o target/symvault-go-update-oracle .",
     "go_version": "go1.26.6",
-    "captured": "2026-10-19",
+    "captured": "2026-10-20",
     "environment": {
       "HOMEBREW_PREFIX": "/",
       "HOME": "disposable temporary directory"
