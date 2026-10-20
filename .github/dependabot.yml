@@ -43,3 +43,8 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # 0.3.2 emits nested block scalars as `- >2-`, breaking the Go config
+      # oracle (config_cases_match_go_generated_contract). Tracked in #1433.
+      - dependency-name: "yaml-edit"
+        versions: ["0.3.2"]

@@ -14,10 +14,10 @@ symvault-core.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
 keyring = { version = "=4.2.0", default-features = false, features = ["v1"] }
-keyring-core = "=1.0.0"
+keyring-core = "=1.0.1"
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "=1.1.4", features = ["fs", "termios"] }
+rustix = { version = "=1.1.5", features = ["fs", "termios"] }
 signal-hook = "=0.3.18"
 
 [dev-dependencies]
@@ -27,7 +27,7 @@ serde.workspace = true
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
-arboard = { version = "=3.6.1", default-features = false }
+arboard = { version = "=3.7.0", default-features = false }
 
 [target.'cfg(windows)'.dev-dependencies]
 tempfile = "=3.27.0"
