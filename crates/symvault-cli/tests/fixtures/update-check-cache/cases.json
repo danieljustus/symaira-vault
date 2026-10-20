@@ -2,7 +2,7 @@
   "oracle": {
     "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
     "binary": "target/port/symvault-go (main.version set by ldflags)",
-    "captured": "2026-10-15",
+    "captured": "2026-10-19",
     "generated_on": "darwin",
     "source_files": [
       "main.go",
@@ -12,7 +12,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "928b75705873333647dfcb7fc25547a1e76bad7477d0601a515f155c008edcd5",
+    "source_digest": "dfe798442b595b3fe16318a516e7c86faa89e330c6ada0c8d25b92d516a78d7a",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "env": "throwaway HOME and XDG_CACHE_HOME, Go main.version set per case, cache timestamp 2099-01-01T00:00:00Z",
     "go_version": "go1.26.6",
