@@ -378,14 +378,14 @@ before this change (format v1) still use scrypt until migrated.
 
 Symaira Vault uses `unsafe.Pointer` and package-level sink variables to attempt to clear sensitive data (passphrases, decrypted entry contents) from memory after use via `crypto.Wipe()`. This is a **best-effort measure** with known limitations:
 
-- Go's runtime may create copies of data that `Wipe()` cannot reach (string interning, GC compaction, escape analysis)
+- String conversions, library calls and OS interfaces may retain copies that `Wipe()` cannot reach; it overwrites only the supplied byte slice
 - The OS may swap memory to disk
 - Memory clearing is not guaranteed by the Go language specification
 
 **Explicit threat model boundary:** Symaira Vault's memory wiping protects against casual recovery of secrets from stale process memory (e.g., reused heap pages). It does **not** protect against an attacker with memory dump access (core dumps, swap analysis, debugger attachment, or /proc/pid/mem inspection). The `crypto.Wipe` mechanism raises the bar for post-compromise forensics but is not a defense against a determined local attacker.
 
 A full evaluation of `github.com/awnumar/memguard` (which provides `mlock(2)`-backed guarded heap allocations) was performed in [ADR 0003](docs/adr/0003-memory-wipe-for-sensitive-data.md). The decision was to keep the zero-dependency best-effort approach because:
-- Passphrases exist in memory only briefly during unlock operations
+- Unlock operations wipe caller-owned passphrase buffers after use; environment-passphrase and session caches have separate lifetimes
 - Adding `memguard` would require refactoring every crypto and vault API
 - The primary threat for a CLI password manager is local malware, where `Wipe` raises the bar sufficiently
 
