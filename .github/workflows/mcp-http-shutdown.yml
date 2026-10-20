@@ -23,7 +23,7 @@ concurrency:
 jobs:
   lifecycle:
     name: HTTP lifecycle (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
       fail-fast: false

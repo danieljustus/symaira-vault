@@ -62,7 +62,7 @@ env:
 jobs:
   audit-native:
     name: Audit differential (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       # FreeBSD and other targets are intentionally absent: no native runner

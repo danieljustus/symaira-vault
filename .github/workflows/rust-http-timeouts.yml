@@ -32,7 +32,7 @@ concurrency:
 jobs:
   timeout:
     name: Configured HTTP deadlines (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
