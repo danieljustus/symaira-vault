@@ -24,7 +24,7 @@ rcgen = "=0.14.10"
 zeroize = { version = "=1.9.1", features = ["alloc"] }
 tokio = { version = "=1.53.3", features = ["rt", "time"] }
 # Go 1.26 selects Unicode 15 tables; ICU 2.3 normalizes newer codepoints differently.
-unicode-normalization = "=0.1.22"
+unicode-normalization = "=0.1.26"
 symvault-core = { path = "../symvault-core", version = "=0.0.0" }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
