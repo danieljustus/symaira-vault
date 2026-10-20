@@ -69,7 +69,7 @@ func TestEvidenceConfinement(t *testing.T) {
 }
 
 func TestProductReceipt(t *testing.T) {
-	valid := productReceipt{SourceCommit: "1a815b23c42a6236101c50c22167c639a3018a8e", Passed: true, Cases: 4, Fixtures: 1}
+	valid := productReceipt{SourceCommit: "e485a815e4be7af238df24b61b1bd09134c443f9", Passed: true, Cases: 4, Fixtures: 1}
 	if err := validateProductReceipt(valid, 4); err != nil {
 		t.Fatal(err)
 	}

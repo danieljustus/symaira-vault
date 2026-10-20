@@ -320,7 +320,7 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
         fixture.oracle.commit,
-        "1a815b23c42a6236101c50c22167c639a3018a8e"
+        "e485a815e4be7af238df24b61b1bd09134c443f9"
     );
     assert_eq!(fixture.oracle.commit_sha, fixture.oracle.commit);
     assert_eq!(fixture.oracle.release, "unreleased");
