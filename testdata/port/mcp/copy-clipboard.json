@@ -191,7 +191,7 @@
       "internal/vault/vault.go",
       "internal/vault/vault_sync_reconcile.go"
     ],
-    "source_hash": "2a563ff822e7a4dce25a73f2a548e96f2932c4a7b3f845759e4f8fbe141be456",
+    "source_hash": "085b867cd13c81326bba76c394d31bdc09195fe18c9fb3722daa3ad53c15534b",
     "source_pin_digest": "32555195c08c2791272ae6a20af758cad0a7298118ff94d48cef9249d658bb55",
     "go_version": "go1.26.6",
     "corekit_version": "v0.18.2",
