@@ -48,3 +48,8 @@ updates:
       # oracle (config_cases_match_go_generated_contract). Tracked in #1433.
       - dependency-name: "yaml-edit"
         versions: ["0.3.2"]
+      # 0.1.22 has Unicode 15 tables, 0.1.25 already Unicode 17; the frozen Go
+      # oracle normalizes with Unicode 15, so newer tables break MCP/doctor
+      # parity (see #1421/#1434).
+      - dependency-name: "unicode-normalization"
+        versions: [">0.1.22"]
