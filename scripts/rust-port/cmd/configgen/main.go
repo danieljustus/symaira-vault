@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
+	pinnedOracleCommit  = "1a815b23c42a6236101c50c22167c639a3018a8e"
 	pinnedOracleRelease = "unreleased"
 )
 

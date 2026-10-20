@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "21f849ee",
-    "commit_sha": "21f849ee971ba60ca3a85eaf4e61e6e520b41034",
+    "commit": "1a815b23c42a6236101c50c22167c639a3018a8e",
+    "commit_sha": "1a815b23c42a6236101c50c22167c639a3018a8e",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -13,8 +13,8 @@
       "internal/config/schema.go",
       "internal/config/warn.go"
     ],
-    "source_digest": "65ec6fcc51d26f8e8267ea936d0d4411a05e9a710b27a7e33aa68cd905d7a3ac",
-    "generator_digest": "e796349898a68ba53ce5c1659299c2bd37d9ea17acdc0a76491d957f7efe009e"
+    "source_digest": "fac9db1896ab1bbeaecf0a23c875f79764bfb9bb23a94b7a84980d07fff2cca3",
+    "generator_digest": "fb9a002d58d21b54c76b5ac6e3e81d31a1188d28d745b4f48329754e515f292e"
   },
   "cases": [
     {
@@ -3112,7 +3112,7 @@
     },
     {
       "name": "explicit_false_sections",
-      "description": "SaveTo writes empty sections for explicit false values",
+      "description": "SaveTo preserves an explicit zero clipboard timer while omitting false booleans",
       "requested": {
         "git": {
           "auto_push": false,
@@ -3125,7 +3125,7 @@
           "copy_by_default": false
         }
       },
-      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit: {}\nclipboard: {}\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit: {}\nclipboard:\n    auto_clear_duration: 0\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
       "loaded": {
         "git": {
           "auto_push": true,
@@ -3134,7 +3134,7 @@
           "commit_template": "Update from Symaira Vault"
         },
         "clipboard": {
-          "auto_clear_duration": 30,
+          "auto_clear_duration": 0,
           "copy_by_default": true
         }
       }

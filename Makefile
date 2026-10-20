@@ -246,14 +246,14 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
 CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
-CFG_BYTES_ORACLE_COMMIT ?= aa21ec4e
+CFG_BYTES_ORACLE_COMMIT ?= 1a815b23c42a6236101c50c22167c639a3018a8e
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
 # while the session/quota fixtures still sit on the frozen v0.22.1 baseline.
-CONFIG_ORACLE_COMMIT ?= aa21ec4e
+CONFIG_ORACLE_COMMIT ?= 1a815b23c42a6236101c50c22167c639a3018a8e
 CONFIG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
@@ -638,7 +638,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 .PHONY: update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 4e9331537dbe3dbb293a3e81483b4bdf335d424b --check
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 1a815b23c42a6236101c50c22167c639a3018a8e --check
 port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
