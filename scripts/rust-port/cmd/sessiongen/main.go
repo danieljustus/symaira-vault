@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+	pinnedOracleCommit  = "1a815b23c42a6236101c50c22167c639a3018a8e"
 	pinnedOracleRelease = "unreleased"
 	vaultMarker         = "__VAULT__"
 	rootMarker          = "__ROOT__"

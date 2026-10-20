@@ -2189,13 +2189,7 @@ fn write_update(out: &mut String, v: &UpdateConfig) -> Result<(), ConfigError> {
     Ok(())
 }
 fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigError> {
-    let mut body = String::new();
-    if v.auto_clear_duration != 0 {
-        body.push_str(&format!(
-            "    auto_clear_duration: {}\n",
-            v.auto_clear_duration
-        ));
-    }
+    let mut body = format!("    auto_clear_duration: {}\n", v.auto_clear_duration);
     // Go's `omitempty` drops false here, which makes a subsequent load turn
     // an explicit opt-out back on. Keep the opt-out in Rust's canonical bytes.
     body.push_str(&format!("    copyByDefault: {}\n", v.copy_by_default));

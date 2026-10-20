@@ -61,9 +61,10 @@ func Check(t *testing.T, generator string, cases int) []byte {
 		t.Fatal(err)
 	}
 	var receipt struct {
-		Passed   bool
-		Compiler struct{ Version string }
-		Lanes    []struct {
+		Passed              bool
+		Compiler            struct{ Version string }
+		ProductSourceReplay productReceipt `json:"product_source_replay"`
+		Lanes               []struct {
 			Lane         string
 			SourceCommit string `json:"source_commit"`
 			Passed       bool
@@ -86,11 +87,28 @@ func Check(t *testing.T, generator string, cases int) []byte {
 			t.Fatalf("incomplete %s generator acceptance", expected.lane)
 		}
 	}
+	if err = validateProductReceipt(receipt.ProductSourceReplay, cases); err != nil {
+		t.Fatal(err)
+	}
 	data, err = readEvidence(files, "evidence/historical/"+fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return data
+}
+
+type productReceipt struct {
+	SourceCommit string `json:"source_commit"`
+	Passed       bool
+	Cases        int
+	Fixtures     int
+}
+
+func validateProductReceipt(product productReceipt, cases int) error {
+	if product.SourceCommit != "1a815b23c42a6236101c50c22167c639a3018a8e" || !product.Passed || product.Cases != cases || product.Fixtures != 1 {
+		return fmt.Errorf("missing passing pinned product-source generator acceptance")
+	}
+	return nil
 }
 
 func fixtureName(generator string, cases int) (string, error) {

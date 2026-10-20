@@ -273,3 +273,17 @@ commit is held only by a local detached worktree. The implementation worker
 has no authority to create/publish an oracle tag. Native Linux, Darwin arm64
 and Windows process/fixture execution on the published integration candidate,
 independent review and the separate GUI/biometric/FFI gates remain required.
+
+For #1320, fixture admission additionally executes a fixed product-source replay
+at `1a815b23c42a6236101c50c22167c639a3018a8e`. The separately named
+`product_source_replay` receipt is mandatory for full and bounded generator
+runs; the historical/corrected lanes and returned historical bytes remain.
+Before compilation, all declared non-module production bytes must equal that
+pin. Product replay overlays the anchored generators with only identity/hash
+transforms (and the explicitly selected approval-lifetime mapping), binds capture
+metadata to those actual inputs before execution, and compares the complete
+historical semantic contract. Modules stay recorded in build inventories under
+the existing treatment. The product Windows entrypoint already contains the
+timeout child repair and must match its pin without another repair. These are
+admission rules; native replay, genuine current-product recaptures, independent
+review and native Windows acceptance remain separate required gates.

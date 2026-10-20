@@ -1,8 +1,8 @@
 {
-  "revision": "55da4ca13ead39d4000cf6f866ac8671ca86d8f2",
+  "revision": "1a815b23c42a6236101c50c22167c639a3018a8e",
   "go_version": "go1.26.6",
-  "source_digest": "5deb5a11ac3e74deb430c445d0ac5eb7411c86b304f6d8ece7d1b0e8bd261a6f",
-  "generator_digest": "8043c93c60029a7d198767281ad15d9233a6a8e3c1236ee8f8e240682c88b2fd",
+  "source_digest": "b6334a096884fa26ccc85a7daf497916d71bad8eab3c8b7113290fe312d086ef",
+  "generator_digest": "af1bef51556ba4f24b071611d011a600aed40ba0973416a55e0f5389f87bc5fc",
   "payload": "synthetic-manifest-value",
   "vectors": [
     {

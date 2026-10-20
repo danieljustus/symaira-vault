@@ -67,3 +67,30 @@ func TestEvidenceConfinement(t *testing.T) {
 		}
 	}
 }
+
+func TestProductReceipt(t *testing.T) {
+	valid := productReceipt{SourceCommit: "1a815b23c42a6236101c50c22167c639a3018a8e", Passed: true, Cases: 4, Fixtures: 1}
+	if err := validateProductReceipt(valid, 4); err != nil {
+		t.Fatal(err)
+	}
+	for _, fault := range []string{"missing", "short-pin", "wrong-pin", "failed", "cases", "fixtures"} {
+		product := valid
+		switch fault {
+		case "missing":
+			product = productReceipt{}
+		case "short-pin":
+			product.SourceCommit = product.SourceCommit[:8]
+		case "wrong-pin":
+			product.SourceCommit = "24acdb08fcc7021262717aa803d72eb8d151c66a"
+		case "failed":
+			product.Passed = false
+		case "cases":
+			product.Cases++
+		case "fixtures":
+			product.Fixtures++
+		}
+		if err := validateProductReceipt(product, 4); err == nil {
+			t.Fatalf("accepted product receipt fault: %s", fault)
+		}
+	}
+}

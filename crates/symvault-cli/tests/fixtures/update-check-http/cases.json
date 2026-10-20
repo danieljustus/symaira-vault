@@ -19,14 +19,14 @@
       "TestCheckerReturnsHTTPError",
       "TestCheckerReturnsDecodeError"
     ],
-    "commit": "4e9331537dbe3dbb293a3e81483b4bdf335d424b",
+    "commit": "1a815b23c42a6236101c50c22167c639a3018a8e",
     "go_version": "go1.26.6",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
     "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
     "generated_on": "darwin",
-    "captured": "2026-10-19",
+    "captured": "2026-10-20",
     "source_pin_digest": "4e54346eb7f33f5a06b6408e747ae55269dffca3e37ff07c3b61673acacb5e2c",
     "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
