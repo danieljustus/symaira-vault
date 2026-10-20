@@ -1910,7 +1910,7 @@ fn check_mcp_approval_tls(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResu
     let now = time::OffsetDateTime::now_utc();
     let days_left = ((expiry - now).whole_seconds() / 86400).max(0);
     let reissue_hint = "it regenerates automatically the next time the server starts; every paired approval device must be re-paired afterward";
-    let date_format = match time::format_description::parse("[year]-[month]-[day]") {
+    let date_format = match time::format_description::parse_borrowed::<1>("[year]-[month]-[day]") {
         Ok(df) => df,
         Err(_) => {
             return DoctorResult::new(

@@ -552,10 +552,7 @@ impl age::Recipient for ArgonRecipient {
         let mut body = nonce.to_vec();
         body.extend(
             cipher
-                .encrypt(
-                    Nonce::from_slice(&nonce),
-                    file_key.expose_secret().as_slice(),
-                )
+                .encrypt((&nonce).into(), file_key.expose_secret().as_slice())
                 .map_err(|_| age::EncryptError::MissingRecipients)?,
         );
         Ok((
@@ -657,9 +654,10 @@ impl age::Identity for ArgonIdentity {
             }
         };
         let cipher = ChaCha20Poly1305::new_from_slice(key.as_bytes()).ok()?;
-        let Ok(mut plain) =
-            cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
-        else {
+        let Ok(mut plain) = cipher.decrypt(
+            <&Nonce>::try_from(&stanza.body[..12]).expect("12-byte nonce"),
+            &stanza.body[12..],
+        ) else {
             return Some(Err(age::DecryptError::DecryptionFailed));
         };
         if plain.len() != 16 {
@@ -829,7 +827,7 @@ fn encrypt_with_key(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError
     let mut result = nonce.to_vec();
     result.extend(
         cipher
-            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .encrypt((&nonce).into(), plaintext)
             .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "cannot encrypt index"))?,
     );
     Ok(result)
@@ -845,7 +843,10 @@ fn decrypt_with_key(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoErro
     let cipher = ChaCha20Poly1305::new_from_slice(key)
         .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "invalid index key"))?;
     cipher
-        .decrypt(Nonce::from_slice(&ciphertext[..12]), &ciphertext[12..])
+        .decrypt(
+            <&Nonce>::try_from(&ciphertext[..12]).expect("12-byte nonce"),
+            &ciphertext[12..],
+        )
         .map_err(|_| {
             CryptoError::new(
                 FailureClass::WrongPassphraseOrKey,
@@ -1156,6 +1157,12 @@ pub fn recover_zero_key_identity(
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn chacha_cipher_preserves_key_zeroization() {
+        fn require_zeroize_on_drop<T: ZeroizeOnDrop>() {}
+        require_zeroize_on_drop::<ChaCha20Poly1305>();
+    }
 
     const ID: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
     const ID2: &str = "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3";
