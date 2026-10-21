@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.23.2] - 2026-10-21
+
+### Security
+- Dependencies: `rustls-webpki` 0.103.16 (RUSTSEC-2026-0382, certificate
+  verification could accept distrusted intermediates) and `webpki-root-certs`
+  1.0.10 (RUSTSEC-2026-0383, bundled roots trusted distrusted emSign
+  intermediates).
+
 ### Fixed
 - Configuration: an explicit `clipboard.autoClearDuration: 0` (auto-clear
   disabled) is no longer rewritten to 30 seconds when the configuration is
@@ -1221,7 +1229,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.1...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...HEAD
+[v0.23.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.2
 [v0.23.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.1
 [v0.23.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.0
 [v0.22.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.1
