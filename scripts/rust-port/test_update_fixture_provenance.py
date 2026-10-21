@@ -18,7 +18,7 @@ class ProvenanceTests(unittest.TestCase):
         valid = {"Version": MODULE.COREKIT_VERSION}
         MODULE.check_build_identity(MODULE.ORACLE_GO, valid)
         for version, module in [
-            ("go1.26.9", valid),
+            ("go1.26.10", valid),
             (MODULE.ORACLE_GO, {"Version": "v0.0.0"}),
             (MODULE.ORACLE_GO, {"Version": "v0.17.1-0.20260904101640-f3d3eb79b9b1"}),
             (MODULE.ORACLE_GO, dict(valid, Replace={})),

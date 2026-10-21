@@ -25,8 +25,8 @@ class GoToolchainTests(unittest.TestCase):
             cwd=ROOT, env=env, text=True, capture_output=True, timeout=120,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.splitlines(), ["go1.26.9", "go1.26.6"])
-        self.assertIn("\ntoolchain go1.26.9\n", (ROOT / "go.mod").read_text())
+        self.assertEqual(result.stdout.splitlines(), ["go1.26.10", "go1.26.6"])
+        self.assertIn("\ntoolchain go1.26.10\n", (ROOT / "go.mod").read_text())
 
 
 if __name__ == "__main__":

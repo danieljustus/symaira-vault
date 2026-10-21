@@ -11,7 +11,7 @@ GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
 # Historical oracle generation keeps its measured compiler identity.
 GO_TOOLCHAIN ?= go1.26.6
-BUILD_GO_TOOLCHAIN ?= go1.26.9
+BUILD_GO_TOOLCHAIN ?= go1.26.10
 export GOTOOLCHAIN ?= $(BUILD_GO_TOOLCHAIN)
 # These fixture generators link packages whose backend is chosen during Go
 # package initialization. Select memory in Make, before `go run` starts; setting

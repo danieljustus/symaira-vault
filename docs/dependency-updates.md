@@ -156,7 +156,7 @@ trusted; for major updates, every step is mandatory.
   go build ./...
   ```
   Confirm no compilation errors with the patched `toolchain` in
-  [`go.mod`](../go.mod) (currently `go1.26.9`), matching
+  [`go.mod`](../go.mod) (currently `go1.26.10`), matching
   `BUILD_GO_TOOLCHAIN` in [`Makefile`](../Makefile). The `go 1.26.6`
   directive retains the minimum for frozen oracle checks.
 
