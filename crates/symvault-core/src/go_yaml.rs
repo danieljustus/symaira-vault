@@ -22,6 +22,28 @@
 //! `hexdecimal` (libyaml: `hexadecimal`). It is mapped explicitly; every other
 //! problem string is identical, which the Go-recorded corpus
 //! (`testdata/port/cli/config-yaml-syntax.json`) pins.
+//!
+//! # Known gap: scanner look-ahead
+//!
+//! The two scanners are not step-for-step identical. libyaml fetches a token
+//! only when the parser asks for it (plus whatever a pending simple key needs).
+//! yaml.v3 (`yaml_parser_fetch_more_tokens`) keeps a look-ahead of two tokens
+//! behind the one the parser is looking at, so that comments can be attached to
+//! the right node. When the parser rejects token *T* and a scanner failure sits
+//! in the next two tokens, Go reports the scanner failure (for example
+//! `mapping values are not allowed in this context` for `a: "x" b: 1`) while
+//! libyaml reports the parser failure at *T* (`did not find expected key`).
+//! Reproducing that needs the scanner state after *T*, which `serde_yaml_ng`
+//! does not expose, so the class is recorded as open divergences in the
+//! Go-recorded corpus instead of being approximated here.
+//!
+//! # Dependency pin
+//!
+//! [`syntax_error_text`] reads the `Debug` form of `serde_yaml_ng::Error`
+//! because the crate exposes no accessor for the libyaml stage, problem or
+//! context. The dependency is therefore pinned to an exact version
+//! (`=0.10.0`), and `debug_shapes_are_the_ones_the_renderer_parses` fails
+//! loudly the moment an upgrade changes that form.
 
 use serde::de::{Deserialize, IgnoredAny};
 
@@ -51,10 +73,47 @@ pub fn syntax_error_text(error: &serde_yaml_ng::Error) -> Option<String> {
 pub fn first_document_syntax_error(bytes: &[u8]) -> Option<String> {
     let mut documents = serde_yaml_ng::Deserializer::from_slice(bytes);
     let first = documents.next()?;
-    IgnoredAny::deserialize(first)
-        .err()
-        .as_ref()
-        .and_then(syntax_error_text)
+    let error = IgnoredAny::deserialize(first).err()?;
+    syntax_error_text(&error).or_else(|| unknown_anchor_text(&error, bytes))
+}
+
+/// Whether Go's `Decoder.Decode(&yaml.Node{})` accepts `document`, a document
+/// that follows the first one in the stream.
+///
+/// `hasTrailingDocuments` in Go's loader counts a later document only when it
+/// decodes without an error, so a libyaml reader, scanner or parser failure in
+/// it means "no trailing document". Any other failure is not a syntax
+/// failure; it is treated as a document, which is what the loader did before.
+/// (yaml.v3 shares anchors across the documents of a stream while
+/// `serde_yaml_ng` scopes them to one document, so an alias to an anchor of an
+/// earlier document cannot be told apart from an undefined one here; that
+/// input stays recorded as an open divergence.)
+#[must_use]
+pub fn decodes_as_go_node(document: serde_yaml_ng::Deserializer<'_>) -> bool {
+    match IgnoredAny::deserialize(document) {
+        Ok(_) => true,
+        Err(error) => syntax_error_text(&error).is_none(),
+    }
+}
+
+/// yaml.v3 builds its node tree event by event and rejects an alias to an
+/// anchor that was not defined earlier with `yaml: unknown anchor 'x'
+/// referenced` (no line). `serde_yaml_ng` rejects the same alias at the same
+/// point but words it `unknown anchor at line L column C`, without the name,
+/// so the name is read back from the alias token at the reported position.
+fn unknown_anchor_text(error: &serde_yaml_ng::Error, bytes: &[u8]) -> Option<String> {
+    if !format!("{error:?}").starts_with("Error(\"unknown anchor\", ") {
+        return None;
+    }
+    // The mark's index is a byte offset into the stream (the port adds the
+    // width of every character it skips), so the lookup is byte based.
+    let rest = bytes.get(error.location()?.index()..)?.strip_prefix(b"*")?;
+    let name: String = rest
+        .iter()
+        .take_while(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        .map(|&byte| char::from(byte))
+        .collect();
+    (!name.is_empty()).then(|| format!("yaml: unknown anchor '{name}' referenced"))
 }
 
 fn render(debug: &str) -> Option<String> {
@@ -208,5 +267,106 @@ mod tests {
         let error = serde_yaml_ng::from_str::<std::collections::BTreeMap<String, u8>>("a: x\n")
             .expect_err("type error");
         assert_eq!(syntax_error_text(&error), None);
+    }
+
+    #[test]
+    fn unknown_anchors_are_worded_like_yaml_v3() {
+        assert_eq!(
+            text("a: *nope\n").as_deref(),
+            Some("yaml: unknown anchor 'nope' referenced")
+        );
+        // The mark is a byte offset, so non-ASCII text before the alias must
+        // not shift the lookup.
+        assert_eq!(
+            text("ключ: значение\nb: *nope-1_x\n").as_deref(),
+            Some("yaml: unknown anchor 'nope-1_x' referenced")
+        );
+        assert_eq!(
+            text("a: [1, *later]\nb: &later 2\n").as_deref(),
+            Some("yaml: unknown anchor 'later' referenced")
+        );
+        // The first failure in event order wins, as in Go's node builder.
+        assert_eq!(
+            text("a: *nope\nb: [\n").as_deref(),
+            Some("yaml: unknown anchor 'nope' referenced")
+        );
+        assert_eq!(text("a: &x 1\nb: *x\n"), None);
+    }
+
+    #[test]
+    fn later_documents_count_unless_libyaml_rejects_them() {
+        fn later(source: &str) -> bool {
+            let mut documents = serde_yaml_ng::Deserializer::from_str(source);
+            documents.next().expect("first document");
+            decodes_as_go_node(documents.next().expect("second document"))
+        }
+        assert!(later("a: 1\n---\nb: 2\n"));
+        assert!(later("a: 1\n---\n"));
+        // Go's `Decode(&second)` fails on a syntax error, so the stream has no
+        // trailing document.
+        assert!(!later("a: 1\n---\n[\n"));
+        assert!(!later("a: 1\n...\nb: [\n"));
+        assert!(!later("a: 1\n---\nb: c: d\n"));
+    }
+
+    #[test]
+    fn debug_shapes_are_the_ones_the_renderer_parses() {
+        fn debug_of(source: &str) -> String {
+            let mut documents = serde_yaml_ng::Deserializer::from_str(source);
+            let first = documents.next().expect("first document");
+            let error = IgnoredAny::deserialize(first).expect_err("malformed document");
+            format!("{error:?}")
+        }
+        const HINT: &str =
+            "serde_yaml_ng's Debug output changed (pinned =0.10.0): update go_yaml::render";
+
+        let scanner = debug_of("a: b: c\n");
+        assert!(
+            scanner.starts_with(
+                "Error { kind: SCANNER, problem: \"mapping values are not allowed in this context\""
+            ),
+            "{HINT}: {scanner}"
+        );
+        assert_eq!(
+            render(&scanner).as_deref(),
+            Some("yaml: mapping values are not allowed in this context"),
+            "{HINT}"
+        );
+
+        let parser = debug_of("a:\n  b: 1\n c: 2\n");
+        assert!(
+            parser.starts_with("Error { kind: PARSER, problem: \"did not find expected key\""),
+            "{HINT}: {parser}"
+        );
+        assert!(
+            parser.contains("problem_mark: Mark { line: 3"),
+            "{HINT}: {parser}"
+        );
+        assert_eq!(
+            render(&parser).as_deref(),
+            Some("yaml: line 2: did not find expected key"),
+            "{HINT}"
+        );
+
+        let reader = debug_of("a: \u{1}\n");
+        assert!(
+            reader.starts_with(
+                "Error { kind: READER, problem: \"control characters are not allowed\""
+            ),
+            "{HINT}: {reader}"
+        );
+        assert_eq!(
+            render(&reader).as_deref(),
+            Some("yaml: control characters are not allowed"),
+            "{HINT}"
+        );
+
+        // Not a libyaml stage: left to the caller.
+        let anchor = debug_of("a: *nope\n");
+        assert_eq!(
+            anchor, "Error(\"unknown anchor\", line: 1, column: 4)",
+            "{HINT}"
+        );
+        assert_eq!(render(&anchor), None, "{HINT}");
     }
 }

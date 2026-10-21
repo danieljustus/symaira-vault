@@ -613,7 +613,7 @@ impl Config {
         reason = "the warning seam is retained; see load_from_bytes_with_warnings"
     )]
     fn parse_document(bytes: &[u8], warnings: &mut Vec<String>) -> Result<Self, ConfigError> {
-        if bytes.iter().all(u8::is_ascii_whitespace) {
+        if is_go_blank(bytes) {
             return Ok(Self::default());
         }
         // Go's loader parses the whole first document into a node tree before
@@ -641,7 +641,11 @@ impl Config {
             .ok_or_else(|| ConfigError::Parse("empty YAML stream".to_owned()))?;
         let profiles = ProfileFields::deserialize(first)
             .map_err(|error| ConfigError::Parse(error.to_string()))?;
-        if documents.next().is_some() {
+        // Go counts a later document only when it decodes: a syntax error in
+        // it leaves the stream a single-document one.
+        if let Some(second) = documents.next()
+            && crate::go_yaml::decodes_as_go_node(second)
+        {
             return Err(ConfigError::Yaml(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
         }
         let fields: serde_yaml_ng::Mapping = profiles
@@ -917,6 +921,18 @@ fn home_dir() -> String {
 fn env_string(name: &str) -> String {
     env::var(name).unwrap_or_default()
 }
+
+/// Go's loader starts with `len(bytes.TrimSpace(data)) == 0` and then serves
+/// the defaults. `TrimSpace` strips Unicode white space (`unicode.IsSpace`:
+/// the ASCII set plus `\v`, U+0085, U+00A0, U+1680, U+2000..=U+200A, U+2028,
+/// U+2029, U+202F, U+205F and U+3000), not only ASCII, and it stops at bytes
+/// that are not valid UTF-8, so such input is not blank. `char::is_whitespace`
+/// is that same `White_Space` set; `go_space_set_matches_unicode_is_space`
+/// pins it against the Go table.
+fn is_go_blank(bytes: &[u8]) -> bool {
+    std::str::from_utf8(bytes).is_ok_and(|text| text.chars().all(char::is_whitespace))
+}
+
 fn key(value: &str) -> serde_yaml_ng::Value {
     serde_yaml_ng::Value::String(value.into())
 }
@@ -2565,5 +2581,51 @@ mod tests {
             ..Config::default()
         };
         assert!(c.validate().is_empty());
+    }
+
+    /// `unicode.IsSpace` of Go 1.26.6, listed by running it over every rune.
+    const GO_IS_SPACE: [u32; 25] = [
+        0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x0020, 0x0085, 0x00A0, 0x1680, 0x2000, 0x2001,
+        0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x2028, 0x2029,
+        0x202F, 0x205F, 0x3000,
+    ];
+
+    #[test]
+    fn go_space_set_matches_unicode_is_space() {
+        let rust: Vec<u32> = (0..=char::MAX as u32)
+            .filter(|&code| char::from_u32(code).is_some_and(char::is_whitespace))
+            .collect();
+        assert_eq!(rust, GO_IS_SPACE);
+    }
+
+    #[test]
+    fn unicode_only_whitespace_serves_the_defaults_like_go() {
+        for blank in [
+            "",
+            "   ",
+            "\u{b}\n",
+            "\u{b}",
+            "\u{c}\n",
+            "\u{a0}\n",
+            "\u{85}\n",
+            "\u{3000}\n",
+            "\u{2028}\u{2029}\n",
+            " \t\r\n\u{b}\u{c}\u{a0}\u{85}\u{3000} \n",
+        ] {
+            assert_eq!(
+                Config::load_from_bytes(blank.as_bytes()).expect(blank),
+                Config::default(),
+                "{blank:?}"
+            );
+        }
+        // Not white space for Go: a BOM, a zero-width space and bytes that are
+        // not UTF-8 all reach the YAML reader.
+        for not_blank in [
+            &b" \xff\n"[..],
+            "\u{200b}\n".as_bytes(),
+            "\u{a0}[\n".as_bytes(),
+        ] {
+            assert!(!is_go_blank(not_blank), "{not_blank:?}");
+        }
     }
 }
