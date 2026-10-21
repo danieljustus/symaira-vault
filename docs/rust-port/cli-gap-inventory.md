@@ -147,25 +147,38 @@ its measured duration and recommended factor are host-dependent, so the added
 differential compares the Argon2id branch exactly and the legacy branch's result
 shape and warning hint.
 
-### Known deviation: config-loader syntax-error dialect (not yet parity)
+### Config-loader syntax-error dialect (libyaml syntax failures at parity; #1241)
 
-On parser-invalid `config.yaml` inputs, five shared IDs can diverge in the
-`message` field: Go renders go-yaml's syntax error while the Rust loader renders
-serde_yaml's detail and source location. A source-bound differential now covers
-the stable multiple-document rejection across all five IDs; that message matches
-Go exactly. Scanner-generated syntax errors remain open.
-The prefixed part (`config.yaml parse error: `, `failed to load config: `,
-`cannot load config: `) is identical, so only the parser dialect differs:
+Go renders `config.yaml` failures with go-yaml (`gopkg.in/yaml.v3`): `yaml: line N: <problem>`
+for scanner and parser failures, `yaml: <problem>` for reader failures and first-line marks. The
+Rust loader used to render serde_yaml's `<problem> at line L column C, while …` behind a
+`parse config:` prefix. Both front ends are ports of libyaml, so problem strings and marks agree;
+`crates/symvault-core/src/go_yaml.rs` converts the second form into the first (Go's `parser.fail`
+line rule: context mark first, `+1` only for scanner errors, no line on the first line, none for
+reader errors; the single spelling difference is yaml.v3's `hexdecimal`). The loader checks the
+first document's syntax before decoding it, as Go does, and `config get`/`config set` run the same
+gate before their lossless editor. The five shared doctor IDs are `vault.config.parses`,
+`vault.config.validates`, `auth.passphrase.rotation`, `mcp.dynamic.engines` and `mcp.agents`.
 
-- `vault.config.parses`, `vault.config.validates`, `auth.passphrase.rotation`,
-  `mcp.dynamic.engines`, `mcp.agents` (all five share the one root cause)
+Evidence: `testdata/port/cli/config-yaml-syntax.json` freezes the pinned Go binary's (`0cc78062`)
+exit status, stdout and stderr for 72 inputs (8 reader, 38 scanner, 22 parser, 1 loader and 3
+accepted controls; at least 38 distinct go-yaml problem strings) over `config validate`,
+`config validate --json`, `config get`, `config set` (config left unchanged) and the five doctor
+checks above. `crates/symvault-cli/tests/config_yaml_syntax.rs` replays all of them against the
+native CLI byte for byte; `make yaml-syntax-cli-differential` rebuilds the oracle, re-verifies the
+fixture and runs the replay. The multiple-document rejection now also matches on
+`config validate` (it no longer carries the `parse config:` prefix).
 
-This is a **pre-existing** divergence of the Rust config loader shared by the whole
-CLI, not introduced by the doctor port, and general parser-message parity is **not**
-claimed. The checks ported in wave 2a quote no parser error, so they match on the
-corrupt fixture as well (`differential_doctor_session_tooling_checks`); the two MCP
-config checks from wave 2b quote parser errors and are pinned for the missing and
-initialized fixtures only (`differential_doctor_mcp_config_checks`).
+Still open, recorded in the fixture's `open_divergences` (each is asserted to still differ, so a
+fix must move it into `cases`): content after a `%YAML` directive without `---` (yaml.v3's scanner
+fails before libyaml's parser would), a lone UTF-16 BOM stream (yaml.v3 decodes it), a UTF-8 BOM
+after the first line (yaml.v3 skips it), a syntax error in the second document (Go ignores it, Rust
+reports multi-document) and an alias to an undefined anchor (yaml.v3 names the anchor). yaml.v3
+*decode* errors (`yaml: unmarshal errors: … cannot unmarshal !!str … into config.Config`) and the
+`config get` key-not-found text are not covered. The checks ported in wave 2a quote no parser
+error (`differential_doctor_session_tooling_checks`); the two MCP config checks from wave 2b are
+additionally pinned for the missing and initialized fixtures
+(`differential_doctor_mcp_config_checks`).
 
 Ported IDs (38 in the registry, 35 of them without network):
 
