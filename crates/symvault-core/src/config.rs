@@ -28,6 +28,12 @@ pub enum ConfigError {
     Read(#[from] std::io::Error),
     #[error("parse config: {0}")]
     Parse(String),
+    /// A loader failure whose text Go returns unwrapped: a libyaml-level syntax
+    /// failure worded as `yaml.v3` words it (`yaml: line 3: …`) or the
+    /// multiple-document rejection. It renders without the `parse config:`
+    /// prefix of [`ConfigError::Parse`].
+    #[error("{0}")]
+    Yaml(String),
     #[error("invalid config: {0}")]
     Invalid(String),
     #[error("serialize config: {0}")]
@@ -610,6 +616,13 @@ impl Config {
         if bytes.iter().all(u8::is_ascii_whitespace) {
             return Ok(Self::default());
         }
+        // Go's loader parses the whole first document into a node tree before
+        // it decodes anything, so a scanner or parser failure anywhere in it
+        // wins over a type error found earlier. Check syntax first and word
+        // the failure the way yaml.v3 does.
+        if let Some(message) = crate::go_yaml::first_document_syntax_error(bytes) {
+            return Err(ConfigError::Yaml(message));
+        }
         // An explicit `null` is an empty document. Go already treats an empty
         // file as "use the defaults", so rejecting `null` while accepting ""
         // would be inconsistent.
@@ -629,7 +642,7 @@ impl Config {
         let profiles = ProfileFields::deserialize(first)
             .map_err(|error| ConfigError::Parse(error.to_string()))?;
         if documents.next().is_some() {
-            return Err(ConfigError::Parse(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
+            return Err(ConfigError::Yaml(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
         }
         let fields: serde_yaml_ng::Mapping = profiles
             .fields
