@@ -23,4 +23,4 @@ sha2 = "=0.11.0"
 regex = "=1.13.1"
 unicode_categories = "=0.1.1"
 zeroize = { version = "=1.9.1", features = ["alloc"] }
-fs4 = { version = "=0.13.1", features = ["sync"] }
+fs4 = { version = "=1.1.0", features = ["sync"] }
