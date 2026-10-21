@@ -45,6 +45,24 @@ RW_DMG="$WORK_DIR/installer-rw.dmg"
 MOUNT_DIR=""
 DEVICE=""
 
+# hdiutil detach can fail with exit 16 (EBUSY) while Spotlight/Finder still
+# hold the freshly laid-out volume on hosted macOS runners. Retry with a short
+# backoff and force only the final attempt.
+detach_device() {
+  local device="$1" attempt
+  for attempt in 1 2 3 4 5; do
+    if hdiutil detach "$device" -quiet; then
+      return 0
+    fi
+    echo "hdiutil detach $device failed (attempt $attempt/5); retrying" >&2
+    sleep $((attempt * 2))
+  done
+  hdiutil detach "$device" -force -quiet || {
+    echo "error: could not detach $device after 5 attempts and -force" >&2
+    return 1
+  }
+}
+
 cleanup() {
   if [ -n "$DEVICE" ]; then
     hdiutil detach "$DEVICE" -quiet 2>/dev/null || true
@@ -109,7 +127,7 @@ end tell
 APPLESCRIPT
 
 sync
-hdiutil detach "$DEVICE" -quiet
+detach_device "$DEVICE"
 DEVICE=""
 
 rm -f "$DMG_PATH"
