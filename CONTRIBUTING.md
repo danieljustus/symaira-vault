@@ -30,7 +30,7 @@ The script is idempotent and safe to run multiple times. Use `./scripts/setup-de
 
 If you prefer manual setup, ensure you have:
 
-- **Go:** use the patched `toolchain` in `go.mod` (currently `go1.26.9`), also selected by `BUILD_GO_TOOLCHAIN` in `Makefile`; the `go 1.26.6` directive is the minimum retained for frozen oracle checks
+- **Go:** use the patched `toolchain` in `go.mod` (currently `go1.26.10`), also selected by `BUILD_GO_TOOLCHAIN` in `Makefile`; the `go 1.26.6` directive is the minimum retained for frozen oracle checks
 - **Python 3:** required by the Makefile test wrapper
 - **Rust/Cargo:** use the toolchain pinned in `rust-toolchain.toml`; the test wrapper builds the Rust CLI unless `SYMVAULT_RUST_BINARY` supplies an existing binary
 - **git**

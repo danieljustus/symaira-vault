@@ -4,7 +4,7 @@ go 1.26.6
 
 // Preserve the minimum compiler for frozen Go 1.26.6 oracle checks.
 // Product builds, tests, scans and releases use the patched toolchain.
-toolchain go1.26.9
+toolchain go1.26.10
 
 // Deferred major updates (intentionally deferred):
 // - github.com/ProtonMail/go-crypto: v1.1.6 -> v1.4.1 (major version bump, potential breaking changes in crypto APIs)

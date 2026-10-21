@@ -78,7 +78,7 @@ class OracleControls(unittest.TestCase):
                 fixtures.fixture_anchor(root,[name])
 
     def test_compiler_is_effective_not_an_environment_label(self):
-        with patch.object(oracle.subprocess,'check_output',return_value=b'go1.26.9\n'):
+        with patch.object(oracle.subprocess,'check_output',return_value=b'go1.26.10\n'):
             with self.assertRaisesRegex(ValueError,'actual go1.26.6'):
                 oracle.pinned_go(dict(os.environ,GOTOOLCHAIN='go1.26.6'),fixtures.ROOT)
 
