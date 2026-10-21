@@ -29,7 +29,7 @@ jobs:
     permissions:
       contents: read
     outputs:
-      any: ${{ steps.select.outputs.any }}
+      group_http: ${{ steps.select.outputs.group_http }}
       head: ${{ steps.select.outputs.head }}
       origin: ${{ steps.select.outputs.origin }}
       oauth: ${{ steps.select.outputs.oauth }}
@@ -65,13 +65,13 @@ jobs:
             # Fail closed: if the selector itself cannot run, every satellite runs.
             echo 'selector failed; selecting all satellites' >&2
             printf 'any=true\n' >> "$GITHUB_OUTPUT"
-            for k in head origin oauth deadline timeout write framing tls; do printf '%s=true\n' "$k" >> "$GITHUB_OUTPUT"; done
+            for k in group_http head origin oauth deadline timeout write framing tls; do printf '%s=true\n' "$k" >> "$GITHUB_OUTPUT"; done
           }
 
   macos-http:
     name: HTTP satellites (macos-latest)
     needs: select
-    if: ${{ !cancelled() && (needs.select.result != 'success' || needs.select.outputs.any != 'false') }}
+    if: ${{ !cancelled() && (needs.select.result != 'success' || needs.select.outputs.group_http != 'false') }}
     runs-on: xcode-27
     timeout-minutes: 180
     env:
