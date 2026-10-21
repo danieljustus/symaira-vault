@@ -4045,7 +4045,7 @@ dependencies = [
 name = "symvault-cli"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "crossterm",
  "ctrlc",
@@ -4090,7 +4090,7 @@ version = "0.0.0"
 dependencies = [
  "aes-gcm",
  "base32",
- "base64 0.22.1",
+ "base64 0.23.1",
  "fs4",
  "getrandom 0.4.3",
  "hmac 0.13.0",
@@ -4113,7 +4113,7 @@ dependencies = [
  "age",
  "age-core",
  "argon2",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chacha20poly1305 0.11.0",
  "getrandom 0.4.3",
  "hkdf 0.12.4",
@@ -4137,7 +4137,7 @@ dependencies = [
 name = "symvault-mcp"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "getrandom 0.4.3",
  "hickory-resolver",
  "hmac 0.12.1",
@@ -4167,7 +4167,7 @@ name = "symvault-platform"
 version = "0.0.0"
 dependencies = [
  "arboard",
- "base64 0.22.1",
+ "base64 0.23.1",
  "keyring",
  "keyring-core",
  "rustix",
@@ -4183,7 +4183,7 @@ dependencies = [
 name = "symvault-store"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "fs4",
  "getrandom 0.4.3",
  "hmac 0.12.1",
@@ -4205,7 +4205,7 @@ dependencies = [
 name = "symvault-sync"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "csv",
  "flate2",
  "getrandom 0.4.3",
