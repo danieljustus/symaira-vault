@@ -189,7 +189,6 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 			}
 			t.Cleanup(func() { cancel(); oracleContext = oldContext; goExecutable, oracleTimeout = oldGo, oldTimeout })
 
-			started := time.Now()
 			result := make(chan error, 1)
 			joined := false
 			go func() {
@@ -229,6 +228,8 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 				}
 			}
 			readyTicker.Stop()
+			// Bound only cleanup, not the readiness wait, which is slow under load.
+			cleanupStarted := time.Now()
 			if parentCancel {
 				cancel()
 			}
@@ -250,7 +251,7 @@ func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {
 				state, stateErr := exec.Command("ps", "-o", "pid,ppid,pgid,state", "-p", strconv.Itoa(descendantPID)).CombinedOutput()
 				t.Fatalf("runOracle did not return within cleanup bound; descendant state: %s (%v)\n%s", state, stateErr, stacks)
 			}
-			if elapsed := time.Since(started); elapsed > 5*time.Second {
+			if elapsed := time.Since(cleanupStarted); elapsed > 5*time.Second {
 				t.Fatalf("timeout cleanup exceeded bound: %v", elapsed)
 			}
 
