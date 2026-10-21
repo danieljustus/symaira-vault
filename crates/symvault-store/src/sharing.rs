@@ -7,7 +7,7 @@
 
 use std::{collections::BTreeMap, fs, io, path::Path};
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 

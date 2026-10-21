@@ -2434,7 +2434,7 @@ mod tests {
 
     #[test]
     fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -2503,7 +2503,7 @@ mod tests {
 
     #[test]
     fn waiting_mcp_approval_does_not_block_local_decision_on_same_server() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -2653,7 +2653,7 @@ mod tests {
 
     #[test]
     fn mcp_request_admission_reserves_two_workers_for_local_approval() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 

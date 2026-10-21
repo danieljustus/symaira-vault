@@ -159,7 +159,7 @@ fn fixture_source_digest_matches_pinned_go_sources() {
         hasher.update([0]);
     }
     let digest = hasher.finalize();
-    let digest = format!("{digest:x}");
+    let digest = hex::encode(digest);
     assert_eq!(
         digest, fixture.oracle.source_digest,
         "pinned Go sources changed; regenerate \

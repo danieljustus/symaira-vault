@@ -133,7 +133,7 @@ fn actual_go_resource_policy_observations_match_rust() {
         generator_digest.update([0]);
     }
     assert_eq!(
-        format!("{:x}", generator_digest.finalize()),
+        hex::encode(generator_digest.finalize()),
         fixture.oracle.generator_digest
     );
     // Validate sizes before reconstructing any potentially large fixture input.
@@ -177,7 +177,7 @@ fn actual_go_resource_policy_observations_match_rust() {
     for case in fixture.cases {
         let raw = input(&case.recipe);
         assert_eq!(
-            format!("{:x}", Sha256::digest(&raw)),
+            hex::encode(Sha256::digest(&raw)),
             case.recipe_input_sha256,
             "{} byte recipe",
             case.recipe.id

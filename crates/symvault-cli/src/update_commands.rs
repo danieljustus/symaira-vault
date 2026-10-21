@@ -640,7 +640,7 @@ fn default_cache_path() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
         .unwrap_or_else(|| PathBuf::from(".cache"));
     let hash = Sha256::digest(b"danieljustus\0symaira-vault");
-    let filename = format!("{hash:x}.json");
+    let filename = format!("{}.json", hex::encode(hash));
     base.join("symaira").join("updatecheck").join(filename)
 }
 
@@ -1056,7 +1056,7 @@ mod check_tests {
             hasher.update([0]);
         }
         assert_eq!(
-            format!("{:x}", hasher.finalize()),
+            hex::encode(hasher.finalize()),
             fixture.oracle.source_digest,
             "pinned Go source changed; recapture the stable update-check fixture"
         );
@@ -1167,7 +1167,7 @@ mod apply_tests {
             hasher.update([0]);
         }
         assert_eq!(
-            format!("{:x}", hasher.finalize()),
+            hex::encode(hasher.finalize()),
             fixture.oracle.source_digest,
             "pinned Go source changed; recapture the stable update-apply fixture"
         );
@@ -1262,7 +1262,7 @@ mod http_tests {
             hasher.update([0]);
         }
         assert_eq!(
-            format!("{:x}", hasher.finalize()),
+            hex::encode(hasher.finalize()),
             fixture.oracle.source_digest,
             "pinned Go source changed; recapture update HTTP fixture"
         );
