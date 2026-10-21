@@ -6,6 +6,18 @@
 //! instead of dying from the signal. SIGHUP is not subscribed and keeps its
 //! default action. These helpers exist only on Unix; Windows console events
 //! use a different mechanism and are not covered here.
+//!
+//! Known residuals against Go (#1242):
+//! - HTTP: Go drains in-flight requests for up to 5 s; Rust exits at once and
+//!   aborts them (before this module Rust died by the signal, which also
+//!   aborted them).
+//! - HTTP: Rust removes only the runtime records it published; Go removes
+//!   them unconditionally.
+//! - stdio: a signal while a clipboard auto-clear is armed only clears the
+//!   clipboard and the server keeps running; Go also shuts down.
+//! - stdio: a signal during the non-secure approval prompt waits the full
+//!   2 s grace before exiting 0.
+//! - `mcp --stdio --allow-locked` keeps the OS default signal actions.
 
 #[cfg(unix)]
 mod unix {
