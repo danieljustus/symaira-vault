@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/importer"
@@ -55,7 +56,7 @@ func main() {
 	must(err)
 	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go", "scripts/rust-port/cmd/importcsvgen/bitwarden_cases.go"})
 	must(err)
-	cases := []csvCase{
+	cases := slices.Concat([]csvCase{
 		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
 		{Name: "csv_invalid_utf8_values", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title,username,password\nA,\xe2\x82,\xff\n"))},
 		{Name: "csv_invalid_utf8_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title\xe2\x82,username,password\nA,u,p\n"))},
@@ -92,8 +93,7 @@ func main() {
 		{Name: "firefox_ipv6", Format: "firefox", Input: "url,username,password,httpRealm\nhttps://[::1]:8000/a,u,p,\n"},
 		{Name: "apple_empty_title", Format: "apple", Input: "Title,URL,Username,Password,Notes,OTPAuth\n,https://example.test,u,p,,\n"},
 		{Name: "profile_case_headers", Format: "chrome", Input: " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n"},
-	}
-	cases = append(cases, bitwardenCases()...)
+	}, bitwardenCases())
 	for i := range cases {
 		parser, newErr := importer.New(cases[i].Format)
 		if newErr == nil && cases[i].Mapping != "" {

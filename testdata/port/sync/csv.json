@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "3b6c3c9e5f103d19ee300df1de23fb31cda9cfce6e63b9ffa6009132df206284",
+  "generator_digest": "535cff4e2c851645861f612e23b972394aa3d4687263378d15dd4dc1f4e88856",
   "cases": [
     {
       "name": "csv_invalid_totp",
