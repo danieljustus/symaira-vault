@@ -5,13 +5,17 @@
 // scanner, parser or reader rejects. The pinned Go binary is run over the same
 // five commands that surface the failure — `config validate`, `config validate
 // --json`, `config get`, `config set` and the five `doctor` checks that load the
-// config — and its exit status, stdout and stderr are recorded byte for byte.
+// config, plus `agent list` for a few failures — and its exit status, stdout and
+// stderr are recorded byte for byte.
 // The Rust integration test replays the identical cases against the native CLI.
 //
 // Expected output always comes from the pinned Go binary; nothing is derived
-// from the Rust side. A small `open_divergences` list records inputs on which
-// the two YAML implementations are known to differ in more than wording, so the
-// gap stays explicit instead of being dropped from the corpus.
+// from the Rust side. The `open_divergences` list records inputs on which the
+// native CLI is known to differ from Go, together with the Go bytes of every
+// command the difference shows on (validate, get, set with its side effect on
+// the file, doctor), so the gap stays explicit instead of being dropped from the
+// corpus. Each entry says whether only the wording differs (same exit status and
+// same effect on the file) or the behavior does, and why.
 package main
 
 import (
@@ -108,15 +112,19 @@ type fixtureCase struct {
 	ConfigText   string            `json:"config_text"`
 	Observations []observation     `json:"observations"`
 	Doctor       doctorObservation `json:"doctor"`
+	AgentList    *observation      `json:"agent_list,omitempty"`
 }
 
 type openDivergence struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Reason      string      `json:"reason"`
-	ConfigHex   string      `json:"config_hex"`
-	ConfigText  string      `json:"config_text"`
-	Validate    observation `json:"validate"`
+	Name         string             `json:"name"`
+	Description  string             `json:"description"`
+	Kind         string             `json:"kind"`
+	Reason       string             `json:"reason"`
+	ConfigHex    string             `json:"config_hex"`
+	ConfigText   string             `json:"config_text"`
+	Observations []observation      `json:"observations"`
+	Doctor       *doctorObservation `json:"doctor,omitempty"`
+	AgentList    *observation       `json:"agent_list,omitempty"`
 }
 
 type fixture struct {
@@ -133,8 +141,10 @@ type input struct {
 }
 
 // inputs lists the corpus. class is the libyaml stage that rejects the input
-// ("scanner", "parser", "reader"), "loader" for the loader's own multi-document
-// rejection, or "accepted" for a control the parser must keep accepting.
+// ("scanner", "parser", "reader"), "node" for yaml.v3's own node builder (an
+// alias to an anchor that was never defined; libyaml accepts it), "loader" for
+// the loader's own multi-document rejection, or "accepted" for an input the
+// loader must keep accepting.
 func inputs() []input {
 	return []input{
 		{"flow_sequence_unterminated", "parser", "flow sequence ends at end of input", []byte("vaultDir: [\n")},
@@ -209,31 +219,133 @@ func inputs() []input {
 		{"accepted_flow_colon_plain", "accepted", "a plain scalar containing a colon inside a flow sequence parses", []byte("a: [x:y]\n")},
 		{"accepted_anchor_reuse", "accepted", "a redefined anchor parses", []byte("a: &x 1\nb: &x 2\nc: *x\n")},
 		{"accepted_tab_after_colon", "accepted", "a tab between the colon and the value parses", []byte("a:\t b\n")},
+		{"utf8_invalid_after_space", "reader", "bytes that are not UTF-8 after white space: not a blank config", []byte(" \xff\n")},
+		{"unknown_anchor_value", "node", "alias to an anchor that is never defined", []byte("a: *nope\n")},
+		{"unknown_anchor_later_line", "node", "alias on a later line to an anchor that is only defined afterwards", []byte("vaultDir: /x\nagents:\n  a: *later\nb: &later 1\n")},
+		{"unknown_anchor_in_flow", "node", "undefined alias inside a flow sequence", []byte("a: [1, *nope]\n")},
+		{"unknown_anchor_as_key", "node", "undefined alias used as a mapping key", []byte("*nope : 1\n")},
+		{"unknown_anchor_name_characters", "node", "anchor name with digits, dash and underscore", []byte("a: *nope-1_x\n")},
+		{"unknown_anchor_before_syntax_error", "node", "the undefined alias comes before an unterminated flow sequence and wins", []byte("a: *nope\nb: [\n")},
+		{"unknown_anchor_after_non_ascii", "node", "multi-byte characters before the undefined alias", []byte("ключ: значение\nb: *nope\n")},
+		{"unknown_anchor_crlf", "node", "undefined alias in a CRLF document", []byte("a: 1\r\nb: *nope\r\n")},
+		{"second_document_flow_unterminated", "accepted", "an unreadable second document does not count as a trailing document", []byte("a: 1\n---\n[\n")},
+		{"document_end_then_flow_unterminated", "accepted", "text after a document end marker is an unreadable second document", []byte("a: 1\n...\nb: [\n")},
+		{"second_document_scanner_failure", "accepted", "a scanner failure in the second document, away from the first", []byte("a: 1\n---\nb: c: d\n")},
+		{"second_document_quote_unterminated", "accepted", "an unterminated quote on a later line of the second document", []byte("a: 1\n---\nb: \"x\n")},
+		{"document_end_then_scanner_failure", "accepted", "scanner failure in the document after a document end marker", []byte("a: 1\n...\nb: c: d\n")},
+		{"whitespace_vertical_tab", "accepted", "only a vertical tab and a newline: Go trims it as white space and serves the defaults", []byte("\v\n")},
+		{"whitespace_vertical_tab_without_newline", "accepted", "a lone vertical tab", []byte("\v")},
+		{"whitespace_no_break_space", "accepted", "only U+00A0 and a newline", []byte("\u00a0\n")},
+		{"whitespace_next_line", "accepted", "only U+0085 and a newline", []byte("\u0085\n")},
+		{"whitespace_ideographic_space", "accepted", "only U+3000 and a newline", []byte("\u3000\n")},
+		{"whitespace_line_separator", "accepted", "only U+2028 and a newline", []byte("\u2028\n")},
+		{"whitespace_mixed_unicode", "accepted", "ASCII and Unicode white space mixed", []byte(" \t\r\n\v\f\u00a0\u0085\u3000 \n")},
 	}
 }
 
-// openInputs are inputs on which the Go and Rust YAML front ends disagree in
-// more than wording. They are recorded from the same Go binary so the gap is
-// pinned rather than hidden.
-func openInputs() []struct {
+// Divergence kinds. "wording": both sides fail or succeed alike, with the same
+// exit status and the same effect on the file, and only the text differs.
+// "behavior": acceptance, exit status or the effect on the file differs.
+const (
+	kindWording  = "wording"
+	kindBehavior = "behavior"
+)
+
+// openEntry is one recorded divergence: the input, the commands whose Go bytes
+// are recorded for it (a subset of validate, validate_json, get, set, doctor),
+// and what the native CLI does differently.
+type openEntry struct {
 	input
-	reason string
-} {
-	type entry = struct {
-		input
-		reason string
-	}
-	return []entry{
+	kind     string
+	commands []string
+	reason   string
+}
+
+// lookaheadReason explains the common root cause of the same-line trailing
+// token family.
+const lookaheadReason = "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. " +
+	"The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'"
+
+var (
+	allCommands  = []string{"validate", "validate_json", "get", "set", "doctor"}
+	textCommands = []string{"validate", "get", "set", "doctor"}
+)
+
+// openInputs are inputs on which the native CLI is known to differ from Go.
+// They are recorded from the same Go binary so the gap is pinned rather than
+// hidden, and the Rust replay fails the day one starts matching.
+func openInputs() []openEntry {
+	return []openEntry{
+		// yaml.v3 scans two tokens ahead of the parser.
+		{input{"trailing_token_after_double_quoted", "parser", "a plain scalar and a colon after a closed double-quoted value on the same line", []byte("a: \"x\" b: 1\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_single_quoted", "parser", "a trailing key after a single-quoted value", []byte("a: 'x' b: c: 1\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_flow_sequence", "parser", "a trailing key after a closed flow sequence", []byte("a: [1] b: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_flow_sequence_later_line", "parser", "the same on the second line of the file", []byte("x: 1\na: [1] b: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_flow_mapping", "parser", "a trailing key after a closed flow mapping", []byte("a: {b: 1} c: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_empty_flow_mapping", "parser", "a trailing key after an empty flow mapping", []byte("a: {} b: 1\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_anchored_flow_sequence", "parser", "a trailing key after an anchored flow sequence", []byte("a: &x [1] c: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_tagged_quoted", "parser", "a trailing key after a tagged double-quoted value", []byte("a: !!str \"x\" b: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_alias", "parser", "a trailing key after an alias to a defined anchor", []byte("a: &x 1\nb: *x c: 2\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_multiline_flow_sequence", "parser", "a trailing key after a flow sequence that spans two lines", []byte("a: [1,\n  2] b: 3\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_nested_flow_sequence", "parser", "a trailing key after a flow sequence in a nested mapping", []byte("a:\n  b: [c] d: 1\n")},
+			kindWording, textCommands, lookaheadReason},
+		{input{"trailing_token_after_flow_sequence_in_block_sequence", "parser", "a trailing key after a flow sequence that is a sequence entry: the parser states differ as well", []byte("- [] b: 1\n")},
+			kindWording, textCommands, "same two-token look-ahead as the other trailing_token_* entries; here the look-ahead also changes which block state libyaml is in when it rejects the token, so Go says \"did not find expected '-' indicator\" and libyaml \"did not find expected key\""},
 		{input{"directive_without_document_start", "scanner", "content after a %YAML directive with no --- line", []byte("%YAML 1.1\na: 1\n")},
-			"yaml.v3 reports a scanner error on line 2 (mapping values are not allowed) where libyaml reports the parser error 'did not find expected <document start>'"},
+			kindWording, textCommands, "same two-token look-ahead: yaml.v3 reports the scanner error on line 2 (mapping values are not allowed) where libyaml reports the parser error 'did not find expected <document start>'"},
+		// The look-ahead also reaches across a document boundary.
+		{input{"scanner_failure_after_document_end", "scanner", "an unterminated quote as the first token of the second document", []byte("a: 1\n---\n\"x\n")},
+			kindBehavior, []string{"validate", "doctor"}, "yaml.v3's two-token look-ahead scans the first token of the second document while it still reads the first one, so Go fails on the second document's scanner error with exit 6; libyaml in the native loader never reaches it and accepts the config"},
+		{input{"third_document_scanner_look_ahead", "accepted", "an unterminated quote as the first token of a third document", []byte("a: 1\n---\nb: 2\n---\n\"x\n")},
+			kindBehavior, []string{"validate"}, "Go's check for a second document decodes it with the same two-token look-ahead, which scans into the third document and fails, so Go sees no trailing document and accepts the config; the native loader decodes the second document fine and rejects the stream as multi-document"},
+		{input{"second_document_unknown_anchor", "node", "an alias in the second document to an anchor that no document defines", []byte("a: 1\n---\nb: *nope\n")},
+			kindBehavior, []string{"validate", "doctor"}, "Go fails to decode the second document, so it sees no trailing document and accepts the config; serde_yaml_ng scopes anchors to one document and yaml.v3 shares them across the stream, so the native loader cannot tell this alias from one to an anchor of the first document and keeps rejecting the stream as multi-document"},
+		{input{"get_set_second_document_syntax_error", "parser", "an unterminated flow sequence in the second document, read by config get and config set", []byte("a: 1\n---\n[\n")},
+			kindBehavior, []string{"get", "set"}, "Go's config get and config set read only the first document (yaml.Unmarshal into a node): get reports the missing key and set succeeds and rewrites the file; the native commands parse the whole stream with yaml_edit, fail on the later syntax error and leave the file alone"},
+		// Not libyaml's scanner or parser at all.
 		{input{"utf16_bom_only", "reader", "a lone UTF-16LE byte order mark", []byte("\xff\xfe")},
-			"yaml.v3 decodes UTF-16 and accepts the empty stream; libyaml in serde_yaml_ng rejects the stream as invalid UTF-8"},
+			kindBehavior, []string{"validate"}, "yaml.v3 decodes UTF-16 and accepts the empty stream; libyaml in serde_yaml_ng rejects the stream as invalid UTF-8"},
 		{input{"bom_after_first_line", "scanner", "a UTF-8 byte order mark at the start of a later line", []byte("a: 1\n\xef\xbb\xbfb: 2\n")},
-			"yaml.v3 skips the mark and accepts the stream; libyaml counts it as a column and rejects the mapping key"},
-		{input{"second_document_syntax_error", "parser", "a syntax error in the second document of the stream", []byte("a: 1\n---\n[\n")},
-			"Go reads only the first document and treats an unreadable second one as absent; the Rust loader rejects the stream as multi-document"},
-		{input{"unknown_anchor", "parser", "alias to an anchor that was never defined", []byte("a: *nope\n")},
-			"yaml.v3 words this as \"unknown anchor 'nope' referenced\" at the decoder; serde_yaml_ng reports 'unknown anchor' with a mark and no name"},
+			kindBehavior, []string{"validate"}, "yaml.v3 skips the mark and accepts the stream; libyaml counts it as a column and rejects the mapping key"},
+		{input{"alias_value_for_string_field", "accepted", "an alias to a scalar anchor used as the value of a string field", []byte("a: &x 1\nvaultDir: *x\n")},
+			kindBehavior, []string{"validate", "set_nested", "doctor", "agent_list"}, "yaml.v3 decodes the alias into the string field and accepts the config (so validate, doctor and agent list succeed and config set of a nested key succeeds); the native loader reads the alias through serde_yaml_ng and rejects 'vaultDir must be a string', and config set writes the file before that post-update load fails"},
+		{input{"custom_tag_on_value", "accepted", "a local tag on a plain scalar", []byte("a: !t x\n")},
+			kindBehavior, textCommands, "yaml.v3 ignores a local tag it does not know and decodes the value; serde_yaml_ng keeps it as a tagged value that the native loader rejects"},
+		// yaml.v3 decode and node layers, not syntax errors.
+		{input{"scalar_root", "accepted", "a document that is a single scalar", []byte("just a scalar\n")},
+			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "the failure comes from yaml.v3's decoder and node layers, not from libyaml: validate says 'yaml: unmarshal errors: line 1: cannot unmarshal !!str `just a ...` into config.Config', get 'parent is a scalar node, not a mapping', set 'root node is a scalar, not a mapping'; the native CLI fails the same commands with the same exit status and leaves the file alone, with different text"},
+		{input{"sequence_root", "accepted", "a document that is a block sequence", []byte("- 1\n- 2\n")},
+			kindWording, append(append([]string(nil), textCommands...), "set_nested", "agent_list"), "yaml.v3 decoder and node layers again: 'cannot unmarshal !!seq into config.Config', 'parent is a sequence node, not a mapping', 'root node is a sequence, not a mapping'; same exit status and unchanged file natively, different text"},
+		{input{"agents_scalar", "accepted", "a scalar where the agents mapping belongs", []byte("agents: x\n")},
+			kindWording, append(append([]string(nil), textCommands...), "agent_list"), "yaml.v3 decode error 'cannot unmarshal !!str `x` into map[string]config.AgentProfile'; get reports the key text differently, and set rewrites the file before the post-update load fails on both sides"},
+		{input{"null_root", "accepted", "a document that is the scalar null", []byte("null\n")},
+			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a scalar node, not a mapping' and 'root node is a scalar, not a mapping', the native CLI with 'key \"vaultDir\" not found' and 'document has no root to descend into'"},
+		{input{"comment_only", "accepted", "a config that contains only a comment", []byte("# nothing\n")},
+			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a unknown(0) node, not a mapping' and 'root node is a unknown(0), not a mapping', the native CLI with 'cannot load config: missing YAML document'"},
+		{input{"document_start_only", "accepted", "a config that is only a document start marker", []byte("---\n")},
+			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the scalar-node wording of null_root"},
+		{input{"empty_flow_mapping_root", "accepted", "a document that is an empty flow mapping", []byte("{}\n")},
+			kindWording, []string{"get"}, "validate agrees; config get fails on both sides with exit 6, Go with `key \"vaultDir\" not found: key \"vaultDir\" not found` (the cause is appended), the native CLI with the bare message"},
+		{input{"empty_file", "accepted", "a zero-byte config", []byte("")},
+			kindWording, []string{"get", "set"}, "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the 'unknown(0) node' wording of comment_only, the native CLI with 'missing YAML document'"},
+		{input{"ascii_spaces_only", "accepted", "a config that is only spaces", []byte("   ")},
+			kindWording, []string{"get", "set"}, "same as empty_file: Go reaches the node layer with an empty document, the native commands report a missing document"},
+		{input{"no_break_space_only", "accepted", "a config that is only U+00A0 and a newline", []byte("\u00a0\n")},
+			kindWording, []string{"get", "set"}, "validate and doctor agree (Go's blank check trims U+00A0, see whitespace_no_break_space); config get and set parse the file as a one-scalar document on the Go side and fail with its node wording, natively with different text; exit status and the unchanged file agree"},
+		{input{"byte_order_mark_only", "accepted", "a config that is only a UTF-8 byte order mark", []byte("\xef\xbb\xbf")},
+			kindWording, []string{"get", "set"}, "validate and doctor agree (defaults); config get and set differ in the node-layer wording of an empty document, exit status and unchanged file agree"},
+		{input{"zero_width_space_root", "accepted", "a document that is only U+200B: not white space for Go, a plain scalar", []byte("\u200b\n")},
+			kindWording, textCommands, "same decode-layer wording gap as scalar_root: yaml.v3 says 'cannot unmarshal !!str `\u200b` into config.Config', the native loader 'invalid type: string'; exit status and the unchanged file agree"},
 	}
 }
 
@@ -325,29 +437,48 @@ func buildCases(goBinary string) ([]fixtureCase, error) {
 	return cases, nil
 }
 
-func buildCase(goBinary string, item input) (fixtureCase, error) {
-	commands := []struct {
-		name      string
-		args      []string
-		captureAt bool
-	}{
-		{"validate", []string{"config", "validate", configMarker}, false},
-		{"validate_json", []string{"config", "validate", configMarker, "--json"}, false},
-		{"get", []string{"config", "get", "vaultDir", "--file", configMarker}, false},
-		{"set", []string{"config", "set", "vaultDir", "changed", "--file", configMarker}, true},
+// commandSpec is one config command whose Go output is recorded.
+type commandSpec struct {
+	name         string
+	args         []string
+	captureAfter bool
+}
+
+var commandSpecs = []commandSpec{
+	{"validate", []string{"config", "validate", configMarker}, false},
+	{"validate_json", []string{"config", "validate", configMarker, "--json"}, false},
+	{"get", []string{"config", "get", "vaultDir", "--file", configMarker}, false},
+	{"set", []string{"config", "set", "vaultDir", "changed", "--file", configMarker}, true},
+}
+
+// openOnlySpecs are recorded for open divergences only: the regular corpus
+// keeps one `set` per case, these probe a nested key.
+var openOnlySpecs = []commandSpec{
+	{"set_nested", []string{"config", "set", "agents.x.canWrite", "true", "--file", configMarker}, true},
+}
+
+func lookupSpec(name string) (commandSpec, bool) {
+	for _, spec := range append(append([]commandSpec(nil), commandSpecs...), openOnlySpecs...) {
+		if spec.name == name {
+			return spec, true
+		}
 	}
+	return commandSpec{}, false
+}
+
+func buildCase(goBinary string, item input) (fixtureCase, error) {
 	built := fixtureCase{
 		Name: item.name, Class: item.class, Description: item.description,
 		ConfigHex: hexOf(item.config), ConfigText: strconv.Quote(string(item.config)),
 	}
-	for _, command := range commands {
+	for _, command := range commandSpecs {
 		// `get` and `set` on an accepted document reach key lookup and file
 		// rewriting, which are different contracts (yaml.v3 node editing); only
-		// the syntax-failure path is in scope for those two commands.
+		// the failure path is in scope for those two commands.
 		if (item.class == "accepted" || item.class == "loader") && (command.name == "get" || command.name == "set") {
 			continue
 		}
-		observed, err := runConfigCommand(goBinary, item, command.name, command.args, command.captureAt)
+		observed, err := runConfigCommand(goBinary, item, command.name, command.args, command.captureAfter)
 		if err != nil {
 			return fixtureCase{}, err
 		}
@@ -358,21 +489,61 @@ func buildCase(goBinary string, item input) (fixtureCase, error) {
 		return fixtureCase{}, err
 	}
 	built.Doctor = doctor
+	if agentListCases[item.name] {
+		observed, err := runAgentList(goBinary, item)
+		if err != nil {
+			return fixtureCase{}, err
+		}
+		built.AgentList = &observed
+	}
 	return built, nil
+}
+
+// agentListCases are the failures that also record `agent list`, a loader
+// caller outside the config and doctor commands (`load config: <error>`).
+var agentListCases = map[string]bool{
+	"mapping_value_nested":       true,
+	"flow_sequence_unterminated": true,
+	"control_character":          true,
+	"multiple_documents":         true,
+	"unknown_anchor_value":       true,
 }
 
 func buildDivergences(goBinary string) ([]openDivergence, error) {
 	var divergences []openDivergence
 	for _, entry := range openInputs() {
-		observed, err := runConfigCommand(goBinary, entry.input, "validate", []string{"config", "validate", configMarker}, false)
-		if err != nil {
-			return nil, err
-		}
-		divergences = append(divergences, openDivergence{
-			Name: entry.name, Description: entry.description, Reason: entry.reason,
+		recorded := openDivergence{
+			Name: entry.name, Description: entry.description, Kind: entry.kind, Reason: entry.reason,
 			ConfigHex: hexOf(entry.config), ConfigText: strconv.Quote(string(entry.config)),
-			Validate: observed,
-		})
+		}
+		for _, name := range entry.commands {
+			if name == "doctor" {
+				doctor, err := runDoctor(goBinary, entry.input)
+				if err != nil {
+					return nil, err
+				}
+				recorded.Doctor = &doctor
+				continue
+			}
+			if name == "agent_list" {
+				observed, err := runAgentList(goBinary, entry.input)
+				if err != nil {
+					return nil, err
+				}
+				recorded.AgentList = &observed
+				continue
+			}
+			spec, ok := lookupSpec(name)
+			if !ok {
+				return nil, fmt.Errorf("open divergence %s: unknown command %q", entry.name, name)
+			}
+			observed, err := runConfigCommand(goBinary, entry.input, spec.name, spec.args, spec.captureAfter)
+			if err != nil {
+				return nil, err
+			}
+			recorded.Observations = append(recorded.Observations, observed)
+		}
+		divergences = append(divergences, recorded)
 	}
 	return divergences, nil
 }
@@ -461,6 +632,35 @@ func runConfigCommand(goBinary string, item input, name string, argTemplate []st
 		}
 		unchanged := bytes.Equal(after, item.config)
 		result.Unchanged = &unchanged
+	}
+	return result, box.close()
+}
+
+// runAgentList records `agent list` against a vault directory whose
+// config.yaml holds the case's bytes.
+func runAgentList(goBinary string, item input) (observation, error) {
+	box, err := newSandbox()
+	if err != nil {
+		return observation{}, err
+	}
+	vault := filepath.Join(box.root, "vault")
+	if err := os.MkdirAll(vault, 0o700); err != nil {
+		return observation{}, errors.Join(err, box.close())
+	}
+	if err := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); err != nil {
+		return observation{}, errors.Join(err, box.close())
+	}
+	template := []string{"--vault", vaultMarker, "agent", "list"}
+	code, stdout, stderr, err := runOracle(goBinary, box, replaceArgs(template, vaultMarker, vault))
+	if err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s agent list: %w", item.name, err), box.close())
+	}
+	result := observation{Command: "agent_list", Args: template, ExitCode: code}
+	if result.Stdout, err = box.normalize(stdout); err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s agent list stdout: %w", item.name, err), box.close())
+	}
+	if result.Stderr, err = box.normalize(stderr); err != nil {
+		return observation{}, errors.Join(fmt.Errorf("case %s agent list stderr: %w", item.name, err), box.close())
 	}
 	return result, box.close()
 }

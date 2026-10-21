@@ -4,13 +4,18 @@
 //!
 //! `testdata/port/cli/config-yaml-syntax.json` freezes what the pinned Go CLI
 //! prints (exit status, stdout, stderr, and whether `config set` left the file
-//! alone) for 72 configs across `config validate`, `config validate --json`,
-//! `config get`, `config set` and the five `doctor` checks that load the
-//! config. This test replays every one of them against the native CLI and
-//! compares the bytes. Nothing here needs a Go toolchain; the fixture is
-//! regenerated and re-verified against the pinned oracle by
-//! `scripts/rust-port/cmd/yamlsyntaxgen` (see
+//! alone) for a corpus of malformed and control configs across
+//! `config validate`, `config validate --json`, `config get`, `config set` and
+//! the five `doctor` checks that load the config. This test replays every one
+//! of them against the native CLI and compares the bytes. Nothing here needs a
+//! Go toolchain; the fixture is regenerated and re-verified against the pinned
+//! oracle by `scripts/rust-port/cmd/yamlsyntaxgen` (see
 //! `scripts/rust-port/check_yaml_syntax_cli.sh`).
+//!
+//! The corpus is not a parity claim for YAML in general. The fixture's
+//! `open_divergences` list records the inputs on which the native CLI is known
+//! to differ from Go, with the Go bytes of the commands the difference shows
+//! on; `recorded_open_divergences_are_still_open` keeps every one honest.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
@@ -69,14 +74,21 @@ struct Case {
     config_hex: String,
     observations: Vec<Observation>,
     doctor: DoctorObservation,
+    #[serde(default)]
+    agent_list: Option<Observation>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenDivergence {
     name: String,
+    kind: String,
     reason: String,
     config_hex: String,
-    validate: Observation,
+    observations: Vec<Observation>,
+    #[serde(default)]
+    doctor: Option<DoctorObservation>,
+    #[serde(default)]
+    agent_list: Option<Observation>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +99,14 @@ struct Fixture {
     cases: Vec<Case>,
     open_divergences: Vec<OpenDivergence>,
 }
+
+/// Cases whose Go output the native CLI must reproduce byte for byte.
+const MATCHING_CASES: usize = 93;
+/// Comparisons the replay executes: every recorded config observation, one
+/// `doctor` run per case and the five `agent list` runs.
+const REPLAYED_COMPARISONS: usize = 438;
+/// Inputs on which the native CLI is known to differ from Go.
+const OPEN_DIVERGENCES: usize = 33;
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/cli/config-yaml-syntax.json");
@@ -164,38 +184,72 @@ fn substitute(args: &[String], marker: &str, value: &Path) -> Vec<String> {
         .collect()
 }
 
+/// How a live run differs from the recorded Go run.
+#[derive(Debug)]
+struct Difference {
+    /// The exit status or the effect on the config file differs, not only the
+    /// text.
+    effect: bool,
+    message: String,
+}
+
+impl Difference {
+    fn effect(message: String) -> Self {
+        Self {
+            effect: true,
+            message,
+        }
+    }
+
+    fn text(message: String) -> Self {
+        Self {
+            effect: false,
+            message,
+        }
+    }
+}
+
 /// Compares one live run of a config command with the recorded Go output.
-/// Returns a description of the first difference, or `None` when every byte
-/// agrees.
+/// Returns the first difference, or `None` when every byte agrees.
 fn compare_observation(
     expected: &Observation,
     exit_code: i32,
     stdout: &str,
     stderr: &str,
     unchanged: Option<bool>,
-) -> Option<String> {
+) -> Option<Difference> {
     if exit_code != expected.exit_code {
-        return Some(format!(
+        return Some(Difference::effect(format!(
             "exit {exit_code}, Go {}; stderr={stderr:?}",
             expected.exit_code
-        ));
-    }
-    if stdout != expected.stdout {
-        return Some(format!("stdout {stdout:?}, Go {:?}", expected.stdout));
-    }
-    if stderr != expected.stderr {
-        return Some(format!("stderr {stderr:?}, Go {:?}", expected.stderr));
+        )));
     }
     if expected.config_unchanged.is_some() && unchanged != expected.config_unchanged {
-        return Some(format!(
+        return Some(Difference::effect(format!(
             "config unchanged {unchanged:?}, Go {:?}",
             expected.config_unchanged
-        ));
+        )));
+    }
+    if stdout != expected.stdout {
+        return Some(Difference::text(format!(
+            "stdout {stdout:?}, Go {:?}",
+            expected.stdout
+        )));
+    }
+    if stderr != expected.stderr {
+        return Some(Difference::text(format!(
+            "stderr {stderr:?}, Go {:?}",
+            expected.stderr
+        )));
     }
     None
 }
 
 fn run_config_observation(case_bytes: &[u8], expected: &Observation) -> Option<String> {
+    config_observation_difference(case_bytes, expected).map(|difference| difference.message)
+}
+
+fn config_observation_difference(case_bytes: &[u8], expected: &Observation) -> Option<Difference> {
     let sandbox = Sandbox::new();
     let config = sandbox.config_path();
     fs::write(&config, case_bytes).expect("write isolated config");
@@ -213,11 +267,43 @@ fn run_config_observation(case_bytes: &[u8], expected: &Observation) -> Option<S
     )
 }
 
+/// `agent list` against a vault directory holding the case's config.yaml.
+fn run_agent_list_observation(case_bytes: &[u8], expected: &Observation) -> Option<String> {
+    agent_list_observation_difference(case_bytes, expected).map(|difference| difference.message)
+}
+
+fn agent_list_observation_difference(
+    case_bytes: &[u8],
+    expected: &Observation,
+) -> Option<Difference> {
+    let sandbox = Sandbox::new();
+    let vault = sandbox.vault_dir();
+    fs::create_dir_all(&vault).expect("create isolated vault directory");
+    fs::write(vault.join("config.yaml"), case_bytes).expect("write isolated vault config");
+    let args = substitute(&expected.args, "__VAULT__", &vault);
+    let output = sandbox.run(&args);
+    compare_observation(
+        expected,
+        output.status.code().unwrap_or(255),
+        &sandbox.normalize(&output.stdout),
+        &sandbox.normalize(&output.stderr),
+        None,
+    )
+}
+
 fn run_doctor_observation(
     case_bytes: &[u8],
     expected: &DoctorObservation,
     ids: &[String],
 ) -> Option<String> {
+    doctor_observation_difference(case_bytes, expected, ids).map(|difference| difference.message)
+}
+
+fn doctor_observation_difference(
+    case_bytes: &[u8],
+    expected: &DoctorObservation,
+    ids: &[String],
+) -> Option<Difference> {
     let sandbox = Sandbox::new();
     let vault = sandbox.vault_dir();
     fs::create_dir_all(&vault).expect("create isolated vault directory");
@@ -226,21 +312,21 @@ fn run_doctor_observation(
     let output = sandbox.run(&args);
     let code = output.status.code().unwrap_or(255);
     if code != expected.exit_code {
-        return Some(format!(
+        return Some(Difference::effect(format!(
             "doctor exit {code}, Go {}; stderr={:?}",
             expected.exit_code,
             String::from_utf8_lossy(&output.stderr)
-        ));
+        )));
     }
     let payload: serde_json::Value = match serde_json::from_slice(&output.stdout) {
         Ok(payload) => payload,
-        Err(error) => return Some(format!("doctor JSON: {error}")),
+        Err(error) => return Some(Difference::effect(format!("doctor JSON: {error}"))),
     };
     let results = payload["results"].as_array().cloned().unwrap_or_default();
     let mut live = Vec::new();
     for id in ids {
         let Some(result) = results.iter().find(|result| result["id"] == id.as_str()) else {
-            return Some(format!("doctor did not report {id}"));
+            return Some(Difference::effect(format!("doctor did not report {id}")));
         };
         let text =
             |field: &str| sandbox.normalize(result[field].as_str().unwrap_or_default().as_bytes());
@@ -253,8 +339,12 @@ fn run_doctor_observation(
             fixable: result["fixable"].as_bool().unwrap_or(false),
         });
     }
-    (live != expected.results)
-        .then(|| format!("doctor results {live:#?}, Go {:#?}", expected.results))
+    (live != expected.results).then(|| {
+        Difference::text(format!(
+            "doctor results {live:#?}, Go {:#?}",
+            expected.results
+        ))
+    })
 }
 
 #[test]
@@ -309,7 +399,10 @@ fn fixture_pins_go_oracle_and_covers_every_libyaml_stage() {
             "accepted" => assert_eq!(validate.exit_code, 0, "{}", case.name),
             _ => assert_eq!(validate.exit_code, 6, "{}", case.name),
         }
-        if matches!(case.class.as_str(), "scanner" | "parser" | "reader") {
+        if matches!(
+            case.class.as_str(),
+            "scanner" | "parser" | "reader" | "node"
+        ) {
             let get = case
                 .observations
                 .iter()
@@ -321,7 +414,10 @@ fn fixture_pins_go_oracle_and_covers_every_libyaml_stage() {
                 .iter()
                 .find(|observation| observation.command == "set")
                 .unwrap_or_else(|| panic!("{} has no set observation", case.name));
+            // Go loads the node tree before it writes anything, so a failing
+            // load must leave the file alone.
             assert_eq!(set.config_unchanged, Some(true), "{}", case.name);
+            assert_eq!(set.exit_code, 6, "{}", case.name);
             // "yaml: line N: <problem>" or "yaml: <problem>": keep the problem.
             let message = validate
                 .stderr
@@ -338,16 +434,31 @@ fn fixture_pins_go_oracle_and_covers_every_libyaml_stage() {
     }
     assert_eq!(
         classes,
-        BTreeSet::from(["accepted", "loader", "parser", "reader", "scanner"])
+        BTreeSet::from(["accepted", "loader", "node", "parser", "reader", "scanner"])
     );
     assert!(
         problems.len() >= 38,
         "corpus covers only {} distinct go-yaml problem strings: {problems:#?}",
         problems.len()
     );
-    assert!(fixture.open_divergences.len() >= 5);
+    // Documented in cli-gap-inventory.md and contract-matrix.md: change the
+    // count there together with this one.
+    assert_eq!(fixture.open_divergences.len(), OPEN_DIVERGENCES);
     for divergence in &fixture.open_divergences {
         assert!(!divergence.reason.is_empty(), "{}", divergence.name);
+        assert!(
+            matches!(divergence.kind.as_str(), "wording" | "behavior"),
+            "{}: kind {:?}",
+            divergence.name,
+            divergence.kind
+        );
+        assert!(
+            !divergence.observations.is_empty()
+                || divergence.doctor.is_some()
+                || divergence.agent_list.is_some(),
+            "{} records no Go output",
+            divergence.name
+        );
     }
 }
 
@@ -357,11 +468,12 @@ fn native_cli_matches_go_recorded_yaml_syntax_failures() {
     let expected_runs: usize = fixture
         .cases
         .iter()
-        .map(|case| case.observations.len() + 1)
+        .map(|case| case.observations.len() + 1 + usize::from(case.agent_list.is_some()))
         .sum();
-    assert!(
-        expected_runs >= 300,
-        "fixture shrank to {expected_runs} comparisons"
+    assert_eq!(fixture.cases.len(), MATCHING_CASES);
+    assert_eq!(
+        expected_runs, REPLAYED_COMPARISONS,
+        "fixture and the pinned comparison count disagree"
     );
     let mut compared = 0_usize;
     let mut failures = Vec::new();
@@ -380,6 +492,12 @@ fn native_cli_matches_go_recorded_yaml_syntax_failures() {
         if let Some(difference) = run_doctor_observation(&bytes, &case.doctor, &fixture.doctor_ids)
         {
             failures.push(format!("{} doctor: {difference}", case.name));
+        }
+        if let Some(agent_list) = &case.agent_list {
+            compared += 1;
+            if let Some(difference) = run_agent_list_observation(&bytes, agent_list) {
+                failures.push(format!("{} agent list: {difference}", case.name));
+            }
         }
     }
     assert_eq!(
@@ -442,19 +560,92 @@ fn mutated_expectation_is_detected() {
     assert!(run_doctor_observation(&bytes, &mutated, &fixture.doctor_ids).is_some());
 }
 
-/// Inputs on which the two YAML front ends differ in more than wording stay in
-/// the fixture with the Go bytes. Each must still differ here; the day one
-/// matches, move it from `open_divergences` into `cases`.
+/// Runs every command recorded for an open divergence and returns, per command,
+/// how the native CLI differs from Go. Empty means the input now matches.
+fn open_divergence_differences(
+    divergence: &OpenDivergence,
+    doctor_ids: &[String],
+) -> Vec<(String, Difference)> {
+    let bytes = decode_hex(&divergence.config_hex);
+    let mut differences = Vec::new();
+    for observation in &divergence.observations {
+        if let Some(difference) = config_observation_difference(&bytes, observation) {
+            differences.push((observation.command.clone(), difference));
+        }
+    }
+    if let Some(expected) = &divergence.doctor
+        && let Some(difference) = doctor_observation_difference(&bytes, expected, doctor_ids)
+    {
+        differences.push(("doctor".to_owned(), difference));
+    }
+    if let Some(expected) = &divergence.agent_list
+        && let Some(difference) = agent_list_observation_difference(&bytes, expected)
+    {
+        differences.push(("agent_list".to_owned(), difference));
+    }
+    differences
+}
+
+/// Inputs on which the native CLI differs from Go stay in the fixture with the
+/// Go bytes of the commands the difference shows on. Each must still differ
+/// here, and in the way its `kind` says: `wording` keeps exit status and the
+/// effect on the file identical and differs in text only, `behavior` differs in
+/// exit status or file effect. The day one matches, move it from
+/// `open_divergences` into `cases`.
 #[test]
 fn recorded_open_divergences_are_still_open() {
     let fixture = fixture();
     for divergence in &fixture.open_divergences {
-        let bytes = decode_hex(&divergence.config_hex);
+        let differences = open_divergence_differences(divergence, &fixture.doctor_ids);
         assert!(
-            run_config_observation(&bytes, &divergence.validate).is_some(),
+            !differences.is_empty(),
             "{} now matches Go ({}); promote it to a regular case",
             divergence.name,
             divergence.reason
         );
+        match divergence.kind.as_str() {
+            "wording" => assert!(
+                differences.iter().all(|(_, difference)| !difference.effect),
+                "{} is recorded as a wording gap but exit status or file effect differs: {differences:#?}",
+                divergence.name
+            ),
+            "behavior" => assert!(
+                differences.iter().any(|(_, difference)| difference.effect),
+                "{} is recorded as a behavior gap but only wording differs: {differences:#?}",
+                divergence.name
+            ),
+            other => panic!("{}: unknown kind {other}", divergence.name),
+        }
     }
+}
+
+/// Negative control for the check above: an input that does match Go must come
+/// back without a difference, and a recorded divergence must come back with one.
+#[test]
+fn open_divergence_check_tells_a_match_from_a_gap() {
+    let fixture = fixture();
+    let matching = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "unknown_anchor_value")
+        .expect("unknown_anchor_value is part of the corpus");
+    let as_divergence = OpenDivergence {
+        name: matching.name.clone(),
+        kind: "wording".to_owned(),
+        reason: String::new(),
+        config_hex: matching.config_hex.clone(),
+        observations: matching.observations.clone(),
+        doctor: None,
+        agent_list: matching.agent_list.clone(),
+    };
+    assert!(
+        open_divergence_differences(&as_divergence, &fixture.doctor_ids).is_empty(),
+        "a regular case must not register as an open divergence"
+    );
+    let gap = fixture
+        .open_divergences
+        .iter()
+        .find(|divergence| divergence.name == "trailing_token_after_double_quoted")
+        .expect("trailing_token_after_double_quoted is recorded");
+    assert!(!open_divergence_differences(gap, &fixture.doctor_ids).is_empty());
 }

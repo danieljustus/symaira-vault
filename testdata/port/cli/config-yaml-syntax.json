@@ -17,7 +17,7 @@
       "internal/health/doctor_vault.go"
     ],
     "source_digest": "3cab9f9259cc88f79eb735a88a11bc849df8b1d0b9448f1e778b4eae48be8620",
-    "generator_digest": "f2bafaa99358f8074dca686d9b6ee17b535a93e08a054a8d032044272e421383"
+    "generator_digest": "ff26392b0cb89b09fa3d58e569d9591ed4d9e747207fbb3cc9d732381cc4fa30"
   },
   "doctor_ids": [
     "vault.config.parses",
@@ -139,6 +139,18 @@
             "fixable": false
           }
         ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: line 1: did not find expected node content\nError: load config: yaml: line 1: did not find expected node content\n"
       }
     },
     {
@@ -2761,6 +2773,18 @@
             "fixable": false
           }
         ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: line 3: mapping values are not allowed in this context\nError: load config: yaml: line 3: mapping values are not allowed in this context\n"
       }
     },
     {
@@ -6979,6 +7003,18 @@
             "fixable": false
           }
         ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: control characters are not allowed\nError: load config: yaml: control characters are not allowed\n"
       }
     },
     {
@@ -7863,6 +7899,18 @@
             "fixable": false
           }
         ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\nError: load config: config contains more than one YAML document; split it into separate files or remove everything after the first document separator\n"
       }
     },
     {
@@ -8122,97 +8170,4639 @@
           }
         ]
       }
+    },
+    {
+      "name": "utf8_invalid_after_space",
+      "class": "reader",
+      "description": "bytes that are not UTF-8 after white space: not a blank config",
+      "config_hex": "20ff0a",
+      "config_text": "\" \\xff\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: invalid leading UTF-8 octet: yaml: invalid leading UTF-8 octet\nError: cannot load config from __CONFIG__: yaml: invalid leading UTF-8 octet: yaml: invalid leading UTF-8 octet\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: invalid leading UTF-8 octet\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: invalid leading UTF-8 octet\nError: config load failed: yaml: invalid leading UTF-8 octet\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: invalid leading UTF-8 octet: cannot parse config file: yaml: invalid leading UTF-8 octet\nError: cannot load config: cannot parse config file: yaml: invalid leading UTF-8 octet: cannot parse config file: yaml: invalid leading UTF-8 octet\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: invalid leading UTF-8 octet: cannot parse config file: yaml: invalid leading UTF-8 octet\nError: cannot load config: cannot parse config file: yaml: invalid leading UTF-8 octet: cannot parse config file: yaml: invalid leading UTF-8 octet\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: invalid leading UTF-8 octet",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: invalid leading UTF-8 octet",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: invalid leading UTF-8 octet",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: invalid leading UTF-8 octet",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: invalid leading UTF-8 octet",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_value",
+      "class": "node",
+      "description": "alias to an anchor that is never defined",
+      "config_hex": "613a202a6e6f70650a",
+      "config_text": "\"a: *nope\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unknown anchor 'nope' referenced\nError: load config: yaml: unknown anchor 'nope' referenced\n"
+      }
+    },
+    {
+      "name": "unknown_anchor_later_line",
+      "class": "node",
+      "description": "alias on a later line to an anchor that is only defined afterwards",
+      "config_hex": "7661756c744469723a202f780a6167656e74733a0a2020613a202a6c617465720a623a20266c6174657220310a",
+      "config_text": "\"vaultDir: /x\\nagents:\\n  a: *later\\nb: &later 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'later' referenced: yaml: unknown anchor 'later' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'later' referenced: yaml: unknown anchor 'later' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'later' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'later' referenced\nError: config load failed: yaml: unknown anchor 'later' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'later' referenced: cannot parse config file: yaml: unknown anchor 'later' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'later' referenced: cannot parse config file: yaml: unknown anchor 'later' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'later' referenced: cannot parse config file: yaml: unknown anchor 'later' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'later' referenced: cannot parse config file: yaml: unknown anchor 'later' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'later' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'later' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'later' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'later' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'later' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_in_flow",
+      "class": "node",
+      "description": "undefined alias inside a flow sequence",
+      "config_hex": "613a205b312c202a6e6f70655d0a",
+      "config_text": "\"a: [1, *nope]\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_as_key",
+      "class": "node",
+      "description": "undefined alias used as a mapping key",
+      "config_hex": "2a6e6f7065203a20310a",
+      "config_text": "\"*nope : 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_name_characters",
+      "class": "node",
+      "description": "anchor name with digits, dash and underscore",
+      "config_hex": "613a202a6e6f70652d315f780a",
+      "config_text": "\"a: *nope-1_x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope-1_x' referenced: yaml: unknown anchor 'nope-1_x' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope-1_x' referenced: yaml: unknown anchor 'nope-1_x' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope-1_x' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope-1_x' referenced\nError: config load failed: yaml: unknown anchor 'nope-1_x' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced: cannot parse config file: yaml: unknown anchor 'nope-1_x' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope-1_x' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope-1_x' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope-1_x' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope-1_x' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope-1_x' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_before_syntax_error",
+      "class": "node",
+      "description": "the undefined alias comes before an unterminated flow sequence and wins",
+      "config_hex": "613a202a6e6f70650a623a205b0a",
+      "config_text": "\"a: *nope\\nb: [\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_after_non_ascii",
+      "class": "node",
+      "description": "multi-byte characters before the undefined alias",
+      "config_hex": "d0bad0bbd18ed1873a20d0b7d0bdd0b0d187d0b5d0bdd0b8d0b50a623a202a6e6f70650a",
+      "config_text": "\"ключ: значение\\nb: *nope\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "unknown_anchor_crlf",
+      "class": "node",
+      "description": "undefined alias in a CRLF document",
+      "config_hex": "613a20310d0a623a202a6e6f70650d0a",
+      "config_text": "\"a: 1\\r\\nb: *nope\\r\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 6,
+          "stdout": "{\"error\":\"yaml: unknown anchor 'nope' referenced\",\"valid\":false}\n",
+          "stderr": "Error: config load failed: yaml: unknown anchor 'nope' referenced\nError: config load failed: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nError: cannot load config: cannot parse config file: yaml: unknown anchor 'nope' referenced: cannot parse config file: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unknown anchor 'nope' referenced",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "second_document_flow_unterminated",
+      "class": "accepted",
+      "description": "an unreadable second document does not count as a trailing document",
+      "config_hex": "613a20310a2d2d2d0a5b0a",
+      "config_text": "\"a: 1\\n---\\n[\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "document_end_then_flow_unterminated",
+      "class": "accepted",
+      "description": "text after a document end marker is an unreadable second document",
+      "config_hex": "613a20310a2e2e2e0a623a205b0a",
+      "config_text": "\"a: 1\\n...\\nb: [\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "second_document_scanner_failure",
+      "class": "accepted",
+      "description": "a scanner failure in the second document, away from the first",
+      "config_hex": "613a20310a2d2d2d0a623a20633a20640a",
+      "config_text": "\"a: 1\\n---\\nb: c: d\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "second_document_quote_unterminated",
+      "class": "accepted",
+      "description": "an unterminated quote on a later line of the second document",
+      "config_hex": "613a20310a2d2d2d0a623a2022780a",
+      "config_text": "\"a: 1\\n---\\nb: \\\"x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "document_end_then_scanner_failure",
+      "class": "accepted",
+      "description": "scanner failure in the document after a document end marker",
+      "config_hex": "613a20310a2e2e2e0a623a20633a20640a",
+      "config_text": "\"a: 1\\n...\\nb: c: d\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_vertical_tab",
+      "class": "accepted",
+      "description": "only a vertical tab and a newline: Go trims it as white space and serves the defaults",
+      "config_hex": "0b0a",
+      "config_text": "\"\\v\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_vertical_tab_without_newline",
+      "class": "accepted",
+      "description": "a lone vertical tab",
+      "config_hex": "0b",
+      "config_text": "\"\\v\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_no_break_space",
+      "class": "accepted",
+      "description": "only U+00A0 and a newline",
+      "config_hex": "c2a00a",
+      "config_text": "\"\\u00a0\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_next_line",
+      "class": "accepted",
+      "description": "only U+0085 and a newline",
+      "config_hex": "c2850a",
+      "config_text": "\"\\u0085\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_ideographic_space",
+      "class": "accepted",
+      "description": "only U+3000 and a newline",
+      "config_hex": "e380800a",
+      "config_text": "\"\\u3000\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_line_separator",
+      "class": "accepted",
+      "description": "only U+2028 and a newline",
+      "config_hex": "e280a80a",
+      "config_text": "\"\\u2028\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "whitespace_mixed_unicode",
+      "class": "accepted",
+      "description": "ASCII and Unicode white space mixed",
+      "config_hex": "20090d0a0b0cc2a0c285e38080200a",
+      "config_text": "\" \\t\\r\\n\\v\\f\\u00a0\\u0085\\u3000 \\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "validate_json",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__",
+            "--json"
+          ],
+          "exit_code": 0,
+          "stdout": "{\"path\":\"__CONFIG__\",\"valid\":true}\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
     }
   ],
   "open_divergences": [
     {
+      "name": "trailing_token_after_double_quoted",
+      "description": "a plain scalar and a colon after a closed double-quoted value on the same line",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a2022782220623a20310a",
+      "config_text": "\"a: \\\"x\\\" b: 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_single_quoted",
+      "description": "a trailing key after a single-quoted value",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a2027782720623a20633a20310a",
+      "config_text": "\"a: 'x' b: c: 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_flow_sequence",
+      "description": "a trailing key after a closed flow sequence",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a205b315d20623a20320a",
+      "config_text": "\"a: [1] b: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_flow_sequence_later_line",
+      "description": "the same on the second line of the file",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "783a20310a613a205b315d20623a20320a",
+      "config_text": "\"x: 1\\na: [1] b: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_flow_mapping",
+      "description": "a trailing key after a closed flow mapping",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a207b623a20317d20633a20320a",
+      "config_text": "\"a: {b: 1} c: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_empty_flow_mapping",
+      "description": "a trailing key after an empty flow mapping",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a207b7d20623a20310a",
+      "config_text": "\"a: {} b: 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_anchored_flow_sequence",
+      "description": "a trailing key after an anchored flow sequence",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a202678205b315d20633a20320a",
+      "config_text": "\"a: &x [1] c: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_tagged_quoted",
+      "description": "a trailing key after a tagged double-quoted value",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a2021217374722022782220623a20320a",
+      "config_text": "\"a: !!str \\\"x\\\" b: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: mapping values are not allowed in this context: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: mapping values are not allowed in this context: cannot parse config file: yaml: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_alias",
+      "description": "a trailing key after an alias to a defined anchor",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a20267820310a623a202a7820633a20320a",
+      "config_text": "\"a: &x 1\\nb: *x c: 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_multiline_flow_sequence",
+      "description": "a trailing key after a flow sequence that spans two lines",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a205b312c0a2020325d20623a20330a",
+      "config_text": "\"a: [1,\\n  2] b: 3\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_nested_flow_sequence",
+      "description": "a trailing key after a flow sequence in a nested mapping",
+      "kind": "wording",
+      "reason": "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'",
+      "config_hex": "613a0a2020623a205b635d20643a20310a",
+      "config_text": "\"a:\\n  b: [c] d: 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "trailing_token_after_flow_sequence_in_block_sequence",
+      "description": "a trailing key after a flow sequence that is a sequence entry: the parser states differ as well",
+      "kind": "wording",
+      "reason": "same two-token look-ahead as the other trailing_token_* entries; here the look-ahead also changes which block state libyaml is in when it rejects the token, so Go says \"did not find expected '-' indicator\" and libyaml \"did not find expected key\"",
+      "config_hex": "2d205b5d20623a20310a",
+      "config_text": "\"- [] b: 1\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: did not find expected '-' indicator: yaml: did not find expected '-' indicator\nError: cannot load config from __CONFIG__: yaml: did not find expected '-' indicator: yaml: did not find expected '-' indicator\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: did not find expected '-' indicator: cannot parse config file: yaml: did not find expected '-' indicator\nError: cannot load config: cannot parse config file: yaml: did not find expected '-' indicator: cannot parse config file: yaml: did not find expected '-' indicator\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: did not find expected '-' indicator: cannot parse config file: yaml: did not find expected '-' indicator\nError: cannot load config: cannot parse config file: yaml: did not find expected '-' indicator: cannot parse config file: yaml: did not find expected '-' indicator\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: did not find expected '-' indicator",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: did not find expected '-' indicator",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: did not find expected '-' indicator",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: did not find expected '-' indicator",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: did not find expected '-' indicator",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
       "name": "directive_without_document_start",
       "description": "content after a %YAML directive with no --- line",
-      "reason": "yaml.v3 reports a scanner error on line 2 (mapping values are not allowed) where libyaml reports the parser error 'did not find expected <document start>'",
+      "kind": "wording",
+      "reason": "same two-token look-ahead: yaml.v3 reports the scanner error on line 2 (mapping values are not allowed) where libyaml reports the parser error 'did not find expected <document start>'",
       "config_hex": "2559414d4c20312e310a613a20310a",
       "config_text": "\"%YAML 1.1\\na: 1\\n\"",
-      "validate": {
-        "command": "validate",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config: cannot parse config file: yaml: line 2: mapping values are not allowed in this context: cannot parse config file: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
         "args": [
-          "config",
-          "validate",
-          "__CONFIG__"
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
         ],
-        "exit_code": 6,
-        "stdout": "",
-        "stderr": "Error: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nError: cannot load config from __CONFIG__: yaml: line 2: mapping values are not allowed in this context: yaml: line 2: mapping values are not allowed in this context\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 2: mapping values are not allowed in this context",
+            "hint": "",
+            "fixable": false
+          }
+        ]
       }
+    },
+    {
+      "name": "scanner_failure_after_document_end",
+      "description": "an unterminated quote as the first token of the second document",
+      "kind": "behavior",
+      "reason": "yaml.v3's two-token look-ahead scans the first token of the second document while it still reads the first one, so Go fails on the second document's scanner error with exit 6; libyaml in the native loader never reaches it and accepts the config",
+      "config_hex": "613a20310a2d2d2d0a22780a",
+      "config_text": "\"a: 1\\n---\\n\\\"x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: line 3: found unexpected end of stream: yaml: line 3: found unexpected end of stream\nError: cannot load config from __CONFIG__: yaml: line 3: found unexpected end of stream: yaml: line 3: found unexpected end of stream\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: line 3: found unexpected end of stream",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: line 3: found unexpected end of stream",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 3: found unexpected end of stream",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 3: found unexpected end of stream",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: line 3: found unexpected end of stream",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "third_document_scanner_look_ahead",
+      "description": "an unterminated quote as the first token of a third document",
+      "kind": "behavior",
+      "reason": "Go's check for a second document decodes it with the same two-token look-ahead, which scans into the third document and fails, so Go sees no trailing document and accepts the config; the native loader decodes the second document fine and rejects the stream as multi-document",
+      "config_hex": "613a20310a2d2d2d0a623a20320a2d2d2d0a22780a",
+      "config_text": "\"a: 1\\n---\\nb: 2\\n---\\n\\\"x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "name": "second_document_unknown_anchor",
+      "description": "an alias in the second document to an anchor that no document defines",
+      "kind": "behavior",
+      "reason": "Go fails to decode the second document, so it sees no trailing document and accepts the config; serde_yaml_ng scopes anchors to one document and yaml.v3 shares them across the stream, so the native loader cannot tell this alias from one to an anchor of the first document and keeps rejecting the stream as multi-document",
+      "config_hex": "613a20310a2d2d2d0a623a202a6e6f70650a",
+      "config_text": "\"a: 1\\n---\\nb: *nope\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "get_set_second_document_syntax_error",
+      "description": "an unterminated flow sequence in the second document, read by config get and config set",
+      "kind": "behavior",
+      "reason": "Go's config get and config set read only the first document (yaml.Unmarshal into a node): get reports the missing key and set succeeds and rewrites the file; the native commands parse the whole stream with yaml_edit, fail on the later syntax error and leave the file alone",
+      "config_hex": "613a20310a2d2d2d0a5b0a",
+      "config_text": "\"a: 1\\n---\\n[\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Set vaultDir = changed\n",
+          "stderr": "",
+          "config_unchanged": false
+        }
+      ]
     },
     {
       "name": "utf16_bom_only",
       "description": "a lone UTF-16LE byte order mark",
+      "kind": "behavior",
       "reason": "yaml.v3 decodes UTF-16 and accepts the empty stream; libyaml in serde_yaml_ng rejects the stream as invalid UTF-8",
       "config_hex": "fffe",
       "config_text": "\"\\xff\\xfe\"",
-      "validate": {
-        "command": "validate",
-        "args": [
-          "config",
-          "validate",
-          "__CONFIG__"
-        ],
-        "exit_code": 0,
-        "stdout": "Configuration is valid (__CONFIG__)\n",
-        "stderr": ""
-      }
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        }
+      ]
     },
     {
       "name": "bom_after_first_line",
       "description": "a UTF-8 byte order mark at the start of a later line",
+      "kind": "behavior",
       "reason": "yaml.v3 skips the mark and accepts the stream; libyaml counts it as a column and rejects the mapping key",
       "config_hex": "613a20310aefbbbf623a20320a",
       "config_text": "\"a: 1\\n\\ufeffb: 2\\n\"",
-      "validate": {
-        "command": "validate",
-        "args": [
-          "config",
-          "validate",
-          "__CONFIG__"
-        ],
-        "exit_code": 0,
-        "stdout": "Configuration is valid (__CONFIG__)\n",
-        "stderr": ""
-      }
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        }
+      ]
     },
     {
-      "name": "second_document_syntax_error",
-      "description": "a syntax error in the second document of the stream",
-      "reason": "Go reads only the first document and treats an unreadable second one as absent; the Rust loader rejects the stream as multi-document",
-      "config_hex": "613a20310a2d2d2d0a5b0a",
-      "config_text": "\"a: 1\\n---\\n[\\n\"",
-      "validate": {
-        "command": "validate",
+      "name": "alias_value_for_string_field",
+      "description": "an alias to a scalar anchor used as the value of a string field",
+      "kind": "behavior",
+      "reason": "yaml.v3 decodes the alias into the string field and accepts the config (so validate, doctor and agent list succeed and config set of a nested key succeeds); the native loader reads the alias through serde_yaml_ng and rejects 'vaultDir must be a string', and config set writes the file before that post-update load fails",
+      "config_hex": "613a20267820310a7661756c744469723a202a780a",
+      "config_text": "\"a: &x 1\\nvaultDir: *x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "set_nested",
+          "args": [
+            "config",
+            "set",
+            "agents.x.canWrite",
+            "true",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Set agents.x.canWrite = true\n",
+          "stderr": "",
+          "config_unchanged": false
+        }
+      ],
+      "doctor": {
         "args": [
-          "config",
-          "validate",
-          "__CONFIG__"
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
         ],
         "exit_code": 0,
-        "stdout": "Configuration is valid (__CONFIG__)\n",
-        "stderr": ""
-      }
-    },
-    {
-      "name": "unknown_anchor",
-      "description": "alias to an anchor that was never defined",
-      "reason": "yaml.v3 words this as \"unknown anchor 'nope' referenced\" at the decoder; serde_yaml_ng reports 'unknown anchor' with a mark and no name",
-      "config_hex": "613a202a6e6f70650a",
-      "config_text": "\"a: *nope\\n\"",
-      "validate": {
-        "command": "validate",
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
         "args": [
-          "config",
-          "validate",
-          "__CONFIG__"
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
         ],
-        "exit_code": 6,
+        "exit_code": 0,
         "stdout": "",
-        "stderr": "Error: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nError: cannot load config from __CONFIG__: yaml: unknown anchor 'nope' referenced: yaml: unknown anchor 'nope' referenced\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        "stderr": "AGENT          TIER       TOKEN      SKILL        LAST SEEN\n----------------------------------------------------------------------\nclaude-code               none       missing      -\ncodex                     none       missing      -\ndefault                   none       missing      -\nhermes                    none       missing      -\nopenclaw                  none       missing      -\nopencode                  none       missing      -\n"
+      }
+    },
+    {
+      "name": "custom_tag_on_value",
+      "description": "a local tag on a plain scalar",
+      "kind": "behavior",
+      "reason": "yaml.v3 ignores a local tag it does not know and decodes the value; serde_yaml_ng keeps it as a tagged value that the native loader rejects",
+      "config_hex": "613a20217420780a",
+      "config_text": "\"a: !t x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Configuration is valid (__CONFIG__)\n",
+          "stderr": ""
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 0,
+          "stdout": "Set vaultDir = changed\n",
+          "stderr": "",
+          "config_unchanged": false
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "ok",
+            "message": "config.yaml loads without errors",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "ok",
+            "message": "config.yaml passes validation",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "passphrase never rotated — rotation is recommended for security hygiene",
+            "hint": "run `symvault auth rotate-passphrase` to rotate",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "ok",
+            "message": "no dynamic providers configured",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "ok",
+            "message": "claude-code, codex, opencode, hermes, openclaw configured",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      }
+    },
+    {
+      "name": "scalar_root",
+      "description": "a document that is a single scalar",
+      "kind": "wording",
+      "reason": "the failure comes from yaml.v3's decoder and node layers, not from libyaml: validate says 'yaml: unmarshal errors: line 1: cannot unmarshal !!str `just a ...` into config.Config', get 'parent is a scalar node, not a mapping', set 'root node is a scalar, not a mapping'; the native CLI fails the same commands with the same exit status and leaves the file alone, with different text",
+      "config_hex": "6a7573742061207363616c61720a",
+      "config_text": "\"just a scalar\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        },
+        {
+          "command": "set_nested",
+          "args": [
+            "config",
+            "set",
+            "agents.x.canWrite",
+            "true",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"agents.x.canWrite\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"agents.x.canWrite\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config\nError: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `just a ...` into config.Config\n"
+      }
+    },
+    {
+      "name": "sequence_root",
+      "description": "a document that is a block sequence",
+      "kind": "wording",
+      "reason": "yaml.v3 decoder and node layers again: 'cannot unmarshal !!seq into config.Config', 'parent is a sequence node, not a mapping', 'root node is a sequence, not a mapping'; same exit status and unchanged file natively, different text",
+      "config_hex": "2d20310a2d20320a",
+      "config_text": "\"- 1\\n- 2\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a sequence node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a sequence node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a sequence, not a mapping: root node is a sequence, not a mapping\nError: cannot set \"vaultDir\": root node is a sequence, not a mapping: root node is a sequence, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        },
+        {
+          "command": "set_nested",
+          "args": [
+            "config",
+            "set",
+            "agents.x.canWrite",
+            "true",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"agents.x.canWrite\": root node is a sequence, not a mapping: root node is a sequence, not a mapping\nError: cannot set \"agents.x.canWrite\": root node is a sequence, not a mapping: root node is a sequence, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config\nError: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!seq into config.Config\n"
+      }
+    },
+    {
+      "name": "agents_scalar",
+      "description": "a scalar where the agents mapping belongs",
+      "kind": "wording",
+      "reason": "yaml.v3 decode error 'cannot unmarshal !!str `x` into map[string]config.AgentProfile'; get reports the key text differently, and set rewrites the file before the post-update load fails on both sides",
+      "config_hex": "6167656e74733a20780a",
+      "config_text": "\"agents: x\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: config is invalid after update: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": false
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile",
+            "hint": "",
+            "fixable": false
+          }
+        ]
+      },
+      "agent_list": {
+        "command": "agent_list",
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "agent",
+          "list"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\nError: load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `x` into map[string]config.AgentProfile\n"
+      }
+    },
+    {
+      "name": "null_root",
+      "description": "a document that is the scalar null",
+      "kind": "wording",
+      "reason": "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a scalar node, not a mapping' and 'root node is a scalar, not a mapping', the native CLI with 'key \"vaultDir\" not found' and 'document has no root to descend into'",
+      "config_hex": "6e756c6c0a",
+      "config_text": "\"null\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "comment_only",
+      "description": "a config that contains only a comment",
+      "kind": "wording",
+      "reason": "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with 'parent is a unknown(0) node, not a mapping' and 'root node is a unknown(0), not a mapping', the native CLI with 'cannot load config: missing YAML document'",
+      "config_hex": "23206e6f7468696e670a",
+      "config_text": "\"# nothing\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nError: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "document_start_only",
+      "description": "a config that is only a document start marker",
+      "kind": "wording",
+      "reason": "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the scalar-node wording of null_root",
+      "config_hex": "2d2d2d0a",
+      "config_text": "\"---\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "empty_flow_mapping_root",
+      "description": "a document that is an empty flow mapping",
+      "kind": "wording",
+      "reason": "validate agrees; config get fails on both sides with exit 6, Go with `key \"vaultDir\" not found: key \"vaultDir\" not found` (the cause is appended), the native CLI with the bare message",
+      "config_hex": "7b7d0a",
+      "config_text": "\"{}\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: key \"vaultDir\" not found\nError: key \"vaultDir\" not found: key \"vaultDir\" not found\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        }
+      ]
+    },
+    {
+      "name": "empty_file",
+      "description": "a zero-byte config",
+      "kind": "wording",
+      "reason": "validate agrees (defaults); get and set fail on both sides with exit 6 and an unchanged file, Go with the 'unknown(0) node' wording of comment_only, the native CLI with 'missing YAML document'",
+      "config_hex": "",
+      "config_text": "\"\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nError: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "ascii_spaces_only",
+      "description": "a config that is only spaces",
+      "kind": "wording",
+      "reason": "same as empty_file: Go reaches the node layer with an empty document, the native commands report a missing document",
+      "config_hex": "202020",
+      "config_text": "\"   \"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nError: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "no_break_space_only",
+      "description": "a config that is only U+00A0 and a newline",
+      "kind": "wording",
+      "reason": "validate and doctor agree (Go's blank check trims U+00A0, see whitespace_no_break_space); config get and set parse the file as a one-scalar document on the Go side and fail with its node wording, natively with different text; exit status and the unchanged file agree",
+      "config_hex": "c2a00a",
+      "config_text": "\"\\u00a0\\n\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "byte_order_mark_only",
+      "description": "a config that is only a UTF-8 byte order mark",
+      "kind": "wording",
+      "reason": "validate and doctor agree (defaults); config get and set differ in the node-layer wording of an empty document, exit status and unchanged file agree",
+      "config_hex": "efbbbf",
+      "config_text": "\"\\ufeff\"",
+      "observations": [
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a unknown(0) node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nError: cannot set \"vaultDir\": root node is a unknown(0), not a mapping: root node is a unknown(0), not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ]
+    },
+    {
+      "name": "zero_width_space_root",
+      "description": "a document that is only U+200B: not white space for Go, a plain scalar",
+      "kind": "wording",
+      "reason": "same decode-layer wording gap as scalar_root: yaml.v3 says 'cannot unmarshal !!str `​` into config.Config', the native loader 'invalid type: string'; exit status and the unchanged file agree",
+      "config_hex": "e2808b0a",
+      "config_text": "\"\\u200b\\n\"",
+      "observations": [
+        {
+          "command": "validate",
+          "args": [
+            "config",
+            "validate",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config\nError: cannot load config from __CONFIG__: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "get",
+          "args": [
+            "config",
+            "get",
+            "vaultDir",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nError: key \"vaultDir\" not found: cannot access key \"vaultDir\": parent is a scalar node, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n"
+        },
+        {
+          "command": "set",
+          "args": [
+            "config",
+            "set",
+            "vaultDir",
+            "changed",
+            "--file",
+            "__CONFIG__"
+          ],
+          "exit_code": 6,
+          "stdout": "",
+          "stderr": "Error: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nError: cannot set \"vaultDir\": root node is a scalar, not a mapping: root node is a scalar, not a mapping\nRun 'symvault doctor' to diagnose and fix configuration issues.\n",
+          "config_unchanged": true
+        }
+      ],
+      "doctor": {
+        "args": [
+          "--vault",
+          "__VAULT__",
+          "doctor",
+          "--only",
+          "vault.config.parses,vault.config.validates,auth.passphrase.rotation,mcp.dynamic.engines,mcp.agents",
+          "--json",
+          "--no-network"
+        ],
+        "exit_code": 0,
+        "results": [
+          {
+            "id": "vault.config.parses",
+            "name": "Vault config parses",
+            "status": "fail",
+            "message": "config.yaml parse error: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for YAML syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "vault.config.validates",
+            "name": "Vault config validates",
+            "status": "fail",
+            "message": "failed to load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config",
+            "hint": "inspect __VAULT__/config.yaml for syntax errors",
+            "fixable": false
+          },
+          {
+            "id": "auth.passphrase.rotation",
+            "name": "Passphrase rotation",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.dynamic.engines",
+            "name": "Dynamic secret engines",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config",
+            "hint": "",
+            "fixable": false
+          },
+          {
+            "id": "mcp.agents",
+            "name": "MCP agents configured",
+            "status": "warn",
+            "message": "cannot load config: yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `​` into config.Config",
+            "hint": "",
+            "fixable": false
+          }
+        ]
       }
     }
   ]
