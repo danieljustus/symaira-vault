@@ -17,6 +17,12 @@
 //!   clipboard and the server keeps running; Go also shuts down.
 //! - stdio: a signal during the non-secure approval prompt waits the full
 //!   2 s grace before exiting 0.
+//! - stdio: a signal (or raw Ctrl-C) during secure input cancels only the
+//!   prompt and the server keeps serving; Go answers `secure input failed:
+//!   context canceled` and also shuts down (exit 0 within about 1 s).
+//! - stdio: a signal during the non-secure approval prompt gets no JSON-RPC
+//!   response from Rust; Go answers `<tool> approval failed: failed to read
+//!   from terminal: context canceled` (isError) and exits 0 within 0.5 s.
 //! - `mcp --stdio --allow-locked` keeps the OS default signal actions.
 
 #[cfg(unix)]
