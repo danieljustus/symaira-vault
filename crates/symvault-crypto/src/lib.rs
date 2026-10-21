@@ -255,7 +255,7 @@ pub fn decrypt_identity(
 pub fn pseudonymize_path(identity: &Identity, path: &str) -> String {
     let identity_string = identity.0.to_string();
     let identity_digest = Sha256::digest(identity_string.expose_secret().as_bytes());
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&identity_digest)
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&identity_digest)
         .expect("HMAC-SHA256 accepts every key length");
     mac.update(path.as_bytes());
     mac.finalize()

@@ -58,5 +58,5 @@ pub(crate) fn opened(
         hash.update(&buffer[..count]);
     }
 
-    Ok((format!("{:x}", hash.finalize()), size, metadata))
+    Ok((hex::encode(hash.finalize()), size, metadata))
 }

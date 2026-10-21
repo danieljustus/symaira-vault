@@ -334,28 +334,27 @@ impl SessionManager {
     }
     fn encrypt(&self, vault: &str, value: &[u8]) -> Result<(String, String), SessionError> {
         let key = self.wrap_key(vault, true)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
         let mut nonce = [0; 12];
         fill(&mut nonce).map_err(|e| SessionError::Crypto(e.to_string()))?;
         let encrypted = cipher
-            .encrypt(Nonce::from_slice(&nonce), value)
+            .encrypt(&Nonce::from(nonce), value)
             .map_err(|e| SessionError::Crypto(e.to_string()))?;
         Ok((B64.encode(encrypted), B64.encode(nonce)))
     }
     fn decrypt(&self, vault: &str, encrypted: &str, nonce: &str) -> Result<Vec<u8>, SessionError> {
         let key = self.wrap_key(vault, false)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
         let payload = B64
             .decode(encrypted)
             .map_err(|e| SessionError::Malformed(e.to_string()))?;
         let nonce = B64
             .decode(nonce)
             .map_err(|e| SessionError::Malformed(e.to_string()))?;
-        if nonce.len() != 12 {
-            return Err(SessionError::Malformed("nonce must be 12 bytes".into()));
-        }
+        let nonce = Nonce::try_from(nonce.as_slice())
+            .map_err(|_| SessionError::Malformed("nonce must be 12 bytes".into()))?;
         cipher
-            .decrypt(Nonce::from_slice(&nonce), payload.as_ref())
+            .decrypt(&nonce, payload.as_ref())
             .map_err(|e| SessionError::Crypto(e.to_string()))
     }
     pub fn save_passphrase(

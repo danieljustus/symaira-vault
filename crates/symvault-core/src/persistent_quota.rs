@@ -1,5 +1,4 @@
 //! Persistent quota counters. State is exactly `{ "counters": { ... } }`.
-use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -33,7 +32,7 @@ struct Persisted {
 
 /// The side-effect boundary for persistent quota storage. Tests can inject
 /// every operation; the default uses an exclusive OS file lock (flock on Unix
-/// and LockFileEx-compatible locking through fs4 on Windows).
+/// and an exclusive whole-file LockFileEx lock on Windows, via `std::fs::File::lock`).
 pub trait QuotaPlatform: Send + Sync {
     fn lock(&self, file: &File) -> Result<(), QuotaError>;
     fn unlock(&self, file: &File) -> Result<(), QuotaError>;
@@ -45,16 +44,14 @@ pub struct NativeQuotaPlatform;
 
 #[cfg(unix)]
 fn native_lock(file: &File) -> Result<(), QuotaError> {
-    file.lock_exclusive()
-        .map_err(|e| QuotaError::Lock(e.to_string()))
+    file.lock().map_err(|e| QuotaError::Lock(e.to_string()))
 }
 #[cfg(windows)]
 fn native_lock(file: &File) -> Result<(), QuotaError> {
-    // fs4's Windows backend calls LockFileEx with an exclusive whole-file
+    // std's Windows backend calls LockFileEx with an exclusive whole-file
     // range; keep this branch explicit so cross-target compilation covers the
     // production Windows locking path rather than a Unix fallback.
-    file.lock_exclusive()
-        .map_err(|e| QuotaError::Lock(e.to_string()))
+    file.lock().map_err(|e| QuotaError::Lock(e.to_string()))
 }
 #[cfg(not(any(unix, windows)))]
 fn native_lock(_: &File) -> Result<(), QuotaError> {
