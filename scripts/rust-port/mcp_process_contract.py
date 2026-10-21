@@ -318,7 +318,9 @@ def vault_snapshot(root):
 # run against the real Go binary and the Rust binary in separate disposable
 # HOMEs, synchronised on observable readiness (never a bare sleep).
 # ---------------------------------------------------------------------------
-SIGNALS = [('SIGINT', signal.SIGINT), ('SIGTERM', signal.SIGTERM), ('SIGQUIT', signal.SIGQUIT)]
+# Windows has no SIGQUIT; the signal contract is Unix-only and asserts that
+# before use, so the table stays empty there and the module still imports.
+SIGNALS = [] if os.name == 'nt' else [('SIGINT', signal.SIGINT), ('SIGTERM', signal.SIGTERM), ('SIGQUIT', signal.SIGQUIT)]
 SIGNAL_MODES = ('stdio', 'http')
 SIGNAL_STATES = ('idle', 'after-init', 'idle-stale-runtime')
 STALE_RUNTIME = {'.runtime-port': b'{"port":1,"bind":"127.0.0.1"}', '.runtime-tls-cert': b'{}'}

@@ -144,6 +144,7 @@ class SignalComparisonNegativeControls(unittest.TestCase):
             CONTRACT.compare_signal_rows(self.go, missing)
 
 
+@unittest.skipIf(os.name == 'nt', 'the signal engine uses Unix process groups')
 class SyntheticSignalEngineControls(unittest.TestCase):
     """The engine itself, driven by tiny synthetic stdio servers (not product evidence)."""
     SERVER = """#!{python}

@@ -204,6 +204,7 @@ class DefaultDeadlineContract(unittest.TestCase):
                 self.assertIs(rejected, not expected_clean)
 
 
+@unittest.skipIf(os.name == 'nt', 'the signal engine uses Unix process groups')
 class SyntheticHttpSignalEngineControls(unittest.TestCase):
     """HTTP signal engine against a tiny synthetic listener (not product evidence)."""
     SERVER = """#!{python}
