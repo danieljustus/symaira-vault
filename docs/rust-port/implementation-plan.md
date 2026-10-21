@@ -111,8 +111,7 @@ six hidden inputs), five cooked-mode restoration checks and two idle
 SIGINT/SIGTERM shutdowns that exit 0 like Go (asserted as `WIFEXITED`, status 0,
 never `WIFSIGNALED`; actual Go oracle 0cc78062 under a controlling PTY, run on
 Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; subsequent input works.
-Ordinary approval restores the terminal before terminating with the original
-signal. The process-owned router is installed only by the standalone Unix
+Ordinary approval restores the terminal, then exits 0 like Go. The process-owned router is installed only by the standalone Unix
 stdio MCP CLI when a controlling terminal exists.
 
 `secure-input-signals-receipt-7be90e81.json` in both existing build roots binds

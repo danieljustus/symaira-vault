@@ -216,7 +216,8 @@ pub fn request_approval(req: &ApprovalRequest) -> ApprovalResult {
 /// Terminal mode is restored by the terminal guard on every return path.
 /// Raw Ctrl-C is handled as cancellation. The standalone CLI stdio process
 /// may install [`install_stdio_secure_input_signal_router`] so external
-/// SIGINT/SIGTERM also cancel an active prompt and retain default idle behavior.
+/// SIGINT/SIGTERM also cancel an active prompt; idle signals are handled by
+/// the CLI's process-owned shutdown, which exits 0 like Go.
 pub fn request_secure_input(req: &SecureInputRequest) -> Result<String, SecureInputError> {
     #[cfg(unix)]
     {
@@ -290,8 +291,9 @@ pub fn install_stdio_secure_input_signal_router() -> Result<(), String> {
 
 /// Installs the process-owned stdio MCP signal router with its injected clipboard.
 /// SIGINT/SIGTERM/SIGHUP clear and cancel an active auto-clear timer; without
-/// an active timer, prompt scopes retain their cancellation/default behavior
-/// and idle signals retain the OS default action.
+/// an active timer, prompt scopes retain their cancellation behavior. Idle
+/// SIGINT/SIGTERM go to the installed stdio terminator (exit 0 like Go);
+/// SIGHUP, or any signal without a terminator, takes the OS default action.
 #[cfg(unix)]
 pub fn install_stdio_clipboard_signal_router(
     clipboard: Arc<dyn symvault_core::platform::Clipboard>,
