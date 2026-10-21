@@ -11,14 +11,27 @@ fn csv_profiles_and_paths_match_production_go() {
         fixture["commit"],
         "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
     );
+    let mut bitwarden_cases = 0usize;
+    let mut dispatch_cases = 0usize;
     for case in fixture["cases"].as_array().unwrap() {
-        let format = match case["format"].as_str().unwrap() {
-            "csv" => Format::Csv,
-            "bitwarden" => Format::Bitwarden,
-            "apple" => Format::Apple,
-            "chrome" => Format::Chrome,
-            "firefox" => Format::Firefox,
-            _ => unreachable!(),
+        let name = case["format"].as_str().unwrap();
+        // Go's importer.New resolves the name exactly; a name without an
+        // importer (the generic json/yaml extensions, a wrong-case or padded
+        // name) fails before any input is read.
+        let format = match importer::format_from_name(name) {
+            Ok(format) => format,
+            Err(error) => {
+                assert!(case["failed"].as_bool().unwrap(), "{}", case["name"]);
+                assert_eq!(
+                    error.to_string(),
+                    case["error"].as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
+                assert_eq!(case["entries"], serde_json::json!([]), "{}", case["name"]);
+                dispatch_cases += 1;
+                continue;
+            }
         };
         let input = case
             .get("input_b64")
@@ -57,6 +70,17 @@ fn csv_profiles_and_paths_match_production_go() {
             "{}",
             case["name"]
         );
+        if format == Format::Bitwarden {
+            bitwarden_cases += 1;
+            // Bitwarden diagnostics are Go's encoding/json text, byte for byte.
+            let actual = result.as_ref().err().map(ToString::to_string);
+            assert_eq!(
+                actual.as_deref().unwrap_or(""),
+                case.get("error").and_then(Value::as_str).unwrap_or(""),
+                "{}",
+                case["name"]
+            );
+        }
         if let Ok(entries) = result {
             assert_eq!(
                 serde_json::to_value(entries).unwrap(),
@@ -66,6 +90,23 @@ fn csv_profiles_and_paths_match_production_go() {
             );
         }
     }
+    let expected_bitwarden = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| case["format"] == "bitwarden")
+        .count();
+    let expected_dispatch = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|case| importer::format_from_name(case["format"].as_str().unwrap()).is_err())
+        .count();
+    assert_eq!(bitwarden_cases, expected_bitwarden);
+    assert_eq!(dispatch_cases, expected_dispatch);
+    // Guard against a fixture that silently loses its Bitwarden/dispatch corpus.
+    assert!(bitwarden_cases >= 171, "{bitwarden_cases} bitwarden cases");
+    assert_eq!(dispatch_cases, 6);
     for (input, expected) in fixture["paths"].as_object().unwrap() {
         assert_eq!(importer::normalize_path(input), expected.as_str().unwrap());
     }
