@@ -11,6 +11,7 @@
 mod unix {
     use std::{
         fs,
+        io::Write,
         path::{Path, PathBuf},
         sync::{
             Arc, Condvar, Mutex,
@@ -38,7 +39,11 @@ mod unix {
 
     fn warn_quit(signal: i32) {
         if signal == SIGQUIT {
-            eprintln!("Received SIGQUIT, shutting down gracefully...");
+            // A closed stderr must not stop the shutdown.
+            let _ = writeln!(
+                std::io::stderr(),
+                "Received SIGQUIT, shutting down gracefully..."
+            );
         }
     }
 

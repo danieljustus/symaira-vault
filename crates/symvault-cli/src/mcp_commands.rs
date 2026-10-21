@@ -148,15 +148,7 @@ pub fn run(
         // confirmation and before the listener exists.
         let runtime_metadata = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root)));
         #[cfg(unix)]
-        {
-            let runtime_metadata = Arc::clone(&runtime_metadata);
-            mcp_shutdown::install_http(Arc::new(move || {
-                runtime_metadata
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .release();
-            }))?;
-        }
+        mcp_shutdown::install_http(http_signal_cleanup(&runtime_metadata))?;
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -514,6 +506,31 @@ impl RuntimeMetadataGuard {
         remove_if_unchanged(&self.port_path, self.port_record.take().as_deref());
         remove_if_unchanged(&self.tls_path, self.tls_record.take().as_deref());
     }
+}
+
+/// Signal-time cleanup for the HTTP transport.
+///
+/// The listener thread lives for the whole process, so it must hold only a
+/// `Weak`: the local `Arc` in `run` stays the sole strong owner and the guard's
+/// `Drop` still removes the records on every non-signal return. The lock is
+/// intentionally kept until the process exits so the main thread cannot publish
+/// a record between this release and `process::exit`.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn http_signal_cleanup(
+    runtime_metadata: &Arc<Mutex<RuntimeMetadataGuard>>,
+) -> Arc<dyn Fn() + Send + Sync> {
+    let weak = Arc::downgrade(runtime_metadata);
+    Arc::new(move || {
+        if let Some(runtime_metadata) = weak.upgrade() {
+            let mut guard = runtime_metadata
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.release();
+            // ponytail: leaking the guard keeps the mutex locked until the
+            // imminent process::exit; only the signal path calls this.
+            std::mem::forget(guard);
+        }
+    })
 }
 
 impl Drop for RuntimeMetadataGuard {
@@ -1210,6 +1227,37 @@ mod tests {
         );
         drop(second);
         assert!(!port.exists());
+    }
+
+    #[test]
+    fn signal_cleanup_does_not_keep_the_guard_alive() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let guard = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root.path())));
+        guard
+            .lock()
+            .unwrap()
+            .publish(RuntimeMetadata {
+                bind: "127.0.0.1".into(),
+                port: 9003,
+                certificate: String::new(),
+                client_ca: String::new(),
+                client_auth_required: false,
+                approval_client_certificate: String::new(),
+                approval_client_key: String::new(),
+                server_working_dir: root.path().to_path_buf(),
+            })
+            .unwrap();
+        let cleanup = http_signal_cleanup(&guard);
+        assert!(port.is_file());
+        // A non-signal exit drops the only strong owner; Drop must remove the
+        // record even though the process-lifetime cleanup closure still exists.
+        drop(guard);
+        assert!(
+            !port.exists(),
+            "Drop must still run with the listener installed"
+        );
+        cleanup();
     }
 
     #[test]
