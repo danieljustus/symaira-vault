@@ -13,9 +13,9 @@ logs and prunes old files based on configurable limits.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SYMVAULT_AUDIT_MAX_SIZE_MB` | `100` | Maximum log file size in megabytes before rotation |
+| `SYMVAULT_AUDIT_MAX_SIZE_MB` | `100` | Maximum log file size in megabytes before rotation; must be greater than 0 (`0` is ignored) |
 | `SYMVAULT_AUDIT_MAX_BACKUPS` | `5` | Maximum number of rotated backup files to retain |
-| `SYMVAULT_AUDIT_MAX_AGE_DAYS` | `30` | Maximum age in days before rotated files are deleted |
+| `SYMVAULT_AUDIT_MAX_AGE_DAYS` | `30` | Maximum age in days before the log rotates and rotated files are deleted; `0` disables age-based rotation and deletion |
 
 Legacy `OPENPASS_AUDIT_*` variants are also accepted for backward
 compatibility. `SYMVAULT_*` takes precedence when both are set.
@@ -121,16 +121,17 @@ export SYMVAULT_AUDIT_MAX_AGE_DAYS=365
 
 Disk usage: ~4.2GB maximum (200MB current + 20×200MB backups).
 
-### Disable Retention (keep everything)
+### Disable Age-Based Cleanup (keep rotated files)
 
 ```bash
-export SYMVAULT_AUDIT_MAX_BACKUPS=0
 export SYMVAULT_AUDIT_MAX_AGE_DAYS=0
+export SYMVAULT_AUDIT_MAX_BACKUPS=999999
 ```
 
-> **Warning**: With `MaxBackups=0`, all rotated files are immediately deleted.
-> Use large values like `999999` to effectively disable cleanup while keeping
-> backups.
+`MaxAgeDays=0` disables age-based rotation and deletion; the size limit and
+`MaxBackups` still apply, so use a large `MaxBackups` to keep rotated files.
+
+> **Warning**: With `MaxBackups=0`, all rotated files are deleted immediately.
 
 ### Audit Log Health
 
