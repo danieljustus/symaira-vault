@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 base32 = "=0.5.1"
-base64 = "=0.22.1"
+base64 = "=0.23.1"
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"] }
 thiserror = "=2.0.21"
 getrandom = "=0.4.3"
