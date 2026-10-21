@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"encoding/base64"
+	"strings"
+)
 
 // bitwardenCases freezes Bitwarden JSON decoding (encoding/json semantics:
 // null, wrong-type, case-insensitive keys, duplicate keys, malformed input)
@@ -10,6 +13,10 @@ import "strings"
 func bitwardenCases() []csvCase {
 	bw := func(name, input string) csvCase {
 		return csvCase{Name: "bw_" + name, Format: "bitwarden", Input: input}
+	}
+	// bwRaw carries arbitrary bytes (invalid UTF-8, control bytes) as input_b64.
+	bwRaw := func(name, input string) csvCase {
+		return csvCase{Name: "bw_" + name, Format: "bitwarden", InputB64: base64.StdEncoding.EncodeToString([]byte(input))}
 	}
 	nested := func(depth int) string {
 		return strings.Repeat("[", depth) + strings.Repeat("]", depth)
@@ -53,6 +60,14 @@ func bitwardenCases() []csvCase {
 		bw("syntax_max_depth_exceeded", nested(10001)),
 		bw("syntax_max_depth_exceeded_inside_object", `{"x":`+nested(10000)+`}`),
 		bw("syntax_max_depth_allowed_in_unknown_key", `{"x":`+nested(9999)+`,"items":[{"type":1,"name":"Deep"}]}`),
+
+		// Invalid UTF-8 and non-printable bytes (raw bytes via input_b64).
+		bwRaw("invalid_utf8_in_string_value", "{\"items\":[{\"type\":1,\"name\":\"a\xffb\xe2\x82c\",\"notes\":\"\xc3(\"}]}"),
+		bwRaw("invalid_utf8_in_key", "{\"items\":[{\"type\":1,\"na\xffme\":\"X\",\"name\":\"Y\",\"\xe2\x82\":1}]}"),
+		bwRaw("invalid_utf8_trailing_garbage", "{\"items\":[{\"type\":1,\"name\":\"T\"}]}\xff\xfe garbage"),
+		bwRaw("syntax_byte_0x01", "{\"items\":\x01}"),
+		bwRaw("syntax_byte_0x7f", "{\"items\":\x7f}"),
+		bwRaw("syntax_byte_0x80", "{\"items\":\x80}"),
 
 		// Top-level shapes.
 		bw("top_array", `[]`),

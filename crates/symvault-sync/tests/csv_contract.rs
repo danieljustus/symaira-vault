@@ -105,7 +105,7 @@ fn csv_profiles_and_paths_match_production_go() {
     assert_eq!(bitwarden_cases, expected_bitwarden);
     assert_eq!(dispatch_cases, expected_dispatch);
     // Guard against a fixture that silently loses its Bitwarden/dispatch corpus.
-    assert!(bitwarden_cases >= 150, "{bitwarden_cases} bitwarden cases");
+    assert!(bitwarden_cases >= 171, "{bitwarden_cases} bitwarden cases");
     assert_eq!(dispatch_cases, 6);
     for (input, expected) in fixture["paths"].as_object().unwrap() {
         assert_eq!(importer::normalize_path(input), expected.as_str().unwrap());

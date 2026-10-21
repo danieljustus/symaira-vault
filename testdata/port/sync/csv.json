@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "e1adf4581e819dc2bec4312228bdd53d6a72d7cd45ebc7bcb5bc3ffc646942b0",
+  "generator_digest": "3b6c3c9e5f103d19ee300df1de23fb31cda9cfce6e63b9ffa6009132df206284",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -931,6 +931,87 @@
         }
       ],
       "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_in_string_value",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6ImH/YuKCYyIsIm5vdGVzIjoiwygifV19",
+      "entries": [
+        {
+          "path": "a�b��c",
+          "data": {
+            "notes": "�(",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_in_key",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmH/bWUiOiJYIiwibmFtZSI6IlkiLCLigiI6MX1dfQ==",
+      "entries": [
+        {
+          "path": "Y",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_invalid_utf8_trailing_garbage",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6W3sidHlwZSI6MSwibmFtZSI6IlQifV19//4gZ2FyYmFnZQ==",
+      "entries": [
+        {
+          "path": "T",
+          "data": {
+            "notes": "",
+            "password": "",
+            "url": "",
+            "urls": [],
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bw_syntax_byte_0x01",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6AX0=",
+      "entries": [],
+      "failed": true,
+      "error": "parse bitwarden export: invalid character '\\x01' looking for beginning of value"
+    },
+    {
+      "name": "bw_syntax_byte_0x7f",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6f30=",
+      "entries": [],
+      "failed": true,
+      "error": "parse bitwarden export: invalid character '\\x7f' looking for beginning of value"
+    },
+    {
+      "name": "bw_syntax_byte_0x80",
+      "format": "bitwarden",
+      "input_b64": "eyJpdGVtcyI6gH0=",
+      "entries": [],
+      "failed": true,
+      "error": "parse bitwarden export: invalid character '\\u0080' looking for beginning of value"
     },
     {
       "name": "bw_top_array",
