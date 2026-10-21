@@ -14,7 +14,6 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use symvault_crypto::{Identity, encrypt, parse_recipient, recipient_string};
@@ -3310,12 +3309,12 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     })?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        match file.try_lock_exclusive() {
-            Ok(true) => return Ok(file),
-            Ok(false) if std::time::Instant::now() < deadline => {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            Ok(false) => {
+            Err(std::fs::TryLockError::WouldBlock) => {
                 return Err(StoreError::Write {
                     path,
                     source: io::Error::new(
@@ -3324,22 +3323,9 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
                     ),
                 });
             }
-            Err(source)
-                if source.kind() == io::ErrorKind::WouldBlock
-                    && std::time::Instant::now() < deadline =>
-            {
-                std::thread::sleep(std::time::Duration::from_millis(50));
+            Err(std::fs::TryLockError::Error(source)) => {
+                return Err(StoreError::Write { path, source });
             }
-            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
-                return Err(StoreError::Write {
-                    path,
-                    source: io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "vault is currently locked by another process, try again in a moment",
-                    ),
-                });
-            }
-            Err(source) => return Err(StoreError::Write { path, source }),
         }
     }
 }

@@ -157,7 +157,7 @@ fn copy_and_hash(mut input: impl Read, mut output: impl Write) -> io::Result<(u6
         digest.update(&buffer[..count]);
         size += count as u64;
     }
-    Ok((size, format!("{:x}", digest.finalize())))
+    Ok((size, hex::encode(digest.finalize())))
 }
 
 /// Creates a private gzip tar backup. Source symlinks are skipped, as in Go;
