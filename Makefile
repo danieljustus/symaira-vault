@@ -246,14 +246,14 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
 CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
-CFG_BYTES_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CFG_BYTES_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
 # while the session/quota fixtures still sit on the frozen v0.22.1 baseline.
-CONFIG_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CONFIG_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CONFIG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
