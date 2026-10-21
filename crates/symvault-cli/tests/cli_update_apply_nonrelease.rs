@@ -99,7 +99,7 @@ fn fixture_source_digest_matches_pinned_go_sources() {
         hasher.update([0]);
     }
     assert_eq!(
-        format!("{:x}", hasher.finalize()),
+        hex::encode(hasher.finalize()),
         fixture.oracle.source_digest,
         "pinned Go sources changed; recapture the update-apply fixture"
     );

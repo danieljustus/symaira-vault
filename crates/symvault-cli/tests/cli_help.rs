@@ -19,7 +19,7 @@ fn run(args: &[&str]) -> Output {
 #[test]
 fn help_matches_frozen_go_root_output_and_ignores_quiet() {
     assert_eq!(
-        format!("{:x}", Sha256::digest(ROOT_HELP)),
+        hex::encode(Sha256::digest(ROOT_HELP)),
         ROOT_HELP_SHA256,
         "root help fixture must remain the captured Go oracle output"
     );

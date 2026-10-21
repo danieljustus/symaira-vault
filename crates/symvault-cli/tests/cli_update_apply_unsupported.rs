@@ -95,7 +95,7 @@ fn fixture_binds_go_sources_and_corekit_pin() {
         hasher.update([0]);
     }
     assert_eq!(
-        format!("{:x}", hasher.finalize()),
+        hex::encode(hasher.finalize()),
         fixture.oracle.source_digest,
         "pinned Go update-apply sources changed"
     );

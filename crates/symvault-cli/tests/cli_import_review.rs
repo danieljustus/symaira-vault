@@ -201,7 +201,7 @@ fn fixture_source_digest_matches_checkout() {
         hasher.update(&content);
         hasher.update([0u8]);
     }
-    let digest = format!("{:x}", hasher.finalize());
+    let digest = hex::encode(hasher.finalize());
     assert_eq!(
         digest, fixture.oracle.source_digest,
         "Go contract source changed since fixture capture — re-freeze \
