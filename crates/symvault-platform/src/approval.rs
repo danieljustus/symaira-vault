@@ -328,12 +328,42 @@ pub fn install_stdio_clipboard_signal_router(
     Ok(())
 }
 
+/// Process-owned shutdown for the foreground `mcp --stdio` command. Go's serve
+/// command subscribes SIGINT/SIGTERM, so those signals cancel its context and
+/// the process exits 0 instead of taking the OS default action. SIGHUP is not
+/// subscribed there and keeps the default action.
+#[cfg(unix)]
+type StdioSignalTerminator = Box<dyn Fn(i32) + Send + Sync>;
+
+#[cfg(unix)]
+static STDIO_SIGNAL_TERMINATOR: OnceLock<StdioSignalTerminator> = OnceLock::new();
+
+/// Installs the SIGINT/SIGTERM shutdown used by the stdio signal router. The
+/// first installation wins; the callback owns process termination.
+#[cfg(unix)]
+pub fn set_stdio_signal_terminator(terminator: impl Fn(i32) + Send + Sync + 'static) -> bool {
+    STDIO_SIGNAL_TERMINATOR.set(Box::new(terminator)).is_ok()
+}
+
+#[cfg(unix)]
+fn terminate_for_stdio_signal(signal: i32) {
+    use signal_hook::consts::signal::{SIGINT, SIGTERM};
+
+    if matches!(signal, SIGINT | SIGTERM)
+        && let Some(terminator) = STDIO_SIGNAL_TERMINATOR.get()
+    {
+        terminator(signal);
+        return;
+    }
+    if signal_hook::low_level::emulate_default_handler(signal).is_err() {
+        std::process::abort();
+    }
+}
+
 #[cfg(unix)]
 fn dispatch_stdio_signal(signal: i32) {
     let Some(state) = SECURE_INPUT_SIGNAL_STATE.get() else {
-        if signal_hook::low_level::emulate_default_handler(signal).is_err() {
-            std::process::abort();
-        }
+        terminate_for_stdio_signal(signal);
         return;
     };
     let (prompt_active, active) = {
@@ -382,9 +412,28 @@ fn dispatch_stdio_signal(signal: i32) {
         // Terminal scopes restore cooked mode before handling pending signals.
         return;
     }
-    if signal_hook::low_level::emulate_default_handler(signal).is_err() {
-        std::process::abort();
-    }
+    terminate_for_stdio_signal(signal);
+}
+
+/// Starts a process-lifetime listener thread for `signals` that forwards each
+/// delivered signal number to `on_signal`. Unlike the stdio router it carries
+/// no prompt or clipboard state; it is the HTTP server's lifecycle hook.
+#[cfg(unix)]
+pub fn spawn_signal_listener(
+    signals: &[i32],
+    on_signal: impl Fn(i32) + Send + 'static,
+) -> Result<(), String> {
+    let mut signals = signal_hook::iterator::Signals::new(signals)
+        .map_err(|error| format!("register process signal listener: {error}"))?;
+    std::thread::Builder::new()
+        .name("symvault-signal-listener".to_owned())
+        .spawn(move || {
+            for signal in signals.forever() {
+                on_signal(signal);
+            }
+        })
+        .map(drop)
+        .map_err(|error| format!("start process signal listener: {error}"))
 }
 
 #[cfg(unix)]
@@ -518,11 +567,10 @@ impl Drop for SecureInputPromptScope {
     fn drop(&mut self) {
         if let Some(signal) = self.finish()
             && (!self.secure_input || signal == signal_hook::consts::signal::SIGHUP)
-            && signal_hook::low_level::emulate_default_handler(signal).is_err()
         {
-            // A failed default re-raise must never turn a pending termination
-            // signal into a silently continued MCP session.
-            std::process::abort();
+            // A failed default re-raise aborts: a pending termination signal
+            // must never become a silently continued MCP session.
+            terminate_for_stdio_signal(signal);
         }
     }
 }
