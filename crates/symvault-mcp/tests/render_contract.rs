@@ -19,7 +19,7 @@ fn production_go_renderer_contract() {
         digest.update([0]);
     }
     assert_eq!(
-        format!("{:x}", digest.finalize()),
+        hex::encode(digest.finalize()),
         fixture["scalar_digest"].as_str().unwrap()
     );
 }
