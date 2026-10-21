@@ -9,35 +9,38 @@
 //! scanner (syntax errors and the max-depth rule) and [`GoDecode`] ports the
 //! type-driven decode (first `UnmarshalTypeError` wins, with its struct/field
 //! context).
+//!
+//! Like Go's `decodeState`, the decode walks the bytes the scanner already
+//! validated: values under unknown keys and values whose type does not match
+//! the target are skipped without recursion or allocation, and only values
+//! bound to struct fields are materialised. No generic document tree exists.
 
 use super::go_string_from_bytes;
 
 /// Go's `maxNestingDepth`.
 const MAX_NESTING_DEPTH: usize = 10_000;
-/// Containers deeper than this are collapsed to empty placeholders: no decode
-/// target in this crate is nested that deeply, and unknown keys are skipped.
-const MAX_BUILD_DEPTH: usize = 8;
 
-#[derive(Debug)]
-pub(super) enum Node {
+/// The JSON kind of the next value; `name` is the word Go uses in
+/// `UnmarshalTypeError` for non-number kinds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum Kind {
     Null,
     Bool,
-    Number(String),
-    String(String),
-    Array(Vec<Node>),
-    Object(Vec<(String, Node)>),
+    Number,
+    String,
+    Array,
+    Object,
 }
 
-impl Node {
-    /// The `Value` word Go uses in `UnmarshalTypeError` for non-number kinds.
-    fn kind(&self) -> &'static str {
+impl Kind {
+    fn name(self) -> &'static str {
         match self {
-            Node::Null => "null",
-            Node::Bool => "bool",
-            Node::Number(_) => "number",
-            Node::String(_) => "string",
-            Node::Array(_) => "array",
-            Node::Object(_) => "object",
+            Kind::Null => "null",
+            Kind::Bool => "bool",
+            Kind::Number => "number",
+            Kind::String => "string",
+            Kind::Array => "array",
+            Kind::Object => "object",
         }
     }
 }
@@ -385,10 +388,11 @@ impl Scanner {
     }
 }
 
-/// Reads the first JSON value of `bytes` exactly like
+/// Validates the first JSON value of `bytes` exactly like
 /// `json.NewDecoder(r).Decode`: leading whitespace is skipped, bytes after the
-/// first value are never inspected, and the error text is Go's.
-pub(super) fn parse_document(bytes: &[u8]) -> Result<Node, String> {
+/// first value are never inspected, and the error text is Go's. The returned
+/// reader walks only the validated value.
+pub(super) fn parse_document(bytes: &[u8]) -> Result<Reader<'_>, String> {
     let mut scanner = Scanner::new();
     let mut end = None;
     for (index, &c) in bytes.iter().enumerate() {
@@ -415,106 +419,81 @@ pub(super) fn parse_document(bytes: &[u8]) -> Result<Node, String> {
             _ => return Err("EOF".into()),
         },
     };
-    let mut builder = Builder {
+    Ok(Reader {
         bytes: &bytes[..end],
         index: 0,
-    };
-    Ok(builder.value(0))
+        key: String::new(),
+    })
 }
 
 // ---------------------------------------------------------------------------
-// Tree builder over a value the scanner already validated
+// Reader over a value the scanner already validated
 // ---------------------------------------------------------------------------
 
-struct Builder<'a> {
+pub(super) struct Reader<'a> {
     bytes: &'a [u8],
     index: usize,
+    /// Scratch buffer for object keys, reused so a key costs no allocation.
+    key: String,
 }
 
-impl Builder<'_> {
+impl<'a> Reader<'a> {
     fn skip_space(&mut self) {
         while self.bytes.get(self.index).is_some_and(|&c| is_space(c)) {
             self.index += 1;
         }
     }
 
-    fn value(&mut self, depth: usize) -> Node {
+    /// The kind of the next value, without consuming it.
+    fn kind(&mut self) -> Kind {
         self.skip_space();
         match self.bytes[self.index] {
-            b'{' => self.object(depth),
-            b'[' => self.array(depth),
-            b'"' => Node::String(self.string()),
-            b't' => {
-                self.index += 4;
-                Node::Bool
-            }
-            b'f' => {
-                self.index += 5;
-                Node::Bool
-            }
-            b'n' => {
-                self.index += 4;
-                Node::Null
-            }
-            _ => {
-                let start = self.index;
-                while self
-                    .bytes
-                    .get(self.index)
-                    .is_some_and(|&c| matches!(c, b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E'))
-                {
-                    self.index += 1;
-                }
-                // A top-level number may be followed by an ignored tail, but
-                // the slice handed to the builder ends at the value.
-                Node::Number(String::from_utf8_lossy(&self.bytes[start..self.index]).into_owned())
+            b'{' => Kind::Object,
+            b'[' => Kind::Array,
+            b'"' => Kind::String,
+            b't' | b'f' => Kind::Bool,
+            b'n' => Kind::Null,
+            _ => Kind::Number,
+        }
+    }
+
+    /// Consumes the next value without decoding it.
+    fn skip_value(&mut self) {
+        match self.kind() {
+            Kind::Object | Kind::Array => self.skip_container(),
+            Kind::String => self.skip_string(),
+            Kind::Bool => self.index += if self.bytes[self.index] == b't' { 4 } else { 5 },
+            Kind::Null => self.index += 4,
+            Kind::Number => {
+                self.number();
             }
         }
     }
 
-    fn object(&mut self, depth: usize) -> Node {
-        if depth >= MAX_BUILD_DEPTH {
-            self.skip_container();
-            return Node::Object(Vec::new());
+    /// The literal of the next number, borrowed from the input.
+    fn number(&mut self) -> &'a str {
+        let start = self.index;
+        while self
+            .bytes
+            .get(self.index)
+            .is_some_and(|&c| matches!(c, b'0'..=b'9' | b'-' | b'+' | b'.' | b'e' | b'E'))
+        {
+            self.index += 1;
         }
-        self.index += 1;
-        let mut members = Vec::new();
-        loop {
-            self.skip_space();
-            match self.bytes[self.index] {
-                b'}' => {
-                    self.index += 1;
-                    return Node::Object(members);
-                }
-                b',' => self.index += 1,
-                _ => {
-                    let key = self.string();
-                    self.skip_space();
-                    self.index += 1; // ':'
-                    members.push((key, self.value(depth + 1)));
-                }
-            }
-        }
+        // A top-level number may be followed by an ignored tail, but the
+        // slice handed to the reader ends at the value.
+        std::str::from_utf8(&self.bytes[start..self.index]).expect("number literals are ASCII")
     }
 
-    fn array(&mut self, depth: usize) -> Node {
-        if depth >= MAX_BUILD_DEPTH {
-            self.skip_container();
-            return Node::Array(Vec::new());
+    fn skip_string(&mut self) {
+        self.index += 1; // opening quote
+        while self.bytes[self.index] != b'"' {
+            if self.bytes[self.index] == b'\\' {
+                self.index += 1;
+            }
+            self.index += 1;
         }
         self.index += 1;
-        let mut elements = Vec::new();
-        loop {
-            self.skip_space();
-            match self.bytes[self.index] {
-                b']' => {
-                    self.index += 1;
-                    return Node::Array(elements);
-                }
-                b',' => self.index += 1,
-                _ => elements.push(self.value(depth + 1)),
-            }
-        }
     }
 
     /// Skips a validated container without recursion.
@@ -548,39 +527,86 @@ impl Builder<'_> {
     /// Go's `unquote`: escapes decoded, surrogate pairs joined, a lone
     /// surrogate and every invalid UTF-8 byte become U+FFFD.
     fn string(&mut self) -> String {
-        self.index += 1; // opening quote
         let mut out = String::new();
+        self.string_capped(&mut out, usize::MAX);
+        out
+    }
+
+    /// Decodes the next string into `out`, but stops growing `out` once the
+    /// decoded text would exceed `cap` bytes. Returns whether the whole string
+    /// fit. Either way the string is consumed.
+    fn string_capped(&mut self, out: &mut String, cap: usize) -> bool {
+        self.index += 1; // opening quote
+        let mut fits = true;
         let mut run_start = self.index;
         loop {
             match self.bytes[self.index] {
                 b'"' => {
-                    out.push_str(&go_string_from_bytes(&self.bytes[run_start..self.index]));
+                    Self::push_run(out, &self.bytes[run_start..self.index], cap, &mut fits);
                     self.index += 1;
-                    return out;
+                    return fits;
                 }
                 b'\\' => {
-                    out.push_str(&go_string_from_bytes(&self.bytes[run_start..self.index]));
+                    Self::push_run(out, &self.bytes[run_start..self.index], cap, &mut fits);
                     self.index += 1;
                     let escape = self.bytes[self.index];
                     self.index += 1;
-                    match escape {
-                        b'b' => out.push('\u{8}'),
-                        b'f' => out.push('\u{c}'),
-                        b'n' => out.push('\n'),
-                        b'r' => out.push('\r'),
-                        b't' => out.push('\t'),
+                    let decoded = match escape {
+                        b'b' => '\u{8}',
+                        b'f' => '\u{c}',
+                        b'n' => '\n',
+                        b'r' => '\r',
+                        b't' => '\t',
                         b'u' => {
                             let unit = self.hex4(self.index);
                             self.index += 4;
-                            out.push(self.code_point(unit));
+                            self.code_point(unit)
                         }
-                        other => out.push(char::from(other)),
+                        other => char::from(other),
+                    };
+                    if fits && out.len() + decoded.len_utf8() <= cap {
+                        out.push(decoded);
+                    } else {
+                        fits = false;
                     }
                     run_start = self.index;
                 }
                 _ => self.index += 1,
             }
         }
+    }
+
+    /// Appends a raw run. Decoding never shrinks a run, so a run longer than
+    /// the remaining room is rejected without converting it.
+    fn push_run(out: &mut String, run: &[u8], cap: usize, fits: &mut bool) {
+        if !*fits {
+            return;
+        }
+        if run.len() > cap.saturating_sub(out.len()) {
+            *fits = false;
+            return;
+        }
+        out.push_str(&go_string_from_bytes(run));
+        if out.len() > cap {
+            *fits = false;
+        }
+    }
+
+    /// Consumes an object key and returns the index of the field it selects
+    /// (exact match first, then Go's case folding). A key too long to match
+    /// any field is scanned but never buffered.
+    fn key_index(&mut self, fields: &[&str]) -> Option<usize> {
+        // Folded characters are ASCII, U+017F (2 bytes) or U+212A (3 bytes).
+        let cap = 3 * fields.iter().map(|name| name.len()).max().unwrap_or(0);
+        let mut key = std::mem::take(&mut self.key);
+        key.clear();
+        let found = if self.string_capped(&mut key, cap) {
+            lookup(fields, &key)
+        } else {
+            None
+        };
+        self.key = key;
+        found
     }
 
     fn hex4(&self, at: usize) -> Option<u32> {
@@ -629,10 +655,17 @@ impl Context {
         self.error
     }
 
-    fn type_error(&mut self, value: &str, target: &str) {
-        if self.error.is_some() {
+    /// Whether an error is already saved (later ones are dropped, so callers
+    /// skip building their text).
+    fn failed(&self) -> bool {
+        self.error.is_some()
+    }
+
+    fn type_error(&mut self, value: &str, target: impl FnOnce() -> String) {
+        if self.failed() {
             return;
         }
+        let target = target();
         self.error = Some(if self.struct_name.is_empty() && self.path.is_empty() {
             format!("json: cannot unmarshal {value} into Go value of type {target}")
         } else {
@@ -648,7 +681,8 @@ impl Context {
 pub(super) trait GoDecode {
     /// `reflect.Type.String()` of the Go target.
     fn go_type(&self) -> String;
-    fn decode(&mut self, node: &Node, context: &mut Context);
+    /// Decodes (and consumes) the next value of `reader` into `self`.
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context);
 }
 
 impl GoDecode for String {
@@ -656,11 +690,14 @@ impl GoDecode for String {
         "string".into()
     }
 
-    fn decode(&mut self, node: &Node, context: &mut Context) {
-        match node {
-            Node::Null => {}
-            Node::String(value) => self.clone_from(value),
-            other => context.type_error(other.kind(), "string"),
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+        match reader.kind() {
+            Kind::Null => reader.skip_value(),
+            Kind::String => *self = reader.string(),
+            other => {
+                context.type_error(other.name(), || "string".into());
+                reader.skip_value();
+            }
         }
     }
 }
@@ -670,14 +707,21 @@ impl GoDecode for i64 {
         "int".into()
     }
 
-    fn decode(&mut self, node: &Node, context: &mut Context) {
-        match node {
-            Node::Null => {}
-            Node::Number(literal) => match literal.parse::<i64>() {
-                Ok(value) => *self = value,
-                Err(_) => context.type_error(&format!("number {literal}"), "int"),
-            },
-            other => context.type_error(other.kind(), "int"),
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+        match reader.kind() {
+            Kind::Null => reader.skip_value(),
+            Kind::Number => {
+                let literal = reader.number();
+                match literal.parse::<i64>() {
+                    Ok(value) => *self = value,
+                    Err(_) if context.failed() => {}
+                    Err(_) => context.type_error(&format!("number {literal}"), || "int".into()),
+                }
+            }
+            other => {
+                context.type_error(other.name(), || "int".into());
+                reader.skip_value();
+            }
         }
     }
 }
@@ -687,24 +731,48 @@ impl<T: GoDecode + Default> GoDecode for Vec<T> {
         format!("[]{}", T::default().go_type())
     }
 
-    fn decode(&mut self, node: &Node, context: &mut Context) {
-        match node {
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+        match reader.kind() {
             // `null` resets a slice to nil.
-            Node::Null => self.clear(),
-            Node::Array(elements) => {
+            Kind::Null => {
+                reader.skip_value();
+                self.clear();
+            }
+            Kind::Array => {
+                reader.index += 1;
                 // Go decodes into the existing elements first and only then
                 // grows or truncates, so earlier duplicate keys leak through.
-                for (index, element) in elements.iter().enumerate() {
-                    if index >= self.len() {
-                        self.push(T::default());
+                //
+                // Not reproduced on purpose: Go's `SetLen` shrink keeps the
+                // backing array, so with three or more duplicate keys a later
+                // longer array re-exposes stale elements that the earlier
+                // truncation dropped (the capacity is reused, not zeroed).
+                // Here truncation really drops them. That divergence needs a
+                // key repeated 3+ times with shrinking then growing arrays,
+                // which no real Bitwarden export produces.
+                let mut count = 0usize;
+                loop {
+                    reader.skip_space();
+                    match reader.bytes[reader.index] {
+                        b']' => {
+                            reader.index += 1;
+                            break;
+                        }
+                        b',' => reader.index += 1,
+                        _ => {
+                            if count >= self.len() {
+                                self.push(T::default());
+                            }
+                            self[count].decode(reader, context);
+                            count += 1;
+                        }
                     }
-                    self[index].decode(element, context);
                 }
-                self.truncate(elements.len());
+                self.truncate(count);
             }
             other => {
-                let target = self.go_type();
-                context.type_error(other.kind(), &target);
+                context.type_error(other.name(), || self.go_type());
+                reader.skip_value();
             }
         }
     }
@@ -713,7 +781,7 @@ impl<T: GoDecode + Default> GoDecode for Vec<T> {
 /// A Go struct with JSON-tagged fields.
 pub(super) trait GoStruct: GoDecode {
     const NAME: &'static str;
-    /// JSON key of each field, in index order.
+    /// JSON key of each field, in index order. Field names are ASCII.
     const FIELDS: &'static [&'static str];
     fn field(&mut self, key: &str) -> &mut dyn GoDecode;
 }
@@ -727,8 +795,8 @@ macro_rules! go_struct {
                 concat!("importer.", $go).into()
             }
 
-            fn decode(&mut self, node: &Node, context: &mut Context) {
-                decode_struct(self, node, context);
+            fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+                decode_struct(self, reader, context);
             }
         }
 
@@ -749,43 +817,68 @@ pub(super) use go_struct;
 
 /// `foldName` for ASCII field names: the only non-ASCII runes whose simple
 /// case folding lands on an ASCII letter are U+017F (S) and U+212A (K).
-fn fold(key: &str) -> Vec<char> {
+fn fold(key: &str) -> String {
     key.chars()
         .map(|c| match c {
             '\u{17f}' => 'S',
             '\u{212a}' => 'K',
-            c if c.is_ascii() => c.to_ascii_uppercase(),
-            c => c,
+            c => c.to_ascii_uppercase(),
         })
         .collect()
 }
 
+/// Exact match first, then the case-folded one. The key is folded once; a
+/// name of a different length is rejected before any character comparison.
 fn lookup(fields: &[&str], key: &str) -> Option<usize> {
-    fields
-        .iter()
-        .position(|name| *name == key)
-        .or_else(|| fields.iter().position(|name| fold(name) == fold(key)))
+    fields.iter().position(|name| *name == key).or_else(|| {
+        let folded = fold(key);
+        // Names are ASCII, so equal folds are exactly ASCII-case-insensitive
+        // equality with the folded key (non-ASCII folded chars never match).
+        fields
+            .iter()
+            .position(|name| name.eq_ignore_ascii_case(&folded))
+    })
 }
 
-pub(super) fn decode_struct<S: GoStruct>(value: &mut S, node: &Node, context: &mut Context) {
-    match node {
-        Node::Null => {}
-        Node::Object(members) => {
-            for (key, member) in members {
-                let Some(index) = lookup(S::FIELDS, key) else {
-                    continue;
-                };
-                let outer = context.struct_name;
-                context.struct_name = S::NAME;
-                context.path.push(S::FIELDS[index]);
-                value.field(S::FIELDS[index]).decode(member, context);
-                context.path.pop();
-                context.struct_name = outer;
+pub(super) fn decode_struct<S: GoStruct>(
+    value: &mut S,
+    reader: &mut Reader<'_>,
+    context: &mut Context,
+) {
+    debug_assert!(S::FIELDS.iter().all(|name| name.is_ascii()));
+    match reader.kind() {
+        Kind::Null => reader.skip_value(),
+        Kind::Object => {
+            reader.index += 1;
+            loop {
+                reader.skip_space();
+                match reader.bytes[reader.index] {
+                    b'}' => {
+                        reader.index += 1;
+                        return;
+                    }
+                    b',' => reader.index += 1,
+                    _ => {
+                        let selected = reader.key_index(S::FIELDS);
+                        reader.skip_space();
+                        reader.index += 1; // ':'
+                        let Some(index) = selected else {
+                            reader.skip_value();
+                            continue;
+                        };
+                        let outer = context.struct_name;
+                        context.struct_name = S::NAME;
+                        context.path.push(S::FIELDS[index]);
+                        value.field(S::FIELDS[index]).decode(reader, context);
+                        context.path.pop();
+                        context.struct_name = outer;
+                    }
+                }
             }
         }
         other => {
-            let target = value.go_type();
-            context.type_error(other.kind(), &target);
+            context.type_error(other.name(), || value.go_type());
+            reader.skip_value();
         }
     }
 }
@@ -793,8 +886,8 @@ pub(super) fn decode_struct<S: GoStruct>(value: &mut S, node: &Node, context: &m
 /// Runs a full `Decode`: the scanner, then the typed decode, returning the
 /// first error with Go's wording.
 pub(super) fn decode_document<S: GoStruct>(bytes: &[u8], target: &mut S) -> Result<(), String> {
-    let node = parse_document(bytes)?;
+    let mut reader = parse_document(bytes)?;
     let mut context = Context::default();
-    target.decode(&node, &mut context);
+    target.decode(&mut reader, &mut context);
     context.into_error().map_or(Ok(()), Err)
 }

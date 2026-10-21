@@ -8,7 +8,7 @@ pub use onepux::parse_1pux;
 pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry};
 pub use totp::parse_totp;
 
-use gojson::{Context, GoDecode, GoStruct, Node, decode_struct};
+use gojson::{Context, GoDecode, GoStruct, Reader, decode_struct};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
