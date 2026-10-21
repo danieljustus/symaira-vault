@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verification could accept distrusted intermediates) and `webpki-root-certs`
   1.0.10 (RUSTSEC-2026-0383, bundled roots trusted distrusted emSign
   intermediates).
+- Toolchain: release binaries are built with Go 1.26.10 (GO-2026-6809,
+  `crypto/x509` certificate verification, reachable through approval
+  client-identity validation).
 
 ### Fixed
 - Configuration: an explicit `clipboard.autoClearDuration: 0` (auto-clear
