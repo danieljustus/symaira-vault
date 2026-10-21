@@ -318,20 +318,20 @@ def vault_snapshot(root):
 # run against the real Go binary and the Rust binary in separate disposable
 # HOMEs, synchronised on observable readiness (never a bare sleep).
 # ---------------------------------------------------------------------------
-SIGNALS = [('SIGINT', signal.SIGINT), ('SIGTERM', signal.SIGTERM)]
+SIGNALS = [('SIGINT', signal.SIGINT), ('SIGTERM', signal.SIGTERM), ('SIGQUIT', signal.SIGQUIT)]
 SIGNAL_MODES = ('stdio', 'http')
 SIGNAL_STATES = ('idle', 'after-init', 'idle-stale-runtime')
 STALE_RUNTIME = {'.runtime-port': b'{"port":1,"bind":"127.0.0.1"}', '.runtime-tls-cert': b'{}'}
-# Files whose bytes legitimately differ between any two runs (random material,
-# timestamps) or are rewritten by Go at startup independent of any signal.
-VOLATILE_CONTENT = {'vault/mcp-server.crt', 'vault/mcp-server.key', 'vault/mcp-server.enroll-secret',
-                    'vault/config.yaml', 'vault/audit-auth-failures.log', 'vault/audit-token-cleanup.log'}
+# Files whose bytes differ between any two runs of the SAME implementation
+# (random key material, timestamps): only their existence is compared.
+RANDOM_CONTENT = {'vault/mcp-server.crt', 'vault/mcp-server.key', 'vault/mcp-server.enroll-secret',
+                  'vault/audit-auth-failures.log', 'vault/audit-token-cleanup.log'}
 # Startup-only differences that exist without any signal and belong to other
 # slices. Pinned exactly: a new or vanished difference fails the harness.
 STARTUP_ONLY_DIFFERENCES = {
     'stdio': {'only_go': set(), 'only_rust': set(), 'content': {'vault/config.yaml'}},
     'http': {'only_go': {'vault/audit-auth-failures.log', 'vault/audit-token-cleanup.log'}, 'only_rust': set(),
-             'content': {'vault/config.yaml', 'vault/mcp-server.enroll-secret'}},
+             'content': {'vault/config.yaml'}},
 }
 STDIO_INITIALIZE = (b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",'
                     b'"clientInfo":{"name":"public-fixture","version":"1"},"capabilities":{}}}\n')
@@ -397,8 +397,8 @@ def tree_snapshot(root):
 
 
 def comparable(snapshot):
-    """Drop content of files that are random or rewritten without any signal."""
-    return {path: ({'kind': 'file'} if path in VOLATILE_CONTENT and row['kind'] == 'file' else row)
+    """Drop the content of files that are random in every run."""
+    return {path: ({'kind': 'file'} if path in RANDOM_CONTENT and row['kind'] == 'file' else row)
             for path, row in snapshot.items()}
 
 
@@ -420,14 +420,9 @@ def snapshot_delta(before, after):
 
 
 def startup_differences(go_final, rust_final):
-    go, rust = tree_snapshot_names(go_final), tree_snapshot_names(rust_final)
-    both = set(go) & set(rust)
+    go, rust = comparable(go_final), comparable(rust_final)
     return {'only_go': set(go) - set(rust), 'only_rust': set(rust) - set(go),
-            'content': {path for path in both if go_final[path] != rust_final[path]}}
-
-
-def tree_snapshot_names(snapshot):
-    return set(snapshot)
+            'content': {path for path in set(go) & set(rust) if go[path] != rust[path]}}
 
 
 def group_members(pgid):
@@ -537,11 +532,13 @@ def run_signal_case(binary, home, env, mode, state, sig_name, sig, port=None, to
         if process.poll() is None:
             stop_group(process)
             process.wait(timeout=15)
+        # A surviving descendant keeps the output pipes open: look for it, and
+        # reap only the group this harness started, before waiting for EOF.
+        row['orphans'] = group_members(process.pid)
+        stop_group(process)
         stdout, stderr = capture.finish()
         if process.stdin:
             process.stdin.close()
-    row['orphans'] = group_members(process.pid)
-    stop_group(process)
     assert not row['orphans'], (mode, state, sig_name, 'orphaned process group members', row['orphans'])
     if mode == 'http':
         try:

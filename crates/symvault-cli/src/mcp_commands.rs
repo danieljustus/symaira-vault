@@ -224,9 +224,8 @@ pub fn run(
                 .port()
         );
         // Go opens the approval-device store before serving; this creates the
-        // private empty store on first start and rejects an unreadable one.
-        crate::device_approval::DeviceSessionStore::new(root)
-            .map_err(|error| format!("MCP HTTP: {error}"))?;
+        // private empty store on first start.
+        ensure_device_session_store(root).map_err(|error| format!("MCP HTTP: {error}"))?;
         if tls.is_none() {
             let loopback_note = if address.is_loopback() {
                 " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
@@ -335,7 +334,7 @@ pub fn run(
         {
             symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
                 .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
-            mcp_shutdown::install_stdio(root.to_path_buf());
+            mcp_shutdown::install_stdio(root.to_path_buf())?;
         }
         let agent_name = agent
             .filter(|name| !name.is_empty())
@@ -439,6 +438,24 @@ impl RuntimeMetadataGuard {
         }
         Ok(())
     }
+}
+
+/// Creates `<vault>/.symvault/device-sessions.json` (`{}`) when it is absent,
+/// matching Go's `NewDeviceSessionStore` on first start. An existing store is
+/// left to the approval commands that own its schema and migration.
+fn ensure_device_session_store(root: &Path) -> Result<(), String> {
+    let path = root.join(".symvault").join("device-sessions.json");
+    let existing = symvault_sync::safeio::read(&path)
+        .map_err(|error| format!("load device session store: {error}"))?;
+    if existing.is_some() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        symvault_sync::safeio::create_dir_all(parent)
+            .map_err(|error| format!("load device session store: {error}"))?;
+    }
+    symvault_sync::safeio::write_atomic(&path, b"{}")
+        .map_err(|error| format!("load device session store: {error}"))
 }
 
 fn effective_absolute_path(server_working_dir: &Path, value: &str) -> String {
@@ -1161,6 +1178,38 @@ mod tests {
             "runtime keeps the dispatch route installed so direct calls reach the capability denial"
         );
         assert!(!tool_list_config(&no_run_capability, false).execute_api_available);
+    }
+
+    #[test]
+    fn released_runtime_metadata_is_removed_once_and_never_a_successors() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let metadata = |bind_port| RuntimeMetadata {
+            bind: "127.0.0.1".into(),
+            port: bind_port,
+            certificate: String::new(),
+            client_ca: String::new(),
+            client_auth_required: false,
+            approval_client_certificate: String::new(),
+            approval_client_key: String::new(),
+            server_working_dir: root.path().to_path_buf(),
+        };
+        let mut first = RuntimeMetadataGuard::new(root.path());
+        first.publish(metadata(9001)).unwrap();
+        first.release();
+        assert!(!port.exists());
+        // A successor publishes after the signal-time release; the late Drop of
+        // the first guard must not remove the successor's record.
+        let mut second = RuntimeMetadataGuard::new(root.path());
+        second.publish(metadata(9002)).unwrap();
+        first.release();
+        drop(first);
+        assert!(
+            port.is_file(),
+            "release is idempotent and ownership-checked"
+        );
+        drop(second);
+        assert!(!port.exists());
     }
 
     #[test]

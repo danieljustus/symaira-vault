@@ -49,11 +49,11 @@ mod unix {
         let _ = fs::remove_file(root.join(".runtime-tls-cert"));
     }
 
-    /// Routes SIGINT/SIGTERM from the stdio signal router into the Go
-    /// shutdown: stop reading after the in-flight frame (at most 2 seconds),
-    /// clear the runtime records and exit 0.
-    pub fn install_stdio(root: PathBuf) {
-        symvault_platform::approval::set_stdio_signal_terminator(move |signal| {
+    /// Routes SIGINT/SIGTERM (via the stdio signal router) and SIGQUIT (via its
+    /// own listener) into the Go shutdown: stop reading after the in-flight
+    /// frame (at most 2 seconds), clear the runtime records and exit 0.
+    pub fn install_stdio(root: PathBuf) -> Result<(), String> {
+        let shutdown = Arc::new(move |signal: i32| {
             REQUESTED.store(true, Ordering::Release);
             warn_quit(signal);
             let (lock, changed) = &STDIO_FINISHED;
@@ -75,6 +75,11 @@ mod unix {
             clear_runtime_records(&root);
             std::process::exit(0);
         });
+        let router = Arc::clone(&shutdown);
+        symvault_platform::approval::set_stdio_signal_terminator(move |signal| router(signal));
+        symvault_platform::approval::spawn_signal_listener(&[SIGQUIT], move |signal| {
+            shutdown(signal)
+        })
     }
 
     /// Called by the stdio loop's owner once the transport returned.

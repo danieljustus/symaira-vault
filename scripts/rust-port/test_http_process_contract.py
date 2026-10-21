@@ -8,13 +8,17 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
+import stat
 import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
 
 import http_process_contract as contract
+import mcp_process_contract as engine
 
 FIXTURE = Path(__file__).resolve().parents[2] / 'testdata/http-default-deadline/windows-incomplete.json'
 FIXTURE_SHA256 = '5deeeb1328552ef31b65173c96af912ff3ab3045bb34eda2a061e94982ee1b41'
@@ -198,6 +202,64 @@ class DefaultDeadlineContract(unittest.TestCase):
                 self.assertIs(result['candidate_worktree_clean_at_end'], expected_clean)
                 self.assertIs(result['passed'], expected_clean)
                 self.assertIs(rejected, not expected_clean)
+
+
+class SyntheticHttpSignalEngineControls(unittest.TestCase):
+    """HTTP signal engine against a tiny synthetic listener (not product evidence)."""
+    SERVER = """#!{python}
+import os, signal, socket, sys
+from pathlib import Path
+port = int(sys.argv[sys.argv.index('--port') + 1])
+sys.stdin.readline()
+listener = socket.socket(); listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(('127.0.0.1', port)); listener.listen(8)
+Path('vault/.runtime-port').write_text('{{}}')
+sys.stderr.write('MCP server is binding "127.0.0.1" without TLS; bearer tokens travel in cleartext (x).\\n'); sys.stderr.flush()
+def stop(number, frame):
+    os.remove('vault/.runtime-port'); sys.exit({code})
+signal.signal(signal.SIGTERM, stop)
+while True:
+    connection, _ = listener.accept()
+    data = b''
+    while b'\\r\\n\\r\\n' not in data:
+        chunk = connection.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    if b'\\r\\n\\r\\n' not in data:
+        connection.close()
+        continue
+    body = b'{{"result":{{"protocolVersion":"2025-11-25"}}}}'
+    connection.sendall(b'HTTP/1.1 200 OK\\r\\nContent-Length: %d\\r\\nConnection: close\\r\\n\\r\\n' % len(body) + body)
+    connection.close()
+"""
+
+    def run_server(self, state, code):
+        with tempfile.TemporaryDirectory(prefix='synthetic-http-signal-') as raw:
+            home = Path(raw)
+            (home / 'vault').mkdir()
+            script = home / 'server.py'
+            script.write_text(self.SERVER.format(python=sys.executable, code=code), encoding='utf-8')
+            script.chmod(script.stat().st_mode | stat.S_IXUSR)
+            return engine.run_signal_case(script, home, dict(os.environ), 'http', state, 'SIGTERM',
+                                            signal.SIGTERM, engine.free_loopback_port(), 'token')
+
+    def test_idle_and_after_initialize_states_are_synchronised_and_observed(self):
+        idle = self.run_server('idle', 0)
+        self.assertEqual((idle['exit_code'], idle['delta']['removed'], idle['listener_closed']),
+                         (0, ['vault/.runtime-port'], True))
+        after = self.run_server('after-init', 0)
+        self.assertEqual(after['initialize'], 'HTTP/1.1 200 OK')
+        self.assertEqual(after['exit_code'], 0)
+
+    def test_a_wrong_exit_status_is_observed_not_normalised(self):
+        self.assertEqual(self.run_server('idle', 3)['exit_code'], 3)
+
+    def test_cli_exposes_the_signal_mode(self):
+        source = Path(contract.__file__).read_text(encoding='utf-8')
+        for option in ('--signals', '--go-cli', '--go-http-seed'):
+            self.assertIn(option, source)
+        self.assertTrue(callable(contract.signals_main))
 
 
 if __name__ == '__main__':
