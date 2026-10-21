@@ -1,9 +1,9 @@
 {
   "oracle": {
-    "commit": "e485a815e4be7af238df24b61b1bd09134c443f9",
+    "commit": "3e088537045400d87461c75acf1c1d45d20cfe1d",
     "binary": "go build with main.version set by ldflags",
     "go_version": "go1.26.6",
-    "captured": "2026-10-20",
+    "captured": "2026-10-21",
     "source_files": [
       "main.go",
       "cmd/admin/update.go",
@@ -13,7 +13,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "679edc2a2b6378a4de6e8fd1ce9aa90559bfbd45e3a4922ba74aeaa18b66a7ab",
+    "source_digest": "26062e5313bbb1eac128e0f5939164b7d19b17481f02fa44ed636dfa9bb3a214",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache",
     "generator_files": [
