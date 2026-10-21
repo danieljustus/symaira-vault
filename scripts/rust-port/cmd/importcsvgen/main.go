@@ -31,6 +31,9 @@ type csvCase struct {
 	InputB64 string          `json:"input_b64,omitempty"`
 	Entries  []entry         `json:"entries"`
 	Failed   bool            `json:"failed"`
+	// Error is the production Go error text. It is recorded only where the
+	// Rust port must reproduce it byte for byte (see recordsError).
+	Error string `json:"error,omitempty"`
 }
 
 type totpCase struct {
@@ -50,7 +53,7 @@ func main() {
 	must(err)
 	digest, err := provenance.Digest(root, sources)
 	must(err)
-	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go"})
+	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go", "scripts/rust-port/cmd/importcsvgen/bitwarden_cases.go"})
 	must(err)
 	cases := []csvCase{
 		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
@@ -90,15 +93,28 @@ func main() {
 		{Name: "apple_empty_title", Format: "apple", Input: "Title,URL,Username,Password,Notes,OTPAuth\n,https://example.test,u,p,,\n"},
 		{Name: "profile_case_headers", Format: "chrome", Input: " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n"},
 	}
+	cases = append(cases, bitwardenCases()...)
 	for i := range cases {
 		parser, newErr := importer.New(cases[i].Format)
 		if newErr == nil && cases[i].Mapping != "" {
 			parser = importer.NewCSV(cases[i].Mapping)
 		}
-		must(newErr)
+		cases[i].Entries = []entry{}
+		if newErr != nil {
+			if !isUnsupportedFormat(cases[i].Format) {
+				must(newErr)
+			}
+			// importer.New rejects names without an importer (for example the
+			// generic "json"/"yaml" names): nothing is parsed.
+			cases[i].Failed = true
+			cases[i].Error = newErr.Error()
+			continue
+		}
 		entries, parseErr := parser.Parse(bytes.NewReader(caseInput(cases[i])))
 		cases[i].Failed = parseErr != nil
-		cases[i].Entries = []entry{}
+		if parseErr != nil && recordsError(cases[i].Format) {
+			cases[i].Error = parseErr.Error()
+		}
 		for _, e := range entries {
 			cases[i].Entries = append(cases[i].Entries, entry{Path: e.Path, Data: e.Data, Warnings: e.Warnings, SecretType: secretType(e)})
 		}
@@ -166,6 +182,23 @@ func main() {
 		must(os.WriteFile(path, content, 0600))
 	}
 	fmt.Printf("PASS CSV oracle (%d cases)\n", len(cases))
+}
+
+// isUnsupportedFormat reports whether name is deliberately not an importer
+// format, so importer.New must fail with "unsupported import format".
+func isUnsupportedFormat(name importer.Format) bool {
+	switch name {
+	case importer.Format1Password, importer.FormatBitwarden, importer.FormatPass, importer.FormatCSV, importer.FormatCXF,
+		importer.FormatApple, importer.FormatChrome, importer.FormatFirefox:
+		return false
+	}
+	return true
+}
+
+// recordsError limits error-text pinning to the families whose Rust parser
+// reproduces Go's diagnostics (Bitwarden JSON).
+func recordsError(format importer.Format) bool {
+	return format == importer.FormatBitwarden
 }
 
 func caseInput(c csvCase) []byte {

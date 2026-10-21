@@ -1,4 +1,5 @@
 mod cxf;
+mod gojson;
 mod onepux;
 pub use cxf::parse as parse_cxf;
 mod pass;
@@ -7,6 +8,7 @@ pub use onepux::parse_1pux;
 pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry};
 pub use totp::parse_totp;
 
+use gojson::{Context, GoDecode, GoStruct, Node, decode_struct};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -22,6 +24,10 @@ pub enum ImportError {
     Limit(usize),
     #[error("import parse failed: {0}")]
     Parse(String),
+    /// A diagnostic reproduced verbatim from the Go importer (for example the
+    /// `encoding/json` errors of the Bitwarden parser).
+    #[error("{0}")]
+    Decode(String),
     #[error("distinct CSV paths collapse to the same UTF-8 path: {0}")]
     PathCollision(String),
     #[error("import I/O failed: {0}")]
@@ -47,6 +53,24 @@ pub enum Format {
     Apple,
     Chrome,
     Firefox,
+}
+
+/// Resolves an importer name the way Go's `importer.New` does: the name is
+/// matched exactly (no trimming or case folding), and names without an
+/// importer, including the generic `json`/`yaml` extension names the CLI
+/// detects, are rejected with Go's `unsupported import format` text.
+pub fn format_from_name(name: &str) -> Result<Format, ImportError> {
+    match name {
+        "1password" => Ok(Format::OnePassword),
+        "bitwarden" => Ok(Format::Bitwarden),
+        "pass" => Ok(Format::Pass),
+        "csv" => Ok(Format::Csv),
+        "cxf" => Ok(Format::Cxf),
+        "apple" => Ok(Format::Apple),
+        "chrome" => Ok(Format::Chrome),
+        "firefox" => Ok(Format::Firefox),
+        other => Err(ImportError::Unsupported(other.to_owned())),
+    }
 }
 
 pub fn normalize_path(value: &str) -> String {
@@ -428,77 +452,74 @@ fn host_from_url(raw: &str) -> &str {
     raw.split(':').next().unwrap_or("")
 }
 
-#[derive(Default, Deserialize)]
+// Bitwarden export shape. Go decodes it with encoding/json into these structs
+// (`internal/importer/bitwarden.go`); `gojson` reproduces that decode, so the
+// fields keep Go's zero values for null/missing keys and the types are the
+// ones whose mismatches Go reports (`brand` is decoded though never imported).
+#[derive(Default)]
 struct Bw {
-    #[serde(default, deserialize_with = "null_default")]
     folders: Vec<BwFolder>,
-    #[serde(default, deserialize_with = "null_default")]
     items: Vec<BwItem>,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwFolder {
-    #[serde(default, deserialize_with = "null_default")]
     id: String,
-    #[serde(default, deserialize_with = "null_default")]
     name: String,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwItem {
-    #[serde(rename = "type", default, deserialize_with = "null_default")]
     kind: i64,
-    #[serde(default, deserialize_with = "null_default")]
     name: String,
-    #[serde(rename = "folderId", default, deserialize_with = "null_default")]
     folder_id: String,
-    #[serde(default, deserialize_with = "null_default")]
     notes: String,
-    #[serde(default, deserialize_with = "null_default")]
     login: BwLogin,
-    #[serde(default, deserialize_with = "null_default")]
     card: BwCard,
-    #[serde(default, deserialize_with = "null_default")]
     fields: Vec<BwField>,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwLogin {
-    #[serde(default, deserialize_with = "null_default")]
     username: String,
-    #[serde(default, deserialize_with = "null_default")]
     password: String,
-    #[serde(default, deserialize_with = "null_default")]
     totp: String,
-    #[serde(default, deserialize_with = "null_default")]
     uris: Vec<BwUri>,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwUri {
-    #[serde(default, deserialize_with = "null_default")]
     uri: String,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwCard {
-    #[serde(rename = "cardholderName", default, deserialize_with = "null_default")]
     cardholder: String,
-    #[serde(default, deserialize_with = "null_default")]
+    brand: String,
     number: String,
-    #[serde(rename = "expMonth", default, deserialize_with = "null_default")]
     exp_month: String,
-    #[serde(rename = "expYear", default, deserialize_with = "null_default")]
     exp_year: String,
-    #[serde(default, deserialize_with = "null_default")]
     code: String,
 }
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct BwField {
-    #[serde(default, deserialize_with = "null_default")]
     name: String,
-    #[serde(default, deserialize_with = "null_default")]
     value: String,
 }
+gojson::go_struct!(Bw, "bitwardenExport", { "folders" => folders, "items" => items });
+gojson::go_struct!(BwFolder, "bitwardenFolder", { "id" => id, "name" => name });
+gojson::go_struct!(BwItem, "bitwardenItem", {
+    "type" => kind, "name" => name, "folderId" => folder_id, "login" => login,
+    "card" => card, "notes" => notes, "fields" => fields,
+});
+gojson::go_struct!(BwLogin, "bitwardenLogin", {
+    "username" => username, "password" => password, "totp" => totp, "uris" => uris,
+});
+gojson::go_struct!(BwUri, "bitwardenURI", { "uri" => uri });
+gojson::go_struct!(BwField, "bitwardenField", { "name" => name, "value" => value });
+gojson::go_struct!(BwCard, "bitwardenCard", {
+    "cardholderName" => cardholder, "brand" => brand, "number" => number,
+    "expMonth" => exp_month, "expYear" => exp_year, "code" => code,
+});
 pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let x = Option::<Bw>::deserialize(&mut serde_json::Deserializer::from_slice(bytes))
-        .map_err(|e| ImportError::Parse(format!("parse bitwarden export: {e}")))?
-        .unwrap_or_default();
+    let mut x = Bw::default();
+    gojson::decode_document(bytes, &mut x)
+        .map_err(|e| ImportError::Decode(format!("parse bitwarden export: {e}")))?;
     let folders: xhash::HashMap<String, String> = x
         .folders
         .into_iter()
