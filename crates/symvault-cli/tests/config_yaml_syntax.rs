@@ -179,9 +179,14 @@ impl Sandbox {
             (self.root.to_path_buf(), "__ROOT__"),
         ];
         for (path, marker) in &replacements {
-            let plain = path.to_string_lossy();
-            text = text.replace(&plain.replace('\\', "\\\\"), marker);
-            text = text.replace(&*plain, marker);
+            // The CLI prints cleaned paths, so a root under a TMPDIR with a
+            // trailing separator (macOS `.../T/` joined to `.../T//x`) also
+            // appears with the duplicate separator collapsed.
+            let cleaned: PathBuf = path.components().collect();
+            for form in [path.to_string_lossy(), cleaned.to_string_lossy()] {
+                text = text.replace(&form.replace('\\', "\\\\"), marker);
+                text = text.replace(&*form, marker);
+            }
         }
         text
     }
