@@ -27,6 +27,25 @@ Linux/macOS/Windows acceptance pending. See ADR 0011 and the contract matrix.
 The measurements below are historical snapshots, retained with their original
 candidate and binary identity; their gap counts are not current status.
 
+## CLI-005 / CLI-006 slice 2, 2026-10-22
+
+`crates/symvault-cli/src/cobra_usage.rs` reproduces cobra's command resolution
+(`stripFlags`, `Find`, legacy root-argument check), pflag's flag parse and the
+argument validators before clap parses, so Go's usage errors, arity errors and
+the output-format gate are produced byte for byte; anything it does not reject
+falls through to clap unchanged. Evidence: `testdata/port/cli/error-taxonomy.json`
+(40 usage cases, 116 arity rows, 116 gate rows, 29 not-initialized cases),
+`make error-taxonomy-cli-differential`.
+
+Measured before the change (28 hand-picked probes of the pinned Go binary against
+the native one): 21 differed, typically clap wording and exit 1 for what Go
+prints as a doubled `Error:` line, exit 9 for the format gate and exit 3 plus a
+hint for an uninitialized vault. Not fixed and recorded: `delete` prompts before
+the vault check; `run`/`file use` need `--` natively; `device approval-pair` and
+`device revoke` word the failure differently; Go's `auth set|status|
+rotate-passphrase` keep exit 1 for the same text (kept, covered by
+`auth_commands.rs`).
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate
