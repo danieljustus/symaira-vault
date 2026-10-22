@@ -20,11 +20,19 @@
 //!   warning in the real Go binary, because `cliout` reads the quiet flag
 //!   before cobra parses it. The fixture records that; this module therefore has
 //!   no quiet input.
+//! * Go cannot fail to subscribe to signals; Rust can (a handler may not be
+//!   installable). `symvault get` then refuses to copy and exits 1 instead of
+//!   leaving a secret that an interrupt could no longer clear.
+//! * Windows: the console close/logoff/shutdown events are delivered by `ctrlc`
+//!   without Go's "block until the OS ends the process" wait, so the clear may
+//!   lose the race against process termination there; Ctrl-C and Ctrl-Break are
+//!   equivalent to Go's `os.Interrupt`.
 //! * Go styles the two `cliout` lines with lipgloss when stderr is a color
 //!   terminal. This module always writes plain text.
 
 use std::fmt;
 use std::io::Write;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -133,7 +141,8 @@ impl CancelToken {
 pub enum Wake {
     Elapsed,
     Cancelled,
-    /// A termination signal (SIGINT/SIGTERM/SIGHUP on Unix) arrived.
+    /// A termination request arrived: SIGINT/SIGTERM/SIGHUP on Unix; on Windows
+    /// Ctrl-C, Ctrl-Break and the console close/logoff/shutdown events.
     Signal,
 }
 
@@ -145,46 +154,142 @@ pub trait Clock: Send + Sync {
     /// `watch_signals`) a termination signal arrives. Cancellation wins over an
     /// already elapsed target.
     fn wait_until(&self, at: Duration, cancel: &CancelToken, watch_signals: bool) -> Wake;
-}
-
-/// Wall-clock implementation. [`RealClock::with_termination_signals`] mirrors
-/// Go `signal.Notify(os.Interrupt, SIGTERM, SIGHUP)` on Unix; on other targets
-/// no signal is observed (Go also lists only Interrupt and SIGTERM on Windows;
-/// the Windows console control handler is a documented residual).
-pub struct RealClock {
-    start: Instant,
-    signaled: Arc<std::sync::atomic::AtomicBool>,
-    #[cfg(unix)]
-    registrations: Vec<signal_hook::SigId>,
-}
-
-impl RealClock {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            start: Instant::now(),
-            signaled: Arc::default(),
-            #[cfg(unix)]
-            registrations: Vec::new(),
-        }
-    }
-
+    /// Starts observing termination requests so that a later
+    /// `wait_until(.., true)` can return [`Wake::Signal`]. Called once, before
+    /// the secret is copied, only when an auto-clear is going to be armed.
+    /// Clocks that observe no signals keep the default.
+    ///
     /// # Errors
-    /// Signal handler registration failed.
-    pub fn with_termination_signals() -> std::io::Result<Self> {
-        #[cfg_attr(not(unix), allow(unused_mut))]
-        let mut clock = Self::new();
-        #[cfg(unix)]
+    /// The reason the handler could not be installed. The caller then refuses
+    /// to copy, because an interrupt could no longer clear the clipboard.
+    fn arm_termination_signals(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// Where termination requests come from. Production uses the OS (signal-hook
+/// on Unix, the console control handler through `ctrlc` on Windows); tests
+/// inject a source they can fire by hand.
+pub trait InterruptSource: Send + Sync {
+    /// Makes every future termination request set `flag`. Called at most once
+    /// per [`RealClock`].
+    ///
+    /// # Errors
+    /// The OS or library message when no handler could be installed.
+    fn install(&self, flag: Arc<AtomicBool>) -> Result<(), String>;
+}
+
+/// Unix: Go `signal.Notify(os.Interrupt, SIGTERM, SIGHUP)`.
+///
+/// `signal-hook` keeps its signal handler installed after `unregister`: the
+/// flag stops being set, but the signal is no longer delivered with its
+/// default disposition. That is acceptable because `get` exits right after the
+/// clipboard flow; a long-lived caller must not reuse this source.
+#[cfg(unix)]
+#[derive(Default)]
+struct UnixSignals {
+    registrations: Mutex<Vec<signal_hook::SigId>>,
+}
+
+#[cfg(unix)]
+impl InterruptSource for UnixSignals {
+    fn install(&self, flag: Arc<AtomicBool>) -> Result<(), String> {
+        let mut registrations = self.registrations.lock().map_err(|e| e.to_string())?;
         for signal in [
             signal_hook::consts::SIGINT,
             signal_hook::consts::SIGTERM,
             signal_hook::consts::SIGHUP,
         ] {
-            clock
-                .registrations
-                .push(signal_hook::flag::register(signal, clock.signaled.clone())?);
+            let id = signal_hook::flag::register(signal, flag.clone())
+                .map_err(|error| error.to_string())?;
+            registrations.push(id);
         }
-        Ok(clock)
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for UnixSignals {
+    fn drop(&mut self) {
+        if let Ok(mut registrations) = self.registrations.lock() {
+            for id in registrations.drain(..) {
+                signal_hook::low_level::unregister(id);
+            }
+        }
+    }
+}
+
+/// Windows: Go lists `os.Interrupt` and `SIGTERM`, and the Go runtime maps
+/// CTRL_C_EVENT and CTRL_BREAK_EVENT to the former and CTRL_CLOSE_EVENT,
+/// CTRL_LOGOFF_EVENT and CTRL_SHUTDOWN_EVENT to the latter. `ctrlc` installs one
+/// `SetConsoleCtrlHandler` routine that reacts to every control event, so all
+/// five set the flag.
+///
+/// `ctrlc` allows one handler per process. Only `symvault get` installs this
+/// source (and the other `ctrlc` users are different commands), so a second
+/// installation would be a bug and is reported as an error rather than ignored.
+#[cfg(windows)]
+struct WindowsConsoleControl;
+
+#[cfg(windows)]
+impl InterruptSource for WindowsConsoleControl {
+    fn install(&self, flag: Arc<AtomicBool>) -> Result<(), String> {
+        ctrlc::set_handler(move || flag.store(true, Ordering::SeqCst))
+            .map_err(|error| error.to_string())
+    }
+}
+
+/// The OS source of this target, or `None` where no signals are observed.
+fn system_interrupts() -> Option<Box<dyn InterruptSource>> {
+    #[cfg(unix)]
+    {
+        Some(Box::new(UnixSignals::default()))
+    }
+    #[cfg(windows)]
+    {
+        Some(Box::new(WindowsConsoleControl))
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        None
+    }
+}
+
+/// Wall-clock implementation. [`RealClock::with_termination_signals`] mirrors
+/// Go `signal.Notify(os.Interrupt, SIGTERM[, SIGHUP])`: SIGINT/SIGTERM/SIGHUP
+/// on Unix and the console control events on Windows. The handler is installed
+/// by [`Clock::arm_termination_signals`], i.e. only when `get` is about to
+/// copy, so a Ctrl-C at the unlock prompt keeps its default meaning (Go
+/// subscribes inside `StartAutoClear`, also after unlock).
+pub struct RealClock {
+    start: Instant,
+    signaled: Arc<AtomicBool>,
+    source: Option<Box<dyn InterruptSource>>,
+    armed: Mutex<bool>,
+}
+
+impl RealClock {
+    /// A clock that observes no signals.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::with_interrupt_source(None)
+    }
+
+    /// A clock whose [`Clock::arm_termination_signals`] installs the OS source.
+    #[must_use]
+    pub fn with_termination_signals() -> Self {
+        Self::with_interrupt_source(system_interrupts())
+    }
+
+    /// A clock with an injected source (tests).
+    #[must_use]
+    pub fn with_interrupt_source(source: Option<Box<dyn InterruptSource>>) -> Self {
+        Self {
+            start: Instant::now(),
+            signaled: Arc::default(),
+            source,
+            armed: Mutex::new(false),
+        }
     }
 }
 
@@ -194,18 +299,22 @@ impl Default for RealClock {
     }
 }
 
-#[cfg(unix)]
-impl Drop for RealClock {
-    fn drop(&mut self) {
-        for id in self.registrations.drain(..) {
-            signal_hook::low_level::unregister(id);
-        }
-    }
-}
-
 impl Clock for RealClock {
     fn elapsed(&self) -> Duration {
         self.start.elapsed()
+    }
+
+    fn arm_termination_signals(&self) -> Result<(), String> {
+        let Some(source) = &self.source else {
+            return Ok(());
+        };
+        let mut armed = self.armed.lock().map_err(|error| error.to_string())?;
+        if *armed {
+            return Ok(());
+        }
+        source.install(self.signaled.clone())?;
+        *armed = true;
+        Ok(())
     }
 
     fn wait_until(&self, at: Duration, cancel: &CancelToken, watch_signals: bool) -> Wake {
@@ -213,7 +322,7 @@ impl Clock for RealClock {
             if cancel.is_cancelled() {
                 return Wake::Cancelled;
             }
-            if watch_signals && self.signaled.load(std::sync::atomic::Ordering::SeqCst) {
+            if watch_signals && self.signaled.load(Ordering::SeqCst) {
                 return Wake::Signal;
             }
             let now = self.start.elapsed();
@@ -342,7 +451,9 @@ pub fn auto_clear_seconds(configured: Option<i64>) -> i64 {
 /// nil (exit 0) after a failed clear or a restored secret.
 ///
 /// # Errors
-/// [`CopyError`] when the initial copy fails; nothing else is written then.
+/// [`CopyError`] when the initial copy fails, or when an auto-clear is
+/// requested but the interrupt handler cannot be installed (fail closed:
+/// nothing is copied); nothing else is written then.
 pub fn copy_and_auto_clear(
     clipboard: &dyn TextClipboard,
     secret: &str,
@@ -350,6 +461,18 @@ pub fn copy_and_auto_clear(
     clock: &dyn Clock,
     stderr: &mut dyn Write,
 ) -> Result<(), CopyError> {
+    // Observe interrupts before the secret is on the clipboard, so none can
+    // slip between the copy and the first wait. Without an auto-clear Go
+    // subscribes to nothing, and neither does this.
+    if auto_clear_seconds > 0 {
+        clock
+            .arm_termination_signals()
+            .map_err(|cause| CopyError {
+                cause: format!(
+                    "cannot install an interrupt handler to clear the clipboard ({cause}); nothing was copied, use --print to print the value instead"
+                ),
+            })?;
+    }
     clipboard
         .copy(secret)
         .map_err(|cause| CopyError { cause })?;

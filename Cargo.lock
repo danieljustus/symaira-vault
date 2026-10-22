@@ -4205,6 +4205,7 @@ version = "0.0.0"
 dependencies = [
  "arboard",
  "base64 0.23.1",
+ "ctrlc",
  "keyring",
  "keyring-core",
  "rustix",

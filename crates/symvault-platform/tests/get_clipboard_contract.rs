@@ -11,11 +11,13 @@
 #![deny(unsafe_code)]
 
 use serde::Deserialize;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use symvault_platform::get_clipboard::{
-    CancelToken, Clock, CopyError, GetDestination, NOT_CLEARED_MESSAGE, RealClock, TextClipboard,
-    VerifyError, Wake, copy_and_auto_clear, countdown, route_get_output, verify_cleared,
+    CancelToken, Clock, CopyError, GetDestination, InterruptSource, NOT_CLEARED_MESSAGE, RealClock,
+    TextClipboard, VerifyError, Wake, copy_and_auto_clear, countdown, route_get_output,
+    verify_cleared,
 };
 
 const FIXTURE: &str = include_str!("../../../testdata/port/platform/get_clipboard.json");
@@ -378,10 +380,13 @@ fn real_clock_cancel_wins_over_elapsed_target() {
 #[cfg(unix)]
 #[test]
 fn real_clock_observes_sigterm_when_registered() {
-    // signal-hook delivers to this process only; the registration is scoped to
-    // the clock and removed on drop. A SIGTERM is raised from a helper thread
-    // after the wait begins.
-    let clock = RealClock::with_termination_signals().expect("register");
+    // signal-hook delivers to this process only. The handler is installed by
+    // `arm_termination_signals`; its flag registration is removed when the
+    // clock drops, but signal-hook leaves its own handler installed, so a later
+    // SIGTERM is swallowed rather than terminating (fine: `get` exits). A
+    // SIGTERM is raised from a helper thread after the wait begins.
+    let clock = RealClock::with_termination_signals();
+    clock.arm_termination_signals().expect("register");
     let cancel = CancelToken::default();
     let raiser = std::thread::spawn(|| {
         std::thread::sleep(Duration::from_millis(100));
@@ -390,4 +395,192 @@ fn real_clock_observes_sigterm_when_registered() {
     let outcome = clock.wait_until(Duration::from_secs(30), &cancel, true);
     raiser.join().unwrap();
     assert_eq!(outcome, Wake::Signal);
+}
+
+/// An [`InterruptSource`] the test fires by hand; it stands in for the Windows
+/// console control handler (and for signal-hook), which cannot be raised
+/// portably. `RealClock` and `copy_and_auto_clear` are the production code.
+#[derive(Clone, Default)]
+struct HandSource {
+    flag: Arc<Mutex<Option<Arc<AtomicBool>>>>,
+    installs: Arc<AtomicUsize>,
+    fail_with: Option<String>,
+}
+
+impl HandSource {
+    fn failing(message: &str) -> Self {
+        Self {
+            fail_with: Some(message.to_owned()),
+            ..Self::default()
+        }
+    }
+
+    fn installed(&self) -> bool {
+        self.flag.lock().unwrap().is_some()
+    }
+
+    /// Fires the interrupt once a handler is installed.
+    fn fire(&self) {
+        let flag = self.flag.lock().unwrap().clone().expect("installed");
+        flag.store(true, Ordering::SeqCst);
+    }
+}
+
+impl InterruptSource for HandSource {
+    fn install(&self, flag: Arc<AtomicBool>) -> Result<(), String> {
+        self.installs.fetch_add(1, Ordering::SeqCst);
+        if let Some(message) = &self.fail_with {
+            return Err(message.clone());
+        }
+        *self.flag.lock().unwrap() = Some(flag);
+        Ok(())
+    }
+}
+
+/// Bounded, so a missing installation fails the test instead of hanging it.
+fn wait_until_installed(source: &HandSource) {
+    let started = std::time::Instant::now();
+    while !source.installed() {
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "the interrupt handler was never installed"
+        );
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
+fn scenario_clipboard(secret: &str) -> FakeClipboard {
+    FakeClipboard {
+        secret: secret.to_owned(),
+        copy_error: String::new(),
+        clear_error: String::new(),
+        read_mode: "honest".to_owned(),
+        read_error: String::new(),
+        state: Mutex::new((String::new(), Vec::new())),
+    }
+}
+
+#[test]
+fn injected_interrupt_clears_and_verifies_long_before_the_deadline() {
+    let source = HandSource::default();
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    let clipboard = scenario_clipboard("interrupt-secret");
+    let firing = source.clone();
+    let interrupter = std::thread::spawn(move || {
+        wait_until_installed(&firing);
+        std::thread::sleep(Duration::from_millis(150));
+        firing.fire();
+    });
+    let mut stderr = Vec::new();
+    let started = std::time::Instant::now();
+    copy_and_auto_clear(&clipboard, "interrupt-secret", 10, &clock, &mut stderr).unwrap();
+    interrupter.join().unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "the interrupt must end the wait, took {:?}",
+        started.elapsed()
+    );
+    let stderr = String::from_utf8(stderr).unwrap();
+    assert!(stderr.contains("[clipboard cleared]"), "{stderr:?}");
+    assert!(!stderr.contains("interrupt-secret"));
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:interrupt-secret", "copy:", "read"]);
+    assert_eq!(state.0, "");
+}
+
+#[test]
+fn interrupt_handler_is_installed_before_the_secret_is_copied() {
+    struct OrderClipboard {
+        source: HandSource,
+        installed_at_copy: Mutex<Vec<bool>>,
+    }
+    impl TextClipboard for OrderClipboard {
+        fn copy(&self, _text: &str) -> Result<(), String> {
+            self.installed_at_copy
+                .lock()
+                .unwrap()
+                .push(self.source.installed());
+            Ok(())
+        }
+        fn read(&self) -> Result<String, String> {
+            Ok(String::new())
+        }
+    }
+    let source = HandSource::default();
+    let clipboard = OrderClipboard {
+        source: source.clone(),
+        installed_at_copy: Mutex::new(Vec::new()),
+    };
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    // Fire up front: the wait observes the already-set flag at once.
+    let firing = source.clone();
+    let armed = std::thread::spawn(move || {
+        wait_until_installed(&firing);
+        firing.fire();
+    });
+    copy_and_auto_clear(&clipboard, "s", 5, &clock, &mut Vec::new()).unwrap();
+    armed.join().unwrap();
+    // Both the secret and the empty clear happened with a handler in place.
+    assert_eq!(*clipboard.installed_at_copy.lock().unwrap(), [true, true]);
+}
+
+#[test]
+fn failed_handler_installation_refuses_to_copy_and_stays_silent() {
+    let source = HandSource::failing("console handler refused");
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    let clipboard = scenario_clipboard("never-copied");
+    let mut stderr = Vec::new();
+    let error: CopyError =
+        copy_and_auto_clear(&clipboard, "never-copied", 30, &clock, &mut stderr).unwrap_err();
+    assert_eq!(CopyError::EXIT_CODE, 1);
+    let text = error.to_string();
+    assert!(text.contains("console handler refused"), "{text}");
+    assert!(text.contains("nothing was copied"), "{text}");
+    assert!(!text.contains("never-copied"));
+    assert!(stderr.is_empty(), "no hint or countdown after a refusal");
+    let state = clipboard.state.lock().unwrap();
+    assert!(state.1.is_empty(), "the clipboard must stay untouched");
+}
+
+#[test]
+fn no_handler_is_installed_when_auto_clear_is_off() {
+    let source = HandSource::default();
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    let clipboard = scenario_clipboard("kept");
+    let mut stderr = Vec::new();
+    copy_and_auto_clear(&clipboard, "kept", 0, &clock, &mut stderr).unwrap();
+    assert_eq!(source.installs.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        String::from_utf8(stderr).unwrap(),
+        "[copied to clipboard]\n"
+    );
+    assert_eq!(clipboard.state.lock().unwrap().0, "kept");
+}
+
+#[test]
+fn arming_twice_installs_one_handler() {
+    // ctrlc (Windows) allows a single handler per process.
+    let source = HandSource::default();
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    clock.arm_termination_signals().unwrap();
+    clock.arm_termination_signals().unwrap();
+    assert_eq!(source.installs.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_flag_set_without_watching_signals_is_ignored() {
+    // The tick loop of `countdown` passes watch_signals = false.
+    let source = HandSource::default();
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    clock.arm_termination_signals().unwrap();
+    source.fire();
+    let cancel = CancelToken::default();
+    assert_eq!(
+        clock.wait_until(Duration::from_millis(20), &cancel, false),
+        Wake::Elapsed
+    );
+    assert_eq!(
+        clock.wait_until(Duration::from_secs(30), &cancel, true),
+        Wake::Signal
+    );
 }
