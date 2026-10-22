@@ -166,15 +166,24 @@ impl Sandbox {
 
     /// Makes recorded and live text comparable: the sandbox root becomes
     /// `__ROOT__`, the config and vault paths their markers. The paths are
-    /// replaced as joined strings, so Windows separators do not matter.
+    /// replaced as joined strings, so Windows separators do not matter. JSON
+    /// output escapes each `\` of a Windows path as `\\`, so the escaped form
+    /// is replaced first; on Unix paths it equals the plain form.
     fn normalize(&self, raw: &[u8]) -> String {
         let mut text = String::from_utf8_lossy(raw).into_owned();
-        let root = self.root.to_string_lossy().into_owned();
         let vault_config = self.vault_dir().join("config.yaml");
-        text = text.replace(&*vault_config.to_string_lossy(), "__VAULT__/config.yaml");
-        text = text.replace(&*self.vault_dir().to_string_lossy(), "__VAULT__");
-        text = text.replace(&*self.config_path().to_string_lossy(), "__CONFIG__");
-        text.replace(&root, "__ROOT__")
+        let replacements = [
+            (vault_config, "__VAULT__/config.yaml"),
+            (self.vault_dir(), "__VAULT__"),
+            (self.config_path(), "__CONFIG__"),
+            (self.root.to_path_buf(), "__ROOT__"),
+        ];
+        for (path, marker) in &replacements {
+            let plain = path.to_string_lossy();
+            text = text.replace(&plain.replace('\\', "\\\\"), marker);
+            text = text.replace(&*plain, marker);
+        }
+        text
     }
 }
 

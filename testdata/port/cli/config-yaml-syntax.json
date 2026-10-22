@@ -17,7 +17,7 @@
       "internal/health/doctor_vault.go"
     ],
     "source_digest": "3cab9f9259cc88f79eb735a88a11bc849df8b1d0b9448f1e778b4eae48be8620",
-    "generator_digest": "ff26392b0cb89b09fa3d58e569d9591ed4d9e747207fbb3cc9d732381cc4fa30"
+    "generator_digest": "77419a6138d7c858081897942cf795154f15af0d4087a6a3a80d8471d6be49ef"
   },
   "doctor_ids": [
     "vault.config.parses",

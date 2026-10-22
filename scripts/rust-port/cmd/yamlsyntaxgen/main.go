@@ -266,10 +266,7 @@ type openEntry struct {
 const lookaheadReason = "yaml.v3 keeps a two-token scanner look-ahead behind the parser (yaml_parser_fetch_more_tokens, for comment association) while libyaml fetches a token only when the parser asks for it. " +
 	"The parser rejects the trailing token in both, but yaml.v3 has already scanned the ':' after it and reports the scanner failure 'mapping values are not allowed in this context' (with its own line), where libyaml reports the parser failure 'did not find expected key'"
 
-var (
-	allCommands  = []string{"validate", "validate_json", "get", "set", "doctor"}
-	textCommands = []string{"validate", "get", "set", "doctor"}
-)
+var textCommands = []string{"validate", "get", "set", "doctor"}
 
 // openInputs are inputs on which the native CLI is known to differ from Go.
 // They are recorded from the same Go binary so the gap is pinned rather than
@@ -609,8 +606,8 @@ func runConfigCommand(goBinary string, item input, name string, argTemplate []st
 		return observation{}, err
 	}
 	configPath := filepath.Join(box.root, "config.yaml")
-	if err := os.WriteFile(configPath, item.config, 0o600); err != nil {
-		return observation{}, errors.Join(err, box.close())
+	if setupErr := os.WriteFile(configPath, item.config, 0o600); setupErr != nil {
+		return observation{}, errors.Join(setupErr, box.close())
 	}
 	args := replaceArgs(argTemplate, configMarker, configPath)
 	code, stdout, stderr, err := runOracle(goBinary, box, args)
@@ -644,11 +641,11 @@ func runAgentList(goBinary string, item input) (observation, error) {
 		return observation{}, err
 	}
 	vault := filepath.Join(box.root, "vault")
-	if err := os.MkdirAll(vault, 0o700); err != nil {
-		return observation{}, errors.Join(err, box.close())
+	if setupErr := os.MkdirAll(vault, 0o700); setupErr != nil {
+		return observation{}, errors.Join(setupErr, box.close())
 	}
-	if err := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); err != nil {
-		return observation{}, errors.Join(err, box.close())
+	if setupErr := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); setupErr != nil {
+		return observation{}, errors.Join(setupErr, box.close())
 	}
 	template := []string{"--vault", vaultMarker, "agent", "list"}
 	code, stdout, stderr, err := runOracle(goBinary, box, replaceArgs(template, vaultMarker, vault))
@@ -671,11 +668,11 @@ func runDoctor(goBinary string, item input) (doctorObservation, error) {
 		return doctorObservation{}, err
 	}
 	vault := filepath.Join(box.root, "vault")
-	if err := os.MkdirAll(vault, 0o700); err != nil {
-		return doctorObservation{}, errors.Join(err, box.close())
+	if setupErr := os.MkdirAll(vault, 0o700); setupErr != nil {
+		return doctorObservation{}, errors.Join(setupErr, box.close())
 	}
-	if err := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); err != nil {
-		return doctorObservation{}, errors.Join(err, box.close())
+	if setupErr := os.WriteFile(filepath.Join(vault, "config.yaml"), item.config, 0o600); setupErr != nil {
+		return doctorObservation{}, errors.Join(setupErr, box.close())
 	}
 	template := []string{"--vault", vaultMarker, "doctor", "--only", strings.Join(doctorIDs, ","), "--json", "--no-network"}
 	code, stdout, stderr, err := runOracle(goBinary, box, replaceArgs(template, vaultMarker, vault))
