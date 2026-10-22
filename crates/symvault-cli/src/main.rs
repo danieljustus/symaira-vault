@@ -3019,11 +3019,11 @@ fn run_auth_set(
                 #[cfg(target_os = "macos")]
                 {
                     let runtime = runtime_session_manager();
-                    if let Some(keyring) = runtime.keyring.as_deref()
-                        && let Err(error) =
-                            session_commands::clear_touch_id_passphrase(&vault, keyring)
-                    {
-                        eprintln!("Warning: could not remove Touch ID unlock item: {error}");
+                    if let Err(error) = session_commands::clear_touch_id_passphrase(
+                        &vault,
+                        touch_id_items(&runtime).as_ref(),
+                    ) {
+                        eprintln!("Warning: {error}");
                     }
                 }
                 if !quiet {
@@ -3047,12 +3047,9 @@ fn run_auth_set(
                     let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
-                    let keyring = runtime.keyring.as_deref().ok_or_else(|| {
-                        "save Touch ID unlock item: keyring unavailable".to_owned()
-                    })?;
                     session_commands::save_touch_id_passphrase(
                         &vault,
-                        keyring,
+                        touch_id_items(&runtime).as_ref(),
                         passphrase.as_bytes(),
                     )
                     .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
@@ -3203,10 +3200,9 @@ fn run_auth_rotate_passphrase(
 
         #[cfg(target_os = "macos")]
         if config.effective_auth_method() == AuthMethod::Touchid
-            && let Some(keyring) = runtime.keyring.as_deref()
             && let Err(error) = session_commands::save_touch_id_passphrase(
                 &vault,
-                keyring,
+                touch_id_items(&runtime).as_ref(),
                 new_passphrase.as_bytes(),
             )
         {
@@ -4864,10 +4860,13 @@ fn unlock_passphrase_with_mode(
     if config.effective_auth_method() == symvault_core::config::AuthMethod::Touchid
         && session_commands::gui_session_available()
         && !is_test_or_ci()
-        && let Some(keyring) = runtime.keyring.as_deref()
     {
         let touch_id = symvault_platform::MacOsTouchId;
-        if let Ok(bytes) = session_commands::load_touch_id_passphrase(vault, keyring, &touch_id) {
+        if let Ok(bytes) = session_commands::load_touch_id_passphrase(
+            vault,
+            touch_id_items(runtime).as_ref(),
+            &touch_id,
+        ) {
             let passphrase = String::from_utf8(bytes.to_vec())
                 .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
             return Ok(Zeroizing::new(passphrase));
@@ -5206,6 +5205,23 @@ fn runtime_session_manager() -> RuntimeSession {
             keyring: None,
             memory_only: true,
         }
+    }
+}
+
+/// Where the Touch ID passphrase item lives. Normally Go's native Keychain
+/// item, read and written through Security.framework (no subprocess, no value
+/// wrapper). When the session cache has already fallen back to memory (tests,
+/// CI, an unusable keychain) the item follows it, so such runs never reach the
+/// developer's keychain.
+#[cfg(target_os = "macos")]
+fn touch_id_items(
+    runtime: &RuntimeSession,
+) -> Box<dyn symvault_core::keychain_status::BiometricItemStore + '_> {
+    match runtime.keyring.as_deref() {
+        Some(keyring) if keyring.is_fallback_active() => Box::new(
+            symvault_core::keychain_status::KeyringBiometricItems(keyring),
+        ),
+        _ => Box::new(symvault_platform::SecurityBiometricItems::system()),
     }
 }
 

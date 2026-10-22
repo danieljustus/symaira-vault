@@ -8,6 +8,10 @@ pub use text_clipboard::{OwnedTextClipboard, native_text_clipboard};
 mod focus;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod macos_keychain;
+#[cfg(target_os = "macos")]
+pub use macos_keychain::SecurityBiometricItems;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",

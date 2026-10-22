@@ -261,6 +261,25 @@ mod tests {
         }
     }
 
+    /// Why the Touch ID passphrase item does not go through this adapter: Go
+    /// stores it as raw bytes (`SecurityBiometricItems`), and this provider
+    /// codec trims whitespace and decodes values that merely start with a
+    /// go-keyring prefix. Reading a Go biometric item here would return a
+    /// different passphrase; writing one would store a base64 wrapper Go would
+    /// then hand to the vault as the passphrase.
+    #[test]
+    fn provider_codec_is_lossy_for_raw_go_biometric_values() {
+        assert_eq!(
+            decode_macos_provider_value(b" padded \n").unwrap(),
+            b"padded"
+        );
+        assert_eq!(
+            decode_macos_provider_value(b"go-keyring-base64:c2VjcmV0").unwrap(),
+            b"secret"
+        );
+        assert_ne!(encode_macos_provider_value(b"secret"), b"secret");
+    }
+
     #[test]
     fn windows_target_matches_go_credential_manager_address() {
         assert_eq!(windows_target_name("symvault", "alice"), "symvault:alice");

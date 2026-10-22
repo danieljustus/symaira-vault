@@ -26,6 +26,21 @@ on Windows. Native 3-OS evidence for this corpus is still pending; IO-002 stays
 Next IO-002 candidates: export/backup CLI-level stdout/stderr differential
 against a built Go binary, and backup-side member modes/ordering corner cases.
 
+## SESSION-003 non-interactive half, 2026-10-22 (#1243 slice 2)
+
+`make biometric-differential` (in `port-contract`) freezes the macOS Keychain
+OSStatus contract, the no-op biometric manager and the Touch ID item layout from
+the pinned Go sources (`biometricgen`, oracle `d13e5d0b`, fixture
+`testdata/port/session/biometric.json`) and replays them in `symvault-core`; on
+macOS `symvault-platform` additionally drives `SecurityBiometricItems`
+(Security.framework, no `security` subprocess) against disposable keychains. Real
+divergence fixed: the Rust Touch ID item used the go-keyring-wrapped `OsKeyring`
+instead of Go's raw item. Still pending, with reasons: the LocalAuthentication
+prompt (no hardware; stays JXA), the real default-keychain/access-control path
+(operator keychain), CI receipt for the new native test. SESSION-001 residuals:
+Go-reads-Rust-written record, Go's case-insensitive JSON field names, CLI-layer
+fallback warning text.
+
 ## Current native-prerequisite repair, 2026-10-11
 
 Task `t_c13388cd` composes the local MCP candidate `c8376fa4` with the existing
