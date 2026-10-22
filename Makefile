@@ -522,8 +522,8 @@ rust-007-fixtures-check: config-profile-fixtures-check
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
 
 rust-007-differential: rust-007-fixtures-check
-	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
-	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
+	$(CARGO) test -p symvault-core --test config_session_contract --test session_cache_contract --all-features --locked
+	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --test session_cache_fallback_contract --all-features --locked
 
 .PHONY: config-profile-fixtures-check config-profile-differential
 config-profile-fixtures-check:

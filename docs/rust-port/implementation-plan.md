@@ -608,6 +608,12 @@ and vice versa.
    `QUOTA-001` transition helper.
 6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
+   Session-cache half (SESSION-001, #1243 slice 1): `make rust-007-differential`
+   replays the Go-derived lifecycle fixture (idle/max TTL, touch versus
+   non-refreshing probes, revoke, corrupted records, keyring failure/fallback,
+   concurrency) through `symvault-core` and `symvault-platform`. The cache has no
+   on-disk representation, so file modes are not part of this row. Touch ID
+   (SESSION-003) is a separate slice.
 
 **Expected:** the Go-derived config/session/quota fixtures and injected platform
 contract tests pass locally. The macOS native adapter slice now compiles and

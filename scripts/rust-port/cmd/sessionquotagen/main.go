@@ -57,9 +57,12 @@ type oracle struct {
 }
 
 type sessionFixture struct {
-	SchemaVersion int           `json:"schema_version"`
-	Oracle        oracle        `json:"oracle"`
-	Cases         []sessionCase `json:"cases"`
+	SchemaVersion int               `json:"schema_version"`
+	Oracle        oracle            `json:"oracle"`
+	Cases         []sessionCase     `json:"cases"`
+	Scenarios     []cacheScenario   `json:"scenarios"`
+	Concurrency   []concurrencyCase `json:"concurrency"`
+	Storage       storageContract   `json:"storage"`
 }
 
 type sessionCase struct {
@@ -112,7 +115,7 @@ func (f *fakeKeyring) Get(key string) (string, error) {
 func (f *fakeKeyring) Set(key, value string) error { f.values[key] = value; return nil }
 func (f *fakeKeyring) Delete(key string) error     { delete(f.values, key); return nil }
 
-func buildSessionFixture(meta oracle) sessionFixture {
+func buildSessionFixture(meta oracle, root string) (sessionFixture, error) {
 	v := "fixture-vault"
 	key := "symvault:" + v + "|session"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -150,7 +153,11 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	cases = append(cases, resultCase("malformed", []string{"load_passphrase"}, err))
 	cases = append(cases, identityMetadataCases()...)
 	_ = meta
-	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}
+	cache, err := buildCacheFixture(root)
+	if err != nil {
+		return sessionFixture{}, fmt.Errorf("session cache scenarios: %w", err)
+	}
+	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases, Scenarios: cache.Scenarios, Concurrency: cache.Concurrency, Storage: cache.Storage}, nil
 }
 
 func resultCase(name string, ops []string, err error) sessionCase {
@@ -267,7 +274,7 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, err
 	}
-	generator, err := digestFiles(root, []string{"scripts/rust-port/cmd/sessionquotagen/main.go", "scripts/rust-port/cmd/sessionquotagen/identity.go"})
+	generator, err := digestFiles(root, []string{"scripts/rust-port/cmd/sessionquotagen/main.go", "scripts/rust-port/cmd/sessionquotagen/identity.go", "scripts/rust-port/cmd/sessionquotagen/cache.go"})
 	if err != nil {
 		return oracle{}, err
 	}
@@ -444,7 +451,11 @@ func main() {
 		fatal("temp root: %v", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	sessionContent := marshal(buildSessionFixture(meta))
+	sessionData, err := buildSessionFixture(meta, root)
+	if err != nil {
+		fatal("session fixture: %v", err)
+	}
+	sessionContent := marshal(sessionData)
 	quotaContent := marshal(buildQuotaFixture(meta, tmp))
 	if err := writeOrCheck(fixtures, sessionPath, sessionContent, *check); err != nil {
 		fatal("session fixture: %v", err)
