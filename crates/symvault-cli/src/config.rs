@@ -5,6 +5,40 @@ use std::{
     str::FromStr,
 };
 
+/// Why `config get` / `config set` failed.
+pub enum ConfigFailure {
+    /// A message printed once, as before.
+    Plain(String),
+    /// A Go `ExitConfigError` that carries its cause in its text: the root
+    /// handler prints `Error: …` twice and appends the doctor hint.
+    GoConfigError(String),
+}
+
+impl From<String> for ConfigFailure {
+    fn from(message: String) -> Self {
+        Self::Plain(message)
+    }
+}
+
+impl From<&str> for ConfigFailure {
+    fn from(message: &str) -> Self {
+        Self::Plain(message.to_owned())
+    }
+}
+
+/// Go's `LoadConfigNode` parses the whole first document with yaml.v3 before
+/// `config get` / `config set` look at a key. Its failure reaches the user as
+/// `cannot load config: cannot parse config file: <yaml error>` plus the same
+/// cause again (`CLIError.Error` appends it).
+fn go_syntax_gate(bytes: &[u8]) -> Result<(), ConfigFailure> {
+    match symvault_core::go_yaml::first_document_syntax_error(bytes) {
+        Some(message) => Err(ConfigFailure::GoConfigError(format!(
+            "cannot load config: cannot parse config file: {message}: cannot parse config file: {message}"
+        ))),
+        None => Ok(()),
+    }
+}
+
 pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
     let bytes = fs::read(crate::agent_list_commands::clean_path(path))
         .map_err(|error| format!("cannot load config: {error}"))?;
@@ -14,9 +48,10 @@ pub fn list(path: &Path, quiet: bool) -> Result<(), String> {
     Ok(())
 }
 
-pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), String> {
+pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), ConfigFailure> {
     let bytes = fs::read(crate::agent_list_commands::clean_path(path))
         .map_err(|error| format!("cannot load config: {error}"))?;
+    go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
     let value = lookup_scalar(source, key)?;
@@ -36,11 +71,12 @@ pub fn get(path: &Path, key: &str, output: &str, quiet: bool) -> Result<(), Stri
     Ok(())
 }
 
-pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), String> {
+pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), ConfigFailure> {
     use yaml_edit::path::YamlPath;
 
     let bytes = fs::read(crate::agent_list_commands::clean_path(path))
         .map_err(|error| format!("cannot load config: {error}"))?;
+    go_syntax_gate(&bytes)?;
     let source = std::str::from_utf8(&bytes)
         .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
     let file = yaml_edit::YamlFile::from_str(source)
@@ -81,7 +117,7 @@ pub fn set(path: &Path, key: &str, value: &str, quiet: bool) -> Result<(), Strin
         );
     }
     if let Err(error) = symvault_core::config::Config::load(path) {
-        return Err(format!("config is invalid after update: {error}"));
+        return Err(format!("config is invalid after update: {error}").into());
     }
     if !quiet {
         println!("Set {key} = {value}");

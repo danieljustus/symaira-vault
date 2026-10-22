@@ -147,25 +147,82 @@ its measured duration and recommended factor are host-dependent, so the added
 differential compares the Argon2id branch exactly and the legacy branch's result
 shape and warning hint.
 
-### Known deviation: config-loader syntax-error dialect (not yet parity)
+### Config-loader syntax-error dialect (bounded corpus at parity, known gaps recorded; #1241)
 
-On parser-invalid `config.yaml` inputs, five shared IDs can diverge in the
-`message` field: Go renders go-yaml's syntax error while the Rust loader renders
-serde_yaml's detail and source location. A source-bound differential now covers
-the stable multiple-document rejection across all five IDs; that message matches
-Go exactly. Scanner-generated syntax errors remain open.
-The prefixed part (`config.yaml parse error: `, `failed to load config: `,
-`cannot load config: `) is identical, so only the parser dialect differs:
+Go renders `config.yaml` failures with go-yaml (`gopkg.in/yaml.v3`): `yaml: line N: <problem>`
+for scanner and parser failures, `yaml: <problem>` for reader failures and first-line marks. The
+Rust loader used to render serde_yaml's `<problem> at line L column C, while …` behind a
+`parse config:` prefix. Both front ends are ports of libyaml, so problem strings and marks agree;
+`crates/symvault-core/src/go_yaml.rs` converts the second form into the first (Go's `parser.fail`
+line rule: context mark first, `+1` only for scanner errors, no line on the first line, none for
+reader errors; the single spelling difference is yaml.v3's `hexdecimal`). The loader checks the
+first document's syntax before decoding it, as Go does, and `config get`/`config set` run the same
+gate before their lossless editor, so a failing load leaves the file untouched. Three more Go
+loader rules are reproduced: an alias to an undefined anchor reads `yaml: unknown anchor 'x'
+referenced` (yaml.v3 names the anchor; the name is read back from the alias token), a later
+document counts as a second document only when it decodes (a syntax error in it, or in text after
+a `...` marker, leaves a single-document stream), and a config that is only Unicode white space
+(`unicode.IsSpace`: `\v`, U+0085, U+00A0, U+3000, …, not only ASCII) serves the defaults. The five
+shared doctor IDs are `vault.config.parses`, `vault.config.validates`,
+`auth.passphrase.rotation`, `mcp.dynamic.engines` and `mcp.agents`.
 
-- `vault.config.parses`, `vault.config.validates`, `auth.passphrase.rotation`,
-  `mcp.dynamic.engines`, `mcp.agents` (all five share the one root cause)
+Evidence: `testdata/port/cli/config-yaml-syntax.json` freezes the pinned Go binary's (`0cc78062`)
+exit status, stdout and stderr for **93** inputs (9 reader, 38 scanner, 22 parser, 8 node-builder
+(undefined anchor), 1 loader and 15 accepted controls, among them the Unicode white-space configs
+and the later-document syntax errors; at least 38 distinct go-yaml problem strings) over
+`config validate`, `config validate --json`, `config get`, `config set` (config left unchanged),
+the five doctor checks above and, for five representative failures, `agent list`.
+`crates/symvault-cli/tests/config_yaml_syntax.rs` replays all **438** comparisons against the
+native CLI byte for byte (the count is asserted); `make yaml-syntax-cli-differential` rebuilds the
+oracle, re-verifies the fixture and runs the replay. The multiple-document rejection also matches
+on `config validate` (it no longer carries the `parse config:` prefix). This is parity for that
+corpus, **not** for YAML syntax errors in general: the next paragraph is the part that is not.
 
-This is a **pre-existing** divergence of the Rust config loader shared by the whole
-CLI, not introduced by the doctor port, and general parser-message parity is **not**
-claimed. The checks ported in wave 2a quote no parser error, so they match on the
-corrupt fixture as well (`differential_doctor_session_tooling_checks`); the two MCP
-config checks from wave 2b quote parser errors and are pinned for the missing and
-initialized fixtures only (`differential_doctor_mcp_config_checks`).
+Open divergences, recorded in the fixture's `open_divergences` (**33** inputs, each with the Go
+bytes of the commands it shows on, a `kind` and a reason; the replay asserts each still differs
+in the way its kind says, so a fix has to move it into `cases`):
+
+- *Scanner look-ahead (root cause of the largest family).* yaml.v3 keeps a two-token scanner
+  look-ahead behind the parser (`yaml_parser_fetch_more_tokens`, for comment association);
+  libyaml fetches a token only when the parser asks for it. When the parser rejects a token and a
+  scanner failure sits in the next two tokens, Go reports the scanner failure (`mapping values are
+  not allowed in this context`, with its own line) and the Rust loader reports the parser failure
+  (`did not find expected key`). Same-line trailing tokens after a closed value are the common
+  trigger: `a: "x" b: 1`, `a: [1] b: 2`, `a: {b: 1} c: 2`, `a: &x [1] c: 2`, `b: *x c: 2`,
+  `a: {} b: 1`, a multi-line flow sequence followed by `b: 3` and more (11 `trailing_token_*`
+  entries plus `- [] b: 1`, where libyaml is also in a different parser state, and the existing
+  `%YAML` directive without `---`). An ad-hoc sweep of 1,020 generated inputs (quoted, flow,
+  anchored, tagged and alias values followed by a second key, at four nesting positions) found 514
+  that differ between the two CLIs: 495 in this wording, 16 in the sequence-root decode text below
+  and 3 on a custom tag. No bounded rule reproduces it without the scanner state after the
+  rejected token, which `serde_yaml_ng` does not expose and a safe re-implementation of
+  yaml.v3's scanner would be needed for, so the class is recorded, not approximated. Exit status
+  and the effect on the file agree for each recorded entry of the family (`kind: wording`). The look-ahead also
+  reaches across documents: `a: 1\n---\n"x\n` is rejected by Go and accepted natively, and
+  `a: 1\n---\nb: 2\n---\n"x\n` accepted by Go and rejected natively (`kind: behavior`).
+- *Later documents.* `a: 1\n---\nb: *nope\n` (Go decodes the second document with anchors shared
+  across the stream and fails, so it sees no trailing document; the native loader scopes anchors
+  per document and rejects the stream as multi-document) and `config get`/`config set` on
+  `a: 1\n---\n[\n` (Go reads only the first document; get reports the key and set succeeds, the
+  native commands parse the whole stream and refuse).
+- *Not libyaml.* A lone UTF-16 BOM stream (yaml.v3 decodes it), a UTF-8 BOM after the first line
+  (yaml.v3 skips it), an alias to a scalar used for a string field (`vaultDir: *x`, accepted by
+  Go, so validate, doctor, `agent list` and a nested `config set` succeed there; natively they
+  fail, and `config set` rewrites the file before its post-update load fails) and a local tag on a
+  value (`a: !t x`, accepted by Go) all differ in acceptance.
+- *yaml.v3 decode and node layers.* A scalar or sequence root, `agents: x`, a root made of one
+  zero-width space, and `config get`/`config set` (and `agent list`) on `null`, `---`, `{}`,
+  comment-only, empty, spaces-only, NBSP-only and BOM-only configs fail on both sides with the
+  same exit status and file effect (a failing load leaves the file untouched; `agents: x` is
+  rewritten on both sides before the post-update load fails) and different text: yaml.v3 says
+  `yaml: unmarshal errors: … cannot unmarshal !!str … into config.Config`, `parent is a scalar
+  node, not a mapping`, `root node is a scalar, not a mapping`, `unknown(0) node`; the native CLI
+  says `invalid type: string …`, `missing YAML document`, `document has no root to descend into`.
+  The `config get` key-not-found text (Go appends its cause) is likewise not covered.
+
+The checks ported in wave 2a quote no parser error (`differential_doctor_session_tooling_checks`);
+the two MCP config checks from wave 2b are additionally pinned for the missing and initialized
+fixtures (`differential_doctor_mcp_config_checks`).
 
 Ported IDs (38 in the registry, 35 of them without network):
 

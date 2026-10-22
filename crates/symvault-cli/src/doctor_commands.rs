@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::ser::{Formatter, PrettyFormatter, Serializer};
-use symvault_core::config::{AuthMethod, Config, ConfigError, MULTIPLE_DOCUMENTS_MESSAGE};
+use symvault_core::config::{AuthMethod, Config, ConfigError};
 use symvault_core::policy::glob_match;
 use symvault_store::token_registry;
 use symvault_sync::GitRepository;
@@ -2440,8 +2440,8 @@ fn check_password_reuse(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult
 }
 
 /// Loads a config the way the doctor checks need it: a read failure keeps Go's
-/// `open <path>: <reason>` wording, a parse failure carries the loader's own text
-/// (the documented go-yaml vs Rust dialect divergence).
+/// `open <path>: <reason>` wording, a YAML syntax failure carries yaml.v3's wording
+/// (see `symvault_core::go_yaml`) and other parse failures the loader's own text.
 fn load_config_for_check(cfg_path: &Path) -> Result<Config, String> {
     match fs::read(cfg_path) {
         Err(err) => Err(format_go_path_error("open", cfg_path, &err)),
@@ -2449,15 +2449,12 @@ fn load_config_for_check(cfg_path: &Path) -> Result<Config, String> {
     }
 }
 
-/// Go reports the stable multi-document rejection directly, without the
-/// generic `parse config:` wrapper used by the Rust loader. Preserve the
-/// loader's remaining diagnostics verbatim until their parser dialect has its
-/// own source-bound compatibility mapping.
+/// Go reports the multi-document rejection and yaml.v3 syntax failures
+/// directly, without the generic `parse config:` wrapper of
+/// [`ConfigError::Parse`]; those arrive as [`ConfigError::Yaml`] and render as
+/// Go's text. The loader's remaining diagnostics are preserved verbatim.
 fn doctor_config_error(error: &ConfigError) -> String {
-    match error {
-        ConfigError::Parse(detail) if detail == MULTIPLE_DOCUMENTS_MESSAGE => detail.clone(),
-        _ => error.to_string(),
-    }
+    error.to_string()
 }
 
 fn check_dynamic_secret_engines(vault_dir: &Path, _opts: &DoctorOptions) -> DoctorResult {

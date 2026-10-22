@@ -53,8 +53,11 @@ Candidate `b92054f8dc6fa83f99aeaf7c37821e89cd00803d` shares one synchronized
 process signal state between hidden input and the active clipboard timer.
 Actual Go and Rust child processes prove SIGINT/SIGTERM clear the clipboard
 and cancel concurrent hidden input; SIGHUP clears the active timer. A later
-idle signal regains its OS default. The CLI installs this router only for
-stdio, including piped input without a terminal. HTTP shutdown is separate.
+idle SIGINT/SIGTERM shuts the CLI down like Go (exit 0, not death by signal:
+Go's serve command keeps its SIGINT/SIGTERM/SIGQUIT subscription for the whole
+process, `cmd/mcp/serve_deps.go`); SIGHUP keeps the OS default. The CLI installs
+this router only for stdio, including piped input without a terminal. HTTP
+shutdown is separate (`mcp_shutdown`, #1242).
 
 Complete native Darwin/arm64 and Linux/arm64 gates pass:91 core,177 MCP,
 36 CLI and60/53 platform tests, source-bound Go differentials, strict Clippy/
@@ -104,11 +107,13 @@ controlling-PTY acceptance explicitly runs the normal suite's opt-in helper.
 The actual Go terminal signal-cancellation oracle and Rust process acceptance
 cover SIGINT and SIGTERM during secure input, idle stdio, and ordinary approval.
 The PTY driver records 17 actions (10 critical approval, one execute approval,
-six hidden inputs), five cooked-mode restoration checks and two idle default
-terminations. Canceled inputs do not mutate the vault; subsequent input works.
-Ordinary approval restores the terminal before terminating with the original
-signal. The process-owned router is installed only by the standalone Unix
-stdio MCP CLI when a controlling terminal exists.
+six hidden inputs), five cooked-mode restoration checks and two idle
+SIGINT/SIGTERM shutdowns that exit 0 like Go (asserted as `WIFEXITED`, status 0,
+never `WIFSIGNALED`; actual Go oracle 0cc78062 under a controlling PTY, run on
+Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; subsequent input works.
+Ordinary approval restores the terminal, then exits 0 like Go. The process-owned router is installed only by the standalone Unix
+stdio MCP CLI, regardless of a controlling terminal; without one, approval and
+secure input fail closed.
 
 `secure-input-signals-receipt-7be90e81.json` in both existing build roots binds
 the final candidate, Cargo manifest paths, fixture and logs. Log SHA-256:
@@ -603,6 +608,12 @@ and vice versa.
    `QUOTA-001` transition helper.
 6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
+   Session-cache half (SESSION-001, #1243 slice 1): `make rust-007-differential`
+   replays the Go-derived lifecycle fixture (idle/max TTL, touch versus
+   non-refreshing probes, revoke, corrupted records, keyring failure/fallback,
+   concurrency) through `symvault-core` and `symvault-platform`. The cache has no
+   on-disk representation, so file modes are not part of this row. Touch ID
+   (SESSION-003) is a separate slice.
 
 **Expected:** the Go-derived config/session/quota fixtures and injected platform
 contract tests pass locally. The macOS native adapter slice now compiles and

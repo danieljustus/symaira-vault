@@ -522,8 +522,8 @@ rust-007-fixtures-check: config-profile-fixtures-check
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
 
 rust-007-differential: rust-007-fixtures-check
-	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
-	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
+	$(CARGO) test -p symvault-core --test config_session_contract --test session_cache_contract --all-features --locked
+	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --test session_cache_fallback_contract --all-features --locked
 
 .PHONY: config-profile-fixtures-check config-profile-differential
 config-profile-fixtures-check:
@@ -537,6 +537,12 @@ config-session-differential: rust-007-differential config-profile-differential
 
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
+
+# CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies
+# the frozen Go corpus (pinned oracle 0cc78062) and replays it against the Rust CLI.
+.PHONY: yaml-syntax-cli-differential
+yaml-syntax-cli-differential:
+	./scripts/rust-port/check_yaml_syntax_cli.sh
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
@@ -639,7 +645,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 3e088537045400d87461c75acf1c1d45d20cfe1d --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
