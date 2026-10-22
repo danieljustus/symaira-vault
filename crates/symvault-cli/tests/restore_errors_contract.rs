@@ -59,7 +59,9 @@ struct Pre {
     mode: u32,
     #[serde(default)]
     data: String,
+    // Only the unix-only symlink seeds read it; Windows skips those cases.
     #[serde(default)]
+    #[cfg_attr(not(unix), allow(dead_code))]
     target: String,
 }
 
