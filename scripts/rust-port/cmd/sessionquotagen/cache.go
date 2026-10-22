@@ -837,6 +837,8 @@ func runScenario(sc cacheScenario) cacheScenario {
 }
 
 func sealWithFixedKey(plaintext []byte) (ciphertext, nonce string) {
+	// #nosec G407 -- fixture generator: a fixed key and nonce make the frozen
+	// ciphertext reproducible; this never seals real secrets.
 	return sealGCM(fixedWrapKey, bytes.Repeat([]byte{0x09}, 12), plaintext)
 }
 
