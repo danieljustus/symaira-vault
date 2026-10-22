@@ -26,6 +26,9 @@ struct Case {
     name: String,
     #[serde(default)]
     unix_only: bool,
+    /// Why the Unix recording cannot be replayed on Windows (set with `unix_only`).
+    #[serde(default)]
+    unix_only_reason: String,
     wrap: String,
     tar_b64: String,
     #[serde(default)]
@@ -228,9 +231,48 @@ fn make_writable(root: &Path) {
 #[cfg(not(unix))]
 fn make_writable(_: &Path) {}
 
-/// The part of an OS-derived message that is not host-specific text.
-fn stable_prefix(message: &str) -> &str {
-    message.rsplit_once(": ").map_or(message, |(head, _)| head)
+/// What production Go prints for a case whose message ends in host-OS text,
+/// when it runs on Windows instead of the Unix host that recorded the corpus.
+/// Derived from Go 1.26.6 and corekit v0.18.2 source, not recorded by an
+/// oracle run (there is no Windows generator host):
+///   * path text is host-separated (`filepath.Join`), so `/` becomes `\\`
+///     after `$ROOT` / `$DEST`;
+///   * `os.Stat` of a missing path fails in `GetFileAttributesEx` with the
+///     system message (`os/stat_windows.go`);
+///   * the Windows `SafeMkdirAll` reports `errUnsafePath` ("path is not a
+///     regular file") where Unix reports `ENOTDIR`;
+///   * `EISDIR` keeps its text: Go maps a refused write-open of a directory to
+///     it (`syscall/syscall_windows.go`).
+fn windows_expected(unix_error: &str, missing: bool) -> String {
+    let mut out = String::new();
+    let mut rest = unix_error;
+    while let Some(start) = rest.find('$') {
+        let (head, tail) = rest.split_at(start);
+        out.push_str(head);
+        let end = tail.find(':').unwrap_or(tail.len());
+        out.push_str(&tail[..end].replace('/', "\\"));
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    if missing {
+        out = out.replace(": stat ", ": GetFileAttributesEx ").replace(
+            "no such file or directory",
+            "The system cannot find the file specified.",
+        );
+    }
+    if out.contains(": mkdir ") {
+        out = out.replace(": not a directory", ": path is not a regular file");
+    }
+    out
+}
+
+/// The error text this host's Go produces for `case`.
+fn host_expected_error(case: &Case) -> String {
+    if cfg!(unix) || !case.os_error {
+        case.error.clone()
+    } else {
+        windows_expected(&case.error, case.missing)
+    }
 }
 
 fn run_case(case: &Case) -> Result<(), String> {
@@ -257,15 +299,14 @@ fn run_case(case: &Case) -> Result<(), String> {
     let mut problems = Vec::new();
     let matches = if !case.error_prefix.is_empty() {
         actual.starts_with(&case.error_prefix) && case.error.starts_with(&case.error_prefix)
-    } else if case.os_error && !cfg!(unix) {
-        stable_prefix(&actual) == stable_prefix(&case.error)
     } else {
-        actual == case.error
+        actual == host_expected_error(case)
     };
     if !matches {
         problems.push(format!(
             "error differs\n    go:   {:?}\n    rust: {:?}",
-            case.error, actual
+            host_expected_error(case),
+            actual
         ));
     }
     let mut tree = snapshot(&root_path);
@@ -310,6 +351,12 @@ fn restore_errors_and_side_effects_match_go_corpus() {
     let mut executed = 0;
     for case in &fixture.cases {
         if case.unix_only && !cfg!(unix) {
+            assert!(
+                !case.unix_only_reason.is_empty(),
+                "{}: unix_only needs a recorded reason",
+                case.name
+            );
+            eprintln!("SKIP {}: {}", case.name, case.unix_only_reason);
             continue;
         }
         executed += 1;
@@ -317,7 +364,8 @@ fn restore_errors_and_side_effects_match_go_corpus() {
             failures.push(message);
         }
     }
-    assert!(executed >= 70, "only {executed} cases executed");
+    // 88 recorded cases, 14 of them Unix-only: 74 run on Windows, all 88 on Unix.
+    assert!(executed >= 74, "only {executed} cases executed");
     assert!(
         failures.is_empty(),
         "{} of {} cases diverge from Go:\n{}",
@@ -373,4 +421,68 @@ fn partial_member_exception_is_bounded_to_the_recorded_paths() {
     // Without the Go-side partial file the exception assertion itself fails.
     let result = std::panic::catch_unwind(|| run_case(&tampered));
     assert!(result.is_err(), "exception must not hide an absent Go path");
+}
+
+#[test]
+fn comparator_rejects_a_changed_os_reason() {
+    let mut case = corpus_case("existing-dir-where-file-goes");
+    run_case(&case).expect("unmodified case matches");
+    case.error = case.error.replace("is a directory", "is a file");
+    assert!(run_case(&case).unwrap_err().contains("error differs"));
+}
+
+/// The Windows expectation is a pure function of the Unix recording, so it is
+/// checked on every host rather than only where the Windows branch runs.
+#[test]
+fn windows_expectation_is_derived_from_go_source_not_guessed() {
+    assert_eq!(
+        windows_expected(
+            "archive not found: stat $ROOT/input.tar.gz: no such file or directory",
+            true
+        ),
+        "archive not found: GetFileAttributesEx $ROOT\\input.tar.gz: The system cannot find the file specified."
+    );
+    assert_eq!(
+        windows_expected(
+            "restore failed: create parent directory: mkdir $DEST/nested: not a directory",
+            false
+        ),
+        "restore failed: create parent directory: mkdir $DEST\\nested: path is not a regular file"
+    );
+    assert_eq!(
+        windows_expected(
+            "restore failed: create file: open $DEST/entries/slot: is a directory",
+            false
+        ),
+        "restore failed: create file: open $DEST\\entries\\slot: is a directory"
+    );
+    assert_eq!(
+        windows_expected(
+            "restore failed: create vault directory: mkdir $DEST: not a directory",
+            false
+        ),
+        "restore failed: create vault directory: mkdir $DEST: path is not a regular file"
+    );
+}
+
+/// `ab:c` is an NTFS alternate-data-stream name: the Unix recording does not
+/// apply, so Rust's Windows behaviour is pinned here on its own terms (it
+/// refuses the member instead of creating a hidden stream) and is not claimed
+/// as Go parity (the exact OS text is host-defined and not pinned).
+#[cfg(windows)]
+#[test]
+fn colon_member_names_are_refused_on_windows() {
+    for name in ["unsafe-name/ab:c", "unsafe-dir-name/ab:c"] {
+        let case = corpus_case(name);
+        assert!(case.unix_only, "{name} must stay Unix-only");
+        let root = tempfile::tempdir().unwrap();
+        let archive = root.path().join("input.tar.gz");
+        let tar = base64::engine::general_purpose::STANDARD
+            .decode(&case.tar_b64)
+            .unwrap();
+        fs::write(&archive, wrapped(&case.wrap, &tar)).unwrap();
+        let dest = root.path().join("vault");
+        let error = backup_commands::restore(&dest, &archive).unwrap_err();
+        assert!(error.starts_with("restore failed: create "), "{error}");
+    }
 }

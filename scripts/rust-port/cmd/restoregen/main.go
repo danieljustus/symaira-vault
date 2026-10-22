@@ -34,6 +34,14 @@ const pinnedOracleCommit = "861ad93813e3ee43c4ec989f45940d14b05b6eaf"
 
 const fixturePath = "testdata/port/sync/restore-errors.json"
 
+// Reasons a case is recorded Unix-only: its outcome is not what Go produces
+// on Windows, so replaying it there would compare against a foreign OS.
+const (
+	reasonSymlink    = "seeds a POSIX symlink; Windows symlink creation needs privileges and the Windows SafeMkdirAll follows symlinks instead of rejecting them"
+	reasonPermission = "depends on Unix permission bits (read-only directories and files) that Windows does not enforce the same way"
+	reasonColonName  = "':' inside a member name is legal on Unix but an NTFS alternate-data-stream separator: Go on Windows creates a hidden stream or fails with an invalid-name error, neither of which this Unix recording pins"
+)
+
 type member struct {
 	Name     string `json:"name"`
 	Type     string `json:"type"`
@@ -62,7 +70,10 @@ type node struct {
 
 type restoreCase struct {
 	Name     string `json:"name"`
-	UnixOnly bool   `json:"unix_only,omitempty"`
+	// UnixOnly marks a case whose recorded outcome cannot be reproduced on
+	// Windows; UnixOnlyReason says why (required whenever UnixOnly is set).
+	UnixOnly       bool   `json:"unix_only,omitempty"`
+	UnixOnlyReason string `json:"unix_only_reason,omitempty"`
 	Wrap     string `json:"wrap"`
 	TarB64   string `json:"tar_b64"`
 	Pre      []pre  `json:"pre,omitempty"`
@@ -296,13 +307,13 @@ func seed(root string, entries []pre) {
 	}
 }
 
-func run(name, wrap string, format tar.Format, members []member, trailer bool, setup []pre, unixOnly bool) restoreCase {
-	return runAt(name, wrap, format, members, trailer, setup, unixOnly, "vault", false, nil)
+func run(name, wrap string, format tar.Format, members []member, trailer bool, setup []pre, unixReason string) restoreCase {
+	return runAt(name, wrap, format, members, trailer, setup, unixReason, "vault", false, nil)
 }
 
 // runAt additionally chooses the destination and may substitute raw tar bytes.
-func runAt(name, wrap string, format tar.Format, members []member, trailer bool, setup []pre, unixOnly bool, destRel string, missing bool, rawTar func([]byte) []byte) restoreCase {
-	if unixOnly && runtime.GOOS == "windows" {
+func runAt(name, wrap string, format tar.Format, members []member, trailer bool, setup []pre, unixReason string, destRel string, missing bool, rawTar func([]byte) []byte) restoreCase {
+	if unixReason != "" && runtime.GOOS == "windows" {
 		panic("restoregen must run on a Unix host: " + name)
 	}
 	tarBytes := buildTar(members, format, trailer)
@@ -363,7 +374,8 @@ func runAt(name, wrap string, format tar.Format, members []member, trailer bool,
 	}
 	return restoreCase{
 		Name:        name,
-		UnixOnly:    unixOnly,
+		UnixOnly:       unixReason != "",
+		UnixOnlyReason: unixReason,
 		Wrap:        wrap,
 		TarB64:      base64.StdEncoding.EncodeToString(tarBytes),
 		Pre:         setup,
@@ -408,7 +420,11 @@ func patchHeaderMode(data []byte, index int, field string) []byte {
 func buildCases() []restoreCase {
 	var cases []restoreCase
 	add := func(name string, members []member, setup ...pre) {
-		cases = append(cases, run(name, "gzip", tar.FormatUnknown, members, true, setup, len(setup) > 0 && hasSymlink(setup)))
+		reason := ""
+		if hasSymlink(setup) {
+			reason = reasonSymlink
+		}
+		cases = append(cases, run(name, "gzip", tar.FormatUnknown, members, true, setup, reason))
 	}
 
 	add("valid-modes-clamped", []member{
@@ -459,8 +475,16 @@ func buildCases() []restoreCase {
 		if label == "" {
 			label = "empty-name"
 		}
-		add("unsafe-name/"+label, append(with(member{Name: "entries/before", Type: "reg", Mode: 0o600, Data: "kept"}), member{Name: name, Type: "reg", Mode: 0o600, Data: "x"}, member{Name: "entries/after", Type: "reg", Mode: 0o600, Data: "not-written"}))
-		add("unsafe-dir-name/"+label, append(with(), member{Name: name, Type: "dir", Mode: 0o700}, member{Name: "entries/after", Type: "reg", Mode: 0o600, Data: "not-written"}))
+		reason := ""
+		if name == "ab:c" {
+			// Unix accepts the name. Go on Windows is not byte-equivalent:
+			// NTFS reads "ab:c" as stream "c" of file "ab", so the open
+			// creates a hidden alternate data stream (file) or fails with
+			// an invalid-name error (directory).
+			reason = reasonColonName
+		}
+		cases = append(cases, run("unsafe-name/"+label, "gzip", tar.FormatUnknown, append(with(member{Name: "entries/before", Type: "reg", Mode: 0o600, Data: "kept"}), member{Name: name, Type: "reg", Mode: 0o600, Data: "x"}, member{Name: "entries/after", Type: "reg", Mode: 0o600, Data: "not-written"}), true, nil, reason))
+		cases = append(cases, run("unsafe-dir-name/"+label, "gzip", tar.FormatUnknown, append(with(), member{Name: name, Type: "dir", Mode: 0o700}, member{Name: "entries/after", Type: "reg", Mode: 0o600, Data: "not-written"}), true, nil, reason))
 	}
 
 	for _, kind := range []string{"symlink", "link", "char", "block", "fifo", "cont", "xglobal"} {
@@ -469,31 +493,31 @@ func buildCases() []restoreCase {
 
 	over := int64(1<<30 + 1)
 	cases = append(cases, run("oversize-member-header", "gzip", tar.FormatUnknown,
-		with(member{Name: "entries/huge", Type: "reg", Mode: 0o600, Size: &over}), false, nil, false))
+		with(member{Name: "entries/huge", Type: "reg", Mode: 0o600, Size: &over}), false, nil, ""))
 	exact := int64(1 << 30)
 	cases = append(cases, run("exact-limit-member-truncated", "gzip", tar.FormatUnknown,
-		with(member{Name: "entries/big", Type: "reg", Mode: 0o600, Size: &exact}), false, nil, false))
+		with(member{Name: "entries/big", Type: "reg", Mode: 0o600, Size: &exact}), false, nil, ""))
 	cases = append(cases, run("truncated-member-data", "gzip", tar.FormatUnknown,
-		with(member{Name: "entries/cut", Type: "reg", Mode: 0o600, Size: i64(64)}), false, nil, false))
+		with(member{Name: "entries/cut", Type: "reg", Mode: 0o600, Size: i64(64)}), false, nil, ""))
 	cases = append(cases, run("negative-mode-file", "gzip", tar.FormatGNU,
-		with(member{Name: "entries/neg", Type: "reg", Mode: -1, Data: "x"}), true, nil, false))
+		with(member{Name: "entries/neg", Type: "reg", Mode: -1, Data: "x"}), true, nil, ""))
 	cases = append(cases, run("negative-mode-dir", "gzip", tar.FormatGNU,
-		with(member{Name: "entries/negdir", Type: "dir", Mode: -1}), true, nil, false))
+		with(member{Name: "entries/negdir", Type: "dir", Mode: -1}), true, nil, ""))
 
-	cases = append(cases, run("not-gzip", "raw", tar.FormatUnknown, with(), true, nil, false))
-	cases = append(cases, run("gzip-truncated", "gzip-cut", tar.FormatUnknown, with(member{Name: "entries/a", Type: "reg", Mode: 0o600, Data: strings.Repeat("payload-", 200)}), true, nil, false))
-	cases = append(cases, run("gzip-corrupt-body", "gzip-corrupt", tar.FormatUnknown, with(member{Name: "entries/a", Type: "reg", Mode: 0o600, Data: strings.Repeat("payload-", 200)}), true, nil, false))
-	cases = append(cases, run("tar-no-trailer", "gzip", tar.FormatUnknown, with(), false, nil, false))
+	cases = append(cases, run("not-gzip", "raw", tar.FormatUnknown, with(), true, nil, ""))
+	cases = append(cases, run("gzip-truncated", "gzip-cut", tar.FormatUnknown, with(member{Name: "entries/a", Type: "reg", Mode: 0o600, Data: strings.Repeat("payload-", 200)}), true, nil, ""))
+	cases = append(cases, run("gzip-corrupt-body", "gzip-corrupt", tar.FormatUnknown, with(member{Name: "entries/a", Type: "reg", Mode: 0o600, Data: strings.Repeat("payload-", 200)}), true, nil, ""))
+	cases = append(cases, run("tar-no-trailer", "gzip", tar.FormatUnknown, with(), false, nil, ""))
 
-	cases = append(cases, run("empty-file", "empty", tar.FormatUnknown, with(), true, nil, false))
-	cases = append(cases, run("gzip-short-header", "gzip-short-header", tar.FormatUnknown, with(), true, nil, false))
-	cases = append(cases, runAt("gzip-of-garbage-tar", "gzip", tar.FormatUnknown, with(), true, nil, false, "vault", false,
+	cases = append(cases, run("empty-file", "empty", tar.FormatUnknown, with(), true, nil, ""))
+	cases = append(cases, run("gzip-short-header", "gzip-short-header", tar.FormatUnknown, with(), true, nil, ""))
+	cases = append(cases, runAt("gzip-of-garbage-tar", "gzip", tar.FormatUnknown, with(), true, nil, "", "vault", false,
 		func([]byte) []byte { return bytes.Repeat([]byte("x"), 700) }))
-	cases = append(cases, runAt("tar-cut-inside-second-header", "gzip", tar.FormatUnknown, with(), true, nil, false, "vault", false,
+	cases = append(cases, runAt("tar-cut-inside-second-header", "gzip", tar.FormatUnknown, with(), true, nil, "", "vault", false,
 		func(data []byte) []byte { return data[:512+512+100] }))
-	cases = append(cases, runAt("tar-cut-after-first-header", "gzip", tar.FormatUnknown, with(), true, nil, false, "vault", false,
+	cases = append(cases, runAt("tar-cut-after-first-header", "gzip", tar.FormatUnknown, with(), true, nil, "", "vault", false,
 		func(data []byte) []byte { return data[:512*2] }))
-	cases = append(cases, runAt("archive-missing", "gzip", tar.FormatUnknown, with(), true, nil, false, "vault", true, nil))
+	cases = append(cases, runAt("archive-missing", "gzip", tar.FormatUnknown, with(), true, nil, "", "vault", true, nil))
 
 	// Pre-existing destination state.
 	add("existing-symlink-file-target", with(member{Name: "entries/a.age", Type: "reg", Mode: 0o600, Data: "x"}),
@@ -516,7 +540,7 @@ func buildCases() []restoreCase {
 	add("destination-is-a-file", with(),
 		pre{Path: "vault", Kind: "file", Mode: 0o600, Data: "file"})
 	cases = append(cases, runAt("destination-ancestor-is-symlink", "gzip", tar.FormatUnknown, with(), true,
-		[]pre{{Path: "redirect", Kind: "symlink", Target: "outside"}}, true, "redirect/restored", false, nil))
+		[]pre{{Path: "redirect", Kind: "symlink", Target: "outside"}}, reasonSymlink, "redirect/restored", false, nil))
 	// No directory member precedes the file, so Go reaches SafeMkdirAll for the
 	// parent of a symlinked component instead of the target-symlink check.
 	add("existing-symlink-parent-of-file-member", []member{
@@ -536,7 +560,7 @@ func buildCases() []restoreCase {
 	// files in place, so a writable existing file inside a 0500 directory is
 	// restored while a new file cannot be created.
 	addUnix := func(name string, members []member, setup ...pre) {
-		cases = append(cases, run(name, "gzip", tar.FormatUnknown, members, true, setup, true))
+		cases = append(cases, run(name, "gzip", tar.FormatUnknown, members, true, setup, reasonPermission))
 	}
 	regm := func(name, data string) member {
 		return member{Name: name, Type: "reg", Mode: 0o600, Data: data}
@@ -565,7 +589,7 @@ func buildCases() []restoreCase {
 	// A malformed mode field is a header error inside Next(), so it wins over
 	// the unsafe member name that follows the same header.
 	cases = append(cases, runAt("invalid-mode-field-beats-unsafe-name", "gzip", tar.FormatUnknown,
-		with(regm("../outside/escaped", "x")), true, nil, false, "vault", false,
+		with(regm("../outside/escaped", "x")), true, nil, "", "vault", false,
 		func(data []byte) []byte { return patchHeaderMode(data, 5, "zzzzzzz\x00") }))
 	return cases
 }

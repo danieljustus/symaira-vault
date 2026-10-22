@@ -18,7 +18,10 @@ flate offset text and re-gzipped gzip-cut/corrupt replay wraps, umask for new fi
 Windows `SafeMkdirAll` symlink following, the Rust-only 100,000-member limit (checked
 before any write; tested in `crates/symvault-sync/tests/restore_limits.rs`), raw-byte
 non-UTF-8 names (host-dependent, same test file) and unparsed uid/gid/mtime header
-fields. Native 3-OS evidence for this corpus is still pending; IO-002 stays
+fields. Windows replay (follow-up to native CI): path separators, the missing-archive stat op,
+mkdir-over-file and directory-open texts are expectations derived from Go source (see the
+matrix row, divergence 4); 14 of 88 cases are `unix_only` with a recorded reason, so 74 run
+on Windows. Native 3-OS evidence for this corpus is still pending; IO-002 stays
 `in_progress`.
 Next IO-002 candidates: export/backup CLI-level stdout/stderr differential
 against a built Go binary, and backup-side member modes/ordering corner cases.

@@ -378,12 +378,23 @@ fn go_safe_mkdir_all(path: &Path, mode: u32) -> Result<(), (PathBuf, String)> {
                 return Err((current, "too many levels of symbolic links".to_owned()));
             }
             Ok(metadata) if !metadata.is_dir() => {
-                return Err((current, "not a directory".to_owned()));
+                return Err((current, not_a_directory_reason().to_owned()));
             }
             Ok(_) => {}
         }
     }
     Ok(())
+}
+
+/// Go's reason when a path component exists but is not a directory. Unix
+/// reports `syscall.ENOTDIR`; the Windows `SafeMkdirAll` (corekit
+/// `fsutil/safewrite_windows.go`) returns `errUnsafePath` instead.
+const fn not_a_directory_reason() -> &'static str {
+    if cfg!(windows) {
+        "path is not a regular file"
+    } else {
+        "not a directory"
+    }
 }
 
 fn make_dir(path: &Path, mode: u32) -> io::Result<()> {
