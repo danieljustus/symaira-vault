@@ -299,15 +299,41 @@ fn item_address_matches_go_layout() {
 #[test]
 fn pinned_source_assertions_all_hold() {
     let layout = fixture().layout;
-    for required in [
+    // All 15 assertions the generator records. A fixture that silently drops
+    // one (e.g. the accessibility attribute) must fail here, not pass on a
+    // subset.
+    let mut required = vec![
         "item_class_generic_password",
+        "item_attributes_service_account_only",
         "value_is_raw_passphrase_bytes",
+        "store_accessible_when_unlocked_this_device_only",
+        "store_deletes_before_add",
+        "store_duplicate_updates_in_place",
+        "update_replaces_value_data_only",
+        "update_scoped_to_default_keychain",
         "load_checks_item_before_prompt",
         "load_missing_item_is_not_configured",
+        "load_prompt_timeout_30s",
+        "load_prompt_failure_is_auth_failed",
         "delete_missing_item_is_success",
-        "store_duplicate_updates_in_place",
         "passphrase_is_c_string",
-    ] {
+        "save_requires_availability",
+    ];
+    assert_eq!(required.len(), 15);
+    assert_eq!(
+        layout.source_assertions.len(),
+        required.len(),
+        "fixture assertion set changed: {:?}",
+        layout
+            .source_assertions
+            .iter()
+            .map(|a| a.name.as_str())
+            .collect::<Vec<_>>()
+    );
+    required.sort_unstable();
+    required.dedup();
+    assert_eq!(required.len(), 15, "duplicate required name");
+    for required in required {
         let assertion = layout
             .source_assertions
             .iter()
@@ -343,6 +369,18 @@ fn item_value_is_the_raw_passphrase() {
         assert_eq!(&**items.load("/fixture/vault").unwrap(), passphrase);
     }
     items.save("/fixture/vault", b"ab\0cd").unwrap();
+    // What was stored, read without the store's own load-side truncation: the
+    // bytes after the first NUL must never reach the keychain (Go: C.CString).
+    let key = format!(
+        "{}|{}",
+        biometric_service_name("/fixture/vault"),
+        BIOMETRIC_ACCOUNT
+    );
+    assert_eq!(
+        keyring.get(&key).unwrap(),
+        b"ab",
+        "save kept bytes after NUL"
+    );
     assert_eq!(&**items.load("/fixture/vault").unwrap(), b"ab");
     assert_eq!(truncate_at_nul(b"ab\0cd"), b"ab");
 }

@@ -159,6 +159,14 @@ fn security_framework_items_match_go_layout_on_disposable_keychains() {
     // E: a C-string passphrase is cut at its first NUL on both save and load.
     items.save(VAULT, b"ab\0cd").unwrap();
     assert_eq!(&**items.load(VAULT).unwrap(), b"ab");
+    // The stored bytes, read by the framework's own reader (which does not
+    // truncate), not by `load`: removing the NUL cut-off on the save path would
+    // leave "ab\0cd" in the keychain, which Go's `C.GoString` reader would then
+    // return as "ab" but any other reader would not.
+    let (stored, _) = kc
+        .find_generic_password(&biometric_service_name(VAULT), BIOMETRIC_ACCOUNT)
+        .expect("read stored item with the Security.framework reader");
+    assert_eq!(&*stored, b"ab", "save must cut the value at the first NUL");
     items.delete(VAULT).unwrap();
 
     // F: duplicate fallback. The lookup scope cannot see the item (search list

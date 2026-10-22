@@ -38,6 +38,23 @@ pub fn truncate_at_nul(bytes: &[u8]) -> &[u8] {
         .map_or(bytes, |end| &bytes[..end])
 }
 
+/// Value prefixes of the go-keyring wrapper that earlier Rust builds put around
+/// the Touch ID passphrase (they routed it through the provider-wrapped keyring
+/// codec; `go-keyring-base64:` is what they wrote, `go-keyring-encoded:` is the
+/// codec's other form). Go never wrote either: its item holds the raw bytes.
+const LEGACY_RUST_WRAPPER_PREFIXES: [&[u8]; 2] = [b"go-keyring-base64:", b"go-keyring-encoded:"];
+
+/// Whether a stored Touch ID value is a wrapper item from an earlier Rust build
+/// rather than a raw passphrase. Such a value is not decoded and not rewritten:
+/// the caller reports it and leaves replacing it to the user (approved Rust-only
+/// migration behavior, `docs/rust-port/contract-matrix.md` SESSION-003).
+#[must_use]
+pub fn is_legacy_rust_wrapped_value(stored: &[u8]) -> bool {
+    LEGACY_RUST_WRAPPER_PREFIXES
+        .iter()
+        .any(|prefix| stored.starts_with(prefix))
+}
+
 pub const ERR_SEC_SUCCESS: i32 = 0;
 pub const ERR_SEC_UNIMPLEMENTED: i32 = -4;
 pub const ERR_SEC_PARAM: i32 = -50;
@@ -349,6 +366,23 @@ mod tests {
                 .kind(),
             KeychainErrorKind::ItemNotFound
         );
+    }
+
+    #[test]
+    fn legacy_wrapper_prefixes_are_recognised_exactly() {
+        assert!(is_legacy_rust_wrapped_value(b"go-keyring-base64:c2VjcmV0"));
+        assert!(is_legacy_rust_wrapped_value(b"go-keyring-encoded:7061"));
+        assert!(is_legacy_rust_wrapped_value(b"go-keyring-base64:"));
+        for raw in [
+            b"".as_slice(),
+            b"secret".as_slice(),
+            b"go-keyring-base64".as_slice(),
+            b" go-keyring-base64:c2VjcmV0".as_slice(),
+            b"Go-Keyring-Base64:c2VjcmV0".as_slice(),
+            b"x go-keyring-encoded:7061".as_slice(),
+        ] {
+            assert!(!is_legacy_rust_wrapped_value(raw), "{raw:?}");
+        }
     }
 
     #[test]
