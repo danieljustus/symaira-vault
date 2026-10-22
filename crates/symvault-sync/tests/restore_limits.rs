@@ -102,3 +102,31 @@ fn non_utf8_member_name_reaches_the_operating_system_unchanged() {
         assert_eq!(names, vec![b"raw-\xff\xfe".to_vec()]);
     }
 }
+
+#[test]
+fn backslash_member_name_is_rejected_with_go_wording_on_every_os() {
+    // Go's `cleanBackupMemberName` rejects `\` in a member name whatever the
+    // host (a Go v0.22.1 Windows backup stores `filepath.Rel` text verbatim).
+    // The check must run before any path handling, because Windows would
+    // otherwise treat the backslash as a separator and accept the name.
+    let archive = gzip_tar(|builder| {
+        let mut header = Header::new_gnu();
+        let name = b"entries\\nested.age";
+        header.as_old_mut().name[..name.len()].copy_from_slice(name);
+        header.set_size(1);
+        header.set_mode(0o600);
+        header.set_cksum();
+        builder.append(&header, &b"x"[..]).unwrap();
+    });
+    let root = tempfile::tempdir().unwrap();
+    let input = root.path().join("input.tar.gz");
+    fs::write(&input, archive).unwrap();
+    let dest = root.path().join("vault");
+    let error = restore(&input, &dest, true).unwrap_err();
+    assert!(matches!(error, ArchiveError::Restore(_)), "{error:?}");
+    assert_eq!(
+        error.to_string(),
+        "archive contains unsafe path: entries\\nested.age"
+    );
+    assert_eq!(count_entries(&dest), 0, "nothing may be written");
+}
