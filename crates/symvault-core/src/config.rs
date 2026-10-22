@@ -735,11 +735,19 @@ impl Config {
                 }
             }
         }
-        if let Some(v) = scalar(root, "authMethod") {
-            config.auth_method = AuthMethod::parse(&string(v, "authMethod")?)?;
-            auth_method_explicit = true;
+        // Go decodes a null scalar to the zero value, and its merges test the
+        // raw method against the exact empty string: only a non-empty text
+        // counts as written. A null or `""` method therefore leaves
+        // `useTouchID` and the vault block free to select the method.
+        if let Some(v) = scalar(root, "authMethod").filter(|v| !v.is_null()) {
+            let text = string(v, "authMethod")?;
+            if !text.is_empty() {
+                config.auth_method = AuthMethod::parse(&text)?;
+                auth_method_explicit = true;
+            }
         }
-        if let Some(v) = scalar(root, "useTouchID") {
+        // `useTouchID` is a `*bool` in Go: null stays nil and selects nothing.
+        if let Some(v) = scalar(root, "useTouchID").filter(|v| !v.is_null()) {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
         }
         config.default_profile = profiles.default_profile.unwrap_or_default();
@@ -1799,7 +1807,9 @@ fn parse_vault(
     if let Some(v) = map.get(key("auto_heal_zero_key")) {
         out.auto_heal_zero_key = bool_field(v, "auto_heal_zero_key")?;
     }
-    if let Some(v) = map.get(key("last_rotated")) {
+    // `last_rotated` is a `time.Time` in Go: null decodes to the zero time,
+    // which is the same as absent.
+    if let Some(v) = map.get(key("last_rotated")).filter(|v| !v.is_null()) {
         out.last_rotated = Some(string(v, "last_rotated")?);
     }
     if let Some(v) = map.get(key("format_version")) {
@@ -1951,11 +1961,14 @@ fn parse_clipboard(
     if let Some(v) = map.get(key("copyByDefault")) {
         out.copy_by_default = bool_field(v, "copyByDefault")?;
     } else if let Some(v) = map.get(key("printByDefault")) {
-        // The deprecated key is honored, and warns once per process.
+        // The deprecated key is honored, and warns once per process. Go
+        // decodes the document before it merges, so a value that does not
+        // decode is rejected without ever reaching the once-only guard:
+        // validate first, then consume.
+        out.copy_by_default = bool_field(v, "printByDefault")?;
         if state.first_print_by_default() {
             warnings.push(PRINT_BY_DEFAULT_WARNING.to_owned());
         }
-        out.copy_by_default = bool_field(v, "printByDefault")?;
     }
     Ok(out)
 }

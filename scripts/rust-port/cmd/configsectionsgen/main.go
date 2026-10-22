@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
@@ -71,6 +72,7 @@ type vaultSnapshot struct {
 	AutoMigrateKDF     bool          `json:"auto_migrate_kdf"`
 	AutoHealZeroKey    bool          `json:"auto_heal_zero_key"`
 	FormatVersion      int           `json:"format_version"`
+	LastRotated        string        `json:"last_rotated"`
 	Argon2idTime       int           `json:"argon2id_time"`
 	Argon2idMemory     int           `json:"argon2id_memory"`
 	Argon2idThreads    int           `json:"argon2id_threads"`
@@ -144,6 +146,9 @@ type sectionCase struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Input       string `json:"input"`
+	// FollowUp, when set, is a second document loaded after Input in the same
+	// process. Loads then holds two results: Input, then FollowUp.
+	FollowUp string `json:"follow_up,omitempty"`
 	// Loads holds the results of loading Input that many times in one process.
 	Loads []load `json:"loads"`
 }
@@ -157,6 +162,15 @@ type fixture struct {
 type input struct {
 	name, description, body string
 	loads                   int
+}
+
+// followUps maps a case name to the second document loaded after its input in
+// the same process. It makes an order-dependent effect observable: a load that
+// is rejected must not consume the once-per-process printByDefault warning, so
+// a following valid load still raises it.
+var followUps = map[string]string{
+	"clipboard_print_by_default_rejected_then_valid": "clipboard:\n  printByDefault: false\n",
+	"mcp_empty_bind_with_print_by_default":           "clipboard:\n  printByDefault: false\n",
 }
 
 func inputs() []input {
@@ -270,8 +284,40 @@ func inputs() []input {
 		// Several warnings at once: order is part of the contract.
 		{"all_warnings_order", "envWhitelist, then mcp, then clipboard", "clipboard:\n  printByDefault: true\nmcp:\n  approval_required: true\nenvWhitelist:\n  - HOME\n", 1},
 		{"warning_then_rejection", "a warning raised before a rejection is still emitted", "envWhitelist:\n  - HOME\nmcp:\n  bind: \"\"\n", 1},
+
+		// A top-level authMethod that is present but empty or null is "not
+		// written": mergeTopLevel and mergeVaultConfig test the raw string
+		// against "" exactly, so useTouchID and the vault block still feed it.
+		{"auth_top_empty_with_use_touch_id", "an empty top-level authMethod is unwritten, so useTouchID selects touchid", "authMethod: \"\"\nuseTouchID: true\n", 1},
+		{"auth_top_empty_with_vault_touchid", "an empty top-level authMethod is unwritten, so vault.authMethod feeds it", "authMethod: \"\"\nvault:\n  authMethod: touchid\n", 1},
+		{"auth_top_empty_with_vault_use_touch_id", "an empty top-level authMethod is unwritten, so vault.useTouchID feeds it", "authMethod: \"\"\nvault:\n  useTouchID: true\n", 1},
+		{"auth_top_null", "a null top-level authMethod is accepted and unwritten", "authMethod:\n", 1},
+		{"auth_top_null_with_use_touch_id", "a null top-level authMethod is unwritten, so useTouchID selects touchid", "authMethod:\nuseTouchID: true\n", 1},
+		{"auth_top_null_with_vault_touchid", "a null top-level authMethod is unwritten, so vault.authMethod feeds it", "authMethod:\nvault:\n  authMethod: touchid\n", 1},
+		{"auth_top_space_with_use_touch_id", "a blank but non-empty authMethod counts as written and blocks useTouchID", "authMethod: \" \"\nuseTouchID: true\n", 1},
+		{"auth_top_space_with_vault_touchid", "a blank but non-empty authMethod counts as written and blocks the vault block", "authMethod: \" \"\nvault:\n  authMethod: touchid\n", 1},
+		{"use_touch_id_null", "a null top-level useTouchID is accepted and selects nothing", "useTouchID:\n", 1},
+		{"use_touch_id_null_with_vault_touchid", "a null top-level useTouchID leaves the vault block to feed the method", "useTouchID:\nvault:\n  authMethod: touchid\n", 1},
+
+		// vault.last_rotated is a time.Time: null decodes to the zero time.
+		{"vault_last_rotated", "last_rotated is read from the document", "vault:\n  last_rotated: 2025-06-07T08:09:10.123456789Z\n", 1},
+		{"vault_last_rotated_null", "a null last_rotated is accepted and decodes to the zero time", "vault:\n  last_rotated:\n", 1},
+
+		// printByDefault: the decode error fires before the merge, so a
+		// rejected document never reaches the once-only guard.
+		{"clipboard_print_by_default_wrong_type", "a non-boolean printByDefault is rejected", "clipboard:\n  printByDefault: maybe\n", 1},
+		{"clipboard_print_by_default_rejected_then_valid", "a rejected printByDefault does not consume the once-per-process warning", "clipboard:\n  printByDefault: maybe\n", 2},
+		{"mcp_empty_bind_with_print_by_default", "residual: mcp.bind is rejected after the clipboard merge consumed the warning, so a following valid load stays silent", "mcp:\n  bind: \"\"\nclipboard:\n  printByDefault: true\n", 2},
 	}
 	return cases
+}
+
+// rotated renders last_rotated; the zero time (absent or null) is empty.
+func rotated(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 func snapshotOf(cfg *configpkg.Config) *snapshot {
@@ -291,6 +337,7 @@ func snapshotOf(cfg *configpkg.Config) *snapshot {
 			ConfigCacheEntries: v.ConfigCacheEntries, PseudonymizePaths: v.PseudonymizePaths,
 			ScryptWorkFactor: v.ScryptWorkFactor, AutoMigrateKDF: v.AutoMigrateKDF,
 			AutoHealZeroKey: v.AutoHealZeroKey, FormatVersion: v.FormatVersion,
+			LastRotated:  rotated(v.LastRotated),
 			Argon2idTime: v.Argon2idTime, Argon2idMemory: v.Argon2idMemory, Argon2idThreads: v.Argon2idThreads,
 			ListingCacheTTLNs: int64(v.ListingCacheTTL), ManifestGeneration: v.ManifestGeneration,
 		}
@@ -335,9 +382,17 @@ func snapshotOf(cfg *configpkg.Config) *snapshot {
 // runChild loads path `count` times in this process and prints the results.
 // It runs in a fresh process per case so the once-per-process warning guard
 // starts closed for every case.
-func runChild(path string, count int) error {
+func runChild(path string, count int, then string) error {
 	loads := make([]load, 0, count)
+	paths := make([]string, 0, count)
 	for range count {
+		paths = append(paths, path)
+	}
+	if then != "" {
+		// The follow-up replaces the second load: Input is loaded once.
+		paths = []string{path, then}
+	}
+	for _, path := range paths {
 		var captured []string
 		configpkg.SetWarnFunc(func(message string) { captured = append(captured, message) })
 		cfg, err := configpkg.Load(path)
@@ -368,7 +423,16 @@ func buildCases(workDir string) ([]sectionCase, error) {
 		if err := os.WriteFile(path, []byte(in.body), 0o600); err != nil {
 			return nil, err
 		}
-		cmd := exec.Command(self, "--child", path, "--child-loads", fmt.Sprint(in.loads)) // #nosec G204 -- re-executes this generator
+		args := []string{"--child", path, "--child-loads", fmt.Sprint(in.loads)}
+		followUp, hasFollowUp := followUps[in.name]
+		if hasFollowUp {
+			thenPath := filepath.Join(workDir, fmt.Sprintf("case-%02d-then.yaml", index))
+			if err := os.WriteFile(thenPath, []byte(followUp), 0o600); err != nil {
+				return nil, err
+			}
+			args = append(args, "--child-then", thenPath)
+		}
+		cmd := exec.Command(self, args...) // #nosec G204 -- re-executes this generator
 		cmd.Env = []string{"HOME=" + workDir, "XDG_CONFIG_HOME=" + filepath.Join(workDir, "cfg"), "XDG_DATA_HOME=" + filepath.Join(workDir, "data"), "XDG_CACHE_HOME=" + filepath.Join(workDir, "cache")}
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
@@ -379,7 +443,7 @@ func buildCases(workDir string) ([]sectionCase, error) {
 		if err := json.Unmarshal(stdout.Bytes(), &loads); err != nil {
 			return nil, fmt.Errorf("case %s: %w", in.name, err)
 		}
-		cases = append(cases, sectionCase{Name: in.name, Description: in.description, Input: in.body, Loads: loads})
+		cases = append(cases, sectionCase{Name: in.name, Description: in.description, Input: in.body, FollowUp: followUp, Loads: loads})
 	}
 	return cases, nil
 }
@@ -391,10 +455,11 @@ func main() {
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
 	child := flag.String("child", "", "internal: load this file and print the results")
 	childLoads := flag.Int("child-loads", 1, "internal: how many times to load it")
+	childThen := flag.String("child-then", "", "internal: load this file after the first one, in the same process")
 	flag.Parse()
 
 	if *child != "" {
-		if err := runChild(*child, *childLoads); err != nil {
+		if err := runChild(*child, *childLoads, *childThen); err != nil {
 			fatal("child: %v", err)
 		}
 		return

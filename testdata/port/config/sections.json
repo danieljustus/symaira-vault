@@ -12,7 +12,7 @@
       "internal/config/warn.go"
     ],
     "source_digest": "f8945c526e654ca361bd66278b27b1102a65e3b15e60dcdd0e605e2c128857f1",
-    "generator_digest": "e4bdd389d653378519266a3822e9a990f3245c363f239c8d0c964a19281fcd62"
+    "generator_digest": "988ce5d91d26237d1fb2ec24f5c05a8e52c1a30a623ade903e7c06d77fc6065b"
   },
   "cases": [
     {
@@ -82,6 +82,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1176,6 +1177,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1218,6 +1220,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1260,6 +1263,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": false,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1302,6 +1306,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 0,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1344,6 +1349,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 2,
               "argon2id_memory": 65536,
               "argon2id_threads": 4,
@@ -1386,6 +1392,7 @@
               "auto_migrate_kdf": true,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1428,6 +1435,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1473,6 +1481,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1515,6 +1524,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1557,6 +1567,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1599,6 +1610,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1641,6 +1653,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1683,6 +1696,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1725,6 +1739,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1769,6 +1784,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1813,6 +1829,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1857,6 +1874,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1899,6 +1917,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1941,6 +1960,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -1983,6 +2003,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2025,6 +2046,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2067,6 +2089,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2189,6 +2212,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2231,6 +2255,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2273,6 +2298,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2315,6 +2341,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2377,6 +2404,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2787,6 +2815,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2829,6 +2858,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2871,6 +2901,7 @@
               "auto_migrate_kdf": false,
               "auto_heal_zero_key": true,
               "format_version": 1,
+              "last_rotated": "",
               "argon2id_time": 0,
               "argon2id_memory": 0,
               "argon2id_threads": 0,
@@ -2969,6 +3000,481 @@
           ],
           "rejected": true,
           "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_use_touch_id",
+      "description": "an empty top-level authMethod is unwritten, so useTouchID selects touchid",
+      "input": "authMethod: \"\"\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_vault_touchid",
+      "description": "an empty top-level authMethod is unwritten, so vault.authMethod feeds it",
+      "input": "authMethod: \"\"\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_vault_use_touch_id",
+      "description": "an empty top-level authMethod is unwritten, so vault.useTouchID feeds it",
+      "input": "authMethod: \"\"\nvault:\n  useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": true,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null",
+      "description": "a null top-level authMethod is accepted and unwritten",
+      "input": "authMethod:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null_with_use_touch_id",
+      "description": "a null top-level authMethod is unwritten, so useTouchID selects touchid",
+      "input": "authMethod:\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null_with_vault_touchid",
+      "description": "a null top-level authMethod is unwritten, so vault.authMethod feeds it",
+      "input": "authMethod:\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_space_with_use_touch_id",
+      "description": "a blank but non-empty authMethod counts as written and blocks useTouchID",
+      "input": "authMethod: \" \"\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_space_with_vault_touchid",
+      "description": "a blank but non-empty authMethod counts as written and blocks the vault block",
+      "input": "authMethod: \" \"\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "use_touch_id_null",
+      "description": "a null top-level useTouchID is accepted and selects nothing",
+      "input": "useTouchID:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "use_touch_id_null_with_vault_touchid",
+      "description": "a null top-level useTouchID leaves the vault block to feed the method",
+      "input": "useTouchID:\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_last_rotated",
+      "description": "last_rotated is read from the document",
+      "input": "vault:\n  last_rotated: 2025-06-07T08:09:10.123456789Z\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "2025-06-07T08:09:10.123456789Z",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_last_rotated_null",
+      "description": "a null last_rotated is accepted and decodes to the zero time",
+      "input": "vault:\n  last_rotated:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_wrong_type",
+      "description": "a non-boolean printByDefault is rejected",
+      "input": "clipboard:\n  printByDefault: maybe\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_rejected_then_valid",
+      "description": "a rejected printByDefault does not consume the once-per-process warning",
+      "input": "clipboard:\n  printByDefault: maybe\n",
+      "follow_up": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        },
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_empty_bind_with_print_by_default",
+      "description": "residual: mcp.bind is rejected after the clipboard merge consumed the warning, so a following valid load stays silent",
+      "input": "mcp:\n  bind: \"\"\nclipboard:\n  printByDefault: true\n",
+      "follow_up": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": true,
+          "snapshot": null
+        },
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
         }
       ]
     }

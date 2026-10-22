@@ -48,6 +48,7 @@ struct VaultSnapshot {
     auto_migrate_kdf: bool,
     auto_heal_zero_key: bool,
     format_version: i64,
+    last_rotated: String,
     argon2id_time: i64,
     argon2id_memory: i64,
     argon2id_threads: i64,
@@ -126,6 +127,10 @@ struct Case {
     #[allow(dead_code)]
     description: String,
     input: String,
+    /// A second document loaded after `input` in the same process; `loads`
+    /// then holds exactly two results, `input` and then `follow_up`.
+    #[serde(default)]
+    follow_up: String,
     loads: Vec<Load>,
 }
 
@@ -170,6 +175,7 @@ fn snapshot_of(config: &Config) -> Snapshot {
             auto_migrate_kdf: v.auto_migrate_kdf,
             auto_heal_zero_key: v.auto_heal_zero_key,
             format_version: v.format_version,
+            last_rotated: v.last_rotated.clone().unwrap_or_default(),
             argon2id_time: v.argon2id_time,
             argon2id_memory: v.argon2id_memory,
             argon2id_threads: v.argon2id_threads,
@@ -252,6 +258,16 @@ fn mask_adjudicated(snapshot: &mut Snapshot) {
 /// difference recorded; the Go behavior is a separate oracle change.
 const ADJUDICATED_STRICTER: [&str; 2] = ["auth_top_invalid", "auth_vault_invalid"];
 
+/// Residual ordering divergence, asserted exactly.
+///
+/// Go checks `mcp.bind` only after every section has merged, so a document
+/// that carries both an empty `mcp.bind` and `clipboard.printByDefault` is
+/// rejected *after* the clipboard merge consumed the once-per-process warning;
+/// a later valid load stays silent. Rust rejects `mcp.bind` before it parses
+/// the clipboard section, so the guard is untouched and the later load warns.
+/// The rejection itself agrees; only the warning on the next load differs.
+const ADJUDICATED_WARNING_ORDER: [&str; 1] = ["mcp_empty_bind_with_print_by_default"];
+
 #[test]
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
@@ -276,7 +292,7 @@ fn fixture_has_pinned_provenance_and_schema() {
             "{source} missing from provenance"
         );
     }
-    assert!(fixture.cases.len() >= 80, "fixture lost cases");
+    assert!(fixture.cases.len() >= 100, "fixture lost cases");
 }
 
 #[test]
@@ -284,7 +300,12 @@ fn sections_match_go_oracle() {
     for case in &fixture().cases {
         let state = WarningState::default();
         for (index, expected) in case.loads.iter().enumerate() {
-            let result = Config::load_from_bytes_with_warnings_in(case.input.as_bytes(), &state);
+            let document = if index == 1 && !case.follow_up.is_empty() {
+                &case.follow_up
+            } else {
+                &case.input
+            };
+            let result = Config::load_from_bytes_with_warnings_in(document.as_bytes(), &state);
             let label = format!("{} (load {index})", case.name);
             if ADJUDICATED_STRICTER.contains(&case.name.as_str()) {
                 assert!(!expected.rejected, "{label}: Go is expected to accept it");
@@ -304,6 +325,21 @@ fn sections_match_go_oracle() {
             let (config, warnings) = result.unwrap_or_else(|error| {
                 panic!("{label}: Go accepted this input, Rust failed: {error}")
             });
+            if ADJUDICATED_WARNING_ORDER.contains(&case.name.as_str()) {
+                assert!(
+                    expected.warnings.is_empty(),
+                    "{label}: Go is expected to stay silent after its earlier consumption"
+                );
+                assert_eq!(
+                    warnings,
+                    vec![
+                        "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+                            .to_owned()
+                    ],
+                    "{label}: the adjudicated warning-order divergence closed or widened"
+                );
+                continue;
+            }
             assert_eq!(warnings, expected.warnings, "warnings for {label}");
             let mut actual = snapshot_of(&config);
             let mut want = expected
@@ -406,5 +442,11 @@ fn every_deprecation_warning_is_pinned() {
         })
         .map(|case| case.name.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(rejected_with_warnings, vec!["warning_then_rejection"]);
+    assert_eq!(
+        rejected_with_warnings,
+        vec![
+            "warning_then_rejection",
+            "mcp_empty_bind_with_print_by_default"
+        ]
+    );
 }
