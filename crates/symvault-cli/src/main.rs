@@ -4857,14 +4857,23 @@ fn unlock_passphrase_with_mode(
         && !is_test_or_ci()
     {
         let touch_id = symvault_platform::MacOsTouchId;
-        if let Ok(bytes) = session_commands::load_touch_id_passphrase(
+        match session_commands::load_touch_id_passphrase(
             vault,
             touch_id_items(runtime).as_ref(),
             &touch_id,
         ) {
-            let passphrase = String::from_utf8(bytes.to_vec())
-                .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
-            return Ok(Zeroizing::new(passphrase));
+            Ok(bytes) => {
+                let passphrase = String::from_utf8(bytes.to_vec())
+                    .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
+                return Ok(Zeroizing::new(passphrase));
+            }
+            // Every other failure falls through to the passphrase prompt
+            // silently, as in Go; this one would otherwise stay invisible and
+            // the user could not tell why Touch ID never works.
+            Err(error) if error == session_commands::LEGACY_TOUCH_ID_ITEM_ERROR => {
+                eprintln!("Warning: {error}");
+            }
+            Err(_) => {}
         }
     }
     if interactive {

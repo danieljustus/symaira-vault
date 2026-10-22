@@ -11,12 +11,18 @@ use std::{path::Path, time::Duration};
 use symvault_core::{config::AuthMethod, session::SessionManager};
 #[cfg(any(target_os = "macos", test))]
 use symvault_core::{
-    keychain_status::{BiometricItemStore, KeychainErrorKind},
+    keychain_status::{BiometricItemStore, KeychainErrorKind, is_legacy_rust_wrapped_value},
     platform::TouchId,
 };
 #[cfg(any(target_os = "macos", test))]
 use zeroize::Zeroizing;
 
+/// Reported when the Touch ID item is a wrapper item an earlier Rust build wrote
+/// (`go-keyring-base64:` / `go-keyring-encoded:`). Go never wrote these, so this
+/// is Rust-only migration behavior: the value is neither decoded nor rewritten,
+/// and the message names the way out without echoing any of it.
+#[cfg(any(target_os = "macos", test))]
+pub const LEGACY_TOUCH_ID_ITEM_ERROR: &str = "the stored Touch ID unlock item was written by an earlier Rust build in a wrapped format that this build (and Go) cannot use; unlock with your passphrase, then run `symvault auth set touchid` to replace it";
 #[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_REASON: &str = "Unlock Symaira Vault vault";
 #[cfg(any(target_os = "macos", test))]
@@ -169,6 +175,11 @@ pub fn load_touch_id_passphrase(
     })?;
     if value.is_empty() {
         return Err(NOT_CONFIGURED.to_owned());
+    }
+    // The wrapper cannot be recognised before the data is read, and the data is
+    // only read after authentication (Go's order), so this is the earliest point.
+    if is_legacy_rust_wrapped_value(&value) {
+        return Err(LEGACY_TOUCH_ID_ITEM_ERROR.to_owned());
     }
     Ok(value)
 }
@@ -350,7 +361,8 @@ mod tests {
         };
         for secret in [
             b" padded \n".as_slice(),
-            b"go-keyring-base64:c2VjcmV0".as_slice(),
+            b"go-keyring-base64 without colon".as_slice(),
+            b"\xff\xfe".as_slice(),
         ] {
             save_touch_id_passphrase(Path::new("/fixture/vault"), &items, secret)
                 .expect("save biometric passphrase");
@@ -358,6 +370,39 @@ mod tests {
             let got = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
                 .expect("load biometric passphrase");
             assert_eq!(&*got, secret);
+        }
+    }
+
+    /// Items written by earlier Rust builds (go-keyring wrapper under the same
+    /// service/account) must not be returned as the passphrase: that made the
+    /// Touch ID prompt succeed and the vault then fail with a generic error.
+    /// They are reported, left untouched, and a fresh save replaces them.
+    #[test]
+    fn touch_id_legacy_rust_wrapped_item_is_reported_not_returned_or_rewritten() {
+        let touch = FakeTouchId {
+            available: true,
+            ..Default::default()
+        };
+        for legacy in [
+            b"go-keyring-base64:c2VjcmV0".as_slice(),
+            b"go-keyring-encoded:736563726574".as_slice(),
+        ] {
+            let keyring = MemoryKeyring::new();
+            let items = KeyringBiometricItems(&keyring);
+            keyring.set(ADDRESS, legacy).expect("store legacy item");
+            let error = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
+                .expect_err("legacy wrapper item");
+            assert_eq!(error, LEGACY_TOUCH_ID_ITEM_ERROR);
+            assert!(!error.contains("c2VjcmV0") && !error.contains("736563726574"));
+            assert!(error.contains("symvault auth set touchid"));
+            // No silent rewrite or decode.
+            assert_eq!(keyring.get(ADDRESS).expect("still stored"), legacy);
+            // The remedy works: saving the raw passphrase replaces the item.
+            save_touch_id_passphrase(Path::new("/fixture/vault"), &items, b"secret")
+                .expect("replace legacy item");
+            let got = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
+                .expect("load replaced item");
+            assert_eq!(&*got, b"secret");
         }
     }
 

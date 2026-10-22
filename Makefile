@@ -304,9 +304,14 @@ biometric-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/biometricgen \
 		--check --output $(BIOMETRIC_FIXTURE)
 
+# One cargo invocation per target: a positional test filter applies to every
+# target of a `cargo test` run, so `--lib keychain_status --test biometric_contract`
+# filtered the whole contract replay away ("0 passed; 10 filtered out") and the
+# gate stayed green. The integration targets therefore run without a filter.
 biometric-differential: biometric-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/biometricgen -count=1
-	$(CARGO) test -p symvault-core --lib keychain_status --test biometric_contract --locked
+	$(CARGO) test -p symvault-core --lib --locked keychain_status
+	$(CARGO) test -p symvault-core --test biometric_contract --locked
 	$(CARGO) test -p symvault-platform --test native_biometric_item --locked
 
 quota-fixtures-generate:
