@@ -72,6 +72,32 @@ graceful shutdown, host clipboard/autotype, Windows TTY and remaining native
 targets stay open. No real clipboard or credential provider was exercised.
 
 
+## PLATFORM-001 slice 1: Linux/Windows desktop command adapters — 2026-10-22
+
+Issue #1244, oracle `861ad93813e3ee43c4ec989f45940d14b05b6eaf`. Gap inventory
+against Go `internal/clipboard` and `internal/autotype` (what Rust lacked before
+this slice, and whether it can be verified without a GUI):
+
+| Area | Go source | Rust state before | Without GUI? |
+|---|---|---|---|
+| Linux/Windows autotype | `autotype_linux.go`, `autotype_windows.go` | `UnavailablePlatform` only | yes (tool routing) / no (typing) |
+| Linux clipboard tool selection | atotto/clipboard `clipboard_unix.go` via `system_clipboard.go` | `arboard`, no tool selection | yes |
+| Windows clipboard | atotto `clipboard_windows.go` (Win32) | `arboard` | no |
+| macOS clipboard/autotype | atotto darwin, `autotype_darwin.go` | `pbcopy`, JXA | no |
+| SendKeys / AppleScript escaping | `autotype_common.go` | none (JXA uses `js_string`) | yes |
+| Focus guard | `focus.go` (+ per-OS capture) | shared `guard` (macOS only wired); Linux/Windows captures missing | yes |
+| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes (next slice) |
+| `Countdown` | `clipboard.go` | missing (no Go non-test caller) | yes |
+| Clear timer / signal clearing | `StartAutoClear` | `OwnedTextClipboard`, signal router (MCP-003) | covered elsewhere |
+| History-exclusion hints | none in Go | none | n/a |
+
+Implemented here: `desktop_commands` (above), `testdata/port/platform/desktop_linux.json`
+and `autotype_escape.json`, `make desktop-differential`. Evidence is local
+(Darwin/arm64 host; the Go side ran on Linux/arm64 in a container) and covers
+tool choice, argv, stdin routing, env policy and error text only. Nothing here
+typed into or copied from a live desktop; the native Linux/Windows `Rust port
+contract` receipt for this commit is pending.
+
 ## Integrated MCP clipboard dispatch — 2026-09-29
 
 Candidate `d5bacb7925232c2e08213be0b8564798f5576486` connects
