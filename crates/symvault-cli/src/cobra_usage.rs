@@ -41,8 +41,8 @@ enum Rule {
     Range(usize, usize),
     /// `device join`: exactly two, reported with a range message and an explanation.
     JoinPair,
-    /// `find`: exactly one, reported as "at most" once more are given.
-    ExactThenAtMost(usize),
+    /// `find`: one query, unless `--url` is set; reported as "at most" once more are given.
+    QueryOrUrl,
 }
 
 const JOIN_SUFFIX: &str = " — either '<remote-url> <token>' or '--pairing-file <path> <token>'";
@@ -126,7 +126,7 @@ const ARITY: &[(&str, Rule)] = &[
     ("file add", Rule::Exact(1)),
     ("file get", Rule::Exact(1)),
     ("file use", Rule::Min(2)),
-    ("find", Rule::ExactThenAtMost(1)),
+    ("find", Rule::QueryOrUrl),
     ("generate manpages", Rule::Exact(1)),
     ("get", Rule::Exact(1)),
     ("git", Rule::Range(1, 2)),
@@ -473,7 +473,7 @@ fn rule_for(path: &str) -> Option<Rule> {
 }
 
 /// The message cobra's argument validator reports, if it rejects `count`.
-fn arity_message(path: &str, count: usize) -> Option<String> {
+fn arity_message(path: &str, count: usize, url_filter: bool) -> Option<String> {
     let at_least = |min: usize| format!("requires at least {min} arg(s), only received {count}");
     let exact = |n: usize| format!("accepts {n} arg(s), received {count}");
     let at_most = |n: usize| format!("accepts at most {n} arg(s), received {count}");
@@ -485,11 +485,11 @@ fn arity_message(path: &str, count: usize) -> Option<String> {
             .then(|| format!("accepts between {min} and {max} arg(s), received {count}")),
         Rule::JoinPair => (count != 2)
             .then(|| format!("accepts between 1 and 2 arg(s), received {count}{JOIN_SUFFIX}")),
-        Rule::ExactThenAtMost(n) => {
-            if count < n {
-                Some(exact(n))
-            } else if count > n {
-                Some(at_most(n))
+        Rule::QueryOrUrl => {
+            if count > 1 {
+                Some(at_most(1))
+            } else if count == 0 && !url_filter {
+                Some(exact(1))
             } else {
                 None
             }
@@ -737,6 +737,8 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str) -> String {
 
 struct Parsed {
     positionals: usize,
+    /// `find --url <non-empty>`: the only flag an argument validator reads.
+    url_filter: bool,
     json_flag: bool,
     output: Option<String>,
 }
@@ -750,6 +752,7 @@ fn parse_flags(
 ) -> Result<Parsed, String> {
     let mut parsed = Parsed {
         positionals: 0,
+        url_filter: false,
         json_flag: false,
         output: None,
     };
@@ -757,6 +760,7 @@ fn parse_flags(
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
         (Some("json"), _) => parsed.json_flag = true,
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
+        (Some("url"), Some(value)) if path == "find" => parsed.url_filter = !value.is_empty(),
         _ => {}
     };
     while index < tokens.len() {
@@ -955,7 +959,7 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     if GROUPS.contains(&path_text.as_str()) {
         return Verdict::GroupHelp(path_text);
     }
-    if let Some(message) = arity_message(&path_text, parsed.positionals) {
+    if let Some(message) = arity_message(&path_text, parsed.positionals, parsed.url_filter) {
         return fail(&message, 1);
     }
     if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
@@ -1016,19 +1020,19 @@ mod tests {
     #[test]
     fn arity_messages_follow_cobra_validators() {
         assert_eq!(
-            arity_message("get", 0).as_deref(),
+            arity_message("get", 0, false).as_deref(),
             Some("accepts 1 arg(s), received 0")
         );
-        assert_eq!(arity_message("get", 1), None);
+        assert_eq!(arity_message("get", 1, false), None);
         assert_eq!(
-            arity_message("find", 4).as_deref(),
+            arity_message("find", 4, false).as_deref(),
             Some("accepts at most 1 arg(s), received 4")
         );
         assert_eq!(
-            arity_message("run", 0).as_deref(),
+            arity_message("run", 0, false).as_deref(),
             Some("requires at least 1 arg(s), only received 0")
         );
-        assert_eq!(arity_message("version", 9), None);
+        assert_eq!(arity_message("version", 9, false), None);
     }
 
     #[derive(serde::Deserialize)]
@@ -1199,6 +1203,19 @@ mod tests {
             assert!(refusals.next().is_none(), "{}", row.path);
         }
         assert!(refused > 150, "only {refused} refusals replayed");
+    }
+
+    #[test]
+    fn find_url_replaces_the_query_argument() {
+        let run = |args: &[&str]| {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            evaluate(&args, root())
+        };
+        assert_eq!(run(&["find", "--url", "github.com"]), Verdict::Proceed);
+        assert_eq!(run(&["find", "--url=github.com"]), Verdict::Proceed);
+        assert_eq!(run(&["find", "--url", "x", "q"]), Verdict::Proceed);
+        assert!(matches!(run(&["find", "--url", ""]), Verdict::Fail { .. }));
+        assert!(matches!(run(&["find", "a", "b"]), Verdict::Fail { .. }));
     }
 
     #[test]
