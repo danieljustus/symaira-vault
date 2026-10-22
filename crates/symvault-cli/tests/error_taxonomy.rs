@@ -11,11 +11,14 @@
 //! Only runs whose Go outcome is a rejection before the command body are
 //! replayed against the binary, so no replay can touch a real vault or network;
 //! the accepting rows are covered by the in-crate `cobra_usage` unit tests.
+//! `argv_shapes` adds the shapes an arity sweep cannot reach (flag *types*, such as
+//! `device join --pairing-file <path> <token>`) and the group help pages; each row
+//! may bring disposable files that are written into the working directory first.
 
 #[path = "support/temp_root.rs"]
 mod test_temp_root;
 
-use std::{fs, process::Command};
+use std::{collections::BTreeMap, fs, process::Command};
 
 use serde::Deserialize;
 
@@ -54,6 +57,14 @@ struct GateRow {
 }
 
 #[derive(Debug, Deserialize)]
+struct ShapeCase {
+    name: String,
+    #[serde(default)]
+    files: BTreeMap<String, String>,
+    observation: Observation,
+}
+
+#[derive(Debug, Deserialize)]
 struct Oracle {
     commit: String,
     commit_sha: String,
@@ -70,9 +81,11 @@ struct Fixture {
     arity: Vec<ArityRow>,
     gate: Vec<GateRow>,
     not_initialized: Vec<Observation>,
+    argv_shapes: Vec<ShapeCase>,
 }
 
-const USAGE_CASES: usize = 40;
+const USAGE_CASES: usize = 63;
+const ARGV_SHAPES: usize = 23;
 const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 188;
 const GATE_REFUSALS: usize = 223;
@@ -87,10 +100,13 @@ fn fixture() -> Fixture {
     serde_json::from_str(&raw).expect("parse error-taxonomy fixture")
 }
 
-fn run(args: &[String]) -> (i32, String, String) {
+fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, String, String) {
     let root = test_temp_root::TempRoot::existing("symvault-error-taxonomy-");
     let home = root.join("home");
     fs::create_dir_all(&home).expect("create isolated home");
+    for (name, content) in files {
+        fs::write(root.join(name), content).expect("write disposable file");
+    }
     let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
     for (name, _) in std::env::vars_os() {
         if name.to_string_lossy().starts_with("SYMVAULT_") {
@@ -127,7 +143,16 @@ fn run(args: &[String]) -> (i32, String, String) {
 }
 
 fn compare(label: &str, observation: &Observation, failures: &mut Vec<String>) {
-    let (code, stdout, stderr) = run(&observation.args);
+    compare_with_files(label, observation, &BTreeMap::new(), failures);
+}
+
+fn compare_with_files(
+    label: &str,
+    observation: &Observation,
+    files: &BTreeMap<String, String>,
+    failures: &mut Vec<String>,
+) {
+    let (code, stdout, stderr) = run_with_files(&observation.args, files);
     if code != observation.exit_code || stdout != observation.stdout || stderr != observation.stderr
     {
         failures.push(format!(
@@ -153,6 +178,7 @@ fn fixture_provenance_and_counts() {
     assert_eq!(fixture.arity.len(), ARITY_ROWS);
     assert_eq!(fixture.gate.len(), ARITY_ROWS);
     assert_eq!(fixture.not_initialized.len(), NOT_INITIALIZED_CASES);
+    assert_eq!(fixture.argv_shapes.len(), ARGV_SHAPES);
     let rejected: usize = fixture
         .arity
         .iter()
@@ -171,6 +197,46 @@ fn native_cli_matches_go_usage_errors() {
         compare(&case.name, &case.observation, &mut failures);
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Every shape ends before a vault, a clone or a prompt (the generator refuses any
+/// other row), so all of them can be replayed byte for byte.
+#[test]
+fn native_cli_matches_go_argument_shapes() {
+    let fixture = fixture();
+    let mut failures = Vec::new();
+    for case in &fixture.argv_shapes {
+        compare_with_files(&case.name, &case.observation, &case.files, &mut failures);
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// `--pairing-file` is a string flag in Go: the three shapes that a bool treatment
+/// rejected before the command ran must reach the invitation file.
+#[test]
+fn pairing_file_shapes_reach_the_invitation_file() {
+    let fixture = fixture();
+    let reached = |name: &str| {
+        let case = fixture
+            .argv_shapes
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("shape {name} is missing"));
+        assert!(
+            case.observation
+                .stderr
+                .starts_with("Error: pairing file token \"ZZZZ\" does not match"),
+            "{name}: Go did not read the file: {:?}",
+            case.observation.stderr
+        );
+        let (code, _, stderr) = run_with_files(&case.observation.args, &case.files);
+        assert_eq!(code, 1, "{name}");
+        assert_eq!(stderr, case.observation.stderr, "{name}");
+    };
+    reached("join_pairing_file_equals_token");
+    reached("join_pairing_file_separate_token");
+    reached("join_pairing_file_equals_double_dash_token");
+    reached("join_pairing_file_separate_double_dash_token");
 }
 
 #[test]

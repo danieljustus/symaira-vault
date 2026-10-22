@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "b80e64331362dd18d52d68550a460b3946e70a6ea77edfb9df546c67a2117177",
-    "generator_digest": "01ffd5808a853af4f70d94dfa9f9e594bed3283f0a23ebe4ec9db41f1c25ee50"
+    "generator_digest": "c8f77aae1d64c503e1f957524cd28f9e88c9b5ccfa4118d53dd8a18afddfb58f"
   },
   "usage": [
     {
@@ -504,6 +504,335 @@
         "exit_code": 1,
         "stdout": "",
         "stderr": "Error: invalid argument \"abc\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\nError: invalid argument \"abc\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"abc\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_hex",
+      "description": "pflag parses ints with ParseInt(s, 0, 64): hex is accepted, so the next flag is the first error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "0x10",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_octal_prefix",
+      "description": "0o octal is accepted",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "0o17",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_binary",
+      "description": "0b binary is accepted",
+      "observation": {
+        "args": [
+          "generate",
+          "--length=0b101",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_underscore",
+      "description": "underscores between digits are accepted with base 0",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "1_0",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_legacy_octal",
+      "description": "a leading zero means octal",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "010",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_signed_hex",
+      "description": "a sign may precede the base prefix",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "-0x10",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_plus_sign",
+      "description": "a plus sign is accepted",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "+5",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_min_int64",
+      "description": "the minimum int64 is accepted",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "-9223372036854775808",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_shorthand_hex",
+      "description": "shorthand with an attached hex value",
+      "observation": {
+        "args": [
+          "generate",
+          "-l0x10",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_shorthand_separate_hex",
+      "description": "shorthand with a separate hex value",
+      "observation": {
+        "args": [
+          "generate",
+          "-l",
+          "0o17",
+          "--bogus"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown flag: --bogus\nError: unknown flag: --bogus\n"
+      }
+    },
+    {
+      "name": "int_flag_prefix_without_digits",
+      "description": "a base prefix needs digits",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "0x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"0x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x\": invalid syntax\nError: invalid argument \"0x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_bad_hex_digit",
+      "description": "a digit past the base is a syntax error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "0x1G"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"0x1G\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x1G\": invalid syntax\nError: invalid argument \"0x1G\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x1G\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_bad_octal_digit",
+      "description": "8 is not an octal digit",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "08"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"08\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"08\": invalid syntax\nError: invalid argument \"08\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"08\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_double_underscore",
+      "description": "doubled underscores are a syntax error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "1__0"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"1__0\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"1__0\": invalid syntax\nError: invalid argument \"1__0\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"1__0\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_leading_underscore",
+      "description": "a leading underscore is a syntax error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "_10"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"_10\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"_10\": invalid syntax\nError: invalid argument \"_10\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"_10\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_trailing_underscore",
+      "description": "a trailing underscore is a syntax error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "10_"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"10_\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"10_\": invalid syntax\nError: invalid argument \"10_\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"10_\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_empty",
+      "description": "an empty value",
+      "observation": {
+        "args": [
+          "generate",
+          "--length="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"\": invalid syntax\nError: invalid argument \"\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_float",
+      "description": "a float is not an integer",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "1e3"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"1e3\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"1e3\": invalid syntax\nError: invalid argument \"1e3\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"1e3\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_space",
+      "description": "surrounding space is not trimmed",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          " 5"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \" 5\" for \"-l, --length\" flag: strconv.ParseInt: parsing \" 5\": invalid syntax\nError: invalid argument \" 5\" for \"-l, --length\" flag: strconv.ParseInt: parsing \" 5\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "int_flag_out_of_range",
+      "description": "a decimal past int64 is a range error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "99999999999999999999"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"99999999999999999999\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\nError: invalid argument \"99999999999999999999\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999\": value out of range\n"
+      }
+    },
+    {
+      "name": "int_flag_hex_out_of_range",
+      "description": "a hex value past int64 is a range error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "0x8000000000000000"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"0x8000000000000000\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x8000000000000000\": value out of range\nError: invalid argument \"0x8000000000000000\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"0x8000000000000000\": value out of range\n"
+      }
+    },
+    {
+      "name": "int_flag_negative_out_of_range",
+      "description": "a negative value below int64 is a range error",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "-9223372036854775809"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"-9223372036854775809\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"-9223372036854775809\": value out of range\nError: invalid argument \"-9223372036854775809\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"-9223372036854775809\": value out of range\n"
+      }
+    },
+    {
+      "name": "int_flag_range_before_syntax",
+      "description": "an overflow is reported before a later invalid digit is seen",
+      "observation": {
+        "args": [
+          "generate",
+          "--length",
+          "99999999999999999999x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"99999999999999999999x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999x\": value out of range\nError: invalid argument \"99999999999999999999x\" for \"-l, --length\" flag: strconv.ParseInt: parsing \"99999999999999999999x\": value out of range\n"
       }
     },
     {
@@ -9187,6 +9516,442 @@
       "exit_code": 3,
       "stdout": "",
       "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+    }
+  ],
+  "argv_shapes": [
+    {
+      "name": "join_pairing_file_equals_token",
+      "description": "--pairing-file=<path> <token>: one positional",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=invite-mismatch.json",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_separate_token",
+      "description": "--pairing-file <path> <token>: the path is the flag's value",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file",
+          "invite-mismatch.json",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_path_only",
+      "description": "--pairing-file <path> without a token: no positional is left",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file",
+          "invite-mismatch.json"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\nError: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_equals_double_dash_token",
+      "description": "the token after -- is positional",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=invite-mismatch.json",
+          "--",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_separate_double_dash_token",
+      "description": "the path is consumed before --, the token follows it",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file",
+          "invite-mismatch.json",
+          "--",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_two_positionals",
+      "description": "with --pairing-file a second positional is refused",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=invite-mismatch.json",
+          "ABCD1234",
+          "extra"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\nError: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_name_flag_first",
+      "description": "another value flag before --pairing-file",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--name",
+          "laptop",
+          "--pairing-file",
+          "invite-mismatch.json",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_name_flag_last",
+      "description": "another value flag after the token",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file",
+          "invite-mismatch.json",
+          "ABCD1234",
+          "--name",
+          "laptop"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\nError: pairing file token \"ZZZZ\" does not match the given token \"ABCD1234\"\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_value_is_token_shaped",
+      "description": "a token-shaped path is still the flag's value",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\nError: with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_missing_file",
+      "description": "the invitation file does not exist",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=missing.json",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: read pairing file: open missing.json: no such file or directory\nError: read pairing file: open missing.json: no such file or directory\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_without_public_key",
+      "description": "the invitation carries no public key",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=invite-nokey.json",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid pairing file: missing or malformed public_key\nError: invalid pairing file: missing or malformed public_key\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_invalid_token",
+      "description": "the token is validated before the file is read",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=missing.json",
+          "ab-cd"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid pairing token: invalid pairing token format\nError: invalid pairing token: invalid pairing token format\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_empty_value_one_positional",
+      "description": "an empty path leaves the flag unset: two positionals are required",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_empty_value_no_positional",
+      "description": "an empty path and no positional",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 0 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 0 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_last_value_wins",
+      "description": "the last occurrence decides whether the flag is set",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file=invite-mismatch.json",
+          "--pairing-file=",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_pairing_file_needs_argument",
+      "description": "--pairing-file without its value",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "--pairing-file"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: flag needs an argument: --pairing-file\nError: flag needs an argument: --pairing-file\n"
+      }
+    },
+    {
+      "name": "join_no_flag_zero_positionals",
+      "description": "no flag, no positional",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 0 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 0 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_no_flag_one_positional",
+      "description": "no flag, one positional",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "ABCD1234"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 1 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_no_flag_two_positionals_invalid_token",
+      "description": "no flag, two positionals: the token is validated before the clone",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "remote",
+          "ab-cd"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid pairing token: invalid pairing token format\nError: invalid pairing token: invalid pairing token format\n"
+      }
+    },
+    {
+      "name": "join_no_flag_three_positionals",
+      "description": "no flag, three positionals",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "remote",
+          "ABCD1234",
+          "extra"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 3 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 3 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "join_no_flag_four_positionals",
+      "description": "no flag, four positionals",
+      "files": {
+        "invite-mismatch.json": "{\"token\":\"ZZZZ\",\"public_key\":\"age1qqqq\"}",
+        "invite-nokey.json": "{\"token\":\"ABCD1234\"}"
+      },
+      "observation": {
+        "args": [
+          "device",
+          "join",
+          "remote",
+          "ABCD1234",
+          "extra",
+          "more"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts between 1 and 2 arg(s), received 4 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\nError: accepts between 1 and 2 arg(s), received 4 — either '<remote-url> <token>' or '--pairing-file <path> <token>'\n"
+      }
+    },
+    {
+      "name": "group_help_agent_skill",
+      "description": "a non-runnable group prints its help and exits 0",
+      "observation": {
+        "args": [
+          "agent",
+          "skill"
+        ],
+        "exit_code": 0,
+        "stdout": "Export or refresh embedded skill packages for AI agents.\n\nUsage:\n  symvault agent skill [command]\n\nAvailable Commands:\n  export      Export a rendered skill package for an agent\n  refresh     Refresh an installed skill file in place\n\nFlags:\n  -h, --help   help for skill\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault agent skill [command] --help\" for more information about a command.\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "group_help_device",
+      "description": "a top-level group prints its help and exits 0",
+      "observation": {
+        "args": [
+          "device"
+        ],
+        "exit_code": 0,
+        "stdout": "Manage paired devices that can access this vault.\n\nUse 'symvault device pair' to generate a pairing token for a new device,\nand 'symvault device join' on the new device to join the vault.\n\nUsage:\n  symvault device [command]\n\nExamples:\n  symvault device pair\n  symvault device join ssh://user@host/path/to/vault.git <token>\n  symvault device accept <token>\n\nAvailable Commands:\n  accept          Accept a join request and re-encrypt entries for the new device\n  add             Add this device to an existing multi-device vault\n  approval-list   List devices enrolled as approval devices\n  approval-pair   Pair a phone as an approval device for agent credential requests\n  approval-revoke Revoke an approval device's ability to approve/deny requests\n  join            Join an existing vault as a new device\n  list            List all devices\n  pair            Generate a pairing token for a new device\n  revoke          Revoke a device and re-encrypt all entries\n\nFlags:\n  -h, --help   help for device\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n\nUse \"symvault device [command] --help\" for more information about a command.\n",
+        "stderr": ""
+      }
     }
   ]
 }
