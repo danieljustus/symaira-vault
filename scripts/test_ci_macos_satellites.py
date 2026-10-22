@@ -37,7 +37,7 @@ BASELINE_PATH = os.path.join(ROOT, "scripts", "ci_macos_satellites_baseline.json
 SELECTOR_PATH = os.path.join(ROOT, "scripts", "ci_macos_satellites.py")
 CONSOLIDATED_PATH = os.path.join(ROOT, ".github", "workflows", "rust-http-macos.yml")
 GROUP_PATH = os.path.join(ROOT, ".github", "workflows", "rust-macos-satellites.yml")
-PINNED_BASE = "895b1fe70103b2bb5c712bc02bb1c616eac1fc2a"
+PINNED_BASE = "861ad93813e3ee43c4ec989f45940d14b05b6eaf"
 ORDER = ["head", "origin", "oauth", "deadline", "timeout", "write", "framing", "tls"]
 FILES = {
     "head": "rust-http-head.yml",
