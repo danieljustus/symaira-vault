@@ -3517,6 +3517,11 @@ fn run_get(
         }
         let result = result?;
         let format = if json { "json" } else { output };
+        if let vault_commands::GetResult::Field { value, .. } = &result
+            && copy_get_field_to_clipboard(&vault, format, print, value)?
+        {
+            return Ok(());
+        }
         let result = if format != "text" && !format.is_empty() && !print {
             mask_sensitive(result)
         } else {
@@ -3536,6 +3541,56 @@ fn run_get(
         )
     })();
     finish_vault_result(result)
+}
+
+/// Go's default `get <path.field>` on a terminal: copy to the clipboard, count
+/// down, clear and verify (`cmd/crud/get.go`, PLATFORM-001 slice 2). Returns
+/// `false` when the value should be printed instead. Go prints the copy failure
+/// through cobra and again through `ExecuteRoot`; the first line is emitted
+/// here and the caller prints the second.
+fn copy_get_field_to_clipboard(
+    vault: &Path,
+    format: &str,
+    print: bool,
+    value: &serde_json::Value,
+) -> Result<bool, String> {
+    use std::io::IsTerminal;
+    use symvault_platform::get_clipboard as clip;
+
+    // Go reads the vault config for `copyByDefault` and, separately, for the
+    // auto-clear duration; a config that cannot be loaded falls back to the
+    // 30 second default and to copying.
+    let config = symvault_core::config::Config::load(vault.join("config.yaml")).ok();
+    let section = config.as_ref().and_then(|config| config.clipboard.as_ref());
+    let destination = clip::route_get_output(
+        format,
+        print,
+        io::stdout().is_terminal(),
+        section.map(|section| section.copy_by_default),
+    );
+    if destination == clip::GetDestination::Stdout {
+        return Ok(false);
+    }
+    let text = match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    };
+    let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
+    let clock = clip::RealClock::with_termination_signals().unwrap_or_default();
+    let clipboard = clip::native_get_clipboard();
+    clip::copy_and_auto_clear(
+        clipboard.as_ref(),
+        &text,
+        seconds,
+        &clock,
+        &mut io::stderr().lock(),
+    )
+    .map_err(|error| {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+        error.to_string()
+    })?;
+    Ok(true)
 }
 
 /// Replaces sensitive field values with `***` so structured output reveals

@@ -86,8 +86,8 @@ this slice, and whether it can be verified without a GUI):
 | macOS clipboard/autotype | atotto darwin, `autotype_darwin.go` | `pbcopy`, JXA | no |
 | SendKeys / AppleScript escaping | `autotype_common.go` | none (JXA uses `js_string`) | yes |
 | Focus guard | `focus.go` (+ per-OS capture) | shared `guard` (macOS only wired); Linux/Windows captures missing | yes |
-| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes (next slice) |
-| `Countdown` | `clipboard.go` | missing (no Go non-test caller) | yes |
+| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes — done in slice 2 |
+| `Countdown` | `clipboard.go` | missing (**has** a Go caller: `cmd/crud/get.go:238`; corrected in slice 2) | yes — done in slice 2 |
 | Clear timer / signal clearing | `StartAutoClear` | `OwnedTextClipboard`, signal router (MCP-003) | covered elsewhere |
 | History-exclusion hints | none in Go | none | n/a |
 
@@ -97,6 +97,12 @@ and `autotype_escape.json`, `make desktop-differential`. Evidence is local
 tool choice, argv, stdin routing, env policy and error text only. Independent review of candidate `1c5a6dab` led to a correction commit: Linux generator tests now dispatch the `--child-clipboard` re-exec through `TestMain` (verified in Linux Docker); the Windows-only unused `SystemHost` import is cfg-scoped (`cargo clippy --target x86_64-pc-windows-msvc` clean); `SystemHost` rejects relative/empty `PATH` hits like Go `exec.ErrDot` (fixture grew to 39 clipboard / 37 autotype cases, 102 recorded calls, oracle-backed) and treats an empty `PATH` as no entries; the env whitelist is tested by a real-process dump and equality with Go's `secrets.DefaultWhitelist()` in the fixture; Windows `SYSTEMROOT` is re-added after `env_clear`. Residuals: non-UTF-8 env values are dropped; spawn-error text for unusual failures differs from Go `os/exec`; Windows `LookPath` semantics are unmodeled (Windows adapters are not wired). Nothing here
 typed into or copied from a live desktop; the native Linux/Windows `Rust port
 contract` receipt for this commit is pending.
+
+## PLATFORM-001 slice 2: `get` clipboard clear verification — 2026-10-22
+
+Issue #1244, same oracle `861ad93813e3ee43c4ec989f45940d14b05b6eaf`. Slice 1 listed `Countdown` as having no Go non-test caller; that was wrong: `cmd/crud/get.go` starts it as a goroutine next to `StartAutoClear`, so it is user-visible and ported. Rust `get` never copied before; it now follows the Go default on a terminal.
+
+Implemented: `symvault_platform::get_clipboard` (`verify_cleared`, `VerifyError`, `countdown`, `copy_and_auto_clear`, `route_get_output`, injectable `TextClipboard`/`Clock`), native text clipboards per OS, and the wiring in `crates/symvault-cli/src/main.rs` (`copy_get_field_to_clipboard`). Evidence is the Go-recorded `testdata/port/platform/get_clipboard.json` (16 command scenarios, 11 `VerifyCleared`, 8 `Countdown`), replayed by `tests/get_clipboard_contract.rs`; gate `make get-clipboard-differential` (part of `port-contract`). Behavior frozen: exact `ErrClipboardNotCleared` text, exit 0 with a stderr warning (never a failure), one read right after the clear (no retry/delay), skipped for an empty secret, read errors passed through, signal-triggered clear, copy failure exit 1. Full contract and residuals: `contract-matrix.md` PLATFORM-001 slice 2. PLATFORM-001 stays `in_progress`: no live clipboard (macOS/X11/Wayland/Windows) was touched, so native behavior, color styling and Windows console-control clearing are open.
 
 ## Integrated MCP clipboard dispatch — 2026-09-29
 
