@@ -11,12 +11,19 @@
 //!
 //! The behavior is frozen by `testdata/port/cli/error-taxonomy.json`
 //! (`scripts/rust-port/cmd/errtaxgen`); `tests/error_taxonomy.rs` replays it.
-//! `ARITY`, `GROUPS` and `OUTPUT_UNSUPPORTED` are checked against that fixture
-//! row by row, so they cannot drift from the oracle unnoticed.
+//! `ARITY`, `GROUPS` and the output-gate tables are checked against that fixture
+//! row by row, and `COMMANDS`/`GROUPS` against `command-tree.json` in both
+//! directions, so they cannot drift from the oracle unnoticed.
 //!
-//! Known limits: flag *types* are not introspected, so only booleans and the
-//! integer flags in `INT_FLAGS` get Go's `invalid argument` wording; a flag that
-//! exists only in Go is not reported as unknown by Rust's tree; and the
+//! Flag *types* come from the clap tree, never from a side table: pflag consumes
+//! the next token for every non-bool flag, so a flag the emulation mistypes turns
+//! a value into a positional (or the reverse) and rejects a valid invocation. The
+//! unit test `flag_types_match_the_command_tree` compares every flag both trees
+//! share against the Go type recorded in `command-tree.json`.
+//!
+//! Known limits: only booleans and the integer flags in `INT_FLAGS` get Go's
+//! `invalid argument` wording (other int/int64/duration flags are not parsed); a
+//! flag that exists only in Go is not reported as unknown by Rust's tree; and the
 //! suggestion order of `SUGGESTION_ORDER` is the strict partial order measured
 //! from the oracle, not Go's registration order.
 
@@ -39,13 +46,17 @@ enum Rule {
     Min(usize),
     Max(usize),
     Range(usize, usize),
-    /// `device join`: exactly two, reported with a range message and an explanation.
+    /// `device join`, validated in Go's `resolveJoinPairing` (`cmd/device.go`): with a
+    /// non-empty `--pairing-file` exactly one positional (the token), otherwise exactly
+    /// two (`<remote-url> <token>`). Each mode has its own message.
     JoinPair,
     /// `find`: one query, unless `--url` is set; reported as "at most" once more are given.
     QueryOrUrl,
 }
 
 const JOIN_SUFFIX: &str = " — either '<remote-url> <token>' or '--pairing-file <path> <token>'";
+const JOIN_PAIRING_FILE_MESSAGE: &str =
+    "with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'";
 
 /// Integer-valued flags, by command path and long name.
 const INT_FLAGS: &[(&str, &str)] = &[("generate", "length")];
@@ -472,8 +483,17 @@ fn rule_for(path: &str) -> Option<Rule> {
         .map(|(_, rule)| *rule)
 }
 
+/// The flag values an argument validator reads (`find --url`, `device join --pairing-file`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ValidatorFlags {
+    /// `find --url <non-empty>`.
+    url_filter: bool,
+    /// `device join --pairing-file <non-empty>`.
+    pairing_file: bool,
+}
+
 /// The message cobra's argument validator reports, if it rejects `count`.
-fn arity_message(path: &str, count: usize, url_filter: bool) -> Option<String> {
+fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<String> {
     let at_least = |min: usize| format!("requires at least {min} arg(s), only received {count}");
     let exact = |n: usize| format!("accepts {n} arg(s), received {count}");
     let at_most = |n: usize| format!("accepts at most {n} arg(s), received {count}");
@@ -483,12 +503,15 @@ fn arity_message(path: &str, count: usize, url_filter: bool) -> Option<String> {
         Rule::Max(n) => (count > n).then(|| at_most(n)),
         Rule::Range(min, max) => (count < min || count > max)
             .then(|| format!("accepts between {min} and {max} arg(s), received {count}")),
+        Rule::JoinPair if flags.pairing_file => {
+            (count != 1).then(|| JOIN_PAIRING_FILE_MESSAGE.to_owned())
+        }
         Rule::JoinPair => (count != 2)
             .then(|| format!("accepts between 1 and 2 arg(s), received {count}{JOIN_SUFFIX}")),
         Rule::QueryOrUrl => {
             if count > 1 {
                 Some(at_most(1))
-            } else if count == 0 && !url_filter {
+            } else if count == 0 && !flags.url_filter {
                 Some(exact(1))
             } else {
                 None
@@ -564,11 +587,6 @@ impl<'a> Flags<'a> {
         })
     }
 }
-
-/// Flags that clap models as taking a value but Go declares as booleans, so the
-/// token after them is a positional argument in Go (`device join --pairing-file
-/// <path> <token>`).
-const GO_BOOL_FLAGS: &[(&str, &str)] = &[("device join", "pairing-file")];
 
 /// pflag consumes the next token for every flag that is not a bool and has no
 /// no-option default (clap: not `require_equals`).
@@ -712,12 +730,122 @@ fn go_parse_bool(value: &str) -> bool {
     )
 }
 
-fn go_parse_int(value: &str) -> bool {
-    let digits = value
-        .strip_prefix('+')
-        .or_else(|| value.strip_prefix('-'))
-        .unwrap_or(value);
-    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+/// Why Go's `strconv.ParseInt(s, 0, 64)` refuses a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IntError {
+    Syntax,
+    Range,
+}
+
+impl IntError {
+    fn text(self) -> &'static str {
+        match self {
+            Self::Syntax => "invalid syntax",
+            Self::Range => "value out of range",
+        }
+    }
+}
+
+/// Go's `strconv.underscoreOK`: underscores may only separate digits (or follow a
+/// base prefix). `digits` is the number after its sign.
+fn underscore_ok(digits: &str) -> bool {
+    let bytes = digits.as_bytes();
+    let mut index = 0;
+    // `^` before anything, `0` after a digit, `_` after an underscore, `!` otherwise.
+    let mut saw = b'^';
+    let mut hex = false;
+    if bytes.len() >= 2
+        && bytes[0] == b'0'
+        && matches!(bytes[1].to_ascii_lowercase(), b'b' | b'o' | b'x')
+    {
+        index = 2;
+        saw = b'0';
+        hex = bytes[1].eq_ignore_ascii_case(&b'x');
+    }
+    for &byte in &bytes[index..] {
+        if byte.is_ascii_digit() || (hex && matches!(byte.to_ascii_lowercase(), b'a'..=b'f')) {
+            saw = b'0';
+        } else if byte == b'_' {
+            if saw != b'0' {
+                return false;
+            }
+            saw = b'_';
+        } else if saw == b'_' {
+            return false;
+        } else {
+            saw = b'!';
+        }
+    }
+    saw != b'_'
+}
+
+/// Go's `strconv.ParseInt(s, 0, 64)`, which is what pflag's int flags call: an optional
+/// sign, then a decimal number or a `0x`/`0o`/`0b`/leading-`0` prefixed one, with `_`
+/// digit separators. Overflow is reported as soon as it is seen, before a later invalid
+/// digit.
+fn go_parse_int(value: &str) -> Result<i64, IntError> {
+    let (negative, unsigned) = match value.as_bytes().first() {
+        Some(b'-') => (true, &value[1..]),
+        Some(b'+') => (false, &value[1..]),
+        _ => (false, value),
+    };
+    if unsigned.is_empty() {
+        return Err(IntError::Syntax);
+    }
+    let bytes = unsigned.as_bytes();
+    let (base, digits) = if bytes[0] == b'0' {
+        match bytes.get(1).map(u8::to_ascii_lowercase) {
+            Some(b'b') if bytes.len() >= 3 => (2, &bytes[2..]),
+            Some(b'o') if bytes.len() >= 3 => (8, &bytes[2..]),
+            Some(b'x') if bytes.len() >= 3 => (16, &bytes[2..]),
+            _ => (8, &bytes[1..]),
+        }
+    } else {
+        (10, bytes)
+    };
+    let mut magnitude: u64 = 0;
+    let mut underscores = false;
+    for &byte in digits {
+        let digit = match byte {
+            b'_' => {
+                underscores = true;
+                continue;
+            }
+            b'0'..=b'9' => byte - b'0',
+            b'a'..=b'z' => byte - b'a' + 10,
+            b'A'..=b'Z' => byte - b'A' + 10,
+            _ => return Err(IntError::Syntax),
+        };
+        if u64::from(digit) >= base {
+            return Err(IntError::Syntax);
+        }
+        magnitude = magnitude
+            .checked_mul(base)
+            .and_then(|scaled| scaled.checked_add(u64::from(digit)))
+            .ok_or(IntError::Range)?;
+    }
+    if underscores && !underscore_ok(unsigned) {
+        return Err(IntError::Syntax);
+    }
+    let limit = if negative {
+        1_u64 << 63
+    } else {
+        (1_u64 << 63) - 1
+    };
+    if magnitude > limit {
+        return Err(IntError::Range);
+    }
+    Ok(if negative {
+        0_i64.wrapping_sub_unsigned(magnitude)
+    } else {
+        i64::try_from(magnitude).map_err(|_| IntError::Range)?
+    })
+}
+
+/// clap value parser for flags Go declares as `int` (pflag: `ParseInt(s, 0, 64)`).
+pub fn parse_go_int(value: &str) -> Result<i64, String> {
+    go_parse_int(value)
+        .map_err(|error| format!("strconv.ParseInt: parsing {value:?}: {}", error.text()))
 }
 
 fn flag_label(arg: &Arg) -> String {
@@ -728,17 +856,17 @@ fn flag_label(arg: &Arg) -> String {
     }
 }
 
-fn invalid_argument(value: &str, arg: &Arg, parser: &str) -> String {
+fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> String {
     format!(
-        "invalid argument {value:?} for {label:?} flag: strconv.{parser}: parsing {value:?}: invalid syntax",
+        "invalid argument {value:?} for {label:?} flag: strconv.{parser}: parsing {value:?}: {reason}",
         label = flag_label(arg)
     )
 }
 
 struct Parsed {
     positionals: usize,
-    /// `find --url <non-empty>`: the only flag an argument validator reads.
-    url_filter: bool,
+    /// The flags an argument validator reads.
+    validator: ValidatorFlags,
     json_flag: bool,
     output: Option<String>,
 }
@@ -752,7 +880,7 @@ fn parse_flags(
 ) -> Result<Parsed, String> {
     let mut parsed = Parsed {
         positionals: 0,
-        url_filter: false,
+        validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
     };
@@ -760,7 +888,12 @@ fn parse_flags(
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
         (Some("json"), _) => parsed.json_flag = true,
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
-        (Some("url"), Some(value)) if path == "find" => parsed.url_filter = !value.is_empty(),
+        (Some("url"), Some(value)) if path == "find" => {
+            parsed.validator.url_filter = !value.is_empty();
+        }
+        (Some("pairing-file"), Some(value)) if path == "device join" => {
+            parsed.validator.pairing_file = !value.is_empty();
+        }
         _ => {}
     };
     while index < tokens.len() {
@@ -781,7 +914,7 @@ fn parse_flags(
                 }
                 return Err(format!("unknown flag: --{name}"));
             };
-            if is_help_arg(arg) || GO_BOOL_FLAGS.contains(&(path, name)) {
+            if is_help_arg(arg) {
                 continue;
             }
             if arg.get_action().takes_values() {
@@ -796,15 +929,17 @@ fn parse_flags(
                         None => return Err(format!("flag needs an argument: --{name}")),
                     },
                 };
-                if INT_FLAGS.contains(&(path, name)) && !go_parse_int(&value) {
-                    return Err(invalid_argument(&value, arg, "ParseInt"));
+                if INT_FLAGS.contains(&(path, name))
+                    && let Err(error) = go_parse_int(&value)
+                {
+                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
                 }
                 note(arg, Some(&value), &mut parsed);
             } else {
                 if let Some(value) = inline
                     && !go_parse_bool(value)
                 {
-                    return Err(invalid_argument(value, arg, "ParseBool"));
+                    return Err(invalid_argument(value, arg, "ParseBool", "invalid syntax"));
                 }
                 let enabled = inline.is_none_or(|value| {
                     matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
@@ -844,8 +979,10 @@ fn parse_flags(
                     }
                 };
                 let long = arg.get_long().unwrap_or_default();
-                if INT_FLAGS.contains(&(path, long)) && !go_parse_int(&value) {
-                    return Err(invalid_argument(&value, arg, "ParseInt"));
+                if INT_FLAGS.contains(&(path, long))
+                    && let Err(error) = go_parse_int(&value)
+                {
+                    return Err(invalid_argument(&value, arg, "ParseInt", error.text()));
                 }
                 note(arg, Some(&value), &mut parsed);
                 break;
@@ -959,7 +1096,7 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     if GROUPS.contains(&path_text.as_str()) {
         return Verdict::GroupHelp(path_text);
     }
-    if let Some(message) = arity_message(&path_text, parsed.positionals, parsed.url_filter) {
+    if let Some(message) = arity_message(&path_text, parsed.positionals, parsed.validator) {
         return fail(&message, 1);
     }
     if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
@@ -1012,27 +1149,72 @@ mod tests {
     #[test]
     fn go_bool_and_int_syntax() {
         assert!(go_parse_bool("T") && go_parse_bool("false") && !go_parse_bool("maybe"));
-        assert!(
-            go_parse_int("-12") && go_parse_int("+3") && !go_parse_int("a") && !go_parse_int("")
-        );
+        assert_eq!(go_parse_int("-12"), Ok(-12));
+        assert_eq!(go_parse_int("+3"), Ok(3));
+        assert_eq!(go_parse_int("a"), Err(IntError::Syntax));
+        assert_eq!(go_parse_int(""), Err(IntError::Syntax));
+    }
+
+    /// `strconv.ParseInt(s, 0, 64)`, value by value (Go 1.26 semantics).
+    #[test]
+    fn go_int_syntax_follows_parse_int_base_zero() {
+        let accepted: &[(&str, i64)] = &[
+            ("0", 0),
+            ("0x10", 16),
+            ("0X10", 16),
+            ("0o17", 15),
+            ("0O17", 15),
+            ("0b101", 5),
+            ("1_0", 10),
+            ("010", 8),
+            ("0_7", 7),
+            ("-0x10", -16),
+            ("+5", 5),
+            ("0x_1", 1),
+            ("0b_1", 1),
+            ("-9223372036854775808", i64::MIN),
+            ("9223372036854775807", i64::MAX),
+            ("-0x8000000000000000", i64::MIN),
+        ];
+        for (text, want) in accepted {
+            assert_eq!(go_parse_int(text), Ok(*want), "{text:?}");
+        }
+        let syntax = [
+            "", "-", "+", "0x", "0b", "0o", "08", "0b2", "0o8", "0x1G", "1__0", "_10", "10_",
+            "0x1_", "0_x1", "1e3", " 5", "5 ", "--5", "+-5", "٣",
+        ];
+        for text in syntax {
+            assert_eq!(go_parse_int(text), Err(IntError::Syntax), "{text:?}");
+        }
+        let range = [
+            "9223372036854775808",
+            "-9223372036854775809",
+            "99999999999999999999",
+            "0x8000000000000000",
+            // Overflow is seen before the later invalid digit.
+            "99999999999999999999x",
+        ];
+        for text in range {
+            assert_eq!(go_parse_int(text), Err(IntError::Range), "{text:?}");
+        }
     }
 
     #[test]
     fn arity_messages_follow_cobra_validators() {
         assert_eq!(
-            arity_message("get", 0, false).as_deref(),
+            arity_message("get", 0, ValidatorFlags::default()).as_deref(),
             Some("accepts 1 arg(s), received 0")
         );
-        assert_eq!(arity_message("get", 1, false), None);
+        assert_eq!(arity_message("get", 1, ValidatorFlags::default()), None);
         assert_eq!(
-            arity_message("find", 4, false).as_deref(),
+            arity_message("find", 4, ValidatorFlags::default()).as_deref(),
             Some("accepts at most 1 arg(s), received 4")
         );
         assert_eq!(
-            arity_message("run", 0, false).as_deref(),
+            arity_message("run", 0, ValidatorFlags::default()).as_deref(),
             Some("requires at least 1 arg(s), only received 0")
         );
-        assert_eq!(arity_message("version", 9, false), None);
+        assert_eq!(arity_message("version", 9, ValidatorFlags::default()), None);
     }
 
     #[derive(serde::Deserialize)]
@@ -1073,10 +1255,17 @@ mod tests {
     }
 
     #[derive(serde::Deserialize)]
+    struct ShapeCase {
+        name: String,
+        observation: Observation,
+    }
+
+    #[derive(serde::Deserialize)]
     struct Fixture {
         usage: Vec<UsageCase>,
         arity: Vec<ArityRow>,
         gate: Vec<GateRow>,
+        argv_shapes: Vec<ShapeCase>,
     }
 
     fn fixture() -> Fixture {
@@ -1126,6 +1315,64 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    /// The emulation answers exactly the diagnostics cobra and the argument validators
+    /// give (usage errors, arity, the `device join` messages) and the group help; every
+    /// other Go outcome belongs to the command body, which the emulation hands to clap.
+    #[test]
+    fn every_argv_shape_is_decided_like_the_oracle() {
+        let fixture = fixture();
+        assert!(fixture.argv_shapes.len() >= 20);
+        let mut failures = Vec::new();
+        for case in &fixture.argv_shapes {
+            let observation = &case.observation;
+            let first_line = observation.stderr.lines().next().unwrap_or_default();
+            let decided_before_the_body = [
+                "Error: accepts ",
+                "Error: with --pairing-file, pass only",
+                "Error: flag needs an argument",
+            ]
+            .iter()
+            .any(|prefix| first_line.starts_with(prefix));
+            let want = if observation.exit_code == 0 {
+                assert!(!observation.stdout.is_empty(), "{}", case.name);
+                let path = observation.args.join(" ");
+                Verdict::GroupHelp(path)
+            } else if decided_before_the_body {
+                expect_fail(observation)
+            } else {
+                Verdict::Proceed
+            };
+            let got = evaluate(&observation.args, root());
+            if got != want {
+                failures.push(format!("{}: {got:?} != {want:?}", case.name));
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn join_arity_depends_on_whether_pairing_file_is_set() {
+        let set = ValidatorFlags {
+            pairing_file: true,
+            ..ValidatorFlags::default()
+        };
+        let unset = ValidatorFlags::default();
+        assert_eq!(arity_message("device join", 1, set), None);
+        assert_eq!(
+            arity_message("device join", 2, set).as_deref(),
+            Some(JOIN_PAIRING_FILE_MESSAGE)
+        );
+        assert_eq!(
+            arity_message("device join", 0, set).as_deref(),
+            Some(JOIN_PAIRING_FILE_MESSAGE)
+        );
+        assert_eq!(arity_message("device join", 2, unset), None);
+        assert!(
+            arity_message("device join", 1, unset)
+                .is_some_and(|message| message.ends_with(JOIN_SUFFIX))
+        );
     }
 
     #[test]
@@ -1203,6 +1450,161 @@ mod tests {
             assert!(refusals.next().is_none(), "{}", row.path);
         }
         assert!(refused > 150, "only {refused} refusals replayed");
+    }
+
+    /// The pinned Go tree: `(path, runnable, local flags, persistent flags)`.
+    fn tree() -> serde_json::Value {
+        serde_json::from_str(include_str!("../../../testdata/port/cli/command-tree.json"))
+            .expect("command-tree fixture parses")
+    }
+
+    /// Walks the clap tree along a Go path ("device join"), like `find_next` does.
+    fn clap_command<'a>(root: &'a Command, path: &str) -> Option<&'a Command> {
+        path.split(' ')
+            .filter(|word| !word.is_empty())
+            .try_fold(root, |node, word| {
+                node.get_subcommands().find(|sub| {
+                    sub.get_name() == word || sub.get_all_aliases().any(|alias| alias == word)
+                })
+            })
+    }
+
+    fn go_path(entry: &serde_json::Value) -> String {
+        entry["path"]
+            .as_str()
+            .expect("path")
+            .trim_start_matches("symvault")
+            .trim_start()
+            .to_owned()
+    }
+
+    /// Flags (long and shorthand) that exist in both trees and whose value syntax the two
+    /// disagree on, plus the number of flags compared. pflag gives a boolean flag a
+    /// no-option default (`--flag` never takes the next token); every other Go flag type
+    /// (string, int, duration, slices) consumes the next token. The emulation consumes
+    /// it exactly when `eats_next` says so, so that is what has to agree with Go's type:
+    /// mixing the two up silently turns a path into a positional (or the reverse).
+    fn flag_type_mismatches(root: &Command) -> (Vec<String>, usize) {
+        let tree = tree();
+        let mut mismatches = Vec::new();
+        let mut compared = 0;
+        let mut compare = |path: &str, command: &Command, flag: &serde_json::Value| {
+            let name = flag["name"].as_str().expect("flag name");
+            if name == "help" {
+                return;
+            }
+            let flags = Flags { command, root };
+            let go_bool = flag["type"] == "bool";
+            let mut check = |label: String, arg: Option<&Arg>| {
+                let Some(arg) = arg else {
+                    return;
+                };
+                compared += 1;
+                let emulated_bool = !eats_next(arg);
+                if go_bool != emulated_bool {
+                    mismatches.push(format!(
+                        "{path} {label}: Go type {} but the emulation treats it as {}",
+                        flag["type"],
+                        if emulated_bool {
+                            "a boolean"
+                        } else {
+                            "a value flag"
+                        }
+                    ));
+                }
+            };
+            check(format!("--{name}"), flags.long(name));
+            if let Some(short) = flag["shorthand"].as_str().and_then(|s| s.chars().next()) {
+                check(format!("-{short}"), flags.short(short));
+            }
+        };
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            let Some(command) = clap_command(root, &path) else {
+                continue;
+            };
+            for key in ["local_flags", "persistent_flags"] {
+                for flag in entry[key].as_array().into_iter().flatten() {
+                    compare(&path, command, flag);
+                }
+            }
+        }
+        (mismatches, compared)
+    }
+
+    #[test]
+    fn flag_types_match_the_command_tree() {
+        let (mismatches, compared) = flag_type_mismatches(&root());
+        assert!(compared > 150, "only {compared} flags compared");
+        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
+
+    #[test]
+    fn integer_flag_table_names_integer_flags() {
+        let tree = tree();
+        for (path, name) in INT_FLAGS {
+            let entry = tree["commands"]
+                .as_array()
+                .expect("commands")
+                .iter()
+                .find(|entry| go_path(entry) == *path)
+                .unwrap_or_else(|| panic!("{path} is not in the command tree"));
+            let flag = entry["local_flags"]
+                .as_array()
+                .expect("flags")
+                .iter()
+                .find(|flag| flag["name"] == *name)
+                .unwrap_or_else(|| panic!("{path} has no --{name}"));
+            assert!(
+                matches!(flag["type"].as_str(), Some("int" | "int64")),
+                "{path} --{name} is {}",
+                flag["type"]
+            );
+        }
+    }
+
+    #[test]
+    fn command_and_group_tables_equal_the_command_tree() {
+        let tree = tree();
+        let mut runnable = Vec::new();
+        let mut groups = Vec::new();
+        let mut all = Vec::new();
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            if path.is_empty() {
+                continue;
+            }
+            if entry["runnable"] == true {
+                runnable.push(path.clone());
+            } else {
+                groups.push(path.clone());
+            }
+            all.push(path);
+        }
+        let diff = |label: &str, table: &[&str], expected: &[String]| {
+            let mut problems = Vec::new();
+            for path in expected {
+                if !table.contains(&path.as_str()) {
+                    problems.push(format!("{label} is missing {path:?}"));
+                }
+            }
+            for path in table {
+                if !expected.iter().any(|candidate| candidate == path) {
+                    problems.push(format!("{label} has the extra entry {path:?}"));
+                }
+            }
+            problems
+        };
+        let mut problems = diff("COMMANDS", COMMANDS, &all);
+        problems.extend(diff("GROUPS", GROUPS, &groups));
+        // An arity rule can only belong to a runnable command (the converse does not
+        // hold: commands whose validator accepts anything have no rule).
+        for (path, _) in ARITY {
+            if !runnable.iter().any(|candidate| candidate == path) {
+                problems.push(format!("ARITY names {path:?}, which is not runnable"));
+            }
+        }
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 
     #[test]

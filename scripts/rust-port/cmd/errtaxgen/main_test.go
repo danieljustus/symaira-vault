@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -81,5 +83,47 @@ func TestResolveOracleRejectsUnpinnedCommit(t *testing.T) {
 	}
 	if commit, release, err := resolveOracle(true, "", ""); err != nil || commit != pinnedOracleCommit || release != pinnedOracleRelease {
 		t.Fatalf("check mode = %q %q %v", commit, release, err)
+	}
+}
+
+func TestShapeCorpusIsWellFormed(t *testing.T) {
+	seen := map[string]bool{}
+	for _, item := range shapeInputs() {
+		if item.name == "" || item.description == "" || len(item.args) == 0 {
+			t.Fatalf("incomplete shape %+v", item)
+		}
+		if seen[item.name] {
+			t.Fatalf("duplicate shape %q", item.name)
+		}
+		seen[item.name] = true
+		for name := range item.files {
+			if strings.ContainsAny(name, `/\`) {
+				t.Fatalf("shape %q: file %q escapes the sandbox working directory", item.name, name)
+			}
+		}
+	}
+	// The three argument forms of --pairing-file and the unset shapes must stay.
+	for _, want := range []string{
+		"join_pairing_file_equals_token", "join_pairing_file_separate_token", "join_pairing_file_path_only",
+		"join_pairing_file_equals_double_dash_token", "join_no_flag_one_positional", "join_no_flag_three_positionals",
+		"group_help_agent_skill",
+	} {
+		if !seen[want] {
+			t.Fatalf("shape %q was dropped", want)
+		}
+	}
+}
+
+func TestRunWritesFilesIntoTheSandboxWorkingDirectory(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "oracle.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ncat \"$1\"\n"), 0o700); err != nil { // #nosec G306 -- test script
+		t.Fatal(err)
+	}
+	res, err := run(script, []string{"note.txt"}, map[string]string{"note.txt": "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.obs.Stdout != "hello" || res.obs.ExitCode != 0 {
+		t.Fatalf("observation = %+v", res.obs)
 	}
 }

@@ -16,6 +16,11 @@
 //     by the output-format gate (exit 9) before the command body runs.
 //   - not_initialized: the commands that fail with "vault not initialized" in an
 //     empty sandbox (exit 3, doubled line, init hint).
+//   - argv_shapes: argument shapes whose outcome depends on a flag's *type*
+//     (`device join --pairing-file` is a string flag, so the token after it is
+//     a value, not a positional), run against disposable files in the sandbox
+//     working directory, plus group help pages. Every row ends before the
+//     command touches a vault or the network.
 package main
 
 import (
@@ -99,6 +104,15 @@ type gateRow struct {
 	Refusals      []observation `json:"refusals,omitempty"`
 }
 
+// shapeCase is one argument shape. Files are written into the sandbox working
+// directory before the oracle runs, so a relative path in Args resolves there.
+type shapeCase struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Files       map[string]string `json:"files,omitempty"`
+	Observation observation       `json:"observation"`
+}
+
 type fixture struct {
 	SchemaVersion  int           `json:"schema_version"`
 	Oracle         oracle        `json:"oracle"`
@@ -106,6 +120,7 @@ type fixture struct {
 	Arity          []arityRow    `json:"arity"`
 	Gate           []gateRow     `json:"gate"`
 	NotInitialized []observation `json:"not_initialized"`
+	ArgvShapes     []shapeCase   `json:"argv_shapes"`
 }
 
 type treeFile struct {
@@ -156,6 +171,29 @@ func usageInputs() []usageInput {
 		{"invalid_bool_value", "an invalid boolean value", []string{"--quiet=maybe", "version"}},
 		{"invalid_int_value", "an invalid integer value", []string{"generate", "--length", "abc"}},
 		{"invalid_int_value_equals", "an invalid integer value with =", []string{"generate", "--length=abc"}},
+		{"int_flag_hex", "pflag parses ints with ParseInt(s, 0, 64): hex is accepted, so the next flag is the first error", []string{"generate", "--length", "0x10", "--bogus"}},
+		{"int_flag_octal_prefix", "0o octal is accepted", []string{"generate", "--length", "0o17", "--bogus"}},
+		{"int_flag_binary", "0b binary is accepted", []string{"generate", "--length=0b101", "--bogus"}},
+		{"int_flag_underscore", "underscores between digits are accepted with base 0", []string{"generate", "--length", "1_0", "--bogus"}},
+		{"int_flag_legacy_octal", "a leading zero means octal", []string{"generate", "--length", "010", "--bogus"}},
+		{"int_flag_signed_hex", "a sign may precede the base prefix", []string{"generate", "--length", "-0x10", "--bogus"}},
+		{"int_flag_plus_sign", "a plus sign is accepted", []string{"generate", "--length", "+5", "--bogus"}},
+		{"int_flag_min_int64", "the minimum int64 is accepted", []string{"generate", "--length", "-9223372036854775808", "--bogus"}},
+		{"int_flag_shorthand_hex", "shorthand with an attached hex value", []string{"generate", "-l0x10", "--bogus"}},
+		{"int_flag_shorthand_separate_hex", "shorthand with a separate hex value", []string{"generate", "-l", "0o17", "--bogus"}},
+		{"int_flag_prefix_without_digits", "a base prefix needs digits", []string{"generate", "--length", "0x"}},
+		{"int_flag_bad_hex_digit", "a digit past the base is a syntax error", []string{"generate", "--length", "0x1G"}},
+		{"int_flag_bad_octal_digit", "8 is not an octal digit", []string{"generate", "--length", "08"}},
+		{"int_flag_double_underscore", "doubled underscores are a syntax error", []string{"generate", "--length", "1__0"}},
+		{"int_flag_leading_underscore", "a leading underscore is a syntax error", []string{"generate", "--length", "_10"}},
+		{"int_flag_trailing_underscore", "a trailing underscore is a syntax error", []string{"generate", "--length", "10_"}},
+		{"int_flag_empty", "an empty value", []string{"generate", "--length="}},
+		{"int_flag_float", "a float is not an integer", []string{"generate", "--length", "1e3"}},
+		{"int_flag_space", "surrounding space is not trimmed", []string{"generate", "--length", " 5"}},
+		{"int_flag_out_of_range", "a decimal past int64 is a range error", []string{"generate", "--length", "99999999999999999999"}},
+		{"int_flag_hex_out_of_range", "a hex value past int64 is a range error", []string{"generate", "--length", "0x8000000000000000"}},
+		{"int_flag_negative_out_of_range", "a negative value below int64 is a range error", []string{"generate", "--length", "-9223372036854775809"}},
+		{"int_flag_range_before_syntax", "an overflow is reported before a later invalid digit is seen", []string{"generate", "--length", "99999999999999999999x"}},
 		{"group_with_unknown_subcommand", "a non-root group given an unknown subcommand", []string{"config", "bogus"}},
 		{"nested_group_with_unknown_subcommand", "a nested group given an unknown subcommand", []string{"agent", "token", "bogus"}},
 		{"group_with_extra_args", "a non-root group given trailing arguments", []string{"config", "a", "b"}},
@@ -212,14 +250,19 @@ type result struct {
 	timedOut bool
 }
 
-// run executes the oracle in a fresh sandbox. A timed-out command keeps the
+// run executes the oracle in a fresh sandbox whose working directory holds files. A timed-out command keeps the
 // partial stderr so a gate refusal (which is immediate) can still be told apart.
-func run(goBinary string, args []string) (result, error) {
+func run(goBinary string, args []string, files map[string]string) (result, error) {
 	box, err := newSandbox()
 	if err != nil {
 		return result{}, err
 	}
 	defer func() { _ = os.RemoveAll(box.root) }()
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(box.root, name), []byte(content), 0o600); err != nil {
+			return result{}, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 	defer cancel()
 	// #nosec G204 -- validateGoBinary checked the pinned, clean oracle before this command.
@@ -307,7 +350,7 @@ func concat(parts ...[]string) []string {
 func buildUsage(goBinary string) ([]usageCase, error) {
 	var out []usageCase
 	for _, in := range usageInputs() {
-		res, err := run(goBinary, in.args)
+		res, err := run(goBinary, in.args, nil)
 		if err != nil {
 			return nil, fmt.Errorf("usage case %s: %w", in.name, err)
 		}
@@ -315,6 +358,88 @@ func buildUsage(goBinary string) ([]usageCase, error) {
 			return nil, fmt.Errorf("usage case %s timed out", in.name)
 		}
 		out = append(out, usageCase{Name: in.name, Description: in.description, Observation: res.obs})
+	}
+	return out, nil
+}
+
+type shapeInput struct {
+	name, description string
+	files             map[string]string
+	args              []string
+}
+
+const (
+	joinToken = "ABCD1234"
+	// joinInviteMismatch is a well-formed invitation for a different token: the
+	// command reads it, finds the mismatch and stops before any vault work.
+	joinInviteMismatch = `{"token":"ZZZZ","public_key":"age1qqqq"}`
+	joinInviteNoKey    = `{"token":"ABCD1234"}`
+)
+
+// joinFiles are the disposable invitation artifacts of the device join shapes.
+var joinFiles = map[string]string{
+	"invite-mismatch.json": joinInviteMismatch,
+	"invite-nokey.json":    joinInviteNoKey,
+}
+
+// shapeInputs covers the argument shapes whose outcome depends on a flag's type.
+// `device join --pairing-file` is a string flag: the token after it is its
+// value, and with it set the command wants exactly one positional (the token),
+// without it exactly two. A dummy-positional sweep never passes the flag, so
+// these shapes are not reachable from the arity corpus.
+func shapeInputs() []shapeInput {
+	join := func(name, description string, args ...string) shapeInput {
+		return shapeInput{name, description, joinFiles, concat([]string{"device", "join"}, args)}
+	}
+	return []shapeInput{
+		join("join_pairing_file_equals_token", "--pairing-file=<path> <token>: one positional", "--pairing-file=invite-mismatch.json", joinToken),
+		join("join_pairing_file_separate_token", "--pairing-file <path> <token>: the path is the flag's value", "--pairing-file", "invite-mismatch.json", joinToken),
+		join("join_pairing_file_path_only", "--pairing-file <path> without a token: no positional is left", "--pairing-file", "invite-mismatch.json"),
+		join("join_pairing_file_equals_double_dash_token", "the token after -- is positional", "--pairing-file=invite-mismatch.json", "--", joinToken),
+		join("join_pairing_file_separate_double_dash_token", "the path is consumed before --, the token follows it", "--pairing-file", "invite-mismatch.json", "--", joinToken),
+		join("join_pairing_file_two_positionals", "with --pairing-file a second positional is refused", "--pairing-file=invite-mismatch.json", joinToken, "extra"),
+		join("join_pairing_file_name_flag_first", "another value flag before --pairing-file", "--name", "laptop", "--pairing-file", "invite-mismatch.json", joinToken),
+		join("join_pairing_file_name_flag_last", "another value flag after the token", "--pairing-file", "invite-mismatch.json", joinToken, "--name", "laptop"),
+		join("join_pairing_file_value_is_token_shaped", "a token-shaped path is still the flag's value", "--pairing-file", joinToken),
+		join("join_pairing_file_missing_file", "the invitation file does not exist", "--pairing-file=missing.json", joinToken),
+		// A file that is not JSON is deliberately absent: the diagnostic carries the
+		// decoder's wording ("invalid character 'o' in literal null ..."), which the
+		// Rust serde parser words differently by design.
+		join("join_pairing_file_without_public_key", "the invitation carries no public key", "--pairing-file=invite-nokey.json", joinToken),
+		join("join_pairing_file_invalid_token", "the token is validated before the file is read", "--pairing-file=missing.json", "ab-cd"),
+		join("join_pairing_file_empty_value_one_positional", "an empty path leaves the flag unset: two positionals are required", "--pairing-file=", joinToken),
+		join("join_pairing_file_empty_value_no_positional", "an empty path and no positional", "--pairing-file="),
+		join("join_pairing_file_last_value_wins", "the last occurrence decides whether the flag is set", "--pairing-file=invite-mismatch.json", "--pairing-file=", joinToken),
+		join("join_pairing_file_needs_argument", "--pairing-file without its value", "--pairing-file"),
+		join("join_no_flag_zero_positionals", "no flag, no positional"),
+		join("join_no_flag_one_positional", "no flag, one positional", joinToken),
+		join("join_no_flag_two_positionals_invalid_token", "no flag, two positionals: the token is validated before the clone", "remote", "ab-cd"),
+		join("join_no_flag_three_positionals", "no flag, three positionals", "remote", joinToken, "extra"),
+		join("join_no_flag_four_positionals", "no flag, four positionals", "remote", joinToken, "extra", "more"),
+		{"group_help_agent_skill", "a non-runnable group prints its help and exits 0", nil, []string{"agent", "skill"}},
+		{"group_help_device", "a top-level group prints its help and exits 0", nil, []string{"device"}},
+	}
+}
+
+func buildShapes(goBinary string) ([]shapeCase, error) {
+	var out []shapeCase
+	for _, in := range shapeInputs() {
+		res, err := run(goBinary, in.args, in.files)
+		if err != nil {
+			return nil, fmt.Errorf("shape %s: %w", in.name, err)
+		}
+		if res.timedOut {
+			return nil, fmt.Errorf("shape %s timed out", in.name)
+		}
+		// The replay never reaches a vault, a clone or a prompt: a row that
+		// the oracle accepted would be a different command, not a diagnostic.
+		if res.obs.ExitCode == 0 && res.obs.Stderr != "" {
+			return nil, fmt.Errorf("shape %s: exit 0 with stderr %q", in.name, res.obs.Stderr)
+		}
+		if res.obs.ExitCode != 0 && (res.obs.Stdout != "" || !strings.HasPrefix(res.obs.Stderr, "Error: ")) {
+			return nil, fmt.Errorf("shape %s: exit %d is not a bare diagnostic: stdout %q stderr %q", in.name, res.obs.ExitCode, res.obs.Stdout, res.obs.Stderr)
+		}
+		out = append(out, shapeCase{Name: in.name, Description: in.description, Files: in.files, Observation: res.obs})
 	}
 	return out, nil
 }
@@ -340,7 +465,7 @@ func buildPaths(goBinary, root string) ([]arityRow, []gateRow, []observation, er
 		row := arityRow{Path: command.Path}
 		valid := -1
 		for count := 0; count <= maxDummyArgs; count++ {
-			res, err := run(goBinary, concat(base, dummyArgs(count)))
+			res, err := run(goBinary, concat(base, dummyArgs(count)), nil)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("arity %s/%d: %w", command.Path, count, err)
 			}
@@ -361,7 +486,7 @@ func buildPaths(goBinary, root string) ([]arityRow, []gateRow, []observation, er
 		entry := gateRow{Path: command.Path, ValidArgs: valid}
 		var outputRefusals int
 		for _, format := range gateFormats {
-			res, err := run(goBinary, concat(base, dummyArgs(valid), format))
+			res, err := run(goBinary, concat(base, dummyArgs(valid), format), nil)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("gate %s %v: %w", command.Path, format, err)
 			}
@@ -383,7 +508,7 @@ func buildPaths(goBinary, root string) ([]arityRow, []gateRow, []observation, er
 			return nil, nil, nil, fmt.Errorf("%s: the gate refuses only some --output formats", command.Path)
 		}
 		gate = append(gate, entry)
-		plain, err := run(goBinary, concat(base, dummyArgs(valid)))
+		plain, err := run(goBinary, concat(base, dummyArgs(valid)), nil)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("plain %s: %w", command.Path, err)
 		}
@@ -460,6 +585,10 @@ func main() {
 	if err != nil {
 		fatal("build path cases: %v", err)
 	}
+	shapes, err := buildShapes(*goBinary)
+	if err != nil {
+		fatal("build argument shapes: %v", err)
+	}
 	content, err := marshalJSON(fixture{
 		SchemaVersion:  1,
 		Oracle:         oracle{commitLabel, resolved, releaseLabel, sources, sourceDigest, generatorDigest},
@@ -467,11 +596,12 @@ func main() {
 		Arity:          arity,
 		Gate:           gate,
 		NotInitialized: notInitialized,
+		ArgvShapes:     shapes,
 	})
 	if err != nil {
 		fatal("marshal fixture: %v", err)
 	}
-	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases", len(usage), len(arity), len(gate), len(notInitialized))
+	summary := fmt.Sprintf("%d usage cases, %d arity rows, %d gate rows, %d not-initialized cases, %d argv shapes", len(usage), len(arity), len(gate), len(notInitialized), len(shapes))
 	if *check {
 		existing, err := os.ReadFile(*output) // #nosec G304 -- repository fixture path
 		if err != nil {

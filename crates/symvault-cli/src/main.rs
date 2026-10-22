@@ -307,7 +307,8 @@ enum Command {
     /// Generate a secure password.
     #[command(alias = "gen")]
     Generate {
-        #[arg(short = 'l', long, default_value_t = 20)]
+        #[arg(short = 'l', long, default_value_t = 20, allow_hyphen_values = true,
+            value_parser = cobra_usage::parse_go_int)]
         length: i64,
         #[arg(short = 's', long)]
         symbols: bool,
@@ -2532,6 +2533,10 @@ fn run_cli() -> ExitCode {
                 }
             };
             let vault = vault.as_path();
+            // `device join` fails inside its RunE like the commands that print each error
+            // twice (cobra, then the root executor); the other device commands do not
+            // have a frozen oracle line yet and keep the single line.
+            let doubled_errors = matches!(command, DeviceCommand::Join { .. });
             let result = match command {
                 DeviceCommand::Pair { .. } => device::pair(vault, cli.quiet),
                 DeviceCommand::Join {
@@ -2575,6 +2580,10 @@ fn run_cli() -> ExitCode {
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
+                Err(error) if doubled_errors => {
+                    print_error_like_go(&error);
+                    ExitCode::from(1)
+                }
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
                     ExitCode::from(1)

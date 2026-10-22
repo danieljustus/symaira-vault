@@ -34,7 +34,8 @@ candidate and binary identity; their gap counts are not current status.
 argument validators before clap parses, so Go's usage errors, arity errors and
 the output-format gate are produced byte for byte; anything it does not reject
 falls through to clap unchanged. Evidence: `testdata/port/cli/error-taxonomy.json`
-(40 usage cases, 116 arity rows, 116 gate rows, 29 not-initialized cases),
+(40 usage cases, 116 arity rows, 116 gate rows, 29 not-initialized cases; the
+follow-up below raises this to 63 usage cases and adds 23 argv shapes),
 `make error-taxonomy-cli-differential`.
 
 Measured before the change (28 hand-picked probes of the pinned Go binary against
@@ -45,6 +46,26 @@ the vault check; `run`/`file use` need `--` natively; `device approval-pair` and
 `device revoke` word the failure differently; Go's `auth set|status|
 rotate-passphrase` keep exit 1 for the same text (kept, covered by
 `auth_commands.rs`).
+
+### Follow-up: `device join --pairing-file` and flag types
+
+Review of slice 2 found `device join --pairing-file <path> <token>` falsely
+rejected: the emulation treated `--pairing-file` as a boolean (a leftover
+override table), but Go declares it a string flag. With a non-empty value Go
+wants exactly one positional (the token) and prints `with --pairing-file, pass
+only the pairing token: ...` otherwise; without it exactly two, with the
+`accepts between 1 and 2 arg(s)` message. Fixed by deleting the override table
+and making the `device join` rule depend on whether the flag is set; flag types
+now come only from clap, and `flag_types_match_the_command_tree` compares every
+shared flag with `command-tree.json` so the class cannot return. The
+`COMMANDS`/`GROUPS` tables are compared with the tree in both directions, and
+`generate --length` now parses like `strconv.ParseInt(s, 0, 64)` (`0x10`, `0o17`,
+`0b101`, `1_0`, range errors; the clap value parser is the same function).
+`errtaxgen` records the new rows in `testdata/port/cli/error-taxonomy.json` (63
+usage cases, 23 `argv_shapes`) and `device join` now prints its errors twice like Go. `agent skill` (bare) is byte-replayed through the
+`group_help_agent_skill` row. Left open: a pairing file that is not JSON (Go's
+decoder wording vs serde), the success path of `device join` (passphrase prompt),
+and int flags other than `generate --length`.
 
 ## Historical measurement, 2026-09-27
 
