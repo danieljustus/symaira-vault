@@ -18,7 +18,7 @@ import time
 from urllib.parse import urlencode
 
 sys.dont_write_bytecode = True
-from mcp_process_contract import ORACLE, checked, isolated, inventory, vault_snapshot
+from mcp_process_contract import ORACLE, checked, isolated, inventory, vault_snapshot, signal_suite
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT/'scripts/rust-port/http_process_seed.go.txt'
@@ -405,12 +405,41 @@ def candidate_paths():
             'scripts/rust-port/test_http_process_contract.py'})
 
 
+def signals_main(args):
+    """SIGINT/SIGTERM contract for the HTTP serve mode against prebuilt binaries."""
+    assert platform.system() in {'Darwin','Linux'}, 'signal contract is Unix-only; Windows Ctrl-C/Ctrl-Break is not covered'
+    go,rust=args.go_cli.resolve(),args.rust.resolve()
+    receipt={'passed':False,'native_os':platform.system(),'architecture':platform.machine(),
+        'candidate_commit':checked(['git','rev-parse','HEAD']).decode().strip(),
+        'go_binary_sha256':hashlib.sha256(go.read_bytes()).hexdigest(),
+        'rust_binary_sha256':hashlib.sha256(rust.read_bytes()).hexdigest(),
+        'driver_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'rows':[],'executed':{}}
+    try:
+        with tempfile.TemporaryDirectory(prefix='symvault-http-signals-') as raw:
+            base=Path(raw);seed_home=base/'seed';seed_home.mkdir()
+            tokens=json.loads(checked([args.go_http_seed,'--root',seed_home/'vault'],cwd=seed_home,env=isolated(seed_home)))
+            rows=signal_suite(go,rust,base,seed_home/'vault','http',tokens=tokens)
+            receipt['rows']+=[{k:v for k,v in r.items() if k not in {'final','final_raw'}} for r in rows]
+            receipt['executed']['http']=len(rows)
+            receipt['passed']=True
+    finally:
+        args.receipt.write_text(json.dumps(receipt,indent=2,sort_keys=True)+'\n',encoding='utf-8')
+    print(f"PASS: {receipt['executed']['http']} http signal runs on {platform.system()}")
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--rust',type=Path,required=True)
     parser.add_argument('--receipt',type=Path,required=True)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
+    parser.add_argument('--signals',action='store_true',
+        help='run only the SIGINT/SIGTERM HTTP contract against prebuilt binaries')
+    parser.add_argument('--go-cli',type=Path,help='prebuilt Go oracle CLI (with --signals)')
+    parser.add_argument('--go-http-seed',type=Path,help='prebuilt Go HTTP fixture seed helper (with --signals)')
     args=parser.parse_args()
+    if args.signals:
+        assert args.go_cli and args.go_http_seed, '--signals needs --go-cli and --go-http-seed'
+        return signals_main(args)
     clean=not checked(['git','status','--porcelain=v1']).strip()
     assert clean or args.allow_dirty_for_development
     rust=args.rust.resolve()
