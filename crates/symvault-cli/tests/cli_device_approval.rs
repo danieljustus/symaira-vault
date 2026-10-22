@@ -408,13 +408,13 @@ fn revoke_errors_match_the_oracle_message_and_exit_status() {
     assert_eq!(too_many.status.code(), Some(1), "{too_many:?}");
     assert_eq!(
         String::from_utf8_lossy(&too_many.stderr),
-        "Error: accepts 1 arg(s), received 2\n"
+        "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n"
     );
 
     let none = run(&binary, &["device", "approval-revoke", "-y"], &root, &home);
     assert_eq!(none.status.code(), Some(1), "{none:?}");
     assert_eq!(
         String::from_utf8_lossy(&none.stderr),
-        "Error: accepts 1 arg(s), received 0\n"
+        "Error: accepts 1 arg(s), received 0\nError: accepts 1 arg(s), received 0\n"
     );
 }

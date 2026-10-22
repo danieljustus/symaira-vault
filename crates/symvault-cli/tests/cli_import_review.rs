@@ -139,16 +139,7 @@ fn import_review_matches_frozen_go_oracle() {
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert_eq!(out.status.code(), Some(case.exit), "case {}: exit", case.id);
 
-        if case.id == "review-bare" {
-            // Documented non-goal: cobra help rendering (module docs).
-            assert!(
-                stdout.is_empty(),
-                "case {}: bare review must stay silent, got: {stdout}",
-                case.id
-            );
-        } else {
-            assert_eq!(stdout, case.stdout, "case {}: stdout", case.id);
-        }
+        assert_eq!(stdout, case.stdout, "case {}: stdout", case.id);
         assert_eq!(stderr, case.stderr, "case {}: stderr", case.id);
 
         if let Some(post) = &case.post_argv {

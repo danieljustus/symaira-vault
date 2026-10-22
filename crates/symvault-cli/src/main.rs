@@ -17,6 +17,7 @@ mod audit_export_commands;
 mod backup_commands;
 mod broker_commands;
 mod cli_artifacts;
+mod cobra_usage;
 mod completion_commands;
 mod completion_protocol;
 mod config;
@@ -1235,6 +1236,10 @@ fn run_cli() -> ExitCode {
         };
     }
 
+    if let Some(code) = cobra_usage::check(&args, Cli::command()) {
+        return code;
+    }
+
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(error) => {
@@ -1557,7 +1562,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stderr().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1657,7 +1664,9 @@ fn run_cli() -> ExitCode {
                 }
                 Ok(())
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_execution_result(result)
@@ -1676,7 +1685,9 @@ fn run_cli() -> ExitCode {
                     .map_err(|error| error.to_string())?;
                 broker_commands::run(&root, &store, &identity, &addr, strict, &passthrough)
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_execution_result(result)
@@ -1704,7 +1715,9 @@ fn run_cli() -> ExitCode {
                 }
                 Ok(())
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1736,7 +1749,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1769,7 +1784,9 @@ fn run_cli() -> ExitCode {
                     ),
                 }
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1795,7 +1812,9 @@ fn run_cli() -> ExitCode {
                     }
                 }
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1813,7 +1832,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1847,7 +1868,9 @@ fn run_cli() -> ExitCode {
                     )
                 }
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1862,7 +1885,9 @@ fn run_cli() -> ExitCode {
                 let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
                 agent_token_commands::list(&vault, &name, cli.quiet, &mut io::stdout().lock())
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1891,7 +1916,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1912,7 +1939,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1941,7 +1970,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1967,7 +1998,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stderr().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -1984,7 +2017,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stdout().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2016,7 +2051,9 @@ fn run_cli() -> ExitCode {
                     None => Ok(()),
                 }
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2059,7 +2096,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stderr().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2094,7 +2133,9 @@ fn run_cli() -> ExitCode {
                     &mut io::stderr().lock(),
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2120,7 +2161,9 @@ fn run_cli() -> ExitCode {
                     },
                 )
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2153,7 +2196,9 @@ fn run_cli() -> ExitCode {
                     ),
                 }
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2397,7 +2442,9 @@ fn run_cli() -> ExitCode {
                 )
                 .map_err(|error| format!("preview path migration: {error}"))
             })();
-            if let Err(error) = &result {
+            if let Err(error) = &result
+                && !is_not_initialized(error)
+            {
                 let _ = writeln!(io::stderr(), "Error: {error}");
             }
             finish_vault_result(result)
@@ -2838,7 +2885,9 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
         }
     })();
     // Go reports profile command errors through both Cobra and main.
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && !is_not_initialized(error)
+    {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_vault_result(result)
@@ -2914,7 +2963,9 @@ fn run_audit_export(
         }
         writeln!(summary).map_err(|error| error.to_string())
     })();
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && !is_not_initialized(error)
+    {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_vault_result(result)
@@ -2984,7 +3035,9 @@ fn run_audit_rotate_key(explicit_vault: Option<&Path>, profile: Option<&str>) ->
         .map_err(|error| error.to_string())?;
         Ok::<(), String>(())
     })();
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && !is_not_initialized(error)
+    {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_vault_result(result)
@@ -3075,7 +3128,7 @@ fn run_auth_set(
     if let Err(error) = &result {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
-    finish_vault_result(result)
+    finish_vault_result_exit_1(result)
 }
 
 fn run_auth_rotate_passphrase(
@@ -3259,7 +3312,7 @@ fn run_auth_rotate_passphrase(
     if let Err(error) = &result {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
-    finish_vault_result(result)
+    finish_vault_result_exit_1(result)
 }
 
 fn run_file(
@@ -3620,14 +3673,34 @@ fn run_find(
     finish_vault_result(result)
 }
 
+/// Go's root executor prints every error twice and, for exit 3, the init hint
+/// (`ExecuteRoot`): the shape of every "vault not initialized" failure.
+pub(crate) fn is_not_initialized(error: &(impl std::fmt::Display + ?Sized)) -> bool {
+    error.to_string().starts_with("vault not initialized")
+}
+
+pub(crate) fn write_not_initialized(error: &str) {
+    // Some handlers already carry the executor's duplicated line in the text.
+    let error = error.lines().next().unwrap_or(error);
+    let mut stderr = io::stderr().lock();
+    let _ = writeln!(stderr, "Error: {error}");
+    let _ = writeln!(stderr, "Error: {error}");
+    let _ = writeln!(
+        stderr,
+        "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard."
+    );
+}
+
 fn finish_execution_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
-            if error.starts_with("vault not initialized") {
-                ExitCode::from(3)
-            } else if error.starts_with("vault locked:") {
+            if error.starts_with("vault locked:") {
                 ExitCode::from(4)
             } else {
                 ExitCode::from(1)
@@ -3636,10 +3709,27 @@ fn finish_execution_result(result: Result<(), String>) -> ExitCode {
     }
 }
 
+/// `finish_vault_result` without the exit-3 mapping: Go's `auth set`,
+/// `auth rotate-passphrase` and `auth status` report an uninitialized vault as
+/// a plain error (exit 1, no hint).
+fn finish_vault_result_exit_1(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn finish_vault_result(result: Result<(), String>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error == "field is required for --length, --digest, or --metadata" {
                 ExitCode::from(9)
@@ -4661,7 +4751,9 @@ fn run_import_review(
             )),
         }
     })();
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && !is_not_initialized(error)
+    {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_vault_result(result)
@@ -4909,7 +5001,9 @@ fn run_auth_status(
         }
         Ok::<(), String>(())
     })();
-    if let Err(error) = &result {
+    if let Err(error) = &result
+        && !is_not_initialized(error)
+    {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
     finish_session_result(result, false, 1)
@@ -4923,6 +5017,10 @@ fn finish_session_result(
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
+            if not_initialized_code == 3 && is_not_initialized(&error) {
+                write_not_initialized(&error);
+                return ExitCode::from(3);
+            }
             let _ = writeln!(io::stderr(), "Error: {error}");
             if error.contains("vault not initialized") {
                 ExitCode::from(not_initialized_code)
