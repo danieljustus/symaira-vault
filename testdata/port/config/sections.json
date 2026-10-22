@@ -1,0 +1,3482 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+    "commit_sha": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go"
+    ],
+    "source_digest": "f8945c526e654ca361bd66278b27b1102a65e3b15e60dcdd0e605e2c128857f1",
+    "generator_digest": "988ce5d91d26237d1fb2ec24f5c05a8e52c1a30a623ade903e7c06d77fc6065b"
+  },
+  "cases": [
+    {
+      "name": "no_sections",
+      "description": "no section present at all",
+      "input": "defaultAgent: default\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "sections_null",
+      "description": "every section explicitly null stays absent",
+      "input": "vault:\ngit:\nmcp:\nupdate:\nclipboard:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "sections_empty",
+      "description": "an empty section takes its full set of defaults",
+      "input": "vault: {}\ngit: {}\nmcp: {}\nupdate: {}\nclipboard: {}\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 10000000000,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": {
+              "cache_ttl_ns": 86400000000000
+            },
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_explicit_false",
+      "description": "explicit false beats a true default",
+      "input": "git:\n  auto_push: false\n  auto_pull: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": false,
+              "auto_pull": false,
+              "auto_pull_interval_ns": 10000000000,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_explicit_zero_interval",
+      "description": "an explicit zero duration beats the ten second default",
+      "input": "git:\n  auto_pull_interval: 0s\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 0,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_explicit_empty_template",
+      "description": "an explicit empty template beats the default text",
+      "input": "git:\n  commit_template: \"\"\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 10000000000,
+              "commit_template": ""
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_partial",
+      "description": "unnamed fields keep their defaults",
+      "input": "git:\n  auto_pull_interval: 45s\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 45000000000,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_wrong_type",
+      "description": "a scalar where a boolean is required is rejected",
+      "input": "git:\n  auto_push: maybe\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "git_scalar_section",
+      "description": "a scalar where a section is required is rejected",
+      "input": "git: nope\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "update_explicit_zero",
+      "description": "an explicit zero TTL beats the default",
+      "input": "update:\n  cache_ttl: 0s\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": {
+              "cache_ttl_ns": 0
+            },
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_explicit",
+      "description": "an explicit TTL",
+      "input": "update:\n  cache_ttl: 90m\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": {
+              "cache_ttl_ns": 5400000000000
+            },
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_zero_auto_clear",
+      "description": "an explicit zero disables the timer",
+      "input": "clipboard:\n  auto_clear_duration: 0\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 0,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_auto_clear",
+      "description": "an explicit duration",
+      "input": "clipboard:\n  auto_clear_duration: 5\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 5,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_copy_false",
+      "description": "an explicit false beats the true default",
+      "input": "clipboard:\n  copyByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_false",
+      "description": "the deprecated key is honored, and warns",
+      "input": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_true",
+      "description": "the deprecated key set true",
+      "input": "clipboard:\n  printByDefault: true\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_copy_wins_over_print",
+      "description": "copyByDefault present suppresses the deprecated key and its warning",
+      "input": "clipboard:\n  copyByDefault: true\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_twice",
+      "description": "the deprecation warning fires once per process",
+      "input": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        },
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_explicit_zero_port",
+      "description": "an explicit zero port beats the default",
+      "input": "mcp:\n  port: 0\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 0,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_stdio",
+      "description": "an explicit boolean",
+      "input": "mcp:\n  stdio: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": true,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_metrics_auth_false",
+      "description": "an explicit false beats the true default",
+      "input": "mcp:\n  metrics_auth_required: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": false,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_rate_limit_zero",
+      "description": "an explicit zero rate limit beats the default",
+      "input": "mcp:\n  rate_limit: 0\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 0,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_empty_token_file",
+      "description": "an explicit empty token file beats the auto default",
+      "input": "mcp:\n  httpTokenFile: \"\"\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_timeouts",
+      "description": "the five explicit timeouts",
+      "input": "mcp:\n  read_header_timeout: 1s\n  read_timeout: 2s\n  write_timeout: 3s\n  shutdown_timeout: 4s\n  approval_timeout: 5s\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 1000000000,
+              "read_timeout_ns": 2000000000,
+              "write_timeout_ns": 3000000000,
+              "shutdown_timeout_ns": 4000000000,
+              "approval_timeout_ns": 5000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_tls",
+      "description": "tls and mtls fields",
+      "input": "mcp:\n  tls_cert_file: /fixture/c.pem\n  tls_key_file: /fixture/k.pem\n  tls_client_ca_file: /fixture/ca.pem\n  mtls_enabled: true\n  allow_insecure_bind: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "/fixture/c.pem",
+              "tls_key_file": "/fixture/k.pem",
+              "tls_client_ca_file": "/fixture/ca.pem",
+              "mtls_enabled": true,
+              "allow_insecure_bind": true,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_empty_bind",
+      "description": "an explicitly empty bind is rejected",
+      "input": "mcp:\n  bind: \"\"\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_absent",
+      "description": "an mcp section without oauth keeps the default TTLs",
+      "input": "mcp:\n  port: 9000\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 9000,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_empty",
+      "description": "an empty oauth section keeps the default TTLs",
+      "input": "mcp:\n  oauth: {}\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_null",
+      "description": "a null oauth section keeps the default TTLs",
+      "input": "mcp:\n  oauth:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_explicit",
+      "description": "both TTLs set",
+      "input": "mcp:\n  oauth:\n    access_token_ttl: 1h\n    refresh_token_ttl: 2h\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 3600000000000,
+                "refresh_token_ttl_ns": 7200000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_partial",
+      "description": "one TTL set keeps the other default",
+      "input": "mcp:\n  oauth:\n    access_token_ttl: 1h\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 3600000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_zero_ignored",
+      "description": "a zero TTL is ignored: the guard is positive-only",
+      "input": "mcp:\n  oauth:\n    access_token_ttl: 0s\n    refresh_token_ttl: 0s\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_oauth_negative_ignored",
+      "description": "a negative TTL is ignored too",
+      "input": "mcp:\n  oauth:\n    access_token_ttl: -1h\n    refresh_token_ttl: -2h\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_approval_required_true",
+      "description": "the deprecated key warns",
+      "input": "mcp:\n  approval_required: true\n",
+      "loads": [
+        {
+          "warnings": [
+            "approval_required is deprecated and will be removed in a future version"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_approval_required_false",
+      "description": "false is the zero value and does not warn",
+      "input": "mcp:\n  approval_required: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_search_index_false",
+      "description": "an explicit false beats the true default",
+      "input": "vault:\n  search_index: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": false,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_scrypt_zero",
+      "description": "an explicit zero beats the default of 18",
+      "input": "vault:\n  scrypt_work_factor: 0\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 0,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_heal_false",
+      "description": "an explicit false beats the true default",
+      "input": "vault:\n  auto_heal_zero_key: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": false,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_format_zero",
+      "description": "an explicit zero beats the default of 1",
+      "input": "vault:\n  format_version: 0\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 0,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_numbers",
+      "description": "explicit numeric fields",
+      "input": "vault:\n  search_workers: 4\n  config_cache_entries: 16\n  argon2id_time: 2\n  argon2id_memory: 65536\n  argon2id_threads: 4\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 4,
+              "search_index_cache": false,
+              "config_cache_entries": 16,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 2,
+              "argon2id_memory": 65536,
+              "argon2id_threads": 4,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_booleans",
+      "description": "explicit boolean fields",
+      "input": "vault:\n  confirm_remove: true\n  search_index_cache: true\n  pseudonymize_paths: true\n  auto_migrate_kdf: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": true,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": true,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": true,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": true,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_path",
+      "description": "an explicit path",
+      "input": "vault:\n  path: /fixture/other\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "/fixture/other",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_recipients_list",
+      "description": "a populated recipient list",
+      "input": "vault:\n  default_recipients:\n    - age1aaa\n    - age1bbb\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [
+                "age1aaa",
+                "age1bbb"
+              ],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_recipients_empty",
+      "description": "an explicitly empty recipient list",
+      "input": "vault:\n  default_recipients: []\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_recipients_null",
+      "description": "a null recipient list keeps the default",
+      "input": "vault:\n  default_recipients:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_legacy_true",
+      "description": "legacy_mode true",
+      "input": "vault:\n  legacy_mode: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": true,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_legacy_false",
+      "description": "legacy_mode false is retained, not dropped",
+      "input": "vault:\n  legacy_mode: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": false,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_legacy_null",
+      "description": "legacy_mode null stays unset",
+      "input": "vault:\n  legacy_mode:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_sync_icloud",
+      "description": "an explicit sync method",
+      "input": "vault:\n  sync:\n    method: icloud-drive\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": {
+                "method": "icloud-drive"
+              }
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_sync_empty",
+      "description": "an empty sync block is propagated",
+      "input": "vault:\n  sync: {}\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": {
+                "method": ""
+              }
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_sync_unknown",
+      "description": "an unknown sync method is carried verbatim",
+      "input": "vault:\n  sync:\n    method: carrier-pigeon\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": {
+                "method": "carrier-pigeon"
+              }
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_listing_cache_ttl",
+      "description": "listing_cache_ttl is read from the document",
+      "input": "vault:\n  listing_cache_ttl: 5m\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_manifest_generation",
+      "description": "manifest_generation is read from the document",
+      "input": "vault:\n  manifest_generation: 7\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_touchid",
+      "description": "vault.authMethod alone selects touchid",
+      "input": "vault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_alias",
+      "description": "vault.authMethod accepts an alias",
+      "input": "vault:\n  authMethod: touch-id\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_use_touch_id",
+      "description": "vault.useTouchID alone selects touchid",
+      "input": "vault:\n  useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": true,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_beats_vault",
+      "description": "top-level authMethod wins over the vault block",
+      "input": "authMethod: passphrase\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_touchid",
+      "description": "top-level touchid",
+      "input": "authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_use_touch_id",
+      "description": "a top-level useTouchID true selects touchid when authMethod is unwritten",
+      "input": "useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_use_touch_id_false",
+      "description": "a top-level useTouchID false selects nothing",
+      "input": "useTouchID: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_passphrase_with_use_touch_id",
+      "description": "an explicit authMethod wins over useTouchID",
+      "input": "authMethod: passphrase\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_touchid_with_vault_section",
+      "description": "a vault block without its own method does not inherit the top-level one",
+      "input": "authMethod: touchid\nvault: {}\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_use_touch_id_then_vault_passphrase",
+      "description": "the vault block's method overrides a top-level useTouchID",
+      "input": "useTouchID: true\nvault:\n  authMethod: passphrase\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_empty_method_feeds_nothing",
+      "description": "an explicitly empty vault.authMethod feeds nothing upward",
+      "input": "useTouchID: true\nvault:\n  authMethod: \"\"\n  useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "",
+              "use_touch_id": true,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_method_and_flag",
+      "description": "vault.authMethod present suppresses the vault.useTouchID fallback",
+      "input": "vault:\n  authMethod: passphrase\n  useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": true,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_invalid",
+      "description": "an invalid top-level authMethod is accepted and ignored by the Go merge",
+      "input": "authMethod: retina\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_invalid",
+      "description": "an invalid vault.authMethod is rejected or carried",
+      "input": "vault:\n  authMethod: retina\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "retina",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_whitelist_warns",
+      "description": "envWhitelist warns",
+      "input": "envWhitelist:\n  - HOME\n",
+      "loads": [
+        {
+          "warnings": [
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_whitelist_empty_warns",
+      "description": "an empty non-null envWhitelist still warns",
+      "input": "envWhitelist: []\n",
+      "loads": [
+        {
+          "warnings": [
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_whitelist_null_silent",
+      "description": "a null envWhitelist does not warn",
+      "input": "envWhitelist:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_allowlist_silent",
+      "description": "envAllowlist does not warn",
+      "input": "envAllowlist:\n  - HOME\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_both_warn",
+      "description": "both keys present: the deprecated one warns",
+      "input": "envAllowlist:\n  - HOME\nenvWhitelist:\n  - PATH\n",
+      "loads": [
+        {
+          "warnings": [
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_null_bool",
+      "description": "a null boolean is present and decodes to false",
+      "input": "git:\n  auto_push:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": false,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 10000000000,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_null_interval",
+      "description": "a null duration is present and decodes to zero",
+      "input": "git:\n  auto_pull_interval:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 0,
+              "commit_template": "Update from Symaira Vault"
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "git_null_template",
+      "description": "a null string is present and decodes to empty",
+      "input": "git:\n  commit_template:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": {
+              "auto_push": true,
+              "auto_pull": true,
+              "auto_pull_interval_ns": 10000000000,
+              "commit_template": ""
+            },
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_null_ttl",
+      "description": "a null TTL is present and decodes to zero",
+      "input": "update:\n  cache_ttl:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": {
+              "cache_ttl_ns": 0
+            },
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_null_auto_clear",
+      "description": "a null integer is present and decodes to zero",
+      "input": "clipboard:\n  auto_clear_duration:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 0,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_null_copy",
+      "description": "a null copyByDefault is present, so the deprecated key is ignored",
+      "input": "clipboard:\n  copyByDefault:\n  printByDefault: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_null_print",
+      "description": "a null printByDefault is present: it warns and decodes to false",
+      "input": "clipboard:\n  printByDefault:\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_null_port",
+      "description": "a null port is present and decodes to zero",
+      "input": "mcp:\n  port:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 0,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_null_bind",
+      "description": "a null bind is present and decodes to empty, which is rejected",
+      "input": "mcp:\n  bind:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "mcp_null_approval_required",
+      "description": "a null approval_required does not warn",
+      "input": "mcp:\n  approval_required:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_null_search_index",
+      "description": "a null boolean is present and decodes to false",
+      "input": "vault:\n  search_index:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": false,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_null_path",
+      "description": "a null string is present and decodes to empty",
+      "input": "vault:\n  path:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_null_scrypt",
+      "description": "a null integer is present and decodes to zero",
+      "input": "vault:\n  scrypt_work_factor:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 0,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "env_whitelist_scalar",
+      "description": "a scalar where a list is required is rejected",
+      "input": "envWhitelist: HOME\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "env_allowlist_scalar",
+      "description": "a scalar where a list is required is rejected",
+      "input": "envAllowlist: HOME\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "all_warnings_order",
+      "description": "envWhitelist, then mcp, then clipboard",
+      "input": "clipboard:\n  printByDefault: true\nmcp:\n  approval_required: true\nenvWhitelist:\n  - HOME\n",
+      "loads": [
+        {
+          "warnings": [
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead",
+            "approval_required is deprecated and will be removed in a future version",
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": {
+              "port": 8080,
+              "bind": "127.0.0.1",
+              "stdio": false,
+              "http_token_file": "auto",
+              "read_header_timeout_ns": 5000000000,
+              "read_timeout_ns": 10000000000,
+              "write_timeout_ns": 10000000000,
+              "shutdown_timeout_ns": 5000000000,
+              "approval_timeout_ns": 30000000000,
+              "rate_limit": 60,
+              "metrics_auth_required": true,
+              "tls_cert_file": "",
+              "tls_key_file": "",
+              "tls_client_ca_file": "",
+              "mtls_enabled": false,
+              "allow_insecure_bind": false,
+              "oauth": {
+                "access_token_ttl_ns": 86400000000000,
+                "refresh_token_ttl_ns": 2592000000000000
+              }
+            },
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "warning_then_rejection",
+      "description": "a warning raised before a rejection is still emitted",
+      "input": "envWhitelist:\n  - HOME\nmcp:\n  bind: \"\"\n",
+      "loads": [
+        {
+          "warnings": [
+            "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead"
+          ],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_use_touch_id",
+      "description": "an empty top-level authMethod is unwritten, so useTouchID selects touchid",
+      "input": "authMethod: \"\"\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_vault_touchid",
+      "description": "an empty top-level authMethod is unwritten, so vault.authMethod feeds it",
+      "input": "authMethod: \"\"\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_empty_with_vault_use_touch_id",
+      "description": "an empty top-level authMethod is unwritten, so vault.useTouchID feeds it",
+      "input": "authMethod: \"\"\nvault:\n  useTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": true,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null",
+      "description": "a null top-level authMethod is accepted and unwritten",
+      "input": "authMethod:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null_with_use_touch_id",
+      "description": "a null top-level authMethod is unwritten, so useTouchID selects touchid",
+      "input": "authMethod:\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_null_with_vault_touchid",
+      "description": "a null top-level authMethod is unwritten, so vault.authMethod feeds it",
+      "input": "authMethod:\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_space_with_use_touch_id",
+      "description": "a blank but non-empty authMethod counts as written and blocks useTouchID",
+      "input": "authMethod: \" \"\nuseTouchID: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_space_with_vault_touchid",
+      "description": "a blank but non-empty authMethod counts as written and blocks the vault block",
+      "input": "authMethod: \" \"\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "use_touch_id_null",
+      "description": "a null top-level useTouchID is accepted and selects nothing",
+      "input": "useTouchID:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "use_touch_id_null_with_vault_touchid",
+      "description": "a null top-level useTouchID leaves the vault block to feed the method",
+      "input": "useTouchID:\nvault:\n  authMethod: touchid\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "touchid",
+            "effective_auth_method": "touchid",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "touchid",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_last_rotated",
+      "description": "last_rotated is read from the document",
+      "input": "vault:\n  last_rotated: 2025-06-07T08:09:10.123456789Z\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "2025-06-07T08:09:10.123456789Z",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "vault_last_rotated_null",
+      "description": "a null last_rotated is accepted and decodes to the zero time",
+      "input": "vault:\n  last_rotated:\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "passphrase",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_wrong_type",
+      "description": "a non-boolean printByDefault is rejected",
+      "input": "clipboard:\n  printByDefault: maybe\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        }
+      ]
+    },
+    {
+      "name": "clipboard_print_by_default_rejected_then_valid",
+      "description": "a rejected printByDefault does not consume the once-per-process warning",
+      "input": "clipboard:\n  printByDefault: maybe\n",
+      "follow_up": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": true,
+          "snapshot": null
+        },
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "mcp_empty_bind_with_print_by_default",
+      "description": "residual: mcp.bind is rejected after the clipboard merge consumed the warning, so a following valid load stays silent",
+      "input": "mcp:\n  bind: \"\"\nclipboard:\n  printByDefault: true\n",
+      "follow_up": "clipboard:\n  printByDefault: false\n",
+      "loads": [
+        {
+          "warnings": [
+            "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead"
+          ],
+          "rejected": true,
+          "snapshot": null
+        },
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": {
+              "auto_clear_duration": 30,
+              "copy_by_default": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
