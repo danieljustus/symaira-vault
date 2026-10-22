@@ -9,6 +9,7 @@ use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -21,6 +22,34 @@ const LEGACY_DIR: &str = ".symvault";
 const DEFAULT_AGENT: &str = "default";
 const DEFAULT_SESSION_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_SESSION_MAX_LIFETIME: Duration = Duration::from_secs(8 * 60 * 60);
+
+const ENV_WHITELIST_WARNING: &str =
+    "envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead";
+const APPROVAL_REQUIRED_WARNING: &str =
+    "approval_required is deprecated and will be removed in a future version";
+const PRINT_BY_DEFAULT_WARNING: &str =
+    "clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead";
+
+/// Which once-per-process warnings have already been raised.
+///
+/// Go keeps this in a package-level atomic, so `clipboard.printByDefault`
+/// warns on the first load that meets it and never again. A fresh state models
+/// a fresh process.
+#[derive(Debug, Default)]
+pub struct WarningState {
+    print_by_default: AtomicBool,
+}
+
+impl WarningState {
+    /// Returns true exactly once per state, the way Go's `Swap(true)` does.
+    fn first_print_by_default(&self) -> bool {
+        !self.print_by_default.swap(true, Ordering::Relaxed)
+    }
+}
+
+static PROCESS_WARNINGS: WarningState = WarningState {
+    print_by_default: AtomicBool::new(false),
+};
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -585,8 +614,15 @@ impl Config {
         Self::load_from_bytes(&bytes)
     }
 
+    /// Loads a config and drops the warnings.
+    ///
+    /// The once-per-process `clipboard.printByDefault` guard is deliberately
+    /// not consumed here: a load that shows the operator nothing has not told
+    /// them anything, so it must not use up the message a later load that does
+    /// show warnings is entitled to.
     pub fn load_from_bytes(bytes: &[u8]) -> Result<Self, ConfigError> {
-        Self::load_from_bytes_with_warnings(bytes).map(|(config, _)| config)
+        Self::load_from_bytes_with_warnings_in(bytes, &WarningState::default())
+            .map(|(config, _)| config)
     }
 
     /// Loads a config and returns the warnings the loader raised.
@@ -594,25 +630,32 @@ impl Config {
     /// Warnings are returned rather than emitted through a global callback, so
     /// they are explicit and thread-safe. Go reaches the same outcome through
     /// `config.SetWarnFunc`, and the CFG-003 contract pins the texts on both
-    /// sides.
-    ///
-    /// The list is currently always empty: the two warnings this loader used to
-    /// raise became rejections in CFG-003 step two. The seam stays because Go
-    /// still warns for the deprecated `envWhitelist`, which this loader cannot
-    /// yet reproduce — it does not model `envAllowlist` at all — and the
-    /// contract test fails the moment a fixture case carries a warning.
+    /// sides. `clipboard.printByDefault` warns once per process, as in Go,
+    /// through the process-wide [`WarningState`].
     pub fn load_from_bytes_with_warnings(bytes: &[u8]) -> Result<(Self, Vec<String>), ConfigError> {
+        Self::load_from_bytes_with_warnings_in(bytes, &PROCESS_WARNINGS)
+    }
+
+    /// [`Config::load_from_bytes_with_warnings`] against an explicit warning
+    /// state, so a caller (or a test) can model a fresh process.
+    ///
+    /// A warning raised before a later rejection is lost: Go emits it and then
+    /// fails, Rust returns only the error. The text is not part of the error
+    /// contract either way.
+    pub fn load_from_bytes_with_warnings_in(
+        bytes: &[u8],
+        state: &WarningState,
+    ) -> Result<(Self, Vec<String>), ConfigError> {
         let mut warnings = Vec::new();
-        let config = Self::parse_document(bytes, &mut warnings)?;
+        let config = Self::parse_document(bytes, &mut warnings, state)?;
         Ok((config, warnings))
     }
 
-    #[allow(
-        clippy::ptr_arg,
-        unused_variables,
-        reason = "the warning seam is retained; see load_from_bytes_with_warnings"
-    )]
-    fn parse_document(bytes: &[u8], warnings: &mut Vec<String>) -> Result<Self, ConfigError> {
+    fn parse_document(
+        bytes: &[u8],
+        warnings: &mut Vec<String>,
+        state: &WarningState,
+    ) -> Result<Self, ConfigError> {
         if is_go_blank(bytes) {
             return Ok(Self::default());
         }
@@ -713,10 +756,23 @@ impl Config {
                 })
                 .collect()
         });
-        if auth_method_explicit {
-            config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
-        } else if config.use_touch_id.is_none() {
-            config.use_touch_id = Some(false);
+        // Go applies a top-level `useTouchID: true` as the method only when
+        // the operator wrote no `authMethod`; a false value never selects
+        // anything. The vault block may still override it below.
+        if !auth_method_explicit && config.use_touch_id == Some(true) {
+            config.auth_method = AuthMethod::Touchid;
+        }
+        // Go warns for the deprecated key once the document has decoded and
+        // the durations have passed, ahead of every merge. A null list is nil
+        // there and neither warns nor overrides; any other value must be a
+        // list. Neither key is consumed by a Rust caller today, so they are
+        // validated and not carried.
+        if let Some(v) = root.get(key("envAllowlist")) {
+            string_list(v, "envAllowlist")?;
+        }
+        if let Some(v) = root.get(key("envWhitelist")).filter(|v| !v.is_null()) {
+            string_list(v, "envWhitelist")?;
+            warnings.push(ENV_WHITELIST_WARNING.to_owned());
         }
         if let Some(v) = root.get(key("agents")) {
             merge_agents(&mut config, v)?;
@@ -744,13 +800,20 @@ impl Config {
             }
         }
         if let Some(v) = root.get(key("vault")).filter(|v| !v.is_null()) {
-            config.vault = Some(parse_vault(v, config.auth_method)?);
+            let (vault, vault_auth) = parse_vault(v)?;
+            config.vault = Some(vault);
+            // Go's vault merge feeds the top-level method when the operator
+            // did not write one there: the vault block's own `authMethod`,
+            // else its `useTouchID`.
+            if !auth_method_explicit && let Some(method) = vault_auth {
+                config.auth_method = method;
+            }
         }
         if let Some(v) = root.get(key("git")).filter(|v| !v.is_null()) {
             config.git = Some(parse_git(v)?);
         }
         if let Some(v) = root.get(key("mcp")).filter(|v| !v.is_null()) {
-            let mcp = parse_mcp(v)?;
+            let mcp = parse_mcp(v, warnings)?;
             if mcp.bind.is_empty() {
                 return Err(ConfigError::Invalid("mcp.bind must not be empty".into()));
             }
@@ -760,8 +823,10 @@ impl Config {
             config.update = Some(parse_update(v)?);
         }
         if let Some(v) = root.get(key("clipboard")).filter(|v| !v.is_null()) {
-            config.clipboard = Some(parse_clipboard(v)?);
+            config.clipboard = Some(parse_clipboard(v, warnings, state)?);
         }
+        // Go ends every load by recording the resolved method as the flag.
+        config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
         Ok(config)
     }
 
@@ -1632,63 +1697,113 @@ fn is_valid_glob_pattern(pattern: &str) -> bool {
     true
 }
 
-fn parse_vault(value: &serde_yaml_ng::Value, auth: AuthMethod) -> Result<VaultConfig, ConfigError> {
+/// A section field's value, with the decoder's treatment of an explicit `null`.
+///
+/// yaml.v3 decodes `null` into a scalar field as that field's zero value, and
+/// the section merge applies a field because its key is *present*, not because
+/// its value is non-zero. A `null` therefore overrides the default with zero —
+/// false, 0, `""` or a zero duration — exactly as an explicit `false` or `0`
+/// does.
+fn present<T>(
+    value: &serde_yaml_ng::Value,
+    zero: T,
+    decode: impl FnOnce(&serde_yaml_ng::Value) -> Result<T, ConfigError>,
+) -> Result<T, ConfigError> {
+    if value.is_null() {
+        Ok(zero)
+    } else {
+        decode(value)
+    }
+}
+fn bool_field(value: &serde_yaml_ng::Value, field: &str) -> Result<bool, ConfigError> {
+    present(value, false, |v| boolean(v, field))
+}
+fn int_field(value: &serde_yaml_ng::Value, field: &str) -> Result<i64, ConfigError> {
+    present(value, 0, |v| integer(v, field))
+}
+fn string_field(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
+    present(value, String::new(), |v| string(v, field))
+}
+fn duration_field(value: &serde_yaml_ng::Value, field: &str) -> Result<Duration, ConfigError> {
+    present(value, Duration::ZERO, |v| duration(v, field))
+}
+
+/// Parses the `vault` section.
+///
+/// The second value is the method Go's vault merge feeds to the top level when
+/// the operator wrote no top-level `authMethod`: the vault block's own method,
+/// else `useTouchID`. An explicitly empty `authMethod` feeds nothing.
+fn parse_vault(
+    value: &serde_yaml_ng::Value,
+) -> Result<(VaultConfig, Option<AuthMethod>), ConfigError> {
     let map = mapping(value)?;
     let mut out = VaultConfig {
-        auth_method: auth,
+        auth_method: AuthMethod::Passphrase,
         search_index: true,
         scrypt_work_factor: 18,
         auto_heal_zero_key: true,
         format_version: 1,
         ..VaultConfig::default()
     };
+    let mut fed_auth = None;
+    let mut auth_present = false;
     if let Some(v) = map.get(key("path")) {
-        out.path = string(v, "vault.path")?;
+        out.path = string_field(v, "vault.path")?;
     }
     if let Some(v) = map.get(key("default_recipients")) {
         out.default_recipients = string_list(v, "default_recipients")?;
     }
     if let Some(v) = map.get(key("confirm_remove")) {
-        out.confirm_remove = boolean(v, "confirm_remove")?;
+        out.confirm_remove = bool_field(v, "confirm_remove")?;
     }
     if let Some(v) = map.get(key("authMethod")) {
-        out.auth_method = AuthMethod::parse(&string(v, "vault.authMethod")?)?;
+        auth_present = true;
+        let text = string_field(v, "vault.authMethod")?;
+        if !text.is_empty() {
+            let method = AuthMethod::parse(&text)?;
+            out.auth_method = method;
+            fed_auth = Some(method);
+        }
     }
     if let Some(v) = map.get(key("useTouchID")) {
-        out.use_touch_id = boolean(v, "vault.useTouchID")?;
+        out.use_touch_id = bool_field(v, "vault.useTouchID")?;
     }
-    if let Some(v) = map.get(key("legacy_mode")) {
+    if !auth_present && out.use_touch_id {
+        fed_auth = Some(AuthMethod::Touchid);
+    }
+    // Go copies a present, non-null `legacy_mode`; a null stays unset.
+    if let Some(v) = map.get(key("legacy_mode")).filter(|v| !v.is_null()) {
         out.legacy_mode = Some(boolean(v, "legacy_mode")?);
     }
     if let Some(v) = map.get(key("search_index")) {
-        out.search_index = boolean(v, "search_index")?;
+        out.search_index = bool_field(v, "search_index")?;
     }
     if let Some(v) = map.get(key("search_workers")) {
-        out.search_workers = integer(v, "search_workers")?;
+        out.search_workers = int_field(v, "search_workers")?;
     }
     if let Some(v) = map.get(key("search_index_cache")) {
-        out.search_index_cache = boolean(v, "search_index_cache")?;
+        out.search_index_cache = bool_field(v, "search_index_cache")?;
     }
     if let Some(v) = map.get(key("config_cache_entries")) {
-        out.config_cache_entries = integer(v, "config_cache_entries")?;
+        out.config_cache_entries = int_field(v, "config_cache_entries")?;
     }
     if let Some(v) = map.get(key("pseudonymize_paths")) {
-        out.pseudonymize_paths = boolean(v, "pseudonymize_paths")?;
+        out.pseudonymize_paths = bool_field(v, "pseudonymize_paths")?;
     }
     if let Some(v) = map.get(key("scrypt_work_factor")) {
-        out.scrypt_work_factor = integer(v, "scrypt_work_factor")?;
+        out.scrypt_work_factor = int_field(v, "scrypt_work_factor")?;
     }
     if let Some(v) = map.get(key("auto_migrate_kdf")) {
-        out.auto_migrate_kdf = boolean(v, "auto_migrate_kdf")?;
+        out.auto_migrate_kdf = bool_field(v, "auto_migrate_kdf")?;
     }
     if let Some(v) = map.get(key("auto_heal_zero_key")) {
-        out.auto_heal_zero_key = boolean(v, "auto_heal_zero_key")?;
+        out.auto_heal_zero_key = bool_field(v, "auto_heal_zero_key")?;
     }
     if let Some(v) = map.get(key("last_rotated")) {
         out.last_rotated = Some(string(v, "last_rotated")?);
     }
     if let Some(v) = map.get(key("format_version")) {
-        out.format_version = integer(v, "format_version")?;
+        out.format_version = int_field(v, "format_version")?;
     }
     for (k, field) in [
         ("argon2id_time", &mut out.argon2id_time),
@@ -1697,54 +1812,63 @@ fn parse_vault(value: &serde_yaml_ng::Value, auth: AuthMethod) -> Result<VaultCo
         ("manifest_generation", &mut out.manifest_generation),
     ] {
         if let Some(v) = map.get(key(k)) {
-            *field = integer(v, k)?;
+            *field = int_field(v, k)?;
         }
     }
     if let Some(v) = map.get(key("listing_cache_ttl")) {
-        out.listing_cache_ttl = duration(v, "listing_cache_ttl")?;
+        out.listing_cache_ttl = duration_field(v, "listing_cache_ttl")?;
     }
     if let Some(v) = map.get(key("sync")).filter(|v| !v.is_null()) {
         let sync_map = mapping(v)?;
         let method = sync_map
             .get(key("method"))
-            .map(|value| string(value, "sync.method"))
+            .map(|value| string_field(value, "sync.method"))
             .transpose()?
             .unwrap_or_default();
         out.sync = Some(SyncConfig { method });
     }
-    Ok(out)
+    Ok((out, fed_auth))
 }
 fn parse_git(value: &serde_yaml_ng::Value) -> Result<GitConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = GitConfig::default();
     if let Some(v) = map.get(key("auto_push")) {
-        out.auto_push = boolean(v, "auto_push")?;
+        out.auto_push = bool_field(v, "auto_push")?;
     }
     if let Some(v) = map.get(key("auto_pull")) {
-        out.auto_pull = boolean(v, "auto_pull")?;
+        out.auto_pull = bool_field(v, "auto_pull")?;
     }
     if let Some(v) = map.get(key("auto_pull_interval")) {
-        out.auto_pull_interval = duration(v, "auto_pull_interval")?;
+        out.auto_pull_interval = duration_field(v, "auto_pull_interval")?;
     }
     if let Some(v) = map.get(key("commit_template")) {
-        out.commit_template = string(v, "commit_template")?;
+        out.commit_template = string_field(v, "commit_template")?;
     }
     Ok(out)
 }
-fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
+fn parse_mcp(
+    value: &serde_yaml_ng::Value,
+    warnings: &mut Vec<String>,
+) -> Result<McpConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = McpConfig::default();
+    // Go warns for a true value before it merges anything else in the block.
+    if let Some(v) = map.get(key("approval_required"))
+        && bool_field(v, "approval_required")?
+    {
+        warnings.push(APPROVAL_REQUIRED_WARNING.to_owned());
+    }
     if let Some(v) = map.get(key("port")) {
-        out.port = integer(v, "port")?;
+        out.port = int_field(v, "port")?;
     }
     if let Some(v) = map.get(key("bind")) {
-        out.bind = string(v, "bind")?;
+        out.bind = string_field(v, "bind")?;
     }
     if let Some(v) = map.get(key("stdio")) {
-        out.stdio = boolean(v, "stdio")?;
+        out.stdio = bool_field(v, "stdio")?;
     }
     if let Some(v) = map.get(key("httpTokenFile")) {
-        out.http_token_file = string(v, "httpTokenFile")?;
+        out.http_token_file = string_field(v, "httpTokenFile")?;
     }
     for (k, d) in [
         ("read_header_timeout", &mut out.read_header_timeout),
@@ -1760,13 +1884,13 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
         }
     }
     if let Some(v) = map.get(key("approval_timeout")) {
-        out.approval_timeout = duration(v, "approval_timeout")?;
+        out.approval_timeout = duration_field(v, "approval_timeout")?;
     }
     if let Some(v) = map.get(key("rate_limit")) {
-        out.rate_limit = integer(v, "rate_limit")?;
+        out.rate_limit = int_field(v, "rate_limit")?;
     }
     if let Some(v) = map.get(key("metrics_auth_required")) {
-        out.metrics_auth_required = boolean(v, "metrics_auth_required")?;
+        out.metrics_auth_required = bool_field(v, "metrics_auth_required")?;
     }
     for (key_name, target) in [
         ("tls_cert_file", &mut out.tls_cert_file),
@@ -1774,7 +1898,7 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
         ("tls_client_ca_file", &mut out.tls_client_ca_file),
     ] {
         if let Some(v) = map.get(key(key_name)) {
-            *target = string(v, key_name)?;
+            *target = string_field(v, key_name)?;
         }
     }
     for (key_name, target) in [
@@ -1782,7 +1906,7 @@ fn parse_mcp(value: &serde_yaml_ng::Value) -> Result<McpConfig, ConfigError> {
         ("allow_insecure_bind", &mut out.allow_insecure_bind),
     ] {
         if let Some(v) = map.get(key(key_name)) {
-            *target = boolean(v, key_name)?;
+            *target = bool_field(v, key_name)?;
         }
     }
     if let Some(value) = map.get(key("oauth")).filter(|value| !value.is_null()) {
@@ -1810,20 +1934,28 @@ fn parse_update(value: &serde_yaml_ng::Value) -> Result<UpdateConfig, ConfigErro
     let map = mapping(value)?;
     let mut out = UpdateConfig::default();
     if let Some(v) = map.get(key("cache_ttl")) {
-        out.cache_ttl = duration(v, "cache_ttl")?;
+        out.cache_ttl = duration_field(v, "cache_ttl")?;
     }
     Ok(out)
 }
-fn parse_clipboard(value: &serde_yaml_ng::Value) -> Result<ClipboardConfig, ConfigError> {
+fn parse_clipboard(
+    value: &serde_yaml_ng::Value,
+    warnings: &mut Vec<String>,
+    state: &WarningState,
+) -> Result<ClipboardConfig, ConfigError> {
     let map = mapping(value)?;
     let mut out = ClipboardConfig::default();
     if let Some(v) = map.get(key("auto_clear_duration")) {
-        out.auto_clear_duration = integer(v, "auto_clear_duration")?;
+        out.auto_clear_duration = int_field(v, "auto_clear_duration")?;
     }
     if let Some(v) = map.get(key("copyByDefault")) {
-        out.copy_by_default = boolean(v, "copyByDefault")?;
+        out.copy_by_default = bool_field(v, "copyByDefault")?;
     } else if let Some(v) = map.get(key("printByDefault")) {
-        out.copy_by_default = boolean(v, "printByDefault")?;
+        // The deprecated key is honored, and warns once per process.
+        if state.first_print_by_default() {
+            warnings.push(PRINT_BY_DEFAULT_WARNING.to_owned());
+        }
+        out.copy_by_default = bool_field(v, "printByDefault")?;
     }
     Ok(out)
 }
