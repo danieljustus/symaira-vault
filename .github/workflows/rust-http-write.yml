@@ -43,12 +43,13 @@ concurrency:
 jobs:
   write:
     name: Absolute HTTP write deadlines (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS runs in rust-http-macos.yml as one consolidated GitHub-hosted job.
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         shell: bash
@@ -60,15 +61,6 @@ jobs:
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - name: Assert actual native macOS arm64
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$RUNNER_OS" = macOS
-          test "$(uname -s)" = Darwin
-          test "$(uname -m)" = arm64
-          sw_vers
       - name: Checkout retained Go oracle and candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
