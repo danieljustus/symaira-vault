@@ -25,6 +25,9 @@ serde.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+# One SetConsoleCtrlHandler routine for `get`'s Ctrl-C/Ctrl-Break/close clear.
+# Same pin as symvault-cli, which uses it in other commands only.
+ctrlc = { version = "=3.5.2", features = ["termination"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 arboard = { version = "=3.7.0", default-features = false }
