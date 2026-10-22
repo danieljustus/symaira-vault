@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 type autotypeCase struct {
@@ -10,6 +12,9 @@ type autotypeCase struct {
 	WaylandDisplay  string         `json:"wayland_display"`
 	WaylandEmptySet bool           `json:"wayland_display_set_to_empty,omitempty"`
 	Tools           []string       `json:"path_tools"`
+	PathSpec        *string        `json:"path_spec,omitempty"`
+	RelTools        []string       `json:"rel_tools,omitempty"`
+	CwdTools        []string       `json:"cwd_tools,omitempty"`
 	Strict          string         `json:"strict_focus_env"`
 	Focus           [2]string      `json:"focus_class_outputs"`
 	FocusExit       int            `json:"focus_probe_exit"`
@@ -34,6 +39,8 @@ func tools(groups ...[]string) []string {
 }
 
 func one(name string) []string { return []string{name} }
+
+func spec(path string) *string { return &path }
 
 // clipboardScenarios exercises atotto/clipboard's init() selection order and
 // the Read/Copy behavior built on it. Each case documents why it exists.
@@ -72,6 +79,17 @@ func clipboardScenarios() []clipboardCase {
 		{Name: "xclip_long_payload", Tools: one("xclip"), Payload: longPayload, PasteOutput: longPayload},
 		{Name: "xclip_exit_1_reports_exit_status", Tools: one("xclip"), Payload: "secret", PasteOutput: "secret", Exit: 1},
 		{Name: "wayland_wl_exit_2_reports_exit_status", WaylandDisplay: wl, Tools: wlPair, Payload: "secret", PasteOutput: "secret", Exit: 2},
+		// Relative and empty PATH entries: exec.LookPath returns ErrDot for an
+		// executable found relative to the working directory, so atotto's init()
+		// treats the tool as absent and never runs it.
+		{Name: "relative_path_xclip_is_not_used", PathSpec: spec("rel"), RelTools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "dot_path_xclip_is_not_used", PathSpec: spec("."), CwdTools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "empty_entry_xclip_in_cwd_is_not_used", PathSpec: spec(":{bin}"), CwdTools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "empty_path_searches_nothing", PathSpec: spec(""), CwdTools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "relative_hit_shadows_absolute_same_tool", PathSpec: spec("rel:{bin}"), RelTools: one("xclip"), Tools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "relative_xclip_falls_to_absolute_xsel", PathSpec: spec("rel:{bin}"), RelTools: one("xclip"), Tools: one("xsel"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "empty_entry_falls_through_to_absolute_xclip", PathSpec: spec(":{bin}"), Tools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
+		{Name: "wayland_relative_wl_pair_ignored_for_absolute_xclip", WaylandDisplay: wl, PathSpec: spec("rel:{bin}"), RelTools: wlPair, Tools: one("xclip"), Payload: "secret", PasteOutput: "secret"},
 	}
 	return cases
 }
@@ -111,6 +129,18 @@ func autotypeScenarios() []autotypeCase {
 		{Name: "wayland_xdotool_alone_is_not_used", WaylandDisplay: wl, Tools: one("xdotool"), Focus: stable, Text: "hunter2"},
 		{Name: "wayland_strict_focus_refuses", WaylandDisplay: wl, Tools: one("wtype"), Strict: "1", Text: "hunter2"},
 		{Name: "wayland_empty_text", WaylandDisplay: wl, Tools: one("wtype"), Text: ""},
+		// Relative and empty PATH entries: exec.LookPath returns ErrDot, the
+		// adapters treat that as "tool not installed", and the secret is never
+		// written to the planted executable.
+		{Name: "x11_relative_path_xdotool_is_refused", PathSpec: spec("rel"), RelTools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "x11_dot_path_xdotool_is_refused", PathSpec: spec("."), CwdTools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "x11_empty_entry_xdotool_in_cwd_is_refused", PathSpec: spec(":{bin}"), CwdTools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "x11_empty_path_searches_nothing", PathSpec: spec(""), CwdTools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "x11_relative_hit_shadows_absolute_xdotool", PathSpec: spec("rel:{bin}"), RelTools: one("xdotool"), Tools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "x11_relative_xdotool_strict_refuses_on_focus", PathSpec: spec("rel"), RelTools: one("xdotool"), Focus: stable, Strict: "1", Text: "hunter2-supersecret"},
+		{Name: "x11_empty_entry_falls_through_to_absolute_xdotool", PathSpec: spec(":{bin}"), Tools: one("xdotool"), Focus: stable, Text: "hunter2-supersecret"},
+		{Name: "wayland_relative_wtype_is_refused", WaylandDisplay: wl, PathSpec: spec("rel"), RelTools: one("wtype"), Text: "hunter2-supersecret"},
+		{Name: "wayland_relative_wtype_falls_to_absolute_ydotool", WaylandDisplay: wl, PathSpec: spec("rel:{bin}"), RelTools: one("wtype"), Tools: one("ydotool"), Text: "hunter2-supersecret"},
 	}
 	for i := range cases {
 		cases[i].Tools = append([]string{}, cases[i].Tools...)
@@ -124,6 +154,8 @@ func buildFixture() (fixture, error) {
 		Note:               "Go-derived by scripts/rust-port/cmd/desktopgen on GOOS=linux with fake POSIX-shell desktop tools on a disposable PATH. Sections: clipboard_cases drive internal/clipboard (atotto backend selection); autotype_cases drive internal/autotype NewLinuxAutotype().Type; windows_extracted_not_executed are go/parser literals from GOOS=windows sources and were never executed. No real clipboard, display or credential was touched.",
 		ScriptPlaceholders: scriptPlaceholders,
 		FakeTools:          fakeToolTemplates(),
+		// Autotype tools receive exactly this environment (secrets.PrepareCmd).
+		AutotypeEnvWhitelist: secrets.DefaultWhitelist(),
 	}
 	for _, c := range clipboardScenarios() {
 		c.Tools = append([]string{}, c.Tools...)

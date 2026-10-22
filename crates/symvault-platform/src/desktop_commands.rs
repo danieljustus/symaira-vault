@@ -136,12 +136,40 @@ pub trait DesktopHost: Send + Sync {
     ) -> Result<ToolOutput, String>;
 }
 
+/// Outcome of a Go `exec.LookPath`-style search.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Lookup {
+    /// An executable reached through an absolute path.
+    Found(PathBuf),
+    /// The first executable hit came from a relative or empty `PATH` entry.
+    /// Go returns `exec.ErrDot` (`cannot run executable found relative to
+    /// current directory`) and does not keep searching later entries.
+    RelativeToCwd,
+    /// Nothing executable was found.
+    NotFound,
+}
+
+/// `filepath.SplitList` for the platform: an empty `PATH` yields **no**
+/// entries (Rust's `split_paths("")` would yield one empty entry, which then
+/// resolves to the working directory).
+#[must_use]
+pub fn go_split_list(value: &std::ffi::OsStr) -> Vec<PathBuf> {
+    if value.is_empty() {
+        Vec::new()
+    } else {
+        std::env::split_paths(value).collect()
+    }
+}
+
 /// The real host. An explicit search path and environment make it usable in
-/// disposable test roots without mutating the test process.
+/// disposable test roots without mutating the test process; an explicit working
+/// directory stands in for the process cwd when relative `PATH` entries are
+/// exercised.
 #[derive(Clone, Debug, Default)]
 pub struct SystemHost {
     path: Option<Vec<PathBuf>>,
     env: Option<HashMap<String, String>>,
+    cwd: Option<PathBuf>,
 }
 
 impl SystemHost {
@@ -156,31 +184,69 @@ impl SystemHost {
         Self {
             path: Some(path),
             env: Some(env),
+            cwd: None,
         }
+    }
+
+    /// Resolves relative `PATH` entries against, and spawns tools in, `cwd`
+    /// instead of the process working directory.
+    #[must_use]
+    pub fn with_cwd(mut self, cwd: PathBuf) -> Self {
+        self.cwd = Some(cwd);
+        self
     }
 
     fn search_path(&self) -> Vec<PathBuf> {
         match &self.path {
             Some(path) => path.clone(),
             None => std::env::var_os("PATH")
-                .map(|value| std::env::split_paths(&value).collect())
+                .map(|value| go_split_list(&value))
                 .unwrap_or_default(),
         }
     }
 
-    fn resolve(&self, name: &str) -> Option<PathBuf> {
-        if name.contains(std::path::MAIN_SEPARATOR) {
-            return is_executable(Path::new(name)).then(|| PathBuf::from(name));
+    fn on_disk(&self, candidate: &Path) -> PathBuf {
+        match &self.cwd {
+            Some(cwd) if candidate.is_relative() => cwd.join(candidate),
+            _ => candidate.to_path_buf(),
         }
-        self.search_path()
-            .into_iter()
-            .map(|dir| dir.join(name))
-            .find(|candidate| is_executable(candidate))
+    }
+
+    /// Go `exec.LookPath` on Unix: the first executable hit wins; if it is
+    /// reached through a relative (or empty, i.e. ".") entry the lookup is an
+    /// `ErrDot` error rather than a hit.
+    fn lookup(&self, name: &str) -> Lookup {
+        if name.contains(std::path::MAIN_SEPARATOR) {
+            return if is_executable(&self.on_disk(Path::new(name))) {
+                Lookup::Found(PathBuf::from(name))
+            } else {
+                Lookup::NotFound
+            };
+        }
+        for dir in self.search_path() {
+            let dir = if dir.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                dir
+            };
+            let candidate = dir.join(name);
+            if is_executable(&self.on_disk(&candidate)) {
+                return if candidate.is_absolute() {
+                    Lookup::Found(candidate)
+                } else {
+                    Lookup::RelativeToCwd
+                };
+            }
+        }
+        Lookup::NotFound
     }
 
     fn base_env(&self) -> Vec<(String, String)> {
         match &self.env {
             Some(env) => env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            // Non-UTF-8 names or values are dropped (Go passes raw bytes
+            // through). Documented residual: no tool this adapter spawns needs
+            // them.
             None => std::env::vars_os()
                 .filter_map(|(k, v)| Some((k.into_string().ok()?, v.into_string().ok()?)))
                 .collect(),
@@ -206,6 +272,23 @@ fn is_executable(path: &Path) -> bool {
     }
 }
 
+/// Go's `exec` re-adds `SYSTEMROOT` on Windows when `cmd.Env` is set without
+/// it (`addCriticalEnv`); the value is the host's, possibly empty.
+fn add_critical_env(
+    env: &mut Vec<(String, String)>,
+    host_systemroot: Option<String>,
+    windows: bool,
+) {
+    if !windows
+        || env
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
+    {
+        return;
+    }
+    env.push(("SYSTEMROOT".to_owned(), host_systemroot.unwrap_or_default()));
+}
+
 impl DesktopHost for SystemHost {
     fn env_var(&self, name: &str) -> Option<String> {
         match &self.env {
@@ -215,7 +298,7 @@ impl DesktopHost for SystemHost {
     }
 
     fn tool_exists(&self, name: &str) -> bool {
-        self.resolve(name).is_some()
+        matches!(self.lookup(name), Lookup::Found(_))
     }
 
     fn run(
@@ -226,17 +309,41 @@ impl DesktopHost for SystemHost {
         capture_stdout: bool,
         env: EnvPolicy,
     ) -> Result<ToolOutput, String> {
-        let resolved = self
-            .resolve(program)
-            .ok_or_else(|| format!("exec: \"{program}\": executable file not found in $PATH"))?;
-        let mut command = Command::new(resolved);
-        command.args(args);
-        command.env_clear();
-        for (key, value) in self.base_env() {
-            if env == EnvPolicy::Inherit || AUTOTYPE_ENV_WHITELIST.contains(&key.as_str()) {
-                command.env(key, value);
+        let resolved = match self.lookup(program) {
+            Lookup::Found(path) => path,
+            Lookup::RelativeToCwd => {
+                return Err(format!(
+                    "exec: \"{program}\": cannot run executable found relative to current directory"
+                ));
             }
+            Lookup::NotFound => {
+                return Err(format!(
+                    "exec: \"{program}\": executable file not found in $PATH"
+                ));
+            }
+        };
+        let mut command = Command::new(self.on_disk(&resolved));
+        command.args(args);
+        if let Some(cwd) = &self.cwd {
+            command.current_dir(cwd);
         }
+        command.env_clear();
+        let base = self.base_env();
+        let mut passed: Vec<(String, String)> = base
+            .iter()
+            .filter(|(key, _)| {
+                env == EnvPolicy::Inherit || AUTOTYPE_ENV_WHITELIST.contains(&key.as_str())
+            })
+            .cloned()
+            .collect();
+        if env == EnvPolicy::Whitelist {
+            let systemroot = base
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("SYSTEMROOT"))
+                .map(|(_, v)| v.clone());
+            add_critical_env(&mut passed, systemroot, cfg!(windows));
+        }
+        command.envs(passed);
         command
             .stdin(Stdio::piped())
             .stdout(if capture_stdout {
@@ -680,6 +787,34 @@ mod tests {
         let calls = host.calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].3, EnvPolicy::Whitelist);
+    }
+
+    #[test]
+    fn critical_env_readds_systemroot_only_on_windows_when_absent() {
+        let mut env = vec![("PATH".to_owned(), "x".to_owned())];
+        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), false);
+        assert_eq!(env.len(), 1, "non-Windows must not add anything");
+        add_critical_env(&mut env, Some("C:\\Windows".to_owned()), true);
+        assert_eq!(env[1], ("SYSTEMROOT".to_owned(), "C:\\Windows".to_owned()));
+        add_critical_env(&mut env, Some("other".to_owned()), true);
+        assert_eq!(env.len(), 2, "already present");
+        let mut lower = vec![("SystemRoot".to_owned(), "a".to_owned())];
+        add_critical_env(&mut lower, None, true);
+        assert_eq!(lower.len(), 1, "case-insensitive match like Go EqualFold");
+        let mut empty = Vec::new();
+        add_critical_env(&mut empty, None, true);
+        assert_eq!(empty, [("SYSTEMROOT".to_owned(), String::new())]);
+    }
+
+    #[test]
+    fn go_split_list_has_no_entries_for_an_empty_path() {
+        use std::ffi::OsStr;
+        assert!(go_split_list(OsStr::new("")).is_empty());
+        #[cfg(unix)]
+        assert_eq!(
+            go_split_list(OsStr::new(":/bin")),
+            [PathBuf::new(), PathBuf::from("/bin")]
+        );
     }
 
     #[test]

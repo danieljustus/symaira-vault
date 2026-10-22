@@ -16,10 +16,11 @@
       "internal/clipboard/clipboard.go",
       "internal/clipboard/interface.go",
       "internal/clipboard/provider.go",
-      "internal/clipboard/system_clipboard.go"
+      "internal/clipboard/system_clipboard.go",
+      "internal/secrets/filter.go"
     ],
-    "source_digest": "9be433e5f8ae79d5230d2b5670887dc80b2ed1389851b605753776753c050d04",
-    "generator_digest": "75d40b3d125ee90bf7f0841fdc1e6b0f06d54d37e99ddc1494c05971d406c5fa",
+    "source_digest": "8b19618b4ffcd07851931a4c0fb28ccb2afde7e5193576ef7c43279e8440b486",
+    "generator_digest": "0a247a52a7eca7848b4730666f444dbb3d8b895f3b11be6ce3b571c0a6706bc9",
     "dependency": "github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=; github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI="
   },
   "note": "Go-derived by scripts/rust-port/cmd/desktopgen on GOOS=linux with fake POSIX-shell desktop tools on a disposable PATH. Sections: clipboard_cases drive internal/clipboard (atotto backend selection); autotype_cases drive internal/autotype NewLinuxAutotype().Type; windows_extracted_not_executed are go/parser literals from GOOS=windows sources and were never executed. No real clipboard, display or credential was touched.",
@@ -43,6 +44,28 @@
     "xsel": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in --input) mode=copy;; esac; done\n{ printf '%s\\n' 'xsel' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
     "ydotool": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=type\n{ printf '%s\\n' 'ydotool' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n"
   },
+  "autotype_env_whitelist": [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "SHELL",
+    "TERM",
+    "COLORTERM",
+    "DISPLAY",
+    "XAUTHORITY",
+    "GIT_ASKPASS",
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "SSH_AUTH_SOCK",
+    "SSH_AGENT_LAUNCHER",
+    "GNUPGHOME"
+  ],
   "clipboard_cases": [
     {
       "name": "x11_no_tools",
@@ -932,6 +955,201 @@
       "copy_error": "exit status 2",
       "paste_error": "exit status 2",
       "paste_result": ""
+    },
+    {
+      "name": "relative_path_xclip_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "dot_path_xclip_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ".",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "empty_entry_xclip_in_cwd_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ":{bin}",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "empty_path_searches_nothing",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "relative_hit_shadows_absolute_same_tool",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "relative_xclip_falls_to_absolute_xsel",
+      "wayland_display": "",
+      "path_tools": [
+        "xsel"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xsel",
+          "mode": "paste",
+          "argv": [
+            "--output",
+            "--clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "empty_entry_falls_through_to_absolute_xclip",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": ":{bin}",
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "wayland_relative_wl_pair_ignored_for_absolute_xclip",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "wl-copy",
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
     }
   ],
   "autotype_cases": [
@@ -1865,6 +2083,223 @@
             "-"
           ],
           "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_relative_path_xdotool_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_dot_path_xdotool_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ".",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_entry_xdotool_in_cwd_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ":{bin}",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_path_searches_nothing",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_relative_hit_shadows_absolute_xdotool",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_relative_xdotool_strict_refuses_on_focus",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "1",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_entry_falls_through_to_absolute_xdotool",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "path_spec": ":{bin}",
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    },
+    {
+      "name": "wayland_relative_wtype_is_refused",
+      "wayland_display": "wayland-0",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype: Wayland session detected but neither `wtype` nor `ydotool` is installed.\nInstall one of them:\n  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n  Arch:          sudo pacman -S wtype     (or ydotool)\n  Fedora:        sudo dnf install wtype   (or ydotool)\n`symvault doctor` will warn about this on every run until one is available",
+      "calls": []
+    },
+    {
+      "name": "wayland_relative_wtype_falls_to_absolute_ydotool",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "ydotool"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "ydotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--file",
+            "/dev/stdin"
+          ],
+          "stdin": "hunter2-supersecret"
         }
       ]
     }

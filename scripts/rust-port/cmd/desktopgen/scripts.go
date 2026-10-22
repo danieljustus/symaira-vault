@@ -96,6 +96,28 @@ type sandbox struct {
 	bin  string
 	rec  string
 	home string
+	// cwd is the working directory scenarios run in; rel is cwd/rel. They let a
+	// scenario put a tool where a relative or empty PATH entry resolves to.
+	cwd string
+	rel string
+}
+
+// placement says where each fake tool is installed. Tools are the absolute
+// bin directory (the default); RelTools live in <cwd>/rel; CwdTools directly
+// in <cwd>.
+type placement struct {
+	Tools    []string
+	RelTools []string
+	CwdTools []string
+}
+
+// pathValue renders a scenario PATH. nil means the absolute bin directory
+// alone; otherwise "{bin}" is replaced by that directory.
+func (sb *sandbox) pathValue(spec *string) string {
+	if spec == nil {
+		return sb.bin
+	}
+	return strings.ReplaceAll(*spec, "{bin}", sb.bin)
 }
 
 type toolParams struct {
@@ -106,12 +128,17 @@ type toolParams struct {
 }
 
 func newSandbox(tools []string, p toolParams, paste string) (*sandbox, error) {
+	return newPlacedSandbox(placement{Tools: tools}, p, paste)
+}
+
+func newPlacedSandbox(place placement, p toolParams, paste string) (*sandbox, error) {
 	root, err := os.MkdirTemp("", "desktopgen-")
 	if err != nil {
 		return nil, err
 	}
-	sb := &sandbox{root: root, bin: filepath.Join(root, "bin"), rec: filepath.Join(root, "rec"), home: filepath.Join(root, "home")}
-	for _, dir := range []string{sb.bin, sb.rec, sb.home} {
+	cwd := filepath.Join(root, "cwd")
+	sb := &sandbox{root: root, bin: filepath.Join(root, "bin"), rec: filepath.Join(root, "rec"), home: filepath.Join(root, "home"), cwd: cwd, rel: filepath.Join(cwd, "rel")}
+	for _, dir := range []string{sb.bin, sb.rec, sb.home, sb.cwd, sb.rel} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			_ = os.RemoveAll(root)
 			return nil, err
@@ -121,17 +148,19 @@ func newSandbox(tools []string, p toolParams, paste string) (*sandbox, error) {
 		_ = os.RemoveAll(root)
 		return nil, err
 	}
-	for _, name := range tools {
-		spec, ok := specFor(name)
-		if !ok {
-			_ = os.RemoveAll(root)
-			return nil, fmt.Errorf("unknown fake tool %q", name)
-		}
-		body := renderTemplate(spec.template(), sb.rec, p)
-		// #nosec G306 -- a fake desktop tool must be executable; it lives in a private scratch directory
-		if err := os.WriteFile(filepath.Join(sb.bin, name), []byte(body), 0o700); err != nil {
-			_ = os.RemoveAll(root)
-			return nil, err
+	for dir, names := range map[string][]string{sb.bin: place.Tools, sb.rel: place.RelTools, sb.cwd: place.CwdTools} {
+		for _, name := range names {
+			spec, ok := specFor(name)
+			if !ok {
+				_ = os.RemoveAll(root)
+				return nil, fmt.Errorf("unknown fake tool %q", name)
+			}
+			body := renderTemplate(spec.template(), sb.rec, p)
+			// #nosec G306 -- a fake desktop tool must be executable; it lives in a private scratch directory
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o700); err != nil {
+				_ = os.RemoveAll(root)
+				return nil, err
+			}
 		}
 	}
 	return sb, nil

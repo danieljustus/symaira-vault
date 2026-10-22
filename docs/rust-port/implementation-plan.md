@@ -94,7 +94,7 @@ this slice, and whether it can be verified without a GUI):
 Implemented here: `desktop_commands` (above), `testdata/port/platform/desktop_linux.json`
 and `autotype_escape.json`, `make desktop-differential`. Evidence is local
 (Darwin/arm64 host; the Go side ran on Linux/arm64 in a container) and covers
-tool choice, argv, stdin routing, env policy and error text only. Nothing here
+tool choice, argv, stdin routing, env policy and error text only. Independent review of candidate `1c5a6dab` led to a correction commit: Linux generator tests now dispatch the `--child-clipboard` re-exec through `TestMain` (verified in Linux Docker); the Windows-only unused `SystemHost` import is cfg-scoped (`cargo clippy --target x86_64-pc-windows-msvc` clean); `SystemHost` rejects relative/empty `PATH` hits like Go `exec.ErrDot` (fixture grew to 39 clipboard / 37 autotype cases, 102 recorded calls, oracle-backed) and treats an empty `PATH` as no entries; the env whitelist is tested by a real-process dump and equality with Go's `secrets.DefaultWhitelist()` in the fixture; Windows `SYSTEMROOT` is re-added after `env_clear`. Residuals: non-UTF-8 env values are dropped; spawn-error text for unusual failures differs from Go `os/exec`; Windows `LookPath` semantics are unmodeled (Windows adapters are not wired). Nothing here
 typed into or copied from a live desktop; the native Linux/Windows `Rust port
 contract` receipt for this commit is pending.
 

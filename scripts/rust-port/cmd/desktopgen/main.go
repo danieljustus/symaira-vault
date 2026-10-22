@@ -59,6 +59,7 @@ var productionSources = []string{
 	"internal/clipboard/interface.go",
 	"internal/clipboard/provider.go",
 	"internal/clipboard/system_clipboard.go",
+	"internal/secrets/filter.go",
 }
 
 // generatorSources are hashed into generator_digest.
@@ -90,9 +91,12 @@ type fixture struct {
 	// templates in FakeTools to reproduce the Go scenarios with real processes.
 	ScriptPlaceholders []string          `json:"script_placeholders"`
 	FakeTools          map[string]string `json:"fake_tools"`
-	Clipboard          []clipboardCase   `json:"clipboard_cases"`
-	Autotype           []autotypeCase    `json:"autotype_cases"`
-	WindowsExtracts    []windowsExtract  `json:"windows_extracted_not_executed"`
+	// AutotypeEnvWhitelist is Go's secrets.DefaultWhitelist(): the only
+	// environment names a Linux/Windows autotype tool receives.
+	AutotypeEnvWhitelist []string         `json:"autotype_env_whitelist"`
+	Clipboard            []clipboardCase  `json:"clipboard_cases"`
+	Autotype             []autotypeCase   `json:"autotype_cases"`
+	WindowsExtracts      []windowsExtract `json:"windows_extracted_not_executed"`
 }
 
 func main() {

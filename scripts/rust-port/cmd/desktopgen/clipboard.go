@@ -13,17 +13,23 @@ import (
 const childFlag = "--child-clipboard"
 
 type clipboardCase struct {
-	Name            string         `json:"name"`
-	WaylandDisplay  string         `json:"wayland_display"`
-	WaylandEmptySet bool           `json:"wayland_display_set_to_empty,omitempty"`
-	Tools           []string       `json:"path_tools"`
-	Payload         string         `json:"payload"`
-	PasteOutput     string         `json:"paste_output"`
-	Exit            int            `json:"tool_exit"`
-	Calls           []recordedCall `json:"calls"`
-	CopyError       string         `json:"copy_error"`
-	PasteError      string         `json:"paste_error"`
-	PasteResult     string         `json:"paste_result"`
+	Name            string   `json:"name"`
+	WaylandDisplay  string   `json:"wayland_display"`
+	WaylandEmptySet bool     `json:"wayland_display_set_to_empty,omitempty"`
+	Tools           []string `json:"path_tools"`
+	// PathSpec overrides PATH ("{bin}" is the absolute tool directory); nil keeps
+	// the default. RelTools/CwdTools install tools under <cwd>/rel and <cwd>,
+	// which a relative or empty PATH entry resolves to.
+	PathSpec    *string        `json:"path_spec,omitempty"`
+	RelTools    []string       `json:"rel_tools,omitempty"`
+	CwdTools    []string       `json:"cwd_tools,omitempty"`
+	Payload     string         `json:"payload"`
+	PasteOutput string         `json:"paste_output"`
+	Exit        int            `json:"tool_exit"`
+	Calls       []recordedCall `json:"calls"`
+	CopyError   string         `json:"copy_error"`
+	PasteError  string         `json:"paste_error"`
+	PasteResult string         `json:"paste_result"`
 }
 
 type childRequest struct {
@@ -66,7 +72,7 @@ func runChild(args []string) int {
 }
 
 func runClipboardCase(c clipboardCase) (clipboardCase, error) {
-	sb, err := newSandbox(c.Tools, toolParams{exit: c.Exit}, c.PasteOutput)
+	sb, err := newPlacedSandbox(placement{Tools: c.Tools, RelTools: c.RelTools, CwdTools: c.CwdTools}, toolParams{exit: c.Exit}, c.PasteOutput)
 	if err != nil {
 		return c, err
 	}
@@ -80,7 +86,8 @@ func runClipboardCase(c clipboardCase) (clipboardCase, error) {
 		return c, err
 	}
 	cmd := exec.Command(self, childFlag) // #nosec G204 -- re-executes this generator binary with a fixed flag
-	cmd.Env = childEnv(sb, c.WaylandDisplay, c.WaylandEmptySet)
+	cmd.Dir = sb.cwd
+	cmd.Env = childEnv(sb, c.PathSpec, c.WaylandDisplay, c.WaylandEmptySet)
 	cmd.Stdin = strings.NewReader(string(request))
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
@@ -98,9 +105,9 @@ func runClipboardCase(c clipboardCase) (clipboardCase, error) {
 }
 
 // childEnv is deliberately minimal: PATH is the fake-tool directory only.
-func childEnv(sb *sandbox, wayland string, emptySet bool) []string {
+func childEnv(sb *sandbox, pathSpec *string, wayland string, emptySet bool) []string {
 	env := []string{
-		"PATH=" + sb.bin,
+		"PATH=" + sb.pathValue(pathSpec),
 		"HOME=" + sb.home,
 		"TMPDIR=" + sb.root,
 		"XDG_CONFIG_HOME=" + sb.home,
