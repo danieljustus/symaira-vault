@@ -209,6 +209,23 @@ fn set_mode(path: &Path, mode: u32) {
 #[cfg(not(unix))]
 fn set_mode(_: &Path, _: u32) {}
 
+/// Read-only directories seeded by a case must not block cleaning up its root.
+#[cfg(unix)]
+fn make_writable(root: &Path) {
+    if let Ok(entries) = fs::read_dir(root) {
+        set_mode(root, 0o700);
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_dir()) {
+                make_writable(&path);
+            }
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn make_writable(_: &Path) {}
+
 /// The part of an OS-derived message that is not host-specific text.
 fn stable_prefix(message: &str) -> &str {
     message.rsplit_once(": ").map_or(message, |(head, _)| head)
@@ -250,6 +267,7 @@ fn run_case(case: &Case) -> Result<(), String> {
         ));
     }
     let mut tree = snapshot(&root_path);
+    make_writable(&root_path);
     let mut expected = case.tree.clone();
     for (name, path) in GO_PARTIAL_FILES {
         if *name == case.name {
@@ -285,7 +303,7 @@ fn restore_errors_and_side_effects_match_go_corpus() {
         "../../../testdata/port/sync/restore-errors.json"
     ))
     .unwrap();
-    assert_eq!(fixture.cases.len(), 80, "corpus size changed");
+    assert_eq!(fixture.cases.len(), 88, "corpus size changed");
     let mut failures = Vec::new();
     let mut executed = 0;
     for case in &fixture.cases {

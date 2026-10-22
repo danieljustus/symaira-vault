@@ -9,6 +9,10 @@ use std::{
 use tar::{Archive, Builder, EntryType, Header};
 use thiserror::Error;
 
+/// Deliberate safety limit with no production-Go equivalent (Go restores any
+/// number of members). It is enforced by a header-only pre-pass in `restore`
+/// before the first member is written, so an over-limit archive leaves no
+/// partial tree. Recorded as an unapproved divergence in the IO-002 row.
 const MAX_ARCHIVE_ENTRIES: usize = 100_000;
 const MAX_ARCHIVE_FILE: u64 = 1 << 30;
 const MAX_ARCHIVE_TOTAL: u64 = 16 * (1 << 30);
@@ -274,48 +278,64 @@ fn lexical_clean(path: &Path) -> PathBuf {
 }
 
 /// Go's `path.Clean` over slash-separated names.
-fn go_path_clean(path: &str) -> String {
+fn go_path_clean(path: &[u8]) -> Vec<u8> {
     if path.is_empty() {
-        return ".".to_owned();
+        return b".".to_vec();
     }
-    let rooted = path.starts_with('/');
-    let mut stack: Vec<&str> = Vec::new();
-    for part in path.split('/') {
+    let rooted = path.starts_with(b"/");
+    let mut stack: Vec<&[u8]> = Vec::new();
+    for part in path.split(|byte| *byte == b'/') {
         match part {
-            "" | "." => {}
-            ".." => {
-                if stack.last().is_some_and(|last| *last != "..") {
+            b"" | b"." => {}
+            b".." => {
+                if stack.last().is_some_and(|last| *last != b"..") {
                     stack.pop();
                 } else if !rooted {
-                    stack.push("..");
+                    stack.push(b"..");
                 }
             }
             other => stack.push(other),
         }
     }
-    let joined = stack.join("/");
+    let joined = stack.join(&b'/');
     match (rooted, joined.is_empty()) {
-        (true, _) => format!("/{joined}"),
-        (false, true) => ".".to_owned(),
+        (true, _) => [b"/".as_slice(), &joined].concat(),
+        (false, true) => b".".to_vec(),
         (false, false) => joined,
     }
 }
 
 /// `cleanBackupMemberName` from cmd/admin/backup.go, including its error text.
-fn go_clean_member_name(name: &str) -> Result<String, String> {
-    if name.is_empty() || name == "." || name.contains('\\') {
-        return Err(format!("archive contains unsafe path: {name}"));
+/// Works on the raw header bytes so a non-UTF-8 name reaches the OS unchanged
+/// (Go passes the bytes through; macOS then answers `illegal byte sequence`).
+fn go_clean_member_name(name: &[u8]) -> Result<Vec<u8>, String> {
+    let shown = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    if name.is_empty() || name == b"." || name.contains(&b'\\') {
+        return Err(format!("archive contains unsafe path: {}", shown(name)));
     }
-    let bytes = name.as_bytes();
-    if name.starts_with('/') || (bytes.len() >= 2 && bytes[1] == b':') {
-        return Err(format!("archive contains absolute path: {name}"));
+    if name.starts_with(b"/") || (name.len() >= 2 && name[1] == b':') {
+        return Err(format!("archive contains absolute path: {}", shown(name)));
     }
-    let name = name.strip_suffix('/').unwrap_or(name);
+    let name = name.strip_suffix(b"/").unwrap_or(name);
     let clean = go_path_clean(name);
-    if clean == "." || clean != name || clean == ".." || clean.starts_with("../") {
-        return Err(format!("archive contains path traversal: {name}"));
+    if clean == b"." || clean != name || clean == b".." || clean.starts_with(b"../") {
+        return Err(format!("archive contains path traversal: {}", shown(name)));
     }
     Ok(clean)
+}
+
+/// The path a cleaned member name denotes. Unix keeps the raw bytes so the
+/// operating system, not a lossy conversion, decides whether the name is legal.
+fn member_path(clean: &[u8]) -> PathBuf {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt as _;
+        PathBuf::from(std::ffi::OsStr::from_bytes(clean))
+    }
+    #[cfg(not(unix))]
+    {
+        PathBuf::from(String::from_utf8_lossy(clean).into_owned())
+    }
 }
 
 /// `fsutil.SafeMkdirAll`: walks each component, trusts only root-owned
@@ -509,12 +529,89 @@ fn check_gzip_header(path: &Path) -> Result<(), ArchiveError> {
     Ok(())
 }
 
+/// Opens an existing restore target for writing without following a symlink.
+fn open_existing_for_write(path: &Path) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.custom_flags(rustix::fs::OFlags::NOFOLLOW.bits() as i32);
+    }
+    options.open(path)
+}
+
+/// Creates an exclusive (`O_EXCL`, mode 0600) staging file next to the target.
+/// Opened directly rather than through `tempfile::NamedTempFile`, which wraps
+/// the `io::Error` and drops the errno Go's lowercase reason text derives from.
+fn create_staging(dir: &Path) -> io::Result<(fs::File, tempfile::TempPath)> {
+    let mut last = io::Error::from(io::ErrorKind::AlreadyExists);
+    for _ in 0..32 {
+        let mut random = [0u8; 8];
+        getrandom::fill(&mut random).map_err(io::Error::other)?;
+        let path = dir.join(format!(".symvault-restore-{}", hex::encode(random)));
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            options.mode(0o600);
+        }
+        match options.open(&path) {
+            Ok(file) => {
+                return match tempfile::TempPath::try_from_path(&path) {
+                    Ok(guard) => Ok((file, guard)),
+                    Err(error) => {
+                        let _ = fs::remove_file(&path);
+                        Err(error)
+                    }
+                };
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => last = error,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last)
+}
+
+/// True when the first header block of `entry` carries the legacy `\0`
+/// typeflag (Go's `TypeRegA`).
+fn is_legacy_regular<R: Read>(entry: &tar::Entry<'_, R>) -> bool {
+    entry.header().as_bytes()[156] == 0
+}
+
+/// Fails with [`ArchiveError::Limit`] before any member is written when the
+/// archive holds more than `MAX_ARCHIVE_ENTRIES` members. Only headers are
+/// counted; a read error ends the count so the extraction pass reports it with
+/// Go's wording and ordering.
+fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
+    let Ok(file) = fs::File::open(input) else {
+        return Ok(());
+    };
+    let mut archive = Archive::new(GzDecoder::new(file));
+    let Ok(entries) = archive.entries() else {
+        return Ok(());
+    };
+    for (index, item) in entries.enumerate() {
+        if item.is_err() {
+            return Ok(());
+        }
+        if index >= MAX_ARCHIVE_ENTRIES {
+            return Err(ArchiveError::Limit);
+        }
+    }
+    Ok(())
+}
+
 /// Restores a gzip tar backup into an existing or newly created directory.
 ///
 /// Error text and extraction order follow `cmd/admin.RestoreBackup` (see
-/// `testdata/port/sync/restore-errors.json`). One deliberate difference: a
-/// member is staged and renamed into place, so a truncated member never leaves
-/// the partial file Go's in-place `O_TRUNC` write does.
+/// `testdata/port/sync/restore-errors.json`). Deliberate differences, all
+/// recorded in the IO-002 contract row: a member is staged and renamed into
+/// place, so a truncated member never leaves the partial file Go's in-place
+/// `O_TRUNC` write does (when the directory is not writable, an existing
+/// writable regular file is rewritten in place instead, as Go does); and an
+/// archive with more than `MAX_ARCHIVE_ENTRIES` members is rejected up front.
 pub fn restore(
     input: impl AsRef<Path>,
     destination: impl AsRef<Path>,
@@ -532,6 +629,7 @@ pub fn restore(
     }
     let input = input.as_ref();
     check_gzip_header(input)?;
+    check_entry_limit(input)?;
     let file = fs::File::open(input).map_err(|error| {
         restore_error(format!(
             "open archive: open {}: {}",
@@ -554,15 +652,17 @@ pub fn restore(
     let mut result = Vec::new();
     let mut total = 0u64;
     let entries = archive.entries().map_err(|error| read_error(&error))?;
-    for (index, item) in entries.enumerate() {
-        if index >= MAX_ARCHIVE_ENTRIES {
-            return Err(ArchiveError::Limit);
-        }
+    for item in entries {
         let mut entry = item.map_err(|error| read_error(&error))?;
+        // Go parses the numeric header fields while reading the header, so a
+        // malformed mode wins over any name error.
+        let header_mode = go_header_mode(entry.header())
+            .map_err(|()| restore_error("read archive: archive/tar: invalid tar header"))?;
         let raw_name = entry.path_bytes().into_owned();
         let name = String::from_utf8_lossy(&raw_name).into_owned();
-        let clean = go_clean_member_name(&name).map_err(restore_error)?;
-        let rel = PathBuf::from(&clean);
+        let clean_bytes = go_clean_member_name(&raw_name).map_err(restore_error)?;
+        let clean = String::from_utf8_lossy(&clean_bytes).into_owned();
+        let rel = member_path(&clean_bytes);
         let target = dest.join(&rel);
         let shown = lexical_clean(&target);
         if fs::symlink_metadata(&target).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
@@ -572,9 +672,13 @@ pub fn restore(
             )));
         }
         let kind = entry.header().entry_type();
-        let header_mode = go_header_mode(entry.header())
-            .map_err(|()| restore_error("read archive: archive/tar: invalid tar header"))?;
-        if kind == EntryType::Directory {
+        // Go's reader maps a legacy `\0` typeflag to a directory when the
+        // (final) name ends in a slash, and to a regular file otherwise.
+        let is_dir = kind == EntryType::Directory
+            || (kind == EntryType::Regular
+                && is_legacy_regular(&entry)
+                && raw_name.ends_with(b"/"));
+        if is_dir {
             if header_mode < 0 {
                 return Err(restore_error(format!(
                     "invalid negative mode in archive: {name}"
@@ -636,16 +740,13 @@ pub fn restore(
                 go_reason(&error)
             ))
         };
-        let m = match fs::symlink_metadata(&target) {
+        // Existing regular file: Go opens it for writing before truncating, so
+        // a permission failure is reported (and nothing is replaced through the
+        // parent directory). The handle is kept for the in-place fallback.
+        let (m, existing) = match fs::symlink_metadata(&target) {
             Ok(metadata) if metadata.is_file() => {
-                // Go opens existing restore targets for writing before
-                // truncating them. Preserve its permission failure instead
-                // of replacing a read-only file through the parent directory.
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open(&target)
-                    .map_err(create_error)?;
-                mode(&metadata)
+                let handle = open_existing_for_write(&target).map_err(create_error)?;
+                (mode(&metadata), Some((metadata, handle)))
             }
             Ok(metadata) if metadata.is_dir() => {
                 return Err(restore_error(format!(
@@ -653,37 +754,67 @@ pub fn restore(
                     shown.display()
                 )));
             }
-            Ok(_) => (header_mode as u32) & 0o600,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => (header_mode as u32) & 0o600,
+            Ok(_) => ((header_mode as u32) & 0o600, None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                ((header_mode as u32) & 0o600, None)
+            }
             Err(error) => return Err(create_error(error)),
         };
-        let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))
-            .map_err(create_error)?;
-        let (copied, hash) = copy_and_hash((&mut entry).take(size), &mut tmp).map_err(|error| {
-            restore_error(format!("write file: {}", go_stream_error(&error, &failure)))
-        })?;
-        if copied != size {
-            return Err(restore_error("write file: unexpected EOF"));
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            tmp.as_file()
-                .set_permissions(fs::Permissions::from_mode(m))
-                .map_err(create_error)?;
-        }
-        let published = if overwrite {
-            tmp.persist(&target)
-        } else {
-            tmp.persist_noclobber(&target)
-        };
-        published.map_err(|error| {
-            if !overwrite && error.error.kind() == io::ErrorKind::AlreadyExists {
-                ArchiveError::Exists(target.clone())
-            } else {
-                create_error(error.error)
+        let parent = target.parent().unwrap_or(dest);
+        let (_, hash) = match create_staging(parent) {
+            Ok((mut staged, staged_path)) => {
+                drop(existing);
+                let outcome =
+                    copy_and_hash((&mut entry).take(size), &mut staged).map_err(|error| {
+                        restore_error(format!("write file: {}", go_stream_error(&error, &failure)))
+                    })?;
+                if outcome.0 != size {
+                    return Err(restore_error("write file: unexpected EOF"));
+                }
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    staged
+                        .set_permissions(fs::Permissions::from_mode(m))
+                        .map_err(create_error)?;
+                }
+                // Close before the rename so it also works where an open
+                // file cannot be replaced.
+                drop(staged);
+                let published = if overwrite {
+                    staged_path.persist(&target)
+                } else {
+                    staged_path.persist_noclobber(&target)
+                };
+                published.map_err(|error| {
+                    if !overwrite && error.error.kind() == io::ErrorKind::AlreadyExists {
+                        ArchiveError::Exists(target.clone())
+                    } else {
+                        create_error(error.error)
+                    }
+                })?;
+                outcome
             }
-        })?;
+            // A directory that cannot be written still lets Go rewrite a
+            // writable file in place. Same target, same checks: the handle was
+            // opened with NOFOLLOW and must still be that regular file.
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied && existing.is_some() => {
+                let (metadata, mut handle) = existing.expect("checked above");
+                if !same_regular_file(&metadata, &handle) {
+                    return Err(create_error(error));
+                }
+                handle.set_len(0).map_err(create_error)?;
+                let outcome =
+                    copy_and_hash((&mut entry).take(size), &mut handle).map_err(|error| {
+                        restore_error(format!("write file: {}", go_stream_error(&error, &failure)))
+                    })?;
+                if outcome.0 != size {
+                    return Err(restore_error("write file: unexpected EOF"));
+                }
+                outcome
+            }
+            Err(error) => return Err(create_error(error)),
+        };
         result.push(ArchiveEntry {
             path: clean,
             directory: false,
@@ -694,4 +825,22 @@ pub fn restore(
     }
     result.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(result)
+}
+
+/// The opened handle is still the regular file `lstat` saw (not swapped for a
+/// symlink target or another inode between the two calls).
+fn same_regular_file(before: &fs::Metadata, handle: &fs::File) -> bool {
+    let Ok(after) = handle.metadata() else {
+        return false;
+    };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        after.is_file() && before.dev() == after.dev() && before.ino() == after.ino()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = before;
+        after.is_file()
+    }
 }

@@ -112,6 +112,10 @@ func typeflag(kind string) byte {
 		return tar.TypeCont
 	case "xglobal":
 		return tar.TypeXGlobalHeader
+	case "rega":
+		// Legacy regular-file flag. archive/tar's writer normalizes it, so
+		// members of this type are always emitted byte-for-byte.
+		return 0
 	}
 	panic("unknown member type " + kind)
 }
@@ -131,6 +135,14 @@ func buildTar(members []member, format tar.Format, trailer bool) []byte {
 		}
 		if m.Type == "xglobal" {
 			header.PAXRecords = map[string]string{"comment": "oracle"}
+		}
+		if m.Type == "rega" {
+			if err := writer.Flush(); err != nil {
+				panic(err)
+			}
+			buffer.Write(rawHeader(m, int64(len(m.Data))))
+			buffer.Write(rawBody(m))
+			continue
 		}
 		if m.Size != nil {
 			// The header promises more data than follows: hand-assemble it.
@@ -310,6 +322,8 @@ func runAt(name, wrap string, format tar.Format, members []member, trailer bool,
 	if err != nil {
 		panic(err)
 	}
+	// Cases that seed read-only directories must still be removable.
+	defer func() { makeWritable(root) }()
 	dest := filepath.Join(root, filepath.FromSlash(destRel))
 	if err := os.MkdirAll(filepath.Join(root, "outside"), 0o700); err != nil {
 		panic(err)
@@ -361,6 +375,34 @@ func runAt(name, wrap string, format tar.Format, members []member, trailer bool,
 		Tree:        snapshot(root),
 		Members:     members,
 	}
+}
+
+// makeWritable restores owner access to every directory below root so the
+// disposable case root can be deleted after a read-only-directory case.
+func makeWritable(root string) {
+	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if entry != nil && entry.IsDir() {
+			_ = os.Chmod(path, 0o700) // #nosec G302 -- disposable generator directory
+		}
+		return nil
+	})
+}
+
+// patchHeaderMode overwrites the mode field of the tar header at block index
+// and recomputes its checksum, so only the numeric field is malformed.
+func patchHeaderMode(data []byte, index int, field string) []byte {
+	out := append([]byte{}, data...)
+	block := out[index*512 : (index+1)*512]
+	copy(block[100:108], field)
+	for i := 148; i < 156; i++ {
+		block[i] = ' '
+	}
+	sum := 0
+	for _, b := range block {
+		sum += int(b)
+	}
+	copy(block[148:156], fmt.Sprintf("%06o\x00 ", sum))
+	return out
 }
 
 func buildCases() []restoreCase {
@@ -489,6 +531,42 @@ func buildCases() []restoreCase {
 	}, pre{Path: "vault/entries", Kind: "symlink", Target: "../outside"})
 	add("destination-is-a-symlink", with(),
 		pre{Path: "vault", Kind: "symlink", Target: "outside"})
+
+	// Read-only directories (Unix permission bits). Go creates and rewrites
+	// files in place, so a writable existing file inside a 0500 directory is
+	// restored while a new file cannot be created.
+	addUnix := func(name string, members []member, setup ...pre) {
+		cases = append(cases, run(name, "gzip", tar.FormatUnknown, members, true, setup, true))
+	}
+	regm := func(name, data string) member {
+		return member{Name: name, Type: "reg", Mode: 0o600, Data: data}
+	}
+	addUnix("new-file-in-readonly-dir", with(regm("entries/a.age", "new")),
+		pre{Path: "vault/entries", Kind: "dir", Mode: 0o500})
+	addUnix("existing-file-in-readonly-dir-rewritten", with(regm("entries/a.age", "new")),
+		pre{Path: "vault/entries/a.age", Kind: "file", Mode: 0o600, Data: "old-longer-content"},
+		pre{Path: "vault/entries", Kind: "dir", Mode: 0o500})
+	addUnix("existing-readonly-file-in-readonly-dir", with(regm("entries/a.age", "new")),
+		pre{Path: "vault/entries/a.age", Kind: "file", Mode: 0o400, Data: "old"},
+		pre{Path: "vault/entries", Kind: "dir", Mode: 0o500})
+	addUnix("existing-readonly-file-in-writable-dir", with(regm("entries/a.age", "new")),
+		pre{Path: "vault/entries/a.age", Kind: "file", Mode: 0o400, Data: "old"})
+
+	// Legacy `\0` typeflag: a trailing slash makes archive/tar report a
+	// directory, otherwise a regular file. TypeReg keeps a trailing-slash name
+	// a file.
+	add("legacy-nul-typeflag-trailing-slash-is-dir", with(
+		member{Name: "d/", Type: "rega", Mode: 0o755},
+		member{Name: "d/x", Type: "reg", Mode: 0o600, Data: "inside"},
+	))
+	add("legacy-nul-typeflag-regular-file", with(member{Name: "entries/legacy", Type: "rega", Mode: 0o644, Data: "legacy-file"}))
+	add("regular-typeflag-trailing-slash-stays-file", with(member{Name: "g/", Type: "reg", Mode: 0o600, Data: "file-named-g"}))
+
+	// A malformed mode field is a header error inside Next(), so it wins over
+	// the unsafe member name that follows the same header.
+	cases = append(cases, runAt("invalid-mode-field-beats-unsafe-name", "gzip", tar.FormatUnknown,
+		with(regm("../outside/escaped", "x")), true, nil, false, "vault", false,
+		func(data []byte) []byte { return patchHeaderMode(data, 5, "zzzzzzz\x00") }))
 	return cases
 }
 
@@ -577,7 +655,7 @@ func rawHeader(m member, size int64) []byte {
 }
 
 func rawBody(m member) []byte {
-	if m.Type != "reg" || m.Size != nil {
+	if (m.Type != "reg" && m.Type != "rega") || m.Size != nil {
 		return nil
 	}
 	padded := make([]byte, (len(m.Data)+511)/512*512)
