@@ -17,7 +17,13 @@ pub fn backup(root: &Path, destination: &Path, exclude_git: bool) -> Result<Path
 }
 
 pub fn restore(root: &Path, source: &Path) -> Result<(), String> {
-    fs::metadata(source).map_err(|error| format!("archive not found: {error}"))?;
+    fs::metadata(source).map_err(|error| {
+        format!(
+            "archive not found: stat {}: {}",
+            source.display(),
+            archive::go_reason(&error)
+        )
+    })?;
     archive::restore(source, root, true).map_err(|error| format!("restore failed: {error}"))?;
     for required in ["identity.age", "config.yaml"] {
         fs::metadata(root.join(required))
