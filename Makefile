@@ -249,6 +249,8 @@ CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
 CFG_BYTES_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
+CFG_SECTIONS_FIXTURE := testdata/port/config/sections.json
+CFG_SECTIONS_ORACLE_COMMIT ?= 861ad93813e3ee43c4ec989f45940d14b05b6eaf
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
@@ -419,6 +421,17 @@ cfg-precedence-fixtures-check:
 		--check --output $(CFG_PRECEDENCE_FIXTURE)
 	$(CARGO) test -p symvault-core --test config_precedence_contract --locked
 
+cfg-sections-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \
+		--output $(CFG_SECTIONS_FIXTURE) \
+		--oracle-commit $(CFG_SECTIONS_ORACLE_COMMIT) \
+		--oracle-release $(CFG_ORACLE_RELEASE)
+
+cfg-sections-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \
+		--check --output $(CFG_SECTIONS_FIXTURE)
+	$(CARGO) test -p symvault-core --test config_sections_contract --test config_sections_process_guard --locked
+
 cfg-bytes-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configbytesgen \
 		--output $(CFG_BYTES_FIXTURE) \
@@ -533,7 +546,7 @@ config-profile-differential: config-profile-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/configprofilegen -count=1 -v -timeout=10m
 	$(CARGO) test -p symvault-core --test config_profiles_contract --locked
 
-config-session-differential: rust-007-differential config-profile-differential
+config-session-differential: rust-007-differential config-profile-differential cfg-sections-fixtures-check
 
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
@@ -652,7 +665,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 3e088537045400d87461c75acf1c1d45d20cfe1d --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential error-taxonomy-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
