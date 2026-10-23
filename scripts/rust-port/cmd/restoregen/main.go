@@ -69,14 +69,14 @@ type node struct {
 }
 
 type restoreCase struct {
-	Name     string `json:"name"`
+	Name string `json:"name"`
 	// UnixOnly marks a case whose recorded outcome cannot be reproduced on
 	// Windows; UnixOnlyReason says why (required whenever UnixOnly is set).
 	UnixOnly       bool   `json:"unix_only,omitempty"`
 	UnixOnlyReason string `json:"unix_only_reason,omitempty"`
-	Wrap     string `json:"wrap"`
-	TarB64   string `json:"tar_b64"`
-	Pre      []pre  `json:"pre,omitempty"`
+	Wrap           string `json:"wrap"`
+	TarB64         string `json:"tar_b64"`
+	Pre            []pre  `json:"pre,omitempty"`
 	// Dest is the restore destination relative to the case root.
 	Dest string `json:"dest"`
 	// Missing leaves the archive file absent (the CLI's own stat check).
@@ -373,19 +373,19 @@ func runAt(name, wrap string, format tar.Format, members []member, trailer bool,
 		}
 	}
 	return restoreCase{
-		Name:        name,
+		Name:           name,
 		UnixOnly:       unixReason != "",
 		UnixOnlyReason: unixReason,
-		Wrap:        wrap,
-		TarB64:      base64.StdEncoding.EncodeToString(tarBytes),
-		Pre:         setup,
-		Dest:        destRel,
-		Missing:     missing,
-		Error:       message,
-		ErrorPrefix: prefix,
-		OSError:     osError,
-		Tree:        snapshot(root),
-		Members:     members,
+		Wrap:           wrap,
+		TarB64:         base64.StdEncoding.EncodeToString(tarBytes),
+		Pre:            setup,
+		Dest:           destRel,
+		Missing:        missing,
+		Error:          message,
+		ErrorPrefix:    prefix,
+		OSError:        osError,
+		Tree:           snapshot(root),
+		Members:        members,
 	}
 }
 
