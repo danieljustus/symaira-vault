@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -433,7 +434,11 @@ func TestRunDriverErrors(t *testing.T) {
 		}
 	})
 	t.Run("scratch directory cannot be created", func(t *testing.T) {
-		t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
+		missing := filepath.Join(t.TempDir(), "does-not-exist")
+		// os.TempDir reads TMPDIR on Unix and TMP/TEMP/USERPROFILE on Windows.
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP", "USERPROFILE"} {
+			t.Setenv(name, missing)
+		}
 		if _, err := runDriver(realRoot); err == nil {
 			t.Fatal("expected a scratch-directory error")
 		}
@@ -651,6 +656,11 @@ func TestMainFatalPaths(t *testing.T) {
 		}
 	})
 	t.Run("driver cannot run without the go tool", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			// An extensionless git link is not resolved through PATHEXT, and
+			// Git for Windows does not run outside its install directory.
+			t.Skip("PATH-only git link is not portable to Windows")
+		}
 		gitPath, err := exec.LookPath("git")
 		if err != nil {
 			t.Skip("git not available")
