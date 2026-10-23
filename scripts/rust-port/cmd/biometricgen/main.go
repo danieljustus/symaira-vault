@@ -279,7 +279,10 @@ func stringConst(file *ast.File, name string) (string, error) {
 			continue
 		}
 		for _, spec := range gen.Specs {
-			vs := spec.(*ast.ValueSpec)
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
 			for i, id := range vs.Names {
 				if id.Name != name || i >= len(vs.Values) {
 					continue
