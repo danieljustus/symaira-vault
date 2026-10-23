@@ -394,7 +394,7 @@ type countdownCase struct {
 	Duration     int    `json:"duration"`
 	NilUpdate    bool   `json:"nil_update"`
 	CancelAfterM int    `json:"cancel_after_ms,omitempty"`
-	PreCancelled bool   `json:"pre_cancelled,omitempty"`
+	PreCancelled bool   `json:"pre_cancelled,omitempty"` //nolint:misspell // fixture key pinned by the Rust contract test
 	Updates      []int  `json:"updates"`
 }
 
@@ -407,7 +407,7 @@ func recordCountdown() []countdownCase {
 		{Name: "zero_duration", Duration: 0},
 		{Name: "negative_duration", Duration: -5},
 		{Name: "nil_update_function", Duration: 2, NilUpdate: true},
-		{Name: "pre_cancelled_still_reports_first", Duration: 5, PreCancelled: true},
+		{Name: "pre_cancelled_still_reports_first", Duration: 5, PreCancelled: true}, //nolint:misspell // fixture case name pinned by the Rust contract test
 	}
 	for i := range cases {
 		c := &cases[i]
