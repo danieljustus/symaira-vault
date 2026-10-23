@@ -3,7 +3,6 @@
     "refractivity",
     "specular-location"
   ],
-  "fill": "automatic",
   "groups": [
     {
       "name": "Vault \u2014 Vordergrund",
@@ -82,5 +81,22 @@
   ],
   "supported-platforms": {
     "squares": "shared"
-  }
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "solid": "srgb:0.93333333,0.92941176,0.91764706,1"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "srgb:0.10980392,0.10980392,0.10588235,1"
+      }
+    },
+    {
+      "appearance": "tinted",
+      "value": "automatic"
+    }
+  ]
 }
