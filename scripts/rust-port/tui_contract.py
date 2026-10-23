@@ -29,6 +29,8 @@ import time
 
 import pyte
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = 'd1cd0f97ac550bc3020bc86b0514989f8d28d95c'
 PHRASE = 'public-tui-passphrase-782a'
@@ -799,8 +801,10 @@ def execute(args, receipt):
             (helper_dir/'main.go').write_bytes(helper_source.read_bytes())
             suffix = '.exe' if os.name == 'nt' else ''
             go, helper = base/('go-cli'+suffix), base/('go-fixture'+suffix)
-            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], cwd=tree)
-            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', helper, './scripts/rust-port/cmd/tuifixture'], cwd=tree)
+            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', go, '.'], cwd=tree,
+                    timeout=oracle_build_timeout())
+            checked(['go', 'build', '-trimpath', '-buildvcs=false', '-o', helper, './scripts/rust-port/cmd/tuifixture'],
+                    cwd=tree, timeout=oracle_build_timeout())
             receipt.update(go_executable_sha256=digest(go), go_fixture_executable_sha256=digest(helper),
                            go_fixture_source_sha256=digest(helper_source),
                            terminal_driver='native-ConPTY' if os.name == 'nt' else 'controlling-Unix-PTY')
@@ -862,7 +866,7 @@ def execute(args, receipt):
             receipt['failure'] = scrub(type(error).__name__+': '+str(error))
             raise
         finally:
-            checked(['git', 'worktree', 'remove', '--force', tree])
+            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
     print(('PASS' if clean else 'DEVELOPMENT ONLY')+': fifteen actual Go/Rust browser cases on '+platform.system())
 
 

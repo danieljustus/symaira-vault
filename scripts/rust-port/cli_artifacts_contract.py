@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import urllib.request
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 # CLI manuals intentionally correct Markdown interpretation of dynamic paths.
 # The earlier oracle remains frozen in manual_path_probe.py and Git history.
@@ -52,10 +54,10 @@ def normalized_man(path, config_path):
     return path.read_bytes().decode('utf-8').replace(literal_roff_text(config_path),'__CONFIG_PATH__')
 
 
-def execute(args, cwd, env, data=None):
+def execute(args, cwd, env, data=None, timeout=120):
     try:
         result = subprocess.run([str(a) for a in args], cwd=cwd, env=env,
-                                input=data, capture_output=True, timeout=120)
+                                input=data, capture_output=True, timeout=timeout)
     except subprocess.TimeoutExpired as error:
         result = error
     returncode = getattr(result, 'returncode', None)
@@ -73,7 +75,7 @@ def execute(args, cwd, env, data=None):
             (record / 'stdin.bin').write_bytes(data)
         write_utf8(record / 'command.json', json.dumps({
             'args': [str(a) for a in args], 'cwd': str(cwd),
-            'returncode': returncode, 'timeout_seconds': 120,
+            'returncode': returncode, 'timeout_seconds': timeout,
             'timed_out': isinstance(result, subprocess.TimeoutExpired),
             'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         }, indent=2) + '\n')
@@ -196,11 +198,13 @@ def validate_observations(observations, commands):
 
 def capture(tree, base, env):
     binary = base / ("go.exe" if os.name == "nt" else "go")
-    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], tree, env)
+    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", binary, "."], tree, env,
+            timeout=oracle_build_timeout())
     helper = tree / "scripts/rust-port/cmd/cli004probe"
     helper.mkdir()
     (helper / "main.go").write_bytes(PROBE.read_bytes())
-    metadata = json.loads(execute(["go", "run", "./scripts/rust-port/cmd/cli004probe", "tree"], tree, env).stdout)
+    metadata = json.loads(execute(["go", "run", "./scripts/rust-port/cmd/cli004probe", "tree"], tree, env,
+                                   timeout=oracle_build_timeout()).stdout)
     commands = metadata['commands']
     help_pages = {}
     paths = [c["path"] for c in commands]
@@ -224,7 +228,7 @@ def capture(tree, base, env):
     declared = requests(commands)
     historical = declared[:-len(PARSER_REQUESTS)]
     seeded = execute(["go", "run", "./scripts/rust-port/cmd/cli004probe"], tree, env,
-                     json.dumps(historical).encode())
+                     json.dumps(historical).encode(), timeout=oracle_build_timeout())
     assert not seeded.stderr, 'seeded Go probe emitted uncaptured diagnostics'
     observations = json.loads(seeded.stdout)
     assert len(observations) == len(historical), 'missing historical Go observations'
@@ -517,7 +521,8 @@ def main():
             else:
                 print(f"PASS actual Go capture: {len(artifact['help'])} help pages, {len(artifact['completions'])} scripts, {len(artifact['manpages'])} manuals, {len(artifact['entry_completions'])} protocol queries")
         finally:
-            execute(["git", "worktree", "remove", "--force", tree], ROOT, os.environ.copy())
+            remove_worktree(lambda: execute(["git", "worktree", "remove", "--force", tree], ROOT, os.environ.copy()),
+                            "oracle worktree")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 import time
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 
@@ -380,7 +382,8 @@ def main():
         checked(["git", "worktree", "add", "--detach", tree, ORACLE])
         try:
             go = base / ("go.exe" if os.name == "nt" else "go")
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree)
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree,
+                    timeout=oracle_build_timeout())
             oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
                                     if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
             embedded = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
@@ -430,7 +433,7 @@ def main():
             args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
             print(f"PASS: {len(observed['go'])} actual Go/Rust serve observations on {platform.system()}")
         finally:
-            checked(["git", "worktree", "remove", tree])
+            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
 
 
 if __name__ == "__main__":

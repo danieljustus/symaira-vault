@@ -6,7 +6,11 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import sys
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_timeout import oracle_build_timeout
 
 
 def kill_owned(process):
@@ -39,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix="store004-cancel-", dir=os.environ.get("
                                     cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT,
                                     start_new_session=os.name != "nt")
         try:
-            result = compiler.wait(timeout=120)
+            result = compiler.wait(timeout=oracle_build_timeout())
         except BaseException:
             kill_owned(compiler)
             raise

@@ -18,7 +18,7 @@ import time
 from urllib.parse import urlencode
 
 sys.dont_write_bytecode = True
-from mcp_process_contract import ORACLE, checked, isolated, inventory, vault_snapshot, signal_suite
+from mcp_process_contract import ORACLE, checked, oracle_build_timeout, remove_worktree, isolated, inventory, vault_snapshot, signal_suite
 
 ROOT = Path(__file__).resolve().parents[2]
 PROBE = ROOT/'scripts/rust-port/http_process_seed.go.txt'
@@ -467,8 +467,8 @@ def main():
                 (helper/'main.go').write_bytes(PROBE.read_bytes())
                 suffix='.exe' if os.name=='nt' else ''
                 go,seed=base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpprocessseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpprocessseed'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 seed_home=base/'seed';seed_home.mkdir()
                 tokens=json.loads(checked([seed,'--root',seed_home/'vault'],cwd=seed_home,env=isolated(seed_home)))
@@ -517,7 +517,7 @@ def main():
                 assert not receipt['differences'],'actual HTTP differences retained'
                 receipt['passed']=True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         receipt['candidate_worktree_clean_at_end'] = not checked(
