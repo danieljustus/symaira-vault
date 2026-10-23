@@ -143,7 +143,7 @@ pub(crate) fn install(
     on_stop: Option<StopCallback>,
 ) -> Result<(), String> {
     match on_stop {
-        Some(stop) => ctrlc::set_handler(move || stop()).map_err(|error| error.to_string()),
+        Some(stop) => ctrlc::set_handler(stop).map_err(|error| error.to_string()),
         None => Ok(()),
     }
 }
