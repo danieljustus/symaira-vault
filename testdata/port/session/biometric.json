@@ -10,7 +10,7 @@
       "internal/session/touchid_darwin.go"
     ],
     "source_digest": "00f1c5d4620fe93a8db2cbb9a0f49e2426fa5e257bd804d9eb6b522554140f15",
-    "generator_digest": "b94e57e448eb957ee2ea7c33149f0cfa14e6226a6a69d003701d0ee7bb4eee61"
+    "generator_digest": "214926b70a180457397bd81f9d248aa8625512f3153d174c5e6f711d22b27749"
   },
   "driver": {
     "sentinels": [
