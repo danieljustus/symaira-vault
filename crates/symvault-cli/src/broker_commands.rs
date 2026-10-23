@@ -58,6 +58,14 @@ fn prepare<'a>(
     );
     // Concurrent brokers must never replace another live instance's CA. Only
     // the public certificate is written; the key stays in the owned runtime.
+    //
+    // Residual (CLI-007): the signal handler that removes this directory needs
+    // its path, so it can only be installed after the directory exists. A
+    // catchable signal in that short window (before `process_signals::install`
+    // in the caller) takes the default action and leaves the directory behind,
+    // exactly like SIGKILL at any time. Closing it would need a pre-chosen
+    // name or a shared cleanup slot and is not worth the added machinery for a
+    // public-certificate-only directory.
     let mut ca_directory_builder = tempfile::Builder::new();
     ca_directory_builder.prefix(".broker-ca-");
     #[cfg(unix)]

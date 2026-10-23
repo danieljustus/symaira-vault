@@ -10,8 +10,10 @@ on:
       - '.github/workflows/rust-signal-process.yml'
       - 'crates/symvault-cli/**'
       - 'crates/symvault-mcp/**'
+      - 'crates/symvault-platform/**'
       - 'crates/symvault-sync/**'
       - 'crates/symvault-store/**'
+      - 'Cargo.toml'
       - 'Cargo.lock'
       - 'Makefile'
       - 'scripts/rust-port/signal_process_contract.py'
@@ -73,7 +75,7 @@ jobs:
           assert receipt['candidate_commit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
           assert receipt['native_os'] == 'Linux'
           for implementation in ('go', 'rust'):
-              assert len(receipt[implementation]) == 21, len(receipt[implementation])
+              assert len(receipt[implementation]) == 33, len(receipt[implementation])
           assert not subprocess.check_output(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
           PY
       - name: Upload complete signal observations

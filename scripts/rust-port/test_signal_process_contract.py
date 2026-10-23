@@ -29,6 +29,18 @@ def go_records():
                state=["inbox", "tmp", "vault", "vault/broker-ca.pem"]),
         record("run-group-sigint", "run-group", "SIGINT", ["signal", signal.SIGINT], orphaned_child_alive=False),
         record("run-timeout-group-sigint", "run-group", "SIGINT", ["signal", signal.SIGINT], orphaned_child_alive=False),
+        # Inherited SIG_IGN (Go 1.26 sigInstallGoHandler: kept for SIGHUP/SIGINT only unless Notify'd).
+        record("broker-ignored-sighup", "broker", "SIGHUP", ["exit", 0], ignored=True, survived=True,
+               listener_open_after_ignored_signal=True, **broker),
+        record("broker-ignored-sigint", "broker", "SIGINT", ["exit", 0], ignored=True, survived=False, **broker),
+        record("run-ignored-sighup", "run", "SIGHUP", ["signal", signal.SIGTERM], ignored=True, survived=True,
+               orphaned_child_alive=True),
+        record("run-ignored-sigint", "run", "SIGINT", ["signal", signal.SIGTERM], ignored=True, survived=True,
+               orphaned_child_alive=True),
+        record("run-ignored-sigterm", "run", "SIGTERM", ["signal", signal.SIGTERM], ignored=True, survived=False,
+               orphaned_child_alive=True),
+        record("run-ignored-sigquit", "run", "SIGQUIT", ["exit", 2], ignored=True, survived=False,
+               orphaned_child_alive=True),
     ]
 
 
@@ -36,7 +48,7 @@ def rust_records():
     rows = copy.deepcopy(go_records())
     for row in rows:
         row["state"] = [n for n in row["state"] if n != "vault/broker-ca.pem"]
-    rows[-1]["orphaned_child_alive"] = True  # documented bounded-run divergence
+    rows[6]["orphaned_child_alive"] = True  # documented bounded-run divergence
     return rows
 
 
@@ -52,6 +64,7 @@ class SignalContractControls(unittest.TestCase):
     def test_unmutated_pair_passes(self):
         contract.compare(go_records(), rust_records())
         contract.check_oracle_expectations(go_records()[:6])
+        contract.check_oracle_expectations(go_records())
 
     def test_death_by_signal_becomes_clean_exit(self):  # the pre-fix SIGHUP behavior
         self.rejects(lambda r: r[1].update(ending=["exit", 0]), "ending")
@@ -91,7 +104,7 @@ class SignalContractControls(unittest.TestCase):
         self.rejects(lambda r: r.pop(), "different case lists")
 
     def test_known_divergence_cannot_go_stale(self):
-        self.rejects(lambda r: r[-1].update(orphaned_child_alive=False), "remove the exemption")
+        self.rejects(lambda r: r[6].update(orphaned_child_alive=False), "remove the exemption")
 
     def test_oracle_drift_is_detected(self):
         go = go_records()[:6]
@@ -106,6 +119,51 @@ class SignalContractControls(unittest.TestCase):
         go[0]["state"] = ["inbox", "tmp", "vault"]
         with self.assertRaisesRegex(AssertionError, "persistent CA"):
             contract.check_oracle_expectations(go)
+
+    # --- inherited SIG_IGN (M1) ---
+    def test_ignored_sighup_killing_rust_is_rejected(self):  # the pre-fix behavior
+        self.rejects(lambda r: r[7].update(survived=False, ending=["signal", signal.SIGHUP]), "ending")
+        self.rejects(lambda r: r[9].update(survived=False, ending=["signal", signal.SIGHUP]), "ending")
+
+    def test_ignored_sigint_not_overridden_by_notify_is_rejected(self):
+        # broker Notify()s SIGINT, so it must stop; surviving would be a hang.
+        self.rejects(lambda r: r[8].update(survived=True), "survived")
+        # plain run does not Notify, so Go keeps the ignore.
+        self.rejects(lambda r: r[10].update(survived=False, ending=["signal", signal.SIGINT]), "ending")
+
+    def test_ignored_sigterm_and_sigquit_must_not_be_protected(self):
+        self.rejects(lambda r: r[11].update(survived=True), "survived")
+        self.rejects(lambda r: r[12].update(survived=True), "survived")
+
+    def test_ignored_listener_must_stay_up_and_ignored_flag_must_match(self):
+        self.rejects(lambda r: r[7].update(listener_open_after_ignored_signal=False), "listener_open_after_ignored_signal")
+        self.rejects(lambda r: r[7].pop("ignored"), "ignored")
+
+    def test_ignored_oracle_drift_is_detected(self):
+        go = go_records()
+        go[7]["survived"] = False
+        with self.assertRaisesRegex(AssertionError, "ignored disposition"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[10]["ending"] = ["exit", 0]
+        with self.assertRaisesRegex(AssertionError, "ignored disposition"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[7]["listener_open_after_ignored_signal"] = False
+        with self.assertRaisesRegex(AssertionError, "listener must survive"):
+            contract.check_oracle_expectations(go)
+        go = go_records()
+        go[7]["command"] = "intake-watch-x"
+        with self.assertRaisesRegex(AssertionError, "unexpected ignored"):
+            contract.check_oracle_expectations(go)
+
+    def test_every_ignored_case_is_exercised_and_expected(self):
+        self.assertEqual(len(contract.IGNORED_CASES), 12)
+        self.assertEqual(set(contract.IGNORED_CASES), set(contract.GO_EXPECTED_IGNORED))
+        # Go respects an inherited ignore for SIGHUP/SIGINT only.
+        for (command, sig), (survived, _) in contract.GO_EXPECTED_IGNORED.items():
+            if sig in ("SIGTERM", "SIGQUIT"):
+                self.assertFalse(survived, (command, sig))
 
     def test_ending_and_normalization(self):
         self.assertEqual(contract.ending(-1), ["signal", 1])

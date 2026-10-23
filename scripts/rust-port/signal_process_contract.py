@@ -60,6 +60,24 @@ GO_EXPECTED = {
     ("run-broker", "SIGHUP"): ("signal", signal.SIGHUP), ("run-broker", "SIGQUIT"): ("exit", 2),
 }
 
+# Dispositions inherited as SIG_IGN (a parent such as nohup or a job-control-free
+# supervisor). Go 1.26 runtime/signal_unix.go sigInstallGoHandler keeps the
+# inherited ignore for SIGHUP and SIGINT only; SIGTERM and SIGQUIT always get the
+# Go handler. signal.Notify (broker, intake watch) overrides an ignore, so SIGINT
+# and SIGTERM still stop those commands. Key: (command, ignored-and-sent signal);
+# value: (survived the signal, ending after the follow-up SIGTERM when it survived).
+# They guard against a vacuous differential; Rust is compared to the observed Go record.
+GO_EXPECTED_IGNORED = {
+    ("broker", "SIGHUP"): (True, ("exit", 0)), ("broker", "SIGINT"): (False, ("exit", 0)),
+    ("broker", "SIGTERM"): (False, ("exit", 0)), ("broker", "SIGQUIT"): (False, ("exit", 2)),
+    ("intake-watch", "SIGHUP"): (True, ("exit", 0)), ("intake-watch", "SIGINT"): (False, ("exit", 0)),
+    ("run", "SIGHUP"): (True, ("signal", signal.SIGTERM)), ("run", "SIGINT"): (True, ("signal", signal.SIGTERM)),
+    ("run", "SIGTERM"): (False, ("signal", signal.SIGTERM)), ("run", "SIGQUIT"): (False, ("exit", 2)),
+    ("run-broker", "SIGHUP"): (True, ("signal", signal.SIGTERM)), ("run-broker", "SIGINT"): (True, ("signal", signal.SIGTERM)),
+}
+IGNORED_CASES = tuple(GO_EXPECTED_IGNORED)
+SURVIVE_WINDOW = 1.5  # seconds a process gets to die from a signal it should ignore
+
 
 def checked(args, cwd=ROOT, env=None, timeout=300):
     result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, timeout=timeout)
@@ -83,12 +101,16 @@ def isolated(home):
 class Proc:
     """A child with pipe readers, so a dead or orphan-holding child never blocks the driver."""
 
-    def __init__(self, args, home, new_session=False):
+    def __init__(self, args, home, new_session=False, ignore=()):
         self.home = home
+        ignore = tuple(ignore)
         self.out, self.err = bytearray(), bytearray()
         self.popen = subprocess.Popen([str(x) for x in args], cwd=home, env=isolated(home),
                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                      start_new_session=new_session)
+                                      start_new_session=new_session,
+                                      # SIG_IGN survives exec, like `nohup` or a supervisor parent.
+                                      preexec_fn=(lambda: [signal.signal(getattr(signal, n), signal.SIG_IGN)
+                                                           for n in ignore]) if ignore else None)
         self.threads = [threading.Thread(target=self._pump, args=(stream, sink), daemon=True)
                         for stream, sink in ((self.popen.stdout, self.out), (self.popen.stderr, self.err))]
         for thread in self.threads:
@@ -122,6 +144,16 @@ class Proc:
         if self.popen.poll() is None:
             self.popen.kill()
             self.popen.wait()
+
+
+def survived_signal(proc, send, sig):
+    """Send `sig`; True when the process is still running after SURVIVE_WINDOW."""
+    send(sig)
+    try:
+        proc.popen.wait(timeout=SURVIVE_WINDOW)
+    except subprocess.TimeoutExpired:
+        return True
+    return False
 
 
 def ending(returncode):
@@ -199,17 +231,19 @@ def case_record(name, command, sig, proc, home, **extra):
     return record
 
 
-def foreground_case(binary, base, template, command, sig):
-    """broker / intake watch: signal the parent only."""
-    name = f"{command}-{sig.lower()}"
+def foreground_case(binary, base, template, command, sig, ignored=False):
+    """broker / intake watch: signal the parent only; `ignored` starts it with `sig` set to SIG_IGN."""
+    name = f"{command}-{'ignored-' if ignored else ''}{sig.lower()}"
     home = new_home(base, template, name)
     (home / "inbox").mkdir()
     if command == "broker":
         args, ready = ["broker"], b"NO_PROXY=127.0.0.1,localhost\n"
     else:
         args, ready = ["intake", "watch", "inbox", "--interval", "1h"], b"Ctrl-C to stop.\n"
-    proc = Proc([binary, *args], home)
+    proc = Proc([binary, *args], home, ignore=(sig,) if ignored else ())
     try:
+        # The readiness marker is printed only after the command has installed its
+        # signal handling, so signalling before it would race the install.
         proc.wait_for_output(ready)
         port = None
         if command == "broker":
@@ -218,9 +252,20 @@ def foreground_case(binary, base, template, command, sig):
             port = int(found.group(1))
             assert listener_open(port), "control: listener must be open before the signal"
         assert proc.popen.poll() is None, "control: process must run until signalled"
-        proc.popen.send_signal(getattr(signal, sig))
+        send = lambda number: proc.popen.send_signal(getattr(signal, number))  # noqa: E731
+        extra = {}
+        if ignored:
+            survived = survived_signal(proc, send, sig)
+            extra["ignored"], extra["survived"] = True, survived
+            if survived:
+                if port is not None:
+                    extra["listener_open_after_ignored_signal"] = listener_open(port)
+                send("SIGTERM")
+        else:
+            send(sig)
         proc.finish()
-        extra = {} if port is None else dict(listener_closed=not listener_open(port))
+        if port is not None:
+            extra["listener_closed"] = not listener_open(port)
         record = case_record(name, command, sig, proc, home, **extra)
     finally:
         proc.kill()
@@ -233,15 +278,19 @@ def foreground_case(binary, base, template, command, sig):
 KNOWN_DIVERGENCES = {"run-timeout-group-sigint": "Rust bounded run isolates the child in its own process group"}
 
 
-def run_case(binary, base, template, command, sig, group, extra=(), label=""):
-    """run / run --broker with a long-lived child; signal the parent or its whole group."""
-    name = f"{command}{label}-{'group-' if group else ''}{sig.lower()}"
+def run_case(binary, base, template, command, sig, group, extra=(), label="", ignored=False):
+    """run / run --broker with a long-lived child; signal the parent or its whole group.
+
+    `ignored` starts the parent with `sig` set to SIG_IGN (parent only; never combined with `group`)."""
+    assert not (ignored and group)
+    name = f"{command}{label}-{'ignored-' if ignored else ''}{'group-' if group else ''}{sig.lower()}"
     home = new_home(base, template, name)
     (home / "child.py").write_text(CHILD)
     pidfile = home / "child.pid"
     args = ["run", *(["--broker"] if command == "run-broker" else []), *extra, "--", sys.executable, home / "child.py", pidfile]
-    proc = Proc([binary, *args], home, new_session=group)
+    proc = Proc([binary, *args], home, new_session=group, ignore=(sig,) if ignored else ())
     child = None
+    survived = None
     try:
         deadline = time.monotonic() + 30
         while not (pidfile.exists() and pidfile.read_text()):
@@ -251,18 +300,25 @@ def run_case(binary, base, template, command, sig, group, extra=(), label=""):
         child = int(pidfile.read_text())
         assert pid_alive(child), "control: child must run before the signal"
         assert proc.popen.poll() is None, "control: parent must wait for the child"
+        send = lambda number: proc.popen.send_signal(getattr(signal, number))  # noqa: E731
         if group:
             os.killpg(proc.popen.pid, getattr(signal, sig))
+        elif ignored:
+            survived = survived_signal(proc, send, sig)
+            if survived:
+                assert pid_alive(child), "an ignored signal must not reach the child either"
+                send("SIGTERM")
         else:
-            proc.popen.send_signal(getattr(signal, sig))
+            send(sig)
         returncode = proc.finish()
         if group:
             orphan_alive = not wait_gone(child)
         else:
             time.sleep(0.2)  # a child that dies with its parent needs a moment
             orphan_alive = pid_alive(child)
+        details = dict(ignored=True, survived=survived) if ignored else {}
         record = case_record(name, command + ("-group" if group else ""), sig, proc, home,
-                             orphaned_child_alive=orphan_alive)
+                             orphaned_child_alive=orphan_alive, **details)
         assert returncode == proc.popen.returncode
     finally:
         proc.kill()
@@ -285,6 +341,11 @@ def exercise(binary, base, template):
         for sig in ("SIGINT", "SIGTERM"):
             records.append(run_case(binary, base, template, command, sig, True))
     records.append(run_case(binary, base, template, "run", "SIGINT", True, ("--timeout", "60s"), "-timeout"))
+    for command, sig in IGNORED_CASES:
+        if command in ("broker", "intake-watch"):
+            records.append(foreground_case(binary, base, template, command, sig, ignored=True))
+        else:
+            records.append(run_case(binary, base, template, command, sig, False, ignored=True))
     return records
 
 
@@ -293,7 +354,8 @@ def compare(go, rust):
     assert [r["case"] for r in go] == [r["case"] for r in rust], "different case lists"
     for left, right in zip(go, rust):
         name = left["case"]
-        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive"]
+        keys = ["ending", "stdout", "stderr", "listener_closed", "orphaned_child_alive",
+                "ignored", "survived", "listener_open_after_ignored_signal"]
         if name in KNOWN_DIVERGENCES:
             assert (left["orphaned_child_alive"], right["orphaned_child_alive"]) == (False, True), \
                 (name, "known divergence changed; remove the exemption", left["orphaned_child_alive"], right["orphaned_child_alive"])
@@ -311,7 +373,14 @@ def compare(go, rust):
 def check_oracle_expectations(go):
     for record in go:
         key = (record["command"], record["signal"])
-        if key in GO_EXPECTED:
+        if record.get("ignored"):
+            assert key in GO_EXPECTED_IGNORED, ("unexpected ignored-disposition case", key)
+            survived, final = GO_EXPECTED_IGNORED[key]
+            assert record["survived"] is survived, ("oracle drifted: ignored disposition", key, record["survived"])
+            assert record["ending"] == list(final), ("oracle drifted: ignored disposition", key, record["ending"])
+            if survived and record["command"] == "broker":
+                assert record["listener_open_after_ignored_signal"] is True, ("listener must survive", key)
+        elif key in GO_EXPECTED:
             assert record["ending"] == list(GO_EXPECTED[key]), ("oracle drifted", key, record["ending"])
         if record["command"] in ("broker", "run-broker") and "group" not in record["case"]:
             assert record["state"].count(f"vault/{CA_NAME}") == 1, ("Go keeps its persistent CA file", record["case"])
