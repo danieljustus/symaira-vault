@@ -1,0 +1,86 @@
+name: Rust signal process contract
+
+# CLI-007 (#1242). Linux only: the Unix driver delivers real signals to the
+# actual Go oracle and the Rust CLI. Native macOS and Windows (Ctrl-Break in a
+# private console) evidence is separate and not claimed by this workflow.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/rust-signal-process.yml'
+      - 'crates/symvault-cli/**'
+      - 'crates/symvault-mcp/**'
+      - 'crates/symvault-sync/**'
+      - 'crates/symvault-store/**'
+      - 'Cargo.lock'
+      - 'Makefile'
+      - 'scripts/rust-port/signal_process_contract.py'
+      - 'scripts/rust-port/test_signal_process_contract.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signals:
+    name: Signal process contract (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      GOTOOLCHAIN: go1.26.10
+      GOWORK: 'off'
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      TZ: UTC
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout retained Go oracle and candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.10'
+      - name: Set up pinned Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+      - name: Test the owning Rust adapters
+        run: |
+          set -euo pipefail
+          cargo fmt --all --check
+          cargo clippy -p symvault-cli --all-targets --all-features --locked -- -D warnings
+          cargo test -p symvault-cli --bin symvault --locked run_commands
+      - name: Execute actual Go and Rust signal observations
+        run: |
+          set -euo pipefail
+          make signal-process-differential
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          receipt = json.loads(Path('target/native-signals.json').read_text())
+          assert receipt['passed'] and receipt['candidate_worktree_clean'] and not receipt['expect_mismatch']
+          assert receipt['candidate_commit'] == subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          assert receipt['native_os'] == 'Linux'
+          for implementation in ('go', 'rust'):
+              assert len(receipt[implementation]) == 21, len(receipt[implementation])
+          assert not subprocess.check_output(['git', 'status', '--porcelain=v1', '--untracked-files=normal']).strip()
+          PY
+      - name: Upload complete signal observations
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: signal-process-ubuntu-latest
+          path: target/native-signals.json
+          if-no-files-found: error
+          retention-days: 14

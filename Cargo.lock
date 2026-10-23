@@ -4099,6 +4099,7 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sha2 0.11.0",
+ "signal-hook 0.4.5",
  "symaira-core-version",
  "symvault-core",
  "symvault-crypto",

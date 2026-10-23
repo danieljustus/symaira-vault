@@ -110,6 +110,10 @@ pub(crate) fn with_broker<T: Send>(
         ca_directory,
     } = prepare(root, store, identity, "127.0.0.1:0", strict, passthrough)
         .map_err(|error| format!("start broker: {error}"))?;
+    // Go subscribes nothing here, so a signal ends `run --broker` by the signal;
+    // only the per-instance CA directory must not outlive that death.
+    crate::process_signals::install(Some(ca_directory.path().to_path_buf()), None)
+        .map_err(|error| format!("start broker: {error}"))?;
     finish_ca(
         broker.with_running(listener, || action(environment)),
         ca_directory,
@@ -133,10 +137,13 @@ pub(crate) fn run(
     let hosts = parse_hosts(passthrough)?;
     let (sender, receiver) = mpsc::channel();
     let stop = broker.shutdown();
-    ctrlc::set_handler(move || {
-        let _ = stop.cancel();
-        let _ = sender.send(());
-    })
+    crate::process_signals::install(
+        Some(ca_directory.path().to_path_buf()),
+        Some(Box::new(move || {
+            let _ = stop.cancel();
+            let _ = sender.send(());
+        })),
+    )
     .map_err(|_| "register broker stop handler")?;
     println!(
         "Symaira Vault egress broker listening on {}",
