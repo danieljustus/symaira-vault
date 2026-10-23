@@ -8,7 +8,7 @@
     "internal/ui/cliout/cliout.go"
   ],
   "source_hash": "0ca868c0001f9a72b7414ca3003199777d4987f5dab6289c2d420cff05d9bb60",
-  "generator_hash": "0d35ba6e958544c438455e4a2a7c391c4b0d6c44f0c09c195fa2ed9da98eab4d",
+  "generator_hash": "ec6e6ca4ac0e9bf44a2ef9606db0a105bb479d2ab642c8a7edb781aa64ae86b9",
   "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with an in-memory clipboard; no host clipboard or credential was used.",
   "scenarios": [
     {
