@@ -100,6 +100,28 @@ fn fixture() -> Fixture {
     serde_json::from_str(&raw).expect("parse error-taxonomy fixture")
 }
 
+/// The fixture was recorded by Go on Unix. Windows renders the same ENOENT errors
+/// with the system message table (`main.rs::go_io_reason`, which is also what Go
+/// prints on Windows), so map those texts back to the recorded Unix wording. The
+/// Unix comparison is untouched: this is a no-op outside Windows.
+#[cfg(windows)]
+fn windows_errno_to_go_unix(text: String) -> String {
+    text.replace(
+        "The system cannot find the file specified.",
+        "no such file or directory",
+    )
+    .replace(
+        "The system cannot find the path specified.",
+        "no such file or directory",
+    )
+    .replace("Access is denied.", "permission denied")
+}
+
+#[cfg(not(windows))]
+fn windows_errno_to_go_unix(text: String) -> String {
+    text
+}
+
 fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, String, String) {
     let root = test_temp_root::TempRoot::existing("symvault-error-taxonomy-");
     let home = root.join("home");
@@ -133,7 +155,7 @@ fn run_with_files(args: &[String], files: &BTreeMap<String, String>) -> (i32, St
             text = text.replace(&form.replace('\\', "\\\\"), "__ROOT__");
             text = text.replace(&*form, "__ROOT__");
         }
-        text
+        windows_errno_to_go_unix(text)
     };
     (
         output.status.code().unwrap_or(-1),

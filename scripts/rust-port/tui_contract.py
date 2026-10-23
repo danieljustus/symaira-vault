@@ -45,7 +45,7 @@ CASES = ['browser-navigation-filter-sort-help', 'native-copy-expiry-quit',
          'uninitialized', 'public-keybinding-table']
 # Actual clipboard-free pinned Go and source-equivalent Rust console captures.
 EXIT_CLASSES = {'locked-wrong-passphrase': {'go': 1, 'rust': 1},
-                'uninitialized': {'go': 3, 'rust': 1}}
+                'uninitialized': {'go': 3, 'rust': 3}}
 COMMAND_OUTPUT = None
 COMMAND_NUMBER = 0
 CAPTURE_OUTPUT = None
@@ -840,9 +840,8 @@ def execute(args, receipt):
                                                               'go': True, 'rust': False, 'decision': 'ADR-0029'})
                     if case in {'locked-wrong-passphrase', 'uninitialized'}:
                         assert go_row['exit_code'] == EXIT_CLASSES[case]['go'] and rust_row['exit_code'] == EXIT_CLASSES[case]['rust']
-                        if go_row['exit_code'] != rust_row['exit_code']:
-                            receipt['declared_differences'].append({'case': case, 'field': 'exit_code',
-                                                                  'go': go_row['exit_code'], 'rust': rust_row['exit_code'], 'tracking_issue': 1241})
+                        # Exit codes are at parity (#1241); no declared difference remains.
+                        assert go_row['exit_code'] == rust_row['exit_code'], 'undeclared exit-code difference'
                 outputs = []
                 for label, binary in [('go', go), ('rust', rust)]:
                     home = base/('keybindings-'+label)

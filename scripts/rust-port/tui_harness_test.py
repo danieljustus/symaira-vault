@@ -81,6 +81,13 @@ class HarnessTests(unittest.TestCase):
     def validate(self, r):
         tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, STRUCTURAL_SHA)
 
+    def test_exit_classes_are_at_parity_with_go(self):
+        # #1241: Rust returns Go's exit code for an uninitialized vault, so no
+        # exit-code difference may be declared for any case.
+        self.assertEqual(tui.EXIT_CLASSES['uninitialized'], {'go': 3, 'rust': 3})
+        for case, classes in tui.EXIT_CLASSES.items():
+            self.assertEqual(classes['go'], classes['rust'], case)
+
     def test_success_and_clean_flags_reject_missing_false_and_integer_true(self):
         valid = self.valid_structural_receipt()
         self.validate(valid)
