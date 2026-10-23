@@ -636,6 +636,7 @@ def candidate_paths():
                   if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
                   or p in {'Cargo.toml','Cargo.lock','.gitattributes','scripts/rust-port/mcp_process_contract.py',
                            'scripts/rust-port/mcp_process_seed.go.txt','scripts/rust-port/mcp_oracle.py',
+                           'scripts/rust-port/build_timeout.py',
                            '.github/workflows/rust-mcp-process.yml'})
 
 

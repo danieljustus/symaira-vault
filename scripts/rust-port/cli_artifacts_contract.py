@@ -203,8 +203,13 @@ def capture(tree, base, env):
     helper = tree / "scripts/rust-port/cmd/cli004probe"
     helper.mkdir()
     (helper / "main.go").write_bytes(PROBE.read_bytes())
-    metadata = json.loads(execute(["go", "run", "./scripts/rust-port/cmd/cli004probe", "tree"], tree, env,
-                                   timeout=oracle_build_timeout()).stdout)
+    # Compile the probe under the build budget, then run the binary under the
+    # ordinary per-run timeout: `go run` would give the probe's execution the
+    # compile budget too.
+    probe = base / ("cli004probe.exe" if os.name == "nt" else "cli004probe")
+    execute(["go", "build", "-trimpath", "-buildvcs=false", "-o", probe, "./scripts/rust-port/cmd/cli004probe"],
+            tree, env, timeout=oracle_build_timeout())
+    metadata = json.loads(execute([probe, "tree"], tree, env).stdout)
     commands = metadata['commands']
     help_pages = {}
     paths = [c["path"] for c in commands]
@@ -227,8 +232,7 @@ def capture(tree, base, env):
     manpages = {p.name: normalized_man(p,metadata['config_path']) for p in sorted(man_dir.glob("*.1"))}
     declared = requests(commands)
     historical = declared[:-len(PARSER_REQUESTS)]
-    seeded = execute(["go", "run", "./scripts/rust-port/cmd/cli004probe"], tree, env,
-                     json.dumps(historical).encode(), timeout=oracle_build_timeout())
+    seeded = execute([probe], tree, env, json.dumps(historical).encode())
     assert not seeded.stderr, 'seeded Go probe emitted uncaptured diagnostics'
     observations = json.loads(seeded.stdout)
     assert len(observations) == len(historical), 'missing historical Go observations'

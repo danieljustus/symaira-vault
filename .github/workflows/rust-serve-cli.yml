@@ -12,6 +12,7 @@ on:
       - 'testdata/**'
       - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/serve_contract.py'
       - 'docs/adr/0013-deprecated-serve-and-locked-stdio.md'
   workflow_dispatch:

@@ -8,6 +8,7 @@ on:
       - 'crates/symvault-mcp/**'
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/connect_contract*'
       - 'docs/adr/0014-connect-socket-and-relay-ownership.md'
   workflow_dispatch:
