@@ -43,13 +43,23 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "0cc780626d3275afad14eb64c44abf8adb23d2ce"
 	pinnedOracleRelease = "unreleased"
 	rootMarker          = "__ROOT__"
 	defaultOutput       = "testdata/port/cli/error-taxonomy.json"
 	commandTreePath     = "testdata/port/cli/command-tree.json"
 	maxDummyArgs        = 4
 	commandTimeout      = 8 * time.Second
+)
+
+// pinnedOracleCommit is only reassigned by tests that run main against a
+// disposable repository.
+var pinnedOracleCommit = "0cc780626d3275afad14eb64c44abf8adb23d2ce"
+
+// Seams for tests of main; production always uses the defaults.
+var (
+	exit           = os.Exit
+	validateOracle = validateGoBinary
+	locateRoot     = repositoryRoot
 )
 
 var fixedSources = []string{"go.mod", "go.sum", "internal/cli/cli.go", "internal/errors/errors.go"}
@@ -550,14 +560,14 @@ func main() {
 	if *goBinary == "" {
 		fatal("--go-binary is required")
 	}
-	if err := validateGoBinary(*goBinary); err != nil {
+	if err := validateOracle(*goBinary); err != nil {
 		fatal("validate Go oracle: %v", err)
 	}
 	commitLabel, releaseLabel, err := resolveOracle(*check, *commit, *release)
 	if err != nil {
 		fatal("resolve oracle metadata: %v", err)
 	}
-	root, err := repositoryRoot()
+	root, err := locateRoot()
 	if err != nil {
 		fatal("locate repository: %v", err)
 	}
@@ -686,5 +696,5 @@ func marshalJSON(value any) ([]byte, error) {
 
 func fatal(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "FAIL "+format+"\n", args...)
-	os.Exit(1)
+	exit(1)
 }
