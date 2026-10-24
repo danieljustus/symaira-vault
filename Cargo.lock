@@ -4206,6 +4206,7 @@ dependencies = [
  "keyring",
  "keyring-core",
  "rustix",
+ "security-framework",
  "serde",
  "serde_json",
  "signal-hook 0.4.5",
