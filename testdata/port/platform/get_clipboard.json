@@ -1,0 +1,491 @@
+{
+  "commit": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+  "source_files": [
+    "cmd/crud/get.go",
+    "internal/clipboard/clipboard.go",
+    "internal/clipboard/clipboard_signal_unix.go",
+    "internal/clipboard/interface.go",
+    "internal/ui/cliout/cliout.go"
+  ],
+  "source_hash": "0ca868c0001f9a72b7414ca3003199777d4987f5dab6289c2d420cff05d9bb60",
+  "generator_hash": "ec6e6ca4ac0e9bf44a2ef9606db0a105bb479d2ab642c8a7edb781aa64ae86b9",
+  "note": "Recorded from the production `get` command (cobra root + cli.ExecuteRoot) with an in-memory clipboard; no host clipboard or credential was used.",
+  "scenarios": [
+    {
+      "name": "cleared_one_second",
+      "secret": "s3cret-one",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-one",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "cleared_two_seconds_ticks",
+      "secret": "s3cret-two",
+      "auto_clear_seconds": 2,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "timer_stub_ms": 1500,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 2s] \r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-two",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 2
+    },
+    {
+      "name": "history_manager_restores_secret",
+      "secret": "s3cret-hist",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "restore_secret",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-hist",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "history_manager_restores_secret_quiet",
+      "secret": "s3cret-hist",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": true,
+      "read_mode": "restore_secret",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-hist",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "clipboard_replaced_by_user",
+      "secret": "s3cret-repl",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "other",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-repl",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "verify_read_error",
+      "secret": "s3cret-rerr",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "error",
+      "read_error": "paste tool exploded",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \rWarning: paste tool exploded — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-rerr",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "clear_fails_then_still_present",
+      "secret": "s3cret-cfail",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "clear_error": "clear boom",
+      "read_mode": "honest",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] Warning: failed to clear clipboard: clear boom\n\rWarning: clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it — consider disabling clipboard-history retention.\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-cfail",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "s3cret-cfail",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "empty_value_is_never_flagged",
+      "secret": "",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "restore_secret",
+      "timer_stub_ms": 150,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:",
+        "copy:"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 1
+    },
+    {
+      "name": "copy_fails",
+      "secret": "s3cret-copyfail",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "copy_error": "no clipboard utilities",
+      "read_mode": "honest",
+      "stdout": "",
+      "stderr": "Error: copy to clipboard: no clipboard utilities\nError: copy to clipboard: no clipboard utilities\n",
+      "exit_code": 1,
+      "clipboard_ops": [
+        "copy:s3cret-copyfail"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "auto_clear_disabled_keeps_secret",
+      "secret": "s3cret-keep",
+      "auto_clear_seconds": 0,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-keep"
+      ],
+      "final_clipboard": "s3cret-keep",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "auto_clear_disabled_quiet",
+      "secret": "s3cret-keepq",
+      "auto_clear_seconds": 0,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": true,
+      "read_mode": "honest",
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-keepq"
+      ],
+      "final_clipboard": "s3cret-keepq",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "sigterm_clears_early",
+      "secret": "s3cret-sig",
+      "auto_clear_seconds": 30,
+      "stdout_terminal": true,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "signal_after_ms": 400,
+      "stdout": "",
+      "stderr": "[copied to clipboard]\n\r[clearing clipboard in 30s] \r[clipboard cleared]        \n",
+      "exit_code": 0,
+      "clipboard_ops": [
+        "copy:s3cret-sig",
+        "copy:",
+        "read"
+      ],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 30
+    },
+    {
+      "name": "not_a_terminal_prints",
+      "secret": "s3cret-pipe",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": false,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "s3cret-pipe\n",
+      "stderr": "",
+      "exit_code": 0,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "print_flag_prints",
+      "secret": "s3cret-print",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": true,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "s3cret-print\n",
+      "stderr": "",
+      "exit_code": 0,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "copy_by_default_false_prints",
+      "secret": "s3cret-nodefault",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "copy_by_default": false,
+      "print": false,
+      "json": false,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "s3cret-nodefault\n",
+      "stderr": "",
+      "exit_code": 0,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    },
+    {
+      "name": "json_output_never_clipboard",
+      "secret": "s3cret-json",
+      "auto_clear_seconds": 1,
+      "stdout_terminal": true,
+      "print": false,
+      "json": true,
+      "quiet": false,
+      "read_mode": "honest",
+      "stdout": "\"***\"\n",
+      "stderr": "",
+      "exit_code": 0,
+      "clipboard_ops": [],
+      "final_clipboard": "",
+      "start_auto_clear_seconds": 0
+    }
+  ],
+  "verify_cleared": [
+    {
+      "name": "still_contains_secret",
+      "expected_absent": "topsecret",
+      "nil_read": false,
+      "current": "topsecret",
+      "result": "not_cleared",
+      "error_text": "clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it",
+      "read_calls": 1
+    },
+    {
+      "name": "cleared_to_empty",
+      "expected_absent": "topsecret",
+      "nil_read": false,
+      "current": "",
+      "result": "ok",
+      "read_calls": 1
+    },
+    {
+      "name": "replaced_by_other",
+      "expected_absent": "topsecret",
+      "nil_read": false,
+      "current": "other",
+      "result": "ok",
+      "read_calls": 1
+    },
+    {
+      "name": "prefix_is_not_a_match",
+      "expected_absent": "topsecret",
+      "nil_read": false,
+      "current": "topsecret ",
+      "result": "ok",
+      "read_calls": 1
+    },
+    {
+      "name": "case_differs",
+      "expected_absent": "topsecret",
+      "nil_read": false,
+      "current": "TOPSECRET",
+      "result": "ok",
+      "read_calls": 1
+    },
+    {
+      "name": "nil_read_function",
+      "expected_absent": "x",
+      "nil_read": true,
+      "current": "",
+      "result": "ok",
+      "read_calls": 0
+    },
+    {
+      "name": "empty_expected_skips_read",
+      "expected_absent": "",
+      "nil_read": false,
+      "current": "anything",
+      "result": "ok",
+      "read_calls": 0
+    },
+    {
+      "name": "read_error_propagates",
+      "expected_absent": "x",
+      "nil_read": false,
+      "current": "",
+      "read_error": "paste failed",
+      "result": "read_error",
+      "error_text": "paste failed",
+      "read_calls": 1
+    },
+    {
+      "name": "read_error_with_matching_text_still_error",
+      "expected_absent": "x",
+      "nil_read": false,
+      "current": "x",
+      "read_error": "paste failed",
+      "result": "read_error",
+      "error_text": "paste failed",
+      "read_calls": 1
+    },
+    {
+      "name": "multiline_secret",
+      "expected_absent": "a\nb",
+      "nil_read": false,
+      "current": "a\nb",
+      "result": "not_cleared",
+      "error_text": "clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it",
+      "read_calls": 1
+    },
+    {
+      "name": "unicode_secret",
+      "expected_absent": "pässwörd ✓",
+      "nil_read": false,
+      "current": "pässwörd ✓",
+      "result": "not_cleared",
+      "error_text": "clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it",
+      "read_calls": 1
+    }
+  ],
+  "countdown": [
+    {
+      "name": "full_run_three",
+      "duration": 3,
+      "nil_update": false,
+      "updates": [
+        3,
+        2,
+        1,
+        0
+      ]
+    },
+    {
+      "name": "full_run_one",
+      "duration": 1,
+      "nil_update": false,
+      "updates": [
+        1,
+        0
+      ]
+    },
+    {
+      "name": "cancel_after_two_ticks",
+      "duration": 10,
+      "nil_update": false,
+      "cancel_after_ms": 2500,
+      "updates": [
+        10,
+        9,
+        8
+      ]
+    },
+    {
+      "name": "cancel_before_first_tick",
+      "duration": 10,
+      "nil_update": false,
+      "cancel_after_ms": 300,
+      "updates": [
+        10
+      ]
+    },
+    {
+      "name": "zero_duration",
+      "duration": 0,
+      "nil_update": false,
+      "updates": []
+    },
+    {
+      "name": "negative_duration",
+      "duration": -5,
+      "nil_update": false,
+      "updates": []
+    },
+    {
+      "name": "nil_update_function",
+      "duration": 2,
+      "nil_update": true,
+      "updates": []
+    },
+    {
+      "name": "pre_cancelled_still_reports_first",
+      "duration": 5,
+      "nil_update": false,
+      "pre_cancelled": true,
+      "updates": [
+        5
+      ]
+    }
+  ]
+}

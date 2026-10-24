@@ -658,7 +658,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 3e088537045400d87461c75acf1c1d45d20cfe1d --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -1002,6 +1002,20 @@ endif
 desktop-differential: autotype-escape-fixtures-check desktop-linux-fixtures-ci
 	$(CARGO) test -p symvault-platform --test desktop_linux_contract --locked
 	$(CARGO) test -p symvault-platform --lib desktop_commands --locked
+
+# PLATFORM-001 slice 2 (#1244): the clipboard path of `symvault get` (routing,
+# Countdown, VerifyCleared / ErrClipboardNotCleared). The fixture is recorded
+# from the production Go command with an in-memory clipboard; no host clipboard
+# or credential is touched. Rust replays it with injected clipboard/clock/stderr.
+.PHONY: get-clipboard-fixtures-check get-clipboard-fixtures-generate get-clipboard-differential
+get-clipboard-fixtures-check:
+	SYMVAULT_GET_CLIPBOARD_FIXTURE=check GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardFixture$$' -count=1
+
+get-clipboard-fixtures-generate:
+	SYMVAULT_GET_CLIPBOARD_FIXTURE=write GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./cmd -run '^TestGenerateGetClipboardFixture$$' -count=1
+
+get-clipboard-differential: get-clipboard-fixtures-check
+	$(CARGO) test -p symvault-platform --test get_clipboard_contract --locked
 
 .PHONY: export-differential
 export-differential:
