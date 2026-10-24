@@ -326,7 +326,7 @@ def main():
                             assert output['fast_drain_started_seconds']>=34
                             if output['received_base64']:
                                 assert output['declared_chunk_length']>=10*1024*1024
-                                assert output['received_chunk_bytes']<output['declared_chunk_length'],'expired write resumed after fast client drain'
+                                assert output['received_chunk_bytes']<output['declared_chunk_length'],f"expired write resumed after fast client drain ({implementation}/{profile}: {output['received_chunk_bytes']}/{output['declared_chunk_length']} chunk bytes)"
                                 response=output['partial_response']
                                 assert response['status_line']=='HTTP/1.1 200 OK'
                                 assert response['headers_without_date']==sorted([('connection','close'),('content-type','application/json'),('transfer-encoding','chunked')])
