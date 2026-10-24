@@ -16,7 +16,8 @@ import tui_contract as tui
 def rejected(tree, binary, receipt, reason, source_only=False):
     receipt = receipt.resolve()  # child cwd is the disposable source tree
     argv = [sys.executable, str(tree/'scripts/rust-port/tui_contract.py'),
-            '--rust-cli', str(binary), '--receipt', str(receipt)]
+            '--receipt', str(receipt)]
+    argv += ['--build-owned'] if binary is None else ['--rust-cli', str(binary)]
     if source_only:
         argv.append('--source-only')
     result = subprocess.run(argv, cwd=tree, capture_output=True, timeout=1500)
@@ -137,7 +138,7 @@ def main():
             rejected(tui.ROOT, mutant, mismatch, 'source/binary mismatch', source_only=True)
             summary['controls']['source-binary-mismatch'] = True
             semantic = args.receipt.with_name('tui-mutation-default-reveal.json')
-            result = rejected(tree, mutant, semantic, 'implicit canary reveal')
+            result = rejected(tree, None, semantic, 'implicit canary reveal')
             assert result['binary_source_verified'] is True
             assert result['rust'][0]['passed'] is False
             assert result['rust'][0]['case'] == tui.CASES[0]

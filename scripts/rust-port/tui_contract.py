@@ -667,22 +667,36 @@ def build_source_bound_rust(rust, base, receipt):
     for package in metadata['packages']:
         assert Path(package['manifest_path']).resolve().is_relative_to(ROOT), 'dependency source escaped checkout'
         assert all(Path(t['src_path']).resolve().is_relative_to(ROOT) for t in package['targets'])
-    # Cargo freshness alone does not prove an externally supplied binary's
-    # contents. Rebuild into a new run-owned target and compare actual bytes.
+    # Only this fresh temporary target is owned by the harness. Caller targets
+    # are never moved, cleaned or reused for a build.
     env = os.environ.copy()
     env.update(CARGO_TARGET_DIR=str(base/'rust-source-build'), CARGO_INCREMENTAL='0',
                CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
-    checked(['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli',
-             '--bin', 'symvault', '--locked'], env=env, timeout=900)
-    rebuilt = base/'rust-source-build/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+    command = ['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli',
+               '--bin', 'symvault', '--locked']
+    target = base/'rust-source-build'
+    rebuilt = target/'debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+    if rust is None:
+        assert not target.exists(), 'owned target must start fresh'
+        checked(command, env=env, timeout=900)
+        # Move only the target just created by us. Both clean builds see the
+        # identical absolute output path, including native UUID/signing inputs.
+        saved = base/'rust-candidate-build'
+        target.rename(saved)
+        rust = saved/'debug'/rebuilt.name
+    receipt.setdefault('rust_executable_sha256', digest(rust))
+    candidate_bytes = rust.read_bytes()
+    checked(command, env=env, timeout=900)
     receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
+    retained = rebuilt
     if COMMAND_OUTPUT is not None:
         retained = COMMAND_OUTPUT/('source-rebuild.exe' if os.name == 'nt' else 'source-rebuild')
         shutil.copy2(rebuilt, retained)
         receipt['rebuilt_binary_artifact'] = str(retained.relative_to(COMMAND_OUTPUT.parent))
         receipt['rebuilt_binary_bytes'] = retained.stat().st_size
-    assert receipt['rebuilt_rust_executable_sha256'] == digest(rust), 'source/binary mismatch'
+    assert rebuilt.read_bytes() == candidate_bytes and digest(rust) == receipt['rebuilt_rust_executable_sha256'], 'source/binary mismatch'
     receipt['binary_source_verified'] = True
+    return retained.resolve()
 
 
 def validate_receipt(receipt, candidate, native_os, architecture, sources, binary_sha256, evidence_root=None):
@@ -760,13 +774,15 @@ def validate_receipt(receipt, candidate, native_os, architecture, sources, binar
 
 
 def execute(args, receipt):
-    rust = args.rust_cli.resolve()
+    rust = args.rust_cli.resolve() if args.rust_cli is not None else None
     commit = checked(['git', 'rev-parse', 'HEAD']).decode().strip()
     clean = clean_source()
     receipt.update(candidate_commit=commit, candidate_worktree_clean=clean)
     assert clean or args.allow_dirty_for_development, 'native acceptance requires clean source'
     before = source_inventory()
-    receipt.update(candidate_sources=before, rust_executable_sha256=digest(rust))
+    receipt.update(candidate_sources=before)
+    if rust is not None:
+        receipt['rust_executable_sha256'] = digest(rust)
     assert sys.version_info[:2] == (3, 13), 'pinned Python 3.13 required'
     receipt['rustc'] = checked(['rustc', '--version']).decode().strip()
     receipt['rustflags'] = os.environ.get('RUSTFLAGS', '')
@@ -776,7 +792,9 @@ def execute(args, receipt):
     assert receipt['go_version'].startswith('go version go1.26.6 '), 'pinned Go required'
     with tempfile.TemporaryDirectory(prefix='symvault-tui-native-') as raw:
         base = Path(raw)
-        build_source_bound_rust(rust, base, receipt)
+        verified = build_source_bound_rust(rust, base, receipt)
+        if rust is None:
+            rust = verified
         assert source_inventory() == before, 'source changed during Rust build'
         if args.source_only:
             receipt['candidate_sources_at_end'] = source_inventory()
@@ -869,7 +887,10 @@ def execute(args, receipt):
 def main():
     global COMMAND_OUTPUT, CAPTURE_OUTPUT
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rust-cli', type=Path, required=True)
+    producer = parser.add_mutually_exclusive_group(required=True)
+    producer.add_argument('--rust-cli', type=Path)
+    producer.add_argument('--build-owned', action='store_true',
+                          help='two fresh builds at one run-owned absolute target path')
     parser.add_argument('--receipt', type=Path, required=True)
     parser.add_argument('--xvfb', default=shutil.which('Xvfb'))
     parser.add_argument('--xclip', default=shutil.which('xclip'))
@@ -880,6 +901,7 @@ def main():
     parser.add_argument('--expected-receipt-sha256')
     args = parser.parse_args()
     args.receipt.parent.mkdir(parents=True, exist_ok=True)
+    assert not (args.validate_receipt and args.build_owned), 'replay requires explicit --rust-cli'
     if args.validate_receipt:
         COMMAND_OUTPUT = Path(tempfile.mkdtemp(prefix=args.receipt.stem+'-replay-commands-', dir=args.receipt.parent))
     else:
