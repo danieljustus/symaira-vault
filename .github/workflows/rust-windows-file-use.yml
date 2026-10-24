@@ -10,6 +10,7 @@ on:
       - 'crates/symvault-sync/**'
       - 'crates/symvault-store/**'
       - 'Cargo.lock'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/windows_file_use_contract.py'
       - 'docs/adr/0012-windows-materialized-file-ownership.md'
   workflow_dispatch:

@@ -1081,6 +1081,7 @@ mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixt
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_build_timeout.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 

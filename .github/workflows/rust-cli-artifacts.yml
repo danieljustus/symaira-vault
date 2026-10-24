@@ -12,6 +12,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/cli_artifacts*'
       - 'scripts/rust-port/test_cli_artifacts_contract.py'
       - 'scripts/rust-port/manual_path*'

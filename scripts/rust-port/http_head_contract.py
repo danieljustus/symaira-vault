@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 sys.dont_write_bytecode = True
 from http_oauth_contract import CHALLENGE, HEX32, PASSPHRASE, PROBE, REDIRECT, STATE, Server, consent, headers
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 
 def parse_response(raw):
@@ -209,8 +209,8 @@ def main():
                 (helper/'main.go').write_bytes(PROBE.read_bytes())
                 suffix = '.exe' if os.name=='nt' else ''
                 go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpheadseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpheadseed'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 seed_home=base/'seed';seed_home.mkdir()
                 tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
@@ -241,7 +241,7 @@ def main():
                 assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
                 receipt['passed']=True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f"PASS: 13 HEAD responses, one HEAD/GET pipeline and 512 authorization HEADs with a real browser recovery per implementation on {platform.system()}")

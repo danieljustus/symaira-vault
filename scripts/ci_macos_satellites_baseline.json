@@ -852,6 +852,8 @@
         "testdata/**",
         "third_party/**",
         "internal/mcp/apitemplates/builtin/**",
+        "scripts/rust-port/build_timeout.py",
+        "scripts/rust-port/test_build_timeout.py",
         "scripts/rust-port/mcp_process*",
         "scripts/rust-port/mcp_oracle.py",
         "scripts/rust-port/mcp_fixture_contract.py",
@@ -876,7 +878,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "981d6e7cbd362cfa97e79d94e7352601a76c632feaae8b8bc2553a19cd3d76c0",
+      "file_sha256": "77029d7915cc9c374638a38e0c38517dde05c0297b997c9cf137127ed8720845",
       "group": "mcp",
       "mac_step_indexes": [
         0,
@@ -969,6 +971,7 @@
         "Cargo.lock",
         ".gitattributes",
         "internal/mcp/apitemplates/builtin/**",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/http_process*",
         "scripts/rust-port/test_http_process_contract.py",
         "testdata/**",
@@ -985,7 +988,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "7942e73a5c6a425665cd994f709679d913167b1ba0c6a7d17638009d88e649c8",
+      "file_sha256": "14dbcc4fca4455799c7f22125c78e0374450199b8500bc694a61a226dd863990",
       "group": "mcp",
       "mac_step_indexes": [
         0,
@@ -1140,6 +1143,7 @@
         "crates/symvault-mcp/**",
         "crates/symvault-platform/**",
         "Cargo.lock",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/connect_contract*",
         "docs/adr/0014-connect-socket-and-relay-ownership.md"
       ],
@@ -1152,7 +1156,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 30,
-      "file_sha256": "eee5c2bda3b084a98ebcccf7ad7970e2f078adbe0d6cca7dca9b84dd3ba8c221",
+      "file_sha256": "063f2ced8e3f80d04a010105d467e43982b6dbe29a906f1678c3867ee737f5c1",
       "group": "broker",
       "mac_step_indexes": [
         0,
@@ -1230,6 +1234,7 @@
         "testdata/**",
         "third_party/**",
         "internal/mcp/apitemplates/builtin/**",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/cmd/cligap/**",
         "scripts/rust-port/egress_contract*",
         "scripts/rust-port/http_tls_identity.go.txt",
@@ -1244,7 +1249,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "7b611894741b1935370d83967262466a1cf0211ded3fc57b6418119166c32feb",
+      "file_sha256": "cd12da703b82ede5ba0ce0858ff62791a806d2c245845481a4ebe6c356c2118a",
       "group": "broker",
       "mac_step_indexes": [
         0,
@@ -1399,6 +1404,7 @@
         "rust-toolchain.toml",
         ".gitattributes",
         "internal/mcp/apitemplates/builtin/**",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/api_transport*",
         "scripts/rust-port/test_api_transport_contract.py",
         "testdata/api-darwin-trust/**",
@@ -1414,7 +1420,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 40,
-      "file_sha256": "5a9fae760d6415f91b4565a4b1328bb9e59ddf1411f7e77e08949a7f7f73c9a5",
+      "file_sha256": "28fdc25feb3a90a837674c9fd4f7d4173970a8014c43cd5dce12f7065173bd87",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1492,6 +1498,7 @@
         "**.go",
         "go.mod",
         "go.sum",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/cli_artifacts*",
         "scripts/rust-port/test_cli_artifacts_contract.py",
         "scripts/rust-port/manual_path*",
@@ -1511,7 +1518,7 @@
         "HOMEBREW_NO_AUTO_UPDATE": "1"
       },
       "timeout_minutes_original": 35,
-      "file_sha256": "d2b8603dc9329255fbb13520cdc9578091d004ebb3aafbb7933e91e4aff5ee05",
+      "file_sha256": "f6814f3b5d403caac10ff62bd04e8eb8e84eba2957bd6be835cfa6efc2ad72e4",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1598,6 +1605,7 @@
         "crates/symvault-store/**",
         "crates/symvault-platform/**",
         "Cargo.lock",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/intake_watch_contract.py",
         "internal/intake/**",
         "cmd/intake/**",
@@ -1612,7 +1620,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 25,
-      "file_sha256": "d0d4bbf754b5f038065c4ca0992fd7e75943e75a6b7d2d945d4427240171eeec",
+      "file_sha256": "988328b275580fe8b7c35c84e579764c844735d5a1ab43f91a96b2de002b6af0",
       "group": "rest",
       "mac_step_indexes": [
         0,
@@ -1690,6 +1698,7 @@
         "testdata/**",
         "third_party/**",
         "internal/mcp/apitemplates/builtin/**",
+        "scripts/rust-port/build_timeout.py",
         "scripts/rust-port/serve_contract.py",
         "docs/adr/0013-deprecated-serve-and-locked-stdio.md"
       ],
@@ -1702,7 +1711,7 @@
         "PYTHONDONTWRITEBYTECODE": "1"
       },
       "timeout_minutes_original": 35,
-      "file_sha256": "f0b904d73fdde187ce32d678807b0f795bae8dcfa73eee1c8349332d2e3ba689",
+      "file_sha256": "ae59a6d1d9ca2a668e2c622ecad510e2b71ff7c38eca03bfad55a15adc80e021",
       "group": "rest",
       "mac_step_indexes": [
         0,
