@@ -16,8 +16,28 @@ pub fn backup(root: &Path, destination: &Path, exclude_git: bool) -> Result<Path
     Ok(destination)
 }
 
+/// The operation name in the `*PathError` Go's `os.Stat` returns. Unix reports
+/// `stat`; on Windows (`os/stat_windows.go`) a missing path fails in
+/// `GetFileAttributesEx` and any other failure falls through to `CreateFile`.
+fn go_stat_op(error: &std::io::Error) -> &'static str {
+    if !cfg!(windows) {
+        "stat"
+    } else if error.kind() == std::io::ErrorKind::NotFound {
+        "GetFileAttributesEx"
+    } else {
+        "CreateFile"
+    }
+}
+
 pub fn restore(root: &Path, source: &Path) -> Result<(), String> {
-    fs::metadata(source).map_err(|error| format!("archive not found: {error}"))?;
+    fs::metadata(source).map_err(|error| {
+        format!(
+            "archive not found: {} {}: {}",
+            go_stat_op(&error),
+            source.display(),
+            archive::go_reason(&error)
+        )
+    })?;
     archive::restore(source, root, true).map_err(|error| format!("restore failed: {error}"))?;
     for required in ["identity.age", "config.yaml"] {
         fs::metadata(root.join(required))
