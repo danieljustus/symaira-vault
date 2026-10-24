@@ -1028,7 +1028,12 @@ pub(super) fn join(
         }
         let token = args[0].trim().to_owned();
         validate_pairing_token(&token).map_err(|e| format!("invalid pairing token: {e}"))?;
-        let pf_data = std::fs::read(pf_path).map_err(|e| format!("read pairing file: {e}"))?;
+        let pf_data = std::fs::read(pf_path).map_err(|e| {
+            format!(
+                "read pairing file: {}",
+                crate::config::format_go_path_error("open", pf_path, &e)
+            )
+        })?;
         let pf = parse_pairing_file(&pf_data).map_err(|e| format!("{e}"))?;
         if !pf.token.is_empty() && pf.token != token {
             return Err(format!(

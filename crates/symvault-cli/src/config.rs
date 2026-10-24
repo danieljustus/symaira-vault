@@ -685,7 +685,7 @@ fn node_range(node: &yaml_edit::YamlNode) -> Option<yaml_edit::TextPosition> {
 /// intentionally not ported here (it requires a TTY-driven repair UI outside
 /// this bounded CLI slice); callers asking for that flag get "not supported"
 /// rather than a silent no-op.
-fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
+pub(crate) fn format_go_path_error(op: &str, path: &Path, err: &io::Error) -> String {
     #[cfg(windows)]
     if err.kind() == io::ErrorKind::PermissionDenied
         && fs::metadata(path).is_ok_and(|metadata| metadata.is_dir())
