@@ -29,9 +29,22 @@ from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vau
 from oracle_build import build_go, remove_oracle_worktree
 
 TLS_OUTPUT=('tls-output','30s',ssl.TLSVersion.TLSv1_3)
+# #1470, owner decision 2026-10-24: the Go oracle's plain-TCP write deadline does not interrupt an in-flight
+# Windows send, so only that one cell is a declared platform difference. Rust stays strictly checked everywhere.
+WINDOWS_GO_TCP_OUTPUT_DECISION='windows-go-plain-tcp-write-deadline-not-enforced'
 PROFILES=[('tcp-five','5s',None),('tcp-short','1s',None),
           ('tls12-short','1s',ssl.TLSVersion.TLSv1_2),('tls13-short','1s',ssl.TLSVersion.TLSv1_3),
           TLS_OUTPUT,('tcp-output','30s',None)]
+
+
+def declared_write_difference(implementation,profile,native_os,output):
+    """Return the declared difference for the single exempt cell, else None (the strict assertion applies)."""
+    if (implementation,profile,native_os)!=('go','tcp-output','Windows'):return None
+    return dict(implementation=implementation,profile=profile,native_os=native_os,
+                received_chunk_bytes=output['received_chunk_bytes'],declared_chunk_length=output['declared_chunk_length'],
+                decision=WINDOWS_GO_TCP_OUTPUT_DECISION,
+                reason='#1470: on Windows the Go oracle completed the expired in-flight plain-TCP write after the fast client drain; '
+                       'recorded as a platform difference (owner decision 2026-10-24). Rust remains strictly checked on every OS.')
 
 
 def handshake_peer(port,tls,row):
@@ -326,7 +339,11 @@ def main():
                             assert output['fast_drain_started_seconds']>=34
                             if output['received_base64']:
                                 assert output['declared_chunk_length']>=10*1024*1024
-                                assert output['received_chunk_bytes']<output['declared_chunk_length'],'expired write resumed after fast client drain'
+                                # Diagnostics go to stderr; the mutation negative control pins the exact assertion message.
+                                print(f"write-deadline {implementation}/{profile}: {output['received_chunk_bytes']}/{output['declared_chunk_length']} chunk bytes received",file=sys.stderr,flush=True)
+                                declared=declared_write_difference(implementation,profile,receipt['native_os'],output)
+                                if declared:receipt['declared_differences'].append(declared)
+                                else:assert output['received_chunk_bytes']<output['declared_chunk_length'],'expired write resumed after fast client drain'
                                 response=output['partial_response']
                                 assert response['status_line']=='HTTP/1.1 200 OK'
                                 assert response['headers_without_date']==sorted([('connection','close'),('content-type','application/json'),('transfer-encoding','chunked')])
