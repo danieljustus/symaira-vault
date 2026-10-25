@@ -150,7 +150,7 @@ type ClipboardConfig struct {
 type AuditConfig struct {
 	MaxFileSize int64 `yaml:"maxSizeMb,omitempty"`
 	MaxBackups  int   `yaml:"maxBackups"`
-	MaxAgeDays  int   `yaml:"maxAgeDays,omitempty"`
+	MaxAgeDays  int   `yaml:"maxAgeDays"`
 }
 
 // LoggingConfig holds logging configuration.

@@ -1,6 +1,6 @@
 {
   "oracle": {
-    "commit": "3e088537045400d87461c75acf1c1d45d20cfe1d",
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "binary": "go build with main.version set by ldflags",
     "go_version": "go1.26.6",
     "captured": "2026-10-21",
@@ -13,7 +13,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "26062e5313bbb1eac128e0f5939164b7d19b17481f02fa44ed636dfa9bb3a214",
+    "source_digest": "b191cac6d5c1a9cb42ab4e3383dc9ee78187e7f3aa7913814dfca0acffef81fa",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "env": "throwaway HOME and XDG_CACHE_HOME, future-dated Go update cache",
     "generator_files": [
@@ -21,7 +21,7 @@
     ],
     "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
     "generated_on": "darwin",
-    "source_pin_digest": "391e8d2d14179c036217f122d84392ab416f85d372962df17f248ae79f3e1b6a",
+    "source_pin_digest": "2c84b63bb3fa64da87573a7734a7141a1087b09819deb68e7612fcef0b2ace98",
     "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
   "cases": [
