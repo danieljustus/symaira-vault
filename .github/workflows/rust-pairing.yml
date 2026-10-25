@@ -11,6 +11,8 @@ on:
     paths:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/build_timeout.py'
+      - 'scripts/rust-port/test_store004_isolation.py'
       - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/test_http001init_isolation.py'
       - 'scripts/rust-port/cmd/http001initgen/**'
@@ -50,6 +52,8 @@ on:
     paths:
       - 'crates/symvault-core/**'
       - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/build_timeout.py'
+      - 'scripts/rust-port/test_store004_isolation.py'
       - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/test_http001init_isolation.py'
       - 'scripts/rust-port/cmd/http001initgen/**'

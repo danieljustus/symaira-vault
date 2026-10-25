@@ -19,6 +19,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
+from build_timeout import oracle_build_timeout
 from mcp_oracle import HISTORICAL, tool_environment
 from mcp_process_contract import checked
 from mcp_fixture_contract import generator_paths, fixture_anchor, materialize_inputs
@@ -241,7 +242,7 @@ def main():
             build_rc, build_output = run_bounded(
                 ["go", "build", f"-modfile={modfile}", "-o", str(binary), "./scripts/rust-port/cmd/http001initgen"],
                 compile_env,
-                timeout=180,
+                timeout=oracle_build_timeout(),
                 cwd=tree,
             )
             if build_rc != 0:

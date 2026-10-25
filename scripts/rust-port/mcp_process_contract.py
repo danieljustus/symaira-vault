@@ -18,6 +18,7 @@ import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_timeout import oracle_build_timeout, remove_worktree
 from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, pinned_go, tool_environment, validate_reference
 
 if sys.flags.optimize:
@@ -30,13 +31,13 @@ CANARIES = ['public-mcp-secret-6af2', 'public-nested-secret-88d1']
 UNICODE_FIXTURE = 'public-fixture-user\u2028line\u2029paragraph'
 
 
-def run(args, cwd, env, data=b''):
+def run(args, cwd, env, data=b'', timeout=120):
     return subprocess.run([str(a) for a in args], cwd=cwd, env=env, input=data,
-                          capture_output=True, timeout=120)
+                          capture_output=True, timeout=timeout)
 
 
-def checked(args, cwd=ROOT, env=None):
-    r = run(args, cwd, env or os.environ.copy())
+def checked(args, cwd=ROOT, env=None, timeout=120):
+    r = run(args, cwd, env or os.environ.copy(), timeout=timeout)
     if r.returncode:
         raise RuntimeError(f'{args[0]} failed ({r.returncode}): '+r.stderr.decode(errors='replace')[-2000:])
     return r.stdout
@@ -635,6 +636,7 @@ def candidate_paths():
                   if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
                   or p in {'Cargo.toml','Cargo.lock','.gitattributes','scripts/rust-port/mcp_process_contract.py',
                            'scripts/rust-port/mcp_process_seed.go.txt','scripts/rust-port/mcp_oracle.py',
+                           'scripts/rust-port/build_timeout.py',
                            '.github/workflows/rust-mcp-process.yml'})
 
 
@@ -707,9 +709,9 @@ def main():
                 suffix = '.exe' if os.name=='nt' else ''
                 go, seed = base/('go-cli'+suffix), base/('go-seed'+suffix)
                 unicode_seed = base/('go-seed-unicode'+suffix)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',go,'.'],tree,build_env)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree,build_env)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree,build_env)
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',go,'.'],tree,build_env,timeout=oracle_build_timeout())
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree,build_env,timeout=oracle_build_timeout())
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree,build_env,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),
                                seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),
                                unicode_seed_binary_sha256=hashlib.sha256(unicode_seed.read_bytes()).hexdigest())
@@ -792,7 +794,7 @@ def main():
                 assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
                 receipt['passed'] = True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'MCP oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         receipt['candidate_worktree_clean_at_end'] = not checked(

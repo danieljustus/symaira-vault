@@ -407,9 +407,12 @@ pub fn watch(
             return Ok(());
         }
         let (sender, stop) = mpsc::channel();
-        ctrlc::set_handler(move || {
-            let _ = sender.send(());
-        })
+        crate::process_signals::install(
+            None,
+            Some(Box::new(move || {
+                let _ = sender.send(());
+            })),
+        )
         .map_err(|e| (1, format!("register intake stop handler: {e}")))?;
         if !quiet {
             println!(

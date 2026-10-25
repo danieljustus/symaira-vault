@@ -12,6 +12,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/tui*'
       - 'docs/adr/0029-native-vault-browser.md'
   workflow_dispatch:
