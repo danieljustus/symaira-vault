@@ -1,0 +1,12 @@
+# cargo-audit reads this file for both `cargo audit --file Cargo.lock` and
+# `cargo audit --file fuzz/Cargo.lock` (Makefile rust-security).
+[advisories]
+ignore = [
+  # RUSTSEC-2026-0387: crypto-bigint 0.5.5 constant-time timing issues.
+  # Reached only through age 0.12.1 -> p256 0.13 / hpke 0.12, which age uses
+  # solely for tag/tagpq recipients. symvault constructs only x25519 and scrypt
+  # recipients/identities, so the affected code is not reachable (source-based).
+  # Scoped exception approved in #1502; remove as soon as age depends on
+  # p256 0.14 / elliptic-curve 0.14 (crypto-bigint >= 0.7.6).
+  "RUSTSEC-2026-0387",
+]
