@@ -12,6 +12,7 @@ on:
       - 'rust-toolchain.toml'
       - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/api_transport*'
       - 'scripts/rust-port/test_api_transport_contract.py'
       - 'testdata/api-darwin-trust/**'

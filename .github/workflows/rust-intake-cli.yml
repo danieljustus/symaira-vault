@@ -10,6 +10,7 @@ on:
       - 'crates/symvault-store/**'
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/intake_watch_contract.py'
       - 'internal/intake/**'
       - 'cmd/intake/**'
