@@ -2,6 +2,16 @@
 
 ## IO-002 restore error/side-effect contract, 2026-10-22 (#1247)
 
+**Update 2026-10-26 (#1498, mode-field spellings):** `restoregen` now freezes 130 cases (+42:
+21 numeric mode-field spellings x file/dir, header block 5 patched with a recomputed checksum;
+the snapshot helper opens mode-0 results so the walk can read them). Red first: 12 cases
+diverged (`+`/`-` signed and embedded-NUL-tail fields: Rust `i64::from_str_radix` accepted signs
+and rejected the NUL tails Go cuts). Rust `go_header_mode` now delegates to a `go_parse_octal`
+that mirrors Go `parseOctal`; the oracle is unchanged (`cmd/admin/backup.go` untouched, pin
+`861ad938` stays). Windows replay count is now 116 of 130. Remaining residuals: #1483
+(entry-limit pre-pass inflates oversized members), #1499 (gzip multistream), uid/gid/mtime
+header fields unparsed, plus the items listed below.
+
 `scripts/rust-port/cmd/restoregen` freezes 88 production-Go `RestoreBackup`
 cases (`testdata/port/sync/restore-errors.json`, oracle `861ad938`; `cmd/admin/backup.go`
 is unchanged, so no oracle-pin advance or provenance re-freeze was needed). Each case records the exact

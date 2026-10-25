@@ -436,23 +436,39 @@ fn go_header_mode(header: &Header) -> Result<i64, ()> {
             value as i64
         });
     }
-    let trimmed: Vec<u8> = field
-        .iter()
-        .copied()
-        .skip_while(|byte| *byte == b' ' || *byte == 0)
-        .collect();
-    let end = trimmed
-        .iter()
-        .rposition(|byte| *byte != b' ' && *byte != 0)
-        .map_or(0, |index| index + 1);
-    let digits = &trimmed[..end];
-    if digits.is_empty() {
+    go_parse_octal(field)
+}
+
+/// Go's `parser.parseOctal`: trim spaces and NULs at both ends, then
+/// `strconv.ParseUint(parseString(b), 8, 64)`, where `parseString` cuts at the
+/// first remaining NUL. Only unsigned base-8 digits are accepted (no sign,
+/// prefix or separators), and the unsigned result is reinterpreted as `int64`.
+fn go_parse_octal(field: &[u8]) -> Result<i64, ()> {
+    let is_padding = |byte: &u8| *byte == b' ' || *byte == 0;
+    let start = field.iter().position(|byte| !is_padding(byte));
+    let Some(start) = start else {
         return Ok(0);
+    };
+    let end = field
+        .iter()
+        .rposition(|byte| !is_padding(byte))
+        .map_or(0, |index| index + 1);
+    let trimmed = &field[start..end];
+    let digits = trimmed
+        .iter()
+        .position(|byte| *byte == 0)
+        .map_or(trimmed, |nul| &trimmed[..nul]);
+    let mut value: u64 = 0;
+    for byte in digits {
+        if !(b'0'..=b'7').contains(byte) {
+            return Err(());
+        }
+        value = value
+            .checked_mul(8)
+            .and_then(|shifted| shifted.checked_add(u64::from(byte - b'0')))
+            .ok_or(())?;
     }
-    std::str::from_utf8(digits)
-        .ok()
-        .and_then(|text| i64::from_str_radix(text, 8).ok())
-        .ok_or(())
+    Ok(value as i64)
 }
 
 type Failure = std::rc::Rc<std::cell::RefCell<Option<(io::ErrorKind, String)>>>;
@@ -853,5 +869,38 @@ fn same_regular_file(before: &fs::Metadata, handle: &fs::File) -> bool {
     {
         let _ = before;
         after.is_file()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::go_parse_octal;
+
+    #[test]
+    fn octal_mode_follows_go_parse_octal() {
+        // Accepted: padding, NUL tail cut, 8 unterminated digits.
+        assert_eq!(go_parse_octal(b"0000644\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"\x00\x00\x00644\x00\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"  644   "), Ok(0o644));
+        assert_eq!(go_parse_octal(b"644\x00777\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"644\x00zz\x00\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"77777777"), Ok(0o7777_7777));
+        assert_eq!(go_parse_octal(b"        "), Ok(0));
+        assert_eq!(go_parse_octal(b"\x00\x00\x00\x00\x00\x00\x00\x00"), Ok(0));
+        // Rejected: signs (even zero), embedded spaces, prefixes,
+        // separators, non-octal digits, bad head before a NUL.
+        for field in [
+            &b"+000644\x00"[..],
+            b"+0\x00\x00\x00\x00\x00\x00",
+            b"-000001\x00",
+            b"-0\x00\x00\x00\x00\x00\x00",
+            b" 6 4 4  ",
+            b"0o644\x00\x00\x00",
+            b"6_44\x00\x00\x00\x00",
+            b"0000888\x00",
+            b"6z4\x00644\x00",
+        ] {
+            assert_eq!(go_parse_octal(field), Err(()), "{field:?}");
+        }
     }
 }
