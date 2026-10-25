@@ -13,6 +13,8 @@ on:
       - 'testdata/**'
       - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
+      - 'scripts/rust-port/test_build_timeout.py'
       - 'scripts/rust-port/mcp_process*'
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'

@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 import time
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
 PASSPHRASE = "correct horse battery staple"
@@ -348,12 +350,14 @@ def main():
             receipt.update(oracle_source_files=sources, oracle_source_digest=digest.hexdigest(),
                            stage="oracle-compiler-preflight")
             # Observe the effective compiler/cache paths without warming caches,
-            # downloading modules separately, or changing the 120-second limit.
+            # downloading modules separately, or changing the 120-second limit
+            # (the compile step below has its own oracle_build_timeout() budget).
             receipt['compiler'] = json.loads(checked(["go", "env", "-json", "GOVERSION", "GOROOT",
                 "GOOS", "GOARCH", "GOCACHE", "GOMODCACHE", "GOPATH", "GOFLAGS", "GOTOOLCHAIN"], cwd=tree))
             receipt.update(stage="oracle-build", oracle_build={})
             checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."],
-                    cwd=tree, evidence=receipt['oracle_build'])
+                    cwd=tree, evidence=receipt['oracle_build'],
+                    timeout=oracle_build_timeout())
             receipt['go_binary_sha256'] = hashlib.sha256(go.read_bytes()).hexdigest()
             go_root, rust_root = base / "go-roots", base / "rust-roots"
             go_root.mkdir(); rust_root.mkdir()
@@ -366,7 +370,7 @@ def main():
             receipt.update(passed=True, stage='complete')
         finally:
             try:
-                checked(["git", "worktree", "remove", tree])
+                remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
             except Exception:
                 receipt.update(passed=False, cleanup_failed=True)
                 raise
