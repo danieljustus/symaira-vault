@@ -38,6 +38,7 @@ mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
 mod policy_commands;
+mod process_signals;
 mod profile_commands;
 mod recipients_commands;
 mod remote_commands;
@@ -1637,6 +1638,10 @@ fn run_cli() -> ExitCode {
                         execute,
                     )?
                 } else {
+                    // Go registers nothing for plain `run`; signals keep the
+                    // runtime defaults (death by signal, SIGQUIT exits 2) and
+                    // the started child is left running.
+                    process_signals::install(None, None)?;
                     execute(BTreeMap::new())?
                 };
                 if result.timed_out {
