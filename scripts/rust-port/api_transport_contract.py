@@ -16,6 +16,8 @@ import tempfile
 import threading
 import time
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = 'd1cd0f97ac550bc3020bc86b0514989f8d28d95c'
 CANARY = b'public-api-native-secret'
@@ -32,8 +34,8 @@ def inventory(root, names):
     return {name: digest(root / name) for name in names}
 
 
-def checked(args, cwd=ROOT, env=None):
-    result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, timeout=240)
+def checked(args, cwd=ROOT, env=None, timeout=240):
+    result = subprocess.run([str(x) for x in args], cwd=cwd, env=env, capture_output=True, timeout=timeout)
     assert result.returncode == 0, (str(args[0]), result.stderr.decode(errors='replace')[-1800:])
     return result.stdout
 
@@ -294,7 +296,8 @@ def main():
             receipt['go_probe_sha256'] = digest(helper)
             (tree / 'internal/mcp/server/api_native_probe_test.go').write_bytes(helper.read_bytes())
             go = base / ('go-api-native.exe' if os.name == 'nt' else 'go-api-native')
-            checked(['go', 'test', '-c', '-trimpath', '-buildvcs=false', '-o', go, './internal/mcp/server'], cwd=tree)
+            checked(['go', 'test', '-c', '-trimpath', '-buildvcs=false', '-o', go, './internal/mcp/server'],
+                    cwd=tree, timeout=oracle_build_timeout())
             receipt['go_executable_sha256'] = digest(go)
             certs = base / 'certs'
             certs.mkdir()
@@ -355,7 +358,7 @@ def main():
         finally:
             args.receipt.parent.mkdir(parents=True, exist_ok=True)
             args.receipt.write_text(json.dumps(receipt, indent=2) + '\n')
-            checked(['git', 'worktree', 'remove', '--force', tree])
+            remove_worktree(lambda: checked(['git', 'worktree', 'remove', '--force', tree]), 'oracle worktree')
     print('PASS: eight actual Go/Rust encrypted API DNS/TLS/cancellation cases on ' + platform.system())
 
 

@@ -9,8 +9,8 @@ publish = false
 
 [dependencies]
 base32 = "=0.5.1"
-base64 = "=0.22.1"
-aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"] }
+base64 = "=0.23.1"
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"] }
 thiserror = "=2.0.21"
 getrandom = "=0.4.3"
 hmac = "=0.13.0"
@@ -23,4 +23,3 @@ sha2 = "=0.11.0"
 regex = "=1.13.1"
 unicode_categories = "=0.1.1"
 zeroize = { version = "=1.9.1", features = ["alloc"] }
-fs4 = { version = "=0.13.1", features = ["sync"] }

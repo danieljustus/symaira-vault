@@ -38,6 +38,7 @@ mod mcp_commands;
 mod migrate_kdf_commands;
 mod path_migration_commands;
 mod policy_commands;
+mod process_signals;
 mod profile_commands;
 mod recipients_commands;
 mod remote_commands;
@@ -1637,6 +1638,10 @@ fn run_cli() -> ExitCode {
                         execute,
                     )?
                 } else {
+                    // Go registers nothing for plain `run`; signals keep the
+                    // runtime defaults (death by signal, SIGQUIT exits 2) and
+                    // the started child is left running.
+                    process_signals::install(None, None)?;
                     execute(BTreeMap::new())?
                 };
                 if result.timed_out {
@@ -2606,13 +2611,23 @@ fn run_cli() -> ExitCode {
                     },
                     cli.quiet,
                 ),
-                ConfigOperation::List => config::list(&path, cli.quiet),
+                ConfigOperation::List => {
+                    config::list(&path, cli.quiet).map_err(config::ConfigFailure::from)
+                }
                 ConfigOperation::Set { key, value } => config::set(&path, &key, &value, cli.quiet),
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
+                Err(config::ConfigFailure::Plain(error)) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(6)
+                }
+                Err(config::ConfigFailure::GoConfigError(error)) => {
+                    print_error_like_go(&error);
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Run 'symvault doctor' to diagnose and fix configuration issues."
+                    );
                     ExitCode::from(6)
                 }
             }

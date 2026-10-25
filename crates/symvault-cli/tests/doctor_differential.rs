@@ -628,8 +628,8 @@ fn differential_doctor_new_checks_corrupt_config() {
 
     fs::write(vault.join("config.yaml"), b"invalid: yaml: [\n").unwrap();
 
-    // Avoid selecting checks that quote the parser error: go-yaml and the Rust
-    // YAML parser intentionally retain different syntax-error dialects.
+    // These two checks do not quote the parser error. The five checks that do
+    // are byte-compared in `config_yaml_syntax.rs`.
     let only_filter = "password.*";
     let args = [
         "--vault",

@@ -3,6 +3,7 @@
 import copy
 import io
 import ssl
+import subprocess
 import unittest
 from unittest import mock
 
@@ -533,6 +534,95 @@ class WriteDeadlineSocketErrors(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'duplicate native loss field'):
                 contract.checked(command[:-1] + [rejected])
             self.assertFalse(rejected.exists())
+
+
+DECLARED_CELLS = [(implementation, profile, native_os)
+                  for implementation in ('go', 'rust') for profile in ('tcp-output', 'tls-output', 'tcp-five')
+                  for native_os in ('Linux', 'Darwin', 'Windows')]
+
+
+class WindowsGoTcpOutputDeclaredDifference(unittest.TestCase):
+    """#1470 exemption: synthetic predicate/validator controls, never native Windows evidence."""
+
+    OUTPUT = {'received_chunk_bytes': 25613743, 'declared_chunk_length': 25613736}
+
+    def test_only_the_go_windows_tcp_output_cell_is_exempt(self):
+        exempt = [cell for cell in DECLARED_CELLS
+                  if contract.declared_write_difference(*cell, self.OUTPUT) is not None]
+        self.assertEqual(exempt, [('go', 'tcp-output', 'Windows')])
+        entry = contract.declared_write_difference('go', 'tcp-output', 'Windows', self.OUTPUT)
+        assert entry is not None
+        self.assertEqual(entry, dict(
+            implementation='go', profile='tcp-output', native_os='Windows', received_chunk_bytes=25613743,
+            declared_chunk_length=25613736, decision=contract.WINDOWS_GO_TCP_OUTPUT_DECISION, reason=entry['reason']))
+        self.assertIn('#1470', entry['reason'])
+
+    def test_strict_assertion_message_is_unchanged_and_not_reachable_for_rust(self):
+        source = contract.Path(contract.__file__).read_text(encoding='utf-8')
+        self.assertEqual(source.count("'expired write resumed after fast client drain'"), 1)
+        self.assertIn("else:assert output['received_chunk_bytes']<output['declared_chunk_length'],", source)
+
+    def validator(self):
+        text = (contract.ROOT / '.github/workflows/rust-http-write.yml').read_text(encoding='utf-8')
+        block = text.split("python3 - <<'CHECK'\n", 1)[1].split('\n          CHECK\n', 1)[0]
+        return '\n'.join(line[10:] for line in block.split('\n'))
+
+    def receipt(self, native_os, commit, declared, rust_complete=False):
+        profiles = ['tcp-five', 'tcp-short', 'tls12-short', 'tls13-short', 'tcp-output', 'tls-output']
+        def observed(implementation, profile):
+            row = {'case': 'ping-after', 'response': {'status_line': 'HTTP/1.1 200 OK'}}
+            data = dict(rows=[row] * 3, processes=[dict(output_capture_complete=True, output_capture_errors=[],
+                                                        forced_cleanup_not_graceful_evidence=True)],
+                        late_body=dict(peer_terminal_observed=True, forced_client_close=False,
+                                       sent_body_suffix_bytes=16, body_completed_seconds=3),
+                        handshake_peer={}, slow_output={})
+            if profile in {'tls12-short', 'tls13-short'}:
+                data['handshake_peer'] = dict(sender_joined=True, peer_terminal_observed=True, forced_client_close=False,
+                                              sent_hello_bytes=10, client_hello_length=100, elapsed_seconds=1)
+            if profile in {'tcp-output', 'tls-output'}:
+                complete = (implementation == 'go' and profile == 'tcp-output' and native_os == 'Windows') \
+                    or (rust_complete and implementation == 'rust' and profile == 'tcp-output')
+                data['slow_output'] = dict(peer_terminal_observed=True, forced_client_close=False, slow_read_calls=5,
+                                           slow_received_bytes=8192, fast_drain_started_seconds=35,
+                                           declared_chunk_length=self.OUTPUT['declared_chunk_length'],
+                                           received_chunk_bytes=self.OUTPUT['received_chunk_bytes'] if complete else 245760)
+            return data
+        return dict(passed=True, candidate_worktree_clean=True, candidate_worktree_clean_at_end=True, scope='full',
+                    candidate_commit=commit, native_os=native_os, differences=[], declared_differences=declared,
+                    profiles={name: {} for name in profiles},
+                    go={name: observed('go', name) for name in profiles},
+                    rust={name: observed('rust', name) for name in profiles})
+
+    def run_validator(self, native_os, declared, rust_complete=False):
+        with contract.tempfile.TemporaryDirectory() as raw:
+            base = contract.Path(raw)
+            git = ['git', '-c', 'user.name=t', '-c', 'user.email=t@example.invalid']
+            contract.checked(['git', 'init', '-q'], base)
+            contract.checked(git + ['commit', '-q', '--allow-empty', '-m', 'x'], base)
+            commit = contract.checked(['git', 'rev-parse', 'HEAD'], base).decode().strip()
+            (base / 'target').mkdir()
+            (base / 'target/native-http-write.json').write_text(contract.json.dumps(
+                self.receipt(native_os, commit, declared, rust_complete)), encoding='utf-8')
+            script = base / 'check.py'
+            script.write_text(self.validator(), encoding='utf-8')
+            return subprocess.run([contract.sys.executable, '-B', str(script)], cwd=base,
+                                           capture_output=True, text=True).returncode
+
+    def test_workflow_validator_is_platform_correct_and_never_exempts_rust(self):
+        entry = contract.declared_write_difference('go', 'tcp-output', 'Windows', self.OUTPUT)
+        assert entry is not None
+        self.assertEqual(self.run_validator('Linux', []), 0)
+        self.assertEqual(self.run_validator('Darwin', []), 0)
+        self.assertEqual(self.run_validator('Windows', [entry]), 0)
+        self.assertNotEqual(self.run_validator('Windows', []), 0)
+        self.assertNotEqual(self.run_validator('Linux', [entry]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [entry, entry]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [{**entry, 'implementation': 'rust'}]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [{**entry, 'profile': 'tls-output'}]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [{**entry, 'reason': 'no reference'}]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [{**entry, 'received_chunk_bytes': 1}]), 0)
+        self.assertNotEqual(self.run_validator('Windows', [entry], rust_complete=True), 0)
+        self.assertNotEqual(self.run_validator('Linux', [], rust_complete=True), 0)
 
 
 if __name__ == '__main__':

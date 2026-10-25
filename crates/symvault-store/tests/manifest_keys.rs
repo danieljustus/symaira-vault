@@ -35,7 +35,7 @@ struct Input {
 }
 
 fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn fixture() -> Fixture {
@@ -85,7 +85,7 @@ fn fixture() -> Fixture {
         assert!(blob.status.success());
         hash.update(blob.stdout);
     }
-    assert_eq!(f.source_digest, format!("{:x}", hash.finalize()));
+    assert_eq!(f.source_digest, hex::encode(hash.finalize()));
     assert_eq!(
         f.generator_digest,
         digest(

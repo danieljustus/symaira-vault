@@ -917,12 +917,28 @@ pub fn run_stream(input: &str, handler: &mut ProtocolHandler) -> Result<Vec<Stri
 /// A final fragment without a newline is dropped, matching the Go transport's
 /// `ReadString('\n')` loop.
 pub fn run_stdio<R: std::io::BufRead, W: std::io::Write>(
+    input: R,
+    output: W,
+    handler: &mut ProtocolHandler,
+) -> Result<(), Error> {
+    run_stdio_until(input, output, handler, || false)
+}
+
+/// Like [`run_stdio`], but returns after the first completed frame once
+/// `cancelled` is true. Go's transport checks its context only between frames:
+/// a read blocked when cancellation arrives still answers the next frame, then
+/// returns without reading another.
+pub fn run_stdio_until<R: std::io::BufRead, W: std::io::Write>(
     mut input: R,
     mut output: W,
     handler: &mut ProtocolHandler,
+    cancelled: impl Fn() -> bool,
 ) -> Result<(), Error> {
     let mut line = Vec::new();
     loop {
+        if cancelled() {
+            return Ok(());
+        }
         line.clear();
         let Some(oversized) = read_bounded_stdio_frame(&mut input, &mut line).map_err(Error::Io)?
         else {

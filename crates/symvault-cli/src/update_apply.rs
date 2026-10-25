@@ -316,7 +316,7 @@ fn download_hashed(
             "updateapply: incomplete download: got {written} bytes, want {total}"
         ));
     }
-    Ok((bytes, format!("{:x}", hasher.finalize())))
+    Ok((bytes, hex::encode(hasher.finalize())))
 }
 
 fn parse_checksums(bytes: &[u8]) -> Result<std::collections::HashMap<String, String>, String> {
@@ -675,6 +675,9 @@ mod tests {
                     Err(error) => panic!("accept download: {error}"),
                 }
             };
+            // Windows sockets inherit the listener's non-blocking mode on accept
+            // (Unix ones do not), which made the read below fail with WSAEWOULDBLOCK.
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
@@ -1025,8 +1028,8 @@ mod tests {
             assert_eq!(entries, vec![binary.file_name().unwrap().to_os_string()]);
         }
         println!(
-            "sanitized live Go/Rust update apply matched: release={latest}, method=direct-download, targets=<isolated>, post_install_files=[symvault], installed_binary_sha256={:x}",
-            go_hash
+            "sanitized live Go/Rust update apply matched: release={latest}, method=direct-download, targets=<isolated>, post_install_files=[symvault], installed_binary_sha256={}",
+            hex::encode(go_hash)
         );
     }
 
@@ -1125,10 +1128,7 @@ mod tests {
             hasher.update(fs::read(root.join(name)).unwrap());
             hasher.update([0]);
         }
-        assert_eq!(
-            format!("{:x}", hasher.finalize()),
-            fixture.oracle.source_digest
-        );
+        assert_eq!(hex::encode(hasher.finalize()), fixture.oracle.source_digest);
         let go_mod = fs::read_to_string(root.join("go.mod")).unwrap();
         assert!(go_mod.contains(&fixture.oracle.corekit_pin));
         assert_eq!(fixture.oracle.corekit_revision.len(), 40);

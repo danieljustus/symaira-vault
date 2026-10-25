@@ -113,7 +113,7 @@ fn actual_historical_go_envelopes_remain_readable_only_with_explicit_policy() {
             .decode(case["ciphertext"].as_str().unwrap())
             .unwrap();
         assert_eq!(
-            format!("{:x}", Sha256::digest(&raw)),
+            hex::encode(Sha256::digest(&raw)),
             case["sha256"].as_str().unwrap()
         );
         assert_eq!(inspect_argon2id_policy(&raw).unwrap(), index < 3);

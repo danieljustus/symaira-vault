@@ -68,7 +68,7 @@ jobs:
       # FreeBSD and other targets are intentionally absent: no native runner
       # evidence exists for them, and cross-compilation is not runtime proof.
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     steps:
       - name: Assert actual native macOS arm64
         if: matrix.os == 'macos-latest'

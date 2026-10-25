@@ -1,5 +1,31 @@
 # Rust migration handover — 2026-09-09
 
+## IO-002 restore error/side-effect contract, 2026-10-22 (#1247)
+
+`scripts/rust-port/cmd/restoregen` freezes 88 production-Go `RestoreBackup`
+cases (`testdata/port/sync/restore-errors.json`, oracle `861ad938`; `cmd/admin/backup.go`
+is unchanged, so no oracle-pin advance or provenance re-freeze was needed). Each case records the exact
+`restore failed:` text and the complete resulting tree, and
+`crates/symvault-cli/tests/restore_errors_contract.rs` replays it through the
+production Rust restore (`make restore-errors-differential`, part of
+`make sync-io-differential`). Rust `archive::restore` now follows Go's member-name
+cleaning, `SafeMkdirAll` component walk, extraction order and error wording.
+
+Open, recorded in the IO-002 matrix row as unapproved divergences: stage-and-rename
+instead of Go's in-place write (partial file on truncated members, inode replaced;
+in-place fallback only for an existing writable file in a non-writable directory),
+flate offset text and re-gzipped gzip-cut/corrupt replay wraps, umask for new files,
+Windows `SafeMkdirAll` symlink following, the Rust-only 100,000-member limit (checked
+before any write; tested in `crates/symvault-sync/tests/restore_limits.rs`), raw-byte
+non-UTF-8 names (host-dependent, same test file) and unparsed uid/gid/mtime header
+fields. Windows replay (follow-up to native CI): path separators, the missing-archive stat op,
+mkdir-over-file and directory-open texts are expectations derived from Go source (see the
+matrix row, divergence 4); 14 of 88 cases are `unix_only` with a recorded reason, so 74 run
+on Windows. Native 3-OS evidence for this corpus is still pending; IO-002 stays
+`in_progress`.
+Next IO-002 candidates: export/backup CLI-level stdout/stderr differential
+against a built Go binary, and backup-side member modes/ordering corner cases.
+
 ## Current native-prerequisite repair, 2026-10-11
 
 Task `t_c13388cd` composes the local MCP candidate `c8376fa4` with the existing

@@ -13,6 +13,8 @@ on:
       - 'testdata/**'
       - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
+      - 'scripts/rust-port/test_build_timeout.py'
       - 'scripts/rust-port/mcp_process*'
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'
@@ -44,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     defaults:
       run:
         shell: bash
@@ -158,10 +160,10 @@ jobs:
           # Two existing host-specific tests are Unix-only: symlink template
           # rejection and clipboard signal clearing. The stdio and HTTP
           # regressions below must execute on every OS.
-          expected_count = 239 if os.environ['RUNNER_OS']=='Windows' else 241
+          expected_count = 243 if os.environ['RUNNER_OS']=='Windows' else 245
           assert results and sum(int(n) for n,_ in results)==expected_count
           assert all(int(ignored)==0 for _,ignored in results)
-          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions']:
+          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions', 'cancelled_stdio_answers_the_frame_it_was_blocked_on_then_stops', 'stdio_cancelled_before_the_first_read_answers_nothing']:
               assert f'{case} ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked api_template_fixture > target/native-mcp-cli-tests.txt 2> target/native-mcp-cli-tests.stderr

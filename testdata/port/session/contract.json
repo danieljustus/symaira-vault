@@ -15,7 +15,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
-    "generator_digest": "28a0fbaa88e373a8bdb74632752297a553d52db275f262be6dc97460d2eb02e4"
+    "generator_digest": "7c4b8d0b0614671fdc1c730e9ff7332b6f104902baba015ebbcfe01c2360708c"
   },
   "cases": [
     {
@@ -77,5 +77,3250 @@
       ],
       "expected": "expired"
     }
-  ]
+  ],
+  "scenarios": [
+    {
+      "name": "idle_ttl_touch_then_evict",
+      "description": "a load inside the idle TTL touches the session; a load past it reports expired and evicts session, identity and wrap key",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 7200000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "identity",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "nonpositive_ttl_is_expired_without_eviction",
+      "description": "zero, negative and absent ttl_ns report expired but leave the cache entry in place",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "ttl_ns": 0
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_zero_ttl",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "ttl_ns": -1
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_zero_ttl",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "remove": [
+            "ttl_ns"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_zero_ttl",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "maximum_lifetime_is_absolute",
+      "description": "activity refreshes last_access but never saved_at: an old saved_at expires a recently used session; a missing maximum falls back to eight hours",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 86400000000000,
+          "max_lifetime_ns": 3600000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 1800000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 7200000000000,
+          "last_access_ago_ns": 0,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 86400000000000,
+          "max_lifetime_ns": 0,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 32400000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 86400000000000,
+          "max_lifetime_ns": 0,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 25200000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "probes_do_not_refresh_or_evict",
+      "description": "is_*_expired and PeekIdentity never rewrite or delete cache entries, expired or not; LoadIdentity on an expired cache evicts",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "ok",
+            "value": "id-1",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 7200000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 7200000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "expired",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "identity",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "touch_scope_passphrase_vs_identity",
+      "description": "LoadPassphrase touches only the session record; LoadIdentity touches the identity and the shared session",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "ok",
+            "value": "id-1",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "ok",
+            "value": "id-1",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "identity_expiry_follows_session_metadata",
+      "description": "identity expiry is judged by the shared session when present and by the identity's own metadata otherwise; a non-positive TTL expires without evicting",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 7200000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "ok",
+            "value": "id-1",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 7200000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "expired",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_delete",
+          "account": "session",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "identity",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "set": {
+            "ttl_ns": 0
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "ttl_ns": 0
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "expired_zero_ttl",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "expired_zero_ttl",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoke_and_clear",
+      "description": "ClearSession deletes session, identity and wrap key and is idempotent; ClearIdentity removes only the identity",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "clear_identity",
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "clear_identity",
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-2",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [
+              "session",
+              "identity",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "not_found",
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "revoke_with_delete_failures",
+      "description": "a failing session delete aborts ClearSession before the other entries are touched; failing wrap-key or identity deletes are swallowed",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_delete": true,
+          "fault_accounts": [
+            "session"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_delete": true,
+          "fault_accounts": [
+            "wrap-key"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "set_fault",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_delete": true,
+          "fault_accounts": [
+            "identity"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [
+              "identity"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "set_fault",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [
+              "identity"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "corrupted_session_record",
+      "description": "undecodable JSON, an invalid timestamp, a wrong field type and a zero TTL after a bad timestamp all fail as malformed without evicting",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "not-json",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "has_legacy_plaintext",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"saved_at\":\"nope\",\"last_access\":\"nope\",\"ttl_ns\":3600000000000}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"saved_at\":\"2099-01-01T00:00:00Z\",\"last_access\":\"2099-01-01T00:00:00Z\",\"ttl_ns\":0,\"nonce\":5}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"saved_at\":\"bad\",\"last_access\":\"2099-01-01T00:00:00Z\",\"ttl_ns\":0}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "incomplete_session_record",
+      "description": "a record without saved_at is expired and evicted, null time fields are Go zero time, and a record without ciphertext or nonce is expired but kept",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "remove": [
+            "saved_at"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "last_access": null,
+            "saved_at": null
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "encrypted_passphrase": ""
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_no_data",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "nonce": ""
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_no_data",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "remove": [
+            "encrypted_passphrase",
+            "nonce"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired_no_data",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "last_access_defaults_to_saved_at",
+      "description": "a missing or null last_access falls back to saved_at before the idle check",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 7200000000000,
+          "last_access_ago_ns": 0,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "remove": [
+            "last_access"
+          ],
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "expired",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 60000000000,
+          "last_access_ago_ns": 0,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "last_access": null
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "tampered_and_misaddressed_ciphertext",
+      "description": "bad ciphertext, an undecodable ciphertext, or a different wrap key fail as decrypt errors and keep the entry",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "encrypted_passphrase": "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE="
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "decrypt_failed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "set": {
+            "encrypted_passphrase": "***not-base64***"
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "decrypt_failed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "wrap-key",
+          "value": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "decrypt_failed",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "wrap_key_states",
+      "description": "a missing, non-base64 or wrong-length wrap key fails the load; saving replaces any unusable wrap key",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "raw_delete",
+          "account": "wrap-key",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "wrap_key_missing",
+            "present": [
+              "session",
+              "identity"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "wrap_key_missing",
+            "present": [
+              "session",
+              "identity"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "wrap-key",
+          "value": "***",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "wrap_key_invalid",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key:invalid"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "wrap-key",
+          "value": "AQEBAQEBAQEBAQEBAQEBAQ==",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "wrap_key_invalid",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key:invalid"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "wrap-key",
+          "value": "AQEBAQEBAQEBAQEBAQEBAQ==",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "ok",
+            "value": "id-1",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "identity"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "corrupted_identity_record",
+      "description": "an undecodable identity fails as malformed everywhere, and a corrupt shared session blocks identity loads without eviction",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "identity",
+          "value": "garbage",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "garbage",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "garbage",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "identity",
+          "set": {
+            "saved_at": "nope"
+          },
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "malformed",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "legacy_plaintext_lifecycle",
+      "description": "a live legacy plaintext session is refused until migrated; migration is a one-shot upgrade and a no-op without a session",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"saved_at\":\"2000-01-01T00:00:00Z\",\"last_access\":\"2000-01-01T00:00:00Z\",\"passphrase\":\"legacy-secret\",\"ttl_ns\":3600000000000}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 60000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "has_legacy_plaintext",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "legacy_plaintext",
+            "present": [
+              "session"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "migrate_session",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "has_legacy_plaintext",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "legacy-secret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "migrate_session",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "has_legacy_plaintext",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "migrate_session",
+          "expect": {
+            "result": "ok",
+            "flag": false,
+            "present": [],
+            "changed": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "keyring_failures",
+      "description": "keyring failures surface as keyring errors, never as misses, and never delete or rewrite the cache",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_get": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_identity",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "peek_identity",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "is_identity_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "has_legacy_plaintext",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "migrate_session",
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_set": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_get": true,
+          "fault_set": true,
+          "fault_delete": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "keyring_unavailable",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": []
+          }
+        },
+        {
+          "op": "set_fault",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "go_sealed_vector",
+      "description": "a record sealed with a known wrap key opens, with the passphrase round trip pinned by AES-256-GCM, standard base64, a 12-byte nonce and no AAD",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "raw_set",
+          "account": "wrap-key",
+          "value": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"encrypted_passphrase\":\"xX1rT+jtbte0akKc31mpjb4pBcTUhL0TcA76OZs=\",\"last_access\":\"2000-01-01T00:00:00Z\",\"max_lifetime_ns\":28800000000000,\"nonce\":\"CQkJCQkJCQkJCQkJ\",\"saved_at\":\"2000-01-01T00:00:00Z\",\"ttl_ns\":3600000000000}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 60000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "vector-secret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "raw_set",
+          "account": "session",
+          "value": "{\"encrypted_passphrase\":\"xX1rT+jtbte0akKc31mpjb4pBcTUhL0TcA76OZs=\",\"last_access\":\"2000-01-01T00:00:00Z\",\"max_lifetime_ns\":0,\"nonce\":\"CQkJCQkJCQkJCQkJ\",\"saved_at\":\"2000-01-01T00:00:00Z\",\"ttl_ns\":3600000000000}",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 60000000000,
+          "last_access_ago_ns": 60000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "vector-secret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "record_shape",
+      "description": "the stored JSON field sets, the wrap-key encoding, the nonce length and the shared saved_at between session and identity are pinned",
+      "backend": "memory",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "inspect",
+          "expect": {
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [],
+            "shape": {
+              "session_fields": [
+                "encrypted_passphrase",
+                "last_access",
+                "max_lifetime_ns",
+                "nonce",
+                "saved_at",
+                "ttl_ns"
+              ],
+              "identity_fields": [
+                "encrypted_identity",
+                "last_access",
+                "max_lifetime_ns",
+                "nonce",
+                "saved_at",
+                "ttl_ns"
+              ],
+              "wrap_key_encoding": "base64_std_32_bytes",
+              "nonce_bytes": 12,
+              "timestamps_utc_z": true,
+              "ttl_ns": 3600000000000,
+              "max_lifetime_ns": 28800000000000,
+              "identity_inherits_session_saved_at": true,
+              "ciphertext_adds_16_byte_tag": true
+            }
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 0,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ]
+          }
+        },
+        {
+          "op": "save_identity",
+          "secret": "id-1",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 0,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [
+              "identity"
+            ]
+          }
+        },
+        {
+          "op": "inspect",
+          "expect": {
+            "present": [
+              "session",
+              "identity",
+              "wrap_key"
+            ],
+            "changed": [],
+            "shape": {
+              "session_fields": [
+                "encrypted_passphrase",
+                "last_access",
+                "nonce",
+                "saved_at",
+                "ttl_ns"
+              ],
+              "identity_fields": [
+                "encrypted_identity",
+                "last_access",
+                "nonce",
+                "saved_at",
+                "ttl_ns"
+              ],
+              "wrap_key_encoding": "base64_std_32_bytes",
+              "nonce_bytes": 12,
+              "timestamps_utc_z": true,
+              "ttl_ns": 3600000000000,
+              "max_lifetime_ns": 0,
+              "identity_inherits_session_saved_at": true,
+              "ciphertext_adds_16_byte_tag": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "fallback_miss_does_not_activate",
+      "description": "a not-found from a healthy primary is an ordinary miss and does not switch to memory",
+      "backend": "fallback",
+      "steps": [
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [],
+            "changed": [],
+            "fallback_active": false
+          }
+        },
+        {
+          "op": "is_session_expired",
+          "expect": {
+            "result": "ok",
+            "flag": true,
+            "present": [],
+            "changed": [],
+            "fallback_active": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "fallback_activates_on_set_failure",
+      "description": "a primary Set failure is absorbed by the in-memory fallback and the session keeps working for the process",
+      "backend": "fallback",
+      "steps": [
+        {
+          "op": "set_fault",
+          "fault_set": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "set_fault",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [],
+            "changed": [],
+            "fallback_active": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "fallback_activates_on_get_failure",
+      "description": "a primary Get failure activates the fallback permanently: earlier primary entries stay invisible even after the primary recovers",
+      "backend": "fallback",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ],
+            "fallback_active": false
+          }
+        },
+        {
+          "op": "edit",
+          "account": "session",
+          "saved_ago_ns": 180000000000,
+          "last_access_ago_ns": 1800000000000,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session"
+            ],
+            "fallback_active": false
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_get": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "set_fault",
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "ok",
+            "value": "s3cret",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "fallback_activates_on_delete_failure",
+      "description": "a primary Delete failure is absorbed and activates the fallback",
+      "backend": "fallback",
+      "steps": [
+        {
+          "op": "save_passphrase",
+          "secret": "s3cret",
+          "ttl_ns": 3600000000000,
+          "max_lifetime_ns": 28800000000000,
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [
+              "session",
+              "wrap_key"
+            ],
+            "fallback_active": false
+          }
+        },
+        {
+          "op": "set_fault",
+          "fault_delete": true,
+          "expect": {
+            "present": [],
+            "changed": []
+          }
+        },
+        {
+          "op": "clear_session",
+          "expect": {
+            "result": "ok",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        },
+        {
+          "op": "load_passphrase",
+          "expect": {
+            "result": "not_found",
+            "present": [
+              "session",
+              "wrap_key"
+            ],
+            "changed": [],
+            "fallback_active": true
+          }
+        }
+      ]
+    }
+  ],
+  "concurrency": [
+    {
+      "name": "concurrent_touch_and_probe_keep_live_session",
+      "description": "parallel loads, touches and non-refreshing probes never evict, corrupt or fail a live session",
+      "workers": 8,
+      "iterations": 25,
+      "workload": [
+        "load_passphrase",
+        "load_identity",
+        "peek_identity",
+        "is_session_expired",
+        "is_identity_expired"
+      ],
+      "permitted_results": {
+        "load_identity": [
+          "ok"
+        ],
+        "load_passphrase": [
+          "ok"
+        ],
+        "peek_identity": [
+          "ok"
+        ]
+      },
+      "probe_expected": {
+        "is_identity_expired": false,
+        "is_session_expired": false
+      },
+      "final_present": [
+        "session",
+        "identity",
+        "wrap_key"
+      ],
+      "final_load_results": [
+        "ok"
+      ]
+    },
+    {
+      "name": "concurrent_revoke_during_loads",
+      "description": "revoke racing loaders yields only a hit, a miss or a missing wrap key, never a panic or a torn record; a final revoke always leaves nothing",
+      "workers": 6,
+      "iterations": 20,
+      "workload": [
+        "load_passphrase",
+        "load_identity"
+      ],
+      "permitted_results": {
+        "load_identity": [
+          "ok",
+          "not_found",
+          "wrap_key_missing"
+        ],
+        "load_passphrase": [
+          "ok",
+          "not_found",
+          "wrap_key_missing"
+        ]
+      },
+      "revokers": 2,
+      "final_present": [],
+      "final_load_results": [
+        "not_found"
+      ]
+    },
+    {
+      "name": "concurrent_saves_recover_by_sequential_save",
+      "description": "racing first saves may leave a session sealed under a different wrap key (decrypt error); one sequential save always recovers it",
+      "workers": 8,
+      "iterations": 5,
+      "workload": [
+        "save_passphrase"
+      ],
+      "permitted_results": {
+        "save_passphrase": [
+          "ok"
+        ]
+      },
+      "final_present": [
+        "session",
+        "wrap_key"
+      ],
+      "final_load_results": [
+        "ok",
+        "decrypt_failed"
+      ],
+      "after_sequential_save": "ok"
+    }
+  ],
+  "storage": {
+    "backend": "keyring",
+    "filesystem_imports": [],
+    "on_disk_files": 0
+  }
 }

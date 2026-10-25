@@ -18,6 +18,8 @@ import tempfile
 import threading
 import time
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 PROBE = ROOT / "scripts/rust-port/egress_contract_probe.go.txt"
@@ -28,8 +30,8 @@ DATA = {"credential": TOKEN, "username": "public-fixture-user", "header_name": "
         "param_name": "api_token", "nested": {"token": NESTED}}
 
 
-def checked(args, cwd=ROOT):
-    result = subprocess.run([str(x) for x in args], cwd=cwd, capture_output=True, timeout=240)
+def checked(args, cwd=ROOT, timeout=240):
+    result = subprocess.run([str(x) for x in args], cwd=cwd, capture_output=True, timeout=timeout)
     assert result.returncode == 0, (args[0], result.stderr.decode(errors="replace")[-2000:])
     return result.stdout
 
@@ -553,16 +555,19 @@ def main():
                 helper.mkdir()
                 (helper / "main.go").write_bytes(PROBE.read_bytes())
                 go = base / ("go-probe.exe" if os.name == "nt" else "go-probe")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/egressprobe"], cwd=tree)
+                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/egressprobe"],
+                        cwd=tree, timeout=oracle_build_timeout())
                 receipt["go_binary_sha256"] = hashlib.sha256(go.read_bytes()).hexdigest()
                 go_cli = base / ("go-cli.exe" if os.name == "nt" else "go-cli")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."], cwd=tree)
+                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go_cli, "."],
+                        cwd=tree, timeout=oracle_build_timeout())
                 receipt["go_cli_binary_sha256"] = hashlib.sha256(go_cli.read_bytes()).hexdigest()
                 identity_helper = tree / "scripts/rust-port/cmd/egressidentity"
                 identity_helper.mkdir()
                 (identity_helper / "main.go").write_bytes(IDENTITY.read_bytes())
                 identity_binary = base / ("go-identity.exe" if os.name == "nt" else "go-identity")
-                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", identity_binary, "./scripts/rust-port/cmd/egressidentity"], cwd=tree)
+                checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", identity_binary, "./scripts/rust-port/cmd/egressidentity"],
+                        cwd=tree, timeout=oracle_build_timeout())
                 identities = base / "identities"
                 checked([identity_binary, "--root", identities], cwd=base)
                 identity_files = sorted(p.name for p in identities.iterdir())
@@ -611,7 +616,7 @@ def main():
                     assert hashlib.sha256(binary.read_bytes()).hexdigest() == receipt[key]
                 receipt["passed"] = True
             finally:
-                checked(["git", "worktree", "remove", "--force", tree])
+                remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
     finally:
         args.receipt.write_text(json.dumps(receipt, indent=2)+"\n", encoding="utf-8")
         receipt["candidate_worktree_clean_at_end"] = not checked(["git", "status", "--porcelain=v1", "--untracked-files=normal"]).strip()

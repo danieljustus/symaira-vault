@@ -891,9 +891,15 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     );
     if cfg!(windows) {
         // The pinned Go v0.22.1 writer used filepath.Rel verbatim in tar
-        // headers on Windows. Its own restore rejects those backslashes.
+        // headers on Windows. Go's restore rejects those backslashes on every
+        // OS (`cleanBackupMemberName`: "archive contains unsafe path"), and
+        // the Rust restore mirrors that text exactly (IO-002).
         assert!(!rust_restore.status.success());
-        assert!(String::from_utf8_lossy(&rust_restore.stderr).contains("unsafe archive path"));
+        let rust_stderr = String::from_utf8_lossy(&rust_restore.stderr);
+        assert!(
+            rust_stderr.contains("restore failed: archive contains unsafe path: "),
+            "{rust_stderr}"
+        );
         let go_reject_root = temporary_root("go-reject-legacy-backup");
         let go_reject = run(
             &go_binary,

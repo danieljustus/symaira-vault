@@ -59,9 +59,23 @@ dependencies = [
  "aead 0.5.2",
  "aes 0.8.4",
  "cipher 0.4.4",
- "ctr",
- "ghash",
+ "ctr 0.9.2",
+ "ghash 0.5.1",
  "subtle",
+]
+
+[[package]]
+name = "aes-gcm"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f2b8006a0c83f52b62ba44a97b58bf76fe2f70a329e588f67f89691d93d498f"
+dependencies = [
+ "aead 0.6.1",
+ "aes 0.9.3",
+ "cipher 0.5.2",
+ "ctr 0.10.1",
+ "ctutils",
+ "ghash 0.6.0",
 ]
 
 [[package]]
@@ -988,7 +1002,7 @@ dependencies = [
  "mio",
  "parking_lot",
  "rustix",
- "signal-hook",
+ "signal-hook 0.3.18",
  "signal-hook-mio",
  "winapi",
 ]
@@ -1065,6 +1079,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctr"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baaca1c4b237092596f64d571e9db6ce4109c4ef9742e27590f1709594461f21"
+dependencies = [
+ "cipher 0.5.2",
+]
+
+[[package]]
 name = "ctrlc"
 version = "3.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1077,9 +1100,9 @@ dependencies = [
 
 [[package]]
 name = "ctutils"
-version = "0.4.2"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d5515a3834141de9eafb9717ad39eea8247b5674e6066c404e8c4b365d2a29e"
+checksum = "12218662ccac37d9714f2191252553d67585b97df8c839cbe49e0bde278dc865"
 dependencies = [
  "cmov",
 ]
@@ -1482,16 +1505,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fs4"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
-dependencies = [
- "rustix",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1664,7 +1677,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
- "polyval",
+ "polyval 0.6.2",
+]
+
+[[package]]
+name = "ghash"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eecf2d5dc9b66b732b97707a0210906b1d30523eb773193ab777c0c84b3e8d5"
+dependencies = [
+ "polyval 0.7.3",
 ]
 
 [[package]]
@@ -1837,7 +1859,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4917627a14198c3603282c5158b815ad5534795451d3c074b53cf3cee0960b11"
 dependencies = [
  "aead 0.5.2",
- "aes-gcm",
+ "aes-gcm 0.10.3",
  "chacha20poly1305 0.10.1",
  "digest 0.10.7",
  "generic-array",
@@ -2999,6 +3021,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "polyval"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0fa31d631f2b2cb2a544d0aa321ce847a94764d701ca2becc411138b93d49cd"
+dependencies = [
+ "cpubits",
+ "cpufeatures 0.3.1",
+ "universal-hash 0.6.1",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3913,6 +3946,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b29ffa27d3d59a049bb328258de100f8012848d1b08d444e08bbc02ac468435e"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
 name = "signal-hook-mio"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3920,7 +3963,7 @@ checksum = "b75a19a7a740b25bc7944bdee6172368f988763b744e3d4dfe753f6b4ece40cc"
 dependencies = [
  "libc",
  "mio",
- "signal-hook",
+ "signal-hook 0.3.18",
 ]
 
 [[package]]
@@ -4035,14 +4078,16 @@ dependencies = [
 name = "symvault-cli"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "crossterm",
  "ctrlc",
  "flate2",
  "getifaddrs",
  "getrandom 0.4.3",
- "hmac 0.12.1",
+ "hex",
+ "hmac 0.13.0",
+ "libc",
  "qrcode",
  "ratatui",
  "rcgen",
@@ -4054,7 +4099,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml_ng",
- "sha2 0.10.9",
+ "sha2 0.11.0",
+ "signal-hook 0.4.5",
  "symaira-core-version",
  "symvault-core",
  "symvault-crypto",
@@ -4078,10 +4124,9 @@ dependencies = [
 name = "symvault-core"
 version = "0.0.0"
 dependencies = [
- "aes-gcm",
+ "aes-gcm 0.11.1",
  "base32",
- "base64 0.22.1",
- "fs4",
+ "base64 0.23.1",
  "getrandom 0.4.3",
  "hmac 0.13.0",
  "regex",
@@ -4103,15 +4148,16 @@ dependencies = [
  "age",
  "age-core",
  "argon2",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chacha20poly1305 0.11.0",
  "getrandom 0.4.3",
- "hkdf 0.12.4",
- "hmac 0.12.1",
+ "hex",
+ "hkdf 0.13.0",
+ "hmac 0.13.0",
  "proptest",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "zeroize",
 ]
 
@@ -4127,10 +4173,11 @@ dependencies = [
 name = "symvault-mcp"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "getrandom 0.4.3",
+ "hex",
  "hickory-resolver",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "http",
  "rcgen",
  "reqwest",
@@ -4138,7 +4185,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml_ng",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "symvault-core",
  "symvault-crypto",
  "symvault-gojson",
@@ -4157,13 +4204,13 @@ name = "symvault-platform"
 version = "0.0.0"
 dependencies = [
  "arboard",
- "base64 0.22.1",
+ "base64 0.23.1",
  "keyring",
  "keyring-core",
  "rustix",
  "serde",
  "serde_json",
- "signal-hook",
+ "signal-hook 0.4.5",
  "symvault-core",
  "tempfile",
  "windows-sys 0.61.2",
@@ -4173,15 +4220,15 @@ dependencies = [
 name = "symvault-store"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
- "fs4",
+ "base64 0.23.1",
  "getrandom 0.4.3",
- "hmac 0.12.1",
+ "hex",
+ "hmac 0.13.0",
  "rustix",
  "serde",
  "serde_json",
  "serde_yaml_ng",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "symvault-core",
  "symvault-crypto",
  "tempfile",
@@ -4195,14 +4242,15 @@ dependencies = [
 name = "symvault-sync"
 version = "0.0.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "csv",
  "flate2",
  "getrandom 0.4.3",
+ "hex",
  "rustix",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "symvault-core",
  "symvault-crypto",
  "symvault-gojson",

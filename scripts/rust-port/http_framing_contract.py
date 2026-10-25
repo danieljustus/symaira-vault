@@ -16,7 +16,7 @@ sys.dont_write_bytecode = True
 from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 PING=b'{"jsonrpc":"2.0","id":2,"method":"ping"}'
 INITIALIZE=b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"public-framing-fixture","version":"1"},"capabilities":{}}}'
@@ -225,8 +225,8 @@ def main():
                 (helper/'main.go').write_bytes(PROBE.read_bytes())
                 suffix = '.exe' if os.name=='nt' else ''
                 go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpframingseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpframingseed'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 seed_home=base/'seed';seed_home.mkdir()
                 tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
@@ -275,7 +275,7 @@ def main():
                 assert not receipt['differences'], 'actual undeclared HTTP framing differences retained'
                 receipt['passed']=True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f"PASS: {expected_count} actual framing responses per implementation on {platform.system()}")

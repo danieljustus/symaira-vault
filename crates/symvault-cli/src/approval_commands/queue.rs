@@ -13,7 +13,7 @@ use std::{
     time::Duration,
 };
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rustls::{
     RootCertStore,
     pki_types::{CertificateDer, PrivateKeyDer, UnixTime, pem::PemObject},

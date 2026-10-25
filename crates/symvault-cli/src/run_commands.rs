@@ -350,9 +350,16 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     let mut child_command = Command::new(&options.command[0]);
     child_command.args(&options.command[1..]);
     #[cfg(unix)]
-    {
+    if options.timeout.is_some() {
         use std::os::unix::process::CommandExt;
-        // ponytail: process-group scope; detached descendants need OS-specific supervision.
+        // Only a bounded run needs its own group, so a timeout can kill the
+        // whole tree. An unbounded run stays in the caller's group like Go's
+        // os/exec child: a terminal Ctrl-C (SIGINT to the foreground group)
+        // then reaches the child instead of orphaning it, and the child keeps
+        // terminal reads. ponytail: process-group scope; detached descendants
+        // need OS-specific supervision.
+        // Residual (#1242): Ctrl-C does not reach a child started with
+        // --timeout/MCP execute, which Go would also have signalled.
         child_command.process_group(0);
     }
     child_command.env_clear();
@@ -1421,6 +1428,45 @@ mod tests {
         assert_eq!(result.exit_code, -1);
         thread::sleep(Duration::from_millis(500));
         assert!(!marker.exists(), "descendant survived command timeout");
+    }
+
+    #[cfg(unix)]
+    fn child_process_group(timeout: Option<Duration>) -> (i32, i32) {
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "ps -o pgid= -p $$".to_owned(),
+        ];
+        let result = run_process(ProcessOptions {
+            command: &command,
+            environment: &BTreeMap::new(),
+            files: &BTreeMap::new(),
+            extra_environment: &[],
+            passthrough: &[],
+            working_directory: None,
+            timeout,
+            redactions: &[],
+            generic_redaction: false,
+            whitelist: &["PATH"],
+        })
+        .expect("child command should succeed");
+        let child = result.stdout.trim().parse().expect("numeric process group");
+        (rustix::process::getpgrp().as_raw_nonzero().get(), child)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unbounded_run_keeps_the_child_in_the_callers_process_group_like_go() {
+        // A terminal Ctrl-C signals the foreground group; Go's child receives it.
+        let (parent, child) = child_process_group(None);
+        assert_eq!(parent, child);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_run_isolates_the_child_so_a_timeout_can_kill_the_tree() {
+        let (parent, child) = child_process_group(Some(Duration::from_secs(5)));
+        assert_ne!(parent, child);
     }
 
     #[cfg(unix)]

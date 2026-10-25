@@ -1,0 +1,232 @@
+{
+  "commit": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+  "source_files": [
+    "internal/autotype/autotype_common.go"
+  ],
+  "source_hash": "4d1fdfc355dcbd719f9c4a7c02777b42d090d15dc620a59128090ffe7482d407",
+  "generator_hash": "d84ae37a2c10ba8c771455ce68249cba004b015b489d2d7c3b52f832efc55a25",
+  "apple_script": [
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "plain",
+      "input": "hello",
+      "output": "hello"
+    },
+    {
+      "name": "backslash",
+      "input": "back\\slash",
+      "output": "back\\\\slash"
+    },
+    {
+      "name": "double_quote",
+      "input": "say \"hello\"",
+      "output": "say \\\"hello\\\""
+    },
+    {
+      "name": "newline",
+      "input": "line\nbreak",
+      "output": "line\\nbreak"
+    },
+    {
+      "name": "carriage_return",
+      "input": "car\rriage",
+      "output": "car\\rriage"
+    },
+    {
+      "name": "tab",
+      "input": "tab\there",
+      "output": "tab\\there"
+    },
+    {
+      "name": "mixed_escapes",
+      "input": "a\\b\"c\\nd\\re\\tf",
+      "output": "a\\\\b\\\"c\\\\nd\\\\re\\\\tf"
+    },
+    {
+      "name": "sendkeys_metacharacters",
+      "input": "test{123}+^%~",
+      "output": "test{123}+^%~"
+    },
+    {
+      "name": "each_sendkeys_metacharacter",
+      "input": "+^%~{}[]",
+      "output": "+^%~{}[]"
+    },
+    {
+      "name": "brackets",
+      "input": "bracket[ and ]",
+      "output": "bracket[ and ]"
+    },
+    {
+      "name": "nul",
+      "input": "a\u0000b",
+      "output": "a\u0000b"
+    },
+    {
+      "name": "other_controls_pass_through",
+      "input": "\u0001\u0007\b\u000b\f\u001b",
+      "output": "\u0001\u0007\b\u000b\f\u001b"
+    },
+    {
+      "name": "unicode_bmp",
+      "input": "pässwörd ✓ 日本語",
+      "output": "pässwörd ✓ 日本語"
+    },
+    {
+      "name": "astral",
+      "input": "𝄞 😀",
+      "output": "𝄞 😀"
+    },
+    {
+      "name": "line_separators",
+      "input": "a\u2028b\u2029c",
+      "output": "a\u2028b\u2029c"
+    },
+    {
+      "name": "already_escaped_look",
+      "input": "\\\\ \\\" \\n {+} {{}",
+      "output": "\\\\\\\\ \\\\\\\" \\\\n {+} {{}"
+    },
+    {
+      "name": "trailing_backslash",
+      "input": "path\\",
+      "output": "path\\\\"
+    },
+    {
+      "name": "only_quote",
+      "input": "\"",
+      "output": "\\\""
+    },
+    {
+      "name": "only_brace",
+      "input": "{",
+      "output": "{"
+    },
+    {
+      "name": "long_mixed",
+      "input": "a\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\n",
+      "output": "a\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\na\\\\\\\"{+}\\n"
+    },
+    {
+      "name": "single_quote_and_backtick_pass_through",
+      "input": "it's `x` $y",
+      "output": "it's `x` $y"
+    }
+  ],
+  "send_keys": [
+    {
+      "name": "empty",
+      "input": "",
+      "output": ""
+    },
+    {
+      "name": "plain",
+      "input": "hello",
+      "output": "hello"
+    },
+    {
+      "name": "backslash",
+      "input": "back\\slash",
+      "output": "back\\slash"
+    },
+    {
+      "name": "double_quote",
+      "input": "say \"hello\"",
+      "output": "say \"hello\""
+    },
+    {
+      "name": "newline",
+      "input": "line\nbreak",
+      "output": "line\nbreak"
+    },
+    {
+      "name": "carriage_return",
+      "input": "car\rriage",
+      "output": "car\rriage"
+    },
+    {
+      "name": "tab",
+      "input": "tab\there",
+      "output": "tab\there"
+    },
+    {
+      "name": "mixed_escapes",
+      "input": "a\\b\"c\\nd\\re\\tf",
+      "output": "a\\b\"c\\nd\\re\\tf"
+    },
+    {
+      "name": "sendkeys_metacharacters",
+      "input": "test{123}+^%~",
+      "output": "test{{}123{}}{+}{^}{%}{~}"
+    },
+    {
+      "name": "each_sendkeys_metacharacter",
+      "input": "+^%~{}[]",
+      "output": "{+}{^}{%}{~}{{}{}}{[}{]}"
+    },
+    {
+      "name": "brackets",
+      "input": "bracket[ and ]",
+      "output": "bracket{[} and {]}"
+    },
+    {
+      "name": "nul",
+      "input": "a\u0000b",
+      "output": "a\u0000b"
+    },
+    {
+      "name": "other_controls_pass_through",
+      "input": "\u0001\u0007\b\u000b\f\u001b",
+      "output": "\u0001\u0007\b\u000b\f\u001b"
+    },
+    {
+      "name": "unicode_bmp",
+      "input": "pässwörd ✓ 日本語",
+      "output": "pässwörd ✓ 日本語"
+    },
+    {
+      "name": "astral",
+      "input": "𝄞 😀",
+      "output": "𝄞 😀"
+    },
+    {
+      "name": "line_separators",
+      "input": "a\u2028b\u2029c",
+      "output": "a\u2028b\u2029c"
+    },
+    {
+      "name": "already_escaped_look",
+      "input": "\\\\ \\\" \\n {+} {{}",
+      "output": "\\\\ \\\" \\n {{}{+}{}} {{}{{}{}}"
+    },
+    {
+      "name": "trailing_backslash",
+      "input": "path\\",
+      "output": "path\\"
+    },
+    {
+      "name": "only_quote",
+      "input": "\"",
+      "output": "\""
+    },
+    {
+      "name": "only_brace",
+      "input": "{",
+      "output": "{{}"
+    },
+    {
+      "name": "long_mixed",
+      "input": "a\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\na\\\"{+}\n",
+      "output": "a\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\na\\\"{{}{+}{}}\n"
+    },
+    {
+      "name": "single_quote_and_backtick_pass_through",
+      "input": "it's `x` $y",
+      "output": "it's `x` $y"
+    }
+  ]
+}

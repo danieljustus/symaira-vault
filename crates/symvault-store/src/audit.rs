@@ -13,7 +13,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
@@ -167,8 +167,8 @@ pub fn canonical_json(entry: &LogEntry) -> Vec<u8> {
 /// Computes one Go-compatible chain HMAC.
 #[must_use]
 pub fn compute_hmac(key: &[u8], previous: &[u8], entry: &LogEntry) -> String {
-    let mut mac =
-        <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC-SHA256 accepts every key length");
+    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(key)
+        .expect("HMAC-SHA256 accepts every key length");
     mac.update(previous);
     mac.update(&canonical_json(entry));
     mac.finalize()
