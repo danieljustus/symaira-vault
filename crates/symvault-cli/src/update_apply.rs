@@ -675,6 +675,9 @@ mod tests {
                     Err(error) => panic!("accept download: {error}"),
                 }
             };
+            // Windows sockets inherit the listener's non-blocking mode on accept
+            // (Unix ones do not), which made the read below fail with WSAEWOULDBLOCK.
+            stream.set_nonblocking(false).unwrap();
             stream
                 .set_read_timeout(Some(Duration::from_secs(5)))
                 .unwrap();
