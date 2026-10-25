@@ -181,35 +181,126 @@ pub fn generate_totp_at(
 }
 
 fn normalize_secret(secret: &str) -> String {
+    // Go: strings.ToUpper(strings.ReplaceAll(secret, " ", "")). ToUpper applies
+    // the simple (single-rune) mapping, so a rune whose full mapping expands
+    // (for example U+00DF) stays unchanged instead of becoming "SS".
     secret
         .chars()
         .filter(|character| *character != ' ')
-        .flat_map(char::to_uppercase)
+        .map(|character| {
+            let mut upper = character.to_uppercase();
+            match (upper.next(), upper.next()) {
+                (Some(single), None) => single,
+                _ => character,
+            }
+        })
         .collect()
 }
 
+/// Port of Go `encoding/base32` `StdEncoding.DecodeString` followed, on error,
+/// by `StdEncoding.WithPadding(NoPadding).DecodeString` (the order used by
+/// `crypto.ValidateTOTPSecret` and `GenerateTOTPAt`).
 fn decode_secret(secret: &str) -> Option<Zeroizing<Vec<u8>>> {
-    // encoding/base32 ignores CR/LF but rejects incomplete final quanta;
-    // the base32 crate otherwise accepts lengths such as three characters.
-    let secret: String = secret
-        .chars()
-        .filter(|c| !matches!(c, '\r' | '\n'))
+    // DecodeString strips CR and LF before decoding.
+    let bytes: Vec<u8> = secret
+        .bytes()
+        .filter(|byte| !matches!(byte, b'\r' | b'\n'))
         .collect();
-    let unpadded = secret.trim_end_matches('=');
-    let remainder = unpadded.len() % 8;
-    if !matches!(remainder, 0 | 2 | 4 | 5 | 7)
-        || (secret.len() != unpadded.len()
-            && (remainder == 0 || secret.len() - unpadded.len() != 8 - remainder))
-    {
-        return None;
-    }
-    let decoded = base32::decode(base32::Alphabet::Rfc4648 { padding: false }, unpadded)?;
+    let decoded = go_base32_decode(&bytes, true).or_else(|| go_base32_decode(&bytes, false))?;
     (!decoded.is_empty()).then(|| Zeroizing::new(decoded))
+}
+
+fn base32_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'2'..=b'7' => Some(byte - b'2' + 26),
+        _ => None,
+    }
+}
+
+/// Mirrors `(*Encoding).decode`, including its quirks: with padding enabled a
+/// pad run only has to cover the next `8-1-j` characters (anything after is
+/// ignored), and with `NoPadding` a final group of 1, 3 or 6 characters is
+/// silently dropped instead of rejected.
+fn go_base32_decode(source: &[u8], padded: bool) -> Option<Vec<u8>> {
+    let mut output = Vec::with_capacity(source.len() / 8 * 5 + 5);
+    let mut rest = source;
+    let mut end = false;
+    while !rest.is_empty() && !end {
+        let mut block = [0u8; 8];
+        let mut length = 8;
+        let mut j = 0;
+        while j < 8 {
+            let Some((&input, tail)) = rest.split_first() else {
+                if padded {
+                    return None;
+                }
+                length = j;
+                end = true;
+                break;
+            };
+            rest = tail;
+            if padded && input == b'=' && j >= 2 && rest.len() < 8 {
+                if rest.len() + j < 8 - 1 {
+                    return None;
+                }
+                for k in 0..(8 - 1 - j) {
+                    if rest.len() > k && rest[k] != b'=' {
+                        return None;
+                    }
+                }
+                length = j;
+                end = true;
+                if matches!(length, 1 | 3 | 6) {
+                    return None;
+                }
+                break;
+            }
+            block[j] = base32_value(input)?;
+            j += 1;
+        }
+        // Go's switch on the group length falls through downwards; lengths
+        // 0, 1, 3 and 6 match no case and contribute no bytes.
+        let count = match length {
+            8 => 5,
+            7 => 4,
+            5 => 3,
+            4 => 2,
+            2 => 1,
+            _ => 0,
+        };
+        let packed = [
+            block[0] << 3 | block[1] >> 2,
+            block[1] << 6 | block[2] << 1 | block[3] >> 4,
+            block[3] << 4 | block[4] >> 1,
+            block[4] << 7 | block[5] << 2 | block[6] >> 3,
+            block[6] << 5 | block[7],
+        ];
+        output.extend_from_slice(&packed[..count]);
+    }
+    Some(output)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secret_validation_follows_go_base32_decode_order() {
+        // A trailing six-character group is dropped, not rejected (NoPadding).
+        assert!(validate_totp_secret("JBSWY3DPEHPK3PXPJBSPXPJBSWY3DPEHPK3PXP").is_ok());
+        assert_eq!(
+            validate_totp_secret("JBSWY3DPEHPK3PWY3DPEHPK3PXP")
+                .unwrap_err()
+                .to_string(),
+            "TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+        );
+        // Padding past the required run is ignored; a short run is rejected.
+        assert!(validate_totp_secret("JBSWY3DPEHPK3PXPJBSWY3DPEH======ZZ").is_ok());
+        assert!(validate_totp_secret("JBSWY3DPEHPK3PXPJBSWY3DPEH=====").is_err());
+        // Simple case mapping: U+00DF does not become "SS".
+        assert!(validate_totp_secret("\u{df}BSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP").is_err());
+    }
 
     #[test]
     fn rfc6238_sha1_vectors_match() {
