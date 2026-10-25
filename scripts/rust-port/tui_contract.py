@@ -672,18 +672,58 @@ def build_source_bound_rust(rust, base, receipt):
     # Cargo freshness alone does not prove an externally supplied binary's
     # contents. Rebuild into a new run-owned target and compare actual bytes.
     env = os.environ.copy()
-    env.update(CARGO_TARGET_DIR=str(base/'rust-source-build'), CARGO_INCREMENTAL='0',
-               CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
-    checked(['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli',
-             '--bin', 'symvault', '--locked'], env=env, timeout=900)
-    rebuilt = base/'rust-source-build/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+    env.update(CARGO_INCREMENTAL='0', CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
+    exe = 'symvault.exe' if os.name == 'nt' else 'symvault'
+    build = ['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli', '--bin', 'symvault', '--locked']
+    if platform.system() != 'Darwin':
+        env['CARGO_TARGET_DIR'] = str(base/'rust-source-build')
+        checked(build, env=env, timeout=900)
+        rebuilt = base/'rust-source-build/debug'/exe
+        record_rebuild(rebuilt, rust, receipt)
+        return
+    # Darwin's linker derives LC_UUID (and so one code-signature page hash)
+    # from the absolute output path, so a rebuild in any other directory can
+    # never be byte-identical. Keep exact equality by rebuilding from scratch
+    # at the very same absolute target path: the whole original target tree is
+    # moved aside (same-volume rename), rebuilt, and always moved back, so the
+    # externally supplied binary is never replaced.
+    target = rust.parent.parent
+    assert rust.parent.name == 'debug' and rust.name == exe and target.is_dir(), \
+        'Darwin source-bound rebuild requires a cargo <target>/debug/symvault binary'
+    assert not target.is_symlink() and target.resolve() == target, 'target directory must be a real absolute path'
+    aside = target.with_name(target.name+'.source-bound-original')
+    assert not aside.exists(), 'stale source-bound original target directory'
+    original_sha256 = digest(rust)
+    target.rename(aside)
+    try:
+        env['CARGO_TARGET_DIR'] = str(target)
+        checked(build, env=env, timeout=900)
+        record_rebuild(target/'debug'/exe, aside/'debug'/exe, receipt)
+    finally:
+        # Restoring the original must not depend on deleting the rebuilt tree
+        # (a deletion race left "Directory not empty"): rename both, then
+        # discard the rebuilt tree on a best-effort basis.
+        discarded = target.with_name(target.name+'.source-bound-rebuilt')
+        shutil.rmtree(discarded, ignore_errors=True)
+        if target.exists():
+            target.rename(discarded)
+        aside.rename(target)
+        for _ in range(5):
+            shutil.rmtree(discarded, ignore_errors=True)
+            if not discarded.exists():
+                break
+            time.sleep(1)
+    assert digest(rust) == original_sha256, 'binary under test changed during source rebuild'
+
+
+def record_rebuild(rebuilt, original, receipt):
     receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
     if COMMAND_OUTPUT is not None:
         retained = COMMAND_OUTPUT/('source-rebuild.exe' if os.name == 'nt' else 'source-rebuild')
         shutil.copy2(rebuilt, retained)
         receipt['rebuilt_binary_artifact'] = str(retained.relative_to(COMMAND_OUTPUT.parent))
         receipt['rebuilt_binary_bytes'] = retained.stat().st_size
-    assert receipt['rebuilt_rust_executable_sha256'] == digest(rust), 'source/binary mismatch'
+    assert receipt['rebuilt_rust_executable_sha256'] == digest(original), 'source/binary mismatch'
     receipt['binary_source_verified'] = True
 
 

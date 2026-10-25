@@ -257,6 +257,71 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(env['SYMVAULT_TEST_KEYRING'], 'memory')
 
 
+class DarwinSourceRebuildTests(unittest.TestCase):
+    """Darwin links LC_UUID from the output path: the rebuild must reuse the
+    binary's own absolute target path, stay byte-exact and restore the original."""
+
+    def run_rebuild(self, built, fail=False, layout=True):
+        real_checked = tui.checked
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix='tui-darwin-rebuild-') as raw:
+            base = Path(raw)
+            target = base/'target/tui-candidate'
+            (target/'debug').mkdir(parents=True)
+            binary = target/'debug'/('symvault' if layout else 'other')
+            binary.write_bytes(b'original-bytes')
+            (target/'debug/deps-marker').write_bytes(b'kept')
+
+            def fake(argv, **kwargs):
+                if argv[:2] != ['cargo', 'build']:
+                    return real_checked(argv, **kwargs)
+                seen['target'] = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                seen['original_moved_aside'] = not binary.exists()
+                if fail:
+                    raise RuntimeError('simulated build failure')
+                (seen['target']/'debug').mkdir(parents=True)
+                (seen['target']/'debug/symvault').write_bytes(built)
+            receipt = {}
+            error = None
+            with patch.object(tui.platform, 'system', return_value='Darwin'), \
+                    patch.object(tui, 'checked', side_effect=fake):
+                try:
+                    tui.build_source_bound_rust(binary.resolve(), base/'unused', receipt)
+                except (AssertionError, RuntimeError) as caught:
+                    error = caught
+            restored = (binary.read_bytes() == b'original-bytes'
+                        and (target/'debug/deps-marker').read_bytes() == b'kept')
+            leftovers = sorted(p.name for p in target.parent.iterdir())
+            return seen, receipt, error, restored, leftovers, target.resolve()
+
+    def test_identical_bytes_at_the_same_target_path_verify_and_restore(self):
+        seen, receipt, error, restored, leftovers, target = self.run_rebuild(b'original-bytes')
+        self.assertIsNone(error)
+        self.assertEqual(seen['target'], target)
+        self.assertTrue(seen['original_moved_aside'])
+        self.assertIs(receipt['binary_source_verified'], True)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'], hashlib.sha256(b'original-bytes').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_different_bytes_still_fail_exactly_and_restore_the_original(self):
+        seen, receipt, error, restored, leftovers, _ = self.run_rebuild(b'original-bytes-with-other-uuid')
+        self.assertIsInstance(error, AssertionError); self.assertEqual(str(error), 'source/binary mismatch')
+        self.assertNotIn('binary_source_verified', receipt)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'],
+                         hashlib.sha256(b'original-bytes-with-other-uuid').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_build_failure_restores_the_original_target(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', fail=True)
+        self.assertIsInstance(error, RuntimeError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_binary_outside_a_cargo_layout_is_rejected_before_any_move(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', layout=False)
+        self.assertIsInstance(error, AssertionError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+
 def editor_keydelivery(go, helper):
     # No private_provider, clipboard calls, credential stores or user HOME.
     # The real Go reference is unmodified; the fixture opens the real document.
