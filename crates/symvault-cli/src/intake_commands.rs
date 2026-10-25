@@ -682,7 +682,12 @@ mod tests {
         // Berlin and UTC otherwise. Run in a child so TZ is not shared.
         if std::env::var_os("SYMVAULT_TZ_CHILD").is_some() {
             let moment = time::OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
-            println!("{}", local_offset_at(moment).whole_seconds());
+            // stderr, not stdout: in sequential libtest mode (RUST_TEST_THREADS=1,
+            // as in CI) the "test ... " status line shares stdout with the child.
+            eprintln!(
+                "SYMVAULT_TZ_OFFSET={}",
+                local_offset_at(moment).whole_seconds()
+            );
             return;
         }
         for (zone, expected) in [("Europe/Berlin", "3600"), ("UTC", "0")] {
@@ -696,11 +701,12 @@ mod tests {
                 .env("SYMVAULT_TZ_CHILD", "1")
                 .output()
                 .unwrap();
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let marker = format!("SYMVAULT_TZ_OFFSET={expected}");
             assert!(
+                stderr.lines().any(|l| l == marker),
+                "{zone}: expected {marker}; stdout={:?} stderr={stderr:?}",
                 String::from_utf8_lossy(&out.stdout)
-                    .lines()
-                    .any(|l| l == expected),
-                "{zone}"
             );
         }
     }
