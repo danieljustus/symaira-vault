@@ -250,7 +250,7 @@ CFG_BYTES_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
 CFG_SECTIONS_FIXTURE := testdata/port/config/sections.json
-CFG_SECTIONS_ORACLE_COMMIT ?= 861ad93813e3ee43c4ec989f45940d14b05b6eaf
+CFG_SECTIONS_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
