@@ -599,17 +599,40 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
     let Ok(file) = fs::File::open(input) else {
         return Ok(());
     };
-    let mut archive = Archive::new(GzDecoder::new(file));
+    scan_entry_limit(GzDecoder::new(file), MAX_ARCHIVE_FILE, MAX_ARCHIVE_TOTAL)
+}
+
+/// Counts tar headers in `reader` (an already-inflated tar stream).
+///
+/// Skipping a member body means inflating it, so the scan stops with `Ok(())`
+/// at the first regular member whose declared size exceeds `max_file`, or
+/// whose size pushes the declared total past `max_total`. The extraction pass
+/// rejects that very header (as Go does) before reading its body, so nothing
+/// beyond it can be written and the oversized body is never inflated here.
+fn scan_entry_limit<R: Read>(reader: R, max_file: u64, max_total: u64) -> Result<(), ArchiveError> {
+    let mut archive = Archive::new(reader);
     let Ok(entries) = archive.entries() else {
         return Ok(());
     };
+    let mut total = 0u64;
     for (index, item) in entries.enumerate() {
-        if item.is_err() {
+        let Ok(entry) = item else {
             return Ok(());
-        }
+        };
         if index >= MAX_ARCHIVE_ENTRIES {
             return Err(ArchiveError::Limit);
         }
+        // Mirrors the extraction pass: only regular files carry a size check.
+        let is_dir = entry.header().entry_type() == EntryType::Directory
+            || (is_legacy_regular(&entry) && entry.path_bytes().ends_with(b"/"));
+        if is_dir || entry.header().entry_type() != EntryType::Regular {
+            continue;
+        }
+        let size = entry.size();
+        if size > max_file || size > max_total || total > max_total - size {
+            return Ok(());
+        }
+        total += size;
     }
     Ok(())
 }
@@ -622,7 +645,8 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
 /// place, so a truncated member never leaves the partial file Go's in-place
 /// `O_TRUNC` write does (when the directory is not writable, an existing
 /// writable regular file is rewritten in place instead, as Go does); and an
-/// archive with more than `MAX_ARCHIVE_ENTRIES` members is rejected up front.
+/// archive with more than `MAX_ARCHIVE_ENTRIES` members is rejected up front
+/// (the header-only pre-pass never inflates a member that extraction rejects).
 pub fn restore(
     input: impl AsRef<Path>,
     destination: impl AsRef<Path>,
@@ -855,3 +879,7 @@ fn same_regular_file(before: &fs::Metadata, handle: &fs::File) -> bool {
         after.is_file()
     }
 }
+
+#[cfg(test)]
+#[path = "archive_entry_limit_tests.rs"]
+mod entry_limit_scan_tests;
