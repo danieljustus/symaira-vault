@@ -99,6 +99,15 @@ def read_syscall(raw, count):
     return op, struct.unpack_from('=qB',raw,24)
 
 
+FICLONE = 0x40049409
+# Descriptor-metadata requests: terminal attributes/size, pending-byte count,
+# close-on-exec flags and FIONBIO. FIONBIO's argument is an int* mode value the
+# kernel reads to toggle O_NONBLOCK (fs/ioctl.c); it moves no file data, so
+# there is no payload to capture and the request consumes no input bytes.
+FIONBIO = 0x5421
+DESCRIPTOR_METADATA_IOCTLS = frozenset((0x5401,0x5413,0x541b,FIONBIO,0x5451,0x5450))
+
+
 def input_fd(number, args, pid=None):
     require(0 <= number < 512, 'unsupported compiler syscall number/ABI')
     if number == 56:  # clone: no untraced or foreign-namespace descendants.
@@ -109,11 +118,11 @@ def input_fd(number, args, pid=None):
     if number == 40:
         return args[1]
     if number == 16:  # ioctl: reflink consumes a source descriptor too.
-        if args[1] == 0x40049409:  # FICLONE
+        if args[1] == FICLONE:
             return args[2]
-        # FIONBIO changes descriptor flags, without consuming file bytes.
-        require(args[1] in (0x5401,0x5413,0x541b,0x5421,0x5451,0x5450),
-                'unsupported compiler ioctl input')
+        # Exact allow-list; every other request, including unknown ones, fails
+        # closed. None of these reads file contents through the descriptor.
+        require(args[1] in DESCRIPTOR_METADATA_IOCTLS, 'unsupported compiler ioctl input')
     if number == 9:  # mmap: shared buffers survive fork without CLONE_VM.
         if args[3] & 1:
             require(not args[3] & 0x20 and not args[2] & 2 and pid is not None,

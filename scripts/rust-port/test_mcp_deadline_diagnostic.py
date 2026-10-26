@@ -436,6 +436,29 @@ class SourceControls(unittest.TestCase):
         self.assertIn("verify_blob(directory/'blobs',row)",producer)
         self.assertNotIn("return ['strace'",producer)
 
+    def test_fionbio_is_metadata_only_and_other_ioctls_stay_fail_closed(self):
+        # ABI argument controls, not native observations.
+        self.assertEqual(capture.FIONBIO,0x5421)
+        self.assertEqual(capture.FIONBIO,21537)
+        # The request toggles O_NONBLOCK from an int*: whatever the descriptor or
+        # pointer operand is, it must never be reported as a consumed input.
+        for fd in (0,3,4,255):
+            for pointer in (0,140731676179844):
+                with self.subTest(fd=fd,pointer=pointer):
+                    self.assertIsNone(capture.input_fd(16,[fd,capture.FIONBIO,pointer,0,0,0]))
+        # Reflink still names its source descriptor, so file bytes stay bound.
+        self.assertEqual(capture.input_fd(16,[7,capture.FICLONE,8,0,0,0]),8)
+        # Neighbouring and file-affecting requests are not admitted by FIONBIO support:
+        # TIOCSTI, FIOASYNC, FIOQSIZE, FICLONERANGE, FIDEDUPERANGE, FS_IOC_FIEMAP,
+        # FS_IOC_GETFLAGS, an unnamed request and a zero request.
+        for request in (0x5412,0x5452,0x5460,0x4020940d,0xc0189436,0xc020660b,0x80086601,0x5422,0x5420,0):
+            with self.subTest(request=hex(request)):
+                self.assertNotIn(request,capture.DESCRIPTOR_METADATA_IOCTLS)
+                with self.assertRaisesRegex(ValueError,'unsupported compiler ioctl input'):
+                    capture.input_fd(16,[7,request,8,0,0,0])
+        self.assertEqual(capture.DESCRIPTOR_METADATA_IOCTLS,
+                         frozenset((0x5401,0x5413,0x541b,0x5421,0x5451,0x5450)))
+
     def test_shared_memory_and_remote_advice_are_rejected(self):
         # ABI argument controls, not native observations. Without a bound reader
         # and verified descriptor mode, even PROT_READ shared maps fail closed.
