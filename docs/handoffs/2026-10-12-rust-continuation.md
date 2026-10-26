@@ -62,7 +62,7 @@ the existing stop/deadline bound. The added write timeout is removed.
 Post-suite provenance rejection now produces a nonzero diagnostic exit while
 retaining the original suite exit independently. All diagnostic control steps
 use the admitted Python. Diagnostic-only step limits total 111 minutes inside
-a 120-minute job, including 10 minutes for upload and 9 minutes of job margin.
+a job whose ceiling is now 150 minutes (see #1379 below), including 10 minutes for upload.
 The original ordinary 40-minute job limit and product timing limits are unchanged.
 These are limits, not a measured runtime or a guarantee against runner failure.
 
@@ -109,6 +109,36 @@ Actual evidence: native CI 38412064106 at BASE 29aca3be passed on Linux, macOS a
 Follow-up to the independent review of `1ec52909`: shared mmap (anonymous or file-backed, including initially read-only mappings), SysV shmget/shmat and remote process_madvise now fail closed at syscall entry. This prevents a fork child from silently modifying an inherited shared read buffer; rejecting initially read-only shared mappings also prevents a later mprotect from bypassing the guard. One new ABI-argument control covers these rejections and preserves private mappings. All six native controls passed without skips in Linux job `115424286281` of run `38434329745` at the rejected review SHA, and that run passed on all three platforms. These results do not approve the new source: fresh exact-commit CI and independent review remain required. Local updated controls: 31 diagnostic tests (6 Linux-only skips), 20 oracle tests and 9 adapter tests (1 opt-in skip). No new diagnostic dispatch occurred.
 
 Correction after review B1: the blanket shared-mapping prohibition above was too broad. Linux removes the ability to gain write permission from a shared file mapping made through an O_RDONLY descriptor. The tracer now permits non-writable, file-backed shared mappings only after verifying the stopped tracee's descriptor access mode in `/proc/<pid>/fdinfo/<fd>`. Missing, malformed or non-read-only evidence still rejects; anonymous shared mappings, requested write access, SysV shared memory and process_madvise remain rejected. Admitted file mappings still go through the original file-consumption binding. A native Linux control verifies real fdinfo classification and that mprotect cannot upgrade either supported read-only shared mapping type. Run `38452243427` at `2d59c1dc` confirmed that the previous blanket guard aborted all six native controls with `shared mapping unsupported`; it is failure evidence, not admission. Compiler/linker compatibility, new exact-head CI and independent review remain open; no additional diagnostic dispatch has occurred.
+
+## Status after merging `origin/main` (#1378, #1379, #1380)
+
+The branch was merged with `origin/main`. The workflow keeps main's action pins,
+Go 1.26.10, build-timeout path filters, PR matrix without macOS and native test
+totals (243 Windows / 245 other) together with every diagnostic job and step.
+The diagnostic selector narrows the matrix to Ubuntu only. The workflow boundary
+control now accepts that matrix and tolerates main's moving totals and extended
+required-case list while still requiring every original case.
+
+- #1378: transient read timeouts keep partial headers (frozen patch helper);
+  post-suite provenance failure returns nonzero with the suite exit retained;
+  phase and job limits and the admitted interpreter are source-controlled. New:
+  the header regression is proven able to fail by restoring the rejected
+  timeout-as-EOF behaviour on the extracted helper. The patch applies to the
+  pinned base `01f7daae` and reproduces both target hashes.
+- #1379: discovery is query-only (`rustup toolchain list`, `component list
+  --installed`, then `which`) with `RUSTUP_AUTO_INSTALL=0`. Missing toolchain,
+  components, Go or caches raise `RunnerNotPrepared`; `stage` prints
+  `RUNNER_NOT_PREPARED`, exits 78 and writes `runner-not-prepared.json`.
+- #1380: FIONBIO is a named metadata-only ioctl; other requests fail closed
+  (table-driven control). The Linux x86_64 tracer test remains native-only.
+
+Open, not addressed here: `stage()` requires `broker.rs`/`request_context.rs` to
+equal the pinned diagnostic base, but `broker.rs` on this branch (since
+`3265045a`) and on main differs from `01f7daae`. A dispatch from this head would
+stop at `product source differs from original diagnostic base`; the maintainer
+must decide the diagnostic target (rebased patch with new hashes and a fresh
+review, or a checkout whose two target files equal the base) before any
+admission. No diagnostic was dispatched.
 
 ## Shared boundaries
 
