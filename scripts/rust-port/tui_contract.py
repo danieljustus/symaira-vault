@@ -673,7 +673,7 @@ def build_source_bound_rust(rust, base, receipt):
     # contents. Rebuild into a new run-owned target and compare actual bytes.
     env = os.environ.copy()
     env.update(CARGO_INCREMENTAL='0', CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
-    exe = 'symvault.exe' if os.name == 'nt' else 'symvault'
+    exe = rust_exe_name()
     build = ['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli', '--bin', 'symvault', '--locked']
     if platform.system() != 'Darwin':
         env['CARGO_TARGET_DIR'] = str(base/'rust-source-build')
@@ -714,6 +714,10 @@ def build_source_bound_rust(rust, base, receipt):
                 break
             time.sleep(1)
     assert digest(rust) == original_sha256, 'binary under test changed during source rebuild'
+
+
+def rust_exe_name():
+    return 'symvault.exe' if os.name == 'nt' else 'symvault'
 
 
 def record_rebuild(rebuilt, original, receipt):
