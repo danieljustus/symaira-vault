@@ -3,6 +3,7 @@
 import copy
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -164,6 +165,34 @@ class SignalContractControls(unittest.TestCase):
         for (command, sig), (survived, _) in contract.GO_EXPECTED_IGNORED.items():
             if sig in ("SIGTERM", "SIGQUIT"):
                 self.assertFalse(survived, (command, sig))
+
+    def test_ignoring_wrapper_sets_sig_ign_through_exec(self):
+        self.assertEqual(contract.ignoring(["x"], ()), ["x"])
+        probe = ("import signal,sys;sys.stdout.write(','.join(n for n in ('SIGHUP','SIGINT','SIGTERM') "
+                 "if signal.getsignal(getattr(signal,n))==signal.SIG_IGN))")
+        argv = contract.ignoring([sys.executable, "-c", probe], ("SIGHUP", "SIGINT"))
+        out = subprocess.run(argv, capture_output=True, check=True).stdout.decode()
+        self.assertEqual(out, "SIGHUP,SIGINT")  # SIGTERM stays default
+
+    def test_survived_signal_window_depends_on_expectation(self):
+        class Stub:
+            def __init__(self, exit_after):
+                self.exit_after, self.timeouts = exit_after, []
+                self.popen = self
+
+            def wait(self, timeout):
+                self.timeouts.append(timeout)
+                if timeout >= self.exit_after:
+                    return 0
+                raise subprocess.TimeoutExpired("x", timeout)
+
+        slow = Stub(exit_after=3.0)  # exits slower than SURVIVE_WINDOW but within DIE_WINDOW
+        self.assertFalse(contract.survived_signal(slow, lambda sig: None, "SIGHUP", should_die=True))
+        self.assertEqual(slow.timeouts, [contract.DIE_WINDOW])
+        survivor = Stub(exit_after=1e9)
+        self.assertTrue(contract.survived_signal(survivor, lambda sig: None, "SIGHUP"))
+        self.assertEqual(survivor.timeouts, [contract.SURVIVE_WINDOW])
+        self.assertLess(contract.SURVIVE_WINDOW, contract.DIE_WINDOW)
 
     def test_ending_and_normalization(self):
         self.assertEqual(contract.ending(-1), ["signal", 1])
