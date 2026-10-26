@@ -106,15 +106,28 @@ def main():
     rustc = os.environ.get('RUSTC', 'rustc')
     version = subprocess.check_output([rustc, '--version'], text=True)
     diagnostic.require(version.startswith('rustc 1.98.0 '), 'pinned Rust 1.98.0 required')
+    # Defect control (#1378): treating a transient read timeout as EOF, like the
+    # rejected `Ok(0) | Err(_)` arm, must make the delayed-request probe fail.
+    transient = '=> {}\n'
+    diagnostic.require(helper.count(transient) == 1, 'ambiguous transient-timeout arm')
+    mutated = helper.replace(transient, '=> return false,\n')
     with tempfile.TemporaryDirectory(prefix='deadline-headers-', dir=os.environ['TMPDIR']) as raw:
         root = Path(raw)
-        source = root / 'headers.rs'
-        source.write_text('use std::io::BufRead;\n' + helper + PROBE)
-        binary = root / ('headers.exe' if os.name == 'nt' else 'headers')
-        subprocess.run([rustc, '--edition=2024', '--test', '-D', 'warnings', str(source), '-o', str(binary)],
-                       check=True, timeout=60)
-        subprocess.run([str(binary)], check=True, timeout=20)
+        for name, body, expect_pass in (('frozen', helper, True), ('timeout-as-eof', mutated, False)):
+            source = root / (name + '.rs')
+            source.write_text('use std::io::BufRead;\n' + body + PROBE)
+            binary = root / (name + ('.exe' if os.name == 'nt' else ''))
+            subprocess.run([rustc, '--edition=2024', '--test', '-D', 'warnings', str(source), '-o', str(binary)],
+                           check=True, timeout=60)
+            result = subprocess.run([str(binary)], check=False, timeout=20,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            if expect_pass:
+                diagnostic.require(result.returncode == 0, 'frozen header reader failed:\n' + result.stdout)
+            else:
+                diagnostic.require(result.returncode != 0 and 'real_read_timeouts_preserve_partial_headers' in result.stdout,
+                                   'delayed-request regression did not detect timeout-as-EOF')
     print('PASS actual frozen header reader; host-only helper regression, not native-suite acceptance')
+    print('PASS timeout-as-EOF defect control fails the delayed-request regression')
 
 
 if __name__ == '__main__':
