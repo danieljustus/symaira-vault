@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599",
-  "generator_digest": "feb7d878701b07873624dcdac9d1873f36841f1148dbc5a2aea76fe39c679768",
+  "generator_digest": "3e2823f24e2f557c1fb712c4a35681cd0227582a11f412500b365e06a3b2b7e0",
   "cases": [
     {
       "name": "multistream/split/at-member-boundary",

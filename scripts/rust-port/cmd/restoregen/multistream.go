@@ -121,7 +121,8 @@ func buildMultistreamCases() []multiCase {
 		return append(append([]byte{}, firstTar...), buildTar([]member{members[4]}, tar.FormatUnknown, true)...)
 	}
 
-	var cuts512, cuts700 []int
+	cuts512 := make([]int, 0, full/512+1)
+	cuts700 := make([]int, 0, full/700+1)
 	for at := 512; at < full; at += 512 {
 		cuts512 = append(cuts512, at)
 	}
