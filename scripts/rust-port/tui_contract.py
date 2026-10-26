@@ -156,7 +156,54 @@ def private_provider(base, xvfb, xclip):
             assert not reader.is_alive(), 'private display reader did not join'
 
 
-def clipboard(env):
+ERROR_ACCESS_DENIED = 5  # OpenClipboard while another thread/process holds it
+ERROR_CLIPBOARD_NOT_OPEN = 1418
+
+
+class ClipboardBusy(AssertionError):
+    """The native clipboard was contended; the read says nothing about its content.
+
+    Subclasses AssertionError so an unhandled busy clipboard still fails the
+    harness exactly as before. Browser.wait() treats it as "not yet satisfied"
+    (neither empty nor populated) and polls again inside its own timeout.
+    """
+
+
+def windows_clipboard_once(user, kernel, last_error, wstring_at):
+    """One Open/Get/Close pass. CloseClipboard only follows a successful Open."""
+    if not user.OpenClipboard(None):
+        error = last_error()
+        if error == ERROR_ACCESS_DENIED:
+            raise ClipboardBusy(('native clipboard busy', error))
+        raise AssertionError(('native clipboard did not open', error))
+    try:
+        handle = user.GetClipboardData(13)  # actual CF_UNICODETEXT
+        if not handle:
+            data = b''
+        else:
+            pointer = kernel.GlobalLock(handle)
+            if not pointer:
+                raise AssertionError(('native clipboard handle did not lock', last_error()))
+            try:
+                data = wstring_at(pointer).encode('utf-8')
+            finally:
+                kernel.GlobalUnlock(handle)
+    except BaseException:
+        user.CloseClipboard()  # never mask the primary failure
+        raise
+    if not user.CloseClipboard():
+        error = last_error()
+        if error == ERROR_CLIPBOARD_NOT_OPEN:
+            # The clipboard was closed under us; the bytes read are unproven.
+            raise ClipboardBusy(('native clipboard closed concurrently', error))
+        raise AssertionError(('native clipboard did not close', error))
+    return data
+
+
+def clipboard(env, busy_timeout=2):
+    """Read the native clipboard. On Windows a contended clipboard is retried for
+    busy_timeout seconds; busy_timeout=0 raises ClipboardBusy at once so a
+    Browser.wait() poll can treat it as not-yet-satisfied."""
     if platform.system() == 'Darwin':
         return checked(['/usr/bin/pbpaste'], env=env, timeout=5)
     if platform.system() == 'Windows':
@@ -166,27 +213,21 @@ def clipboard(env):
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         user.OpenClipboard.argtypes = [wintypes.HWND]
         user.OpenClipboard.restype = wintypes.BOOL
+        user.CloseClipboard.argtypes = []
+        user.CloseClipboard.restype = wintypes.BOOL
         user.GetClipboardData.argtypes = [wintypes.UINT]
         user.GetClipboardData.restype = wintypes.HANDLE
         kernel.GlobalLock.argtypes = [wintypes.HGLOBAL]
         kernel.GlobalLock.restype = ctypes.c_void_p
         kernel.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
-        until = time.monotonic()+2
-        while not user.OpenClipboard(None):
-            assert time.monotonic() < until, 'native clipboard remained locked'
-            time.sleep(0.02)
-        try:
-            handle = user.GetClipboardData(13)  # actual CF_UNICODETEXT
-            if not handle:
-                return b''
-            pointer = kernel.GlobalLock(handle)
-            assert pointer, 'native clipboard handle did not lock'
+        until = time.monotonic()+busy_timeout
+        while True:
             try:
-                return ctypes.wstring_at(pointer).encode('utf-8')
-            finally:
-                kernel.GlobalUnlock(handle)
-        finally:
-            assert user.CloseClipboard(), 'native clipboard did not close'
+                return windows_clipboard_once(user, kernel, ctypes.get_last_error, ctypes.wstring_at)
+            except ClipboardBusy as busy:
+                if time.monotonic() >= until:
+                    raise ClipboardBusy(('native clipboard remained busy', *busy.args)) from None
+                time.sleep(0.02)
     executable = shutil.which('xclip', path=env['PATH'])
     assert executable
     result = subprocess.run([executable, '-selection', 'clipboard', '-out'],
@@ -292,17 +333,26 @@ class Browser:
 
     def wait(self, predicate, description, timeout=15):
         end = time.monotonic()+timeout
+        busy = []
+        def satisfied():
+            # A contended native clipboard is neither empty nor populated: not yet satisfied.
+            try:
+                return predicate()
+            except ClipboardBusy as error:
+                busy[:] = [error.args]
+                return False
         while time.monotonic() < end:
             self.pump()
-            if predicate():
+            if satisfied():
                 return
             if not self.alive():
                 break
         # Exit can occur between the predicate and alive() observations. A
         # receipt/exit predicate must be checked after that final transition.
-        if predicate():
+        if satisfied():
             return
-        raise AssertionError(description+'; screen='+scrub(self.view())[-2000:])
+        raise AssertionError(description+(f'; last clipboard state={busy[0]}' if busy else '')
+                             +'; screen='+scrub(self.view())[-2000:])
 
     def keys(self, text):
         for character in text:
@@ -327,12 +377,12 @@ class Browser:
 
     def copy(self, value=CANARIES[0]):
         self.write('\r')
-        self.wait(lambda: clipboard(self.env) == value.encode(), 'actual native clipboard delivery')
+        self.wait(lambda: clipboard(self.env, busy_timeout=0) == value.encode(), 'actual native clipboard delivery')
         assert value not in self.view(), 'copy implicitly revealed a secret'
 
     def expiry(self, started=None):
         started = time.monotonic() if started is None else started
-        self.wait(lambda: not clipboard(self.env), 'actual native clipboard expiry', timeout=6)
+        self.wait(lambda: not clipboard(self.env, busy_timeout=0), 'actual native clipboard expiry', timeout=6)
         elapsed = time.monotonic()-started
         assert 1.3 <= elapsed <= 6, ('unexpected configured clipboard expiry', elapsed)
         return elapsed
@@ -508,7 +558,7 @@ def run_case(case, label, binary, helper, seed, base, provider):
             browser.wait(lambda: 'Invalid length' in browser.view(), 'invalid generator length')
             browser.write('\x7f'); browser.pump(); browser.keys('8'); browser.write('s'); browser.pump()
             browser.write('\r')
-            browser.wait(lambda: len(clipboard(env)) == 8, 'actual generated native clipboard delivery')
+            browser.wait(lambda: len(clipboard(env, busy_timeout=0)) == 8, 'actual generated native clipboard delivery')
             generated = clipboard(env)
             assert re.fullmatch(rb'[A-Za-z0-9]{8}', generated), 'symbol toggle ignored'
             assert generated not in browser.capture, 'generated password implicitly revealed'
@@ -672,18 +722,62 @@ def build_source_bound_rust(rust, base, receipt):
     # Cargo freshness alone does not prove an externally supplied binary's
     # contents. Rebuild into a new run-owned target and compare actual bytes.
     env = os.environ.copy()
-    env.update(CARGO_TARGET_DIR=str(base/'rust-source-build'), CARGO_INCREMENTAL='0',
-               CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
-    checked(['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli',
-             '--bin', 'symvault', '--locked'], env=env, timeout=900)
-    rebuilt = base/'rust-source-build/debug'/('symvault.exe' if os.name == 'nt' else 'symvault')
+    env.update(CARGO_INCREMENTAL='0', CARGO_PROFILE_DEV_DEBUG='0', CARGO_PROFILE_TEST_DEBUG='0')
+    exe = rust_exe_name()
+    build = ['cargo', 'build', '--manifest-path', manifest, '-p', 'symvault-cli', '--bin', 'symvault', '--locked']
+    if platform.system() != 'Darwin':
+        env['CARGO_TARGET_DIR'] = str(base/'rust-source-build')
+        checked(build, env=env, timeout=900)
+        rebuilt = base/'rust-source-build/debug'/exe
+        record_rebuild(rebuilt, rust, receipt)
+        return
+    # Darwin's linker derives LC_UUID (and so one code-signature page hash)
+    # from the absolute output path, so a rebuild in any other directory can
+    # never be byte-identical. Keep exact equality by rebuilding from scratch
+    # at the very same absolute target path: the whole original target tree is
+    # moved aside (same-volume rename), rebuilt, and always moved back, so the
+    # externally supplied binary is never replaced.
+    target = rust.parent.parent
+    assert rust.parent.name == 'debug' and rust.name == exe and target.is_dir(), \
+        'Darwin source-bound rebuild requires a cargo <target>/debug/symvault binary'
+    assert not target.is_symlink() and target.resolve() == target, 'target directory must be a real absolute path'
+    aside = target.with_name(target.name+'.source-bound-original')
+    assert not aside.exists(), 'stale source-bound original target directory'
+    original_sha256 = digest(rust)
+    target.rename(aside)
+    try:
+        env['CARGO_TARGET_DIR'] = str(target)
+        checked(build, env=env, timeout=900)
+        record_rebuild(target/'debug'/exe, aside/'debug'/exe, receipt)
+    finally:
+        # Restoring the original must not depend on deleting the rebuilt tree
+        # (a deletion race left "Directory not empty"): rename both, then
+        # discard the rebuilt tree on a best-effort basis.
+        discarded = target.with_name(target.name+'.source-bound-rebuilt')
+        shutil.rmtree(discarded, ignore_errors=True)
+        if target.exists():
+            target.rename(discarded)
+        aside.rename(target)
+        for _ in range(5):
+            shutil.rmtree(discarded, ignore_errors=True)
+            if not discarded.exists():
+                break
+            time.sleep(1)
+    assert digest(rust) == original_sha256, 'binary under test changed during source rebuild'
+
+
+def rust_exe_name():
+    return 'symvault.exe' if os.name == 'nt' else 'symvault'
+
+
+def record_rebuild(rebuilt, original, receipt):
     receipt['rebuilt_rust_executable_sha256'] = digest(rebuilt)
     if COMMAND_OUTPUT is not None:
         retained = COMMAND_OUTPUT/('source-rebuild.exe' if os.name == 'nt' else 'source-rebuild')
         shutil.copy2(rebuilt, retained)
         receipt['rebuilt_binary_artifact'] = str(retained.relative_to(COMMAND_OUTPUT.parent))
         receipt['rebuilt_binary_bytes'] = retained.stat().st_size
-    assert receipt['rebuilt_rust_executable_sha256'] == digest(rust), 'source/binary mismatch'
+    assert receipt['rebuilt_rust_executable_sha256'] == digest(original), 'source/binary mismatch'
     receipt['binary_source_verified'] = True
 
 

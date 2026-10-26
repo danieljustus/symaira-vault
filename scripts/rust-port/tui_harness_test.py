@@ -12,6 +12,7 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -255,6 +256,267 @@ class HarnessTests(unittest.TestCase):
             env = tui.fixture_env(Path(raw)/'home', {})
             self.assertEqual(env['TERM'], 'screen-256color')
             self.assertEqual(env['SYMVAULT_TEST_KEYRING'], 'memory')
+
+
+class FakeWin32:
+    """Scripted user32/kernel32 stand-in; records call order. No real Win32."""
+    def __init__(self, opens, closes=(True,), text='secret', handle=1, pointer=2, error=0):
+        self.opens, self.closes = list(opens), list(closes)
+        self.text, self.handle, self.pointer, self.error = text, handle, pointer, error
+        self.calls = []
+        self.OpenClipboard = lambda hwnd: self._pop('open', self.opens)
+        self.CloseClipboard = lambda: self._pop('close', self.closes)
+        self.GetClipboardData = lambda fmt: self._log('get', self.handle)
+        self.GlobalLock = lambda handle: self._log('lock', self.pointer)
+        self.GlobalUnlock = lambda handle: self._log('unlock', True)
+    def _log(self, name, value):
+        self.calls.append(name)
+        return value
+    def _pop(self, name, queue):
+        self.calls.append(name)
+        ok, error = queue.pop(0) if isinstance(queue[0], tuple) else (queue.pop(0), 0)
+        self.error = error
+        return ok
+    def read(self):
+        return tui.windows_clipboard_once(self, self, lambda: self.error, lambda pointer: self.text)
+
+
+class WindowsClipboardTests(unittest.TestCase):
+    def test_open_denied_is_busy_then_retry_succeeds_without_close(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED), True])
+        with self.assertRaises(tui.ClipboardBusy):
+            fake.read()
+        self.assertEqual(fake.calls, ['open'], 'CloseClipboard must not follow a failed OpenClipboard')
+        fake.calls.clear()
+        self.assertEqual(fake.read(), b'secret')
+        self.assertEqual(fake.calls, ['open', 'get', 'lock', 'unlock', 'close'])
+
+    def test_open_other_error_is_real_failure_with_code(self):
+        fake = FakeWin32(opens=[(False, 1400)])
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertNotIsInstance(caught.exception, tui.ClipboardBusy)
+        self.assertEqual(caught.exception.args[0], ('native clipboard did not open', 1400))
+        self.assertEqual(fake.calls, ['open'])
+
+    def test_close_only_after_successful_open_and_empty_clipboard(self):
+        fake = FakeWin32(opens=[True], handle=0)
+        self.assertEqual(fake.read(), b'')
+        self.assertEqual(fake.calls, ['open', 'get', 'close'])
+
+    def test_close_failure_surfaces_error_code(self):
+        fake = FakeWin32(opens=[True], closes=[(False, 87)])
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertNotIsInstance(caught.exception, tui.ClipboardBusy)
+        self.assertEqual(caught.exception.args[0], ('native clipboard did not close', 87))
+
+    def test_close_not_open_is_retryable_busy(self):
+        fake = FakeWin32(opens=[True], closes=[(False, tui.ERROR_CLIPBOARD_NOT_OPEN)])
+        with self.assertRaises(tui.ClipboardBusy):
+            fake.read()
+
+    def test_primary_failure_is_not_masked_by_close(self):
+        fake = FakeWin32(opens=[True], closes=[(False, 87)], pointer=0, error=6)
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertEqual(caught.exception.args[0][0], 'native clipboard handle did not lock')
+        self.assertEqual(fake.calls, ['open', 'get', 'lock', 'close'])
+
+    def test_clipboard_retries_busy_then_reads(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED), True])
+        with self.fake_windows(fake):
+            self.assertEqual(tui.clipboard({}), b'secret')
+        self.assertEqual(fake.calls.count('open'), 2)
+
+    def test_clipboard_zero_timeout_raises_busy_immediately(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED)])
+        with self.fake_windows(fake), self.assertRaises(tui.ClipboardBusy):
+            tui.clipboard({}, busy_timeout=0)
+        self.assertEqual(fake.calls, ['open'])
+
+    def test_clipboard_persistent_busy_fails_after_timeout(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED)]*2000000)
+        with self.fake_windows(fake), self.assertRaises(tui.ClipboardBusy) as caught:
+            tui.clipboard({}, busy_timeout=0.05)
+        self.assertEqual(caught.exception.args[0][0], 'native clipboard remained busy')
+
+    def fake_windows(self, fake):
+        import contextlib, sys, types
+        wintypes = types.SimpleNamespace(HWND=object, BOOL=object, UINT=object, HANDLE=object, HGLOBAL=object)
+        stub = types.SimpleNamespace(
+            WinDLL=lambda name, use_last_error=False: fake, c_void_p=object, wintypes=wintypes,
+            get_last_error=lambda: fake.error, wstring_at=lambda pointer: fake.text)
+        @contextlib.contextmanager
+        def manager():
+            with patch.object(tui.platform, 'system', return_value='Windows'), \
+                 patch.dict(sys.modules, {'ctypes': stub, 'ctypes.wintypes': wintypes}), \
+                 patch.object(tui.time, 'sleep'):
+                # `from ctypes import wintypes` resolves the attribute on the stub.
+                yield
+        return manager()
+
+    def test_wait_treats_busy_as_not_yet_satisfied(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: None
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        results = [tui.ClipboardBusy(('busy', 5)), b'', ]
+        def poll():
+            result = results.pop(0)
+            if isinstance(result, Exception): raise result
+            return not result
+        browser.wait(poll, 'expiry', timeout=5)
+        self.assertEqual(results, [])
+
+    def test_wait_busy_is_not_empty_or_populated(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: time.sleep(0.01)
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        def busy(): raise tui.ClipboardBusy(('busy', 5))
+        with self.assertRaises(AssertionError) as caught:
+            browser.wait(lambda: not busy(), 'actual native clipboard expiry', timeout=0.05)
+        self.assertIn('last clipboard state=', str(caught.exception))
+
+    def test_wait_other_predicates_and_errors_unchanged(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: None
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        calls = []
+        browser.wait(lambda: calls.append(1) or len(calls) == 3, 'plain')
+        self.assertEqual(len(calls), 3)
+        def real(): raise AssertionError('real failure')
+        with self.assertRaisesRegex(AssertionError, 'real failure'):
+            browser.wait(real, 'x')
+
+
+class DarwinSourceRebuildTests(unittest.TestCase):
+    """Darwin links LC_UUID from the output path: the rebuild must reuse the
+    binary's own absolute target path, stay byte-exact and restore the original."""
+
+    exe_name = 'symvault'
+
+    def setUp(self):
+        # The binary name is os.name-dependent (symvault.exe on Windows); the
+        # Darwin branch is exercised on every host with either name.
+        patcher = patch.object(tui, 'rust_exe_name', return_value=self.exe_name)
+        patcher.start(); self.addCleanup(patcher.stop)
+
+    def run_rebuild(self, built, fail=False, layout=True):
+        real_checked = tui.checked
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix='tui-darwin-rebuild-') as raw:
+            base = Path(raw)
+            target = base/'target/tui-candidate'
+            (target/'debug').mkdir(parents=True)
+            binary = target/'debug'/(self.exe_name if layout else 'other')
+            binary.write_bytes(b'original-bytes')
+            (target/'debug/deps-marker').write_bytes(b'kept')
+
+            def fake(argv, **kwargs):
+                if argv[:2] != ['cargo', 'build']:
+                    return real_checked(argv, **kwargs)
+                seen['target'] = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                seen['original_moved_aside'] = not binary.exists()
+                if fail:
+                    raise RuntimeError('simulated build failure')
+                (seen['target']/'debug').mkdir(parents=True)
+                (seen['target']/'debug'/self.exe_name).write_bytes(built)
+            receipt = {}
+            error = None
+            with patch.object(tui.platform, 'system', return_value='Darwin'), \
+                    patch.object(tui, 'checked', side_effect=fake):
+                try:
+                    tui.build_source_bound_rust(binary.resolve(), base/'unused', receipt)
+                except (AssertionError, RuntimeError) as caught:
+                    error = caught
+            restored = (binary.read_bytes() == b'original-bytes'
+                        and (target/'debug/deps-marker').read_bytes() == b'kept')
+            leftovers = sorted(p.name for p in target.parent.iterdir())
+            return seen, receipt, error, restored, leftovers, target.resolve()
+
+    def test_identical_bytes_at_the_same_target_path_verify_and_restore(self):
+        seen, receipt, error, restored, leftovers, target = self.run_rebuild(b'original-bytes')
+        self.assertIsNone(error)
+        self.assertEqual(seen['target'], target)
+        self.assertTrue(seen['original_moved_aside'])
+        self.assertIs(receipt['binary_source_verified'], True)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'], hashlib.sha256(b'original-bytes').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_different_bytes_still_fail_exactly_and_restore_the_original(self):
+        seen, receipt, error, restored, leftovers, _ = self.run_rebuild(b'original-bytes-with-other-uuid')
+        self.assertIsInstance(error, AssertionError); self.assertEqual(str(error), 'source/binary mismatch')
+        self.assertNotIn('binary_source_verified', receipt)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'],
+                         hashlib.sha256(b'original-bytes-with-other-uuid').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_build_failure_restores_the_original_target(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', fail=True)
+        self.assertIsInstance(error, RuntimeError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_binary_outside_a_cargo_layout_is_rejected_before_any_move(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', layout=False)
+        self.assertIsInstance(error, AssertionError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+
+class DarwinSourceRebuildWindowsNameTests(DarwinSourceRebuildTests):
+    """Same Darwin-branch contract with the .exe binary name."""
+    exe_name = 'symvault.exe'
+
+
+class NonDarwinSourceRebuildTests(unittest.TestCase):
+    """Linux/Windows keep the pre-#1409 behaviour: rebuild into a separate
+    run-owned target, never touch the binary's own target tree."""
+
+    def run_rebuild(self, system, exe_name, built):
+        real_checked = tui.checked
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix='tui-nondarwin-rebuild-') as raw:
+            base = Path(raw)
+            target = base/'target/tui-candidate'
+            (target/'debug').mkdir(parents=True)
+            binary = target/'debug'/exe_name
+            binary.write_bytes(b'original-bytes')
+
+            def fake(argv, **kwargs):
+                if argv[:2] != ['cargo', 'build']:
+                    return real_checked(argv, **kwargs)
+                seen['target'] = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                seen['original_untouched'] = binary.read_bytes() == b'original-bytes'
+                (seen['target']/'debug').mkdir(parents=True)
+                (seen['target']/'debug'/exe_name).write_bytes(built)
+            receipt = {}
+            error = None
+            with patch.object(tui.platform, 'system', return_value=system), \
+                    patch.object(tui, 'rust_exe_name', return_value=exe_name), \
+                    patch.object(tui, 'checked', side_effect=fake):
+                try:
+                    tui.build_source_bound_rust(binary, base, receipt)
+                except AssertionError as caught:
+                    error = caught
+            return seen, receipt, error, base/'rust-source-build', binary.read_bytes(), sorted(p.name for p in target.parent.iterdir())
+
+    def test_separate_target_and_exact_bytes_for_each_platform_name(self):
+        for system, exe_name in [('Linux', 'symvault'), ('Windows', 'symvault.exe')]:
+            with self.subTest(system=system):
+                seen, receipt, error, expected, original, leftovers = self.run_rebuild(system, exe_name, b'original-bytes')
+                self.assertIsNone(error)
+                self.assertEqual(seen['target'], expected); self.assertTrue(seen['original_untouched'])
+                self.assertIs(receipt['binary_source_verified'], True)
+                self.assertEqual(original, b'original-bytes'); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_different_bytes_fail_exactly_for_each_platform_name(self):
+        for system, exe_name in [('Linux', 'symvault'), ('Windows', 'symvault.exe')]:
+            with self.subTest(system=system):
+                _, receipt, error, _, original, _ = self.run_rebuild(system, exe_name, b'other')
+                self.assertIsInstance(error, AssertionError); self.assertEqual(str(error), 'source/binary mismatch')
+                self.assertNotIn('binary_source_verified', receipt); self.assertEqual(original, b'original-bytes')
 
 
 def editor_keydelivery(go, helper):
