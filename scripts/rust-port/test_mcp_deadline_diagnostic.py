@@ -12,6 +12,7 @@ import signal
 from pathlib import Path
 import subprocess
 import sys
+import re
 import tempfile
 import threading
 from types import SimpleNamespace
@@ -65,7 +66,7 @@ def workflow_boundaries(text):
     need('          python3 ' not in controls)
     headers = text.split('      - name: Check frozen diagnostic header reader\n',1)[1].split('      - name:',1)[0]
     need(('        if: ${{ !('+SELECTOR+') }}') in headers)
-    need("'[\"ubuntu-latest\"]' || '[\"ubuntu-latest\",\"macos-latest\",\"windows-latest\"]'" in text)
+    need("fromJSON(("+SELECTOR+") && '[\"ubuntu-latest\"]' || (github.event_name == 'pull_request' && '[\"ubuntu-latest\",\"windows-latest\"]' || '[\"ubuntu-latest\",\"macos-latest\",\"windows-latest\"]'))" in text)
     owning = text.split('      - name: Test the owning runtime and production CLI assembly\n',1)[1]
     owning, later = owning.split('      - name: Execute actual Go and Rust native profiles and hostile stdio\n',1)
     need(owning.count('exec "$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py owning') == 1)
@@ -560,7 +561,18 @@ class SourceControls(unittest.TestCase):
                           ('          test "$(go env GOVERSION)"','      - name: Upload complete')]:
             body = original.split(start,1)[1].split(end,1)[0]
             # Only the interpreter selection changed in the receipt control body.
-            self.assertIn(body,text.replace('"${DEADLINE_PYTHON:-python3}" -B -','python3 -'))
+            # Main-line test additions move the native totals and extend the
+            # required case list; the shape is frozen, every original case stays.
+            count = r"expected_count = \d+ if os\.environ\['RUNNER_OS'\]=='Windows' else \d+"
+            cases = r"for case in \[[^\]]*\]:"
+            def shape(value):
+                value = re.sub(count,"expected_count = N",value)
+                return re.sub(cases,"for case in CASES:",value)
+            current = text.replace('"${DEADLINE_PYTHON:-python3}" -B -','python3 -')
+            self.assertIn(shape(body),shape(current))
+            for listed in re.findall(cases,body):
+                for case in re.findall(r"'([^']+)'",listed):
+                    self.assertIn("'"+case+"'",current)
 
     def test_real_command_source_and_fail_closed_staging(self):
         self.assertEqual(diagnostic.SUITE,['cargo','test','-p','symvault-mcp','--all-targets','--locked','--','--show-output'])
