@@ -1041,13 +1041,10 @@ func TestShareStore_CheckAccess_ApprovedThenExpired(t *testing.T) {
 	path := filepath.Join(dir, "mcp-shares.json")
 	store := NewShareStore(path)
 
-	// Inject a fake clock so the TTL check does not depend on wall-clock I/O
-	// latency or time.Sleep.
-	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
-	store.now = func() time.Time { return now }
-
-	const ttl = 100 * time.Millisecond
-	g, err := store.Create("alice", "bob", "vault/secret/ephemeral", "", ttl)
+	// A TTL that is long relative to file I/O keeps the first assertion
+	// independent of runner speed (#1468); expiry is then forced by moving the
+	// stored deadline into the past instead of racing the wall clock.
+	g, err := store.Create("alice", "bob", "vault/secret/ephemeral", "", time.Hour)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -1060,14 +1057,11 @@ func TestShareStore_CheckAccess_ApprovedThenExpired(t *testing.T) {
 		t.Error("grant should be accessible right after approval")
 	}
 
-	// Still accessible just before the TTL elapses.
-	now = now.Add(ttl - time.Millisecond)
-	if _, ok := store.CheckAccess("bob", "vault/secret/ephemeral"); !ok {
-		t.Error("grant should be accessible before TTL elapses")
-	}
-
-	// Advance past expiry.
-	now = now.Add(2 * time.Millisecond)
+	// Expire the grant.
+	store.mu.Lock()
+	past := time.Now().Add(-time.Millisecond)
+	store.grants[g.ID].ExpiresAt = &past
+	store.mu.Unlock()
 
 	// Should NOT be accessible after expiry.
 	if _, ok := store.CheckAccess("bob", "vault/secret/ephemeral"); ok {

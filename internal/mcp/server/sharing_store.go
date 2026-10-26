@@ -37,9 +37,6 @@ type ShareStore struct {
 	version    int
 	signingKey []byte
 	stopFn     func()
-	// now returns the current time. It defaults to time.Now and is
-	// overridden in tests to make expiry checks deterministic.
-	now func() time.Time
 }
 
 // NewShareStore creates a ShareStore that loads/saves from the given file
@@ -49,20 +46,7 @@ func NewShareStore(path string) *ShareStore {
 		path:    path,
 		grants:  make(map[string]*mcp.ShareGrant),
 		version: shareStoreVersion,
-		now:     time.Now,
 	}
-}
-
-// isExpired reports whether g has an expiration time that has passed
-// according to the store's clock. A nil grant counts as expired.
-func (s *ShareStore) isExpired(g *mcp.ShareGrant) bool {
-	if g == nil {
-		return true
-	}
-	if g.ExpiresAt == nil {
-		return false
-	}
-	return s.now().After(*g.ExpiresAt)
 }
 
 // SetSigningKey sets the HMAC signing key used to generate and verify
@@ -163,7 +147,7 @@ func (s *ShareStore) Save() error {
 // grant ID is a cryptographically bound HMAC-SHA256 hash of the grant fields
 // plus a random nonce. Otherwise a random hex ID is used (legacy mode).
 func (s *ShareStore) Create(fromAgent, toAgent, secretPath, secretField string, ttl time.Duration) (*mcp.ShareGrant, error) {
-	createdAt := s.now().UTC()
+	createdAt := time.Now().UTC()
 
 	var expiresAt *time.Time
 	if ttl > 0 {
@@ -261,7 +245,7 @@ func (s *ShareStore) Approve(id string, approvedBy string) error {
 		return fmt.Errorf("share grant %s is not pending (status: %s)", id, g.Status)
 	}
 
-	now := s.now().UTC()
+	now := time.Now().UTC()
 	g.Status = mcp.ShareApproved
 	g.ApprovedAt = &now
 	g.ApprovedBy = approvedBy
@@ -288,7 +272,7 @@ func (s *ShareStore) Revoke(id string) error {
 		return fmt.Errorf("share grant %s cannot be revoked (status: %s)", id, g.Status)
 	}
 
-	now := s.now().UTC()
+	now := time.Now().UTC()
 	g.Status = mcp.ShareRevoked
 	g.RevokedAt = &now
 	s.mu.Unlock()
@@ -376,7 +360,7 @@ func (s *ShareStore) CheckAccess(toAgent, secretPath string) (*mcp.ShareGrant, b
 	defer s.mu.RUnlock()
 
 	for _, g := range s.grants {
-		if g.ToAgent == toAgent && g.SecretPath == secretPath && g.Status == mcp.ShareApproved && !s.isExpired(g) {
+		if g.ToAgent == toAgent && g.SecretPath == secretPath && g.Status == mcp.ShareApproved && !g.IsExpired() {
 			// Verify HMAC for cryptographically bound grants.
 			if vaultcrypto.IsHMACFormat(g.ID) {
 				if len(s.signingKey) == 0 {
@@ -423,7 +407,7 @@ func (s *ShareStore) CleanupExpired() int {
 
 	var removed int
 	for id, g := range s.grants {
-		if s.isExpired(g) {
+		if g.IsExpired() {
 			delete(s.grants, id)
 			removed++
 		}
