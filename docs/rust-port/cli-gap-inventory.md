@@ -61,11 +61,23 @@ shared flag with `command-tree.json` so the class cannot return. The
 `COMMANDS`/`GROUPS` tables are compared with the tree in both directions, and
 `generate --length` now parses like `strconv.ParseInt(s, 0, 64)` (`0x10`, `0o17`,
 `0b101`, `1_0`, range errors; the clap value parser is the same function).
-`errtaxgen` records the new rows in `testdata/port/cli/error-taxonomy.json` (63
+`errtaxgen` records the new rows in `testdata/port/cli/error-taxonomy.json` (73
 usage cases, 23 `argv_shapes`) and `device join` now prints its errors twice like Go. `agent skill` (bare) is byte-replayed through the
 `group_help_agent_skill` row. Left open: a pairing file that is not JSON (Go's
 decoder wording vs serde), the success path of `device join` (passphrase prompt),
 and int flags other than `generate --length`.
+
+Review follow-up (repeated booleans): pflag assigns a bool on every occurrence,
+so `--json --json=false` leaves the flag unset and the last value wins. The
+emulation only ever set `json_flag`, so `--json --json=false --output xml
+startup-profile` named `json` instead of `xml` (exit 9 either way) and
+`--json --json=false lock` was refused where Go reaches the command. The gate
+now assigns the parsed value on every occurrence, and the global `--json`,
+`--quiet` and `--no-pipe-warning` clap flags are `--flag[=bool]` with
+`overrides_with` (Go's `ParseBool` forms, last value wins) instead of
+`SetTrue`, which rejected `--quiet=false` and any repeat. Ten Go-recorded usage
+cases (`bool_flag_*`) pin it. Local bool flags other than the existing
+`--flag[=bool]` ones stay `SetTrue` and still reject `--flag=false`.
 
 ## Historical measurement, 2026-09-27
 

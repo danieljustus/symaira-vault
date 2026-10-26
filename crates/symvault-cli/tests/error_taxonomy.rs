@@ -84,7 +84,7 @@ struct Fixture {
     argv_shapes: Vec<ShapeCase>,
 }
 
-const USAGE_CASES: usize = 63;
+const USAGE_CASES: usize = 73;
 const ARGV_SHAPES: usize = 23;
 const ARITY_ROWS: usize = 116;
 const REJECTED_ARITY_PROBES: usize = 188;

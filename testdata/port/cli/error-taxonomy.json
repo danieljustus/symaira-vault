@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "b80e64331362dd18d52d68550a460b3946e70a6ea77edfb9df546c67a2117177",
-    "generator_digest": "26c47bc950f0e85f6eb6efd7ac70f2970f1b4748700e61b8074005ba88d937f5"
+    "generator_digest": "a30969fd79e1fe3d5e8b98679148d666744058dd3d6cca06fa9cb4dc9346ce44"
   },
   "usage": [
     {
@@ -943,6 +943,147 @@
         "exit_code": 9,
         "stdout": "",
         "stderr": "Error: output format \"JSON\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"JSON\" is not supported by 'symvault doctor' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "bool_flag_reset_output_gate",
+      "description": "a repeated --json is last-value-wins: the reset leaves the --output xml gate to decide",
+      "observation": {
+        "args": [
+          "--json",
+          "--json=false",
+          "--output",
+          "xml",
+          "startup-profile"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault startup-profile' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "bool_flag_reset_accepts_command",
+      "description": "--json --json=false no longer refuses `lock`, which rejects --json: the vault check then fails",
+      "observation": {
+        "args": [
+          "--json",
+          "--json=false",
+          "lock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_set_after_reset",
+      "description": "--json=false --json: the last occurrence turns the flag on again",
+      "observation": {
+        "args": [
+          "--json=false",
+          "--json",
+          "lock"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "bool_flag_noncanonical_false",
+      "description": "ParseBool accepts F as false",
+      "observation": {
+        "args": [
+          "--json=F",
+          "lock"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_noncanonical_false_output_gate",
+      "description": "--json=F leaves the --output xml gate to decide",
+      "observation": {
+        "args": [
+          "--json=F",
+          "--output",
+          "xml",
+          "lock"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"xml\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"xml\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "bool_flag_reset_after_command",
+      "description": "the reset also applies after the command word",
+      "observation": {
+        "args": [
+          "lock",
+          "--json",
+          "--json=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_set_after_command",
+      "description": "--json=false before the command, --json after it",
+      "observation": {
+        "args": [
+          "--json=false",
+          "lock",
+          "--json"
+        ],
+        "exit_code": 9,
+        "stdout": "",
+        "stderr": "Error: output format \"json\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\nError: output format \"json\" is not supported by 'symvault lock' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)\n"
+      }
+    },
+    {
+      "name": "bool_flag_invalid_value",
+      "description": "an invalid boolean value on --json",
+      "observation": {
+        "args": [
+          "--json=maybe",
+          "lock"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"--json\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\nError: invalid argument \"maybe\" for \"--json\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_quiet_reset",
+      "description": "--quiet --quiet=false is a valid repeated boolean",
+      "observation": {
+        "args": [
+          "--quiet",
+          "--quiet=false",
+          "version"
+        ],
+        "exit_code": 0,
+        "stdout": "symvault dev\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "bool_flag_quiet_set_after_reset",
+      "description": "--quiet=false --quiet is a valid repeated boolean",
+      "observation": {
+        "args": [
+          "--quiet=false",
+          "--quiet",
+          "version"
+        ],
+        "exit_code": 0,
+        "stdout": "symvault dev\n",
+        "stderr": ""
       }
     }
   ],

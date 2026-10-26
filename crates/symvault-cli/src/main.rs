@@ -117,15 +117,21 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
 struct Cli {
     #[arg(long, global = true)]
     vault: Option<std::path::PathBuf>,
-    #[arg(long, global = true)]
+    #[arg(long, global = true, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+        default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool,
+        overrides_with = "quiet")]
     quiet: bool,
     #[arg(long, global = true)]
     _profile: Option<String>,
     #[arg(long, global = true)]
     output: Option<String>,
-    #[arg(long, global = true)]
+    #[arg(long, global = true, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+        default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool,
+        overrides_with = "json")]
     json: bool,
-    #[arg(long, global = true)]
+    #[arg(long, global = true, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
+        default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool,
+        overrides_with = "_no_pipe_warning")]
     _no_pipe_warning: bool,
     #[arg(long, global = true, default_value = "auto")]
     _color: String,

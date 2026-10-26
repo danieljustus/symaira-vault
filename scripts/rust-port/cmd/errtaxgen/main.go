@@ -212,6 +212,16 @@ func usageInputs() []usageInput {
 		{"output_text_explicit", "an explicit --output text on a refusing command is accepted", []string{"--output", "text", "version"}},
 		{"output_empty_value", "an empty --output value", []string{"--output", "", "doctor"}},
 		{"output_case_sensitive", "--output JSON is not json", []string{"--output", "JSON", "doctor"}},
+		{"bool_flag_reset_output_gate", "a repeated --json is last-value-wins: the reset leaves the --output xml gate to decide", []string{"--json", "--json=false", "--output", "xml", "startup-profile"}},
+		{"bool_flag_reset_accepts_command", "--json --json=false no longer refuses `lock`, which rejects --json: the vault check then fails", []string{"--json", "--json=false", "lock"}},
+		{"bool_flag_set_after_reset", "--json=false --json: the last occurrence turns the flag on again", []string{"--json=false", "--json", "lock"}},
+		{"bool_flag_noncanonical_false", "ParseBool accepts F as false", []string{"--json=F", "lock"}},
+		{"bool_flag_noncanonical_false_output_gate", "--json=F leaves the --output xml gate to decide", []string{"--json=F", "--output", "xml", "lock"}},
+		{"bool_flag_reset_after_command", "the reset also applies after the command word", []string{"lock", "--json", "--json=false"}},
+		{"bool_flag_set_after_command", "--json=false before the command, --json after it", []string{"--json=false", "lock", "--json"}},
+		{"bool_flag_invalid_value", "an invalid boolean value on --json", []string{"--json=maybe", "lock"}},
+		{"bool_flag_quiet_reset", "--quiet --quiet=false is a valid repeated boolean", []string{"--quiet", "--quiet=false", "version"}},
+		{"bool_flag_quiet_set_after_reset", "--quiet=false --quiet is a valid repeated boolean", []string{"--quiet=false", "--quiet", "version"}},
 	}
 }
 

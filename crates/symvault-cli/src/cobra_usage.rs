@@ -594,6 +594,17 @@ fn eats_next(arg: &Arg) -> bool {
     arg.get_action().takes_values() && !arg.is_require_equals_set()
 }
 
+/// A Go bool flag: clap `SetTrue`/`SetFalse`, or the `--flag[=bool]` spelling
+/// (`ArgAction::Set` with `require_equals` and an optional value) that
+/// accepts Go's `ParseBool` forms with the last occurrence winning.
+fn is_bool_arg(arg: &Arg) -> bool {
+    !arg.get_action().takes_values()
+        || (arg.is_require_equals_set()
+            && arg
+                .get_num_args()
+                .is_some_and(|range| range.min_values() == 0))
+}
+
 fn is_help_arg(arg: &Arg) -> bool {
     arg.get_id().as_str() == "help"
 }
@@ -886,7 +897,6 @@ fn parse_flags(
     };
     let mut index = 0;
     let note = |arg: &Arg, value: Option<&str>, parsed: &mut Parsed| match (arg.get_long(), value) {
-        (Some("json"), _) => parsed.json_flag = true,
         (Some("output"), Some(value)) => parsed.output = Some(value.to_owned()),
         (Some("url"), Some(value)) if path == "find" => {
             parsed.validator.url_filter = !value.is_empty();
@@ -917,7 +927,7 @@ fn parse_flags(
             if is_help_arg(arg) {
                 continue;
             }
-            if arg.get_action().takes_values() {
+            if !is_bool_arg(arg) {
                 let value = match inline {
                     Some(value) => value.to_owned(),
                     None if arg.is_require_equals_set() => continue,
@@ -941,11 +951,13 @@ fn parse_flags(
                 {
                     return Err(invalid_argument(value, arg, "ParseBool", "invalid syntax"));
                 }
+                // pflag assigns the parsed value on every occurrence: the last one wins,
+                // so `--json --json=false` leaves the flag unset.
                 let enabled = inline.is_none_or(|value| {
                     matches!(value, "1" | "t" | "T" | "TRUE" | "true" | "True")
                 });
-                if enabled {
-                    note(arg, None, &mut parsed);
+                if arg.get_long() == Some("json") {
+                    parsed.json_flag = enabled;
                 }
             }
         } else if token.starts_with('-') && token.len() > 1 {
@@ -961,7 +973,7 @@ fn parse_flags(
                     return Err(format!("unknown shorthand flag: {short:?} in -{rest}"));
                 };
                 at += 1;
-                if is_help_arg(arg) || !arg.get_action().takes_values() {
+                if is_help_arg(arg) || is_bool_arg(arg) {
                     continue;
                 }
                 let value: String = if at < cluster.len() {
@@ -1300,8 +1312,9 @@ mod tests {
         let mut failures = Vec::new();
         for case in &fixture.usage {
             let got = evaluate(&case.observation.args, root());
-            let want = if case.observation.exit_code == 0 {
-                // Group help (stdout) or a successful command: never a failure.
+            let want = if matches!(case.observation.exit_code, 0 | 3) {
+                // Group help (stdout), a successful command or the command body's own
+                // "vault not initialized" failure (exit 3): never the emulation's verdict.
                 if case.observation.stdout.is_empty() {
                     Verdict::Proceed
                 } else {
@@ -1530,6 +1543,48 @@ mod tests {
             }
         }
         (mismatches, compared)
+    }
+
+    fn verdict(args: &[&str]) -> Verdict {
+        let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        evaluate(&args, root())
+    }
+
+    fn refused(args: &[&str]) -> bool {
+        matches!(verdict(args), Verdict::Fail { code: 9, .. })
+    }
+
+    /// pflag assigns a bool on every occurrence, so the last one decides the gate.
+    #[test]
+    fn repeated_json_flag_is_last_value_wins() {
+        assert!(refused(&["--json", "lock"]));
+        assert!(refused(&["--json=true", "--json", "lock"]));
+        assert!(!refused(&["--json", "--json=false", "lock"]));
+        assert!(refused(&["--json=false", "--json", "lock"]));
+        assert!(!refused(&["--json=F", "lock"]));
+        assert!(!refused(&["lock", "--json", "--json=0"]));
+        assert!(refused(&["--json=false", "lock", "--json=T"]));
+        // The reset hands the decision to `--output`, whose own value then refuses.
+        let Verdict::Fail { stderr, code } = verdict(&[
+            "--json",
+            "--json=false",
+            "--output",
+            "xml",
+            "startup-profile",
+        ]) else {
+            panic!("--output xml must be refused");
+        };
+        assert_eq!(code, 9);
+        assert!(stderr.contains("output format \"xml\""), "{stderr}");
+        // ParseBool accepts no other spelling.
+        assert!(matches!(
+            verdict(&["--json=maybe", "lock"]),
+            Verdict::Fail { code: 1, .. }
+        ));
+        assert!(matches!(
+            verdict(&["--quiet=maybe", "version"]),
+            Verdict::Fail { code: 1, .. }
+        ));
     }
 
     #[test]
