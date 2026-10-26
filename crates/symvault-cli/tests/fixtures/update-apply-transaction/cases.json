@@ -16,7 +16,7 @@
     ],
     "corekit_source_digest": "3580bee12d7e912129adbc2b9150bfd2458816828c25f047ec009b342848d832",
     "captured": "2026-10-21",
-    "commit": "3e088537045400d87461c75acf1c1d45d20cfe1d",
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
