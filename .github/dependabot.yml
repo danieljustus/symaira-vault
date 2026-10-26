@@ -47,7 +47,7 @@ updates:
       # 0.3.2 emitted nested block scalars as `- >2-` (fixed in 0.3.3). 0.3.4+
       # accepts a document-start-only config in `set` where Go exits 6,
       # breaking config_yaml_syntax recorded_open_divergences_are_still_open
-      # (document_start_only). Tracked in #1433.
+      # (document_start_only). Tracked in #1526.
       - dependency-name: "yaml-edit"
         versions: [">0.3.3"]
       # 0.1.22 has Unicode 15 tables, 0.1.25 already Unicode 17; the frozen Go
