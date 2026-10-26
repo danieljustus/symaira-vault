@@ -12,6 +12,7 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 
@@ -255,6 +256,140 @@ class HarnessTests(unittest.TestCase):
             env = tui.fixture_env(Path(raw)/'home', {})
             self.assertEqual(env['TERM'], 'screen-256color')
             self.assertEqual(env['SYMVAULT_TEST_KEYRING'], 'memory')
+
+
+class FakeWin32:
+    """Scripted user32/kernel32 stand-in; records call order. No real Win32."""
+    def __init__(self, opens, closes=(True,), text='secret', handle=1, pointer=2, error=0):
+        self.opens, self.closes = list(opens), list(closes)
+        self.text, self.handle, self.pointer, self.error = text, handle, pointer, error
+        self.calls = []
+        self.OpenClipboard = lambda hwnd: self._pop('open', self.opens)
+        self.CloseClipboard = lambda: self._pop('close', self.closes)
+        self.GetClipboardData = lambda fmt: self._log('get', self.handle)
+        self.GlobalLock = lambda handle: self._log('lock', self.pointer)
+        self.GlobalUnlock = lambda handle: self._log('unlock', True)
+    def _log(self, name, value):
+        self.calls.append(name)
+        return value
+    def _pop(self, name, queue):
+        self.calls.append(name)
+        ok, error = queue.pop(0) if isinstance(queue[0], tuple) else (queue.pop(0), 0)
+        self.error = error
+        return ok
+    def read(self):
+        return tui.windows_clipboard_once(self, self, lambda: self.error, lambda pointer: self.text)
+
+
+class WindowsClipboardTests(unittest.TestCase):
+    def test_open_denied_is_busy_then_retry_succeeds_without_close(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED), True])
+        with self.assertRaises(tui.ClipboardBusy):
+            fake.read()
+        self.assertEqual(fake.calls, ['open'], 'CloseClipboard must not follow a failed OpenClipboard')
+        fake.calls.clear()
+        self.assertEqual(fake.read(), b'secret')
+        self.assertEqual(fake.calls, ['open', 'get', 'lock', 'unlock', 'close'])
+
+    def test_open_other_error_is_real_failure_with_code(self):
+        fake = FakeWin32(opens=[(False, 1400)])
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertNotIsInstance(caught.exception, tui.ClipboardBusy)
+        self.assertEqual(caught.exception.args[0], ('native clipboard did not open', 1400))
+        self.assertEqual(fake.calls, ['open'])
+
+    def test_close_only_after_successful_open_and_empty_clipboard(self):
+        fake = FakeWin32(opens=[True], handle=0)
+        self.assertEqual(fake.read(), b'')
+        self.assertEqual(fake.calls, ['open', 'get', 'close'])
+
+    def test_close_failure_surfaces_error_code(self):
+        fake = FakeWin32(opens=[True], closes=[(False, 87)])
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertNotIsInstance(caught.exception, tui.ClipboardBusy)
+        self.assertEqual(caught.exception.args[0], ('native clipboard did not close', 87))
+
+    def test_close_not_open_is_retryable_busy(self):
+        fake = FakeWin32(opens=[True], closes=[(False, tui.ERROR_CLIPBOARD_NOT_OPEN)])
+        with self.assertRaises(tui.ClipboardBusy):
+            fake.read()
+
+    def test_primary_failure_is_not_masked_by_close(self):
+        fake = FakeWin32(opens=[True], closes=[(False, 87)], pointer=0, error=6)
+        with self.assertRaises(AssertionError) as caught:
+            fake.read()
+        self.assertEqual(caught.exception.args[0][0], 'native clipboard handle did not lock')
+        self.assertEqual(fake.calls, ['open', 'get', 'lock', 'close'])
+
+    def test_clipboard_retries_busy_then_reads(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED), True])
+        with self.fake_windows(fake):
+            self.assertEqual(tui.clipboard({}), b'secret')
+        self.assertEqual(fake.calls.count('open'), 2)
+
+    def test_clipboard_zero_timeout_raises_busy_immediately(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED)])
+        with self.fake_windows(fake), self.assertRaises(tui.ClipboardBusy):
+            tui.clipboard({}, busy_timeout=0)
+        self.assertEqual(fake.calls, ['open'])
+
+    def test_clipboard_persistent_busy_fails_after_timeout(self):
+        fake = FakeWin32(opens=[(False, tui.ERROR_ACCESS_DENIED)]*2000000)
+        with self.fake_windows(fake), self.assertRaises(tui.ClipboardBusy) as caught:
+            tui.clipboard({}, busy_timeout=0.05)
+        self.assertEqual(caught.exception.args[0][0], 'native clipboard remained busy')
+
+    def fake_windows(self, fake):
+        import contextlib, sys, types
+        wintypes = types.SimpleNamespace(HWND=object, BOOL=object, UINT=object, HANDLE=object, HGLOBAL=object)
+        stub = types.SimpleNamespace(
+            WinDLL=lambda name, use_last_error=False: fake, c_void_p=object, wintypes=wintypes,
+            get_last_error=lambda: fake.error, wstring_at=lambda pointer: fake.text)
+        @contextlib.contextmanager
+        def manager():
+            with patch.object(tui.platform, 'system', return_value='Windows'), \
+                 patch.dict(sys.modules, {'ctypes': stub, 'ctypes.wintypes': wintypes}), \
+                 patch.object(tui.time, 'sleep'):
+                # `from ctypes import wintypes` resolves the attribute on the stub.
+                yield
+        return manager()
+
+    def test_wait_treats_busy_as_not_yet_satisfied(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: None
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        results = [tui.ClipboardBusy(('busy', 5)), b'', ]
+        def poll():
+            result = results.pop(0)
+            if isinstance(result, Exception): raise result
+            return not result
+        browser.wait(poll, 'expiry', timeout=5)
+        self.assertEqual(results, [])
+
+    def test_wait_busy_is_not_empty_or_populated(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: time.sleep(0.01)
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        def busy(): raise tui.ClipboardBusy(('busy', 5))
+        with self.assertRaises(AssertionError) as caught:
+            browser.wait(lambda: not busy(), 'actual native clipboard expiry', timeout=0.05)
+        self.assertIn('last clipboard state=', str(caught.exception))
+
+    def test_wait_other_predicates_and_errors_unchanged(self):
+        browser = object.__new__(tui.Browser)
+        browser.pump = lambda seconds=0.12: None
+        browser.alive = lambda: True
+        browser.view = lambda: ''
+        calls = []
+        browser.wait(lambda: calls.append(1) or len(calls) == 3, 'plain')
+        self.assertEqual(len(calls), 3)
+        def real(): raise AssertionError('real failure')
+        with self.assertRaisesRegex(AssertionError, 'real failure'):
+            browser.wait(real, 'x')
 
 
 class DarwinSourceRebuildTests(unittest.TestCase):
