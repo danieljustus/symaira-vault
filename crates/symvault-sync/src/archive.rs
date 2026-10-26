@@ -1,4 +1,5 @@
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use crate::gzip_multistream::GoGzip;
+use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -484,6 +485,10 @@ fn go_stream_error(error: &io::Error, failure: &Failure) -> String {
         if *kind == io::ErrorKind::UnexpectedEof || message.contains("incomplete") {
             return "unexpected EOF".to_owned();
         }
+        // Framing errors raised by the multistream reader carry Go's text.
+        if message == "gzip: invalid header" || message == "gzip: invalid checksum" {
+            return message.clone();
+        }
         // Go appends "before offset N", a decoder-internal position that
         // flate2 does not expose.
         return "flate: corrupt input".to_owned();
@@ -599,7 +604,7 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
     let Ok(file) = fs::File::open(input) else {
         return Ok(());
     };
-    let mut archive = Archive::new(GzDecoder::new(file));
+    let mut archive = Archive::new(GoGzip::new(file));
     let Ok(entries) = archive.entries() else {
         return Ok(());
     };
@@ -615,6 +620,9 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
 }
 
 /// Restores a gzip tar backup into an existing or newly created directory.
+///
+/// The gzip layer is multistream like Go's `gzip.Reader` (see
+/// `gzip_multistream`): concatenated members are one tar stream.
 ///
 /// Error text and extraction order follow `cmd/admin.RestoreBackup` (see
 /// `testdata/port/sync/restore-errors.json`). Deliberate differences, all
@@ -649,8 +657,12 @@ pub fn restore(
         ))
     })?;
     let failure = Failure::default();
+    // Go's gzip.Reader is multistream and validates the first header eagerly.
+    let mut gzip = GoGzip::new(file);
+    gzip.read_first_header()
+        .map_err(|reason| restore_error(format!("read gzip: {reason}")))?;
     let decoder = Tracked {
-        inner: GzDecoder::new(file),
+        inner: gzip,
         failure: failure.clone(),
     };
     let mut archive = Archive::new(decoder);

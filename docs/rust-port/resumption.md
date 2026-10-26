@@ -26,6 +26,21 @@ on Windows. Native 3-OS evidence for this corpus is still pending; IO-002 stays
 Next IO-002 candidates: export/backup CLI-level stdout/stderr differential
 against a built Go binary, and backup-side member modes/ordering corner cases.
 
+## IO-002 gzip multistream parity, 2026-10-26 (#1499)
+
+Restore now reads the archive with `symvault_sync::gzip_multistream::GoGzip`, which
+follows Go's multistream `gzip.Reader` (members concatenate, trailing bytes are the next
+header, per-member CRC/length checks, sticky errors), in both the entry-count pre-pass and
+the extraction pass. `restoregen` gained `multistream.go` and a second fixture,
+`testdata/port/sync/restore-gzip-multistream.json` (61 cases with the exact Go gzip bytes),
+replayed by `crates/symvault-cli/tests/restore_gzip_multistream_contract.rs` as part of
+`make restore-errors-differential`; limit behaviour across members is in
+`crates/symvault-sync/tests/restore_gzip_multistream.rs`. No Go production source changed, so
+the oracle pin (`861ad938`) is unchanged; `restore-errors.json` was regenerated only because its
+`generator_digest` covers `restoregen/main.go`. Still open: native 3-OS evidence, Go's
+`flate: corrupt input before offset N` text, and the PR #1515/#1516 merge (same files: see
+matrix row IO-002 for the divergence list).
+
 ## Current native-prerequisite repair, 2026-10-11
 
 Task `t_c13388cd` composes the local MCP candidate `c8376fa4` with the existing

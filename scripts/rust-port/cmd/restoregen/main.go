@@ -620,6 +620,7 @@ func main() {
 	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/restoregen/main.go"})
 	fatal(err)
 
+	writeOrCheckMultistream(root, *check, sources, digest, multistreamGeneratorDigest(root))
 	cases := buildCases()
 	fixture := struct {
 		Commit          string        `json:"commit"`
