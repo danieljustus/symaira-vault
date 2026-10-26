@@ -86,65 +86,202 @@ fn unix_platform_approval_pty_acceptance() {
         .expect("write synthetic entry");
 
     let executable = std::env::current_exe().expect("locate MCP test helper binary");
-    // Threaded libtest framing keeps the status prefix off protocol stdout.
-    // Each child still selects exactly one worker, regardless of suite policy.
-    let mut worker = Command::new(&executable)
-        .args([
-            "--ignored",
-            "--exact",
-            "unix_platform_approval_stdio_worker",
-            "--nocapture",
-            "--test-threads=2",
-        ])
-        .env("SYMVAULT_PTY_STDIO_WORKER", "1")
-        .env("SYMVAULT_PTY_VAULT", &vault)
-        .env("SYMVAULT_PTY_IDENTITY", &identity_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn MCP worker with separate stdio pipes");
 
-    let protocol_input = concat!(
-        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}\n",
-        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"set_entry_field\",\"arguments\":{\"path\":\"fixture\",\"field\":\"username\",\"value\":\"approved-user\"}}}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"execute_with_secret\",\"arguments\":{\"command\":[\"/usr/bin/true\"],\"secret_refs\":[],\"env_vars\":{\"PTY_FIXTURE\":\"synthetic\"}}}}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"set_entry_field\",\"arguments\":{\"path\":\"fixture\",\"field\":\"username\",\"value\":\"denied-user\"}}}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"secure_input\",\"arguments\":{\"path\":\"fixture\",\"field\":\"secure-token\",\"description\":\"synthetic local test\"}}}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"request_credential\",\"arguments\":{\"path\":\"fixture\",\"field\":\"requested-token\",\"reason\":\"synthetic local test\"}}}\n",
-        "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"secure_input\",\"arguments\":{\"path\":\"fixture\",\"field\":\"canceled-token\",\"description\":\"cancel then verify restore\"}}}\n",
-    );
-    let mut worker_stdin = Some(worker.stdin.take().expect("MCP pipe stdin"));
-    worker_stdin
-        .as_mut()
-        .expect("MCP pipe stdin remains open")
-        .write_all(protocol_input.as_bytes())
-        .expect("send MCP frames over the isolated pipe");
+    /// One spawned stdio worker with isolated pipes. Responses are read from a
+    /// reader thread so a hung worker is bounded by the deadline, not by the pipe.
+    struct Worker {
+        child: std::process::Child,
+        stdin: Option<std::process::ChildStdin>,
+        lines: mpsc::Receiver<std::io::Result<String>>,
+        stderr: Option<thread::JoinHandle<String>>,
+        stdout: String,
+        responses: Vec<serde_json::Value>,
+        last_response_at: Instant,
+        deadline: Instant,
+        name: &'static str,
+    }
 
-    let stdout_pipe = worker.stdout.take().expect("MCP worker stdout pipe");
-    let (stdout_sender, stdout_receiver) = mpsc::channel();
-    let stdout_reader = thread::spawn(move || {
-        for line in BufReader::new(stdout_pipe).lines() {
-            if stdout_sender.send(line).is_err() {
-                return;
+    enum Event {
+        Response(serde_json::Value),
+        Exited(std::process::ExitStatus),
+    }
+
+    impl Worker {
+        fn spawn(
+            name: &'static str,
+            executable: &std::path::Path,
+            vault: &std::path::Path,
+            identity_path: &std::path::Path,
+            frames: &str,
+        ) -> Self {
+            // Threaded libtest framing keeps the status prefix off protocol
+            // stdout. Each child still selects exactly one worker.
+            let mut child = Command::new(executable)
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "unix_platform_approval_stdio_worker",
+                    "--nocapture",
+                    "--test-threads=2",
+                ])
+                .env("SYMVAULT_PTY_STDIO_WORKER", "1")
+                .env("SYMVAULT_PTY_VAULT", vault)
+                .env("SYMVAULT_PTY_IDENTITY", identity_path)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap_or_else(|error| panic!("spawn {name} MCP worker: {error}"));
+            let mut stdin = child.stdin.take().expect("MCP pipe stdin");
+            stdin
+                .write_all(frames.as_bytes())
+                .unwrap_or_else(|error| panic!("send {name} MCP frames: {error}"));
+            let stdout_pipe = child.stdout.take().expect("MCP worker stdout pipe");
+            let (sender, lines) = mpsc::channel();
+            thread::spawn(move || {
+                for line in BufReader::new(stdout_pipe).lines() {
+                    if sender.send(line).is_err() {
+                        return;
+                    }
+                }
+            });
+            let stderr_pipe = child.stderr.take().expect("MCP worker stderr pipe");
+            let stderr = thread::spawn(move || {
+                let mut text = String::new();
+                let _ = BufReader::new(stderr_pipe).read_to_string(&mut text);
+                text
+            });
+            Self {
+                child,
+                stdin: Some(stdin),
+                lines,
+                stderr: Some(stderr),
+                stdout: String::new(),
+                responses: Vec::new(),
+                last_response_at: Instant::now(),
+                deadline: Instant::now() + Duration::from_secs(20),
+                name,
             }
         }
-    });
-    let stderr_pipe = worker.stderr.take().expect("MCP worker stderr pipe");
-    let stderr_reader = thread::spawn(move || {
-        let mut text = String::new();
-        let mut pipe = BufReader::new(stderr_pipe);
-        let _ = pipe.read_to_string(&mut text);
-        text
-    });
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let mut stdout = String::new();
-    let mut responses = Vec::new();
-    let mut process_status = None;
-    let mut sent_after_cancel = false;
-    let mut idle_signal_requested = false;
-    let mut terminal_restore_error = None;
+
+        fn id(&self) -> u32 {
+            self.child.id()
+        }
+
+        fn send(&mut self, frame: &str) {
+            self.stdin
+                .as_mut()
+                .expect("MCP pipe stdin remains open")
+                .write_all(frame.as_bytes())
+                .unwrap_or_else(|error| panic!("send {} frame: {error}", self.name));
+        }
+
+        /// Next JSON response, or the exit once stdout closed.
+        fn next(&mut self) -> Event {
+            loop {
+                match self.lines.recv_timeout(Duration::from_millis(50)) {
+                    Ok(Ok(line)) => {
+                        self.stdout.push_str(&line);
+                        self.stdout.push('\n');
+                        if let Ok(response) = serde_json::from_str::<serde_json::Value>(&line) {
+                            self.responses.push(response.clone());
+                            self.last_response_at = Instant::now();
+                            return Event::Response(response);
+                        }
+                    }
+                    Ok(Err(error)) => panic!("read {} worker stdout: {error}", self.name),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        let status = self.child.wait().expect("reap MCP worker");
+                        return Event::Exited(status);
+                    }
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
+                if Instant::now() >= self.deadline {
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    panic!(
+                        "{} worker exceeded its bounded PTY acceptance deadline; stdout={}",
+                        self.name, self.stdout
+                    );
+                }
+            }
+        }
+
+        fn expect_response(&mut self, id: i64) -> serde_json::Value {
+            match self.next() {
+                Event::Response(response) if response["id"] == serde_json::json!(id) => response,
+                Event::Response(response) => {
+                    panic!("{}: unexpected response {response:?}", self.name)
+                }
+                Event::Exited(status) => panic!(
+                    "{} worker exited ({status:?}) before response {id}; stdout={}",
+                    self.name, self.stdout
+                ),
+            }
+        }
+
+        /// Waits for the exit after the last response and returns its status,
+        /// stderr and the time the exit took after that response.
+        fn expect_exit(&mut self) -> (std::process::ExitStatus, String, Duration) {
+            let status = match self.next() {
+                Event::Exited(status) => status,
+                Event::Response(response) => panic!(
+                    "{}: unexpected extra response {response:?}; stdout={}",
+                    self.name, self.stdout
+                ),
+            };
+            let latency = self.last_response_at.elapsed();
+            drop(self.stdin.take());
+            let stderr = self
+                .stderr
+                .take()
+                .expect("stderr reader")
+                .join()
+                .expect("join stderr reader");
+            (status, stderr, latency)
+        }
+
+        fn assert_clean_stdout(&self) {
+            assert!(
+                !self.stdout.contains("MCP OPERATION APPROVAL REQUIRED"),
+                "{}: approval prompt leaked to MCP stdout: {}",
+                self.name,
+                self.stdout
+            );
+            for line in self.stdout.lines().filter(|line| !line.is_empty()) {
+                if serde_json::from_str::<serde_json::Value>(line).is_err() {
+                    assert!(
+                        line == "running 1 test"
+                            || line.starts_with("test unix_platform_approval_stdio_worker ... ok")
+                            || line.starts_with("test result: ok. 1 passed; 0 failed;"),
+                        "{}: unexpected non-protocol worker stdout (only the libtest wrapper is allowed): {line:?}",
+                        self.name
+                    );
+                }
+            }
+        }
+    }
+
+    // Go cancels its serve context on SIGINT/SIGTERM, answers the in-flight
+    // request and exits 0 well inside the 2 s shutdown grace (oracle 0cc78062:
+    // about 1 s for secure input, 0.5 s for approval).
+    let assert_prompt_signal_shutdown =
+        |worker_name: &str, status, stderr: &str, latency: Duration, stdout: &str| {
+            assert_go_signal_shutdown(
+                status,
+                &format!("{worker_name}: stdout={stdout} stderr={stderr}"),
+            );
+            assert!(
+                latency < Duration::from_millis(1500),
+                "{worker_name}: exit took {latency:?} after the answer (grace-period wait?)"
+            );
+        };
+    let assert_json_rpc_error = |response: &serde_json::Value, message: &str| {
+        assert_eq!(response["error"]["code"], -32603, "{response:?}");
+        assert_eq!(response["error"]["message"], message, "{response:?}");
+        assert!(response.get("result").is_none(), "{response:?}");
+    };
+
     let check_terminal_restored = || -> Result<(), String> {
         let terminal = std::fs::File::open("/dev/tty")
             .map_err(|error| format!("open controlling TTY: {error}"))?;
@@ -165,131 +302,121 @@ fn unix_platform_approval_pty_acceptance() {
             Err(format!("terminal was not restored: {state}"))
         }
     };
-    loop {
-        match stdout_receiver.recv_timeout(Duration::from_millis(50)) {
-            Ok(Ok(line)) => {
-                stdout.push_str(&line);
-                stdout.push('\n');
-                if let Ok(response) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if response.get("id") == Some(&serde_json::json!(7)) {
-                        if response["result"]["isError"] != true
-                            || response["result"]["content"][0]["text"]
-                                != "secure input canceled by user"
-                        {
-                            terminal_restore_error = Some(format!(
-                                "raw Ctrl-C did not produce the cancellation response: {response:?}"
-                            ));
-                        }
-                        if let Err(error) = check_terminal_restored() {
-                            terminal_restore_error = Some(error);
-                        }
-                        println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
-                        println!("PTY_SIGNAL_TARGET pid={} signal=SIGINT", worker.id());
-                        if let Err(error) = worker_stdin
-                            .as_mut()
-                            .expect("MCP pipe stdin remains open")
-                            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"secure_input\",\"arguments\":{\"path\":\"fixture\",\"field\":\"signal-canceled-token\",\"description\":\"SIGINT while secure input is active\"}}}\n")
-                        {
-                            terminal_restore_error = Some(format!("send SIGINT cancellation request: {error}"));
-                        }
-                    } else if response.get("id") == Some(&serde_json::json!(8)) {
-                        if response["result"]["isError"] != true
-                            || response["result"]["content"][0]["text"]
-                                != "secure input canceled by user"
-                        {
-                            terminal_restore_error = Some(format!(
-                                "external SIGINT did not cancel secure input: {response:?}"
-                            ));
-                        }
-                        if let Err(error) = check_terminal_restored() {
-                            terminal_restore_error = Some(error);
-                        }
-                        println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
-                        if let Err(error) = worker_stdin
-                            .as_mut()
-                            .expect("MCP pipe stdin remains open")
-                            .write_all(b"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"secure_input\",\"arguments\":{\"path\":\"fixture\",\"field\":\"after-signal-token\",\"description\":\"terminal usable after external cancellation\"}}}\n")
-                        {
-                            terminal_restore_error = Some(format!("send post-signal call: {error}"));
-                        } else {
-                            sent_after_cancel = true;
-                        }
-                    } else if response.get("id") == Some(&serde_json::json!(9)) {
-                        if response["result"]["isError"] != false {
-                            terminal_restore_error = Some(format!(
-                                "secure input after SIGINT did not complete: {response:?}"
-                            ));
-                        }
-                        if let Err(error) = check_terminal_restored() {
-                            terminal_restore_error = Some(error);
-                        }
-                        println!(
-                            "PTY_IDLE_SIGNAL pid={} signal=SIGINT after=success",
-                            worker.id()
-                        );
-                        idle_signal_requested = true;
-                    }
-                    responses.push(response);
-                }
+    let read_fixture = || {
+        Store::open(&vault, &identity)
+            .expect("reopen synthetic vault")
+            .get("fixture", &identity)
+            .expect("read synthetic entry")
+    };
+
+    const INIT: &str = concat!(
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}\n",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
+    );
+    let call = |id: u32, tool: &str, arguments: &str| {
+        format!(
+            "{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"tools/call\",\"params\":{{\"name\":\"{tool}\",\"arguments\":{arguments}}}}}\n"
+        )
+    };
+
+    // Worker 1: prompts 0-10. Approved/denied writes, stored secure input,
+    // raw Ctrl-C (user cancel, keeps serving), then an external SIGINT during
+    // secure input: Go answers `secure input failed: context canceled` and
+    // shuts down (exit 0), so nothing after it is served.
+    let protocol_input = [
+        INIT.to_owned(),
+        call(
+            2,
+            "set_entry_field",
+            r#"{"path":"fixture","field":"username","value":"approved-user"}"#,
+        ),
+        call(
+            3,
+            "execute_with_secret",
+            r#"{"command":["/usr/bin/true"],"secret_refs":[],"env_vars":{"PTY_FIXTURE":"synthetic"}}"#,
+        ),
+        call(
+            4,
+            "set_entry_field",
+            r#"{"path":"fixture","field":"username","value":"denied-user"}"#,
+        ),
+        call(
+            5,
+            "secure_input",
+            r#"{"path":"fixture","field":"secure-token","description":"synthetic local test"}"#,
+        ),
+        call(
+            6,
+            "request_credential",
+            r#"{"path":"fixture","field":"requested-token","reason":"synthetic local test"}"#,
+        ),
+        call(
+            7,
+            "secure_input",
+            r#"{"path":"fixture","field":"canceled-token","description":"cancel then verify restore"}"#,
+        ),
+    ]
+    .concat();
+    let mut worker = Worker::spawn(
+        "raw-ctrl-c-then-sigint",
+        &executable,
+        &vault,
+        &identity_path,
+        &protocol_input,
+    );
+    let mut terminal_restore_error = None;
+    for expected in 1..=7 {
+        let response = worker.expect_response(expected);
+        if expected == 7 {
+            if response["result"]["isError"] != true
+                || response["result"]["content"][0]["text"] != "secure input canceled by user"
+            {
+                terminal_restore_error = Some(format!(
+                    "raw Ctrl-C did not produce the cancellation response: {response:?}"
+                ));
             }
-            Ok(Err(error)) => panic!("read MCP worker stdout: {error}"),
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-        }
-        if process_status.is_none() {
-            process_status = worker.try_wait().expect("poll MCP worker");
-        }
-        if Instant::now() >= deadline {
-            let _ = worker.kill();
-            let _ = worker.wait();
-            panic!("MCP worker exceeded its bounded PTY acceptance deadline; stdout={stdout}");
-        }
-        if process_status.is_some() && (!sent_after_cancel || !idle_signal_requested) {
-            panic!("MCP worker exited before the cancellation/idle-signal checks; stdout={stdout}");
+            if let Err(error) = check_terminal_restored() {
+                terminal_restore_error = Some(error);
+            }
+            println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
+            println!("PTY_SIGNAL_TARGET pid={} signal=SIGINT", worker.id());
+            worker.send(&call(
+                8,
+                "secure_input",
+                r#"{"path":"fixture","field":"signal-canceled-token","description":"SIGINT while secure input is active"}"#,
+            ));
         }
     }
-    let status = process_status.unwrap_or_else(|| worker.wait().expect("reap MCP worker"));
-    drop(worker_stdin);
-    let _ = stdout_reader.join();
-    let stderr = stderr_reader.join().expect("join stderr reader");
-    assert_go_signal_shutdown(
+    let sigint_secure_response = worker.expect_response(8);
+    let (status, stderr, latency) = worker.expect_exit();
+    assert_prompt_signal_shutdown(
+        "external SIGINT during secure input",
         status,
-        &format!("idle SIGINT after terminal restoration: stdout={stdout} stderr={stderr}"),
+        &stderr,
+        latency,
+        &worker.stdout,
     );
+    check_terminal_restored().expect("restore TTY after active SIGINT");
+    println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
     assert!(
         terminal_restore_error.is_none(),
         "raw Ctrl-C did not restore terminal before the next call: {terminal_restore_error:?}"
     );
-    assert!(
-        !stdout.contains("MCP OPERATION APPROVAL REQUIRED"),
-        "approval prompt leaked to MCP stdout: {stdout}"
-    );
-    for line in stdout.lines().filter(|line| !line.is_empty()) {
-        if serde_json::from_str::<serde_json::Value>(line).is_err() {
-            assert!(
-                line == "running 1 test"
-                    || line == "PTY_SECURE_INPUT_CANCELLED termios_restore_check=required"
-                    || line.starts_with("PTY_SIGNAL_TARGET pid=")
-                    || line.starts_with("PTY_IDLE_SIGNAL pid=")
-                    || line.starts_with("test unix_platform_approval_stdio_worker ... ok")
-                    || line.starts_with("test result: ok. 1 passed; 0 failed;"),
-                "unexpected non-protocol worker stdout (only the libtest wrapper is allowed): {line:?}"
-            );
-        }
-    }
+    worker.assert_clean_stdout();
     assert_eq!(
-        responses
+        worker
+            .responses
             .iter()
             .filter_map(|response| response.get("id").and_then(serde_json::Value::as_i64))
             .collect::<Vec<_>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9],
-        "worker stdout must contain exactly the nine MCP responses"
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        "worker stdout must contain exactly the eight MCP responses and nothing after the shutdown"
     );
-    assert_eq!(
-        responses.len(),
-        9,
-        "worker stdout must not contain extra JSON responses without IDs"
+    assert_json_rpc_error(
+        &sigint_secure_response,
+        "secure input failed: context canceled",
     );
+    let responses = worker.responses.clone();
     let by_id = |id| {
         responses
             .iter()
@@ -324,313 +451,186 @@ fn unix_platform_approval_pty_acceptance() {
         "secure input canceled by user",
         "raw Ctrl-C must cancel promptly rather than become a timeout"
     );
-    assert_eq!(by_id(8)["result"]["isError"], true, "{responses:?}");
-    assert_eq!(
-        by_id(8)["result"]["content"][0]["text"],
-        "secure input canceled by user"
-    );
-    assert_eq!(by_id(9)["result"]["isError"], false, "{responses:?}");
-    assert!(
-        by_id(9)["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("= *** (value hidden from agent)"),
-        "follow-up secure input must work after SIGINT cancellation: {responses:?}"
-    );
 
-    let store = Store::open(&vault, &identity).expect("reopen synthetic vault");
-    let entry = store
-        .get("fixture", &identity)
-        .expect("read synthetic entry");
+    let entry = read_fixture();
     assert_eq!(entry.data["username"], "approved-user");
     assert_eq!(entry.data["secure-token"], "synthetic-credential-one");
     assert_eq!(entry.data["requested-token"], "synthetic-credential-two");
+    assert!(!entry.data.contains_key("canceled-token"));
+    assert!(
+        !entry.data.contains_key("signal-canceled-token"),
+        "an externally canceled secure input must not store the pre-cancel input"
+    );
+
+    // Worker 2: a completed secure input followed by an idle SIGINT (prompts
+    // 11-12) proves the terminal is usable and idle SIGINT still exits 0.
+    let mut idle_sigint_worker = Worker::spawn(
+        "idle SIGINT after secure input",
+        &executable,
+        &vault,
+        &identity_path,
+        &[
+            INIT.to_owned(),
+            call(
+                2,
+                "secure_input",
+                r#"{"path":"fixture","field":"after-signal-token","description":"terminal usable before idle SIGINT"}"#,
+            ),
+        ]
+        .concat(),
+    );
+    idle_sigint_worker.expect_response(1);
+    let response = idle_sigint_worker.expect_response(2);
+    assert_eq!(response["result"]["isError"], false, "{response:?}");
+    assert!(
+        response["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("= *** (value hidden from agent)"),
+        "{response:?}"
+    );
+    check_terminal_restored().expect("restore TTY after completed secure input");
+    println!(
+        "PTY_IDLE_SIGNAL pid={} signal=SIGINT after=success",
+        idle_sigint_worker.id()
+    );
+    let (status, stderr, _) = idle_sigint_worker.expect_exit();
+    assert_go_signal_shutdown(
+        status,
+        &format!(
+            "idle SIGINT after terminal restoration: stdout={} stderr={stderr}",
+            idle_sigint_worker.stdout
+        ),
+    );
+    idle_sigint_worker.assert_clean_stdout();
     assert_eq!(
-        entry.data["after-signal-token"],
+        read_fixture().data["after-signal-token"],
         "synthetic-credential-three"
     );
-    assert!(!entry.data.contains_key("canceled-token"));
-    assert!(!entry.data.contains_key("signal-canceled-token"));
 
-    // A second process proves SIGTERM cancels secure input and that a later
-    // idle SIGTERM resumes the normal default termination behavior.
-    let mut term_worker = Command::new(&executable)
-        .args([
-            "--ignored",
-            "--exact",
-            "unix_platform_approval_stdio_worker",
-            "--nocapture",
-            "--test-threads=2",
-        ])
-        .env("SYMVAULT_PTY_STDIO_WORKER", "1")
-        .env("SYMVAULT_PTY_VAULT", &vault)
-        .env("SYMVAULT_PTY_IDENTITY", &identity_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn second MCP worker with separate stdio pipes");
-    let mut term_stdin = Some(term_worker.stdin.take().expect("SIGTERM worker stdin"));
-    term_stdin
-        .as_mut()
-        .unwrap()
-        .write_all(concat!(
-            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"secure_input\",\"arguments\":{\"path\":\"fixture\",\"field\":\"sigterm-canceled-token\",\"description\":\"SIGTERM cancellation fixture\"}}}\n",
-        ).as_bytes())
-        .expect("send secure-input call to SIGTERM worker");
+    // Worker 3: an external SIGTERM during secure input answers the same
+    // context-canceled error and exits 0 (prompts 13-14).
+    let mut term_worker = Worker::spawn(
+        "external SIGTERM during secure input",
+        &executable,
+        &vault,
+        &identity_path,
+        &[
+            INIT.to_owned(),
+            call(
+                2,
+                "secure_input",
+                r#"{"path":"fixture","field":"sigterm-canceled-token","description":"SIGTERM cancellation fixture"}"#,
+            ),
+        ]
+        .concat(),
+    );
     println!("PTY_SIGNAL_TARGET pid={} signal=SIGTERM", term_worker.id());
+    term_worker.expect_response(1);
+    let response = term_worker.expect_response(2);
+    assert_json_rpc_error(&response, "secure input failed: context canceled");
+    let (status, stderr, latency) = term_worker.expect_exit();
+    assert_prompt_signal_shutdown(
+        "external SIGTERM during secure input",
+        status,
+        &stderr,
+        latency,
+        &term_worker.stdout,
+    );
+    check_terminal_restored().expect("restore TTY after active SIGTERM");
+    println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
+    term_worker.assert_clean_stdout();
+    assert!(
+        !read_fixture().data.contains_key("sigterm-canceled-token"),
+        "an externally canceled secure input must not store the pre-cancel input"
+    );
 
-    let (term_sender, term_receiver) = mpsc::channel();
-    let term_stdout = BufReader::new(term_worker.stdout.take().expect("SIGTERM stdout"));
-    let term_reader = thread::spawn(move || {
-        for line in term_stdout.lines() {
-            if term_sender.send(line).is_err() {
-                return;
-            }
-        }
-    });
-    let term_stderr = term_worker.stderr.take().expect("SIGTERM stderr");
-    let term_stderr_reader = thread::spawn(move || {
-        let mut text = String::new();
-        let mut pipe = BufReader::new(term_stderr);
-        let _ = pipe.read_to_string(&mut text);
-        text
-    });
-    let term_deadline = Instant::now() + Duration::from_secs(20);
-    let mut term_stdout_text = String::new();
-    let mut term_status = None;
-    let mut term_followup_sent = false;
-    let mut term_idle_signal_requested = false;
-    while term_status.is_none() {
-        match term_receiver.recv_timeout(Duration::from_millis(50)) {
-            Ok(Ok(line)) => {
-                term_stdout_text.push_str(&line);
-                term_stdout_text.push('\n');
-                if let Ok(response) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if response.get("id") == Some(&serde_json::json!(2)) {
-                        assert_eq!(response["result"]["isError"], true, "{response:?}");
-                        assert_eq!(
-                            response["result"]["content"][0]["text"],
-                            "secure input canceled by user",
-                            "external SIGTERM must cancel the active secure-input prompt"
-                        );
-                        check_terminal_restored().expect("restore TTY after active SIGTERM");
-                        println!("PTY_SECURE_INPUT_CANCELLED termios_restore_check=required");
-                        term_stdin
-                            .as_mut()
-                            .unwrap()
-                            .write_all(
-                                b"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}\n",
-                            )
-                            .expect("send no-prompt request after SIGTERM cancellation");
-                        term_followup_sent = true;
-                    } else if response.get("id") == Some(&serde_json::json!(3)) {
-                        println!(
-                            "PTY_IDLE_SIGNAL pid={} signal=SIGTERM after=canceled",
-                            term_worker.id()
-                        );
-                        term_idle_signal_requested = true;
-                    }
-                }
-            }
-            Ok(Err(error)) => panic!("read SIGTERM MCP worker stdout: {error}"),
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-        }
-        if term_status.is_none() {
-            term_status = term_worker.try_wait().expect("poll SIGTERM worker");
-        }
-        if Instant::now() >= term_deadline {
-            let _ = term_worker.kill();
-            let _ = term_worker.wait();
-            panic!("SIGTERM worker exceeded its bounded deadline: {term_stdout_text}");
-        }
-        if term_status.is_some() && (!term_followup_sent || !term_idle_signal_requested) {
-            panic!("SIGTERM worker exited before cancellation/idle checks: {term_stdout_text}");
-        }
+    // Worker 4: idle SIGTERM (no prompt) still exits 0.
+    let mut idle_term_worker = Worker::spawn(
+        "idle SIGTERM",
+        &executable,
+        &vault,
+        &identity_path,
+        &[
+            INIT.to_owned(),
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\n".to_owned(),
+        ]
+        .concat(),
+    );
+    idle_term_worker.expect_response(1);
+    idle_term_worker.expect_response(2);
+    println!(
+        "PTY_IDLE_SIGNAL pid={} signal=SIGTERM after=idle",
+        idle_term_worker.id()
+    );
+    let (status, stderr, _) = idle_term_worker.expect_exit();
+    assert_go_signal_shutdown(
+        status,
+        &format!(
+            "idle SIGTERM: stdout={} stderr={stderr}",
+            idle_term_worker.stdout
+        ),
+    );
+    idle_term_worker.assert_clean_stdout();
+
+    // Workers 5 and 6: an external SIGINT/SIGTERM during an ordinary approval
+    // prompt answers Go's isError result `<tool> approval failed: failed to
+    // read from terminal: context canceled`, restores the terminal, never
+    // commits the write and exits 0 (prompts 15 and 16).
+    for (signal_name, field) in [
+        ("SIGINT", "approval-signal-must-not-commit"),
+        ("SIGTERM", "approval-term-must-not-commit"),
+    ] {
+        let mut approval_worker = Worker::spawn(
+            if signal_name == "SIGINT" {
+                "ordinary approval SIGINT"
+            } else {
+                "ordinary approval SIGTERM"
+            },
+            &executable,
+            &vault,
+            &identity_path,
+            &[
+                INIT.to_owned(),
+                call(
+                    2,
+                    "set_entry_field",
+                    &format!(r#"{{"path":"fixture","field":"{field}","value":"forbidden"}}"#),
+                ),
+            ]
+            .concat(),
+        );
+        println!(
+            "PTY_SIGNAL_TARGET pid={} signal={signal_name}",
+            approval_worker.id()
+        );
+        approval_worker.expect_response(1);
+        let response = approval_worker.expect_response(2);
+        assert_eq!(response["result"]["isError"], true, "{response:?}");
+        assert_eq!(
+            response["result"]["content"][0]["text"],
+            "set_entry_field approval failed: failed to read from terminal: context canceled",
+            "{signal_name} during an approval prompt must answer Go's context-canceled result"
+        );
+        let (status, stderr, latency) = approval_worker.expect_exit();
+        check_terminal_restored().expect("restore terminal after approval signal");
+        println!("PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required");
+        assert_prompt_signal_shutdown(
+            &format!("ordinary approval {signal_name}"),
+            status,
+            &stderr,
+            latency,
+            &approval_worker.stdout,
+        );
+        approval_worker.assert_clean_stdout();
+        assert!(
+            !read_fixture().data.contains_key(field),
+            "an interrupted approval must not commit the write"
+        );
     }
-    let term_status =
-        term_status.unwrap_or_else(|| term_worker.wait().expect("reap SIGTERM worker"));
-    drop(term_stdin);
-    let _ = term_reader.join();
-    let term_stderr_text = term_stderr_reader
-        .join()
-        .expect("join SIGTERM stderr reader");
-    assert_go_signal_shutdown(
-        term_status,
-        &format!(
-            "idle SIGTERM after terminal restoration: stdout={term_stdout_text} stderr={term_stderr_text}"
-        ),
-    );
-    let store = Store::open(&vault, &identity).expect("reopen fixture after SIGTERM cancellation");
-    let entry = store
-        .get("fixture", &identity)
-        .expect("read fixture after SIGTERM cancellation");
-    assert!(!entry.data.contains_key("sigterm-canceled-token"));
-
-    // Ordinary approvals still end the process on an external signal, but only
-    // after the shared raw-terminal scope restores cooked mode; like Go the exit
-    // is a clean status 0, not death by signal.
-    let mut approval_worker = Command::new(&executable)
-        .args([
-            "--ignored",
-            "--exact",
-            "unix_platform_approval_stdio_worker",
-            "--nocapture",
-            "--test-threads=2",
-        ])
-        .env("SYMVAULT_PTY_STDIO_WORKER", "1")
-        .env("SYMVAULT_PTY_VAULT", &vault)
-        .env("SYMVAULT_PTY_IDENTITY", &identity_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn ordinary-approval signal worker");
-    let mut approval_stdin = approval_worker.stdin.take().expect("approval worker stdin");
-    approval_stdin
-        .write_all(concat!(
-            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"set_entry_field\",\"arguments\":{\"path\":\"fixture\",\"field\":\"approval-signal-must-not-commit\",\"value\":\"forbidden\"}}}\n",
-        ).as_bytes())
-        .expect("send pending approved-write call");
-    println!(
-        "PTY_SIGNAL_TARGET pid={} signal=SIGINT",
-        approval_worker.id()
-    );
-    let mut approval_stdout =
-        BufReader::new(approval_worker.stdout.take().expect("approval stdout"));
-    let mut unexpected_response = String::new();
-    let mut approval_stderr = approval_worker.stderr.take().expect("approval stderr");
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let approval_status = loop {
-        if let Some(status) = approval_worker
-            .try_wait()
-            .expect("poll approval signal worker")
-        {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = approval_worker.kill();
-            let _ = approval_worker.wait();
-            panic!("ordinary approval signal worker exceeded its bounded deadline");
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    };
-    drop(approval_stdin);
-    let _ = approval_stdout.read_to_string(&mut unexpected_response);
-    let mut approval_stderr_text = String::new();
-    let _ = approval_stderr.read_to_string(&mut approval_stderr_text);
-    check_terminal_restored().expect("restore terminal before default approval SIGINT");
-    println!("PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required");
-    assert_go_signal_shutdown(
-        approval_status,
-        &format!(
-            "ordinary approval SIGINT after restoring termios: stdout={unexpected_response} stderr={approval_stderr_text}"
-        ),
-    );
-    assert!(
-        !unexpected_response.lines().any(|line| {
-            serde_json::from_str::<serde_json::Value>(line)
-                .ok()
-                .is_some_and(|value| value.get("id") == Some(&serde_json::json!(2)))
-        }),
-        "an interrupted approval must not produce a successful MCP response: {unexpected_response}"
-    );
-    let store = Store::open(&vault, &identity).expect("reopen fixture after approval signal");
-    let entry = store
-        .get("fixture", &identity)
-        .expect("read fixture after approval signal");
-    assert!(!entry.data.contains_key("approval-signal-must-not-commit"));
-
-    let mut term_approval_worker = Command::new(&executable)
-        .args([
-            "--ignored",
-            "--exact",
-            "unix_platform_approval_stdio_worker",
-            "--nocapture",
-            "--test-threads=2",
-        ])
-        .env("SYMVAULT_PTY_STDIO_WORKER", "1")
-        .env("SYMVAULT_PTY_VAULT", &vault)
-        .env("SYMVAULT_PTY_IDENTITY", &identity_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn ordinary-approval SIGTERM worker");
-    let mut term_approval_stdin = term_approval_worker
-        .stdin
-        .take()
-        .expect("SIGTERM approval worker stdin");
-    term_approval_stdin
-        .write_all(concat!(
-            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n",
-            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"set_entry_field\",\"arguments\":{\"path\":\"fixture\",\"field\":\"approval-term-must-not-commit\",\"value\":\"forbidden\"}}}\n",
-        ).as_bytes())
-        .expect("send pending SIGTERM approval call");
-    println!(
-        "PTY_SIGNAL_TARGET pid={} signal=SIGTERM",
-        term_approval_worker.id()
-    );
-    let mut term_approval_stdout = BufReader::new(
-        term_approval_worker
-            .stdout
-            .take()
-            .expect("SIGTERM approval stdout"),
-    );
-    let mut term_unexpected_response = String::new();
-    let mut term_approval_stderr = term_approval_worker
-        .stderr
-        .take()
-        .expect("SIGTERM approval stderr");
-    let deadline = Instant::now() + Duration::from_secs(20);
-    let term_approval_status = loop {
-        if let Some(status) = term_approval_worker
-            .try_wait()
-            .expect("poll SIGTERM approval worker")
-        {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = term_approval_worker.kill();
-            let _ = term_approval_worker.wait();
-            panic!("ordinary SIGTERM approval worker exceeded its bounded deadline");
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    };
-    drop(term_approval_stdin);
-    let _ = term_approval_stdout.read_to_string(&mut term_unexpected_response);
-    let mut term_approval_stderr_text = String::new();
-    let _ = term_approval_stderr.read_to_string(&mut term_approval_stderr_text);
-    check_terminal_restored().expect("restore terminal before default approval SIGTERM");
-    println!("PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required");
-    assert_go_signal_shutdown(
-        term_approval_status,
-        &format!(
-            "ordinary approval SIGTERM after restoring termios: stdout={term_unexpected_response} stderr={term_approval_stderr_text}"
-        ),
-    );
-    assert!(
-        !term_unexpected_response.lines().any(|line| {
-            serde_json::from_str::<serde_json::Value>(line)
-                .ok()
-                .is_some_and(|value| value.get("id") == Some(&serde_json::json!(2)))
-        }),
-        "an interrupted SIGTERM approval must not produce an MCP response: {term_unexpected_response}"
-    );
-    let store = Store::open(&vault, &identity).expect("reopen fixture after approval SIGTERM");
-    let entry = store
-        .get("fixture", &identity)
-        .expect("read fixture after approval SIGTERM");
-    assert!(!entry.data.contains_key("approval-term-must-not-commit"));
 
     println!(
-        "PTY_ACCEPTANCE_RECEIPT {{\"controlling_tty\":true,\"mcp_stdin_piped\":true,\"set_approved\":true,\"execute_approved\":true,\"deny_left_store_unchanged\":true,\"secure_input_stored\":true,\"request_credential_stored\":true,\"canceled_input_not_stored\":true,\"post_cancel_input_stored\":true,\"external_sigint_canceled\":true,\"idle_sigint_exit0\":true,\"external_sigterm_canceled\":true,\"idle_sigterm_exit0\":true,\"approval_sigint_exit0\":true,\"approval_sigterm_exit0\":true,\"worker_prompts\":17}}"
+        "PTY_ACCEPTANCE_RECEIPT {{\"controlling_tty\":true,\"mcp_stdin_piped\":true,\"set_approved\":true,\"execute_approved\":true,\"deny_left_store_unchanged\":true,\"secure_input_stored\":true,\"request_credential_stored\":true,\"canceled_input_not_stored\":true,\"raw_ctrl_c_keeps_serving\":true,\"external_sigint_secure_context_canceled_exit0\":true,\"idle_sigint_exit0\":true,\"external_sigterm_secure_context_canceled_exit0\":true,\"idle_sigterm_exit0\":true,\"approval_sigint_context_canceled_exit0\":true,\"approval_sigterm_context_canceled_exit0\":true,\"worker_prompts\":17}}"
     );
 }
 
