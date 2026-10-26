@@ -257,6 +257,133 @@ class HarnessTests(unittest.TestCase):
             self.assertEqual(env['SYMVAULT_TEST_KEYRING'], 'memory')
 
 
+class DarwinSourceRebuildTests(unittest.TestCase):
+    """Darwin links LC_UUID from the output path: the rebuild must reuse the
+    binary's own absolute target path, stay byte-exact and restore the original."""
+
+    exe_name = 'symvault'
+
+    def setUp(self):
+        # The binary name is os.name-dependent (symvault.exe on Windows); the
+        # Darwin branch is exercised on every host with either name.
+        patcher = patch.object(tui, 'rust_exe_name', return_value=self.exe_name)
+        patcher.start(); self.addCleanup(patcher.stop)
+
+    def run_rebuild(self, built, fail=False, layout=True):
+        real_checked = tui.checked
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix='tui-darwin-rebuild-') as raw:
+            base = Path(raw)
+            target = base/'target/tui-candidate'
+            (target/'debug').mkdir(parents=True)
+            binary = target/'debug'/(self.exe_name if layout else 'other')
+            binary.write_bytes(b'original-bytes')
+            (target/'debug/deps-marker').write_bytes(b'kept')
+
+            def fake(argv, **kwargs):
+                if argv[:2] != ['cargo', 'build']:
+                    return real_checked(argv, **kwargs)
+                seen['target'] = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                seen['original_moved_aside'] = not binary.exists()
+                if fail:
+                    raise RuntimeError('simulated build failure')
+                (seen['target']/'debug').mkdir(parents=True)
+                (seen['target']/'debug'/self.exe_name).write_bytes(built)
+            receipt = {}
+            error = None
+            with patch.object(tui.platform, 'system', return_value='Darwin'), \
+                    patch.object(tui, 'checked', side_effect=fake):
+                try:
+                    tui.build_source_bound_rust(binary.resolve(), base/'unused', receipt)
+                except (AssertionError, RuntimeError) as caught:
+                    error = caught
+            restored = (binary.read_bytes() == b'original-bytes'
+                        and (target/'debug/deps-marker').read_bytes() == b'kept')
+            leftovers = sorted(p.name for p in target.parent.iterdir())
+            return seen, receipt, error, restored, leftovers, target.resolve()
+
+    def test_identical_bytes_at_the_same_target_path_verify_and_restore(self):
+        seen, receipt, error, restored, leftovers, target = self.run_rebuild(b'original-bytes')
+        self.assertIsNone(error)
+        self.assertEqual(seen['target'], target)
+        self.assertTrue(seen['original_moved_aside'])
+        self.assertIs(receipt['binary_source_verified'], True)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'], hashlib.sha256(b'original-bytes').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_different_bytes_still_fail_exactly_and_restore_the_original(self):
+        seen, receipt, error, restored, leftovers, _ = self.run_rebuild(b'original-bytes-with-other-uuid')
+        self.assertIsInstance(error, AssertionError); self.assertEqual(str(error), 'source/binary mismatch')
+        self.assertNotIn('binary_source_verified', receipt)
+        self.assertEqual(receipt['rebuilt_rust_executable_sha256'],
+                         hashlib.sha256(b'original-bytes-with-other-uuid').hexdigest())
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_build_failure_restores_the_original_target(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', fail=True)
+        self.assertIsInstance(error, RuntimeError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_binary_outside_a_cargo_layout_is_rejected_before_any_move(self):
+        _, receipt, error, restored, leftovers, _ = self.run_rebuild(b'', layout=False)
+        self.assertIsInstance(error, AssertionError); self.assertNotIn('binary_source_verified', receipt)
+        self.assertTrue(restored); self.assertEqual(leftovers, ['tui-candidate'])
+
+
+class DarwinSourceRebuildWindowsNameTests(DarwinSourceRebuildTests):
+    """Same Darwin-branch contract with the .exe binary name."""
+    exe_name = 'symvault.exe'
+
+
+class NonDarwinSourceRebuildTests(unittest.TestCase):
+    """Linux/Windows keep the pre-#1409 behaviour: rebuild into a separate
+    run-owned target, never touch the binary's own target tree."""
+
+    def run_rebuild(self, system, exe_name, built):
+        real_checked = tui.checked
+        seen = {}
+        with tempfile.TemporaryDirectory(prefix='tui-nondarwin-rebuild-') as raw:
+            base = Path(raw)
+            target = base/'target/tui-candidate'
+            (target/'debug').mkdir(parents=True)
+            binary = target/'debug'/exe_name
+            binary.write_bytes(b'original-bytes')
+
+            def fake(argv, **kwargs):
+                if argv[:2] != ['cargo', 'build']:
+                    return real_checked(argv, **kwargs)
+                seen['target'] = Path(kwargs['env']['CARGO_TARGET_DIR'])
+                seen['original_untouched'] = binary.read_bytes() == b'original-bytes'
+                (seen['target']/'debug').mkdir(parents=True)
+                (seen['target']/'debug'/exe_name).write_bytes(built)
+            receipt = {}
+            error = None
+            with patch.object(tui.platform, 'system', return_value=system), \
+                    patch.object(tui, 'rust_exe_name', return_value=exe_name), \
+                    patch.object(tui, 'checked', side_effect=fake):
+                try:
+                    tui.build_source_bound_rust(binary, base, receipt)
+                except AssertionError as caught:
+                    error = caught
+            return seen, receipt, error, base/'rust-source-build', binary.read_bytes(), sorted(p.name for p in target.parent.iterdir())
+
+    def test_separate_target_and_exact_bytes_for_each_platform_name(self):
+        for system, exe_name in [('Linux', 'symvault'), ('Windows', 'symvault.exe')]:
+            with self.subTest(system=system):
+                seen, receipt, error, expected, original, leftovers = self.run_rebuild(system, exe_name, b'original-bytes')
+                self.assertIsNone(error)
+                self.assertEqual(seen['target'], expected); self.assertTrue(seen['original_untouched'])
+                self.assertIs(receipt['binary_source_verified'], True)
+                self.assertEqual(original, b'original-bytes'); self.assertEqual(leftovers, ['tui-candidate'])
+
+    def test_different_bytes_fail_exactly_for_each_platform_name(self):
+        for system, exe_name in [('Linux', 'symvault'), ('Windows', 'symvault.exe')]:
+            with self.subTest(system=system):
+                _, receipt, error, _, original, _ = self.run_rebuild(system, exe_name, b'other')
+                self.assertIsInstance(error, AssertionError); self.assertEqual(str(error), 'source/binary mismatch')
+                self.assertNotIn('binary_source_verified', receipt); self.assertEqual(original, b'original-bytes')
+
+
 def editor_keydelivery(go, helper):
     # No private_provider, clipboard calls, credential stores or user HOME.
     # The real Go reference is unmodified; the fixture opens the real document.
