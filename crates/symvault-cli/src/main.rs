@@ -2695,13 +2695,7 @@ fn run_verify(
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        verify_commands::verify(
-            &vault,
-            &identity,
-            rebuild,
-            rebuild_only,
-            &mut io::stderr().lock(),
-        )
+        verify_commands::verify(&vault, &identity, rebuild, rebuild_only, &mut io::stderr())
     })();
     finish_vault_result(result)
 }
@@ -3537,7 +3531,9 @@ fn run_get(
             quiet,
             &environment,
             &mut io::stdout().lock(),
-            &mut io::stderr().lock(),
+            // Not `.lock()`: the guard is not `Send`, and the clipboard flow
+            // writes diagnostics from its own thread.
+            &mut io::stderr(),
         )
     })();
     finish_vault_result(result)
@@ -3564,7 +3560,7 @@ fn emit_get_result(
     quiet: bool,
     environment: &GetEnvironment<'_>,
     stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
+    stderr: &mut (dyn Write + Send),
 ) -> Result<(), String> {
     if let vault_commands::GetResult::Field { value, .. } = &result
         && copy_get_field_to_clipboard(vault, format, print, value, environment, stderr)?
@@ -3597,7 +3593,7 @@ fn copy_get_field_to_clipboard(
     print: bool,
     value: &serde_json::Value,
     environment: &GetEnvironment<'_>,
-    stderr: &mut dyn Write,
+    stderr: &mut (dyn Write + Send),
 ) -> Result<bool, String> {
     use symvault_platform::get_clipboard as clip;
 

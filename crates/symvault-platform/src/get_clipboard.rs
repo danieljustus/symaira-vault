@@ -13,9 +13,12 @@
 //!
 //! Known, deliberate differences from Go:
 //!
-//! * Go runs the countdown on a goroutine; Rust runs one event loop. Output is
-//!   identical except when the last tick and the timer fire at the same instant
-//!   (Go's order is scheduler dependent). Rust prints the tick first.
+//! * Go runs the countdown on a goroutine and clears from `StartAutoClear`;
+//!   Rust decides (timer, signals, clear, verify) in one event loop and hands
+//!   every stderr write to a writer thread, so a blocked stderr cannot delay
+//!   the clear. Output is identical except when the last tick and the timer
+//!   fire at the same instant (Go's order is scheduler dependent). Rust prints
+//!   the tick first.
 //! * `--quiet` does not silence `[copied to clipboard]` or the failed-clear
 //!   warning in the real Go binary, because `cliout` reads the quiet flag
 //!   before cobra parses it. The fixture records that; this module therefore has
@@ -450,6 +453,15 @@ pub fn auto_clear_seconds(configured: Option<i64>) -> i64 {
 /// branch of `cmd/crud/get.go`. Warnings never change the result: Go returns
 /// nil (exit 0) after a failed clear or a restored secret.
 ///
+/// Diagnostics never gate the clear. Like Go, where the countdown runs on its
+/// own goroutine while `StartAutoClear` owns the timer and the signals, every
+/// stderr write happens on a dedicated writer thread fed through an unbounded
+/// channel. The calling thread only decides (timer, signal, clear, verify) and
+/// never blocks on stderr, so an unread pipe cannot keep the secret on the
+/// clipboard or delay a signal-driven clear. The function itself still returns
+/// only after the queued output is written (Go's `StartAutoClear` also blocks
+/// on its final `Fprintln`), but that wait comes after the clear.
+///
 /// # Errors
 /// [`CopyError`] when the initial copy fails, or when an auto-clear is
 /// requested but the interrupt handler cannot be installed (fail closed:
@@ -459,7 +471,7 @@ pub fn copy_and_auto_clear(
     secret: &str,
     auto_clear_seconds: i64,
     clock: &dyn Clock,
-    stderr: &mut dyn Write,
+    stderr: &mut (dyn Write + Send),
 ) -> Result<(), CopyError> {
     // Observe interrupts before the secret is on the clipboard, so none can
     // slip between the copy and the first wait. Without an auto-clear Go
@@ -473,22 +485,53 @@ pub fn copy_and_auto_clear(
                 ),
             })?;
     }
-    clipboard
-        .copy(secret)
-        .map_err(|cause| CopyError { cause })?;
-    let _ = writeln!(stderr, "[copied to clipboard]");
-    if auto_clear_seconds <= 0 {
-        return Ok(());
-    }
+    std::thread::scope(|scope| {
+        let (diagnostics, queued) = std::sync::mpsc::channel::<String>();
+        // Started before the copy: no thread, no secret on the clipboard.
+        std::thread::Builder::new()
+            .name("symvault-get-diagnostics".to_owned())
+            .spawn_scoped(scope, move || {
+                for message in queued {
+                    let _ = stderr.write_all(message.as_bytes());
+                    let _ = stderr.flush();
+                }
+            })
+            .map_err(|error| CopyError {
+                cause: format!(
+                    "cannot start the diagnostics thread ({error}); nothing was copied, use --print to print the value instead"
+                ),
+            })?;
+        // A send only fails when the writer thread is gone; output is best
+        // effort exactly like Go's ignored stderr write errors.
+        let say = |message: String| {
+            let _ = diagnostics.send(message);
+        };
+        clipboard
+            .copy(secret)
+            .map_err(|cause| CopyError { cause })?;
+        say("[copied to clipboard]\n".to_owned());
+        if auto_clear_seconds <= 0 {
+            return Ok(());
+        }
+        wait_and_clear(clipboard, secret, auto_clear_seconds, clock, &say);
+        Ok(())
+    })
+}
 
+/// The timer/signal half of [`copy_and_auto_clear`]: tick, clear, verify. Its
+/// only output channel is `say`, which never blocks.
+fn wait_and_clear(
+    clipboard: &dyn TextClipboard,
+    secret: &str,
+    auto_clear_seconds: i64,
+    clock: &dyn Clock,
+    say: &dyn Fn(String),
+) {
     let never = CancelToken::default();
     let base = clock.elapsed();
     let deadline = Duration::from_secs(u64::try_from(auto_clear_seconds).unwrap_or(0));
-    let show = |stderr: &mut dyn Write, remaining: i64| {
-        let _ = write!(stderr, "\r[clearing clipboard in {remaining}s] ");
-        let _ = stderr.flush();
-    };
-    show(stderr, auto_clear_seconds);
+    let show = |remaining: i64| say(format!("\r[clearing clipboard in {remaining}s] "));
+    show(auto_clear_seconds);
     let mut ticker = Ticker {
         duration: auto_clear_seconds,
         remaining: auto_clear_seconds,
@@ -498,7 +541,7 @@ pub fn copy_and_auto_clear(
             // A tick due at the deadline goes first, so the countdown reaches 0.
             Some(at) if at <= deadline => {
                 if clock.wait_until(base + at, &never, true) == Wake::Elapsed {
-                    show(stderr, ticker.tick());
+                    show(ticker.tick());
                 } else {
                     break;
                 }
@@ -511,22 +554,15 @@ pub fn copy_and_auto_clear(
     }
 
     if let Err(cause) = clipboard.copy("") {
-        let _ = writeln!(stderr, "Warning: failed to clear clipboard: {cause}");
+        say(format!("Warning: failed to clear clipboard: {cause}\n"));
     }
     let read = || clipboard.read();
     match verify_cleared(secret, Some(&read)) {
-        Err(error) => {
-            let _ = writeln!(
-                stderr,
-                "\rWarning: {error} — consider disabling clipboard-history retention."
-            );
-        }
-        Ok(()) => {
-            let _ = writeln!(stderr, "\r[clipboard cleared]        ");
-        }
+        Err(error) => say(format!(
+            "\rWarning: {error} — consider disabling clipboard-history retention.\n"
+        )),
+        Ok(()) => say("\r[clipboard cleared]        \n".to_owned()),
     }
-    let _ = stderr.flush();
-    Ok(())
 }
 
 /// The OS clipboard for `get`: `pbcopy`/`pbpaste` on macOS, the atotto-style

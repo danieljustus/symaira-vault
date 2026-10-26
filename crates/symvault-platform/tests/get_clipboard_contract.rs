@@ -584,3 +584,140 @@ fn a_flag_set_without_watching_signals_is_ignored() {
         Wake::Signal
     );
 }
+
+/// A stderr that blocks every write until released, like a pipe nobody reads.
+/// Written bytes land in `written` only once the gate is open.
+#[derive(Clone, Default)]
+struct BlockedStderr {
+    open: Arc<(Mutex<bool>, std::sync::Condvar)>,
+    written: Arc<Mutex<Vec<u8>>>,
+    entered: Arc<AtomicBool>,
+}
+
+impl BlockedStderr {
+    fn release(&self) {
+        let (open, changed) = &*self.open;
+        *open.lock().unwrap() = true;
+        changed.notify_all();
+    }
+
+    fn wait_for_first_write(&self) {
+        let started = std::time::Instant::now();
+        while !self.entered.load(Ordering::SeqCst) {
+            assert!(
+                started.elapsed() < Duration::from_secs(5),
+                "the writer was never reached"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    fn text(&self) -> String {
+        String::from_utf8(self.written.lock().unwrap().clone()).unwrap()
+    }
+}
+
+impl std::io::Write for BlockedStderr {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.entered.store(true, Ordering::SeqCst);
+        let (open, changed) = &*self.open;
+        let mut open = open.lock().unwrap();
+        while !*open {
+            open = changed.wait(open).unwrap();
+        }
+        self.written.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Polls until the fake clipboard is empty; returns how long that took.
+fn wait_until_clipboard_clear(clipboard: &FakeClipboard, limit: Duration) -> Option<Duration> {
+    let started = std::time::Instant::now();
+    while started.elapsed() < limit {
+        let state = clipboard.state.lock().unwrap();
+        if state.1.iter().any(|op| op == "copy:") && state.0.is_empty() {
+            return Some(started.elapsed());
+        }
+        drop(state);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    None
+}
+
+/// Regression for the review finding: the countdown used to write and flush on
+/// the thread that also owns the timer and the clear, so a stderr nobody reads
+/// kept the secret on the clipboard past the timeout. Go keeps clearing
+/// independent of the countdown output.
+#[test]
+fn blocked_stderr_does_not_delay_the_timer_clear() {
+    let clipboard = scenario_clipboard("blocked-timer-secret");
+    let clock = RealClock::new();
+    let stderr = BlockedStderr::default();
+    let mut writer = stderr.clone();
+    std::thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            copy_and_auto_clear(&clipboard, "blocked-timer-secret", 1, &clock, &mut writer)
+        });
+        stderr.wait_for_first_write();
+        // 1 s timeout plus generous scheduling margin.
+        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_millis(3500));
+        let still_blocked = !run.is_finished();
+        stderr.release();
+        run.join().unwrap().unwrap();
+        let cleared = cleared.expect("the secret stayed on the clipboard while stderr was blocked");
+        assert!(
+            cleared >= Duration::from_millis(900),
+            "cleared early: {cleared:?}"
+        );
+        assert!(
+            still_blocked,
+            "the call must have been stuck on stderr at that point"
+        );
+    });
+    // Nothing was lost: once the pipe drains, the Go-observed bytes appear.
+    assert_eq!(
+        stderr.text(),
+        "[copied to clipboard]\n\r[clearing clipboard in 1s] \r[clearing clipboard in 0s] \r[clipboard cleared]        \n"
+    );
+    let state = clipboard.state.lock().unwrap();
+    assert_eq!(state.1, ["copy:blocked-timer-secret", "copy:", "read"]);
+}
+
+#[test]
+fn blocked_stderr_does_not_delay_the_signal_clear() {
+    let source = HandSource::default();
+    let clock = RealClock::with_interrupt_source(Some(Box::new(source.clone())));
+    let clipboard = scenario_clipboard("blocked-signal-secret");
+    let stderr = BlockedStderr::default();
+    let mut writer = stderr.clone();
+    std::thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            copy_and_auto_clear(&clipboard, "blocked-signal-secret", 30, &clock, &mut writer)
+        });
+        stderr.wait_for_first_write();
+        wait_until_installed(&source);
+        source.fire();
+        let cleared = wait_until_clipboard_clear(&clipboard, Duration::from_secs(3));
+        let still_blocked = !run.is_finished();
+        stderr.release();
+        run.join().unwrap().unwrap();
+        assert!(
+            cleared.is_some(),
+            "a signal must clear the clipboard while stderr is blocked"
+        );
+        assert!(
+            still_blocked,
+            "the call must have been stuck on stderr at that point"
+        );
+    });
+    let text = stderr.text();
+    assert!(
+        text.ends_with("\r[clipboard cleared]        \n"),
+        "{text:?}"
+    );
+    assert!(!text.contains("blocked-signal-secret"));
+}
