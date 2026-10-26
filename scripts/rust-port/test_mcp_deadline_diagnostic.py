@@ -134,9 +134,9 @@ class SourceControls(unittest.TestCase):
                 return actual(command, **kwargs)
             try:
                 with patch.object(diagnostic.subprocess,'check_output',side_effect=guarded):
-                    with self.assertRaises(subprocess.CalledProcessError) as failed:
+                    with self.assertRaises(diagnostic.RunnerNotPrepared) as failed:
                         diagnostic.private_environment(root/'private',env)
-                self.assertIn('not installed',failed.exception.stderr)
+                self.assertIn('runner not prepared: installed Rust toolchain missing',str(failed.exception))
                 self.assertEqual(requests,[])
                 self.assertFalse(any((root/'rustup/toolchains').glob('*')))
                 self.assertFalse(any((root/'rustup/downloads').glob('*')))
@@ -145,6 +145,81 @@ class SourceControls(unittest.TestCase):
                 server.shutdown()
                 thread.join()
                 server.server_close()
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX shell rustup double')
+    def test_unprepared_runner_is_classified_from_query_only_probes(self):
+        # A recording rustup double: discovery may only list toolchains/components
+        # and resolve tools. Any install/update/default-style subcommand fails the test.
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            root = Path(raw)
+            script = root/'bin/rustup'
+            script.parent.mkdir()
+            # Discovery passes only PATH/HOME/RUSTUP_HOME, so the double keeps its
+            # scripted answers beside itself rather than in the environment.
+            script.write_text('#!/bin/sh\n'
+                              'here=$(dirname "$0")\n'
+                              'echo "$*" >> "$here/calls"\n'
+                              'test "$RUSTUP_AUTO_INSTALL" = 0 || exit 97\n'
+                              'case "$1 $2" in\n'
+                              '  "toolchain list") cat "$here/toolchains";;\n'
+                              '  "component list") cat "$here/components";;\n'
+                              '  *) exit 98;;\n'
+                              'esac\n')
+            script.chmod(0o755)
+            log = script.parent/'calls'
+            env = {'PATH':str(script.parent)+os.pathsep+os.defpath, 'HOME':raw, 'RUSTUP_AUTO_INSTALL':'1'}
+            cases = [
+                ('no installed toolchains\n','', 'installed Rust toolchain missing', ['toolchain list']),
+                ('stable-x86_64-unknown-linux-gnu (default)\n','', 'installed Rust toolchain missing', ['toolchain list']),
+                ('1.98.0-x86_64-unknown-linux-gnu\n','clippy-x86_64-unknown-linux-gnu\nrust-std-x86_64-unknown-linux-gnu\n',
+                 'installed Rust component missing: rustfmt',
+                 ['toolchain list','component list --toolchain 1.98.0 --installed']),
+                ('1.98.0-x86_64-unknown-linux-gnu (active)\n','rustfmt-x86_64-unknown-linux-gnu\n',
+                 'installed Rust component missing: clippy',
+                 ['toolchain list','component list --toolchain 1.98.0 --installed']),
+            ]
+            for toolchains, components, message, calls in cases:
+                with self.subTest(message=message,toolchains=toolchains):
+                    log.write_text('')
+                    (script.parent/'toolchains').write_text(toolchains)
+                    (script.parent/'components').write_text(components)
+                    with self.assertRaises(diagnostic.RunnerNotPrepared) as failed:
+                        diagnostic.private_environment(root/'private',env)
+                    self.assertIn('runner not prepared: '+message,str(failed.exception))
+                    self.assertIsInstance(failed.exception,ValueError)
+                    self.assertEqual(log.read_text().splitlines(),calls)
+                    self.assertFalse((root/'private').exists())
+            # A failing query is also a classified preparation failure, never an install.
+            (script.parent/'toolchains').unlink()
+            log.write_text('')
+            with self.assertRaises(diagnostic.RunnerNotPrepared) as failed:
+                diagnostic.private_environment(root/'private',env)
+            self.assertIn('rustup query failed: toolchain list',str(failed.exception))
+            self.assertEqual(log.read_text().splitlines(),['toolchain list'])
+
+    def test_stage_reports_unprepared_runner_with_distinct_exit_and_evidence(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as raw:
+            evidence = Path(raw)/'evidence'
+            evidence.mkdir()
+            problem = diagnostic.RunnerNotPrepared('runner not prepared: installed Rust toolchain missing: 1.98.0')
+            with patch.object(diagnostic,'EVIDENCE',evidence), patch.object(diagnostic,'begin',side_effect=problem), \
+                    patch.object(diagnostic.sys,'argv',['diagnostic','stage']), \
+                    patch.object(diagnostic.sys.stderr,'write') as stderr:
+                self.assertEqual(diagnostic.main(),diagnostic.NOT_PREPARED_EXIT)
+            self.assertEqual(diagnostic.NOT_PREPARED_EXIT,78)
+            self.assertIn('RUNNER_NOT_PREPARED',''.join(call.args[0] for call in stderr.call_args_list))
+            record = json.loads((evidence/'runner-not-prepared.json').read_bytes())
+            self.assertEqual(record,{'classification':'runner-not-prepared','reason':str(problem),
+                                     'installed_anything':False,'acceptance':False})
+            # Other admission failures stay ordinary, unclassified errors.
+            with patch.object(diagnostic,'EVIDENCE',evidence), patch.object(diagnostic,'begin',side_effect=ValueError('x')), \
+                    patch.object(diagnostic.sys,'argv',['diagnostic','stage']):
+                with self.assertRaises(ValueError):
+                    diagnostic.main()
+            # Execution never contains an installer or fallback command.
+            source = Path(diagnostic.__file__).read_text()
+            self.assertNotRegex(source,r"\[[^\]]*'(?:install|update|default|run)'")
+            self.assertNotRegex(source,r"'toolchain',\s*'install'")
 
     def test_real_entrypoint_refuses_missing_admission_and_optimization(self):
         script = ROOT/'scripts/rust-port/mcp_deadline_diagnostic.py'

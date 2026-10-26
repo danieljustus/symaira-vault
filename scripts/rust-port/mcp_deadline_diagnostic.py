@@ -44,11 +44,24 @@ CLIPPY = ['cargo', 'clippy', '-p', 'symvault-cli', '-p', 'symvault-mcp',
 NO_RUN = ['cargo', 'test', '-p', 'symvault-mcp', '--all-targets', '--locked',
           '--no-run', '--message-format=json']
 TEST = 'broker::tests::slow_response_cannot_extend_the_request_deadline'
+RUST = '1.98.0'
+
+
+class RunnerNotPrepared(ValueError):
+    """A pinned tool, component or cache is absent; preparation is a separate step."""
+
+
+NOT_PREPARED_EXIT = 78  # EX_CONFIG: distinct from product, suite and tracer failures
 
 
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def prepared(condition, message):
+    if not condition:
+        raise RunnerNotPrepared('runner not prepared: '+message)
 
 
 def digest(path):
@@ -119,7 +132,7 @@ def admission(env, head, review):
 
 def installed(env, name):
     path = shutil.which(name, path=env['PATH'])
-    require(path is not None, 'required installed tool missing: '+name)
+    prepared(path is not None, 'required installed tool missing: '+name)
     # Multicall tools dispatch on argv[0]: rustup may link to rustup-init.
     return str(Path(path).absolute())
 
@@ -130,24 +143,39 @@ def private_environment(root, env):
     resolution = {k:env[k] for k in ('PATH','HOME','RUSTUP_HOME') if k in env}
     # Discovery must not install a missing toolchain, even with rustup defaults.
     resolution['RUSTUP_AUTO_INSTALL'] = '0'
+    # Query-only probes first: neither listing toolchains nor components can
+    # install, and an absent toolchain is classified before any resolver runs.
+    def query(*arguments):
+        try:
+            return subprocess.check_output([rustup,*arguments], env=resolution, text=True,
+                                           stderr=subprocess.PIPE, timeout=30)
+        except (subprocess.CalledProcessError, OSError, subprocess.TimeoutExpired) as problem:
+            raise RunnerNotPrepared('runner not prepared: rustup query failed: '
+                                    +' '.join(arguments)) from problem
+    listed = [line.split()[0] for line in query('toolchain','list').splitlines() if line.split()]
+    prepared(any(name == RUST or name.startswith(RUST+'-') for name in listed),
+             'installed Rust toolchain missing: '+RUST)
+    components = [line.strip() for line in query('component','list','--toolchain',RUST,'--installed').splitlines()]
+    for name in ('rustfmt','clippy'):
+        prepared(any(row.startswith(name+'-') for row in components),
+                 'installed Rust component missing: '+name)
     def rust_tool(name):
-        return Path(subprocess.check_output([rustup,'which','--toolchain','1.98.0',name],
-                    env=resolution, text=True, timeout=30).strip()).resolve(strict=True)
+        return Path(query('which','--toolchain',RUST,name).strip()).resolve(strict=True)
     cargo, rustc, rustdoc = (rust_tool(n) for n in ('cargo','rustc','rustdoc'))
     for name in ('rustfmt','clippy-driver','cargo-clippy','cargo-fmt'):
-        require((cargo.parent/name).is_file(), 'installed Rust component missing: '+name)
+        prepared((cargo.parent/name).is_file(), 'installed Rust component missing: '+name)
     go_candidates = sorted(Path(env['RUNNER_TOOL_CACHE']).glob('go/1.26.6/x64/bin/go'))
-    require(len(go_candidates) == 1, 'installed Go 1.26.6 required; no download fallback')
+    prepared(len(go_candidates) == 1, 'installed Go 1.26.6 required; no download fallback')
     go = go_candidates[0].resolve(strict=True)
     home = root/'home'
     for leaf in ('home','config','data','cache','runtime','tmp','cargo','build','gocache','gopath'):
         (root/leaf).mkdir(mode=0o700)
     original_cargo = Path(env.get('CARGO_HOME', str(Path(env['HOME'])/'.cargo')))
     for leaf in ('registry','git'):
-        require((original_cargo/leaf).is_dir(), 'installed offline Cargo cache missing: '+leaf)
+        prepared((original_cargo/leaf).is_dir(), 'installed offline Cargo cache missing: '+leaf)
         shutil.copytree(original_cargo/leaf, root/'cargo'/leaf, symlinks=True)
     prepared_go = Path(env['RUNNER_TEMP'])/'deadline-prepared-go-mod'
-    require(prepared_go.is_dir(), 'prepared offline Go module cache missing')
+    prepared(prepared_go.is_dir(), 'prepared offline Go module cache missing')
     shutil.copytree(prepared_go, root/'gopath/pkg/mod', symlinks=True)
     private = dict(PATH=os.pathsep.join([str(cargo.parent),str(go.parent),str(Path(sys.executable).parent),'/usr/bin','/bin']),
         HOME=str(home), USERPROFILE=str(home), XDG_CONFIG_HOME=str(root/'config'),
@@ -618,6 +646,15 @@ def binary(arguments):
     return result.returncode if result.returncode >= 0 else 128-result.returncode
 
 
+def unprepared(problem):
+    """Classify a missing prerequisite; never install it and never claim acceptance."""
+    print('RUNNER_NOT_PREPARED: '+str(problem), file=sys.stderr)
+    if EVIDENCE.is_dir():
+        save(EVIDENCE/'runner-not-prepared.json', {'classification':'runner-not-prepared',
+             'reason':str(problem), 'installed_anything':False, 'acceptance':False})
+    return NOT_PREPARED_EXIT
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('mode',choices=['stage','generator','owning','binary'])
@@ -628,7 +665,10 @@ def main():
         return binary(args.arguments)
     require(not args.arguments, 'unexpected diagnostic arguments')
     if args.mode == 'stage':
-        begin()
+        try:
+            begin()
+        except RunnerNotPrepared as problem:
+            return unprepared(problem)
         return 0
     return generator() if args.mode == 'generator' else owning()
 
