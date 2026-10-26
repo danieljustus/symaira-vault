@@ -175,6 +175,16 @@ option. Release/debug packaging is unchanged. Retain the actual rebuilt binary
 even on mismatch and record effective flags/profile. Never normalize binary
 differences away or replace an externally supplied binary silently.
 
+Follow-up (#1409): the opt-level 1 smoke was not sufficient on the hosted
+macOS runner. A same-source rebuild into another target directory still
+differed in exactly `LC_UUID` and one CodeDirectory page hash, because ld64
+derives the UUID from the absolute output path. On Darwin the check therefore
+rebuilds at the *same* absolute `CARGO_TARGET_DIR` as the binary under test:
+the original target tree is renamed aside, rebuilt from scratch, compared
+byte-for-byte, and always renamed back (the supplied binary is never replaced).
+Linux and Windows keep the separate run-owned target directory. Equality is
+unchanged; no normalization is applied.
+
 The next genuine Linux prefix reached zero-TTL, then correctly rejected an
 invalid fixture assumption. The pinned Go initializer's `omitempty` tag omits
 numeric zero; the actual persisted configuration reloaded as thirty seconds,

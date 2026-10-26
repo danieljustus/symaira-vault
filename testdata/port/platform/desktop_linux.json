@@ -1,0 +1,2345 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+    "commit_sha": "861ad93813e3ee43c4ec989f45940d14b05b6eaf",
+    "release": "unreleased",
+    "source_files": [
+      "internal/autotype/autotype_common.go",
+      "internal/autotype/autotype_linux.go",
+      "internal/autotype/autotype_windows.go",
+      "internal/autotype/focus.go",
+      "internal/autotype/focus_linux.go",
+      "internal/autotype/focus_windows.go",
+      "internal/autotype/interface.go",
+      "internal/autotype/provider.go",
+      "internal/clipboard/clipboard.go",
+      "internal/clipboard/interface.go",
+      "internal/clipboard/provider.go",
+      "internal/clipboard/system_clipboard.go",
+      "internal/secrets/filter.go"
+    ],
+    "source_digest": "8b19618b4ffcd07851931a4c0fb28ccb2afde7e5193576ef7c43279e8440b486",
+    "generator_digest": "0a247a52a7eca7848b4730666f444dbb3d8b895f3b11be6ce3b571c0a6706bc9",
+    "dependency": "github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=; github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI="
+  },
+  "note": "Go-derived by scripts/rust-port/cmd/desktopgen on GOOS=linux with fake POSIX-shell desktop tools on a disposable PATH. Sections: clipboard_cases drive internal/clipboard (atotto backend selection); autotype_cases drive internal/autotype NewLinuxAutotype().Type; windows_extracted_not_executed are go/parser literals from GOOS=windows sources and were never executed. No real clipboard, display or credential was touched.",
+  "script_placeholders": [
+    "@REC@",
+    "@EXIT@",
+    "@FOCUS1@",
+    "@FOCUS2@",
+    "@FOCUSEXIT@"
+  ],
+  "fake_tools": {
+    "clip.exe": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'clip.exe' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "powershell.exe": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'powershell.exe' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "termux-clipboard-get": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'termux-clipboard-get' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "termux-clipboard-set": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'termux-clipboard-set' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "wl-copy": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=copy\n{ printf '%s\\n' 'wl-copy' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "wl-paste": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\n{ printf '%s\\n' 'wl-paste' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "wtype": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=type\n{ printf '%s\\n' 'wtype' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "xclip": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in -in) mode=copy;; esac; done\n{ printf '%s\\n' 'xclip' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "xdotool": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=type\n[ \"$1\" = getactivewindow ] && mode=focus\n{ printf '%s\\n' 'xdotool' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "xsel": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=paste\nfor a in \"$@\"; do case \"$a\" in --input) mode=copy;; esac; done\n{ printf '%s\\n' 'xsel' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n",
+    "ydotool": "#!/bin/sh\nREC='@REC@'\nn=$(/bin/cat \"$REC/seq\" 2>/dev/null || echo 0)\nn=$((n+1))\necho \"$n\" > \"$REC/seq\"\nmode=type\n{ printf '%s\\n' 'ydotool' \"$mode\" \"$#\"; for a in \"$@\"; do printf '%s\\n' \"$a\"; done; } > \"$REC/call.$n\"\ncase \"$mode\" in\ncopy|type) /bin/cat > \"$REC/call.$n.stdin\"; exit @EXIT@ ;;\npaste) /bin/cat \"$REC/paste\"; exit @EXIT@ ;;\nfocus)\n  f=$(/bin/cat \"$REC/focus.n\" 2>/dev/null || echo 0)\n  f=$((f+1))\n  echo \"$f\" > \"$REC/focus.n\"\n  if [ \"$f\" = 1 ]; then printf '%s\\n' '@FOCUS1@'; else printf '%s\\n' '@FOCUS2@'; fi\n  exit @FOCUSEXIT@ ;;\nesac\n"
+  },
+  "autotype_env_whitelist": [
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "USER",
+    "LOGNAME",
+    "LANG",
+    "LC_ALL",
+    "SHELL",
+    "TERM",
+    "COLORTERM",
+    "DISPLAY",
+    "XAUTHORITY",
+    "GIT_ASKPASS",
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "SSH_AUTH_SOCK",
+    "SSH_AGENT_LAUNCHER",
+    "GNUPGHOME"
+  ],
+  "clipboard_cases": [
+    {
+      "name": "x11_no_tools",
+      "wayland_display": "",
+      "path_tools": [],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "wayland_no_tools",
+      "wayland_display": "wayland-0",
+      "path_tools": [],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "wayland_wl_pair",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "wl-copy",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "wl-paste",
+          "mode": "paste",
+          "argv": [
+            "--no-newline"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "wayland_wl_pair_beats_xclip",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste",
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "wl-copy",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "wl-paste",
+          "mode": "paste",
+          "argv": [
+            "--no-newline"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "wayland_wl_copy_without_paste_falls_to_xclip",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wl-copy",
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "wayland_wl_paste_without_copy_is_unsupported",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "wayland_empty_string_is_unset",
+      "wayland_display": "",
+      "wayland_display_set_to_empty": true,
+      "path_tools": [
+        "wl-copy",
+        "wl-paste",
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "x11_wl_pair_ignored_for_xclip",
+      "wayland_display": "",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste",
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "x11_wl_pair_only_is_unsupported",
+      "wayland_display": "",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "x11_xclip_only",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "x11_xsel_only",
+      "wayland_display": "",
+      "path_tools": [
+        "xsel"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xsel",
+          "mode": "paste",
+          "argv": [
+            "--output",
+            "--clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "x11_xclip_beats_xsel",
+      "wayland_display": "",
+      "path_tools": [
+        "xsel",
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "x11_xsel_beats_termux",
+      "wayland_display": "",
+      "path_tools": [
+        "xsel",
+        "termux-clipboard-set",
+        "termux-clipboard-get"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xsel",
+          "mode": "paste",
+          "argv": [
+            "--output",
+            "--clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "termux_pair",
+      "wayland_display": "",
+      "path_tools": [
+        "termux-clipboard-set",
+        "termux-clipboard-get"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "termux-clipboard-set",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "termux-clipboard-get",
+          "mode": "paste",
+          "argv": [],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "termux_set_without_get_is_unsupported",
+      "wayland_display": "",
+      "path_tools": [
+        "termux-clipboard-set"
+      ],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "termux_beats_windows_pair_and_does_not_trim",
+      "wayland_display": "",
+      "path_tools": [
+        "termux-clipboard-set",
+        "termux-clipboard-get",
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "secret",
+      "paste_output": "secret\r\n",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "termux-clipboard-set",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "termux-clipboard-get",
+          "mode": "paste",
+          "argv": [],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret\r\n"
+    },
+    {
+      "name": "windows_pair_trims_crlf",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "secret",
+      "paste_output": "secret\r\n",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "powershell.exe",
+          "mode": "paste",
+          "argv": [
+            "Get-Clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "windows_pair_trims_two_bytes_unconditionally",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "powershell.exe",
+          "mode": "paste",
+          "argv": [
+            "Get-Clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secr"
+    },
+    {
+      "name": "windows_pair_one_byte_output_is_kept",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "a",
+      "paste_output": "a",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "a"
+        },
+        {
+          "tool": "powershell.exe",
+          "mode": "paste",
+          "argv": [
+            "Get-Clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "a"
+    },
+    {
+      "name": "windows_pair_two_byte_output_becomes_empty",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "ab",
+      "paste_output": "ab",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "ab"
+        },
+        {
+          "tool": "powershell.exe",
+          "mode": "paste",
+          "argv": [
+            "Get-Clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": ""
+    },
+    {
+      "name": "windows_pair_empty_output",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe",
+        "powershell.exe"
+      ],
+      "payload": "",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "clip.exe",
+          "mode": "copy",
+          "argv": [],
+          "stdin": ""
+        },
+        {
+          "tool": "powershell.exe",
+          "mode": "paste",
+          "argv": [
+            "Get-Clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": ""
+    },
+    {
+      "name": "windows_clip_exe_without_powershell_is_unsupported",
+      "wayland_display": "",
+      "path_tools": [
+        "clip.exe"
+      ],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "windows_powershell_without_clip_exe_is_unsupported",
+      "wayland_display": "",
+      "path_tools": [
+        "powershell.exe"
+      ],
+      "payload": "secret",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "xclip_empty_payload_clear",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "",
+      "paste_output": "",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": ""
+    },
+    {
+      "name": "xclip_multiline_payload",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "line1\nline2\r\nline3",
+      "paste_output": "line1\nline2\r\nline3",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "line1\nline2\r\nline3"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "line1\nline2\r\nline3"
+    },
+    {
+      "name": "xclip_unicode_payload",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "pässwörd ✓ 𝄞 日本語",
+      "paste_output": "pässwörd ✓ 𝄞 日本語",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "pässwörd ✓ 𝄞 日本語"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "pässwörd ✓ 𝄞 日本語"
+    },
+    {
+      "name": "xclip_nul_in_payload",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "a\u0000b",
+      "paste_output": "a\u0000b",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "a\u0000b"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "a\u0000b"
+    },
+    {
+      "name": "xclip_payload_that_looks_like_flags",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "-in -selection clipboard",
+      "paste_output": "x",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "-in -selection clipboard"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "x"
+    },
+    {
+      "name": "xclip_long_payload",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "paste_output": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    {
+      "name": "xclip_exit_1_reports_exit_status",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 1,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "exit status 1",
+      "paste_error": "exit status 1",
+      "paste_result": ""
+    },
+    {
+      "name": "wayland_wl_exit_2_reports_exit_status",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wl-copy",
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 2,
+      "calls": [
+        {
+          "tool": "wl-copy",
+          "mode": "copy",
+          "argv": [],
+          "stdin": "secret"
+        },
+        {
+          "tool": "wl-paste",
+          "mode": "paste",
+          "argv": [
+            "--no-newline"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "exit status 2",
+      "paste_error": "exit status 2",
+      "paste_result": ""
+    },
+    {
+      "name": "relative_path_xclip_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "dot_path_xclip_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ".",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "empty_entry_xclip_in_cwd_is_not_used",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ":{bin}",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "empty_path_searches_nothing",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "",
+      "cwd_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "relative_hit_shadows_absolute_same_tool",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [],
+      "copy_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_error": "No clipboard utilities available. Please install xsel, xclip, wl-clipboard or Termux:API add-on for termux-clipboard-get/set.",
+      "paste_result": ""
+    },
+    {
+      "name": "relative_xclip_falls_to_absolute_xsel",
+      "wayland_display": "",
+      "path_tools": [
+        "xsel"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xclip"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xsel",
+          "mode": "copy",
+          "argv": [
+            "--input",
+            "--clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xsel",
+          "mode": "paste",
+          "argv": [
+            "--output",
+            "--clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "empty_entry_falls_through_to_absolute_xclip",
+      "wayland_display": "",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": ":{bin}",
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    },
+    {
+      "name": "wayland_relative_wl_pair_ignored_for_absolute_xclip",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "xclip"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "wl-copy",
+        "wl-paste"
+      ],
+      "payload": "secret",
+      "paste_output": "secret",
+      "tool_exit": 0,
+      "calls": [
+        {
+          "tool": "xclip",
+          "mode": "copy",
+          "argv": [
+            "-in",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": "secret"
+        },
+        {
+          "tool": "xclip",
+          "mode": "paste",
+          "argv": [
+            "-out",
+            "-selection",
+            "clipboard"
+          ],
+          "stdin": ""
+        }
+      ],
+      "copy_error": "",
+      "paste_error": "",
+      "paste_result": "secret"
+    }
+  ],
+  "autotype_cases": [
+    {
+      "name": "x11_xdotool_stable_focus",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    },
+    {
+      "name": "x11_sendkeys_metacharacters_are_not_escaped",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "a+b^c%d~e{f}g[h]i",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "a+b^c%d~e{f}g[h]i"
+        }
+      ]
+    },
+    {
+      "name": "x11_multiline_text",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "user\tname\nsecond\r\nthird",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "user\tname\nsecond\r\nthird"
+        }
+      ]
+    },
+    {
+      "name": "x11_unicode_text",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "pässwörd ✓ 𝄞 日本語",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "pässwörd ✓ 𝄞 日本語"
+        }
+      ]
+    },
+    {
+      "name": "x11_empty_text",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_text_that_looks_like_flags",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "--clearmodifiers --file /etc/passwd",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "--clearmodifiers --file /etc/passwd"
+        }
+      ]
+    },
+    {
+      "name": "x11_long_text",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-hunter2-"
+        }
+      ]
+    },
+    {
+      "name": "x11_focus_changed_aborts_before_typing",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "xterm"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: active window changed between capture and send — aborting to prevent typing into the wrong app",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_first_focus_class_empty_still_compares",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        "xterm"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: active window changed between capture and send — aborting to prevent typing into the wrong app",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_focus_probe_fails_lenient_still_types",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 1,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "x11_focus_probe_fails_strict_refuses",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "1",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 1,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_strict_zero_is_lenient",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "0",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 1,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "x11_strict_false_string_is_strict",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "false",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 1,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_type_failure_reports_exit_status",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 1,
+      "text": "hunter2",
+      "error": "autotype failed (xdotool may not be installed or display not available): exit status 1",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "x11_no_xdotool",
+      "wayland_display": "",
+      "path_tools": [],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_no_xdotool_strict_refuses_on_focus",
+      "wayland_display": "",
+      "path_tools": [],
+      "strict_focus_env": "1",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": []
+    },
+    {
+      "name": "x11_wtype_and_ydotool_do_not_substitute",
+      "wayland_display": "",
+      "path_tools": [
+        "wtype",
+        "ydotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "wayland_empty_string_uses_x11_path",
+      "wayland_display": "",
+      "wayland_display_set_to_empty": true,
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "wayland_wtype",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "wtype",
+          "mode": "type",
+          "argv": [
+            "-"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    },
+    {
+      "name": "wayland_wtype_beats_ydotool",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype",
+        "ydotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "",
+      "calls": [
+        {
+          "tool": "wtype",
+          "mode": "type",
+          "argv": [
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "wayland_ydotool_fallback",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "ydotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "ydotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--file",
+            "/dev/stdin"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    },
+    {
+      "name": "wayland_wtype_metacharacters_and_unicode",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "a+b^c%d~e{f}g[h]i ✓",
+      "error": "",
+      "calls": [
+        {
+          "tool": "wtype",
+          "mode": "type",
+          "argv": [
+            "-"
+          ],
+          "stdin": "a+b^c%d~e{f}g[h]i ✓"
+        }
+      ]
+    },
+    {
+      "name": "wayland_wtype_failure_does_not_fall_back",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype",
+        "ydotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 1,
+      "text": "hunter2",
+      "error": "autotype failed (wtype): exit status 1",
+      "calls": [
+        {
+          "tool": "wtype",
+          "mode": "type",
+          "argv": [
+            "-"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "wayland_ydotool_failure",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "ydotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 3,
+      "text": "hunter2",
+      "error": "autotype failed (ydotool): exit status 3",
+      "calls": [
+        {
+          "tool": "ydotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--file",
+            "/dev/stdin"
+          ],
+          "stdin": "hunter2"
+        }
+      ]
+    },
+    {
+      "name": "wayland_no_tools_install_hint",
+      "wayland_display": "wayland-0",
+      "path_tools": [],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: Wayland session detected but neither `wtype` nor `ydotool` is installed.\nInstall one of them:\n  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n  Arch:          sudo pacman -S wtype     (or ydotool)\n  Fedora:        sudo dnf install wtype   (or ydotool)\n`symvault doctor` will warn about this on every run until one is available",
+      "calls": []
+    },
+    {
+      "name": "wayland_xdotool_alone_is_not_used",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: Wayland session detected but neither `wtype` nor `ydotool` is installed.\nInstall one of them:\n  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n  Arch:          sudo pacman -S wtype     (or ydotool)\n  Fedora:        sudo dnf install wtype   (or ydotool)\n`symvault doctor` will warn about this on every run until one is available",
+      "calls": []
+    },
+    {
+      "name": "wayland_strict_focus_refuses",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "1",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": []
+    },
+    {
+      "name": "wayland_empty_text",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "",
+      "error": "",
+      "calls": [
+        {
+          "tool": "wtype",
+          "mode": "type",
+          "argv": [
+            "-"
+          ],
+          "stdin": ""
+        }
+      ]
+    },
+    {
+      "name": "x11_relative_path_xdotool_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_dot_path_xdotool_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ".",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_entry_xdotool_in_cwd_is_refused",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": ":{bin}",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_path_searches_nothing",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "",
+      "cwd_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_relative_hit_shadows_absolute_xdotool",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype failed: xdotool not installed",
+      "calls": []
+    },
+    {
+      "name": "x11_relative_xdotool_strict_refuses_on_focus",
+      "wayland_display": "",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "xdotool"
+      ],
+      "strict_focus_env": "1",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype: cannot detect active window on this platform",
+      "calls": []
+    },
+    {
+      "name": "x11_empty_entry_falls_through_to_absolute_xdotool",
+      "wayland_display": "",
+      "path_tools": [
+        "xdotool"
+      ],
+      "path_spec": ":{bin}",
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "firefox",
+        "firefox"
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "focus",
+          "argv": [
+            "getactivewindow",
+            "getwindowclassname"
+          ],
+          "stdin": ""
+        },
+        {
+          "tool": "xdotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "0",
+            "--file",
+            "-"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    },
+    {
+      "name": "wayland_relative_wtype_is_refused",
+      "wayland_display": "wayland-0",
+      "path_tools": [],
+      "path_spec": "rel",
+      "rel_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "autotype: Wayland session detected but neither `wtype` nor `ydotool` is installed.\nInstall one of them:\n  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n  Arch:          sudo pacman -S wtype     (or ydotool)\n  Fedora:        sudo dnf install wtype   (or ydotool)\n`symvault doctor` will warn about this on every run until one is available",
+      "calls": []
+    },
+    {
+      "name": "wayland_relative_wtype_falls_to_absolute_ydotool",
+      "wayland_display": "wayland-0",
+      "path_tools": [
+        "ydotool"
+      ],
+      "path_spec": "rel:{bin}",
+      "rel_tools": [
+        "wtype"
+      ],
+      "strict_focus_env": "",
+      "focus_class_outputs": [
+        "",
+        ""
+      ],
+      "focus_probe_exit": 0,
+      "type_exit": 0,
+      "text": "hunter2-supersecret",
+      "error": "",
+      "calls": [
+        {
+          "tool": "ydotool",
+          "mode": "type",
+          "argv": [
+            "type",
+            "--file",
+            "/dev/stdin"
+          ],
+          "stdin": "hunter2-supersecret"
+        }
+      ]
+    }
+  ],
+  "windows_extracted_not_executed": [
+    {
+      "file": "internal/autotype/autotype_windows.go",
+      "kind": "const",
+      "name": "readSendKeysWrapper",
+      "value": "$ErrorActionPreference = 'Stop';\n$text = [System.Console]::In.ReadToEnd();\n$wshell = New-Object -ComObject WScript.Shell;\n$wshell.SendKeys($text);"
+    },
+    {
+      "file": "internal/autotype/autotype_windows.go",
+      "kind": "exec_command",
+      "name": "exec.Command",
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$ErrorActionPreference = 'Stop';\n$text = [System.Console]::In.ReadToEnd();\n$wshell = New-Object -ComObject WScript.Shell;\n$wshell.SendKeys($text);"
+      ]
+    },
+    {
+      "file": "internal/autotype/focus_windows.go",
+      "kind": "const",
+      "name": "foregroundProbe",
+      "value": "Add-Type @\"\nusing System;\nusing System.Runtime.InteropServices;\npublic class W { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();\n                 [DllImport(\"user32.dll\")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid); }\n\"@;\n$h = [W]::GetForegroundWindow();\n[int]$pid = 0;\n[void][W]::GetWindowThreadProcessId($h, [ref]$pid);\n$p = Get-Process -Id $pid -ErrorAction SilentlyContinue;\nif ($p) { $p.ProcessName }"
+    },
+    {
+      "file": "internal/autotype/focus_windows.go",
+      "kind": "exec_command",
+      "name": "exec.Command",
+      "argv": [
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Add-Type @\"\nusing System;\nusing System.Runtime.InteropServices;\npublic class W { [DllImport(\"user32.dll\")] public static extern IntPtr GetForegroundWindow();\n                 [DllImport(\"user32.dll\")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid); }\n\"@;\n$h = [W]::GetForegroundWindow();\n[int]$pid = 0;\n[void][W]::GetWindowThreadProcessId($h, [ref]$pid);\n$p = Get-Process -Id $pid -ErrorAction SilentlyContinue;\nif ($p) { $p.ProcessName }"
+      ]
+    }
+  ]
+}

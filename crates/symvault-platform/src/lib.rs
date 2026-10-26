@@ -2,9 +2,9 @@
 #![deny(unsafe_code)]
 
 pub mod approval;
+pub mod desktop_commands;
 mod text_clipboard;
 pub use text_clipboard::{OwnedTextClipboard, native_text_clipboard};
-#[cfg(any(target_os = "macos", test))]
 mod focus;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -44,6 +44,34 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+
+/// Native automated typing for this OS. Linux and Windows use the command
+/// adapters in [`desktop_commands`]; their tool routing is proven with injected
+/// and fake-tool hosts only, not against a live desktop session. Other systems
+/// fail closed.
+#[must_use]
+pub fn native_autotype() -> Arc<dyn Autotype> {
+    #[cfg(target_os = "macos")]
+    {
+        Arc::new(MacOsPlatform)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Arc::new(desktop_commands::LinuxAutotype::new(Arc::new(
+            desktop_commands::SystemHost::new(),
+        )))
+    }
+    #[cfg(windows)]
+    {
+        Arc::new(desktop_commands::WindowsAutotype::new(Arc::new(
+            desktop_commands::SystemHost::new(),
+        )))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
+    {
+        Arc::new(UnavailablePlatform)
+    }
+}
 
 /// OS-keyring wrapper with the same process-lifetime memory fallback as Go.
 /// A missing credential is an ordinary cache miss; provider failures activate

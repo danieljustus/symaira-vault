@@ -207,3 +207,28 @@ post-drain response while Go stays incomplete, not an unrelated failure. The
 runner restores and hashes the original source and executable even on failure.
 Keep baseline and mutant receipts separately; native acceptance cannot be
 changed until the real native positive and negative controls are established.
+
+## Declared platform difference: Go plain-TCP output on Windows (#1470)
+
+The native Windows observation of run 40093354990 (job 120870417174) returned
+432,442 of 25,613,736 chunk bytes for Go over TLS and 245,760 for Rust over TLS,
+but 25,613,743 for the immutable Go oracle over plain TCP: the oracle's expired
+in-flight write completed after the fast client drain. Rust over plain TCP was
+not reached because the Go assertion aborted first and remains unmeasured there.
+
+Owner decision (2026-10-24): record exactly this cell as a declared platform
+difference and keep Rust strictly checked, so Rust stays stricter than the Go
+oracle. In `http_write_contract.py` only `implementation == 'go'`,
+`profile == 'tcp-output'` and `native_os == 'Windows'` skip the incomplete-chunk
+assertion and instead append a `declared_differences` entry carrying
+`implementation`, `profile`, `native_os`, `received_chunk_bytes`,
+`declared_chunk_length`, `decision` and a `reason` citing #1470. Rust on every
+OS, Go on `tls-output` everywhere and Go on Linux/macOS keep the assertion with
+its unchanged message, which `http_write_mutation.py` pins; the mutation control
+runs Rust over `tls-output` and is therefore never masked.
+
+The receipt validators in `rust-http-write.yml` and `rust-http-macos.yml` (and the
+pinned `ci_macos_satellites_baseline.json`) require exactly that one entry on
+Windows, none elsewhere, and a truncated chunk for every Rust cell. The unit
+controls in `test_http_write_contract.py` are synthetic and are not native
+evidence. Native Windows CI must still show Rust over plain TCP truncated.

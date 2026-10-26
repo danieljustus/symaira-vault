@@ -14,13 +14,15 @@ import tempfile
 import threading
 import time
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "d1cd0f97ac550bc3020bc86b0514989f8d28d95c"
 PROBE = ROOT / "scripts/rust-port/connect_contract_probe.go.txt"
 
 
-def checked(args, cwd=ROOT):
-    result = subprocess.run([str(x) for x in args], cwd=cwd, capture_output=True, timeout=180)
+def checked(args, cwd=ROOT, timeout=180):
+    result = subprocess.run([str(x) for x in args], cwd=cwd, capture_output=True, timeout=timeout)
     assert result.returncode == 0, (args[0], result.stderr.decode(errors="replace")[-3000:])
     return result.stdout
 
@@ -142,7 +144,8 @@ def main():
             helper.mkdir()
             (helper / "main.go").write_bytes(PROBE.read_bytes())
             go = base / ("go-probe.exe" if os.name == "nt" else "go-probe")
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/connectprobe"], cwd=tree)
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "./scripts/rust-port/cmd/connectprobe"],
+                    cwd=tree, timeout=oracle_build_timeout())
             observed = {"go": exercise(go, base / "go-home", True), "rust": exercise(rust, base / "rust-home", False)}
             assert observed["go"] == observed["rust"]
             receipt = {"passed": True, "oracle_commit": ORACLE, "oracle_source_files": oracle_sources,
@@ -160,7 +163,7 @@ def main():
             args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
             print(f"PASS: three actual native Go/Rust CONNECT cases on {platform.system()}")
         finally:
-            checked(["git", "worktree", "remove", "--force", tree])
+            remove_worktree(lambda: checked(["git", "worktree", "remove", "--force", tree]), "oracle worktree")
 
 
 if __name__ == "__main__":

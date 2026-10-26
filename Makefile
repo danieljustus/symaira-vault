@@ -246,14 +246,16 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
 CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
-CFG_BYTES_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CFG_BYTES_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
+CFG_SECTIONS_FIXTURE := testdata/port/config/sections.json
+CFG_SECTIONS_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
 # while the session/quota fixtures still sit on the frozen v0.22.1 baseline.
-CONFIG_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CONFIG_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CONFIG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
@@ -393,7 +395,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: export-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: export-differential restore-errors-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	# Other sync integration suites already run through the prerequisites above.
 	$(CARGO) test -p symvault-sync --all-features --locked --lib \
@@ -418,6 +420,17 @@ cfg-precedence-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configprecedencegen \
 		--check --output $(CFG_PRECEDENCE_FIXTURE)
 	$(CARGO) test -p symvault-core --test config_precedence_contract --locked
+
+cfg-sections-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \
+		--output $(CFG_SECTIONS_FIXTURE) \
+		--oracle-commit $(CFG_SECTIONS_ORACLE_COMMIT) \
+		--oracle-release $(CFG_ORACLE_RELEASE)
+
+cfg-sections-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \
+		--check --output $(CFG_SECTIONS_FIXTURE)
+	$(CARGO) test -p symvault-core --test config_sections_contract --test config_sections_process_guard --locked
 
 cfg-bytes-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configbytesgen \
@@ -522,8 +535,8 @@ rust-007-fixtures-check: config-profile-fixtures-check
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
 
 rust-007-differential: rust-007-fixtures-check
-	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
-	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
+	$(CARGO) test -p symvault-core --test config_session_contract --test session_cache_contract --all-features --locked
+	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --test session_cache_fallback_contract --all-features --locked
 
 .PHONY: config-profile-fixtures-check config-profile-differential
 config-profile-fixtures-check:
@@ -533,10 +546,16 @@ config-profile-differential: config-profile-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/configprofilegen -count=1 -v -timeout=10m
 	$(CARGO) test -p symvault-core --test config_profiles_contract --locked
 
-config-session-differential: rust-007-differential config-profile-differential
+config-session-differential: rust-007-differential config-profile-differential cfg-sections-fixtures-check
 
 config-cli-differential:
 	./scripts/rust-port/check_config_cli.sh
+
+# CLI-005: go-yaml scanner/parser/reader error wording of config.yaml. Re-verifies
+# the frozen Go corpus (pinned oracle 0cc78062) and replays it against the Rust CLI.
+.PHONY: yaml-syntax-cli-differential
+yaml-syntax-cli-differential:
+	./scripts/rust-port/check_yaml_syntax_cli.sh
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
@@ -638,8 +657,8 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 .PHONY: update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 3e088537045400d87461c75acf1c1d45d20cfe1d --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:
@@ -934,10 +953,68 @@ focus-differential:
 	SYMVAULT_FOCUS_FIXTURE=check GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/autotype -run '^TestGenerateFocusFixture$$' -count=1
 	$(CARGO) test -p symvault-platform --lib focus_guard_matches_go_oracle --locked
 
+# PLATFORM-001 (#1244): Linux desktop clipboard/autotype routing and the shared
+# autotype escapers, frozen from the production Go code. The Linux fixture is
+# generated by driving the real GOOS=linux packages with fake desktop tools, so
+# the generator needs a Linux host: on any other host it runs in a Linux
+# container (Docker). The oracle sources are verified against the pinned commit
+# on the host first, because a container's older git cannot read a worktree.
+DESKTOP_LINUX_FIXTURE := testdata/port/platform/desktop_linux.json
+DESKTOP_DOCKER_IMAGE ?= golang:1.26
+DESKTOP_REPO_COMMON := $(abspath $(shell git rev-parse --git-common-dir)/..)
+DESKTOP_GOMODCACHE = $(shell $(GO) env GOMODCACHE)
+
+.PHONY: autotype-escape-fixtures-check desktop-linux-fixtures-check desktop-linux-fixtures-generate desktop-linux-fixtures-ci desktop-differential
+autotype-escape-fixtures-check:
+	SYMVAULT_AUTOTYPE_ESCAPE_FIXTURE=check GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/autotype -run '^TestGenerateAutotypeEscapeFixture$$' -count=1
+
+desktop-linux-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/desktopgen -provenance-only
+ifeq ($(shell uname -s),Linux)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/desktopgen -check -output $(DESKTOP_LINUX_FIXTURE)
+else
+	docker run --rm -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
+		-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off \
+		$(DESKTOP_DOCKER_IMAGE) go run ./scripts/rust-port/cmd/desktopgen -check -provenance-host-verified -output $(DESKTOP_LINUX_FIXTURE)
+endif
+
+desktop-linux-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/desktopgen -provenance-only
+ifeq ($(shell uname -s),Linux)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/desktopgen -output $(DESKTOP_LINUX_FIXTURE)
+else
+	docker run --rm -v "$(DESKTOP_REPO_COMMON):$(DESKTOP_REPO_COMMON)" -v "$(DESKTOP_GOMODCACHE):/gomod" -v desktopgen-gocache:/gocache -w "$(CURDIR)" \
+		-e GOMODCACHE=/gomod -e GOCACHE=/gocache -e GOWORK=off -e GOTOOLCHAIN=local -e GOFLAGS=-mod=mod -e GOPROXY=off \
+		$(DESKTOP_DOCKER_IMAGE) go run ./scripts/rust-port/cmd/desktopgen -provenance-host-verified -output $(DESKTOP_LINUX_FIXTURE)
+endif
+
+# Aggregate-gate variant: on a Linux host the fixture is checked natively; on
+# any other host it is NOT verified (the Linux job owns it) and says so, rather
+# than requiring Docker on every runner. Use desktop-linux-fixtures-check to
+# verify it explicitly off Linux.
+desktop-linux-fixtures-ci:
+ifeq ($(shell uname -s),Linux)
+	$(MAKE) desktop-linux-fixtures-check
+else
+	@echo "NOTE desktop_linux.json: not regenerated on $(shell uname -s); the Linux 'Rust port contract' job verifies it. Run 'make desktop-linux-fixtures-check' (Docker) to verify here."
+endif
+
+desktop-differential: autotype-escape-fixtures-check desktop-linux-fixtures-ci
+	$(CARGO) test -p symvault-platform --test desktop_linux_contract --locked
+	$(CARGO) test -p symvault-platform --lib desktop_commands --locked
+
 .PHONY: export-differential
 export-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/exportgen -check
 	$(CARGO) test -p symvault-sync --test export_contract --locked
+
+# IO-002: production-Go RestoreBackup error text and side effects for hostile
+# and malformed archives, replayed through the Rust restore path.
+.PHONY: restore-errors-differential
+restore-errors-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/restoregen -check
+	$(CARGO) test -p symvault-cli --test restore_errors_contract --locked
+	$(CARGO) test -p symvault-sync --test restore_limits --locked
 
 .PHONY: mcp-call-fixtures-check mcp-call-differential mcp-execute-with-secret-fixtures-check mcp-execute-with-secret-differential
 mcp-execute-with-secret-fixtures-check: mcp-ordered-fixtures-check
@@ -970,6 +1047,25 @@ mcp-execute-api-https-fixtures-check: mcp-ordered-fixtures-check
 mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::https_is_verified_for_local_targets_and_public_dns_remains_blocked --exact
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::local_https_contract_matches_the_source_bound_go_handler_fixture --exact
+
+# CLI-007 (#1242): real SIGINT/SIGTERM/SIGHUP/SIGQUIT delivery to the actual Go
+# oracle (pinned in the driver, built from `git archive`) and the Rust CLI for
+# broker, run, run --broker and intake watch: ending status, output, listener,
+# orphaned child and on-disk state. Windows Ctrl-Break is covered by
+# egress_contract.py / intake_watch_contract.py; this Unix driver is skipped there.
+# Set SIGNAL_PROCESS_ARGS=--allow-dirty-for-development for an uncommitted candidate.
+SIGNAL_PROCESS_ARGS ?=
+.PHONY: signal-process-differential
+signal-process-differential:
+ifeq ($(OS),Windows_NT)
+	@echo "SKIP Unix signal process contract: Windows Ctrl-Break evidence comes from egress_contract.py and intake_watch_contract.py"
+else
+	python3 -B scripts/rust-port/test_signal_process_contract.py
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/signal_process_contract.py \
+		--rust "$(RUST_BINARY)" \
+		--receipt "$(CARGO_TARGET_DIR)/native-signals.json" $(SIGNAL_PROCESS_ARGS)
+endif
 
 .PHONY: mcp-copy-clipboard-fixtures-check mcp-copy-clipboard-differential mcp-clipboard-signals-differential
 mcp-clipboard-signals-differential:
@@ -1012,6 +1108,7 @@ mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixt
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_build_timeout.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 

@@ -10,6 +10,7 @@ on:
       - 'crates/symvault-store/**'
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/intake_watch_contract.py'
       - 'internal/intake/**'
       - 'cmd/intake/**'
@@ -31,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     defaults:
       run:
         shell: bash

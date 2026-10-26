@@ -1,6 +1,6 @@
 {
   "oracle": {
-    "commit": "3e088537045400d87461c75acf1c1d45d20cfe1d",
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "binary": "GOTOOLCHAIN=go1.26.6 go build -o target/symvault-go-update-oracle .",
     "go_version": "go1.26.6",
     "captured": "2026-10-21",

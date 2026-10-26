@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "e485a815e4be7af238df24b61b1bd09134c443f9"
+	pinnedOracleCommit  = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9"
 	pinnedOracleRelease = "unreleased"
 
 	// Default() derives vaultDir from the environment, and the writer emits it,

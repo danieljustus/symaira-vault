@@ -58,6 +58,14 @@ fn prepare<'a>(
     );
     // Concurrent brokers must never replace another live instance's CA. Only
     // the public certificate is written; the key stays in the owned runtime.
+    //
+    // Residual (CLI-007): the signal handler that removes this directory needs
+    // its path, so it can only be installed after the directory exists. A
+    // catchable signal in that short window (before `process_signals::install`
+    // in the caller) takes the default action and leaves the directory behind,
+    // exactly like SIGKILL at any time. Closing it would need a pre-chosen
+    // name or a shared cleanup slot and is not worth the added machinery for a
+    // public-certificate-only directory.
     let mut ca_directory_builder = tempfile::Builder::new();
     ca_directory_builder.prefix(".broker-ca-");
     #[cfg(unix)]
@@ -110,6 +118,10 @@ pub(crate) fn with_broker<T: Send>(
         ca_directory,
     } = prepare(root, store, identity, "127.0.0.1:0", strict, passthrough)
         .map_err(|error| format!("start broker: {error}"))?;
+    // Go subscribes nothing here, so a signal ends `run --broker` by the signal;
+    // only the per-instance CA directory must not outlive that death.
+    crate::process_signals::install(Some(ca_directory.path().to_path_buf()), None)
+        .map_err(|error| format!("start broker: {error}"))?;
     finish_ca(
         broker.with_running(listener, || action(environment)),
         ca_directory,
@@ -133,10 +145,13 @@ pub(crate) fn run(
     let hosts = parse_hosts(passthrough)?;
     let (sender, receiver) = mpsc::channel();
     let stop = broker.shutdown();
-    ctrlc::set_handler(move || {
-        let _ = stop.cancel();
-        let _ = sender.send(());
-    })
+    crate::process_signals::install(
+        Some(ca_directory.path().to_path_buf()),
+        Some(Box::new(move || {
+            let _ = stop.cancel();
+            let _ = sender.send(());
+        })),
+    )
     .map_err(|_| "register broker stop handler")?;
     println!(
         "Symaira Vault egress broker listening on {}",

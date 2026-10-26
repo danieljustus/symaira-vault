@@ -6,6 +6,10 @@ all-features = true
 
 [advisories]
 unmaintained = "workspace"
+ignore = [
+  # Scoped exception approved in #1502; delete together with the audit.toml entry.
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 only via age 0.12.1 -> p256 0.13, used by age tag/tagpq recipients that symvault never constructs; remove when age adopts p256 0.14 (#1502)" },
+]
 
 [licenses]
 confidence-threshold = 0.8

@@ -12,6 +12,7 @@ on:
       - 'crates/symvault-platform/**'
       - 'Cargo.lock'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/http_head_contract.py'
       - 'scripts/rust-port/http_framing_contract.py'
       - 'scripts/rust-port/http_slow_peer_contract.py'
@@ -32,12 +33,13 @@ concurrency:
 jobs:
   timeout:
     name: Configured HTTP deadlines (${{ matrix.os }})
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS runs in rust-http-macos.yml as one consolidated GitHub-hosted job.
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         shell: bash
@@ -49,15 +51,6 @@ jobs:
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
-      - name: Assert actual native macOS arm64
-        if: matrix.os == 'macos-latest'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$RUNNER_OS" = macOS
-          test "$(uname -s)" = Darwin
-          test "$(uname -m)" = arm64
-          sw_vers
       - name: Checkout retained Go oracle and candidate
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,7 +80,7 @@ jobs:
           from pathlib import Path
           text=Path('target/native-timeout-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',text)
-          assert results and sum(int(n) for n,_ in results)==(239 if os.environ['RUNNER_OS']=='Windows' else 241)
+          assert results and sum(int(n) for n,_ in results)==(243 if os.environ['RUNNER_OS']=='Windows' else 245)
           assert all(int(ignored)==0 for _,ignored in results)
           core=Path('target/native-timeout-core-tests.txt').read_text()
           core_results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',core)

@@ -22,7 +22,7 @@ from http_head_contract import parse_response
 from http_origin_contract import assert_validation_response
 from http_oauth_contract import PASSPHRASE, PROBE
 from http_process_contract import ProcessCapture, SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 IDENTITY = ROOT/'scripts/rust-port/http_tls_identity.go.txt'
 FIELDS = ['status_line','headers_without_date','body_base64']
@@ -307,9 +307,9 @@ def main():
                     helper=tree/'scripts/rust-port/cmd'/name;helper.mkdir();(helper/'main.go').write_bytes(source)
                 suffix='.exe' if os.name=='nt' else ''
                 go,seed,identity=[base/(name+suffix) for name in ['go-cli','go-seed','go-identity']]
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httptlsseed'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',identity,'./scripts/rust-port/cmd/httptlsidentity'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httptlsseed'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',identity,'./scripts/rust-port/cmd/httptlsidentity'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),identity_binary_sha256=hashlib.sha256(identity.read_bytes()).hexdigest())
                 identities=base/'identities'
                 receipt['identity_parameters']=json.loads(checked([identity,'--root',identities],base))
@@ -370,7 +370,7 @@ def main():
                 assert receipt['candidate_worktree_clean_at_end'] or args.allow_dirty_for_development
                 assert not receipt['differences'],'actual undeclared live TLS/mTLS differences retained'
                 receipt['passed']=True
-            finally:checked(['git','worktree','remove','--force',tree])
+            finally:remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f'PASS: 48 verified TLS/mTLS response pairs, 12 identity denials and eight progressing encrypted records per implementation on {platform.system()}')
 

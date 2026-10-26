@@ -19,7 +19,7 @@ from http_framing_contract import INITIALIZE, JSON_ERROR, PING, assert_response,
 from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE, Server
 from http_process_contract import SECRET, request
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 
 def cases(port,tokens):
@@ -181,8 +181,8 @@ def main():
                 (helper/'main.go').write_bytes(PROBE.read_bytes())
                 suffix = '.exe' if os.name=='nt' else ''
                 go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpslowseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httpslowseed'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 seed_home=base/'seed';seed_home.mkdir()
                 tokens=json.loads(checked([seed,'--root',seed_home/'vault'],seed_home,isolated(seed_home)))
@@ -238,7 +238,7 @@ def main():
                 assert not receipt['differences'], 'actual undeclared HTTP slow-peer differences retained'
                 receipt['passed']=True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f"PASS: three real runtime responses, two progressing read deadlines and a six-second idle boundary per implementation on {platform.system()}")

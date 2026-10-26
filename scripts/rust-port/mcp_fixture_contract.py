@@ -25,7 +25,7 @@ from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, inventory, git, pinned_go,
 import mcp_compiler_adapter as compiler_adapter
 
 ROOT = Path(__file__).resolve().parents[2]
-PRODUCT_SOURCE = 'e485a815e4be7af238df24b61b1bd09134c443f9'
+PRODUCT_SOURCE = '58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9'
 FIXTURE_BASE = '2b596f916bf736250b7fd3bb4d39f5f89fb20aa2'
 ANCHOR = ROOT/'scripts/rust-port/fixtures/mcp-anomaly/historical-inputs.json'
 ANCHOR_SHA256 = '678531bead3d9bc4a8d754ce7996b8cd29f94d8a4dbb8ef91cef71577296394d'
@@ -34,6 +34,7 @@ ARCHIVED_INPUTS = {
     'internal/mcp/server/mcp_secure_input_fixture_generator_test.go',
     'internal/mcp/server/mcpexecutewithsecret_fixture_generator_test.go',
     'internal/mcp/server/tools_run_test.go',
+    'internal/secureui/pty_test.go',
     'scripts/rust-port/cmd/mcpcallgen/main_test.go',
     'scripts/rust-port/cmd/http001initgen/main_test.go',
     'scripts/rust-port/cmd/execute_secret_provenance/main.go',
@@ -203,7 +204,7 @@ def approval_generator_source(root):
 def validate_product_source(root):
     # Fixed admission, never a caller-selected revision. Modules remain recorded
     # inputs but excluded from production byte equality, as in both old lanes.
-    if PRODUCT_SOURCE != 'e485a815e4be7af238df24b61b1bd09134c443f9':
+    if PRODUCT_SOURCE != '58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9':
         raise ValueError('invalid product source pin')
     resolved = git(ROOT, 'rev-parse', '--verify', PRODUCT_SOURCE+'^{commit}').decode().strip()
     if resolved != PRODUCT_SOURCE:
