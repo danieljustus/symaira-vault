@@ -1,6 +1,6 @@
 {
   "oracle": {
-    "commit": "3e088537045400d87461c75acf1c1d45d20cfe1d",
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "binary": "target/port/symvault-go (main.version set by ldflags)",
     "captured": "2026-10-21",
     "generated_on": "darwin",
@@ -12,7 +12,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "ac733b38a23a759efd471d2ac2f0a9fbad8b21e779b8b86cbdcd878c8e7d682a",
+    "source_digest": "ea63aa8f12073167d9a62e50802895c655b7af9ea00be5fab468e43c1581317d",
     "corekit_pin": "github.com/danieljustus/symaira-corekit v0.18.2",
     "env": "throwaway HOME and XDG_CACHE_HOME, Go main.version set per case, cache timestamp 2099-01-01T00:00:00Z",
     "go_version": "go1.26.6",
@@ -20,7 +20,7 @@
       "scripts/rust-port/refresh-update-fixtures.py"
     ],
     "generator_digest": "042a20f44f6b88120cc2b1ceee64700b16c39ff989e4f4f674714c5891bfdf54",
-    "source_pin_digest": "369b355da681d1d805f410f7268dc8032f24fb7cd3c9cd9ffd39bd9d279d087b",
+    "source_pin_digest": "5adb91a42527b85a27306fe8c7aff28c1e3ffa9811810b82a684026d6505d56f",
     "corekit_sum": "h1:Nl05PxfSrYJ5njEbdmqFHSQRtKlK6aj8HsOJReC15dY="
   },
   "cases": [

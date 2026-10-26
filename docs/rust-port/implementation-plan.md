@@ -1,5 +1,64 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## CLI-007 slice 2: non-MCP long-running command signals — 2026-10-23
+
+Issue #1242, slice 1 was #1469 (`mcp`). Inventory of Go commands that react to
+signals: `mcp` (done), `broker` (`signal.Notify` SIGINT/SIGTERM), `intake watch`
+(`NotifyContext` SIGINT/SIGTERM); `run`/`run --broker` register nothing, so the
+Go runtime defaults apply (death by SIGINT/SIGTERM/SIGHUP, exit 2 with a
+goroutine dump for SIGQUIT) and the started child keeps running. Go's `sync`
+and git push use `exec.CommandContext` with a plain context and no signal hook.
+There is no Go `daemon` command.
+
+Differential: `scripts/rust-port/signal_process_contract.py` (`make
+signal-process-differential`, `rust-signal-process.yml`) builds the pinned Go
+oracle `45b8577e` from `git archive` in a disposable directory and delivers
+SIGINT/SIGTERM/SIGHUP/SIGQUIT to the real Go and Rust processes in disposable
+HOME/XDG/TMPDIR roots with a memory keyring (no operator credentials). It
+compares 33 observations per implementation (21 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
+stderr, listener closed, orphaned child alive, and signal-relevant names left
+on disk. Each case first asserts that the process runs until signalled. The
+Go record is itself checked against expected endings so a vacuous oracle fails.
+
+Found by the harness against the pre-change Rust CLI and fixed: SIGHUP made
+`broker`/`intake watch` exit 0 (`ctrlc` `termination`; Go dies by SIGHUP); SIGQUIT
+left the temporary broker CA directory behind and died by signal instead of
+exit 2; `run --broker` leaked that directory on every signal; a terminal Ctrl-C
+orphaned the child of an unbounded `run` because Rust always put it in its own
+process group. `process_signals.rs` registers exactly the Go signal set, removes
+the per-instance CA directory, then re-raises the default action. Windows keeps
+`ctrlc` unchanged.
+
+Review follow-up (inherited `SIG_IGN`): Go 1.26 `runtime/signal_unix.go`
+`sigInstallGoHandler` keeps an inherited-ignored disposition for SIGHUP and
+SIGINT only; SIGTERM and SIGQUIT always get the Go handler. `signal.Notify`
+(`broker`, `intake watch`) installs a handler for SIGINT/SIGTERM and so
+overrides an ignore; nothing in Go notifies SIGHUP. `process_signals.rs` now
+queries each disposition (`sigaction(2)` with a null new action, the single
+`unsafe` block of the module) and does not register SIGHUP (always) or SIGINT
+(when the command has no stop callback) if they were `SIG_IGN`; SIGTERM and
+SIGQUIT are always registered. The 12 added driver cases start the process with
+the signal set to `SIG_IGN` via `preexec_fn` after its readiness marker and
+record whether it survived (1.5 s window), then stop it with SIGTERM.
+Negative control: a Rust build that always registers every signal is rejected
+at `broker-ignored-sighup`.
+
+Negative controls: the pre-fix Rust binary (`--expect-mismatch`) is rejected at
+`broker-sighup`; `test_signal_process_contract.py` mutates each compared field.
+One divergence is asserted rather than hidden: `run --timeout` keeps the child
+in its own process group for tree-kill (#1199), so a group-wide Ctrl-C does not
+reach it (`KNOWN_DIVERGENCES`; the check fails if Rust starts matching).
+
+Residuals added by review: the per-instance broker CA directory is created in
+`prepare()` before the signal handler (which needs its path) can be installed, so
+a catchable signal in that short window, like SIGKILL, leaves it; the stdio
+approval prompt in `symvault-platform` (`approval.rs`) runs its own `signal-hook`
+thread during prompts and is not covered by this module or the driver.
+
+Status: local Darwin/arm64 PASS. Native Linux CI, native macOS CI and every
+Windows console case are pending; this driver refuses to run on Windows rather
+than pass vacuously. CLI-007 stays `in_progress`.
+
 
 ## Dependency-bound oracle refresh — 2026-10-03
 

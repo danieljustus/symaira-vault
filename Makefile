@@ -246,16 +246,16 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
 CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
-CFG_BYTES_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CFG_BYTES_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
 CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
 CFG_SECTIONS_FIXTURE := testdata/port/config/sections.json
-CFG_SECTIONS_ORACLE_COMMIT ?= 861ad93813e3ee43c4ec989f45940d14b05b6eaf
+CFG_SECTIONS_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CFG_ORACLE_RELEASE ?= unreleased
 # RUST-007's config fixture pins its own production-Go oracle, separately from
 # PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
 # while the session/quota fixtures still sit on the frozen v0.22.1 baseline.
-CONFIG_ORACLE_COMMIT ?= e485a815e4be7af238df24b61b1bd09134c443f9
+CONFIG_ORACLE_COMMIT ?= 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9
 CONFIG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
@@ -395,7 +395,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: export-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: export-differential restore-errors-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	# Other sync integration suites already run through the prerequisites above.
 	$(CARGO) test -p symvault-sync --all-features --locked --lib \
@@ -657,7 +657,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 .PHONY: update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
-	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 3e088537045400d87461c75acf1c1d45d20cfe1d --check
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
 port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
@@ -1008,6 +1008,14 @@ export-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/exportgen -check
 	$(CARGO) test -p symvault-sync --test export_contract --locked
 
+# IO-002: production-Go RestoreBackup error text and side effects for hostile
+# and malformed archives, replayed through the Rust restore path.
+.PHONY: restore-errors-differential
+restore-errors-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/restoregen -check
+	$(CARGO) test -p symvault-cli --test restore_errors_contract --locked
+	$(CARGO) test -p symvault-sync --test restore_limits --locked
+
 .PHONY: mcp-call-fixtures-check mcp-call-differential mcp-execute-with-secret-fixtures-check mcp-execute-with-secret-differential
 mcp-execute-with-secret-fixtures-check: mcp-ordered-fixtures-check
 
@@ -1039,6 +1047,25 @@ mcp-execute-api-https-fixtures-check: mcp-ordered-fixtures-check
 mcp-execute-api-https-differential: mcp-execute-api-https-fixtures-check
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::https_is_verified_for_local_targets_and_public_dns_remains_blocked --exact
 	$(CARGO) test -p symvault-mcp --lib --locked -- broker::tests::local_https_contract_matches_the_source_bound_go_handler_fixture --exact
+
+# CLI-007 (#1242): real SIGINT/SIGTERM/SIGHUP/SIGQUIT delivery to the actual Go
+# oracle (pinned in the driver, built from `git archive`) and the Rust CLI for
+# broker, run, run --broker and intake watch: ending status, output, listener,
+# orphaned child and on-disk state. Windows Ctrl-Break is covered by
+# egress_contract.py / intake_watch_contract.py; this Unix driver is skipped there.
+# Set SIGNAL_PROCESS_ARGS=--allow-dirty-for-development for an uncommitted candidate.
+SIGNAL_PROCESS_ARGS ?=
+.PHONY: signal-process-differential
+signal-process-differential:
+ifeq ($(OS),Windows_NT)
+	@echo "SKIP Unix signal process contract: Windows Ctrl-Break evidence comes from egress_contract.py and intake_watch_contract.py"
+else
+	python3 -B scripts/rust-port/test_signal_process_contract.py
+	$(CARGO) build -p symvault-cli --bin symvault --locked
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 -B scripts/rust-port/signal_process_contract.py \
+		--rust "$(RUST_BINARY)" \
+		--receipt "$(CARGO_TARGET_DIR)/native-signals.json" $(SIGNAL_PROCESS_ARGS)
+endif
 
 .PHONY: mcp-copy-clipboard-fixtures-check mcp-copy-clipboard-differential mcp-clipboard-signals-differential
 mcp-clipboard-signals-differential:
@@ -1081,6 +1108,7 @@ mcp-call-fixtures-check: mcp-copy-clipboard-fixtures-check mcp-secure-input-fixt
 .PHONY: mcp-ordered-fixtures-check mcp-oracle-controls
 MCP_FIXTURE_EVIDENCE ?= target/mcp-fixture-evidence
 mcp-oracle-controls:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_build_timeout.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_oracle.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_mcp_compiler_adapter.py
 

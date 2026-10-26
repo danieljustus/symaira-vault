@@ -40,18 +40,28 @@ func TestTTY_EchoOffOverPty(t *testing.T) {
 		_, _ = master.Write([]byte("hunter2\n"))
 	}()
 
+	// The line discipline may deliver the echo in several chunks (Linux
+	// flushes it from a workqueue), so one Read can return just "h".
+	// Accumulate until the full line arrives or the deadline expires.
+	var got []byte
 	buf := make([]byte, 32)
 	_ = master.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-	n, err := master.Read(buf)
-	if err != nil && err != io.EOF {
-		t.Skipf("pty read failed (sandbox limitation): %v", err)
+	for !strings.Contains(string(got), "hunter2") {
+		n, err := master.Read(buf)
+		got = append(got, buf[:n]...)
+		if err != nil {
+			if len(got) == 0 && err != io.EOF {
+				t.Skipf("pty read failed (sandbox limitation): %v", err)
+			}
+			break
+		}
 	}
-	if n == 0 {
+	if len(got) == 0 {
 		t.Skip("pty produced no bytes (no controlling terminal)")
 	}
 	// Sanity: the bytes round-tripped through the pty.
-	if !strings.Contains(string(buf[:n]), "hunter2") {
-		t.Errorf("pty read returned %q, want to contain 'hunter2'", string(buf[:n]))
+	if !strings.Contains(string(got), "hunter2") {
+		t.Errorf("pty read returned %q, want to contain 'hunter2'", string(got))
 	}
 }
 

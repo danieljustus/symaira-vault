@@ -12,6 +12,7 @@ on:
       - 'testdata/**'
       - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/cmd/cligap/**'
       - 'scripts/rust-port/egress_contract*'
       - 'scripts/rust-port/http_tls_identity.go.txt'

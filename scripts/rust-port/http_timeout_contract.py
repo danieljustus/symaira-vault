@@ -21,7 +21,7 @@ from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE
 from http_process_contract import ProcessCapture, SECRET
 from http_slow_peer_contract import observe
-from mcp_process_contract import ORACLE, ROOT, checked, inventory, isolated, vault_snapshot
+from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 
 PROFILES=[('positive','1s','3s',(.6,2),(2,4)),
@@ -97,8 +97,8 @@ def main():
                 (helper/'main.go').write_bytes(seed_source)
                 suffix = '.exe' if os.name=='nt' else ''
                 go,seed = base/('go-cli'+suffix),base/('go-seed'+suffix)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree)
-                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httptimeoutseed'],tree)
+                checked(['go','build','-trimpath','-buildvcs=false','-o',go,'.'],tree,timeout=oracle_build_timeout())
+                checked(['go','build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/httptimeoutseed'],tree,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest())
                 with socket.socket() as selection:
                     selection.bind(('127.0.0.1',0));port=selection.getsockname()[1]
@@ -155,7 +155,7 @@ def main():
                 assert not receipt['differences'], 'actual undeclared HTTP slow-peer differences retained'
                 receipt['passed']=True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(f'PASS: nine configured runtime responses, six progressing read deadlines and three real six-second idle boundaries per implementation on {platform.system()}')
