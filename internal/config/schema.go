@@ -140,7 +140,8 @@ type UpdateConfig struct {
 
 // ClipboardConfig holds clipboard-related configuration.
 type ClipboardConfig struct {
-	AutoClearDuration int  `yaml:"auto_clear_duration,omitempty"`
+	// Zero disables the timer; omission would restore the loader's default.
+	AutoClearDuration int  `yaml:"auto_clear_duration"`
 	CopyByDefault     bool `yaml:"copyByDefault,omitempty"`
 	PrintByDefault    bool `yaml:"printByDefault,omitempty"`
 }
@@ -148,8 +149,8 @@ type ClipboardConfig struct {
 // AuditConfig holds audit log rotation configuration.
 type AuditConfig struct {
 	MaxFileSize int64 `yaml:"maxSizeMb,omitempty"`
-	MaxBackups  int   `yaml:"maxBackups,omitempty"`
-	MaxAgeDays  int   `yaml:"maxAgeDays,omitempty"`
+	MaxBackups  int   `yaml:"maxBackups"`
+	MaxAgeDays  int   `yaml:"maxAgeDays"`
 }
 
 // LoggingConfig holds logging configuration.

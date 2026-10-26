@@ -43,13 +43,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
-          go-version-input: '1.26.9'
+          go-version-input: '1.26.10'
           go-package: ./...
 
   dependency-scan:
@@ -64,13 +64,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Run OSV Scanner
         id: osv_scan
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: >-
             --lockfile=go.mod
@@ -81,7 +81,7 @@ jobs:
 
       - name: Upload OSV SARIF to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: osv-results.sarif
 
@@ -120,7 +120,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Verify product and historical oracle toolchains
@@ -134,6 +134,8 @@ jobs:
         with:
           version: v2.11.4
           install-mode: binary
+          # Skip `config verify`: it downloads the JSON schema and times out (#1407).
+          verify: false
           args: --timeout=5m --verbose
 
       - name: Run gosec SAST scanner
@@ -156,7 +158,7 @@ jobs:
 
       - name: Upload gosec SARIF report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gosec-sarif
           path: gosec.sarif
@@ -164,7 +166,7 @@ jobs:
 
       - name: Upload gosec results to code scanning
         if: always() && github.event_name == 'push'
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: gosec.sarif
 
@@ -257,7 +259,7 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install Rust verification tools
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
           tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0
           fallback: none
@@ -347,7 +349,7 @@ jobs:
       - name: Set up Go for embedded production-handler tests
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install pinned Rust toolchain
@@ -405,7 +407,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install dependencies
@@ -441,7 +443,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install dependencies
@@ -492,7 +494,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Build binary
@@ -504,7 +506,7 @@ jobs:
           go build -ldflags="-s -w -X main.version=dev -X main.commit=${{ github.sha }}" -o symvault-linux-amd64 .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: symvault-linux-amd64
           path: symvault-linux-amd64
@@ -528,7 +530,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" && !seen { split($2, v, "."); print v[1]; seen = 1 }')"
           if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
             echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
             exit 1
@@ -537,7 +539,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Build Vaultcore framework
@@ -655,7 +657,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.path-check.outputs.run == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -685,7 +687,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.26.9']
+        go-version: ['1.26.10']
       fail-fast: false
     steps:
       - name: Assert actual native macOS arm64
@@ -750,7 +752,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-report
           path: coverage.html
@@ -770,7 +772,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Run fuzz tests
@@ -819,7 +821,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Build binary
@@ -833,7 +835,7 @@ jobs:
           echo "Built: $output_name"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
           path: symvault-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
@@ -856,7 +858,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install dependencies
@@ -886,7 +888,7 @@ jobs:
     needs: [build]
     steps:
       - name: Download linux-amd64 binary
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: symvault-linux-amd64
           path: ./bin

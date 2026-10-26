@@ -78,7 +78,7 @@ class OracleControls(unittest.TestCase):
                 fixtures.fixture_anchor(root,[name])
 
     def test_compiler_is_effective_not_an_environment_label(self):
-        with patch.object(oracle.subprocess,'check_output',return_value=b'go1.26.9\n'):
+        with patch.object(oracle.subprocess,'check_output',return_value=b'go1.26.10\n'):
             with self.assertRaisesRegex(ValueError,'actual go1.26.6'):
                 oracle.pinned_go(dict(os.environ,GOTOOLCHAIN='go1.26.6'),fixtures.ROOT)
 
@@ -411,6 +411,141 @@ unittest.main(module=test_mcp_oracle, argv=['locale-control',
             self.assertNotIn('compiler', receipt)
             self.assertEqual(receipt['approval_generator'], 'approval-lifetime-v1')
             self.assertEqual(receipt['candidate_inputs'][fixtures.APPROVAL_SOURCE], fixtures.APPROVAL_SHA256)
+
+
+class ProductSourceControls(unittest.TestCase):
+    """Real admission/materialization with structural captures, never native evidence."""
+
+    def test_preflight_fixed_pin_and_source_drift_before_compiler_or_output(self):
+        sources = fixtures.validate_product_source(fixtures.ROOT)
+        self.assertEqual(len(set(sources)-{'go.mod', 'go.sum'}), 195)
+        for pin in [None, '', fixtures.PRODUCT_SOURCE[:8], oracle.ORDERED]:
+            with self.subTest(pin=pin), tempfile.TemporaryDirectory() as raw:
+                output = Path(raw)/'rejected'
+                with patch.object(fixtures, 'PRODUCT_SOURCE', pin), \
+                     patch.object(sys, 'argv', ['gate', '--generator', 'tools-call', '--output', str(output)]), \
+                     patch.object(fixtures, 'pinned_go', side_effect=AssertionError('unexpected compiler')) as compiler, \
+                     self.assertRaisesRegex(ValueError, 'product source pin'):
+                    fixtures.main()
+                compiler.assert_not_called()
+                self.assertFalse(output.exists())
+        real_git = fixtures.git
+        def drift(root, *args):
+            data = real_git(root, *args)
+            return data+b'\n' if args == ('show', fixtures.PRODUCT_SOURCE+':internal/config/schema.go') else data
+        with patch.object(fixtures, 'git', side_effect=drift), \
+             patch.object(fixtures, 'pinned_go', side_effect=AssertionError('unexpected compiler')) as compiler, \
+             patch.object(sys, 'argv', ['gate', '--output', 'not-created']), \
+             self.assertRaisesRegex(ValueError, 'production input drift: internal/config/schema.go'):
+            fixtures.main()
+        compiler.assert_not_called()
+
+    def test_product_materialization_identity_and_semantics_all_cases(self):
+        generators = fixtures.generator_paths()
+        with tempfile.TemporaryDirectory() as raw:
+            tree = Path(raw)
+            archive = fixtures.git(fixtures.ROOT, 'archive', fixtures.PRODUCT_SOURCE)
+            with tarfile.open(fileobj=io.BytesIO(archive)) as files:
+                for member in files.getmembers():
+                    if member.isfile():
+                        path = tree/member.name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(files.extractfile(member).read())
+            mapping = fixtures.materialize_inputs(tree, generators, fixtures.PRODUCT_SOURCE, 'approval-lifetime-v1')
+            fixtures.validate_product_source(tree)
+            self.assertEqual(mapping['product_source_commit'], fixtures.PRODUCT_SOURCE)
+            self.assertEqual(mapping['corrected_sha256'], fixtures.APPROVAL_SHA256)
+            for name in generators:
+                original = fixtures.historical_file(fixtures.ROOT, name).read_bytes()
+                if name == fixtures.APPROVAL_GENERATOR:
+                    original = fixtures.approval_generator_source(fixtures.ROOT)
+                expected = fixtures.corrected_generator(original, fixtures.PRODUCT_SOURCE) if name.endswith('.go') else original
+                self.assertEqual((tree/name).read_bytes(), expected)
+            for name, count in fixtures.FIXTURES.items():
+                old = json.loads(fixtures.historical_file(fixtures.ROOT, name).read_bytes())
+                identity = fixtures.product_capture_identity(tree, name)
+                expected_label = fixtures.PRODUCT_SOURCE[:8] if name == fixtures.APPROVAL_FIXTURE else fixtures.PRODUCT_SOURCE
+                self.assertEqual(identity['oracle']['commit'], expected_label)
+                unit_capture = dict(old, **identity)
+                fixtures.compare_product_capture(old, unit_capture, count, identity)
+                # Untouched historical output cannot masquerade as a P execution.
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'identity drift'):
+                    fixtures.compare_product_capture(old, old, count, identity)
+                for field in fixtures.IDENTITY_KEYS & identity['oracle'].keys():
+                    bad = copy.deepcopy(unit_capture)
+                    bad['oracle'][field] = 'unit-wrong'
+                    with self.subTest(name=name, field=field), self.assertRaises(ValueError):
+                        fixtures.compare_product_capture(old, bad, count, identity)
+                bad = copy.deepcopy(unit_capture)
+                bad['oracle']['source_files'].reverse()
+                with self.assertRaises(ValueError):
+                    fixtures.compare_product_capture(old, bad, count, identity)
+                for mutate in [lambda d: d['cases'].pop(),
+                               lambda d: d['cases'][0].update(name='changed'),
+                               lambda d: d.update(schema_version=True),
+                               lambda d: d.update(schema_version=1.0),
+                               lambda d: d['cases'][0].pop('name')]:
+                    bad = copy.deepcopy(unit_capture)
+                    mutate(bad)
+                    with self.assertRaises(ValueError):
+                        fixtures.compare_product_capture(old, bad, count, identity)
+            name = 'internal/mcp/server/test_main_test.go'
+            before = (tree/name).read_bytes()
+            receipt = fixtures.admit_timeout_child(tree, fixtures.PRODUCT_SOURCE)
+            self.assertEqual(receipt['delta'], '')
+            self.assertEqual((tree/name).read_bytes(), before)
+            (tree/name).write_bytes(before+b'// drift\n')
+            with self.assertRaisesRegex(ValueError, 'product timeout entrypoint identity drift'):
+                fixtures.admit_timeout_child(tree, fixtures.PRODUCT_SOURCE)
+
+    def test_bounded_product_execution_cannot_pass_on_no_execution(self):
+        # Drive the actual three-source loop. Git archives stand in for checkout
+        # administration only; compiler lookup/commands are explicit UNIT stubs.
+        with tempfile.TemporaryDirectory() as raw:
+            output = Path(raw)/'evidence'
+            real_git = fixtures.git
+            executions = []
+            commits = {}
+            def checkout(root, *args):
+                if args[:2] == ('worktree', 'add'):
+                    tree, commit = Path(args[3]), args[4]
+                    tree.mkdir()
+                    commits[tree] = commit
+                    archive = real_git(fixtures.ROOT, 'archive', commit)
+                    with tarfile.open(fileobj=io.BytesIO(archive)) as files:
+                        for member in files.getmembers():
+                            if member.isfile():
+                                path = tree/member.name
+                                path.parent.mkdir(parents=True, exist_ok=True)
+                                path.write_bytes(files.extractfile(member).read())
+                    return b''
+                if args[:2] == ('worktree', 'remove'):
+                    return b''
+                if args == ('ls-files',):
+                    return real_git(fixtures.ROOT, 'ls-tree', '-r', '--name-only', commits[root])
+                return real_git(root, *args)
+            def execute(command, tree, env, lane_out, label, steps):
+                executions.append(lane_out.name)
+                name = 'testdata/port/mcp/tools-call.json'
+                if lane_out.name == 'corrected':
+                    value = json.loads((tree/name).read_bytes())
+                    value['oracle']['commit_sha'] = oracle.ORDERED
+                    (tree/name).write_text(json.dumps(value))
+                # P deliberately leaves the historical output unchanged.
+            with patch.object(sys, 'argv', ['gate', '--generator', 'tools-call', '--output', str(output)]), \
+                 patch.object(fixtures, 'git', side_effect=checkout), \
+                 patch.object(fixtures, 'pinned_go', return_value=('unit-compiler', {}, {'version':'unit-only'})), \
+                 patch.object(fixtures, 'run_step', side_effect=execute), \
+                 self.assertRaisesRegex(ValueError, 'product capture identity drift'):
+                fixtures.main()
+            self.assertEqual(executions, ['historical', 'corrected', 'product-source'])
+            receipt = json.loads((output/'receipt.json').read_bytes())
+            self.assertFalse(receipt['passed'])
+            self.assertEqual(len(receipt['lanes']), 2)
+            self.assertTrue(all(row['passed'] for row in receipt['lanes']))
+            self.assertFalse(receipt['product_source_replay']['passed'])
+            self.assertEqual(receipt['product_source_replay']['source_commit'], fixtures.PRODUCT_SOURCE)
+            self.assertTrue((output/'product-source/tools-call.json').is_file())
 
 
 if __name__=='__main__':

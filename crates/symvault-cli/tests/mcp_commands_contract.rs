@@ -5,6 +5,25 @@ mod mcp_commands;
 #[path = "../src/run_commands.rs"]
 mod run_commands;
 
+/// Go's `symvault mcp --stdio` subscribes SIGINT/SIGTERM/SIGQUIT for the whole
+/// process (`cmd/mcp/serve_deps.go`: `ServeSignalNotify(sigCh, SIGINT, SIGTERM,
+/// SIGQUIT)`), so an external SIGINT/SIGTERM never takes the OS default action:
+/// it cancels the serve context and the command returns nil, i.e. exit code 0.
+/// `internal/secureui/backend_tty.go` and go-tty only `signal.Stop` their own
+/// channels, which leaves that subscription in place after the terminal is
+/// restored. Actual Go oracle 0cc78062 under a controlling PTY (idle after a
+/// completed secure-input prompt; during an ordinary approval prompt) ends with
+/// `WIFEXITED` and status 0, never `WIFSIGNALED`.
+#[cfg(unix)]
+fn assert_go_signal_shutdown(status: std::process::ExitStatus, context: &str) {
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(
+        (status.code(), status.signal()),
+        (Some(0), None),
+        "{context}: Go cancels its context on SIGINT/SIGTERM and exits 0 (not by signal)"
+    );
+}
+
 #[cfg(unix)]
 #[ignore = "run via scripts/rust-port/mcp-approval-pty.py for real controlling-TTY acceptance"]
 #[test]
@@ -233,14 +252,10 @@ fn unix_platform_approval_pty_acceptance() {
     drop(worker_stdin);
     let _ = stdout_reader.join();
     let stderr = stderr_reader.join().expect("join stderr reader");
-    {
-        use std::os::unix::process::ExitStatusExt;
-        assert_eq!(
-            status.signal(),
-            Some(2),
-            "idle SIGINT should retain default termination after terminal restoration: stdout={stdout} stderr={stderr}"
-        );
-    }
+    assert_go_signal_shutdown(
+        status,
+        &format!("idle SIGINT after terminal restoration: stdout={stdout} stderr={stderr}"),
+    );
     assert!(
         terminal_restore_error.is_none(),
         "raw Ctrl-C did not restore terminal before the next call: {terminal_restore_error:?}"
@@ -443,22 +458,21 @@ fn unix_platform_approval_pty_acceptance() {
     let term_stderr_text = term_stderr_reader
         .join()
         .expect("join SIGTERM stderr reader");
-    {
-        use std::os::unix::process::ExitStatusExt;
-        assert_eq!(
-            term_status.signal(),
-            Some(15),
-            "idle SIGTERM should retain default termination after terminal restoration: stdout={term_stdout_text} stderr={term_stderr_text}"
-        );
-    }
+    assert_go_signal_shutdown(
+        term_status,
+        &format!(
+            "idle SIGTERM after terminal restoration: stdout={term_stdout_text} stderr={term_stderr_text}"
+        ),
+    );
     let store = Store::open(&vault, &identity).expect("reopen fixture after SIGTERM cancellation");
     let entry = store
         .get("fixture", &identity)
         .expect("read fixture after SIGTERM cancellation");
     assert!(!entry.data.contains_key("sigterm-canceled-token"));
 
-    // Ordinary approvals still terminate on an external signal, but only after
-    // the shared raw-terminal scope restores cooked mode.
+    // Ordinary approvals still end the process on an external signal, but only
+    // after the shared raw-terminal scope restores cooked mode; like Go the exit
+    // is a clean status 0, not death by signal.
     let mut approval_worker = Command::new(&executable)
         .args([
             "--ignored",
@@ -512,14 +526,12 @@ fn unix_platform_approval_pty_acceptance() {
     let _ = approval_stderr.read_to_string(&mut approval_stderr_text);
     check_terminal_restored().expect("restore terminal before default approval SIGINT");
     println!("PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required");
-    {
-        use std::os::unix::process::ExitStatusExt;
-        assert_eq!(
-            approval_status.signal(),
-            Some(2),
-            "ordinary approval should keep default SIGINT termination after restoring termios; stdout={unexpected_response} stderr={approval_stderr_text}"
-        );
-    }
+    assert_go_signal_shutdown(
+        approval_status,
+        &format!(
+            "ordinary approval SIGINT after restoring termios: stdout={unexpected_response} stderr={approval_stderr_text}"
+        ),
+    );
     assert!(
         !unexpected_response.lines().any(|line| {
             serde_json::from_str::<serde_json::Value>(line)
@@ -597,14 +609,12 @@ fn unix_platform_approval_pty_acceptance() {
     let _ = term_approval_stderr.read_to_string(&mut term_approval_stderr_text);
     check_terminal_restored().expect("restore terminal before default approval SIGTERM");
     println!("PTY_APPROVAL_SIGNAL_RESTORED termios_restore_check=required");
-    {
-        use std::os::unix::process::ExitStatusExt;
-        assert_eq!(
-            term_approval_status.signal(),
-            Some(15),
-            "ordinary approval should keep default SIGTERM termination after restoring termios; stdout={term_unexpected_response} stderr={term_approval_stderr_text}"
-        );
-    }
+    assert_go_signal_shutdown(
+        term_approval_status,
+        &format!(
+            "ordinary approval SIGTERM after restoring termios: stdout={term_unexpected_response} stderr={term_approval_stderr_text}"
+        ),
+    );
     assert!(
         !term_unexpected_response.lines().any(|line| {
             serde_json::from_str::<serde_json::Value>(line)
@@ -620,7 +630,7 @@ fn unix_platform_approval_pty_acceptance() {
     assert!(!entry.data.contains_key("approval-term-must-not-commit"));
 
     println!(
-        "PTY_ACCEPTANCE_RECEIPT {{\"controlling_tty\":true,\"mcp_stdin_piped\":true,\"set_approved\":true,\"execute_approved\":true,\"deny_left_store_unchanged\":true,\"secure_input_stored\":true,\"request_credential_stored\":true,\"canceled_input_not_stored\":true,\"post_cancel_input_stored\":true,\"external_sigint_canceled\":true,\"idle_sigint_terminated\":true,\"external_sigterm_canceled\":true,\"idle_sigterm_terminated\":true,\"approval_sigint_terminated\":true,\"approval_sigterm_terminated\":true,\"worker_prompts\":17}}"
+        "PTY_ACCEPTANCE_RECEIPT {{\"controlling_tty\":true,\"mcp_stdin_piped\":true,\"set_approved\":true,\"execute_approved\":true,\"deny_left_store_unchanged\":true,\"secure_input_stored\":true,\"request_credential_stored\":true,\"canceled_input_not_stored\":true,\"post_cancel_input_stored\":true,\"external_sigint_canceled\":true,\"idle_sigint_exit0\":true,\"external_sigterm_canceled\":true,\"idle_sigterm_exit0\":true,\"approval_sigint_exit0\":true,\"approval_sigterm_exit0\":true,\"worker_prompts\":17}}"
     );
 }
 

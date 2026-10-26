@@ -1,5 +1,64 @@
 # Symaira Vault Rust Migration Implementation Plan
 
+## CLI-007 slice 2: non-MCP long-running command signals — 2026-10-23
+
+Issue #1242, slice 1 was #1469 (`mcp`). Inventory of Go commands that react to
+signals: `mcp` (done), `broker` (`signal.Notify` SIGINT/SIGTERM), `intake watch`
+(`NotifyContext` SIGINT/SIGTERM); `run`/`run --broker` register nothing, so the
+Go runtime defaults apply (death by SIGINT/SIGTERM/SIGHUP, exit 2 with a
+goroutine dump for SIGQUIT) and the started child keeps running. Go's `sync`
+and git push use `exec.CommandContext` with a plain context and no signal hook.
+There is no Go `daemon` command.
+
+Differential: `scripts/rust-port/signal_process_contract.py` (`make
+signal-process-differential`, `rust-signal-process.yml`) builds the pinned Go
+oracle `45b8577e` from `git archive` in a disposable directory and delivers
+SIGINT/SIGTERM/SIGHUP/SIGQUIT to the real Go and Rust processes in disposable
+HOME/XDG/TMPDIR roots with a memory keyring (no operator credentials). It
+compares 33 observations per implementation (21 plain deliveries plus 12 started with the signal inherited as `SIG_IGN`): how the process ended, stdout,
+stderr, listener closed, orphaned child alive, and signal-relevant names left
+on disk. Each case first asserts that the process runs until signalled. The
+Go record is itself checked against expected endings so a vacuous oracle fails.
+
+Found by the harness against the pre-change Rust CLI and fixed: SIGHUP made
+`broker`/`intake watch` exit 0 (`ctrlc` `termination`; Go dies by SIGHUP); SIGQUIT
+left the temporary broker CA directory behind and died by signal instead of
+exit 2; `run --broker` leaked that directory on every signal; a terminal Ctrl-C
+orphaned the child of an unbounded `run` because Rust always put it in its own
+process group. `process_signals.rs` registers exactly the Go signal set, removes
+the per-instance CA directory, then re-raises the default action. Windows keeps
+`ctrlc` unchanged.
+
+Review follow-up (inherited `SIG_IGN`): Go 1.26 `runtime/signal_unix.go`
+`sigInstallGoHandler` keeps an inherited-ignored disposition for SIGHUP and
+SIGINT only; SIGTERM and SIGQUIT always get the Go handler. `signal.Notify`
+(`broker`, `intake watch`) installs a handler for SIGINT/SIGTERM and so
+overrides an ignore; nothing in Go notifies SIGHUP. `process_signals.rs` now
+queries each disposition (`sigaction(2)` with a null new action, the single
+`unsafe` block of the module) and does not register SIGHUP (always) or SIGINT
+(when the command has no stop callback) if they were `SIG_IGN`; SIGTERM and
+SIGQUIT are always registered. The 12 added driver cases start the process with
+the signal set to `SIG_IGN` via `preexec_fn` after its readiness marker and
+record whether it survived (1.5 s window), then stop it with SIGTERM.
+Negative control: a Rust build that always registers every signal is rejected
+at `broker-ignored-sighup`.
+
+Negative controls: the pre-fix Rust binary (`--expect-mismatch`) is rejected at
+`broker-sighup`; `test_signal_process_contract.py` mutates each compared field.
+One divergence is asserted rather than hidden: `run --timeout` keeps the child
+in its own process group for tree-kill (#1199), so a group-wide Ctrl-C does not
+reach it (`KNOWN_DIVERGENCES`; the check fails if Rust starts matching).
+
+Residuals added by review: the per-instance broker CA directory is created in
+`prepare()` before the signal handler (which needs its path) can be installed, so
+a catchable signal in that short window, like SIGKILL, leaves it; the stdio
+approval prompt in `symvault-platform` (`approval.rs`) runs its own `signal-hook`
+thread during prompts and is not covered by this module or the driver.
+
+Status: local Darwin/arm64 PASS. Native Linux CI, native macOS CI and every
+Windows console case are pending; this driver refuses to run on Windows rather
+than pass vacuously. CLI-007 stays `in_progress`.
+
 
 ## Dependency-bound oracle refresh — 2026-10-03
 
@@ -53,8 +112,11 @@ Candidate `b92054f8dc6fa83f99aeaf7c37821e89cd00803d` shares one synchronized
 process signal state between hidden input and the active clipboard timer.
 Actual Go and Rust child processes prove SIGINT/SIGTERM clear the clipboard
 and cancel concurrent hidden input; SIGHUP clears the active timer. A later
-idle signal regains its OS default. The CLI installs this router only for
-stdio, including piped input without a terminal. HTTP shutdown is separate.
+idle SIGINT/SIGTERM shuts the CLI down like Go (exit 0, not death by signal:
+Go's serve command keeps its SIGINT/SIGTERM/SIGQUIT subscription for the whole
+process, `cmd/mcp/serve_deps.go`); SIGHUP keeps the OS default. The CLI installs
+this router only for stdio, including piped input without a terminal. HTTP
+shutdown is separate (`mcp_shutdown`, #1242).
 
 Complete native Darwin/arm64 and Linux/arm64 gates pass:91 core,177 MCP,
 36 CLI and60/53 platform tests, source-bound Go differentials, strict Clippy/
@@ -68,6 +130,35 @@ candidate, Cargo paths, Go fixtures and log hashes. HTTP signal fan-out and
 graceful shutdown, host clipboard/autotype, Windows TTY and remaining native
 targets stay open. No real clipboard or credential provider was exercised.
 
+
+## PLATFORM-001 slice 1: Linux/Windows desktop command adapters — 2026-10-22
+
+Issue #1244, oracle `861ad93813e3ee43c4ec989f45940d14b05b6eaf`. Gap inventory
+against Go `internal/clipboard` and `internal/autotype` (what Rust lacked before
+this slice, and whether it can be verified without a GUI):
+
+| Area | Go source | Rust state before | Without GUI? |
+|---|---|---|---|
+| Linux/Windows autotype | `autotype_linux.go`, `autotype_windows.go` | `UnavailablePlatform` only | yes (tool routing) / no (typing) |
+| Linux clipboard tool selection | atotto/clipboard `clipboard_unix.go` via `system_clipboard.go` | `arboard`, no tool selection | yes |
+| Windows clipboard | atotto `clipboard_windows.go` (Win32) | `arboard` | no |
+| macOS clipboard/autotype | atotto darwin, `autotype_darwin.go` | `pbcopy`, JXA | no |
+| SendKeys / AppleScript escaping | `autotype_common.go` | none (JXA uses `js_string`) | yes |
+| Focus guard | `focus.go` (+ per-OS capture) | shared `guard` (macOS only wired); Linux/Windows captures missing | yes |
+| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes (next slice) |
+| `Countdown` | `clipboard.go` | missing (no Go non-test caller) | yes |
+| Clear timer / signal clearing | `StartAutoClear` | `OwnedTextClipboard`, signal router (MCP-003) | covered elsewhere |
+| History-exclusion hints | none in Go | none | n/a |
+
+Implemented here: `desktop_commands` (above), `testdata/port/platform/desktop_linux.json`
+and `autotype_escape.json`, `make desktop-differential`. Evidence is local
+(Darwin/arm64 host; the Go side ran on Linux/arm64 in a container) and covers
+tool choice, argv, stdin routing, env policy and error text only. Independent review of candidate `1c5a6dab` led to a correction commit: Linux generator tests now dispatch the `--child-clipboard` re-exec through `TestMain` (verified in Linux Docker); the Windows-only unused `SystemHost` import is cfg-scoped (`cargo clippy --target x86_64-pc-windows-msvc` clean); `SystemHost` rejects relative/empty `PATH` hits like Go `exec.ErrDot` (fixture grew to 39 clipboard / 37 autotype cases, 102 recorded calls, oracle-backed) and treats an empty `PATH` as no entries; the env whitelist is tested by a real-process dump and equality with Go's `secrets.DefaultWhitelist()` in the fixture; Windows `SYSTEMROOT` is re-added after `env_clear`. Residuals: non-UTF-8 env values are dropped; spawn-error text for unusual failures differs from Go `os/exec`; Windows `LookPath` semantics are unmodeled (Windows adapters are not wired). Nothing here
+typed into or copied from a live desktop. Native receipt: push CI run
+39853115776 on merge commit `d13e5d0b` (#1481) passed `Rust port contract`
+(ubuntu-latest), `Rust native (windows-latest)`, `Rust native (macos-latest)`,
+`Rust Miri` and `Rust`; the Rust pairing, audit and KDF workflows on the same
+commit passed too. This proves the replays, not a live desktop clipboard.
 
 ## Integrated MCP clipboard dispatch — 2026-09-29
 
@@ -104,11 +195,13 @@ controlling-PTY acceptance explicitly runs the normal suite's opt-in helper.
 The actual Go terminal signal-cancellation oracle and Rust process acceptance
 cover SIGINT and SIGTERM during secure input, idle stdio, and ordinary approval.
 The PTY driver records 17 actions (10 critical approval, one execute approval,
-six hidden inputs), five cooked-mode restoration checks and two idle default
-terminations. Canceled inputs do not mutate the vault; subsequent input works.
-Ordinary approval restores the terminal before terminating with the original
-signal. The process-owned router is installed only by the standalone Unix
-stdio MCP CLI when a controlling terminal exists.
+six hidden inputs), five cooked-mode restoration checks and two idle
+SIGINT/SIGTERM shutdowns that exit 0 like Go (asserted as `WIFEXITED`, status 0,
+never `WIFSIGNALED`; actual Go oracle 0cc78062 under a controlling PTY, run on
+Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; subsequent input works.
+Ordinary approval restores the terminal, then exits 0 like Go. The process-owned router is installed only by the standalone Unix
+stdio MCP CLI, regardless of a controlling terminal; without one, approval and
+secure input fail closed.
 
 `secure-input-signals-receipt-7be90e81.json` in both existing build roots binds
 the final candidate, Cargo manifest paths, fixture and logs. Log SHA-256:
@@ -603,6 +696,12 @@ and vice versa.
    `QUOTA-001` transition helper.
 6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
+   Session-cache half (SESSION-001, #1243 slice 1): `make rust-007-differential`
+   replays the Go-derived lifecycle fixture (idle/max TTL, touch versus
+   non-refreshing probes, revoke, corrupted records, keyring failure/fallback,
+   concurrency) through `symvault-core` and `symvault-platform`. The cache has no
+   on-disk representation, so file modes are not part of this row. Touch ID
+   (SESSION-003) is a separate slice.
 
 **Expected:** the Go-derived config/session/quota fixtures and injected platform
 contract tests pass locally. The macOS native adapter slice now compiles and

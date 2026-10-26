@@ -13,6 +13,8 @@ on:
       - 'testdata/**'
       - 'third_party/**'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
+      - 'scripts/rust-port/test_build_timeout.py'
       - 'scripts/rust-port/mcp_process*'
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'
@@ -89,12 +91,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && '["ubuntu-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && '["ubuntu-latest"]' || (github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]')) }}
     defaults:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.9
+      GOTOOLCHAIN: go1.26.10
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
       TZ: UTC
@@ -119,7 +121,7 @@ jobs:
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
       - name: Set up pinned Python
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -284,10 +286,10 @@ jobs:
           # Two existing host-specific tests are Unix-only: symlink template
           # rejection and clipboard signal clearing. The stdio and HTTP
           # regressions below must execute on every OS.
-          expected_count = 236 if os.environ['RUNNER_OS']=='Windows' else 238
+          expected_count = 243 if os.environ['RUNNER_OS']=='Windows' else 245
           assert results and sum(int(n) for n,_ in results)==expected_count
           assert all(int(ignored)==0 for _,ignored in results)
-          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions']:
+          for case in ['tier_overrides_never_reach_handlers_or_storage', 'explicit_operator_allowlist_restricts_discovery_and_direct_calls', 'command_capability_denial_preserves_rpc_error_without_dispatch', 'oversized_stdio_frame_is_drained_with_bounded_storage', 'exact_frame_limit_is_accepted_and_next_request_recovers_after_oversize', 'oversized_unterminated_fragment_keeps_the_eof_contract', 'public_http_adapter_bounds_oversized_json_before_deserialization', 'nonmcp_oversized_prefixes_preserve_accepted_main_wire_response', 'oversized_body_errors_follow_admission_without_creating_sessions', 'cancelled_stdio_answers_the_frame_it_was_blocked_on_then_stops', 'stdio_cancelled_before_the_first_read_answers_nothing']:
               assert f'{case} ... ok' in text
           PY
           cargo test -p symvault-cli --test mcp_commands_contract --locked api_template_fixture > target/native-mcp-cli-tests.txt 2> target/native-mcp-cli-tests.stderr
@@ -341,7 +343,7 @@ jobs:
       - name: Upload complete actual native observations
         timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 10 || 40 }}
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: mcp-process-${{ matrix.os }}
           path: |

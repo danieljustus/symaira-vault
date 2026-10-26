@@ -59,6 +59,7 @@ func TestConcurrentMergeEntry(t *testing.T) {
 		t.Skip("skipping on windows: concurrent cgo calls can trigger access violations in age crypto")
 	}
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	id := testutil.TempIdentity(t)
 
 	entry := &Entry{

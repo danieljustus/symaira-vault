@@ -12,7 +12,7 @@ use std::{
 };
 
 use getifaddrs::{Address, InterfaceFlags};
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use qrcode::{Color as QrColor, EcLevel, QrCode};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;

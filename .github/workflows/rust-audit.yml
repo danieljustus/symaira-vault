@@ -56,7 +56,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOTOOLCHAIN: go1.26.9
+  GOTOOLCHAIN: go1.26.10
   RUSTUP_TOOLCHAIN: 1.98.0
 
 jobs:
@@ -68,7 +68,7 @@ jobs:
       # FreeBSD and other targets are intentionally absent: no native runner
       # evidence exists for them, and cross-compilation is not runtime proof.
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     steps:
       - name: Assert actual native macOS arm64
         if: matrix.os == 'macos-latest'
@@ -88,7 +88,7 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install pinned Rust toolchain
@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(go env GOVERSION)" = "go1.26.9"
+          test "$(go env GOVERSION)" = "go1.26.10"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
 
       - name: Run clean audit differential

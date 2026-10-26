@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOTOOLCHAIN: go1.26.9
+  GOTOOLCHAIN: go1.26.10
   GOWORK: 'off'
   RUSTUP_TOOLCHAIN: 1.98.0
 
@@ -59,7 +59,7 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
@@ -78,7 +78,7 @@ jobs:
           go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$' -count=1 -timeout=15m -json > storage-differential.jsonl
           python3 -c 'import json; rows=[json.loads(line) for line in open("storage-differential.jsonl")]; expected={"TestEntryWriterGoRustLiveAcceptance","TestManifestSequenceGoRustDifferential","TestManifestSequenceJSONTransportControls","TestEncryptedIndexGoRustLiveAcceptance","TestEncryptedIndexBuildEmptyGoRust"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass" and "/" not in r.get("Test", "")}; assert expected <= passed, (expected-passed); assert not any(r.get("Action")=="skip" and r.get("Test") in expected for r in rows); print("Verified all five live contract tests executed")'
       - name: Upload native storage evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: storage-differential-${{ matrix.os }}
           path: storage-differential.jsonl

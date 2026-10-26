@@ -12,6 +12,8 @@ import struct
 import subprocess
 import tempfile
 
+from build_timeout import oracle_build_timeout, remove_worktree
+
 ROOT = Path(__file__).resolve().parents[2]
 ORACLE = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2"
 PAYLOAD = b"file-use-secret\0\xff"
@@ -154,7 +156,8 @@ def main():
         try:
             go = base / "go.exe"
             build_env = dict(os.environ, GOOS="windows", GOARCH={"x64": "amd64", "arm64": "arm64"}[args.architecture])
-            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, env=build_env)
+            checked(["go", "build", "-trimpath", "-buildvcs=false", "-o", go, "."], cwd=tree, env=build_env,
+                    timeout=oracle_build_timeout())
             assert pe_machine(go) == expected
             oracle_sources = sorted(x for x in checked(["git", "ls-tree", "-r", "--name-only", ORACLE]).decode().splitlines()
                                     if x in {"go.mod", "go.sum"} or (x.endswith(".go") and not x.endswith("_test.go")))
@@ -185,7 +188,7 @@ def main():
             args.receipt.write_bytes((json.dumps(receipt, indent=2)+"\n").encode("utf-8"))
             print(f"PASS: four actual Go/Rust file-use cases on native Windows {args.architecture}")
         finally:
-            checked(["git", "worktree", "remove", tree])
+            remove_worktree(lambda: checked(["git", "worktree", "remove", tree]), "oracle worktree")
 
 
 if __name__ == "__main__":

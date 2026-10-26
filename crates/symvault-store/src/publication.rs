@@ -554,7 +554,8 @@ mod tests {
     #[test]
     fn rejects_symlink_and_socket_without_opening_or_removing_them() {
         use std::os::unix::{fs::symlink, net::UnixListener};
-        let dir = tempdir();
+        // Socket paths are bounded by SUN_LEN, so a long TMPDIR cannot be used.
+        let dir = tempfile::tempdir_in(Path::new("/tmp").canonicalize().unwrap()).unwrap();
         let parent = super::super::ensure_directory(dir.path()).unwrap();
         fs::write(dir.path().join("sentinel"), b"outside").unwrap();
         let link = dir.path().join("link.age");

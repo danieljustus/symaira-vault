@@ -199,7 +199,10 @@ fn go_duration(total: u64) -> String {
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "21f849ee");
+    assert_eq!(
+        fixture.oracle.commit,
+        "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9"
+    );
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
@@ -567,10 +570,15 @@ fn go_writer_cases_reload_with_rust_semantics() {
                 .expect("false-section case must reload a clipboard section");
             assert!(
                 loaded_clipboard.copy_by_default,
-                "Go's empty clipboard section applies its true default"
+                "Go's omitted clipboard boolean applies its true default"
             );
+            assert_eq!(requested_clipboard.auto_clear_duration, 0);
+            assert_eq!(loaded_clipboard.auto_clear_duration, 0);
             assert!(case.saved_yaml.contains("git: {}\n"));
-            assert!(case.saved_yaml.contains("clipboard: {}\n"));
+            assert!(
+                case.saved_yaml
+                    .contains("clipboard:\n    auto_clear_duration: 0\n")
+            );
 
             // Rust deliberately retains these explicit safety opt-outs in its
             // own writer, even though the Go `omitempty` writer loses them.
@@ -593,14 +601,12 @@ fn go_writer_cases_reload_with_rust_semantics() {
             assert!(rust_yaml.contains("auto_push: false"));
             assert!(rust_yaml.contains("auto_pull: false"));
             assert!(rust_yaml.contains("copyByDefault: false"));
+            assert!(rust_yaml.contains("auto_clear_duration: 0\n"));
             let rust_reload = Config::load_from_bytes(rust_yaml.as_bytes()).expect("Rust reload");
             assert!(!rust_reload.git.expect("Rust git section").auto_push);
-            assert!(
-                !rust_reload
-                    .clipboard
-                    .expect("Rust clipboard section")
-                    .copy_by_default
-            );
+            let clipboard = rust_reload.clipboard.expect("Rust clipboard section");
+            assert!(!clipboard.copy_by_default);
+            assert_eq!(clipboard.auto_clear_duration, 0);
         }
     }
 }

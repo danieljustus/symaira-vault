@@ -58,6 +58,14 @@ enum HttpTransport {
     Tls(Box<StreamOwned<ServerConnection, DeadlineSocket>>),
 }
 
+/// Largest slice handed to the OS socket per `write`; bounds bytes that can
+/// outlive an absolute write deadline inside the kernel send path.
+const MAX_SOCKET_WRITE: usize = 64 * 1024;
+
+fn bounded_write_slice(buffer: &[u8]) -> &[u8] {
+    &buffer[..buffer.len().min(MAX_SOCKET_WRITE)]
+}
+
 struct DeadlineSocket {
     stream: TcpStream,
     nonblocking: Cell<bool>,
@@ -145,6 +153,13 @@ impl Write for DeadlineSocket {
         if buffer.is_empty() {
             return Ok(0);
         }
+        // Windows AFD accepts one arbitrarily large nonblocking send whole,
+        // even when the peer never reads, so the kernel keeps transmitting
+        // after the absolute deadline. Hand the stack at most one bounded
+        // slice per call; `write_all` re-checks the deadline between slices
+        // (TLS already writes record-sized slices, which is why only plain
+        // TCP resumed after expiry).
+        let buffer = bounded_write_slice(buffer);
         let timeout = match self.write_deadline.get() {
             Some(deadline) => {
                 let remaining = deadline
@@ -2434,7 +2449,7 @@ mod tests {
 
     #[test]
     fn local_approval_route_is_mounted_without_mcp_bearer_auth() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -2503,7 +2518,7 @@ mod tests {
 
     #[test]
     fn waiting_mcp_approval_does_not_block_local_decision_on_same_server() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -2653,7 +2668,7 @@ mod tests {
 
     #[test]
     fn mcp_request_admission_reserves_two_workers_for_local_approval() {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
         use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -3839,6 +3854,30 @@ mod tests {
         assert_eq!(
             &after, b"after-reset",
             "expired bytes must never reach the peer"
+        );
+    }
+
+    #[test]
+    fn write_slice_is_bounded_on_every_platform() {
+        let payload = vec![0; 4 * 1024 * 1024];
+        assert_eq!(bounded_write_slice(&payload).len(), MAX_SOCKET_WRITE);
+        assert_eq!(bounded_write_slice(b"short"), b"short");
+    }
+
+    #[test]
+    fn socket_write_hands_the_kernel_at_most_one_bounded_slice() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("loopback bind");
+        let _client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (socket, _) = listener.accept().unwrap();
+        let mut stream = DeadlineSocket::new(socket);
+        stream
+            .set_write_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let payload = vec![0x5a; 4 * 1024 * 1024];
+        let accepted = stream.write(&payload).expect("first slice");
+        assert!(
+            (1..=MAX_SOCKET_WRITE).contains(&accepted),
+            "one write must not hand the stack {accepted} bytes that can outlive the deadline"
         );
     }
 

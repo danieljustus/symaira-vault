@@ -155,7 +155,10 @@ trusted; for major updates, every step is mandatory.
   ```bash
   go build ./...
   ```
-  Confirm no compilation errors on the target Go version (currently Go 1.26.5).
+  Confirm no compilation errors with the patched `toolchain` in
+  [`go.mod`](../go.mod) (currently `go1.26.10`), matching
+  `BUILD_GO_TOOLCHAIN` in [`Makefile`](../Makefile). The `go 1.26.6`
+  directive retains the minimum for frozen oracle checks.
 
 - [ ] **7. Cross-compilation smoke test**  
   Because Symaira Vault ships for multiple platforms:

@@ -257,7 +257,7 @@ var secureInputGeneratorFiles = []string{
 	"scripts/rust-port/cmd/secure_input_unicode/main.go",
 }
 
-const secureInputOracleCommit = "24acdb08fcc7021262717aa803d72eb8d151c66a"
+const secureInputOracleCommit = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9"
 
 func TestGenerateMCPSecureInputFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_SECURE_INPUT_FIXTURE") == "1"
@@ -288,7 +288,7 @@ func TestGenerateMCPSecureInputFixture(t *testing.T) {
 	}
 
 	oracle := secureInputOracle{
-		Commit:          "24acdb08",
+		Commit:          "58d978bb",
 		CommitSHA:       secureInputOracleCommit,
 		SourceFiles:     secureInputSourceFiles,
 		SourceHash:      sourceHash,

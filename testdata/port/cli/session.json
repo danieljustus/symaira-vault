@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
-    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
+    "commit_sha": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "release": "unreleased",
     "source_files": [
       "cmd/auth/auth.go",
@@ -32,8 +32,8 @@
       "internal/session/session.go",
       "internal/session/touchid_darwin.go"
     ],
-    "source_digest": "c3c566f6212ecbe8fafefc62e73a94da5f7dccc6bbd2e3a7227463e4a2802fc7",
-    "generator_digest": "b5a6a8720de2b4765ecb0c7ca6a0c760b3054cbb6b19e5f4dc163dbdfb102fca"
+    "source_digest": "ca2bf46364a47807513b3eb69f5404849db21e6b151c6faba04f8a5cc1e99212",
+    "generator_digest": "bbb8d3af2f57057782fbb4cbee1dab0225c8aae3cf97123ac7be8ef28c17bb1f"
   },
   "cases": [
     {

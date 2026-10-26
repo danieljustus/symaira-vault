@@ -38,10 +38,18 @@ pins=$(
         python3 - <<'PY'
 import ast
 from pathlib import Path
-tree = ast.parse(Path('scripts/rust-port/mcp_oracle.py').read_text())
-for node in tree.body:
-    if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in {'HISTORICAL', 'ORDERED'} for t in node.targets):
-        print(ast.literal_eval(node.value))
+for filename, pins in [('mcp_oracle.py', {'HISTORICAL', 'ORDERED'}),
+                       ('mcp_fixture_contract.py', {'PRODUCT_SOURCE'})]:
+    tree = ast.parse(Path('scripts/rust-port', filename).read_text())
+    found = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in pins:
+                    print(ast.literal_eval(node.value))
+                    found.add(target.id)
+    if found != pins:
+        raise ValueError('missing oracle pins: '+filename)
 PY
         grep -hoE '^[A-Z_]*ORACLE_COMMIT[[:space:]]*[:?]?=[[:space:]]*[0-9a-f]{7,40}' Makefile 2>/dev/null || true
     } | grep -oE '[0-9a-f]{7,40}' | sort -u

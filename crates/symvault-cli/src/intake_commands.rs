@@ -407,9 +407,12 @@ pub fn watch(
             return Ok(());
         }
         let (sender, stop) = mpsc::channel();
-        ctrlc::set_handler(move || {
-            let _ = sender.send(());
-        })
+        crate::process_signals::install(
+            None,
+            Some(Box::new(move || {
+                let _ = sender.send(());
+            })),
+        )
         .map_err(|e| (1, format!("register intake stop handler: {e}")))?;
         if !quiet {
             println!(
@@ -533,7 +536,7 @@ fn write_batch(
         };
         let bytes = fs::read(staged)
             .map_err(|e| (1, format!("read staged copy for {:?}: {e}", result.file)))?;
-        let hash = format!("{:x}", Sha256::digest(&bytes));
+        let hash = hex::encode(Sha256::digest(&bytes));
         if hash != provenance.sha256 {
             return Err((
                 1,

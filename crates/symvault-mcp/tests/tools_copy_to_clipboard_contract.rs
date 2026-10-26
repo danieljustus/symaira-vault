@@ -99,7 +99,7 @@ fn copy_to_clipboard_replays_source_bound_go_dispatcher() {
     .expect("decode actual Go copy_to_clipboard fixture");
     assert_eq!(
         fixture.oracle.commit_sha,
-        "24acdb08fcc7021262717aa803d72eb8d151c66a"
+        "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9"
     );
     assert_eq!(fixture.oracle.source_pin_digest.len(), 64);
     assert_eq!(fixture.oracle.go_version, "go1.26.6");

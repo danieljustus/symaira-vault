@@ -29,7 +29,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Check formatting
@@ -40,6 +40,8 @@ jobs:
         with:
           version: v2.11.4
           install-mode: binary
+          # Skip `config verify`: it downloads the JSON schema and times out (#1407).
+          verify: false
           args: --timeout=5m --verbose
 
       - name: Run gosec SAST scanner
@@ -49,7 +51,7 @@ jobs:
 
       - name: Upload gosec SARIF report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gosec-sarif
           path: gosec.sarif
@@ -57,7 +59,7 @@ jobs:
 
       - name: Upload gosec results to code scanning
         if: always() && github.event_name == 'push'
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: gosec.sarif
 
@@ -74,11 +76,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Run tests
-        run: go test -v -race -timeout=30m ./...
+        # TestReencryptJournalGoRustIntegration needs SYMVAULT_RUST_BINARY and
+        # fails without it by design; its gate is `make port-contract` (CI "Rust
+        # port contract"). This job has no Rust toolchain, same as CI's
+        # integration job.
+        run: go test -v -race -timeout=30m -skip 'ReencryptJournalGoRustIntegration' ./...
 
   govulncheck:
     name: govulncheck
@@ -92,13 +98,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
-          go-version-input: '1.26.9'
+          go-version-input: '1.26.10'
           go-package: ./...
 
   docker:
@@ -199,7 +205,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Install Cosign
@@ -211,15 +217,34 @@ jobs:
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           distribution: goreleaser
           version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
+
+      - name: Open Homebrew tap pull request
+        # Tap main is PR-protected; publish on branch symvault-<version> and open a PR.
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          BRANCH="symvault-${VERSION}"
+          TAP="$RUNNER_TEMP/homebrew-tap"
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/danieljustus/homebrew-tap.git" "$TAP"
+          scripts/homebrew-formula.sh "$VERSION" "dist/symaira-vault_${VERSION}_checksums.txt" > "$TAP/Formula/symvault.rb"
+          git -C "$TAP" switch -c "$BRANCH"
+          git -C "$TAP" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -am "Brew formula update for symvault version ${TAG}"
+          git -C "$TAP" push --force origin "$BRANCH"
+          gh pr view "$BRANCH" --repo danieljustus/homebrew-tap >/dev/null 2>&1 ||
+            gh pr create --repo danieljustus/homebrew-tap --base main --head "$BRANCH" \
+              --title "Brew formula update for symvault version ${TAG}" \
+              --body "Automated update from danieljustus/symaira-vault release ${TAG}."
 
       - name: Notarize macOS binaries
         if: steps.signing.outputs.signed == 'true'
@@ -315,7 +340,7 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild -version
-          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" && !seen { split($2, v, "."); print v[1]; seen = 1 }')"
           if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
             echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
             exit 1
@@ -334,7 +359,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
           cache: true
 
       - name: Build Vaultcore XCFramework (for iOS target)
@@ -733,7 +758,9 @@ jobs:
 
       - name: Fetch Homebrew formula
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symvault.rb" -o symvault.rb
+          # GoReleaser publishes on the PR branch symvault-<version> (tap main is PR-protected).
+          TAG="${{ steps.tag.outputs.tag }}"
+          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/symvault-${TAG#v}/Formula/symvault.rb" -o symvault.rb
 
       - name: Verify formula exists and has correct version
         run: |
@@ -743,8 +770,9 @@ jobs:
             echo "Homebrew formula not found or empty"
             exit 1
           fi
-          if ! grep -q "version \"${VERSION}\"" symvault.rb; then
-            echo "Version mismatch: expected ${VERSION} in formula"
+          # No `version` line (strict tap audit rejects it); Homebrew scans it from the URL.
+          if ! grep -q "releases/download/v${VERSION}/symaira-vault_${VERSION}_" symvault.rb; then
+            echo "Version mismatch: expected ${VERSION} in formula URLs"
             exit 1
           fi
 

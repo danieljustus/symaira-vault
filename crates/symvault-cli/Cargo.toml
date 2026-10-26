@@ -12,24 +12,25 @@ name = "symvault"
 path = "src/main.rs"
 
 [dependencies]
-base64 = "=0.22.1"
+base64 = "=0.23.1"
 clap.workspace = true
 crossterm = { version = "=0.29.0", default-features = false, features = ["events", "windows"] }
+hex = "=0.4.3"
 ratatui = { version = "=0.30.2", default-features = false, features = ["std", "crossterm_0_29", "layout-cache"] }
-flate2 = "=1.1.5"
+flate2 = "=1.1.10"
 getifaddrs = "=0.4.1"
-getrandom = "=0.3.3"
-hmac = "=0.12.1"
+getrandom = "=0.4.3"
+hmac = "=0.13.0"
 qrcode = { version = "=0.14.1", default-features = false }
 rcgen = "=0.14.10"
 tar = "=0.4.46"
 tempfile = "=3.27.0"
-zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
+zip = { version = "=9.0.5", default-features = false, features = ["deflate"] }
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
-sha2 = "=0.10.9"
+sha2 = "=0.11.0"
 serde_yaml_ng = "=0.10.0"
 yaml-edit = { version = "=0.3.1", default-features = false }
 rpassword = "=7.5.4"
@@ -38,16 +39,18 @@ symaira-core-version.workspace = true
 symvault-core.workspace = true
 symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 terminal_size = "=0.4.4"
-time = { version = "=0.3.47", features = ["formatting", "local-offset", "parsing"] }
+time = { version = "=0.3.55", features = ["formatting", "local-offset", "parsing"] }
 symvault-platform = { path = "../symvault-platform", version = "=0.0.0" }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 symvault-mcp = { path = "../symvault-mcp", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
 url = "=2.5.8"
-zeroize = { version = "=1.8.2", features = ["alloc"] }
+zeroize = { version = "=1.9.1", features = ["alloc"] }
 x509-parser = "=0.18.1"
 ctrlc = { version = "=3.5.2", features = ["termination"] }
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "=1.1.4", features = ["event", "fs", "process", "termios"] }
+libc = "=0.2.189"
+signal-hook = "=0.4.5"
+rustix = { version = "=1.1.5", features = ["event", "fs", "process", "termios"] }

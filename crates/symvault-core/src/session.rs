@@ -5,7 +5,7 @@ use aes_gcm::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use getrandom::fill;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -19,6 +19,7 @@ pub const IDENTITY_ACCOUNT: &str = "identity";
 pub const WRAP_KEY_ACCOUNT: &str = "wrap-key";
 pub const DEFAULT_MAX_LIFETIME: Duration = Duration::from_secs(8 * 60 * 60);
 const GO_ZERO_NANOS: i128 = -62_135_596_800_000_000_000;
+const GO_ZERO_TEXT: &str = "0001-01-01T00:00:00Z";
 
 #[derive(Debug, Error)]
 pub enum SessionError {
@@ -34,6 +35,10 @@ pub enum SessionError {
     LegacyPlaintext,
     #[error("session cryptography failed: {0}")]
     Crypto(String),
+    #[error("wrap key not found")]
+    WrapKeyMissing,
+    #[error("wrap key is unusable: {0}")]
+    WrapKeyInvalid(String),
 }
 
 /// Splits a composite keyring key into its service and account halves.
@@ -143,6 +148,23 @@ impl Timestamp {
     fn is_go_zero(&self) -> bool {
         self.nanos().is_ok_and(|nanos| nanos == GO_ZERO_NANOS)
     }
+}
+
+/// Go decodes an absent or `null` `time.Time` as the zero instant, an absent or
+/// `null` integer as zero and an absent or `null` string as empty. The cache
+/// contract depends on those defaults: a record without `saved_at` is expired,
+/// not malformed.
+fn go_zero_timestamp() -> Timestamp {
+    Timestamp::Text(GO_ZERO_TEXT.to_owned())
+}
+fn timestamp_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Timestamp, D::Error> {
+    Ok(Option::<Timestamp>::deserialize(deserializer)?.unwrap_or_else(go_zero_timestamp))
+}
+fn i64_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<i64, D::Error> {
+    Ok(Option::<i64>::deserialize(deserializer)?.unwrap_or_default())
+}
+fn string_or_null<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(deserializer)?.unwrap_or_default())
 }
 fn timestamp(t: SystemTime) -> Result<Timestamp, SessionError> {
     let d = t
@@ -266,7 +288,9 @@ fn parse_timestamp(v: &str) -> Option<i128> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct StoredSession {
+    #[serde(default = "go_zero_timestamp", deserialize_with = "timestamp_or_null")]
     saved_at: Timestamp,
+    #[serde(default = "go_zero_timestamp", deserialize_with = "timestamp_or_null")]
     last_access: Timestamp,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     passphrase: Option<String>,
@@ -274,19 +298,50 @@ struct StoredSession {
     encrypted_passphrase: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     nonce: Option<String>,
+    #[serde(default, deserialize_with = "i64_or_null")]
     ttl_ns: i64,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(
+        default,
+        deserialize_with = "i64_or_null",
+        skip_serializing_if = "is_zero"
+    )]
     max_lifetime_ns: i64,
+}
+impl StoredSession {
+    /// Go validates every timestamp while decoding the record, before any TTL
+    /// decision is made, so an unparsable instant is a decode error even when
+    /// the TTL would already have expired the entry.
+    fn validate(&self) -> Result<(), SessionError> {
+        self.saved_at.nanos()?;
+        self.last_access.nanos()?;
+        Ok(())
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct StoredIdentity {
+    #[serde(default = "go_zero_timestamp", deserialize_with = "timestamp_or_null")]
     saved_at: Timestamp,
+    #[serde(default = "go_zero_timestamp", deserialize_with = "timestamp_or_null")]
     last_access: Timestamp,
+    #[serde(default, deserialize_with = "string_or_null")]
     encrypted_identity: String,
+    #[serde(default, deserialize_with = "string_or_null")]
     nonce: String,
+    #[serde(default, deserialize_with = "i64_or_null")]
     ttl_ns: i64,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(
+        default,
+        deserialize_with = "i64_or_null",
+        skip_serializing_if = "is_zero"
+    )]
     max_lifetime_ns: i64,
+}
+impl StoredIdentity {
+    fn validate(&self) -> Result<(), SessionError> {
+        self.saved_at.nanos()?;
+        self.last_access.nanos()?;
+        Ok(())
+    }
 }
 
 fn is_zero(value: &i64) -> bool {
@@ -317,45 +372,65 @@ impl SessionManager {
             timestamp(t)?,
         ))
     }
-    fn wrap_key(&self, vault: &str, create: bool) -> Result<[u8; 32], SessionError> {
-        match self.keyring.get(&Self::key(vault, WRAP_KEY_ACCOUNT)) {
-            Ok(raw) => raw
-                .try_into()
-                .map_err(|_| SessionError::Malformed("wrap key must be 32 bytes".into())),
-            Err(SessionError::NotFound) if create => {
-                let mut raw = [0; 32];
-                fill(&mut raw).map_err(|e| SessionError::Crypto(e.to_string()))?;
-                self.keyring
-                    .set(&Self::key(vault, WRAP_KEY_ACCOUNT), &raw)?;
-                Ok(raw)
-            }
-            Err(e) => Err(e),
+    /// Reads the wrap key exactly as Go stores it: standard base64 text of 32
+    /// bytes. A missing or empty entry is `WrapKeyMissing`; anything else that
+    /// is not 32 decoded bytes is `WrapKeyInvalid`; backend failures pass through.
+    fn load_wrap_key(&self, vault: &str) -> Result<[u8; 32], SessionError> {
+        let raw = match self.keyring.get(&Self::key(vault, WRAP_KEY_ACCOUNT)) {
+            Ok(raw) => raw,
+            Err(SessionError::NotFound) => return Err(SessionError::WrapKeyMissing),
+            Err(error) => return Err(error),
+        };
+        if raw.is_empty() {
+            return Err(SessionError::WrapKeyMissing);
         }
+        let decoded = std::str::from_utf8(&raw)
+            .ok()
+            .and_then(|text| B64.decode(text).ok())
+            .ok_or_else(|| SessionError::WrapKeyInvalid("not standard base64".into()))?;
+        decoded.try_into().map_err(|decoded: Vec<u8>| {
+            SessionError::WrapKeyInvalid(format!("invalid length: got {}, want 32", decoded.len()))
+        })
+    }
+    /// Go replaces any unusable wrap key on save (`getOrCreateWrapKey`): every
+    /// load failure, not only absence, falls through to generating a new one.
+    fn get_or_create_wrap_key(&self, vault: &str) -> Result<[u8; 32], SessionError> {
+        if let Ok(key) = self.load_wrap_key(vault) {
+            return Ok(key);
+        }
+        let mut raw = [0; 32];
+        fill(&mut raw).map_err(|e| SessionError::Crypto(e.to_string()))?;
+        self.keyring.set(
+            &Self::key(vault, WRAP_KEY_ACCOUNT),
+            B64.encode(raw).as_bytes(),
+        )?;
+        Ok(raw)
     }
     fn encrypt(&self, vault: &str, value: &[u8]) -> Result<(String, String), SessionError> {
-        let key = self.wrap_key(vault, true)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let key = self.get_or_create_wrap_key(vault)?;
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
         let mut nonce = [0; 12];
         fill(&mut nonce).map_err(|e| SessionError::Crypto(e.to_string()))?;
         let encrypted = cipher
-            .encrypt(Nonce::from_slice(&nonce), value)
+            .encrypt(&Nonce::from(nonce), value)
             .map_err(|e| SessionError::Crypto(e.to_string()))?;
         Ok((B64.encode(encrypted), B64.encode(nonce)))
     }
     fn decrypt(&self, vault: &str, encrypted: &str, nonce: &str) -> Result<Vec<u8>, SessionError> {
-        let key = self.wrap_key(vault, false)?;
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let key = self.load_wrap_key(vault)?;
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(key));
         let payload = B64
             .decode(encrypted)
-            .map_err(|e| SessionError::Malformed(e.to_string()))?;
+            .map_err(|e| SessionError::Crypto(format!("decode ciphertext: {e}")))?;
         let nonce = B64
             .decode(nonce)
-            .map_err(|e| SessionError::Malformed(e.to_string()))?;
-        if nonce.len() != 12 {
-            return Err(SessionError::Malformed("nonce must be 12 bytes".into()));
-        }
+            .map_err(|e| SessionError::Crypto(format!("decode nonce: {e}")))?;
+        // Go's cipher panics on a wrong-length nonce; a typed error is the safe
+        // superset of that behaviour.
+        let nonce = Nonce::try_from(nonce.as_slice())
+            .map_err(|_| SessionError::Crypto("nonce must be 12 bytes".into()))?;
         cipher
-            .decrypt(Nonce::from_slice(&nonce), payload.as_ref())
+            .decrypt(&nonce, payload.as_ref())
             .map_err(|e| SessionError::Crypto(e.to_string()))
     }
     pub fn save_passphrase(
@@ -418,9 +493,12 @@ impl SessionManager {
     }
     fn session_metadata(&self, vault: &str) -> Result<Option<StoredSession>, SessionError> {
         match self.keyring.get(&Self::key(vault, SESSION_ACCOUNT)) {
-            Ok(raw) => serde_json::from_slice(&raw)
-                .map(Some)
-                .map_err(|e| SessionError::Malformed(e.to_string())),
+            Ok(raw) => {
+                let session: StoredSession = serde_json::from_slice(&raw)
+                    .map_err(|e| SessionError::Malformed(e.to_string()))?;
+                session.validate()?;
+                Ok(Some(session))
+            }
             Err(SessionError::NotFound) => Ok(None),
             Err(error) => Err(error),
         }
@@ -442,6 +520,7 @@ impl SessionManager {
         let raw = self.keyring.get(&Self::key(vault, SESSION_ACCOUNT))?;
         let mut s: StoredSession =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        s.validate()?;
         let (now, t) = self.now()?;
         if s.ttl_ns <= 0 {
             return Err(SessionError::Expired("TTL is zero or negative"));
@@ -462,15 +541,15 @@ impl SessionManager {
         {
             return Err(SessionError::LegacyPlaintext);
         }
-        let value = self.decrypt(
-            vault,
+        let (Some(encrypted), Some(nonce)) = (
             s.encrypted_passphrase
                 .as_deref()
-                .ok_or(SessionError::Expired("passphrase missing"))?,
-            s.nonce
-                .as_deref()
-                .ok_or(SessionError::Malformed("nonce missing".into()))?,
-        )?;
+                .filter(|value| !value.is_empty()),
+            s.nonce.as_deref().filter(|value| !value.is_empty()),
+        ) else {
+            return Err(SessionError::Expired("no passphrase data available"));
+        };
+        let value = self.decrypt(vault, encrypted, nonce)?;
         s.last_access = t;
         if let Ok(payload) = serde_json::to_vec(&s) {
             let _ = self
@@ -483,6 +562,7 @@ impl SessionManager {
         let raw = self.keyring.get(&Self::key(vault, IDENTITY_ACCOUNT))?;
         let mut i: StoredIdentity =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        i.validate()?;
         let session = self.session_metadata(vault)?;
         let (saved_at, last_access, ttl, max_lifetime) = if let Some(session) = &session {
             (
@@ -500,6 +580,9 @@ impl SessionManager {
             )
         };
         let (now, t) = self.now()?;
+        if ttl <= 0 {
+            return Err(SessionError::Expired("TTL is zero or negative"));
+        }
         if Self::expired(saved_at, last_access, ttl, max_lifetime, now) {
             if refresh {
                 let _ = self.revoke(vault);
@@ -577,11 +660,27 @@ impl SessionManager {
             )
             .unwrap_or(true)
     }
+    /// Go's `ClearSession`: only a failing session delete is an error and it
+    /// aborts before anything else is touched. The wrap key and the identity are
+    /// removed best-effort; a failure there is swallowed, as in Go. A missing
+    /// entry is never an error, so revoking twice is a no-op.
     pub fn revoke(&self, vault: &str) -> Result<(), SessionError> {
-        for a in [SESSION_ACCOUNT, IDENTITY_ACCOUNT, WRAP_KEY_ACCOUNT] {
-            self.keyring.delete(&Self::key(vault, a))?;
+        match self.keyring.delete(&Self::key(vault, SESSION_ACCOUNT)) {
+            Ok(()) | Err(SessionError::NotFound) => {}
+            Err(error) => return Err(error),
         }
+        let _ = self.keyring.delete(&Self::key(vault, WRAP_KEY_ACCOUNT));
+        let _ = self.clear_identity(vault);
         Ok(())
+    }
+
+    /// Go's `ClearIdentity`: removes only the cached identity and, unlike
+    /// `revoke`, reports a failing delete.
+    pub fn clear_identity(&self, vault: &str) -> Result<(), SessionError> {
+        match self.keyring.delete(&Self::key(vault, IDENTITY_ACCOUNT)) {
+            Ok(()) | Err(SessionError::NotFound) => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 
     /// Reports whether the cached session still holds a plaintext passphrase.
@@ -594,6 +693,7 @@ impl SessionManager {
             Ok(raw) => {
                 let session: StoredSession = serde_json::from_slice(&raw)
                     .map_err(|e| SessionError::Malformed(e.to_string()))?;
+                session.validate()?;
                 Ok(session
                     .passphrase
                     .as_deref()
@@ -619,6 +719,7 @@ impl SessionManager {
         };
         let mut session: StoredSession =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        session.validate()?;
         let plaintext = match session.passphrase.as_deref() {
             Some(value) if !value.is_empty() => value.to_owned(),
             _ => return Ok(false),

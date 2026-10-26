@@ -6,7 +6,10 @@ For download verification, use [the distribution guide](distribution.md#cosign-s
 
 ## Current Build Inputs
 
-Use the Go version declared in `go.mod`. The executable package is the repository
+Use the patched `toolchain` declared in [`go.mod`](../go.mod) (currently
+`go1.26.10`), matching `BUILD_GO_TOOLCHAIN` in [`Makefile`](../Makefile).
+The `go 1.26.6` directive retains the minimum for frozen oracle checks.
+The executable package is the repository
 root (`.`); the linker metadata variables are `main.version`, `main.commit` and
 `main.date`. To compare builds, keep the source revision, toolchain, platform,
 CGO setting, build tags, flags and all three metadata values identical. Release

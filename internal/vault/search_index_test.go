@@ -543,6 +543,7 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
+	t.Cleanup(FlushManifestUpdates) // drain queued manifest writes before TempDir removal
 	identity := testutil.TempIdentity(t)
 
 	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{

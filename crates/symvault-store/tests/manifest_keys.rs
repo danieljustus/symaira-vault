@@ -9,7 +9,7 @@ use symvault_crypto::parse_identity;
 use symvault_store::{Entry, Store};
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-const REVISION: &str = "55da4ca13ead39d4000cf6f866ac8671ca86d8f2";
+const REVISION: &str = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9";
 const IDENTITY: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
 
 #[derive(Deserialize)]
@@ -35,7 +35,7 @@ struct Input {
 }
 
 fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn fixture() -> Fixture {
@@ -85,7 +85,7 @@ fn fixture() -> Fixture {
         assert!(blob.status.success());
         hash.update(blob.stdout);
     }
-    assert_eq!(f.source_digest, format!("{:x}", hash.finalize()));
+    assert_eq!(f.source_digest, hex::encode(hash.finalize()));
     assert_eq!(
         f.generator_digest,
         digest(

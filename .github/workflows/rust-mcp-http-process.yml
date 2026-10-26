@@ -11,6 +11,7 @@ on:
       - 'Cargo.lock'
       - '.gitattributes'
       - 'internal/mcp/apitemplates/builtin/**'
+      - 'scripts/rust-port/build_timeout.py'
       - 'scripts/rust-port/http_process*'
       - 'scripts/rust-port/test_http_process_contract.py'
       - 'testdata/**'
@@ -34,12 +35,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     defaults:
       run:
         shell: bash
     env:
-      GOTOOLCHAIN: go1.26.9
+      GOTOOLCHAIN: go1.26.10
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
       RUST_TEST_THREADS: '1'
@@ -63,7 +64,7 @@ jobs:
       - name: Set up pinned Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.10'
       - name: Set up pinned Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -83,7 +84,7 @@ jobs:
           from pathlib import Path
           log=Path('target/native-http-tests.txt').read_text()
           results=re.findall(r'test result: ok\. (\d+) passed; 0 failed; (\d+) ignored',log)
-          assert results and sum(int(n) for n,_ in results)==(238 if os.environ['RUNNER_OS']=='Windows' else 240)
+          assert results and sum(int(n) for n,_ in results)==(243 if os.environ['RUNNER_OS']=='Windows' else 245)
           assert all(int(ignored)==0 for _,ignored in results)
           assert 'test http::tests::oversized_body_errors_follow_admission_without_creating_sessions ... ok' in log
           assert 'test http::tests::nonmcp_oversized_prefixes_preserve_accepted_main_wire_response ... ok' in log
@@ -124,7 +125,7 @@ jobs:
           PY
       - name: Upload complete actual native observations
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: http-process-${{ matrix.os }}
           path: |

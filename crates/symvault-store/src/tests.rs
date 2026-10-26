@@ -1907,7 +1907,7 @@ fn cross_process_manifest_writers_preserve_records_and_rebuild_recovers() {
         thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(store.load_manifest(&identity).unwrap(), before);
-    fs4::fs_std::FileExt::unlock(&lock).unwrap();
+    lock.unlock().unwrap();
     drop(lock);
     wait_for_process_marker(&root.join(MANIFEST_PROCESS_REBUILD_DONE));
     wait_for_process_marker(&root.join(MANIFEST_PROCESS_WRITERS_READY));

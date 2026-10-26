@@ -16,6 +16,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.23.2] - 2026-10-21
+
+### Security
+- Dependencies: `rustls-webpki` 0.103.16 (RUSTSEC-2026-0382, certificate
+  verification could accept distrusted intermediates) and `webpki-root-certs`
+  1.0.10 (RUSTSEC-2026-0383, bundled roots trusted distrusted emSign
+  intermediates).
+- Toolchain: release binaries are built with Go 1.26.10 (GO-2026-6809,
+  `crypto/x509` certificate verification, reachable through approval
+  client-identity validation).
+
+### Fixed
+- Configuration: an explicit `clipboard.autoClearDuration: 0` (auto-clear
+  disabled) is no longer rewritten to 30 seconds when the configuration is
+  saved or the vault is first opened (#1320).
+- Configuration: an explicit `audit.maxBackups: 0` (retain no rotated audit
+  backups) survives a configuration save instead of reverting to 5 (#1430).
+- Release distribution: the Scoop manifest is published again with a
+  refreshed bucket credential (#1413).
+
+### Changed
+- Dependencies: Rust (chacha20poly1305 0.11, getrandom 0.4, thiserror 2,
+  time, clap, zeroize, rustix, tokio and others), Go (prometheus/common,
+  golang.org/x/tools) and pinned GitHub Actions updated. `yaml-edit` and
+  `unicode-normalization` stay on versions that keep Go-oracle parity
+  (#1433).
+- Documentation: setup, command and memory-security guidance aligned with
+  the implementation (#1383); audit retention docs name the real
+  `maxSizeMb` key.
+
+## [v0.23.1] - 2026-10-18
+
+### Fixed
+- Release distribution: the Homebrew formula and Scoop manifest are now
+  published as pull requests to the PR-protected tap and bucket. v0.23.0's
+  GitHub release was published, but its Homebrew/Scoop update, macOS
+  notarization, MCPB bundles and macOS app DMG did not complete; v0.23.1
+  supersedes it with the same code.
+- The Scoop bucket is not updated for v0.23.1 (expired publishing
+  credential, #1413); install via Homebrew, the release archives or packages.
+
+## [v0.23.0] - 2026-10-18
+
+### Security
+- Upgraded the `zip` dependency of the Rust CLI and importers to 9.0.5
+  (RUSTSEC-2026-0367, -0368, -0369). SymVault never called the affected
+  `ZipArchive::extract`, so no exposure was demonstrated (#1408).
+
+### Fixed
+- OAuth token issuance and refresh now reject lifetimes whose expiry cannot be
+  represented instead of panicking, and fail before any token-registry write
+  (#1332).
+
 ### Changed (breaking)
 - `symvault get --output json` now masks sensitive fields (`password`,
   `token`, `secret`, `key`, `passwd`, `pwd`) as `***` unless `--print` is
@@ -1179,7 +1232,10 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.22.1...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.23.2...HEAD
+[v0.23.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.2
+[v0.23.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.1
+[v0.23.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.23.0
 [v0.22.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.1
 [v0.22.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.22.0
 [v0.21.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.21.1

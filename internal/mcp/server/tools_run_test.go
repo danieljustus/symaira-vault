@@ -626,7 +626,12 @@ func TestHandleRunCommand_WorkingDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
 	}
-	wd := t.TempDir()
+	// A date-like parent component is maskable by output redaction, so the
+	// child's working directory is proven by a relative write, not stdout.
+	wd := filepath.Join(t.TempDir(), "20261017")
+	if err := os.Mkdir(wd, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
@@ -636,7 +641,7 @@ func TestHandleRunCommand_WorkingDir(t *testing.T) {
 
 	req := mcp.CallToolRequest{
 		Arguments: map[string]any{
-			"command":     []any{"pwd"},
+			"command":     []any{"sh", "-c", "pwd; : > wd-marker"},
 			"working_dir": wd,
 		},
 	}
@@ -653,10 +658,12 @@ func TestHandleRunCommand_WorkingDir(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(wd, "wd-marker")); err != nil {
+		t.Errorf("child did not run in working dir %q: %v", wd, err)
+	}
 	stdout := strings.TrimSpace(output["stdout"].(string))
-	// stdout is wrapped with EmbedAsData; verify the path is contained within.
-	if !strings.Contains(stdout, wd) {
-		t.Errorf("stdout = %q, want to contain working dir %q", stdout, wd)
+	if stdout == "" {
+		t.Error("stdout is empty, want the data-wrapped pwd output")
 	}
 }
 

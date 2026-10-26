@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "21f849ee"
+	pinnedOracleCommit  = "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9"
 	pinnedOracleRelease = "unreleased"
 
 	// Default() derives vaultDir from the environment, and the writer emits it,
@@ -325,7 +325,7 @@ func buildWriterCases(workDir string) ([]writerCase, error) {
 	falseSections := configpkg.Default()
 	falseSections.Git = &configpkg.GitConfig{AutoPush: false, AutoPull: false, AutoPullInterval: 0, CommitTemplate: ""}
 	falseSections.Clipboard = &configpkg.ClipboardConfig{AutoClearDuration: 0, CopyByDefault: false, PrintByDefault: false}
-	second, err := buildWriterCase(workDir, "explicit_false_sections", "SaveTo writes empty sections for explicit false values", falseSections, nil)
+	second, err := buildWriterCase(workDir, "explicit_false_sections", "SaveTo preserves an explicit zero clipboard timer while omitting false booleans", falseSections, nil)
 	if err != nil {
 		return nil, err
 	}

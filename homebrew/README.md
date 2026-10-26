@@ -16,7 +16,7 @@ placeholder with the intended source tag, version, source archive SHA-256,
 commit and date. Verify the resulting URL (the template already prefixes the
 tag with `v`). Only `main.version`, `main.commit` and `main.date` exist in
 `main.go`; remove the unsupported `main.builtBy` assignment from the rendered
-copy. See `.goreleaser.yml` for the current release formula configuration.
+copy. See `scripts/homebrew-formula.sh` for the release formula.
 
 Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install the prepared formula from it:
 

@@ -5,6 +5,8 @@
 //! vault and unlocked identity. HTTP selects its configured agent per request;
 //! stdio uses the CLI-selected agent. It performs no keychain lookup.
 
+#[path = "mcp_shutdown.rs"]
+mod mcp_shutdown;
 #[path = "mcp_tls_cert.rs"]
 mod mcp_tls_cert;
 
@@ -32,7 +34,7 @@ use symvault_core::{
 use symvault_crypto::{Identity, SecretBytes};
 use symvault_mcp::{
     ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
-    ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
+    ToolListConfig, read_only_tool_names, run_stdio, run_stdio_until, unavailable_tool,
 };
 use symvault_platform::approval::is_tty_present;
 
@@ -131,6 +133,9 @@ pub fn run(
     );
     let clipboard = clipboard_backend();
     let (touch_id_available, backend, persistent, message) = status();
+    // Go clears a stale TLS discovery record for every transport before
+    // publishing its own (HTTP) or none (stdio).
+    let _ = fs::remove_file(root.join(".runtime-tls-cert"));
     if !stdio {
         if config
             .mcp
@@ -139,6 +144,11 @@ pub fn run(
         {
             confirm_insecure_bind(io::stdin().lock(), &mut io::stderr().lock())?;
         }
+        // Go subscribes SIGINT/SIGTERM/SIGQUIT here, after the cleartext
+        // confirmation and before the listener exists.
+        let runtime_metadata = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root)));
+        #[cfg(unix)]
+        mcp_shutdown::install_http(http_signal_cleanup(&runtime_metadata))?;
         let (tls_cert, tls_key, tls_ca, mtls_enabled) =
             effective_tls(config.mcp.as_ref(), tls_cert, tls_key, tls_ca);
         let generated = if !config
@@ -151,6 +161,16 @@ pub fn run(
         } else {
             None
         };
+        if generated.is_none()
+            && let Err(error) = mcp_tls_cert::ensure_tls_cert(root)
+        {
+            // Go caches the vault certificate for device pairing even when it
+            // serves cleartext or a configured certificate; failure only
+            // disables pairing.
+            eprintln!(
+                "could not compute TLS certificate fingerprint; device pairing is disabled: {error}"
+            );
+        }
         let (tls_cert, tls_key) = match generated.as_ref() {
             Some((cert, key)) => (
                 cert.to_str()
@@ -195,24 +215,39 @@ pub fn run(
                 .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
                 .port()
         );
+        // Go opens the approval-device store before serving; this creates the
+        // private empty store on first start.
+        ensure_device_session_store(root).map_err(|error| format!("MCP HTTP: {error}"))?;
+        if tls.is_none() {
+            let loopback_note = if address.is_loopback() {
+                " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
+            } else {
+                ""
+            };
+            eprintln!(
+                "MCP server is binding \"{address}\" without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).{loopback_note}"
+            );
+        }
         let server_working_dir = std::env::current_dir()
             .map_err(|error| format!("inspect server working directory: {error}"))?;
         let (approval_client_cert, approval_client_key) =
             configured_approval_tls_identity(root, mtls_enabled)?;
-        let mut runtime_metadata = RuntimeMetadataGuard::new(root);
-        runtime_metadata.publish(RuntimeMetadata {
-            bind: address.to_string(),
-            port: listener
-                .local_addr()
-                .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
-                .port(),
-            certificate: tls_cert.to_owned(),
-            client_ca: tls_ca.to_owned(),
-            client_auth_required: mtls_enabled,
-            approval_client_certificate: approval_client_cert,
-            approval_client_key,
-            server_working_dir,
-        })?;
+        runtime_metadata
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .publish(RuntimeMetadata {
+                bind: address.to_string(),
+                port: listener
+                    .local_addr()
+                    .map_err(|error| format!("inspect MCP HTTP listener: {error}"))?
+                    .port(),
+                certificate: tls_cert.to_owned(),
+                client_ca: tls_ca.to_owned(),
+                client_auth_required: mtls_enabled,
+                approval_client_certificate: approval_client_cert,
+                approval_client_key,
+                server_working_dir,
+            })?;
         let approval_queue = Arc::new(symvault_mcp::approval::ApprovalQueue::default());
         let enroll_secret = ensure_enroll_secret(root)?;
         let expected_recipient = symvault_crypto::recipient_string(&identity);
@@ -288,8 +323,11 @@ pub fn run(
         result.map_err(|error| format!("MCP HTTP: {error}"))
     } else {
         #[cfg(unix)]
-        symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
-            .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
+        {
+            symvault_platform::approval::install_stdio_clipboard_signal_router(clipboard.clone())
+                .map_err(|error| format!("install MCP stdio signal router: {error}"))?;
+            mcp_shutdown::install_stdio(root.to_path_buf())?;
+        }
         let agent_name = agent
             .filter(|name| !name.is_empty())
             .unwrap_or(config.default_agent.as_str());
@@ -312,8 +350,16 @@ pub fn run(
         .map_err(|error| format!("failed to create MCP server: {error}"))?;
         let stdin = io::stdin();
         let stdout = io::stdout();
-        run_stdio(BufReader::new(stdin.lock()), stdout.lock(), &mut handler)
-            .map_err(|error| format!("MCP stdio: {error}"))
+        let result = run_stdio_until(
+            BufReader::new(stdin.lock()),
+            stdout.lock(),
+            &mut handler,
+            mcp_shutdown::requested,
+        );
+        mcp_shutdown::stdio_finished();
+        // A signal-driven shutdown is a success and finishes in its own thread.
+        mcp_shutdown::park_if_requested();
+        result.map_err(|error| format!("MCP stdio: {error}"))
     }
 }
 
@@ -386,6 +432,24 @@ impl RuntimeMetadataGuard {
     }
 }
 
+/// Creates `<vault>/.symvault/device-sessions.json` (`{}`) when it is absent,
+/// matching Go's `NewDeviceSessionStore` on first start. An existing store is
+/// left to the approval commands that own its schema and migration.
+fn ensure_device_session_store(root: &Path) -> Result<(), String> {
+    let path = root.join(".symvault").join("device-sessions.json");
+    let existing = symvault_sync::safeio::read(&path)
+        .map_err(|error| format!("load device session store: {error}"))?;
+    if existing.is_some() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        symvault_sync::safeio::create_dir_all(parent)
+            .map_err(|error| format!("load device session store: {error}"))?;
+    }
+    symvault_sync::safeio::write_atomic(&path, b"{}")
+        .map_err(|error| format!("load device session store: {error}"))
+}
+
 fn effective_absolute_path(server_working_dir: &Path, value: &str) -> String {
     if value.is_empty() {
         return String::new();
@@ -435,10 +499,43 @@ fn configured_approval_tls_identity(
     ))
 }
 
+impl RuntimeMetadataGuard {
+    /// Removes only the records this guard published. Idempotent, so a signal
+    /// shutdown and the normal drop cannot remove a successor's records.
+    fn release(&mut self) {
+        remove_if_unchanged(&self.port_path, self.port_record.take().as_deref());
+        remove_if_unchanged(&self.tls_path, self.tls_record.take().as_deref());
+    }
+}
+
+/// Signal-time cleanup for the HTTP transport.
+///
+/// The listener thread lives for the whole process, so it must hold only a
+/// `Weak`: the local `Arc` in `run` stays the sole strong owner and the guard's
+/// `Drop` still removes the records on every non-signal return. The lock is
+/// intentionally kept until the process exits so the main thread cannot publish
+/// a record between this release and `process::exit`.
+#[cfg_attr(not(unix), allow(dead_code))]
+fn http_signal_cleanup(
+    runtime_metadata: &Arc<Mutex<RuntimeMetadataGuard>>,
+) -> Arc<dyn Fn() + Send + Sync> {
+    let weak = Arc::downgrade(runtime_metadata);
+    Arc::new(move || {
+        if let Some(runtime_metadata) = weak.upgrade() {
+            let mut guard = runtime_metadata
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            guard.release();
+            // ponytail: leaking the guard keeps the mutex locked until the
+            // imminent process::exit; only the signal path calls this.
+            std::mem::forget(guard);
+        }
+    })
+}
+
 impl Drop for RuntimeMetadataGuard {
     fn drop(&mut self) {
-        remove_if_unchanged(&self.port_path, self.port_record.as_deref());
-        remove_if_unchanged(&self.tls_path, self.tls_record.as_deref());
+        self.release();
     }
 }
 
@@ -1098,6 +1195,69 @@ mod tests {
             "runtime keeps the dispatch route installed so direct calls reach the capability denial"
         );
         assert!(!tool_list_config(&no_run_capability, false).execute_api_available);
+    }
+
+    #[test]
+    fn released_runtime_metadata_is_removed_once_and_never_a_successors() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let metadata = |bind_port| RuntimeMetadata {
+            bind: "127.0.0.1".into(),
+            port: bind_port,
+            certificate: String::new(),
+            client_ca: String::new(),
+            client_auth_required: false,
+            approval_client_certificate: String::new(),
+            approval_client_key: String::new(),
+            server_working_dir: root.path().to_path_buf(),
+        };
+        let mut first = RuntimeMetadataGuard::new(root.path());
+        first.publish(metadata(9001)).unwrap();
+        first.release();
+        assert!(!port.exists());
+        // A successor publishes after the signal-time release; the late Drop of
+        // the first guard must not remove the successor's record.
+        let mut second = RuntimeMetadataGuard::new(root.path());
+        second.publish(metadata(9002)).unwrap();
+        first.release();
+        drop(first);
+        assert!(
+            port.is_file(),
+            "release is idempotent and ownership-checked"
+        );
+        drop(second);
+        assert!(!port.exists());
+    }
+
+    #[test]
+    fn signal_cleanup_does_not_keep_the_guard_alive() {
+        let root = tempfile::tempdir().unwrap();
+        let port = root.path().join(".runtime-port");
+        let guard = Arc::new(Mutex::new(RuntimeMetadataGuard::new(root.path())));
+        guard
+            .lock()
+            .unwrap()
+            .publish(RuntimeMetadata {
+                bind: "127.0.0.1".into(),
+                port: 9003,
+                certificate: String::new(),
+                client_ca: String::new(),
+                client_auth_required: false,
+                approval_client_certificate: String::new(),
+                approval_client_key: String::new(),
+                server_working_dir: root.path().to_path_buf(),
+            })
+            .unwrap();
+        let cleanup = http_signal_cleanup(&guard);
+        assert!(port.is_file());
+        // A non-signal exit drops the only strong owner; Drop must remove the
+        // record even though the process-lifetime cleanup closure still exists.
+        drop(guard);
+        assert!(
+            !port.exists(),
+            "Drop must still run with the listener installed"
+        );
+        cleanup();
     }
 
     #[test]

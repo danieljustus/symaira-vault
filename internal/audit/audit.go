@@ -90,7 +90,9 @@ func parseAuditConfig(base *Config) Config {
 	}
 
 	if val := os.Getenv(envMaxSizeMB); val != "" {
-		if mb, err := strconv.ParseInt(val, 10, 64); err == nil && mb >= 0 {
+		// A zero size limit would rotate on every write; config.yaml rejects
+		// it in validation, so the environment override ignores it too.
+		if mb, err := strconv.ParseInt(val, 10, 64); err == nil && mb > 0 {
 			cfg.MaxFileSize = mb * 1024 * 1024
 		}
 	}
@@ -345,7 +347,8 @@ func (l *Logger) rotateIfNeeded() error {
 
 	needsRotation := info.Size() >= config.MaxFileSize
 
-	if !needsRotation {
+	// MaxAgeDays 0 disables age-based rotation (docs/audit-retention.md).
+	if !needsRotation && config.MaxAgeDays > 0 {
 		age := time.Since(info.ModTime())
 		maxFileAge := time.Duration(config.MaxAgeDays) * 24 * time.Hour
 		needsRotation = age >= maxFileAge
@@ -427,8 +430,12 @@ func (l *Logger) EnforceRetention() error {
 		rotatedFiles = rotatedFiles[backupsToDelete:]
 	}
 
-	// Check max age policy - remove files older than MaxAgeDays
+	// Check max age policy - remove files older than MaxAgeDays.
+	// MaxAgeDays 0 disables age-based deletion; MaxBackups still applies.
 	for _, info := range rotatedFiles {
+		if config.MaxAgeDays <= 0 {
+			break
+		}
 		age := now.Sub(info.ModTime())
 		if age >= maxAge {
 			path := filepath.Join(auditDir, info.Name())
@@ -465,7 +472,7 @@ func (l *Logger) HealthCheck() (*HealthStatus, error) {
 	status.WriteAccessible = info.Mode().Perm()&0200 != 0
 
 	maxFileAge := time.Duration(config.MaxAgeDays) * 24 * time.Hour
-	if info.Size() >= config.MaxFileSize || status.LogFileAge >= maxFileAge.String() {
+	if info.Size() >= config.MaxFileSize || (config.MaxAgeDays > 0 && time.Since(info.ModTime()) >= maxFileAge) {
 		status.NeedsRotation = true
 	}
 

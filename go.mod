@@ -4,7 +4,7 @@ go 1.26.6
 
 // Preserve the minimum compiler for frozen Go 1.26.6 oracle checks.
 // Product builds, tests, scans and releases use the patched toolchain.
-toolchain go1.26.9
+toolchain go1.26.10
 
 // Deferred major updates (intentionally deferred):
 // - github.com/ProtonMail/go-crypto: v1.1.6 -> v1.4.1 (major version bump, potential breaking changes in crypto APIs)
@@ -47,7 +47,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.31
 	github.com/mattn/go-tty v0.0.8
 	github.com/prometheus/client_golang v1.25.0
-	github.com/prometheus/common v0.72.0
+	github.com/prometheus/common v0.72.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/zalando/go-keyring v0.2.8
@@ -60,7 +60,7 @@ require (
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
-	golang.org/x/tools v0.51.0
+	golang.org/x/tools v0.52.0
 	gopkg.in/yaml.v3 v3.0.1
 	rsc.io/qr v0.2.0
 )
@@ -143,8 +143,8 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/mobile v0.0.0-20260821190718-4776eadac327 // indirect
-	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect

@@ -7,12 +7,18 @@ import os
 from pathlib import Path
 import platform
 import re
+import select
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_timeout import oracle_build_timeout, remove_worktree
 from mcp_oracle import CONTRACT, HISTORICAL, ORDERED, pinned_go, tool_environment, validate_reference
 
 if sys.flags.optimize:
@@ -25,13 +31,13 @@ CANARIES = ['public-mcp-secret-6af2', 'public-nested-secret-88d1']
 UNICODE_FIXTURE = 'public-fixture-user\u2028line\u2029paragraph'
 
 
-def run(args, cwd, env, data=b''):
+def run(args, cwd, env, data=b'', timeout=120):
     return subprocess.run([str(a) for a in args], cwd=cwd, env=env, input=data,
-                          capture_output=True, timeout=120)
+                          capture_output=True, timeout=timeout)
 
 
-def checked(args, cwd=ROOT, env=None):
-    r = run(args, cwd, env or os.environ.copy())
+def checked(args, cwd=ROOT, env=None, timeout=120):
+    r = run(args, cwd, env or os.environ.copy(), timeout=timeout)
     if r.returncode:
         raise RuntimeError(f'{args[0]} failed ({r.returncode}): '+r.stderr.decode(errors='replace')[-2000:])
     return r.stdout
@@ -303,11 +309,334 @@ def vault_snapshot(root):
     return result
 
 
+# ---------------------------------------------------------------------------
+# Termination-signal contract (issue #1242, Unix only).
+#
+# Go's serve command subscribes SIGINT/SIGTERM (and SIGQUIT), cancels its
+# context and returns success: exit 0, no extra output, runtime port/TLS
+# records removed. A stdio server answers at most one more frame after the
+# signal and always waits <= 2 s for its blocked stdin read. Each case below is
+# run against the real Go binary and the Rust binary in separate disposable
+# HOMEs, synchronised on observable readiness (never a bare sleep).
+# ---------------------------------------------------------------------------
+# Windows has no SIGQUIT; the signal contract is Unix-only and asserts that
+# before use, so the table stays empty there and the module still imports.
+SIGNALS = [] if os.name == 'nt' else [('SIGINT', signal.SIGINT), ('SIGTERM', signal.SIGTERM), ('SIGQUIT', signal.SIGQUIT)]
+SIGNAL_MODES = ('stdio', 'http')
+SIGNAL_STATES = ('idle', 'after-init', 'idle-stale-runtime')
+STALE_RUNTIME = {'.runtime-port': b'{"port":1,"bind":"127.0.0.1"}', '.runtime-tls-cert': b'{}'}
+# Files whose bytes differ between any two runs of the SAME implementation
+# (random key material, timestamps): only their existence is compared.
+RANDOM_CONTENT = {'vault/mcp-server.crt', 'vault/mcp-server.key', 'vault/mcp-server.enroll-secret',
+                  'vault/audit-auth-failures.log', 'vault/audit-token-cleanup.log'}
+# Startup-only differences that exist without any signal and belong to other
+# slices. Pinned exactly: a new or vanished difference fails the harness.
+STARTUP_ONLY_DIFFERENCES = {
+    'stdio': {'only_go': set(), 'only_rust': set(), 'content': {'vault/config.yaml'}},
+    'http': {'only_go': {'vault/audit-auth-failures.log', 'vault/audit-token-cleanup.log'}, 'only_rust': set(),
+             'content': {'vault/config.yaml'}},
+}
+STDIO_INITIALIZE = (b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25",'
+                    b'"clientInfo":{"name":"public-fixture","version":"1"},"capabilities":{}}}\n')
+HTTP_BINDING_MARKER = b'without TLS; bearer tokens travel in cleartext'
+
+
+class PipeCapture:
+    """Drain both pipes of an owned child into bounded buffers."""
+    LIMIT = 1024 * 1024
+
+    def __init__(self, process):
+        self.buffers = {'stdout': bytearray(), 'stderr': bytearray()}
+        self.condition = threading.Condition()
+        self.workers = []
+        for name, pipe in [('stdout', process.stdout), ('stderr', process.stderr)]:
+            worker = threading.Thread(target=self._drain, args=(name, pipe), daemon=True)
+            worker.start()
+            self.workers.append(worker)
+
+    def _drain(self, name, pipe):
+        try:
+            while True:
+                data = os.read(pipe.fileno(), 4096)
+                if not data:
+                    break
+                with self.condition:
+                    assert len(self.buffers[name]) + len(data) <= self.LIMIT, name + ' exceeds capture bound'
+                    self.buffers[name] += data
+                    self.condition.notify_all()
+        finally:
+            pipe.close()
+            with self.condition:
+                self.condition.notify_all()
+
+    def wait_for(self, name, predicate, deadline):
+        with self.condition:
+            while not predicate(bytes(self.buffers[name])):
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self.condition.wait(min(remaining, 0.05))
+        return True
+
+    def finish(self):
+        for worker in self.workers:
+            worker.join(timeout=10)
+        assert not any(worker.is_alive() for worker in self.workers), 'output readers did not reach EOF'
+        return bytes(self.buffers['stdout']), bytes(self.buffers['stderr'])
+
+
+def tree_snapshot(root):
+    result = {}
+    for path in sorted(root.rglob('*')):
+        rel = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            result[rel] = {'kind': 'symlink'}
+        elif path.is_dir():
+            result[rel] = {'kind': 'dir'}
+        else:
+            data = path.read_bytes()
+            result[rel] = {'kind': 'file', 'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+    return result
+
+
+def comparable(snapshot):
+    """Drop the content of files that are random in every run."""
+    return {path: ({'kind': 'file'} if path in RANDOM_CONTENT and row['kind'] == 'file' else row)
+            for path, row in snapshot.items()}
+
+
+def settled_snapshot(root, deadline):
+    """Snapshot after two consecutive identical reads (startup writes done)."""
+    previous = None
+    while True:
+        current = tree_snapshot(root)
+        if current == previous or time.monotonic() > deadline:
+            return current
+        previous = current
+        time.sleep(0.05)
+
+
+def snapshot_delta(before, after):
+    before, after = comparable(before), comparable(after)
+    return {'removed': sorted(set(before) - set(after)), 'added': sorted(set(after) - set(before)),
+            'changed': sorted(path for path in set(before) & set(after) if before[path] != after[path])}
+
+
+def startup_differences(go_final, rust_final):
+    go, rust = comparable(go_final), comparable(rust_final)
+    return {'only_go': set(go) - set(rust), 'only_rust': set(rust) - set(go),
+            'content': {path for path in set(go) & set(rust) if go[path] != rust[path]}}
+
+
+def group_members(pgid):
+    out = subprocess.run(['ps', '-axo', 'pid=,pgid='], capture_output=True, text=True, check=True).stdout
+    return sorted(int(pid) for pid, group in (line.split() for line in out.splitlines() if line.strip())
+                  if int(group) == pgid)
+
+
+def normalise_process_text(text, home):
+    """Normalise only PIDs, ports, timestamps and temp paths."""
+    text = text.replace(str(home), '<HOME>')
+    text = re.sub(r'\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}', '<TIMESTAMP>', text)
+    text = re.sub(r'(127\.0\.0\.1|\[::1\]):\d+', r'\1:<PORT>', text)
+    return re.sub(r'\bpid[= ]\d+', 'pid=<PID>', text)
+
+
+def free_loopback_port():
+    with socket.socket() as selection:
+        selection.bind(('127.0.0.1', 0))
+        return selection.getsockname()[1]
+
+
+def http_initialize(port, token):
+    body = STDIO_INITIALIZE.strip()
+    request = (f'POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n'
+               f'Authorization: Bearer {token}\r\nX-Symaira-Agent: fixture\r\n'
+               # Go warns on stderr for an Origin-less /mcp request; that warning is a request-handling
+               # difference outside this slice, so the fixture sends an allowed loopback Origin.
+               f'Origin: http://127.0.0.1:{port}\r\n'
+               'Content-Type: application/json\r\nAccept: application/json, text/event-stream\r\n'
+               f'Content-Length: {len(body)}\r\n\r\n').encode() + body
+    received = bytearray()
+    with socket.create_connection(('127.0.0.1', port), timeout=15) as connection:
+        connection.sendall(request)
+        while True:
+            chunk = connection.recv(65536)
+            if not chunk:
+                break
+            received += chunk
+    head, _, payload = bytes(received).partition(b'\r\n\r\n')
+    assert head.startswith(b'HTTP/1.1 200 '), 'initialize must complete before the signal'
+    assert b'"protocolVersion"' in payload, 'initialize must return a result'
+    return head.split(b'\r\n')[0].decode()
+
+
+def stop_group(process):
+    """Kill only the process group this harness started."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run_signal_case(binary, home, env, mode, state, sig_name, sig, port=None, token=None):
+    assert mode in SIGNAL_MODES and state in SIGNAL_STATES and sig in dict(SIGNALS).values()
+    vault = home / 'vault'
+    if state == 'idle-stale-runtime':
+        for name, data in STALE_RUNTIME.items():
+            (vault / name).write_bytes(data)
+    if mode == 'stdio':
+        args = [binary, '--quiet', 'mcp', '--stdio', '--agent', 'fixture']
+    else:
+        args = [binary, '--quiet', 'mcp', '--bind', '127.0.0.1', '--port', str(port)]
+    process = subprocess.Popen([str(a) for a in args], cwd=home, env=env, stdin=subprocess.PIPE,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+    capture = PipeCapture(process)
+    row = {'mode': mode, 'state': state, 'signal': sig_name}
+    deadline = time.monotonic() + 30
+    try:
+        if mode == 'http':
+            # The cleartext-bind confirmation is part of the Go CLI contract.
+            process.stdin.write(b'y\n')
+            process.stdin.close()
+            process.stdin = None
+            assert capture.wait_for('stderr', lambda data: HTTP_BINDING_MARKER in data, deadline), 'server never announced its listener'
+            while True:
+                assert process.poll() is None, 'server exited before serving'
+                try:
+                    socket.create_connection(('127.0.0.1', port), timeout=.2).close()
+                    break
+                except OSError:
+                    assert time.monotonic() < deadline, 'server never listened'
+                    time.sleep(.02)
+        else:
+            # server.New creates the agent audit log after the signal subscription exists.
+            while not (vault / 'audit-fixture.log').exists():
+                assert process.poll() is None, 'stdio server exited before serving'
+                assert time.monotonic() < deadline, 'stdio server never became ready'
+                time.sleep(.02)
+        if state == 'after-init':
+            if mode == 'stdio':
+                process.stdin.write(STDIO_INITIALIZE)
+                process.stdin.flush()
+                assert capture.wait_for('stdout', lambda data: data.endswith(b'\n'), deadline), 'initialize response missing'
+                row['initialize'] = 'stdio-response'
+            else:
+                row['initialize'] = http_initialize(port, token)
+        ready = settled_snapshot(home, time.monotonic() + 5)
+        started = time.monotonic()
+        os.kill(process.pid, sig)
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            raise AssertionError(f'{mode}/{state}/{sig_name}: process ignored the signal for 15 s')
+        row['elapsed_seconds'] = time.monotonic() - started
+    finally:
+        if process.poll() is None:
+            stop_group(process)
+            process.wait(timeout=15)
+        # A surviving descendant keeps the output pipes open: look for it, and
+        # reap only the group this harness started, before waiting for EOF.
+        row['orphans'] = group_members(process.pid)
+        stop_group(process)
+        stdout, stderr = capture.finish()
+        if process.stdin:
+            process.stdin.close()
+    assert not row['orphans'], (mode, state, sig_name, 'orphaned process group members', row['orphans'])
+    if mode == 'http':
+        try:
+            socket.create_connection(('127.0.0.1', port), timeout=.3).close()
+            row['listener_closed'] = False
+        except OSError:
+            row['listener_closed'] = True
+        assert row['listener_closed'], 'listener still accepting after exit'
+    final = tree_snapshot(home)
+    text = stderr.decode('utf-8')
+    row.update(exit_code=process.returncode, stdout=stdout.decode('utf-8'),
+               stderr=normalise_process_text(text, home), delta=snapshot_delta(ready, final),
+               final=comparable(final), final_raw=final, ready_files=sorted(ready))
+    return row
+
+
+def compare_signal_rows(go_row, rust_row):
+    """Strict Go/Rust equality for one case; returns the startup-only differences."""
+    key = (go_row['mode'], go_row['state'], go_row['signal'])
+    assert key == (rust_row['mode'], rust_row['state'], rust_row['signal'])
+    for field in ('exit_code', 'stdout', 'stderr', 'delta', 'orphans', 'initialize'):
+        assert go_row.get(field) == rust_row.get(field), (key, field, go_row.get(field), rust_row.get(field))
+    differences = startup_differences(go_row['final_raw'], rust_row['final_raw'])
+    assert differences == STARTUP_ONLY_DIFFERENCES[go_row['mode']], (key, 'unpinned startup difference', differences)
+    return differences
+
+
+def signal_suite(go, rust, base, seed_vault, mode, tokens=None, repeats=2):
+    """Run every state x signal for one mode; return the rows and executed count."""
+    rows = []
+    for state in SIGNAL_STATES:
+        for sig_name, sig in SIGNALS:
+            observed = {}
+            for implementation, binary in [('go', go), ('rust', rust)]:
+                observed[implementation] = []
+                for attempt in range(repeats):
+                    home = base / f'signal-{mode}-{state}-{sig_name}-{implementation}-{attempt}'
+                    home.mkdir()
+                    shutil.copytree(seed_vault, home / 'vault')
+                    port = free_loopback_port() if mode == 'http' else None
+                    row = run_signal_case(binary, home, isolated(home), mode, state, sig_name, sig, port,
+                                          (tokens or {}).get('full'))
+                    row['implementation'] = implementation
+                    row['attempt'] = attempt
+                    observed[implementation].append(row)
+                    rows.append(row)
+            go_first, go_rest = observed['go'][0], observed['go'][1:]
+            for repeat in go_rest:
+                for field in ('exit_code', 'stdout', 'stderr', 'delta', 'initialize'):
+                    assert repeat.get(field) == go_first.get(field), (mode, state, sig_name, 'Go oracle is nondeterministic', field)
+            for rust_row in observed['rust']:
+                compare_signal_rows(go_first, rust_row)
+            # Positive controls: Go really exits successfully, and the runtime port
+            # record present at readiness is really gone afterwards.
+            assert go_first['exit_code'] == 0, (mode, state, sig_name, 'Go exits 0 on a handled signal')
+            expects_port = mode == 'http' or state == 'idle-stale-runtime'
+            assert ('vault/.runtime-port' in go_first['ready_files']) == expects_port, (mode, state, 'runtime port at readiness')
+            assert ('vault/.runtime-port' in go_first['delta']['removed']) == expects_port, (mode, state, 'runtime port removed by shutdown')
+            assert 'vault/.runtime-tls-cert' not in go_first['final'], (mode, state, 'runtime TLS record cleared')
+    return rows
+
+
+def signals_main(args):
+    go, rust = args.go_cli.resolve(), args.rust.resolve()
+    assert platform.system() in {'Darwin', 'Linux'}, 'signal contract is Unix-only; Windows Ctrl-C/Ctrl-Break is not covered'
+    receipt = {'passed': False, 'native_os': platform.system(), 'architecture': platform.machine(),
+               'candidate_commit': checked(['git', 'rev-parse', 'HEAD']).decode().strip(),
+               'go_binary_sha256': hashlib.sha256(go.read_bytes()).hexdigest(),
+               'rust_binary_sha256': hashlib.sha256(rust.read_bytes()).hexdigest(),
+               'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+               'startup_only_differences': {k: {a: sorted(b) for a, b in v.items()} for k, v in STARTUP_ONLY_DIFFERENCES.items()},
+               'rows': [], 'executed': {}}
+    try:
+        with tempfile.TemporaryDirectory(prefix='symvault-mcp-signals-') as raw:
+            base = Path(raw)
+            seed_home = base / 'seed'
+            seed_home.mkdir()
+            (seed_home / 'profile.json').write_text(json.dumps({'tier': 'admin', 'allowedPaths': ['public']}), encoding='utf-8')
+            checked([args.go_seed, '--root', seed_home / 'vault', '--profile', seed_home / 'profile.json',
+                     '--builtin', '', '--agent', 'fixture'], seed_home, isolated(seed_home))
+            rows = signal_suite(go, rust, base, seed_home / 'vault', 'stdio')
+            receipt['rows'] += [{k: v for k, v in r.items() if k not in {'final', 'final_raw'}} for r in rows]
+            receipt['executed']['stdio'] = len(rows)
+            receipt['passed'] = True
+    finally:
+        args.receipt.write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+    print('PASS: ' + ', '.join(f'{count} {mode} signal runs' for mode, count in receipt['executed'].items()) + f' on {platform.system()}')
+
+
 def candidate_paths():
     return sorted(p for p in checked(['git','ls-files','--cached','--others','--exclude-standard']).decode().splitlines()
                   if p.startswith(('crates/','third_party/','testdata/','internal/mcp/apitemplates/builtin/'))
                   or p in {'Cargo.toml','Cargo.lock','.gitattributes','scripts/rust-port/mcp_process_contract.py',
                            'scripts/rust-port/mcp_process_seed.go.txt','scripts/rust-port/mcp_oracle.py',
+                           'scripts/rust-port/build_timeout.py',
                            '.github/workflows/rust-mcp-process.yml'})
 
 
@@ -316,8 +645,16 @@ def main():
     parser.add_argument('--rust',type=Path,required=True)
     parser.add_argument('--receipt',type=Path,required=True)
     parser.add_argument('--allow-dirty-for-development',action='store_true')
-    parser.add_argument('--reference', choices=['historical', CONTRACT], required=True)
+    parser.add_argument('--reference', choices=['historical', CONTRACT])
+    parser.add_argument('--signals',action='store_true',
+                        help='run only the SIGINT/SIGTERM stdio contract against prebuilt binaries')
+    parser.add_argument('--go-cli',type=Path,help='prebuilt Go oracle CLI (with --signals)')
+    parser.add_argument('--go-seed',type=Path,help='prebuilt Go fixture seed helper (with --signals)')
     args = parser.parse_args()
+    if args.signals:
+        assert args.go_cli and args.go_seed, '--signals needs --go-cli and --go-seed'
+        return signals_main(args)
+    assert args.reference, '--reference is required unless --signals is used'
     reference = ORACLE if args.reference=='historical' else ORDERED
     if reference == ORDERED:
         validate_reference(ROOT)
@@ -372,9 +709,9 @@ def main():
                 suffix = '.exe' if os.name=='nt' else ''
                 go, seed = base/('go-cli'+suffix), base/('go-seed'+suffix)
                 unicode_seed = base/('go-seed-unicode'+suffix)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',go,'.'],tree,build_env)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree,build_env)
-                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree,build_env)
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',go,'.'],tree,build_env,timeout=oracle_build_timeout())
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',seed,'./scripts/rust-port/cmd/mcpprocessseed'],tree,build_env,timeout=oracle_build_timeout())
+                checked([go_compiler,'build','-trimpath','-buildvcs=false','-o',unicode_seed,'./scripts/rust-port/cmd/mcpprocessseedunicode'],tree,build_env,timeout=oracle_build_timeout())
                 receipt.update(go_binary_sha256=hashlib.sha256(go.read_bytes()).hexdigest(),
                                seed_binary_sha256=hashlib.sha256(seed.read_bytes()).hexdigest(),
                                unicode_seed_binary_sha256=hashlib.sha256(unicode_seed.read_bytes()).hexdigest())
@@ -457,7 +794,7 @@ def main():
                 assert checked(['git','rev-parse','HEAD']).decode().strip()==receipt['candidate_commit']
                 receipt['passed'] = True
             finally:
-                checked(['git','worktree','remove','--force',tree])
+                remove_worktree(lambda: checked(['git','worktree','remove','--force',tree]), 'MCP oracle worktree')
     finally:
         args.receipt.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
         receipt['candidate_worktree_clean_at_end'] = not checked(

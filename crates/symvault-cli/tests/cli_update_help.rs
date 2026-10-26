@@ -48,7 +48,7 @@ fn update_help_matches_frozen_and_actual_go_without_accessing_vault_or_updater()
         "ffd5d76a2a4879387aacc3597ea3a937a2216a4de0bea05e434af6b0bba35e33",
     ]) {
         assert_eq!(
-            format!("{:x}", Sha256::digest(page)),
+            hex::encode(Sha256::digest(page)),
             digest,
             "retained actual Go page {topic}"
         );

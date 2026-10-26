@@ -472,7 +472,7 @@ func TestRotateIfNeededAgeLimit(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days means immediate
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "1")
 
 	ReloadConfig()
 
@@ -541,13 +541,68 @@ func TestEnforceRetentionMaxBackups(t *testing.T) {
 	}
 }
 
+// TestEnforceRetentionZeroBackupsFromConfig documents what an explicit
+// config.yaml `audit.maxBackups: 0` means once it reaches the logger through
+// SetConfig (#1430): no rotated backups are retained, while the active log
+// and unrelated files in the directory stay untouched.
+func TestEnforceRetentionZeroBackupsFromConfig(t *testing.T) {
+	t.Cleanup(ReloadConfig)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, name := range []string{"SYMVAULT_AUDIT_MAX_SIZE_MB", "SYMVAULT_AUDIT_MAX_BACKUPS", "SYMVAULT_AUDIT_MAX_AGE_DAYS",
+		"OPENPASS_AUDIT_MAX_SIZE_MB", "OPENPASS_AUDIT_MAX_BACKUPS", "OPENPASS_AUDIT_MAX_AGE_DAYS"} {
+		t.Setenv(name, "")
+	}
+	SetConfig(&Config{MaxFileSize: 100 * 1024 * 1024, MaxBackups: 0, MaxAgeDays: 365})
+	if got := GetConfig().MaxBackups; got != 0 {
+		t.Fatalf("SetConfig MaxBackups = %d, want 0", got)
+	}
+
+	logger, err := New("zero-backups-test", "", nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
+	for i := 0; i < 3; i++ {
+		name := filepath.Join(auditDir, fmt.Sprintf("audit-zero-backups-test.log.rotated.2026010%d-000000", i+1))
+		if err := os.WriteFile(name, []byte("rotated"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+	}
+	sentinels := []string{
+		filepath.Join(auditDir, "audit-other-agent.log.rotated.20260101-000000"),
+		filepath.Join(auditDir, "unrelated-sentinel.txt"),
+	}
+	for _, name := range sentinels {
+		if err := os.WriteFile(name, []byte("keep"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+	}
+
+	if err := logger.EnforceRetention(); err != nil {
+		t.Fatalf("EnforceRetention() error = %v", err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(auditDir, "audit-zero-backups-test.log.rotated.*"))
+	if len(matches) != 0 {
+		t.Fatalf("rotated backups retained with maxBackups 0: %v", matches)
+	}
+	for _, name := range append(sentinels, filepath.Join(auditDir, "audit-zero-backups-test.log")) {
+		if _, err := os.Stat(name); err != nil {
+			t.Fatalf("file outside the retention set was touched: %s: %v", name, err)
+		}
+	}
+}
+
 func TestEnforceRetentionMaxAge(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "100")
 	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "100")
-	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days = delete all
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "1")
 
 	ReloadConfig()
 
@@ -561,9 +616,13 @@ func TestEnforceRetentionMaxAge(t *testing.T) {
 
 	// Create rotated files with old timestamps
 	for i := 0; i < 3; i++ {
-		rotatedName := filepath.Join(auditDir, fmt.Sprintf("audit-age-cleanup-test.log.rotated.%s", time.Now().UTC().Add(time.Duration(-i-1)*24*time.Hour).Format("20060102-150405")))
+		stamp := time.Now().Add(time.Duration(-i-2) * 24 * time.Hour)
+		rotatedName := filepath.Join(auditDir, fmt.Sprintf("audit-age-cleanup-test.log.rotated.%s", stamp.UTC().Format("20060102-150405")))
 		if err := os.WriteFile(rotatedName, []byte("test"), 0o600); err != nil {
 			t.Fatalf("WriteFile() error = %v", err)
+		}
+		if err := os.Chtimes(rotatedName, stamp, stamp); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
 		}
 	}
 
@@ -806,7 +865,7 @@ func TestHealthCheckNeedsRotationBySize(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "0") // Very small
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -816,7 +875,7 @@ func TestHealthCheckNeedsRotationBySize(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", Path: strings.Repeat("x", 1024*1024), OK: true})
 
 	status, err := logger.HealthCheck()
 	if err != nil {
@@ -1841,14 +1900,17 @@ func TestHealthCheckZeroMaxAge(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	oldTime := time.Now().Add(-400 * 24 * time.Hour)
+	if err := os.Chtimes(logger.path, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
 
 	status, err := logger.HealthCheck()
 	if err != nil {
 		t.Fatalf("HealthCheck() error = %v", err)
 	}
-
-	if status.LogFileAge >= "0s" {
-		t.Log("LogFileAge comparison reached")
+	if status.NeedsRotation {
+		t.Fatal("maxAgeDays 0 must not report age-based rotation (#1442)")
 	}
 }
 
@@ -2199,7 +2261,7 @@ func TestRotateIfNeededAgeLimit_Symvault(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days means immediate
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "1")
 
 	ReloadConfig()
 
@@ -2231,7 +2293,7 @@ func TestHealthCheckNeedsRotationBySize_Symvault(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "0") // Very small
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -2241,7 +2303,7 @@ func TestHealthCheckNeedsRotationBySize_Symvault(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", Path: strings.Repeat("x", 1024*1024), OK: true})
 
 	status, err := logger.HealthCheck()
 	if err != nil {
@@ -2310,5 +2372,63 @@ func TestCountPlaintextExposures(t *testing.T) {
 	}
 	if countNone != 0 {
 		t.Errorf("CountPlaintextExposures = %d, want 0", countNone)
+	}
+}
+
+// TestMaxAgeDaysZeroKeepsRotatedFilesAndLog documents the contract in
+// docs/audit-retention.md (#1442): MaxAgeDays 0 disables age-based rotation
+// and age-based deletion, while MaxBackups still applies.
+func TestMaxAgeDaysZeroKeepsRotatedFilesAndLog(t *testing.T) {
+	t.Cleanup(ReloadConfig)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "100")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "100")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0")
+	ReloadConfig()
+
+	logger, err := New("zero-age-keep-test", "", nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
+	old := time.Now().Add(-400 * 24 * time.Hour)
+	for i := 0; i < 3; i++ {
+		name := filepath.Join(auditDir, fmt.Sprintf("audit-zero-age-keep-test.log.rotated.2025010%d-000000", i+1))
+		if err := os.WriteFile(name, []byte("rotated"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+		if err := os.Chtimes(name, old, old); err != nil {
+			t.Fatalf("Chtimes() error = %v", err)
+		}
+	}
+	if err := os.Chtimes(logger.path, old, old); err != nil {
+		t.Fatalf("Chtimes() error = %v", err)
+	}
+
+	if err := logger.rotateIfNeeded(); err != nil {
+		t.Fatalf("rotateIfNeeded() error = %v", err)
+	}
+	if err := logger.EnforceRetention(); err != nil {
+		t.Fatalf("EnforceRetention() error = %v", err)
+	}
+
+	matches, _ := filepath.Glob(filepath.Join(auditDir, "audit-zero-age-keep-test.log.rotated.*"))
+	if len(matches) != 3 {
+		t.Fatalf("maxAgeDays 0 must keep old rotated files and not rotate the active log: got %d rotated files %v", len(matches), matches)
+	}
+}
+
+// TestEnvZeroMaxSizeIgnored (#1442): SYMVAULT_AUDIT_MAX_SIZE_MB=0 would rotate
+// on every write; like config.yaml validation it is rejected and the default
+// size limit stays in effect.
+func TestEnvZeroMaxSizeIgnored(t *testing.T) {
+	t.Cleanup(ReloadConfig)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "0")
+	ReloadConfig()
+	if got := GetConfig().MaxFileSize; got != 100*1024*1024 {
+		t.Fatalf("MaxFileSize = %d, want default 100MB", got)
 	}
 }
