@@ -55,6 +55,21 @@ prompt (no hardware; stays JXA), the real default-keychain/access-control path
 Go-reads-Rust-written record, Go's case-insensitive JSON field names, CLI-layer
 fallback warning text.
 
+## IO-002 restore entry-limit pre-pass is bounded, 2026-10-26 (#1483)
+
+`check_entry_limit` (`crates/symvault-sync/src/archive.rs`) skipped member bodies by
+inflating them, so an over-limit member was fully decompressed before extraction
+rejected it at the header (Go rejects at the header without reading the body).
+Measured on a 3 GiB zero-filled member (14 MB gzip, debug build): Rust 2.94 s -> 0.49 ms
+with the identical error `archive entry entries/huge exceeds maximum file size of
+1073741824 bytes`; Go `RestoreBackup` 0.42 ms. Fix: the pre-pass (`scan_entry_limit`)
+returns `Ok(())` at the first regular member whose declared size exceeds the file limit
+or the remaining total budget and leaves the error to the extraction pass. Regression:
+`entry_limit_scan_tests` (counting reader; 64 MiB over-limit and over-budget members must
+not be read, a within-limit member must still be skipped; fails against the old scan).
+Residual (low, documented): the archive is still inflated twice for valid inputs and a
+file swapped between passes is bounded only by the size limits.
+
 ## Current native-prerequisite repair, 2026-10-11
 
 Task `t_c13388cd` composes the local MCP candidate `c8376fa4` with the existing
