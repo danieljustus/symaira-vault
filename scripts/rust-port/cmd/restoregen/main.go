@@ -255,9 +255,18 @@ func snapshot(root string) []node {
 		case info.IsDir():
 			item.Kind = "dir"
 			item.Mode = uint32(info.Mode().Perm())
+			// A header mode of 0 restores an unreadable directory; record the
+			// restored mode first, then open it so the walk can continue.
+			if err := os.Chmod(path, info.Mode().Perm()|0o700); err != nil {
+				return err
+			}
 		default:
 			item.Kind = "file"
 			item.Mode = uint32(info.Mode().Perm())
+			// Likewise a header mode of 0 restores an unreadable file.
+			if err := os.Chmod(path, info.Mode().Perm()|0o600); err != nil {
+				return err
+			}
 			data, err := os.ReadFile(path) // #nosec G304 -- walks the generator's own temporary case root
 			if err != nil {
 				return err
@@ -591,6 +600,44 @@ func buildCases() []restoreCase {
 	cases = append(cases, runAt("invalid-mode-field-beats-unsafe-name", "gzip", tar.FormatUnknown,
 		with(regm("../outside/escaped", "x")), true, nil, "", "vault", false,
 		func(data []byte) []byte { return patchHeaderMode(data, 5, "zzzzzzz\x00") }))
+
+	// Numeric mode-field spellings (#1498): Go's parseOctal trims spaces/NULs
+	// at both ends, cuts at the first remaining NUL and accepts unsigned
+	// base-8 digits only; base-256 is separate. Each field replaces the mode
+	// of the first member after the fixed prelude (header block 5) and keeps
+	// the checksum valid, so only the numeric field differs.
+	modeFields := []struct{ label, field string }{
+		{"plain-octal", "0000644\x00"},
+		{"leading-nuls", "\x00\x00\x00644\x00\x00"},
+		{"space-padded", "  644   "},
+		{"no-terminator", "77777777"},
+		{"all-spaces", "        "},
+		{"all-nuls", "\x00\x00\x00\x00\x00\x00\x00\x00"},
+		{"plus-sign", "+000644\x00"},
+		{"plus-zero", "+0\x00\x00\x00\x00\x00\x00"},
+		{"minus-sign", "-000001\x00"},
+		{"minus-zero", "-0\x00\x00\x00\x00\x00\x00"},
+		{"embedded-nul-tail", "644\x00777\x00"},
+		{"embedded-nul-garbage-tail", "644\x00zz\x00\x00"},
+		{"embedded-nul-invalid-head", "6z4\x00644\x00"},
+		{"embedded-space", " 6 4 4  "},
+		{"prefix-0o", "0o644\x00\x00\x00"},
+		{"underscore", "6_44\x00\x00\x00\x00"},
+		{"non-octal-digit", "0000888\x00"},
+		{"base256-positive", "\x80\x00\x00\x00\x00\x00\x01\xa4"},
+		{"base256-large-positive", "\xbf\xff\xff\xff\xff\xff\xff\xff"},
+		{"base256-negative", "\xff\xff\xff\xff\xff\xff\xff\xff"},
+		{"base256-negative-one-bit", "\xc0\x00\x00\x00\x00\x00\x00\x00"},
+	}
+	for _, mf := range modeFields {
+		field := mf.field
+		cases = append(cases, runAt("mode-field/file/"+mf.label, "gzip", tar.FormatUnknown,
+			with(regm("entries/modecase", "x")), true, nil, "", "vault", false,
+			func(data []byte) []byte { return patchHeaderMode(data, 5, field) }))
+		cases = append(cases, runAt("mode-field/dir/"+mf.label, "gzip", tar.FormatUnknown,
+			with(member{Name: "entries/modedir", Type: "dir", Mode: 0o700}), true, nil, "", "vault", false,
+			func(data []byte) []byte { return patchHeaderMode(data, 5, field) }))
+	}
 	return cases
 }
 
