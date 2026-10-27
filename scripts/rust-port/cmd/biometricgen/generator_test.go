@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -151,7 +153,7 @@ func TestBuildLayoutFailurePaths(t *testing.T) {
 		source  *string // nil: do not create the file
 		wantErr string
 	}{
-		{"source file missing", nil, "no such file"},
+		{"source file missing", nil, ""}, // checked with errors.Is: the OS wording differs on Windows
 		{"unparsable source", ptr("this is not go"), "expected 'package'"},
 		{"account const missing", ptr("package p\nconst currentBiometricServicePrefix = \"x\"\n"), "const biometricAccount not found"},
 		{"account const not a string", ptr("package p\nconst biometricAccount = 1\n"), "biometricAccount is not a string literal"},
@@ -165,7 +167,14 @@ func TestBuildLayoutFailurePaths(t *testing.T) {
 			if tc.source != nil {
 				writeFile(t, filepath.Join(root, layoutSource), *tc.source)
 			}
-			if _, err := buildLayout(root); err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+			_, err := buildLayout(root)
+			if tc.source == nil {
+				if !errors.Is(err, fs.ErrNotExist) {
+					t.Fatalf("err = %v, want fs.ErrNotExist", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("err = %v, want %q", err, tc.wantErr)
 			}
 		})
