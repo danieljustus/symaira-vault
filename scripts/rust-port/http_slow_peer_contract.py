@@ -22,6 +22,26 @@ from http_process_contract import SECRET, request
 from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 
+# Progress cadence. The shortest configured deadline is 1s and the contract needs >=4 progress
+# bytes before it, so the cadence must leave ample scheduling slack (20 slots, 4 required).
+PROGRESS_INTERVAL=.05
+MIN_PROGRESS_BYTES=4
+
+
+def assert_progress(row):
+    """Keep the >=4 bytes and joined-sender proof, but name why it failed when it does."""
+    if row['sender_joined'] and row['sent_progress_bytes']>=MIN_PROGRESS_BYTES:
+        row['progress_shortfall_reason']=None
+        return
+    if not row['sender_joined']:reason='sender-thread-not-joined-within-5s'
+    elif row['sent_progress_bytes']==0:reason='sender-never-wrote-before-peer-terminal'
+    else:reason='sender-wrote-%d-of-%d-bytes-before-peer-terminal'%(row['sent_progress_bytes'],MIN_PROGRESS_BYTES)
+    row['progress_shortfall_reason']=reason
+    raise AssertionError('%s (case=%s sent=%s first_progress_seconds=%s elapsed=%s interval=%s stop=%s terminal=%s): sender starved before the deadline, not a timeout verdict'%(
+        reason,row.get('case'),row['sent_progress_bytes'],row.get('first_progress_seconds'),row.get('elapsed_seconds'),
+        row.get('progress_interval_seconds'),row.get('sender_stop_reason'),row.get('peer_terminal_kind')))
+
+
 def cases(port,tokens):
     return [('initialize',request('/mcp',port,tokens,body=INITIALIZE)),
             ('ping-before',request('/mcp',port,tokens,body=PING)),
@@ -37,20 +57,28 @@ def progressing_peer(port,tokens,body,row):
     row.update(case='progressing-body' if body else 'progressing-header',
                request_prefix_sha256=hashlib.sha256(prefix).hexdigest(),
                request_prefix_base64=base64.b64encode(prefix).decode(),
-               sent_progress_bytes=0,peer_terminal_observed=False,peer_terminal_kind=None,forced_client_close=False,received_base64='')
+               sent_progress_bytes=0,first_progress_seconds=None,sender_stop_reason=None,progress_interval_seconds=PROGRESS_INTERVAL,peer_terminal_observed=False,peer_terminal_kind=None,forced_client_close=False,received_base64='')
     received=bytearray()
     stop=threading.Event()
     with socket.create_connection(('127.0.0.1',port),timeout=.25) as stream:
         started=time.monotonic()
         stream.sendall(prefix)
         def sender():
+            # Drift-free schedule: a late wake-up is caught up by the next send instead of
+            # silently losing slots, so scheduler stalls on loaded runners cannot starve the
+            # >=4 progress-byte evidence of a 1s deadline.
+            slot=0
             while not stop.is_set():
                 try:
                     stream.sendall(progress)
                     row['sent_progress_bytes']+=1
-                except (OSError,TimeoutError):
+                    if row['first_progress_seconds'] is None:row['first_progress_seconds']=time.monotonic()-started
+                except (OSError,TimeoutError) as error:
+                    row['sender_stop_reason']='write-failed-after-peer-close:'+type(error).__name__
                     return
-                stop.wait(.2)
+                slot+=1
+                stop.wait(max(0.,started+slot*PROGRESS_INTERVAL-time.monotonic()))
+            row['sender_stop_reason']='stopped-by-client'
         worker=threading.Thread(target=sender)
         worker.start()
         try:
@@ -75,7 +103,7 @@ def progressing_peer(port,tokens,body,row):
             row['received_base64']=base64.b64encode(received).decode()
             stop.set();worker.join(timeout=5)
             row['sender_joined']=not worker.is_alive()
-            assert row['sender_joined']
+            assert row['sender_joined'],'sender-thread-not-joined-within-5s'
 
 
 def idle_boundary(port,tokens,retained):
@@ -210,7 +238,7 @@ def main():
                     observed=receipt[implementation]
                     assert len(observed['slow_peers'])==2
                     for row in observed['slow_peers']:
-                        assert row['sent_progress_bytes']>=4 and row['sender_joined']
+                        assert_progress(row)
                         assert row['peer_terminal_observed'] and not row['forced_client_close'], 'progressing peer escaped its absolute request deadline'
                         raw=base64.b64decode(row['received_base64'])
                         if raw:
