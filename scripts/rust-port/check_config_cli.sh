@@ -6,6 +6,10 @@ cd "$repo_root"
 # A supplied oracle is still verified by configclicasesgen (revision,
 # clean VCS metadata and toolchain). CI builds one when none is provided.
 export GOWORK=off
+# macOS TMPDIR ends in '/'. Sandboxes created under it would keep a doubled
+# separator that the CLI's cleaned paths never contain (#1474).
+while case ${TMPDIR:-} in ?*/) true ;; *) false ;; esac; do TMPDIR=${TMPDIR%/}; done
+[ -z "${TMPDIR:-}" ] || export TMPDIR
 export GOTOOLCHAIN=${GO_TOOLCHAIN:-go1.26.6}
 oracle_binary=${SYMVAULT_GO_BINARY:-}
 if [ -z "$oracle_binary" ]; then
