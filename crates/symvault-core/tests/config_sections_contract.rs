@@ -256,7 +256,20 @@ fn mask_adjudicated(snapshot: &mut Snapshot) {
 /// discard CFG-003 step two closed for session durations, and Rust's method
 /// type cannot carry the raw text either. The stricter side is kept and the
 /// difference recorded; the Go behavior is a separate oracle change.
-const ADJUDICATED_STRICTER: [&str; 2] = ["auth_top_invalid", "auth_vault_invalid"];
+///
+/// The same family covers non-string scalars: yaml.v3 decodes a non-null
+/// `authMethod: 5`, `true` or `1.5` into the string field as text, which the
+/// merge then ignores as an unknown method, while Rust rejects the wrong type.
+const ADJUDICATED_STRICTER: [&str; 8] = [
+    "auth_top_invalid",
+    "auth_vault_invalid",
+    "auth_top_integer",
+    "auth_top_bool",
+    "auth_top_float",
+    "auth_vault_integer",
+    "auth_vault_bool",
+    "auth_vault_float",
+];
 
 /// Residual ordering divergence, asserted exactly.
 ///
@@ -338,9 +351,11 @@ fn sections_match_go_oracle() {
                     ],
                     "{label}: the adjudicated warning-order divergence closed or widened"
                 );
-                continue;
+            } else {
+                assert_eq!(warnings, expected.warnings, "warnings for {label}");
             }
-            assert_eq!(warnings, expected.warnings, "warnings for {label}");
+            // Only the warning diverges for the warning-order case; the
+            // resulting configuration must still match Go exactly.
             let mut actual = snapshot_of(&config);
             let mut want = expected
                 .snapshot
