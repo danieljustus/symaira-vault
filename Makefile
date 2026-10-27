@@ -1,4 +1,4 @@
-.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check biometric-fixtures-generate biometric-fixtures-check biometric-differential all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages release-manpages manpages-differential port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential git-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates rust-gates-core help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -218,6 +218,9 @@ SESSION_ORACLE_RELEASE ?= unreleased
 CLI_ORACLE_COMMIT ?= dda01b562696136dd65e958b6abdce2f29fe297f
 CLI_ORACLE_RELEASE ?= unreleased
 KEYRING_KEY_FIXTURE := testdata/port/session/keyring-keys.json
+BIOMETRIC_FIXTURE := testdata/port/session/biometric.json
+BIOMETRIC_ORACLE_COMMIT ?= d13e5d0b
+BIOMETRIC_ORACLE_RELEASE ?= unreleased
 # SESSION-002's portable half. The native keychain round-trip stays a
 # macOS-gated diagnostic; these addressing rules are platform-independent and
 # must be verifiable on every OS, which is what this row was missing.
@@ -288,6 +291,30 @@ keyring-key-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/keyringkeygen \
 		--check --output $(KEYRING_KEY_FIXTURE)
 	$(CARGO) test -p symvault-core --test keyring_keys_contract --locked
+
+# SESSION-003 (non-interactive half): keychain OSStatus contract, no-op
+# biometric manager and Touch ID item layout, frozen from the pinned Go sources.
+# The Rust replay runs everywhere; the Security-framework test is macOS-only and
+# uses disposable keychains (it compiles to zero tests elsewhere).
+biometric-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/biometricgen \
+		--output $(BIOMETRIC_FIXTURE) \
+		--oracle-commit $(BIOMETRIC_ORACLE_COMMIT) \
+		--oracle-release $(BIOMETRIC_ORACLE_RELEASE)
+
+biometric-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/biometricgen \
+		--check --output $(BIOMETRIC_FIXTURE)
+
+# One cargo invocation per target: a positional test filter applies to every
+# target of a `cargo test` run, so `--lib keychain_status --test biometric_contract`
+# filtered the whole contract replay away ("0 passed; 10 filtered out") and the
+# gate stayed green. The integration targets therefore run without a filter.
+biometric-differential: biometric-fixtures-check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/biometricgen -count=1
+	$(CARGO) test -p symvault-core --lib --locked keychain_status
+	$(CARGO) test -p symvault-core --test biometric_contract --locked
+	$(CARGO) test -p symvault-platform --test native_biometric_item --locked
 
 quota-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
@@ -572,8 +599,8 @@ crypto-differential:
 	$(MAKE) crypto-fuzz-smoke
 
 crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) GO=$(GO) ./scripts/go-fuzz-target.sh -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
 
 # Verify the independent fuzz workspace has a present, consistent lockfile.
 # cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
@@ -658,7 +685,7 @@ port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
 update-fixtures-check:
 	python3 -B scripts/rust-port/test_update_fixture_provenance.py
 	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/refresh-update-fixtures.py --commit 58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9 --check
-port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
+port-contract: reencrypt-journal-differential export-cli-fixtures-check mcp-call-fixtures-check focus-differential desktop-differential get-clipboard-differential mcp-prompts-differential mcp-render-differential config-cli-differential yaml-syntax-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check biometric-differential core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-http-init-differential mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check cfg-sections-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential cli-help-differential token-lookup-fixtures-check
 
 .PHONY: token-lookup-fixtures-check
 token-lookup-fixtures-check:

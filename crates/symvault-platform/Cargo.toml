@@ -16,6 +16,9 @@ symvault-core.workspace = true
 keyring = { version = "=4.2.0", default-features = false, features = ["v1"] }
 keyring-core = "=1.0.1"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "=3.7.0", default-features = false, features = ["OSX_10_15"] }
+
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "=1.1.5", features = ["fs", "termios"] }
 signal-hook = "=0.4.5"
@@ -32,5 +35,5 @@ ctrlc = { version = "=3.5.2", features = ["termination"] }
 [target.'cfg(any(target_os = "linux", target_os = "windows"))'.dependencies]
 arboard = { version = "=3.7.0", default-features = false }
 
-[target.'cfg(windows)'.dev-dependencies]
+[target.'cfg(any(windows, target_os = "macos"))'.dev-dependencies]
 tempfile = "=3.27.0"
