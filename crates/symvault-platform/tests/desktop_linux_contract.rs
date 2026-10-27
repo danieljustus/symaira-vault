@@ -487,9 +487,39 @@ mod process {
         }
     }
 
+    /// Installs an executable fake tool at `path` without ever holding a write
+    /// descriptor to it in this process.
+    ///
+    /// Linux refuses to `exec` a file that any process still has open for
+    /// writing (`ETXTBSY`, "Text file busy"). Writing the file from this
+    /// multi-threaded test process is racy: a sibling test that forks between
+    /// our `open` and `close` inherits the descriptor and keeps it until its own
+    /// `exec`, so the very next spawn of the tool can fail and the fake never
+    /// records its call (#1508, #1511). Renaming a file written in-process does
+    /// not help because the inherited descriptor follows the inode. So a
+    /// short-lived `sh` writes a temporary file in the same directory, makes it
+    /// executable and renames it into place; it has exited (and its descriptor
+    /// is gone) before this function returns, and no other thread ever had the
+    /// descriptor to inherit.
     fn write_executable(path: &Path, body: &str) {
-        fs::write(path, body).unwrap();
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        let tmp = path.with_file_name(format!(
+            ".{}.tmp",
+            path.file_name().unwrap().to_str().unwrap()
+        ));
+        let status = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf '%s' \"$1\" > \"$2\" && chmod 700 \"$2\" && mv -f \"$2\" \"$3\"")
+            .arg("write-executable")
+            .arg(body)
+            .arg(&tmp)
+            .arg(path)
+            .status()
+            .unwrap();
+        assert!(status.success(), "installing fake tool {}", path.display());
+        assert_eq!(
+            fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
     }
 
     fn read_calls(rec: &Path) -> Vec<Call> {
