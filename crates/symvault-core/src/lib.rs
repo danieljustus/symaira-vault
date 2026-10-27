@@ -7,6 +7,7 @@ use symaira_core_version::new as new_version;
 pub mod config;
 pub mod error;
 pub mod go_yaml;
+pub mod keychain_status;
 pub mod password;
 pub mod persistent_quota;
 pub mod platform;
