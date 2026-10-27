@@ -11,16 +11,18 @@ use std::{path::Path, time::Duration};
 use symvault_core::{config::AuthMethod, session::SessionManager};
 #[cfg(any(target_os = "macos", test))]
 use symvault_core::{
+    keychain_status::{BiometricItemStore, KeychainErrorKind, is_legacy_rust_wrapped_value},
     platform::TouchId,
-    session::{Keyring, SessionError},
 };
 #[cfg(any(target_os = "macos", test))]
 use zeroize::Zeroizing;
 
+/// Reported when the Touch ID item is a wrapper item an earlier Rust build wrote
+/// (`go-keyring-base64:` / `go-keyring-encoded:`). Go never wrote these, so this
+/// is Rust-only migration behavior: the value is neither decoded nor rewritten,
+/// and the message names the way out without echoing any of it.
 #[cfg(any(target_os = "macos", test))]
-const BIOMETRIC_SERVICE_PREFIX: &str = "symvault-biometric:";
-#[cfg(any(target_os = "macos", test))]
-const BIOMETRIC_ACCOUNT: &str = "passphrase";
+pub const LEGACY_TOUCH_ID_ITEM_ERROR: &str = "the stored Touch ID unlock item was written by an earlier Rust build in a wrapped format that this build (and Go) cannot use; unlock with your passphrase, then run `symvault auth set touchid` to replace it";
 #[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_REASON: &str = "Unlock Symaira Vault vault";
 #[cfg(any(target_os = "macos", test))]
@@ -136,69 +138,84 @@ pub fn check(manager: &SessionManager, vault: &Path) -> Result<(), String> {
 
 /// Loads the passphrase stored by Go's macOS Touch ID provider.
 ///
-/// Go stores this credential separately from the normal session entry under
-/// `symvault-biometric:<vault>|passphrase`. Authentication is performed before
-/// reading the item so the OS keychain remains the authorization boundary.
-/// The keyring and authenticator are injected to make the decision and error
-/// paths testable without touching a developer keychain or invoking Touch ID.
+/// Go keeps this credential apart from the normal session entry, as a
+/// generic-password item `symvault-biometric:<vault>` / `passphrase` holding the
+/// raw passphrase bytes. The order is Go's: learn whether the item exists
+/// without reading it (so an unconfigured vault never raises a prompt), then
+/// authenticate, then read. The item store and the authenticator are injected so
+/// the decision and error paths are testable without a developer keychain or
+/// Touch ID.
 #[cfg(any(target_os = "macos", test))]
 pub fn load_touch_id_passphrase(
     vault: &Path,
-    keyring: &dyn Keyring,
+    items: &dyn BiometricItemStore,
     touch_id: &dyn TouchId,
 ) -> Result<Zeroizing<Vec<u8>>, String> {
+    const NOT_CONFIGURED: &str = "Touch ID unlock is not configured for this vault";
     let vault = vault
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
     if !touch_id.is_available() {
         return Err("Touch ID unlock is unavailable on this system".to_owned());
     }
+    match items.exists(vault) {
+        Ok(true) => {}
+        Ok(false) => return Err(NOT_CONFIGURED.to_owned()),
+        Err(error) => return Err(error.to_string()),
+    }
     touch_id
         .authenticate(BIOMETRIC_REASON, BIOMETRIC_TIMEOUT)
         .map_err(|error| format!("Touch ID authentication failed: {error}"))?;
-    let key = format!("{BIOMETRIC_SERVICE_PREFIX}{vault}|{BIOMETRIC_ACCOUNT}");
-    let value = keyring.get(&key).map_err(|error| match error {
-        SessionError::NotFound => "Touch ID unlock is not configured for this vault".to_owned(),
-        _ => "Touch ID passphrase could not be loaded from the native keychain".to_owned(),
+    let value = items.load(vault).map_err(|error| {
+        if error.kind() == KeychainErrorKind::ItemNotFound {
+            NOT_CONFIGURED.to_owned()
+        } else {
+            error.to_string()
+        }
     })?;
     if value.is_empty() {
-        return Err("Touch ID unlock is not configured for this vault".to_owned());
+        return Err(NOT_CONFIGURED.to_owned());
     }
-    Ok(Zeroizing::new(value))
+    // The wrapper cannot be recognised before the data is read, and the data is
+    // only read after authentication (Go's order), so this is the earliest point.
+    if is_legacy_rust_wrapped_value(&value) {
+        return Err(LEGACY_TOUCH_ID_ITEM_ERROR.to_owned());
+    }
+    Ok(value)
 }
 
-/// Stores a passphrase under the Go-compatible Touch ID keychain address so a
-/// later unlock or biometric setup change can retrieve it. Mirrors Go's
-/// `session.SaveBiometricPassphrase` (the C store call has no separate
-/// authentication step; only `Load` is biometric-gated in both ports).
+/// Stores a passphrase as Go's Touch ID item so a later unlock or biometric
+/// setup change can retrieve it. Mirrors Go's `session.SaveBiometricPassphrase`
+/// (the store has no separate authentication step; only `Load` is
+/// biometric-gated in both ports).
 #[cfg(any(target_os = "macos", test))]
 pub fn save_touch_id_passphrase(
     vault: &Path,
-    keyring: &dyn Keyring,
+    items: &dyn BiometricItemStore,
     passphrase: &[u8],
 ) -> Result<(), String> {
     let vault = vault
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
-    let key = format!("{BIOMETRIC_SERVICE_PREFIX}{vault}|{BIOMETRIC_ACCOUNT}");
-    keyring
-        .set(&key, passphrase)
+    items
+        .save(vault, passphrase)
         .map_err(|error| format!("save Touch ID unlock item: {error}"))
 }
 
 /// Removes the Touch ID unlock item for a vault, mirroring Go's
-/// `session.ClearBiometricPassphrase`. Go's real keychain reports "not found"
-/// as an error when no item was ever configured; callers should treat a
-/// failure here as a warning rather than fatal, matching how the Go CLI's
-/// `auth set passphrase` only logs a warning on this call.
+/// `session.ClearBiometricPassphrase`. An absent item is success in both ports;
+/// callers still treat a failure as a warning, as the Go CLI's
+/// `auth set passphrase` only logs it.
 #[cfg(any(target_os = "macos", test))]
-pub fn clear_touch_id_passphrase(vault: &Path, keyring: &dyn Keyring) -> Result<(), String> {
+pub fn clear_touch_id_passphrase(
+    vault: &Path,
+    items: &dyn BiometricItemStore,
+) -> Result<(), String> {
     let vault = vault
         .to_str()
         .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
-    let key = format!("{BIOMETRIC_SERVICE_PREFIX}{vault}|{BIOMETRIC_ACCOUNT}");
-    keyring
-        .delete(&key)
+    items
+        .delete(vault)
         .map_err(|error| format!("could not remove Touch ID unlock item: {error}"))
 }
 
@@ -277,54 +294,132 @@ mod tests {
         }
     }
 
+    use symvault_core::keychain_status::KeyringBiometricItems;
+    use symvault_core::session::{Keyring, MemoryKeyring};
+
+    const ADDRESS: &str = "symvault-biometric:/fixture/vault|passphrase";
+
     #[test]
     fn touch_id_load_matches_go_service_and_account() {
-        let keyring = symvault_core::session::MemoryKeyring::new();
-        keyring
-            .set("symvault-biometric:/fixture/vault|passphrase", b"secret")
-            .expect("store fixture");
+        let keyring = MemoryKeyring::new();
+        keyring.set(ADDRESS, b"secret").expect("store fixture");
         let touch = FakeTouchId {
             available: true,
             ..Default::default()
         };
-        let got = load_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, &touch)
-            .expect("load biometric passphrase");
+        let got = load_touch_id_passphrase(
+            Path::new("/fixture/vault"),
+            &KeyringBiometricItems(&keyring),
+            &touch,
+        )
+        .expect("load biometric passphrase");
         assert_eq!(&*got, b"secret");
         let calls = touch.authenticated.lock().expect("fake lock");
         assert_eq!(&*calls, &[(BIOMETRIC_REASON.to_owned(), BIOMETRIC_TIMEOUT)]);
     }
 
     #[test]
-    fn touch_id_does_not_read_keyring_when_unavailable() {
+    fn touch_id_does_not_read_items_when_unavailable() {
         let touch = FakeTouchId::default();
-        let keyring = symvault_core::session::MemoryKeyring::new();
-        let error = load_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, &touch)
-            .expect_err("unavailable touch id");
+        let keyring = MemoryKeyring::new();
+        let error = load_touch_id_passphrase(
+            Path::new("/fixture/vault"),
+            &KeyringBiometricItems(&keyring),
+            &touch,
+        )
+        .expect_err("unavailable touch id");
         assert_eq!(error, "Touch ID unlock is unavailable on this system");
     }
 
+    /// Go learns the item is missing before it shows the prompt.
     #[test]
-    fn save_touch_id_passphrase_uses_go_service_and_account() {
-        let keyring = symvault_core::session::MemoryKeyring::new();
-        save_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, b"secret")
-            .expect("save biometric passphrase");
-        let stored = keyring
-            .get("symvault-biometric:/fixture/vault|passphrase")
-            .expect("stored under go-compatible address");
-        assert_eq!(stored, b"secret");
+    fn touch_id_unconfigured_vault_never_prompts() {
+        let keyring = MemoryKeyring::new();
+        let touch = FakeTouchId {
+            available: true,
+            ..Default::default()
+        };
+        let error = load_touch_id_passphrase(
+            Path::new("/fixture/vault"),
+            &KeyringBiometricItems(&keyring),
+            &touch,
+        )
+        .expect_err("nothing stored");
+        assert_eq!(error, "Touch ID unlock is not configured for this vault");
+        assert!(touch.authenticated.lock().expect("fake lock").is_empty());
+    }
+
+    /// The value is the raw passphrase: nothing a go-keyring wrapper would
+    /// have trimmed or decoded may change on the way through.
+    #[test]
+    fn touch_id_passphrase_is_raw_bytes_both_ways() {
+        let keyring = MemoryKeyring::new();
+        let items = KeyringBiometricItems(&keyring);
+        let touch = FakeTouchId {
+            available: true,
+            ..Default::default()
+        };
+        for secret in [
+            b" padded \n".as_slice(),
+            b"go-keyring-base64 without colon".as_slice(),
+            b"\xff\xfe".as_slice(),
+        ] {
+            save_touch_id_passphrase(Path::new("/fixture/vault"), &items, secret)
+                .expect("save biometric passphrase");
+            assert_eq!(keyring.get(ADDRESS).expect("stored"), secret);
+            let got = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
+                .expect("load biometric passphrase");
+            assert_eq!(&*got, secret);
+        }
+    }
+
+    /// Items written by earlier Rust builds (go-keyring wrapper under the same
+    /// service/account) must not be returned as the passphrase: that made the
+    /// Touch ID prompt succeed and the vault then fail with a generic error.
+    /// They are reported, left untouched, and a fresh save replaces them.
+    #[test]
+    fn touch_id_legacy_rust_wrapped_item_is_reported_not_returned_or_rewritten() {
+        let touch = FakeTouchId {
+            available: true,
+            ..Default::default()
+        };
+        for legacy in [
+            b"go-keyring-base64:c2VjcmV0".as_slice(),
+            b"go-keyring-encoded:736563726574".as_slice(),
+        ] {
+            let keyring = MemoryKeyring::new();
+            let items = KeyringBiometricItems(&keyring);
+            keyring.set(ADDRESS, legacy).expect("store legacy item");
+            let error = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
+                .expect_err("legacy wrapper item");
+            assert_eq!(error, LEGACY_TOUCH_ID_ITEM_ERROR);
+            assert!(!error.contains("c2VjcmV0") && !error.contains("736563726574"));
+            assert!(error.contains("symvault auth set touchid"));
+            // No silent rewrite or decode.
+            assert_eq!(keyring.get(ADDRESS).expect("still stored"), legacy);
+            // The remedy works: saving the raw passphrase replaces the item.
+            save_touch_id_passphrase(Path::new("/fixture/vault"), &items, b"secret")
+                .expect("replace legacy item");
+            let got = load_touch_id_passphrase(Path::new("/fixture/vault"), &items, &touch)
+                .expect("load replaced item");
+            assert_eq!(&*got, b"secret");
+        }
     }
 
     #[test]
-    fn clear_touch_id_passphrase_removes_saved_item() {
-        let keyring = symvault_core::session::MemoryKeyring::new();
-        save_touch_id_passphrase(Path::new("/fixture/vault"), &keyring, b"secret")
+    fn clear_touch_id_passphrase_removes_saved_item_and_is_idempotent() {
+        let keyring = MemoryKeyring::new();
+        let items = KeyringBiometricItems(&keyring);
+        save_touch_id_passphrase(Path::new("/fixture/vault"), &items, b"secret")
             .expect("save biometric passphrase");
-        clear_touch_id_passphrase(Path::new("/fixture/vault"), &keyring)
+        clear_touch_id_passphrase(Path::new("/fixture/vault"), &items)
             .expect("clear biometric passphrase");
-        let error = keyring
-            .get("symvault-biometric:/fixture/vault|passphrase")
-            .expect_err("item removed");
-        assert!(matches!(error, SessionError::NotFound));
+        assert!(matches!(
+            keyring.get(ADDRESS).expect_err("item removed"),
+            symvault_core::session::SessionError::NotFound
+        ));
+        clear_touch_id_passphrase(Path::new("/fixture/vault"), &items)
+            .expect("clearing an absent item succeeds, as in Go");
     }
 
     #[test]

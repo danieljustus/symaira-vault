@@ -98,10 +98,10 @@ def spawn(args, home):
 
 def exercise(binary, inspector, root):
     records = []
-    def case(name, args, home=None):
+    def case(name, args, home=None, extra_env=None):
         home = home or root / name
         home.mkdir(exist_ok=True)
-        result = run([binary, *args], cwd=home, env=isolated(home))
+        result = run([binary, *args], cwd=home, env={**isolated(home), **(extra_env or {})})
         records.append({"case": name, "exit": result.returncode,
                         "stdout": normal(result.stdout, home),
                         "stderr": normal(result.stderr, home)})
@@ -273,6 +273,23 @@ def exercise(binary, inspector, root):
         assert b"fixture-password" not in result.stdout
         assert b"fixture-ocr-password" not in result.stdout
         assert (home / filename).read_bytes() == payload
+
+    # Go formats ModTime() in time.Local; a non-UTC host zone must therefore
+    # print its offset. Windows Go resolves zones from the registry, not TZ.
+    if os.name != "nt":
+        home = root / "file-env-local-zone"
+        home.mkdir()
+        (home / "fixture.env").write_bytes(b"USERNAME=fixture-user\nPASSWORD=fixture-password\n")
+        os.utime(home / "fixture.env", (1700000000, 1700000000))
+        result, _ = case("file-env-local-zone", ["intake", "fixture.env", "--dry-run", "--json"],
+                         home, {"TZ": "Europe/Berlin"})
+        assert result.returncode == 0, result.stderr
+        observed = json.loads(result.stdout)
+        assert observed["results"][0]["provenance"]["mtime"] == "2023-11-14T23:13:20+01:00", observed
+        for item in observed["results"]:
+            item["suggestions"].sort(key=lambda s: (s["path"], s["field"]))
+        records[-1]["json"] = observed
+        del records[-1]["stdout"]
 
     home = root / "ordinary-encrypted-file"
     home.mkdir()

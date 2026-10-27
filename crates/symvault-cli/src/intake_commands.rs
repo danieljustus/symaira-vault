@@ -252,6 +252,33 @@ fn source_type(kind: intake::SourceType) -> &'static str {
     }
 }
 
+/// UTC offset the host zone (`TZ`, then the system zone) applies at `moment`.
+/// The `time` crate refuses to read it once the process has a second thread,
+/// and the CLI always runs on a spawned worker, so ask libc directly.
+#[cfg(unix)]
+#[allow(unsafe_code)] // One localtime_r(3) call on a stack-allocated `tm`.
+fn local_offset_at(moment: time::OffsetDateTime) -> time::UtcOffset {
+    let seconds: libc::time_t = moment.unix_timestamp();
+    // SAFETY: `seconds` and `local` are valid for the call; localtime_r is the
+    // reentrant variant and does not retain either pointer.
+    let local = unsafe {
+        let mut local: libc::tm = std::mem::zeroed();
+        if libc::localtime_r(&seconds, &mut local).is_null() {
+            return time::UtcOffset::UTC;
+        }
+        local
+    };
+    i32::try_from(local.tm_gmtoff)
+        .ok()
+        .and_then(|offset| time::UtcOffset::from_whole_seconds(offset).ok())
+        .unwrap_or(time::UtcOffset::UTC)
+}
+
+#[cfg(not(unix))]
+fn local_offset_at(moment: time::OffsetDateTime) -> time::UtcOffset {
+    time::UtcOffset::local_offset_at(moment).unwrap_or(time::UtcOffset::UTC)
+}
+
 fn public_result(result: &FileResult) -> Result<serde_json::Value, Error> {
     let mut out = serde_json::Map::new();
     out.insert("file".into(), result.file.clone().into());
@@ -262,6 +289,8 @@ fn public_result(result: &FileResult) -> Result<serde_json::Value, Error> {
     if let Some(p) = &result.provenance {
         let stamp = time::OffsetDateTime::from_unix_timestamp_nanos(p.mtime_unix_nanoseconds)
             .map_err(|e| (1, format!("encode intake output: {e}")))?;
+        // Go keeps `fi.ModTime()` in time.Local, so the JSON carries the host offset.
+        let stamp = stamp.to_offset(local_offset_at(stamp));
         out.insert("provenance".into(), serde_json::json!({"source_path":p.source_path,"source_name":p.source_name,
             "source_type":source_type(p.source_type),"size":p.size,"sha256":p.sha256,"mtime":GoTime::from_offset_datetime(stamp).to_rfc3339_nano()}));
     }
@@ -641,4 +670,44 @@ fn notify_local(id: &str, count: usize) {
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (id, count);
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_offset_follows_tz_for_worker_threads() {
+        // localtime_r reads TZ; the offset for 2023-11-14 is CET (+01:00) in
+        // Berlin and UTC otherwise. Run in a child so TZ is not shared.
+        if std::env::var_os("SYMVAULT_TZ_CHILD").is_some() {
+            let moment = time::OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+            // stderr, not stdout: in sequential libtest mode (RUST_TEST_THREADS=1,
+            // as in CI) the "test ... " status line shares stdout with the child.
+            eprintln!(
+                "SYMVAULT_TZ_OFFSET={}",
+                local_offset_at(moment).whole_seconds()
+            );
+            return;
+        }
+        for (zone, expected) in [("Europe/Berlin", "3600"), ("UTC", "0")] {
+            let out = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "intake_commands::tests::local_offset_follows_tz_for_worker_threads",
+                    "--nocapture",
+                ])
+                .env("TZ", zone)
+                .env("SYMVAULT_TZ_CHILD", "1")
+                .output()
+                .unwrap();
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let marker = format!("SYMVAULT_TZ_OFFSET={expected}");
+            assert!(
+                stderr.lines().any(|l| l == marker),
+                "{zone}: expected {marker}; stdout={:?} stderr={stderr:?}",
+                String::from_utf8_lossy(&out.stdout)
+            );
+        }
+    }
 }

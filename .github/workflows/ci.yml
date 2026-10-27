@@ -777,13 +777,14 @@ jobs:
 
       - name: Run fuzz tests
         run: |
+          ./scripts/test-go-fuzz-target.sh
           echo "Running fuzz tests with 55s per target..."
-          go test -fuzz=FuzzCSVImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzBitwardenImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzOnePUXImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzParsePassEntry -fuzztime=55s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzNormalizePath -fuzztime=55s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzParseMapping -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzCSVImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzBitwardenImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzOnePUXImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzParsePassEntry -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzNormalizePath -fuzztime=55s -timeout=180s ./internal/importer/
+          ./scripts/go-fuzz-target.sh -fuzz=FuzzParseMapping -fuzztime=55s -timeout=180s ./internal/importer/
           echo "All fuzz tests passed without crashes"
 
   build:
