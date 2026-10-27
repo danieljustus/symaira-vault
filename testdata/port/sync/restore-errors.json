@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "85d61017b7a7bfb1d3dedc2cb6dd30bc33075c9497ef145398164d98dca26599",
-  "generator_digest": "214745da2ce8ce72ccac5539aa0e97cf1a01b9da5e4ea955e1591bf4d7f5124c",
+  "generator_digest": "f8315c372a039123382af5524899601d08d9cc3706d90b525340c52b454c414b",
   "cases": [
     {
       "name": "valid-modes-clamped",

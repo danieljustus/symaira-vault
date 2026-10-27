@@ -1,4 +1,5 @@
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use crate::gzip_multistream::GoGzip;
+use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -500,6 +501,10 @@ fn go_stream_error(error: &io::Error, failure: &Failure) -> String {
         if *kind == io::ErrorKind::UnexpectedEof || message.contains("incomplete") {
             return "unexpected EOF".to_owned();
         }
+        // Framing errors raised by the multistream reader carry Go's text.
+        if message == "gzip: invalid header" || message == "gzip: invalid checksum" {
+            return message.clone();
+        }
         // Go appends "before offset N", a decoder-internal position that
         // flate2 does not expose.
         return "flate: corrupt input".to_owned();
@@ -615,7 +620,7 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
     let Ok(file) = fs::File::open(input) else {
         return Ok(());
     };
-    scan_entry_limit(GzDecoder::new(file), MAX_ARCHIVE_FILE, MAX_ARCHIVE_TOTAL)
+    scan_entry_limit(GoGzip::new(file), MAX_ARCHIVE_FILE, MAX_ARCHIVE_TOTAL)
 }
 
 /// Counts tar headers in `reader` (an already-inflated tar stream).
@@ -655,6 +660,9 @@ fn scan_entry_limit<R: Read>(reader: R, max_file: u64, max_total: u64) -> Result
 
 /// Restores a gzip tar backup into an existing or newly created directory.
 ///
+/// The gzip layer is multistream like Go's `gzip.Reader` (see
+/// `gzip_multistream`): concatenated members are one tar stream.
+///
 /// Error text and extraction order follow `cmd/admin.RestoreBackup` (see
 /// `testdata/port/sync/restore-errors.json`). Deliberate differences, all
 /// recorded in the IO-002 contract row: a member is staged and renamed into
@@ -689,8 +697,12 @@ pub fn restore(
         ))
     })?;
     let failure = Failure::default();
+    // Go's gzip.Reader is multistream and validates the first header eagerly.
+    let mut gzip = GoGzip::new(file);
+    gzip.read_first_header()
+        .map_err(|reason| restore_error(format!("read gzip: {reason}")))?;
     let decoder = Tracked {
-        inner: GzDecoder::new(file),
+        inner: gzip,
         failure: failure.clone(),
     };
     let mut archive = Archive::new(decoder);
