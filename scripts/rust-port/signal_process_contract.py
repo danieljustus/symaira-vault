@@ -76,7 +76,8 @@ GO_EXPECTED_IGNORED = {
     ("run-broker", "SIGHUP"): (True, ("signal", signal.SIGTERM)), ("run-broker", "SIGINT"): (True, ("signal", signal.SIGTERM)),
 }
 IGNORED_CASES = tuple(GO_EXPECTED_IGNORED)
-SURVIVE_WINDOW = 1.5  # seconds a process gets to die from a signal it should ignore
+SURVIVE_WINDOW = 1.5  # observation window for a process that must survive an ignored signal
+DIE_WINDOW = 5.0  # a process that must die gets this long (returns as soon as it exits; loaded runners are slow)
 
 
 def checked(args, cwd=ROOT, env=None, timeout=300):
@@ -98,6 +99,23 @@ def isolated(home):
     return env
 
 
+def ignoring(argv, names):
+    """Wrap `argv` so it starts with each signal in `names` set to SIG_IGN.
+
+    SIG_IGN survives exec, like `nohup` or a supervisor parent. A POSIX shell sets it
+    (`trap "" HUP`) and execs the real binary, so the pid is unchanged and nothing runs
+    in the forked child between fork and exec (`preexec_fn` is not fork-safe while the
+    pump threads of earlier cases are running).
+    """
+    names = tuple(names)
+    if not names:
+        return argv
+    if os.name == "nt":
+        raise NotImplementedError("inherited SIG_IGN is Unix-only")
+    traps = " ".join(signal.Signals[name].name[3:] for name in names)
+    return ["sh", "-c", f'trap "" {traps}; exec "$@"', "sh", *argv]
+
+
 class Proc:
     """A child with pipe readers, so a dead or orphan-holding child never blocks the driver."""
 
@@ -105,12 +123,9 @@ class Proc:
         self.home = home
         ignore = tuple(ignore)
         self.out, self.err = bytearray(), bytearray()
-        self.popen = subprocess.Popen([str(x) for x in args], cwd=home, env=isolated(home),
+        self.popen = subprocess.Popen(ignoring([str(x) for x in args], ignore), cwd=home, env=isolated(home),
                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                      start_new_session=new_session,
-                                      # SIG_IGN survives exec, like `nohup` or a supervisor parent.
-                                      preexec_fn=(lambda: [signal.signal(getattr(signal, n), signal.SIG_IGN)
-                                                           for n in ignore]) if ignore else None)
+                                      start_new_session=new_session)
         self.threads = [threading.Thread(target=self._pump, args=(stream, sink), daemon=True)
                         for stream, sink in ((self.popen.stdout, self.out), (self.popen.stderr, self.err))]
         for thread in self.threads:
@@ -146,11 +161,15 @@ class Proc:
             self.popen.wait()
 
 
-def survived_signal(proc, send, sig):
-    """Send `sig`; True when the process is still running after SURVIVE_WINDOW."""
+def survived_signal(proc, send, sig, should_die=False):
+    """Send `sig`; True when the process is still running when the observation window ends.
+
+    A process expected to die is polled for up to DIE_WINDOW and returns as soon as it
+    exits, so a slow runner cannot turn a late exit into a false "survived". A process
+    expected to survive keeps the short SURVIVE_WINDOW; a real survivor never exits."""
     send(sig)
     try:
-        proc.popen.wait(timeout=SURVIVE_WINDOW)
+        proc.popen.wait(timeout=DIE_WINDOW if should_die else SURVIVE_WINDOW)
     except subprocess.TimeoutExpired:
         return True
     return False
@@ -255,7 +274,7 @@ def foreground_case(binary, base, template, command, sig, ignored=False):
         send = lambda number: proc.popen.send_signal(getattr(signal, number))  # noqa: E731
         extra = {}
         if ignored:
-            survived = survived_signal(proc, send, sig)
+            survived = survived_signal(proc, send, sig, should_die=not GO_EXPECTED_IGNORED[(command, sig)][0])
             extra["ignored"], extra["survived"] = True, survived
             if survived:
                 if port is not None:
@@ -304,7 +323,7 @@ def run_case(binary, base, template, command, sig, group, extra=(), label="", ig
         if group:
             os.killpg(proc.popen.pid, getattr(signal, sig))
         elif ignored:
-            survived = survived_signal(proc, send, sig)
+            survived = survived_signal(proc, send, sig, should_die=not GO_EXPECTED_IGNORED[(command, sig)][0])
             if survived:
                 assert pid_alive(child), "an ignored signal must not reach the child either"
                 send("SIGTERM")

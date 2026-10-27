@@ -1305,25 +1305,50 @@ mod tests {
         );
     }
 
-    #[test]
-    fn slow_response_cannot_extend_the_request_deadline() {
+    /// One attempt of the slow-response deadline contract. Returns `false` when
+    /// the deadline was already spent before the response started, in which
+    /// case the attempt says nothing about slow responses.
+    fn slow_response_attempt(timeout: Duration) -> bool {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
+        let client_returned = Arc::new(AtomicBool::new(false));
+        let server_gate = Arc::clone(&client_returned);
+        // The body stays stalled well past the deadline: three timeouts.
+        let body_delay = timeout * 3;
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
+            // Do not block in accept(): when setup alone consumes the deadline
+            // the client never connects.
+            let mut stream = loop {
+                match listener.accept() {
+                    Ok((stream, _)) => break stream,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        if server_gate.load(Ordering::Acquire) {
+                            return None;
+                        }
+                        thread::sleep(Duration::from_millis(1));
+                    }
+                    Err(error) => panic!("accept failed: {error}"),
+                }
+            };
+            stream.set_nonblocking(false).unwrap();
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
             let mut reader = BufReader::new(stream.try_clone().unwrap());
             loop {
                 let mut line = String::new();
-                reader.read_line(&mut line).unwrap();
-                if line == "\r\n" {
+                if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
                     break;
                 }
             }
             stream
                 .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\nx")
-                .unwrap();
-            thread::sleep(Duration::from_millis(400));
+                .ok()?;
+            let headers_sent = std::time::Instant::now();
+            thread::sleep(body_delay);
             let _ = stream.write_all(b"xxxxxxx");
+            Some((headers_sent, std::time::Instant::now()))
         });
         let template = ApiTemplate {
             base_url: format!("http://{address}"),
@@ -1340,19 +1365,55 @@ mod tests {
             &BTreeMap::new(),
             b"",
             None,
-            Duration::from_millis(150),
+            timeout,
         )
         .unwrap_err();
-        let elapsed = started.elapsed();
+        let returned = std::time::Instant::now();
+        client_returned.store(true, Ordering::Release);
+        let elapsed = returned.duration_since(started);
         assert!(matches!(
             error.as_str(),
             "upstream request timed out" | "upstream request failed"
         ));
+        // The deadline can never fire early, whatever the machine load.
+        assert!(elapsed >= timeout * 2 / 3, "{error}: {elapsed:?}");
+        let Some((headers_sent, body_written)) = server.join().unwrap() else {
+            return false;
+        };
+        if returned <= headers_sent {
+            // The deadline expired while the broker was still building its
+            // client (synchronous, non-interruptible work inside the
+            // deadline); no response had started, so nothing was exercised.
+            return false;
+        }
+        // The contract under test: once the response has started, its stalled
+        // body cannot extend the request deadline. The call must have given
+        // up before the server ever produced the rest of the body; with a
+        // stall of three timeouts this is `deadline + overshoot < 3 * timeout`
+        // measured from the first response bytes, independent of setup time.
         assert!(
-            elapsed >= Duration::from_millis(100),
-            "{error}: {elapsed:?}"
+            returned < body_written,
+            "{error}: returned {:?} after headers, body written {:?} after headers",
+            returned.duration_since(headers_sent),
+            body_written.duration_since(headers_sent),
         );
-        assert!(elapsed < Duration::from_millis(500), "{error}: {elapsed:?}");
-        server.join().unwrap();
+        true
+    }
+
+    #[test]
+    fn slow_response_cannot_extend_the_request_deadline() {
+        // Broker client construction (TLS configuration, native roots) is
+        // synchronous work that the deadline cannot interrupt. Under CPU
+        // contention it alone can outlast a 150 ms deadline (measured up to
+        // 2 s on a 1-CPU container), so a wall-clock bound from before the
+        // call also measures the machine. Measure from the first response
+        // bytes instead, and when setup consumed the whole deadline retry
+        // with a proportionally longer deadline and body stall.
+        for attempt in 0..6 {
+            if slow_response_attempt(Duration::from_millis(150) * (1 << attempt)) {
+                return;
+            }
+        }
+        panic!("the deadline expired before any response started in every attempt");
     }
 }
