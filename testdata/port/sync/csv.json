@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "535cff4e2c851645861f612e23b972394aa3d4687263378d15dd4dc1f4e88856",
+  "generator_digest": "4d36ca3db92050f5670c6b98e64e65e2fdcecd2828b6acb5625e4dd27bc2e89c",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -3007,6 +3007,1486 @@
       "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=9223372036854775808",
       "value": null,
       "error": "invalid TOTP period \"9223372036854775808\" in otpauth URI: strconv.Atoi: parsing \"9223372036854775808\": value out of range"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSPXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSPXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "J",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "J=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JB",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JB======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBS",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBS=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSW",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSW====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3D",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3D=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPE",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPE=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEH",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEH======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHP=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3P==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PX",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PX=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJ",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJ=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJB",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJB======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBS",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBS=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSW",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSW====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3D",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3D=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPE",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPE=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH======"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHP=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK===="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3===",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3==="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX=",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP========",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP=========",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DP========",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH======="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH========",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH========"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK=====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK====="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK======"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK=======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK======="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK========",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK========"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3===="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3=====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3====="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3======"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3=======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3======="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3========",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3========"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P========",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX==",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX=="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX===",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX==="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX===="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX=====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX====="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX======"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX=======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX======="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX========",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PX========"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH======ZZ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH======ZZ"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=======XYZ",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=A====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH==A===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPE===",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHP=",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEH=PK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "========",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPAB======ZZ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPAB======ZZ"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPA=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPABC=====",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "jbswy3dpehpk3pxpjbswy3dpehpk3pxp",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpehpk3pxp"
+      },
+      "error": ""
+    },
+    {
+      "input": "jbswy3dpehpk3pxpjbswy3dpeh",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpeh"
+      },
+      "error": ""
+    },
+    {
+      "input": "jbswy3dpehpk3pxpjbswy3dpeh======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpeh======"
+      },
+      "error": ""
+    },
+    {
+      "input": "jbswy3dpehPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "jbsw y3dp ehpk 3pxp jbsw y3dp ehpk 3pxp",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbsw y3dp ehpk 3pxp jbsw y3dp ehpk 3pxp"
+      },
+      "error": ""
+    },
+    {
+      "input": " JBSWY3DPEHPK3PXPJBSWY3DPEH ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3  PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3  PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH== ====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH== ===="
+      },
+      "error": ""
+    },
+    {
+      "input": "J B S W Y 3 D P E H P K 3 P X P J B S W Y 3 D P E H P K 3 P X P",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "J B S W Y 3 D P E H P K 3 P X P J B S W Y 3 D P E H P K 3 P X P"
+      },
+      "error": ""
+    },
+    {
+      "input": "\tJBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP\tJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP JBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP\nJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP\nJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP\r\nJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP\r\nJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\n",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "\nJBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH\n======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH\n======"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH=\r\n=====",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH=\r\n====="
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEH\n",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3D\rPEHPK3PXPJBSWY3DPEH",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3D\rPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P0P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P1P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P8P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P9P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P-P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P_P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P\u0000P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PßP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PıP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PıP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PſP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PſP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PŉP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PKP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PéP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "ıBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ıBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHſſſſſſ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHſſſſſſ"
+      },
+      "error": ""
+    },
+    {
+      "input": "ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "ıııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııı",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ıııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııııı"
+      },
+      "error": ""
+    },
+    {
+      "input": "ſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſJBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſſJBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too long: maximum 256 base32 characters"
+    },
+    {
+      "input": "jbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dp",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dpjbswy3dp"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3D",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3D"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPE",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too long: maximum 256 base32 characters"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3==",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too long: maximum 256 base32 characters"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPEHPK",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPEHPK"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBS",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJB",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJB"
+      },
+      "error": ""
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJ",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3D",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3D"
+      },
+      "error": ""
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAA=======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      },
+      "error": ""
+    },
+    {
+      "input": "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+      },
+      "error": ""
+    },
+    {
+      "input": "77777777777777777777777777777777",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "ABABABABABABABABABABABABABABABAB",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ABABABABABABABABABABABABABABABAB"
+      },
+      "error": ""
+    },
+    {
+      "input": "AAAAAAAAAAAAAAAAAAAAAAAAAA======",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEH",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPE",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSPXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSPXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=jbswy3dpehpk3pxpjbswy3dpehpk3pxp",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpehpk3pxp"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP%3D",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEH%3D%3D%3D%3D%3D%3D",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH======"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEH======",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH======"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEH%3d%3d",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP%20JBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP JBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP+JBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP JBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP%0AJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP\nJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXP%0d%0aJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXP\r\nJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=%20JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": " JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P%C3%9FP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P%C4%B1P",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PıP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P%C5%BFP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PſP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P%01P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3P0P",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too long: maximum 256 base32 characters"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DPJBSWY3DP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=AAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret is trivially weak: all bytes identical"
+    },
+    {
+      "input": "otpauth://totp/x?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=%41%42%43",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026secret=bad",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=bad\u0026secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEH\u0026digits=8",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 8,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEH"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?issuer=a\u0026secret=JBSWY3DPEHPK3PXPJBSWY3DPE\u0026period=60",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "  OTPAUTH://totp/x?secret=jbswy3dpehpk3pxpjbswy3dpeh  ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpeh"
+      },
+      "error": ""
     }
   ]
 }

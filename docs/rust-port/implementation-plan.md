@@ -700,8 +700,16 @@ and vice versa.
    replays the Go-derived lifecycle fixture (idle/max TTL, touch versus
    non-refreshing probes, revoke, corrupted records, keyring failure/fallback,
    concurrency) through `symvault-core` and `symvault-platform`. The cache has no
-   on-disk representation, so file modes are not part of this row. Touch ID
-   (SESSION-003) is a separate slice.
+   on-disk representation, so file modes are not part of this row.
+   Touch ID non-interactive half (SESSION-003, #1243 slice 2):
+   `make biometric-differential` (part of `port-contract`) regenerates
+   `testdata/port/session/biometric.json` from the pinned Go sources, replays the
+   Keychain OSStatus/sentinel contract and the Touch ID item layout in
+   `symvault-core`, and, on macOS, exercises the Security-framework item store on
+   disposable keychains. The Rust Touch ID item is now Go's raw generic-password
+   item instead of a go-keyring-wrapped value. The biometric prompt, the real
+   default-keychain path and signed-app access control remain hardware/operator
+   gates.
 
 **Expected:** the Go-derived config/session/quota fixtures and injected platform
 contract tests pass locally. The macOS native adapter slice now compiles and

@@ -1,5 +1,9 @@
 # Rust migration handover — 2026-09-09
 
+## IO-003 intake watch mtime zone, 2026-10-25 (#1510)
+
+Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance `mtime` carries the host offset (`2023-11-14T23:13:20+01:00` under `TZ=Europe/Berlin`); Rust printed `Z`. The contract was previously only exercised in UTC. Red: `TZ=Europe/Berlin intake_watch_contract.py` failed on `file-env` against the pinned Go oracle. Fix: `intake_commands.rs` converts the mtime with a `localtime_r` offset (the `time` crate's `local_offset_at` refuses in the CLI's worker thread). The contract gains a `file-env-local-zone` case (`TZ=Europe/Berlin`, non-Windows; asserts `+01:00`). No Go source or fixture changed, so no pin advance was needed.
+
 ## IO-002 restore error/side-effect contract, 2026-10-22 (#1247)
 
 `scripts/rust-port/cmd/restoregen` freezes 88 production-Go `RestoreBackup`
@@ -25,6 +29,21 @@ on Windows. Native 3-OS evidence for this corpus is still pending; IO-002 stays
 `in_progress`.
 Next IO-002 candidates: export/backup CLI-level stdout/stderr differential
 against a built Go binary, and backup-side member modes/ordering corner cases.
+
+## SESSION-003 non-interactive half, 2026-10-22 (#1243 slice 2)
+
+`make biometric-differential` (in `port-contract`) freezes the macOS Keychain
+OSStatus contract, the no-op biometric manager and the Touch ID item layout from
+the pinned Go sources (`biometricgen`, oracle `d13e5d0b`, fixture
+`testdata/port/session/biometric.json`) and replays them in `symvault-core`; on
+macOS `symvault-platform` additionally drives `SecurityBiometricItems`
+(Security.framework, no `security` subprocess) against disposable keychains. Real
+divergence fixed: the Rust Touch ID item used the go-keyring-wrapped `OsKeyring`
+instead of Go's raw item. Still pending, with reasons: the LocalAuthentication
+prompt (no hardware; stays JXA), the real default-keychain/access-control path
+(operator keychain), CI receipt for the new native test. SESSION-001 residuals:
+Go-reads-Rust-written record, Go's case-insensitive JSON field names, CLI-layer
+fallback warning text.
 
 ## Current native-prerequisite repair, 2026-10-11
 

@@ -54,7 +54,7 @@ func main() {
 	must(err)
 	digest, err := provenance.Digest(root, sources)
 	must(err)
-	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go", "scripts/rust-port/cmd/importcsvgen/bitwarden_cases.go"})
+	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go", "scripts/rust-port/cmd/importcsvgen/bitwarden_cases.go", "scripts/rust-port/cmd/importcsvgen/totp_cases.go"})
 	must(err)
 	cases := slices.Concat([]csvCase{
 		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
@@ -132,6 +132,13 @@ func main() {
 		"otpauth://totp/x?secret=" + secret + "&period=0", "otpauth://totp/x?secret=" + secret + "&period=3601",
 		"otpauth://totp/x?secret=" + secret + "&period=9223372036854775808",
 	}
+	inputs = append(inputs, mutatedTOTPInputs(secret)...)
+	seenInputs := map[string]bool{}
+	inputs = slices.DeleteFunc(inputs, func(input string) bool {
+		duplicate := seenInputs[input]
+		seenInputs[input] = true
+		return duplicate
+	})
 	for _, input := range inputs {
 		v, totpErr := importer.ParseTOTP(input)
 		message := ""
