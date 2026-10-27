@@ -1,5 +1,9 @@
 # Rust migration handover — 2026-09-09
 
+## IO-003 intake watch mtime zone, 2026-10-25 (#1510)
+
+Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance `mtime` carries the host offset (`2023-11-14T23:13:20+01:00` under `TZ=Europe/Berlin`); Rust printed `Z`. The contract was previously only exercised in UTC. Red: `TZ=Europe/Berlin intake_watch_contract.py` failed on `file-env` against the pinned Go oracle. Fix: `intake_commands.rs` converts the mtime with a `localtime_r` offset (the `time` crate's `local_offset_at` refuses in the CLI's worker thread). The contract gains a `file-env-local-zone` case (`TZ=Europe/Berlin`, non-Windows; asserts `+01:00`). No Go source or fixture changed, so no pin advance was needed.
+
 ## IO-002 restore error/side-effect contract, 2026-10-22 (#1247)
 
 `scripts/rust-port/cmd/restoregen` freezes 88 production-Go `RestoreBackup`
