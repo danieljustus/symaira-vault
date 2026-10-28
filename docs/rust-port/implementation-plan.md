@@ -205,7 +205,12 @@ The PTY driver records 17 actions (10 critical approval, one execute approval,
 six hidden inputs), five cooked-mode restoration checks and two idle
 SIGINT/SIGTERM shutdowns that exit 0 like Go (asserted as `WIFEXITED`, status 0,
 never `WIFSIGNALED`; actual Go oracle 0cc78062 under a controlling PTY, run on
-Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; subsequent input works.
+Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; after a raw Ctrl-C (user cancel)
+subsequent input works. #1472 supersedes the earlier external-signal behavior:
+SIGINT/SIGTERM during secure input answers JSON-RPC -32603 `secure input failed:
+context canceled` and exits 0; during an ordinary approval prompt the tool result
+is `<tool> approval failed: failed to read from terminal: context canceled`,
+then exit 0 (the PTY acceptance runs one worker per signal case).
 Ordinary approval restores the terminal, then exits 0 like Go. The process-owned router is installed only by the standalone Unix
 stdio MCP CLI, regardless of a controlling terminal; without one, approval and
 secure input fail closed.
