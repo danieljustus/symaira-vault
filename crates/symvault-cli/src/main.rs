@@ -5119,7 +5119,17 @@ fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
 }
 
 fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
-    let vault_env = std::env::var("SYMVAULT_VAULT").ok();
+    let vault_env = if explicit.is_some() {
+        None
+    } else {
+        match std::env::var("SYMVAULT_VAULT") {
+            Ok(value) => Some(value),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err("vault path must be UTF-8".to_owned());
+            }
+        }
+    };
     let profile_env = std::env::var("SYMVAULT_PROFILE").ok();
     let resolver = PathResolver::new();
     symvault_core::config_overrides::VaultOverrides {

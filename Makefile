@@ -454,7 +454,8 @@ cfg-overrides-fixtures-generate:
 
 cfg-overrides-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configoverridesgen --check
-	$(CARGO) test -p symvault-cli --bin symvault config_override_tests::overrides_match_go_oracle --locked -- --exact --nocapture
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/configoverridesgen -count=1 -v
+	$(CARGO) test -p symvault-cli --bin symvault config_override_tests:: --locked -- --nocapture
 
 cfg-sections-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \

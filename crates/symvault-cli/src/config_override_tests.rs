@@ -1,7 +1,28 @@
 //! Fresh-process replay through the production clap parser and resolve_vault.
 use super::*;
 use serde::Deserialize;
-use std::process::Command as ProcessCommand;
+use std::process::{Command as ProcessCommand, Output, Stdio};
+
+// These children only read ordinary fixture files and never spawn descendants.
+fn bounded_output(command: &mut ProcessCommand) -> Output {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let started = std::time::Instant::now();
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            return child.wait_with_output().unwrap();
+        }
+        if started.elapsed() > std::time::Duration::from_secs(15) {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("config override child timed out");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+}
 
 #[derive(Debug, Deserialize)]
 struct Case {
@@ -42,8 +63,10 @@ fn child() {
 
 #[test]
 fn overrides_match_go_oracle() {
-    let source = include_str!("../../../testdata/port/config/overrides.json");
-    let fixture: serde_json::Value = serde_json::from_str(source).unwrap();
+    let source = std::env::var_os("CFG_OVERRIDES_FIXTURE")
+        .map(|path| fs::read_to_string(path).expect("read explicit override corpus"))
+        .unwrap_or_else(|| include_str!("../../../testdata/port/config/overrides.json").to_owned());
+    let fixture: serde_json::Value = serde_json::from_str(&source).unwrap();
     assert_eq!(
         fixture["oracle"]["commit"],
         "314a25a5cdd2e90517bb55a90495d7b97f68c6df"
@@ -99,7 +122,7 @@ fn overrides_match_go_oracle() {
             assert!(key.starts_with("SYMVAULT_"));
             child.env(key, value);
         }
-        let output = child.output().unwrap();
+        let output = bounded_output(&mut child);
         assert!(
             output.status.success(),
             "{}: {}{}",
@@ -112,5 +135,32 @@ fn overrides_match_go_oracle() {
     eprintln!(
         "PASS CFG-002 production Rust parser/resolver: {} cases",
         cases.len()
+    );
+}
+
+#[test]
+fn altered_oracle_answer_is_rejected() {
+    let mut fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../testdata/port/config/overrides.json")).unwrap();
+    fixture["cases"][0]["result"]["path"] = "wrong-oracle-answer".into();
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("mutant.json");
+    let bytes = serde_json::to_vec(&fixture).unwrap();
+    fs::write(&path, &bytes).unwrap();
+    let mut child = ProcessCommand::new(std::env::current_exe().unwrap());
+    child
+        .args([
+            "--exact",
+            "config_override_tests::overrides_match_go_oracle",
+            "--nocapture",
+        ])
+        .env("CFG_OVERRIDES_FIXTURE", &path);
+    let output = bounded_output(&mut child);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("defaults_no_file"));
+    assert_eq!(
+        fs::read(&path).unwrap(),
+        bytes,
+        "checking must never rewrite evidence"
     );
 }
