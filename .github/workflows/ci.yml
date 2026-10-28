@@ -29,10 +29,50 @@ env:
   GOSEC_VERSION: v2.22.0
 
 jobs:
+  changes:
+    name: Changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.areas.outputs.code }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Test the path table
+        run: ./scripts/test-ci-changed-areas.sh
+
+      - name: Map changed paths to jobs
+        id: areas
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Only pull requests are path-gated; push, schedule and dispatch run everything.
+          if [ "$EVENT_NAME" != pull_request ]; then
+            echo code=true >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for ref in "$BASE_SHA" "$HEAD_SHA"; do
+            if [[ ! "$ref" =~ ^[0-9a-f]{40}$ ]] || ! git cat-file -e "${ref}^{commit}"; then
+              echo "::error::Pull request base/head commit is invalid or unavailable: $ref" >&2
+              exit 1
+            fi
+          done
+          git diff --no-renames --name-only -z "$BASE_SHA" "$HEAD_SHA" \
+            | ./scripts/ci-changed-areas.sh | tee -a "$GITHUB_OUTPUT"
+
   # ── Always-run jobs (PR + main) ──────────────────────────────────────────
 
   govulncheck:
     name: govulncheck
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -54,6 +94,8 @@ jobs:
 
   dependency-scan:
     name: Dependency Scan
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -109,6 +151,8 @@ jobs:
 
   lint:
     name: Lint
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -172,6 +216,8 @@ jobs:
 
   flake-vendorhash:
     name: Flake vendorHash
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -213,6 +259,8 @@ jobs:
 
   port-contract:
     name: Rust port contract
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -236,6 +284,8 @@ jobs:
 
   rust:
     name: Rust
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -277,6 +327,8 @@ jobs:
 
   rust-miri:
     name: Rust Miri
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -318,6 +370,8 @@ jobs:
   # workflow_dispatch of the entire Go/CI matrix.
   rust-native:
     name: Rust native (${{ matrix.os }})
+    needs: [changes]
+    if: needs.changes.outputs.code != 'false'
     runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
     timeout-minutes: 45
     env:
@@ -395,7 +449,8 @@ jobs:
 
   test-pr:
     name: Test (ubuntu) — PR
-    if: github.event_name == 'pull_request'
+    needs: [changes]
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -428,9 +483,11 @@ jobs:
     # Also dispatchable: this is the only job that exercises the Windows
     # job-object paths, and cross-compilation is not evidence for them.
     if: >-
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch') &&
+      needs.changes.outputs.code != 'false'
     runs-on: windows-latest
+    needs: [changes]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -482,9 +539,9 @@ jobs:
 
   build-pr:
     name: Build (linux-amd64) — PR
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code != 'false'
     runs-on: ubuntu-latest
-    needs: [lint, test-pr, govulncheck, dependency-scan]
+    needs: [changes, lint, test-pr, govulncheck, dependency-scan]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -957,6 +1014,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
+      - changes
       - govulncheck
       - dependency-scan
       - lint
@@ -991,6 +1049,8 @@ jobs:
       - name: Verify applicable PR dependencies
         shell: bash
         env:
+          RES_CHANGES: ${{ needs.changes.result }}
+          RES_CODE_CHANGED: ${{ needs.changes.outputs.code }}
           RES_GOVULNCHECK: ${{ needs.govulncheck.result }}
           RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
           RES_LINT: ${{ needs.lint.result }}
@@ -1041,17 +1101,45 @@ jobs:
                 ;;
             esac
           }
-          check_required "$RES_GOVULNCHECK" govulncheck
-          check_required "$RES_DEPENDENCY_SCAN" dependency-scan
-          check_required "$RES_LINT" lint
-          check_required "$RES_FLAKE_VENDORHASH" flake-vendorhash
-          check_required "$RES_PORT_CONTRACT" port-contract
-          check_required "$RES_RUST" rust
-          check_required "$RES_RUST_MIRI" rust-miri
-          check_required "$RES_RUST_NATIVE" rust-native
-          check_required "$RES_TEST_PR" test-pr
-          check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
-          check_required "$RES_BUILD_PR" build-pr
+          # Only a confirmed code=false permits a skip; true/unknown/missing require success.
+          check_code() {
+            local code_changed="$1" result="$2" label="$3"
+            case "$code_changed" in
+              true) check_required "$result" "$label" ;;
+              false) check_path_gated "$result" "$label" ;;
+              *) echo "❌ ${label}: code classification (${code_changed:-missing}) is not true or false" >&2; exit 1 ;;
+            esac
+          }
+          expect_code() {
+            local expected="$1" code_changed="$2" result="$3" actual
+            if (check_code "$code_changed" "$result" probe) >/dev/null 2>&1; then actual=accept; else actual=reject; fi
+            if [ "$actual" != "$expected" ]; then
+              echo "Gate regression: code=${code_changed:-missing}, result=${result:-missing} expected ${expected}, got ${actual}" >&2
+              exit 1
+            fi
+          }
+          expect_code accept true success
+          expect_code reject true skipped
+          expect_code reject true failure
+          expect_code accept false skipped
+          expect_code accept false success
+          expect_code reject false failure
+          expect_code reject false cancelled
+          expect_code reject '' skipped
+          expect_code reject unknown success
+          echo "Code gate regression passed (only confirmed code=false permits a skip)"
+          check_required "$RES_CHANGES" changes
+          check_code "$RES_CODE_CHANGED" "$RES_GOVULNCHECK" govulncheck
+          check_code "$RES_CODE_CHANGED" "$RES_DEPENDENCY_SCAN" dependency-scan
+          check_code "$RES_CODE_CHANGED" "$RES_LINT" lint
+          check_code "$RES_CODE_CHANGED" "$RES_FLAKE_VENDORHASH" flake-vendorhash
+          check_code "$RES_CODE_CHANGED" "$RES_PORT_CONTRACT" port-contract
+          check_code "$RES_CODE_CHANGED" "$RES_RUST" rust
+          check_code "$RES_CODE_CHANGED" "$RES_RUST_MIRI" rust-miri
+          check_code "$RES_CODE_CHANGED" "$RES_RUST_NATIVE" rust-native
+          check_code "$RES_CODE_CHANGED" "$RES_TEST_PR" test-pr
+          check_code "$RES_CODE_CHANGED" "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
+          check_code "$RES_CODE_CHANGED" "$RES_BUILD_PR" build-pr
           expect_vaultcore() {
             local expected="$1" client_changed="$2" result="$3" actual
             if check_vaultcore "$client_changed" "$result" >/dev/null 2>&1; then
