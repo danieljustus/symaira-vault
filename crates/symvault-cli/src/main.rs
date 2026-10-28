@@ -1309,9 +1309,13 @@ fn run_cli() -> ExitCode {
             shell,
             no_descriptions,
         }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
-        Some(Command::Init { vault_dir, auth }) => {
-            run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
-        }
+        Some(Command::Init { vault_dir, auth }) => run_init(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            vault_dir.as_deref(),
+            &auth,
+            cli.quiet,
+        ),
         Some(Command::Add {
             name,
             value,
@@ -3356,6 +3360,7 @@ fn run_file(
 
 fn run_init(
     explicit_vault: Option<&Path>,
+    profile: Option<&str>,
     positional_vault: Option<&Path>,
     auth: &str,
     quiet: bool,
@@ -3370,7 +3375,7 @@ fn run_init(
         let vault = if let Some(path) = positional_vault.or(explicit_vault) {
             expand_vault_path(path)?
         } else {
-            resolve_vault(None, None)?
+            resolve_vault(None, profile)?
         };
         if vault.join("config.yaml").is_file() {
             return Err(format!("vault already initialized at {}", vault.display()));
@@ -4395,9 +4400,14 @@ fn go_io_reason(error: &std::io::Error) -> String {
     }
 }
 
-fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpService) -> ExitCode {
+fn run_mcp_service(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    quiet: bool,
+    action: McpService,
+) -> ExitCode {
     let result = (|| {
-        let vault = resolve_vault(explicit_vault, None).map_err(|error| {
+        let vault = resolve_vault(explicit_vault, profile).map_err(|error| {
             symvault_core::error::CliError::new(symvault_core::error::ExitCode::Config, error, None)
         })?;
         let config = service_config(matches!(action, McpService::Install));
@@ -4453,13 +4463,13 @@ fn run_mcp_action(
 ) -> ExitCode {
     let flags = match action {
         Some(McpAction::Install) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Install);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Install);
         }
         Some(McpAction::Status) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Status);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Status);
         }
         Some(McpAction::Uninstall) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Uninstall);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Uninstall);
         }
         Some(McpAction::Token { args }) => return deprecated_stubs::serve_token(&args),
         Some(McpAction::Serve { flags }) => flags,
