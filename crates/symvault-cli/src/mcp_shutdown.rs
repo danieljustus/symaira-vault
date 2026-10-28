@@ -13,17 +13,24 @@
 //!   aborted them).
 //! - HTTP: Rust removes only the runtime records it published; Go removes
 //!   them unconditionally.
-//! - stdio: a signal while a clipboard auto-clear is armed only clears the
-//!   clipboard and the server keeps running; Go also shuts down.
-//! - stdio: a signal during the non-secure approval prompt waits the full
-//!   2 s grace before exiting 0.
-//! - stdio: a signal (or raw Ctrl-C) during secure input cancels only the
-//!   prompt and the server keeps serving; Go answers `secure input failed:
-//!   context canceled` and also shuts down (exit 0 within about 1 s).
-//! - stdio: a signal during the non-secure approval prompt gets no JSON-RPC
-//!   response from Rust; Go answers `<tool> approval failed: failed to read
-//!   from terminal: context canceled` (isError) and exits 0 within 0.5 s.
+//! - stdio: a signal while a clipboard auto-clear is armed outside a secure-input
+//!   prompt only clears the clipboard and the server keeps running; Go also shuts down.
+//!   (During a secure-input prompt the signal also ends the process, see
+//!   below.)
 //! - `mcp --stdio --allow-locked` keeps the OS default signal actions.
+//!
+//! Signal during an in-flight stdio prompt (#1472, Go oracle 0cc78062 under a
+//! controlling PTY): the in-flight request is answered with Go's
+//! context-canceled shape and the process then exits 0, like Go.
+//! - secure input: JSON-RPC error -32603 `secure input failed: context
+//!   canceled` (the `ContextCanceled` secure-input error). The typed value is
+//!   never stored. Raw Ctrl-C (ETX) stays the user cancel `secure input
+//!   canceled by user` and the server keeps serving.
+//! - ordinary approval: `<tool> approval failed: failed to read from terminal:
+//!   context canceled` through the tool's normal approval-failure mapping.
+//! - Rust returns the response as soon as the prompt unwinds and the stdio loop
+//!   sees the shutdown request, so it exits well inside Go's 0.5 s / 1 s;
+//!   the exit code (0) and stdout are what is compared.
 
 #[cfg(unix)]
 mod unix {
@@ -76,6 +83,7 @@ mod unix {
     /// own listener) into the Go shutdown: stop reading after the in-flight
     /// frame (at most 2 seconds), clear the runtime records and exit 0.
     pub fn install_stdio(root: PathBuf) -> Result<(), String> {
+        let root_for_fallback = root.clone();
         let shutdown = Arc::new(move |signal: i32| {
             REQUESTED.store(true, Ordering::Release);
             warn_quit(signal);
@@ -99,7 +107,24 @@ mod unix {
             std::process::exit(0);
         });
         let router = Arc::clone(&shutdown);
-        symvault_platform::approval::set_stdio_signal_terminator(move |signal| router(signal));
+        let fallback_root = root_for_fallback;
+        // The terminator runs on the thread that owns the in-flight request when
+        // a prompt is canceled. It only records the request and hands the
+        // grace-period wait and exit to a helper thread, so the request is
+        // answered and flushed before the stdio loop sees the flag and returns.
+        symvault_platform::approval::set_stdio_signal_terminator(move |signal| {
+            REQUESTED.store(true, Ordering::Release);
+            let router = Arc::clone(&router);
+            if std::thread::Builder::new()
+                .name("symvault-mcp-shutdown".to_owned())
+                .spawn(move || router(signal))
+                .is_err()
+            {
+                // No thread to wait on: exit now rather than keep serving.
+                clear_runtime_records(&fallback_root);
+                std::process::exit(0);
+            }
+        });
         symvault_platform::approval::spawn_signal_listener(&[SIGQUIT], move |signal| {
             shutdown(signal)
         })
