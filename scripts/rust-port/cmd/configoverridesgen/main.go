@@ -16,10 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/pflag"
+
 	rootcmd "github.com/danieljustus/symaira-vault/cmd"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
-	"github.com/spf13/pflag"
 )
 
 const oracleCommit = "314a25a5cdd2e90517bb55a90495d7b97f68c6df"
@@ -127,7 +128,7 @@ func capture(item vector) (observation, error) {
 	if err != nil {
 		return observation{}, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	home := filepath.Join(dir, "home")
 	if err = os.MkdirAll(home, 0700); err != nil {
 		return observation{}, err
@@ -141,7 +142,10 @@ func capture(item vector) (observation, error) {
 			return observation{}, err
 		}
 	}
-	payload, _ := json.Marshal(item)
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return observation{}, err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	exe, err := os.Executable()
