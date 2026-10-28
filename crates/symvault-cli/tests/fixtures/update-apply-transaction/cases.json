@@ -6,7 +6,7 @@
       "go.mod",
       "go.sum"
     ],
-    "source_digest": "793140e408b0026be1dd5628ba02484ec1aa061193d09891208410c55d5378cb",
+    "source_digest": "25300a2c1d46a77e3b7c702ac6113535c74697a7f27f939f448867a9c5216cd9",
     "corekit_pin": "v0.18.2",
     "corekit_revision": "98aed77ceeaba5a5d2fc4668acac50a073e55d99",
     "corekit_source_files": [
@@ -15,7 +15,7 @@
       "updatecheck/cosign/cosign.go"
     ],
     "corekit_source_digest": "3580bee12d7e912129adbc2b9150bfd2458816828c25f047ec009b342848d832",
-    "captured": "2026-10-21",
+    "captured": "2026-10-28",
     "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
