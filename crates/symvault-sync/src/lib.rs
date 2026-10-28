@@ -10,6 +10,7 @@ pub mod device_sessions;
 pub mod devices;
 pub mod export;
 pub mod git;
+mod gzip_multistream;
 pub mod importer;
 pub mod intake;
 pub mod offline;
