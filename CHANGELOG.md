@@ -39,9 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Dependencies: Rust (chacha20poly1305 0.11, getrandom 0.4, thiserror 2,
   time, clap, zeroize, rustix, tokio and others), Go (prometheus/common,
-  golang.org/x/tools) and pinned GitHub Actions updated. `yaml-edit` and
-  `unicode-normalization` stay on versions that keep Go-oracle parity
-  (#1433).
+  golang.org/x/tools) and pinned GitHub Actions updated. `yaml-edit` is
+  pinned to 0.3.3 (0.3.2 breaks block-scalar output, 0.3.4+ changes
+  document-start-only handling) and `unicode-normalization` stays on a
+  version that keeps Go-oracle parity (#1433).
 - Documentation: setup, command and memory-security guidance aligned with
   the implementation (#1383); audit retention docs name the real
   `maxSizeMb` key.

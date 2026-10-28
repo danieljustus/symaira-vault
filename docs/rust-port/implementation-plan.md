@@ -38,8 +38,9 @@ queries each disposition (`sigaction(2)` with a null new action, the single
 `unsafe` block of the module) and does not register SIGHUP (always) or SIGINT
 (when the command has no stop callback) if they were `SIG_IGN`; SIGTERM and
 SIGQUIT are always registered. The 12 added driver cases start the process with
-the signal set to `SIG_IGN` via `preexec_fn` after its readiness marker and
-record whether it survived (1.5 s window), then stop it with SIGTERM.
+the signal set to `SIG_IGN` before exec (the driver waits for the readiness
+marker before signaling) and record whether it survived (1.5 s window), then
+stop it with SIGTERM.
 Negative control: a Rust build that always registers every signal is rejected
 at `broker-ignored-sighup`.
 

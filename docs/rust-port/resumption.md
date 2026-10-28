@@ -6,6 +6,16 @@ Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance 
 
 ## IO-002 restore error/side-effect contract, 2026-10-22 (#1247)
 
+**Update 2026-10-26 (#1498, mode-field spellings):** `restoregen` now freezes 130 cases (+42:
+21 numeric mode-field spellings x file/dir, header block 5 patched with a recomputed checksum;
+the snapshot helper opens mode-0 results so the walk can read them). Red first: 12 cases
+diverged (`+`/`-` signed and embedded-NUL-tail fields: Rust `i64::from_str_radix` accepted signs
+and rejected the NUL tails Go cuts). Rust `go_header_mode` now delegates to a `go_parse_octal`
+that mirrors Go `parseOctal`; the oracle is unchanged (`cmd/admin/backup.go` untouched, pin
+`861ad938` stays). Windows replay count is now 116 of 130. Remaining residuals: #1483
+(entry-limit pre-pass inflates oversized members), #1499 (gzip multistream), uid/gid/mtime
+header fields unparsed, plus the items listed below.
+
 `scripts/rust-port/cmd/restoregen` freezes 88 production-Go `RestoreBackup`
 cases (`testdata/port/sync/restore-errors.json`, oracle `861ad938`; `cmd/admin/backup.go`
 is unchanged, so no oracle-pin advance or provenance re-freeze was needed). Each case records the exact
@@ -44,6 +54,36 @@ prompt (no hardware; stays JXA), the real default-keychain/access-control path
 (operator keychain), CI receipt for the new native test. SESSION-001 residuals:
 Go-reads-Rust-written record, Go's case-insensitive JSON field names, CLI-layer
 fallback warning text.
+
+## IO-002 restore entry-limit pre-pass is bounded, 2026-10-26 (#1483)
+
+`check_entry_limit` (`crates/symvault-sync/src/archive.rs`) skipped member bodies by
+inflating them, so an over-limit member was fully decompressed before extraction
+rejected it at the header (Go rejects at the header without reading the body).
+Measured on a 3 GiB zero-filled member (14 MB gzip, debug build): Rust 2.94 s -> 0.49 ms
+with the identical error `archive entry entries/huge exceeds maximum file size of
+1073741824 bytes`; Go `RestoreBackup` 0.42 ms. Fix: the pre-pass (`scan_entry_limit`)
+returns `Ok(())` at the first regular member whose declared size exceeds the file limit
+or the remaining total budget and leaves the error to the extraction pass. Regression:
+`entry_limit_scan_tests` (counting reader; 64 MiB over-limit and over-budget members must
+not be read, a within-limit member must still be skipped; fails against the old scan).
+Residual (low, documented): the archive is still inflated twice for valid inputs and a
+file swapped between passes is bounded only by the size limits.
+
+## IO-002 gzip multistream parity, 2026-10-26 (#1499)
+
+Restore now reads the archive with `symvault_sync::gzip_multistream::GoGzip`, which
+follows Go's multistream `gzip.Reader` (members concatenate, trailing bytes are the next
+header, per-member CRC/length checks, sticky errors), in both the entry-count pre-pass and
+the extraction pass. `restoregen` gained `multistream.go` and a second fixture,
+`testdata/port/sync/restore-gzip-multistream.json` (61 cases with the exact Go gzip bytes),
+replayed by `crates/symvault-cli/tests/restore_gzip_multistream_contract.rs` as part of
+`make restore-errors-differential`; limit behaviour across members is in
+`crates/symvault-sync/tests/restore_gzip_multistream.rs`. No Go production source changed, so
+the oracle pin (`861ad938`) is unchanged; `restore-errors.json` was regenerated only because its
+`generator_digest` covers `restoregen/main.go`. Still open: native 3-OS evidence, Go's
+`flate: corrupt input before offset N` text, and the PR #1515/#1516 merge (same files: see
+matrix row IO-002 for the divergence list).
 
 ## Current native-prerequisite repair, 2026-10-11
 

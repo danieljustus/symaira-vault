@@ -20,7 +20,7 @@ from http_framing_contract import JSON_ERROR, assert_response
 from http_head_contract import parse_response
 from http_oauth_contract import PASSPHRASE, PROBE
 from http_process_contract import ProcessCapture, SECRET
-from http_slow_peer_contract import observe
+from http_slow_peer_contract import assert_progress, observe
 from mcp_process_contract import ORACLE, ROOT, checked, oracle_build_timeout, remove_worktree, inventory, isolated, vault_snapshot
 
 
@@ -131,7 +131,7 @@ def main():
                         observed=receipt[implementation][profile]
                         assert len(observed['rows'])==3 and len(observed['slow_peers'])==2
                         for row in observed['slow_peers']:
-                            assert row['sent_progress_bytes']>=4 and row['sender_joined']
+                            assert_progress(row)
                             assert row['peer_terminal_observed'] and not row['forced_client_close']
                             raw=base64.b64decode(row['received_base64'])
                             if raw:

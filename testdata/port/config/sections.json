@@ -12,7 +12,7 @@
       "internal/config/warn.go"
     ],
     "source_digest": "ade78ac9b4c61a5b7693fb964087c37223444f662d2943927204237eb87f82cc",
-    "generator_digest": "3d08accab79f117bcb24734b5c3476f30e84203620a0dedeea744e865638931e"
+    "generator_digest": "5747ebebc4f34b1058bcfaffaff5899ccab5ac1712458eeef9f094dab62ebd17"
   },
   "cases": [
     {
@@ -2393,6 +2393,195 @@
               "default_recipients": [],
               "confirm_remove": false,
               "auth_method": "retina",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_integer",
+      "description": "a top-level integer authMethod decodes as text and is ignored by the Go merge",
+      "input": "authMethod: 5\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_bool",
+      "description": "a top-level boolean authMethod decodes as text and is ignored by the Go merge",
+      "input": "authMethod: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_top_float",
+      "description": "a top-level float authMethod decodes as text and is ignored by the Go merge",
+      "input": "authMethod: 1.5\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": null,
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_integer",
+      "description": "a vault.authMethod integer decodes as text for the Go merge",
+      "input": "vault:\n  authMethod: 5\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "5",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_bool",
+      "description": "a vault.authMethod boolean decodes as text for the Go merge",
+      "input": "vault:\n  authMethod: true\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "true",
+              "use_touch_id": false,
+              "legacy_mode": null,
+              "search_index": true,
+              "search_workers": 0,
+              "search_index_cache": false,
+              "config_cache_entries": 0,
+              "pseudonymize_paths": false,
+              "scrypt_work_factor": 18,
+              "auto_migrate_kdf": false,
+              "auto_heal_zero_key": true,
+              "format_version": 1,
+              "last_rotated": "",
+              "argon2id_time": 0,
+              "argon2id_memory": 0,
+              "argon2id_threads": 0,
+              "listing_cache_ttl_ns": 0,
+              "manifest_generation": 0,
+              "sync": null
+            },
+            "git": null,
+            "mcp": null,
+            "update": null,
+            "clipboard": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth_vault_float",
+      "description": "a vault.authMethod float decodes as text for the Go merge",
+      "input": "vault:\n  authMethod: 1.5\n",
+      "loads": [
+        {
+          "warnings": [],
+          "rejected": false,
+          "snapshot": {
+            "auth_method": "passphrase",
+            "effective_auth_method": "passphrase",
+            "vault": {
+              "path": "",
+              "default_recipients": [],
+              "confirm_remove": false,
+              "auth_method": "1.5",
               "use_touch_id": false,
               "legacy_mode": null,
               "search_index": true,

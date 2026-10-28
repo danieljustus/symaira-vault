@@ -3,7 +3,7 @@
     "commit": "58d978bb53a1dc6257b3a0e3154f7bd29fdd3fd9",
     "binary": "GOTOOLCHAIN=go1.26.6 go build -o target/symvault-go-update-oracle .",
     "go_version": "go1.26.6",
-    "captured": "2026-10-21",
+    "captured": "2026-10-28",
     "environment": {
       "HOMEBREW_PREFIX": "/",
       "HOME": "disposable temporary directory"
@@ -16,7 +16,7 @@
       "internal/cli/version.go",
       "internal/update/apply.go"
     ],
-    "source_digest": "ced7b919c5c08760b71896ef39f057ca0ab365610f8a4d204db0db8e1baf458d",
+    "source_digest": "d0c7c5d80e5410b63895d859c49d1a0545373a774b50be128b766d077d3444db",
     "generator_files": [
       "scripts/rust-port/refresh-update-fixtures.py"
     ],

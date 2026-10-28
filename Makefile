@@ -1048,7 +1048,8 @@ export-differential:
 restore-errors-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/restoregen -check
 	$(CARGO) test -p symvault-cli --test restore_errors_contract --locked
-	$(CARGO) test -p symvault-sync --test restore_limits --locked
+	$(CARGO) test -p symvault-cli --test restore_gzip_multistream_contract --locked
+	$(CARGO) test -p symvault-sync --test restore_limits --test restore_gzip_multistream --locked
 
 .PHONY: mcp-call-fixtures-check mcp-call-differential mcp-execute-with-secret-fixtures-check mcp-execute-with-secret-differential
 mcp-execute-with-secret-fixtures-check: mcp-ordered-fixtures-check
