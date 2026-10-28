@@ -255,6 +255,14 @@ func inputs() []input {
 		{"auth_vault_method_and_flag", "vault.authMethod present suppresses the vault.useTouchID fallback", "vault:\n  authMethod: passphrase\n  useTouchID: true\n", 1},
 		{"auth_top_invalid", "an invalid top-level authMethod is accepted and ignored by the Go merge", "authMethod: retina\n", 1},
 		{"auth_vault_invalid", "an invalid vault.authMethod is rejected or carried", "vault:\n  authMethod: retina\n", 1},
+		// yaml.v3 decodes a non-null, non-string scalar into the string field,
+		// so Go reads these as an unknown method and ignores them; Rust rejects.
+		{"auth_top_integer", "a top-level integer authMethod decodes as text and is ignored by the Go merge", "authMethod: 5\n", 1},
+		{"auth_top_bool", "a top-level boolean authMethod decodes as text and is ignored by the Go merge", "authMethod: true\n", 1},
+		{"auth_top_float", "a top-level float authMethod decodes as text and is ignored by the Go merge", "authMethod: 1.5\n", 1},
+		{"auth_vault_integer", "a vault.authMethod integer decodes as text for the Go merge", "vault:\n  authMethod: 5\n", 1},
+		{"auth_vault_bool", "a vault.authMethod boolean decodes as text for the Go merge", "vault:\n  authMethod: true\n", 1},
+		{"auth_vault_float", "a vault.authMethod float decodes as text for the Go merge", "vault:\n  authMethod: 1.5\n", 1},
 
 		// Deprecated top-level key and its precedence over the new name.
 		{"env_whitelist_warns", "envWhitelist warns", "envWhitelist:\n  - HOME\n", 1},

@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "d13e5d0b",
+    "commit_sha": "d13e5d0b0e652dd85b8bb97591b536717aa5c988",
+    "release": "unreleased",
+    "source_files": [
+      "internal/session/biometric.go",
+      "internal/session/keychain_status.go",
+      "internal/session/touchid_darwin.go"
+    ],
+    "source_digest": "00f1c5d4620fe93a8db2cbb9a0f49e2426fa5e257bd804d9eb6b522554140f15",
+    "generator_digest": "214926b70a180457397bd81f9d248aa8625512f3153d174c5e6f711d22b27749"
+  },
+  "driver": {
+    "sentinels": [
+      {
+        "name": "ErrBiometricNotAvailable",
+        "message": "biometric authentication not available"
+      },
+      {
+        "name": "ErrBiometricFailed",
+        "message": "biometric authentication failed"
+      },
+      {
+        "name": "ErrBiometricNotConfigured",
+        "message": "biometric authentication is not configured"
+      },
+      {
+        "name": "ErrKeychainDuplicateItem",
+        "message": "keychain item already exists"
+      },
+      {
+        "name": "ErrKeychainItemNotFound",
+        "message": "keychain item not found"
+      },
+      {
+        "name": "ErrKeychainNoSuchKeychain",
+        "message": "keychain not found"
+      },
+      {
+        "name": "ErrKeychainInvalid",
+        "message": "keychain is invalid or corrupted"
+      },
+      {
+        "name": "ErrKeychainLocked",
+        "message": "keychain is locked or unavailable"
+      },
+      {
+        "name": "ErrKeychainReadOnly",
+        "message": "keychain is read-only"
+      },
+      {
+        "name": "ErrKeychainInteractionNotAllowed",
+        "message": "keychain access requires user interaction"
+      },
+      {
+        "name": "ErrKeychainMissingEntitlement",
+        "message": "keychain access denied for this binary"
+      },
+      {
+        "name": "ErrKeychainInternal",
+        "message": "keychain call failed"
+      },
+      {
+        "name": "ErrKeychainUnexpectedStatus",
+        "message": "unexpected keychain error"
+      }
+    ],
+    "statuses": [
+      {
+        "status": 0,
+        "ok": true,
+        "sentinels": []
+      },
+      {
+        "status": -4,
+        "ok": false,
+        "message": "keychain call failed: the keychain operation is not implemented on this system (keychain status -4)",
+        "sentinels": [
+          "ErrKeychainInternal"
+        ]
+      },
+      {
+        "status": -50,
+        "ok": false,
+        "message": "keychain call failed: the keychain rejected the request parameters (keychain status -50)",
+        "sentinels": [
+          "ErrKeychainInternal"
+        ]
+      },
+      {
+        "status": -108,
+        "ok": false,
+        "message": "keychain call failed: the keychain could not allocate memory (keychain status -108)",
+        "sentinels": [
+          "ErrKeychainInternal"
+        ]
+      },
+      {
+        "status": -128,
+        "ok": false,
+        "message": "biometric authentication failed: the authentication prompt was canceled (keychain status -128); retry and complete the Touch ID prompt",
+        "sentinels": [
+          "ErrBiometricFailed"
+        ]
+      },
+      {
+        "status": -25291,
+        "ok": false,
+        "message": "keychain is locked or unavailable: no keychain is available to this process (keychain status -25291); unlock the login keychain with `security unlock-keychain` and re-run the command from a logged-in session",
+        "sentinels": [
+          "ErrKeychainLocked"
+        ]
+      },
+      {
+        "status": -25292,
+        "ok": false,
+        "message": "keychain is read-only: the keychain does not accept writes (keychain status -25292); unlock the login keychain with `security unlock-keychain` and check its permissions in Keychain Access",
+        "sentinels": [
+          "ErrKeychainReadOnly"
+        ]
+      },
+      {
+        "status": -25293,
+        "ok": false,
+        "message": "biometric authentication failed: the system rejected the authentication (keychain status -25293); retry, or fall back to `symvault unlock` with your passphrase",
+        "sentinels": [
+          "ErrBiometricFailed"
+        ]
+      },
+      {
+        "status": -25294,
+        "ok": false,
+        "message": "keychain not found: the target keychain does not exist (keychain status -25294); the login keychain may be missing from the keychain search list (`security list-keychains -d user`), so writes and lookups target different keychains — run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainNoSuchKeychain"
+        ]
+      },
+      {
+        "status": -25295,
+        "ok": false,
+        "message": "keychain is invalid or corrupted: the target keychain could not be read (keychain status -25295); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainInvalid"
+        ]
+      },
+      {
+        "status": -25299,
+        "ok": false,
+        "message": "keychain item already exists: the existing item could not be replaced (keychain status -25299); the login keychain may be missing from the keychain search list (`security list-keychains -d user`), so writes and lookups target different keychains — run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainDuplicateItem"
+        ]
+      },
+      {
+        "status": -25300,
+        "ok": false,
+        "message": "keychain item not found: no matching item is visible to this process (keychain status -25300); the login keychain may be missing from the keychain search list (`security list-keychains -d user`), so writes and lookups target different keychains — run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainItemNotFound"
+        ]
+      },
+      {
+        "status": -25308,
+        "ok": false,
+        "message": "keychain access requires user interaction: the keychain is locked and this process cannot prompt (keychain status -25308); unlock the login keychain with `security unlock-keychain` and re-run the command from a logged-in GUI session",
+        "sentinels": [
+          "ErrKeychainInteractionNotAllowed"
+        ]
+      },
+      {
+        "status": -26275,
+        "ok": false,
+        "message": "keychain is invalid or corrupted: the stored item could not be decoded (keychain status -26275); re-run `symvault auth set touchid` to store the passphrase again",
+        "sentinels": [
+          "ErrKeychainInvalid"
+        ]
+      },
+      {
+        "status": -34018,
+        "ok": false,
+        "message": "keychain access denied for this binary: the running binary lacks the entitlement or signature the keychain item requires (keychain status -34018); use an official signed `symvault` build, or re-create the item with the binary you are running",
+        "sentinels": [
+          "ErrKeychainMissingEntitlement"
+        ]
+      },
+      {
+        "status": 1,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status 1); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": -1,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status -1); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": 4,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status 4); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": -25301,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status -25301); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": -34019,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status -34019); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": 2147483647,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status 2147483647); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      },
+      {
+        "status": -2147483648,
+        "ok": false,
+        "message": "unexpected keychain error (keychain status -2147483648); run `symvault doctor` and check the \"Session keyring roundtrip\" result",
+        "sentinels": [
+          "ErrKeychainUnexpectedStatus"
+        ]
+      }
+    ],
+    "noop_manager": [
+      {
+        "op": "authenticator.is_available",
+        "ok": true,
+        "sentinels": [],
+        "bool": false
+      },
+      {
+        "op": "authenticator.authenticate",
+        "ok": false,
+        "message": "biometric authentication not available",
+        "sentinels": [
+          "ErrBiometricNotAvailable"
+        ]
+      },
+      {
+        "op": "store.is_available",
+        "ok": true,
+        "sentinels": [],
+        "bool": false
+      },
+      {
+        "op": "store.save",
+        "ok": false,
+        "message": "biometric authentication not available",
+        "sentinels": [
+          "ErrBiometricNotAvailable"
+        ]
+      },
+      {
+        "op": "store.load",
+        "ok": false,
+        "message": "biometric authentication not available",
+        "sentinels": [
+          "ErrBiometricNotAvailable"
+        ],
+        "loaded_len": 0
+      },
+      {
+        "op": "store.delete",
+        "ok": true,
+        "sentinels": []
+      },
+      {
+        "op": "after_nil_reset.authenticator.is_available",
+        "ok": true,
+        "sentinels": [],
+        "bool": false
+      },
+      {
+        "op": "after_nil_reset.store.is_available",
+        "ok": true,
+        "sentinels": [],
+        "bool": false
+      }
+    ]
+  },
+  "layout": {
+    "account": "passphrase",
+    "service_prefix": "symvault-biometric:",
+    "service_names": [
+      {
+        "vault": "/fixture/vault",
+        "service": "symvault-biometric:/fixture/vault"
+      },
+      {
+        "vault": "/Users/u/.symvault",
+        "service": "symvault-biometric:/Users/u/.symvault"
+      },
+      {
+        "vault": "",
+        "service": "symvault-biometric:"
+      },
+      {
+        "vault": "C:\\Users\\u\\.symvault",
+        "service": "symvault-biometric:C:\\Users\\u\\.symvault"
+      },
+      {
+        "vault": "/home/ü/vält",
+        "service": "symvault-biometric:/home/ü/vält"
+      },
+      {
+        "vault": "a|b",
+        "service": "symvault-biometric:a|b"
+      }
+    ],
+    "load_reason": "Unlock Symaira Vault vault",
+    "source_assertions": [
+      {
+        "name": "item_class_generic_password",
+        "meaning": "the item is a kSecClassGenericPassword",
+        "matched": true
+      },
+      {
+        "name": "item_attributes_service_account_only",
+        "meaning": "the lookup key is exactly service + account",
+        "matched": true
+      },
+      {
+        "name": "value_is_raw_passphrase_bytes",
+        "meaning": "kSecValueData is the passphrase bytes with no go-keyring prefix or encoding",
+        "matched": true
+      },
+      {
+        "name": "store_accessible_when_unlocked_this_device_only",
+        "meaning": "new items are kSecAttrAccessibleWhenUnlockedThisDeviceOnly",
+        "matched": true
+      },
+      {
+        "name": "store_deletes_before_add",
+        "meaning": "Save first deletes any existing item, then adds",
+        "matched": true
+      },
+      {
+        "name": "store_duplicate_updates_in_place",
+        "meaning": "errSecDuplicateItem after the add falls back to an in-place update",
+        "matched": true
+      },
+      {
+        "name": "update_replaces_value_data_only",
+        "meaning": "the in-place update changes kSecValueData and nothing else",
+        "matched": true
+      },
+      {
+        "name": "update_scoped_to_default_keychain",
+        "meaning": "the update matches only the default keychain (kSecMatchSearchList)",
+        "matched": true
+      },
+      {
+        "name": "load_checks_item_before_prompt",
+        "meaning": "Load verifies the item exists (no data returned) BEFORE showing the biometric prompt",
+        "matched": true
+      },
+      {
+        "name": "load_missing_item_is_not_configured",
+        "meaning": "errSecItemNotFound becomes ErrBiometricNotConfigured, not a keychain error",
+        "matched": true
+      },
+      {
+        "name": "load_prompt_timeout_30s",
+        "meaning": "the biometric prompt gives up after 30 seconds",
+        "matched": true
+      },
+      {
+        "name": "load_prompt_failure_is_auth_failed",
+        "meaning": "an unavailable policy, timeout or rejection all return errSecAuthFailed",
+        "matched": true
+      },
+      {
+        "name": "delete_missing_item_is_success",
+        "meaning": "deleting an absent item succeeds",
+        "matched": true
+      },
+      {
+        "name": "passphrase_is_c_string",
+        "meaning": "save and load go through NUL-terminated C strings, so a passphrase is cut at its first NUL byte",
+        "matched": true
+      },
+      {
+        "name": "save_requires_availability",
+        "meaning": "Save refuses without biometric hardware before touching the keychain",
+        "matched": true
+      }
+    ]
+  }
+}
