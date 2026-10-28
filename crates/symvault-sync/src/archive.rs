@@ -1,4 +1,5 @@
-use flate2::{Compression, read::GzDecoder, write::GzEncoder};
+use crate::gzip_multistream::GoGzip;
+use flate2::{Compression, write::GzEncoder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -436,23 +437,39 @@ fn go_header_mode(header: &Header) -> Result<i64, ()> {
             value as i64
         });
     }
-    let trimmed: Vec<u8> = field
-        .iter()
-        .copied()
-        .skip_while(|byte| *byte == b' ' || *byte == 0)
-        .collect();
-    let end = trimmed
-        .iter()
-        .rposition(|byte| *byte != b' ' && *byte != 0)
-        .map_or(0, |index| index + 1);
-    let digits = &trimmed[..end];
-    if digits.is_empty() {
+    go_parse_octal(field)
+}
+
+/// Go's `parser.parseOctal`: trim spaces and NULs at both ends, then
+/// `strconv.ParseUint(parseString(b), 8, 64)`, where `parseString` cuts at the
+/// first remaining NUL. Only unsigned base-8 digits are accepted (no sign,
+/// prefix or separators), and the unsigned result is reinterpreted as `int64`.
+fn go_parse_octal(field: &[u8]) -> Result<i64, ()> {
+    let is_padding = |byte: &u8| *byte == b' ' || *byte == 0;
+    let start = field.iter().position(|byte| !is_padding(byte));
+    let Some(start) = start else {
         return Ok(0);
+    };
+    let end = field
+        .iter()
+        .rposition(|byte| !is_padding(byte))
+        .map_or(0, |index| index + 1);
+    let trimmed = &field[start..end];
+    let digits = trimmed
+        .iter()
+        .position(|byte| *byte == 0)
+        .map_or(trimmed, |nul| &trimmed[..nul]);
+    let mut value: u64 = 0;
+    for byte in digits {
+        if !(b'0'..=b'7').contains(byte) {
+            return Err(());
+        }
+        value = value
+            .checked_mul(8)
+            .and_then(|shifted| shifted.checked_add(u64::from(byte - b'0')))
+            .ok_or(())?;
     }
-    std::str::from_utf8(digits)
-        .ok()
-        .and_then(|text| i64::from_str_radix(text, 8).ok())
-        .ok_or(())
+    Ok(value as i64)
 }
 
 type Failure = std::rc::Rc<std::cell::RefCell<Option<(io::ErrorKind, String)>>>;
@@ -483,6 +500,10 @@ fn go_stream_error(error: &io::Error, failure: &Failure) -> String {
     if let Some((kind, message)) = failure.borrow().as_ref() {
         if *kind == io::ErrorKind::UnexpectedEof || message.contains("incomplete") {
             return "unexpected EOF".to_owned();
+        }
+        // Framing errors raised by the multistream reader carry Go's text.
+        if message == "gzip: invalid header" || message == "gzip: invalid checksum" {
+            return message.clone();
         }
         // Go appends "before offset N", a decoder-internal position that
         // flate2 does not expose.
@@ -599,22 +620,48 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
     let Ok(file) = fs::File::open(input) else {
         return Ok(());
     };
-    let mut archive = Archive::new(GzDecoder::new(file));
+    scan_entry_limit(GoGzip::new(file), MAX_ARCHIVE_FILE, MAX_ARCHIVE_TOTAL)
+}
+
+/// Counts tar headers in `reader` (an already-inflated tar stream).
+///
+/// Skipping a member body means inflating it, so the scan stops with `Ok(())`
+/// at the first regular member whose declared size exceeds `max_file`, or
+/// whose size pushes the declared total past `max_total`. The extraction pass
+/// rejects that very header (as Go does) before reading its body, so nothing
+/// beyond it can be written and the oversized body is never inflated here.
+fn scan_entry_limit<R: Read>(reader: R, max_file: u64, max_total: u64) -> Result<(), ArchiveError> {
+    let mut archive = Archive::new(reader);
     let Ok(entries) = archive.entries() else {
         return Ok(());
     };
+    let mut total = 0u64;
     for (index, item) in entries.enumerate() {
-        if item.is_err() {
+        let Ok(entry) = item else {
             return Ok(());
-        }
+        };
         if index >= MAX_ARCHIVE_ENTRIES {
             return Err(ArchiveError::Limit);
         }
+        // Mirrors the extraction pass: only regular files carry a size check.
+        let is_dir = entry.header().entry_type() == EntryType::Directory
+            || (is_legacy_regular(&entry) && entry.path_bytes().ends_with(b"/"));
+        if is_dir || entry.header().entry_type() != EntryType::Regular {
+            continue;
+        }
+        let size = entry.size();
+        if size > max_file || size > max_total || total > max_total - size {
+            return Ok(());
+        }
+        total += size;
     }
     Ok(())
 }
 
 /// Restores a gzip tar backup into an existing or newly created directory.
+///
+/// The gzip layer is multistream like Go's `gzip.Reader` (see
+/// `gzip_multistream`): concatenated members are one tar stream.
 ///
 /// Error text and extraction order follow `cmd/admin.RestoreBackup` (see
 /// `testdata/port/sync/restore-errors.json`). Deliberate differences, all
@@ -622,7 +669,8 @@ fn check_entry_limit(input: &Path) -> Result<(), ArchiveError> {
 /// place, so a truncated member never leaves the partial file Go's in-place
 /// `O_TRUNC` write does (when the directory is not writable, an existing
 /// writable regular file is rewritten in place instead, as Go does); and an
-/// archive with more than `MAX_ARCHIVE_ENTRIES` members is rejected up front.
+/// archive with more than `MAX_ARCHIVE_ENTRIES` members is rejected up front
+/// (the header-only pre-pass never inflates a member that extraction rejects).
 pub fn restore(
     input: impl AsRef<Path>,
     destination: impl AsRef<Path>,
@@ -649,8 +697,12 @@ pub fn restore(
         ))
     })?;
     let failure = Failure::default();
+    // Go's gzip.Reader is multistream and validates the first header eagerly.
+    let mut gzip = GoGzip::new(file);
+    gzip.read_first_header()
+        .map_err(|reason| restore_error(format!("read gzip: {reason}")))?;
     let decoder = Tracked {
-        inner: GzDecoder::new(file),
+        inner: gzip,
         failure: failure.clone(),
     };
     let mut archive = Archive::new(decoder);
@@ -855,3 +907,40 @@ fn same_regular_file(before: &fs::Metadata, handle: &fs::File) -> bool {
         after.is_file()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::go_parse_octal;
+
+    #[test]
+    fn octal_mode_follows_go_parse_octal() {
+        // Accepted: padding, NUL tail cut, 8 unterminated digits.
+        assert_eq!(go_parse_octal(b"0000644\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"\x00\x00\x00644\x00\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"  644   "), Ok(0o644));
+        assert_eq!(go_parse_octal(b"644\x00777\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"644\x00zz\x00\x00"), Ok(0o644));
+        assert_eq!(go_parse_octal(b"77777777"), Ok(0o7777_7777));
+        assert_eq!(go_parse_octal(b"        "), Ok(0));
+        assert_eq!(go_parse_octal(b"\x00\x00\x00\x00\x00\x00\x00\x00"), Ok(0));
+        // Rejected: signs (even zero), embedded spaces, prefixes,
+        // separators, non-octal digits, bad head before a NUL.
+        for field in [
+            &b"+000644\x00"[..],
+            b"+0\x00\x00\x00\x00\x00\x00",
+            b"-000001\x00",
+            b"-0\x00\x00\x00\x00\x00\x00",
+            b" 6 4 4  ",
+            b"0o644\x00\x00\x00",
+            b"6_44\x00\x00\x00\x00",
+            b"0000888\x00",
+            b"6z4\x00644\x00",
+        ] {
+            assert_eq!(go_parse_octal(field), Err(()), "{field:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "archive_entry_limit_tests.rs"]
+mod entry_limit_scan_tests;

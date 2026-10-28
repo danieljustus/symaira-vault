@@ -38,8 +38,9 @@ queries each disposition (`sigaction(2)` with a null new action, the single
 `unsafe` block of the module) and does not register SIGHUP (always) or SIGINT
 (when the command has no stop callback) if they were `SIG_IGN`; SIGTERM and
 SIGQUIT are always registered. The 12 added driver cases start the process with
-the signal set to `SIG_IGN` via `preexec_fn` after its readiness marker and
-record whether it survived (1.5 s window), then stop it with SIGTERM.
+the signal set to `SIG_IGN` before exec (the driver waits for the readiness
+marker before signaling) and record whether it survived (1.5 s window), then
+stop it with SIGTERM.
 Negative control: a Rust build that always registers every signal is rejected
 at `broker-ignored-sighup`.
 
@@ -145,8 +146,8 @@ this slice, and whether it can be verified without a GUI):
 | macOS clipboard/autotype | atotto darwin, `autotype_darwin.go` | `pbcopy`, JXA | no |
 | SendKeys / AppleScript escaping | `autotype_common.go` | none (JXA uses `js_string`) | yes |
 | Focus guard | `focus.go` (+ per-OS capture) | shared `guard` (macOS only wired); Linux/Windows captures missing | yes |
-| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes (next slice) |
-| `Countdown` | `clipboard.go` | missing (no Go non-test caller) | yes |
+| `VerifyCleared` / `ErrClipboardNotCleared` | `clipboard.go`, `cmd/crud/get.go` | missing | yes — done in slice 2 |
+| `Countdown` | `clipboard.go` | missing (**has** a Go caller: `cmd/crud/get.go:238`; corrected in slice 2) | yes — done in slice 2 |
 | Clear timer / signal clearing | `StartAutoClear` | `OwnedTextClipboard`, signal router (MCP-003) | covered elsewhere |
 | History-exclusion hints | none in Go | none | n/a |
 
@@ -159,6 +160,12 @@ typed into or copied from a live desktop. Native receipt: push CI run
 (ubuntu-latest), `Rust native (windows-latest)`, `Rust native (macos-latest)`,
 `Rust Miri` and `Rust`; the Rust pairing, audit and KDF workflows on the same
 commit passed too. This proves the replays, not a live desktop clipboard.
+
+## PLATFORM-001 slice 2: `get` clipboard clear verification — 2026-10-22
+
+Issue #1244, same oracle `861ad93813e3ee43c4ec989f45940d14b05b6eaf`. Slice 1 listed `Countdown` as having no Go non-test caller; that was wrong: `cmd/crud/get.go` starts it as a goroutine next to `StartAutoClear`, so it is user-visible and ported. Rust `get` never copied before; it now follows the Go default on a terminal.
+
+Implemented: `symvault_platform::get_clipboard` (`verify_cleared`, `VerifyError`, `countdown`, `copy_and_auto_clear`, `route_get_output`, injectable `TextClipboard`/`Clock`), native text clipboards per OS, and the wiring in `crates/symvault-cli/src/main.rs` (`emit_get_result` / `copy_get_field_to_clipboard`, covered PTY-free by `get_clipboard_wiring_tests`). Interrupt clearing: SIGINT/SIGTERM/SIGHUP on Unix and, via one `ctrlc` handler behind `InterruptSource`, Ctrl-C/Ctrl-Break/close on Windows (type-checked for msvc, not executed); if no handler can be installed `get` copies nothing and exits 1. Evidence is the Go-recorded `testdata/port/platform/get_clipboard.json` (16 command scenarios, 11 `VerifyCleared`, 8 `Countdown`), replayed by `tests/get_clipboard_contract.rs`; gate `make get-clipboard-differential` (part of `port-contract`). Behavior frozen: exact `ErrClipboardNotCleared` text, exit 0 with a stderr warning (never a failure), one read right after the clear (no retry/delay), skipped for an empty secret, read errors passed through, signal-triggered clear, copy failure exit 1. Full contract and residuals: `contract-matrix.md` PLATFORM-001 slice 2. PLATFORM-001 stays `in_progress`: no live clipboard (macOS/X11/Wayland/Windows) was touched, so native behavior, color styling and Windows console-control clearing are open.
 
 ## Integrated MCP clipboard dispatch — 2026-09-29
 
@@ -198,7 +205,12 @@ The PTY driver records 17 actions (10 critical approval, one execute approval,
 six hidden inputs), five cooked-mode restoration checks and two idle
 SIGINT/SIGTERM shutdowns that exit 0 like Go (asserted as `WIFEXITED`, status 0,
 never `WIFSIGNALED`; actual Go oracle 0cc78062 under a controlling PTY, run on
-Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; subsequent input works.
+Linux, exits 0 after idle SIGINT/SIGTERM and during an approval prompt). Canceled inputs do not mutate the vault; after a raw Ctrl-C (user cancel)
+subsequent input works. #1472 supersedes the earlier external-signal behavior:
+SIGINT/SIGTERM during secure input answers JSON-RPC -32603 `secure input failed:
+context canceled` and exits 0; during an ordinary approval prompt the tool result
+is `<tool> approval failed: failed to read from terminal: context canceled`,
+then exit 0 (the PTY acceptance runs one worker per signal case).
 Ordinary approval restores the terminal, then exits 0 like Go. The process-owned router is installed only by the standalone Unix
 stdio MCP CLI, regardless of a controlling terminal; without one, approval and
 secure input fail closed.
@@ -700,8 +712,16 @@ and vice versa.
    replays the Go-derived lifecycle fixture (idle/max TTL, touch versus
    non-refreshing probes, revoke, corrupted records, keyring failure/fallback,
    concurrency) through `symvault-core` and `symvault-platform`. The cache has no
-   on-disk representation, so file modes are not part of this row. Touch ID
-   (SESSION-003) is a separate slice.
+   on-disk representation, so file modes are not part of this row.
+   Touch ID non-interactive half (SESSION-003, #1243 slice 2):
+   `make biometric-differential` (part of `port-contract`) regenerates
+   `testdata/port/session/biometric.json` from the pinned Go sources, replays the
+   Keychain OSStatus/sentinel contract and the Touch ID item layout in
+   `symvault-core`, and, on macOS, exercises the Security-framework item store on
+   disposable keychains. The Rust Touch ID item is now Go's raw generic-password
+   item instead of a go-keyring-wrapped value. The biometric prompt, the real
+   default-keychain path and signed-app access control remain hardware/operator
+   gates.
 
 **Expected:** the Go-derived config/session/quota fixtures and injected platform
 contract tests pass locally. The macOS native adapter slice now compiles and

@@ -16,7 +16,7 @@
       "internal/health/doctor_session.go",
       "internal/health/doctor_vault.go"
     ],
-    "source_digest": "3cab9f9259cc88f79eb735a88a11bc849df8b1d0b9448f1e778b4eae48be8620",
+    "source_digest": "2dcc63c1eaca1c45b64d530a9423385b6057a90aebd0aad2db214a34a8440cc8",
     "generator_digest": "77419a6138d7c858081897942cf795154f15af0d4087a6a3a80d8471d6be49ef"
   },
   "doctor_ids": [

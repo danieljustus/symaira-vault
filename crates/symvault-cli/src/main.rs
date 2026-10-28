@@ -2695,13 +2695,7 @@ fn run_verify(
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let identity = device::unlock_vault(&vault)?;
-        verify_commands::verify(
-            &vault,
-            &identity,
-            rebuild,
-            rebuild_only,
-            &mut io::stderr().lock(),
-        )
+        verify_commands::verify(&vault, &identity, rebuild, rebuild_only, &mut io::stderr())
     })();
     finish_vault_result(result)
 }
@@ -3019,11 +3013,11 @@ fn run_auth_set(
                 #[cfg(target_os = "macos")]
                 {
                     let runtime = runtime_session_manager();
-                    if let Some(keyring) = runtime.keyring.as_deref()
-                        && let Err(error) =
-                            session_commands::clear_touch_id_passphrase(&vault, keyring)
-                    {
-                        eprintln!("Warning: could not remove Touch ID unlock item: {error}");
+                    if let Err(error) = session_commands::clear_touch_id_passphrase(
+                        &vault,
+                        touch_id_items(&runtime).as_ref(),
+                    ) {
+                        eprintln!("Warning: {error}");
                     }
                 }
                 if !quiet {
@@ -3047,12 +3041,9 @@ fn run_auth_set(
                     let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
                     decrypt_identity(&identity_bytes, &SecretBytes::new(passphrase.as_bytes()))
                         .map_err(|error| format!("open vault: {error}"))?;
-                    let keyring = runtime.keyring.as_deref().ok_or_else(|| {
-                        "save Touch ID unlock item: keyring unavailable".to_owned()
-                    })?;
                     session_commands::save_touch_id_passphrase(
                         &vault,
-                        keyring,
+                        touch_id_items(&runtime).as_ref(),
                         passphrase.as_bytes(),
                     )
                     .map_err(|error| format!("save Touch ID unlock item: {error}"))?;
@@ -3203,10 +3194,9 @@ fn run_auth_rotate_passphrase(
 
         #[cfg(target_os = "macos")]
         if config.effective_auth_method() == AuthMethod::Touchid
-            && let Some(keyring) = runtime.keyring.as_deref()
             && let Err(error) = session_commands::save_touch_id_passphrase(
                 &vault,
-                keyring,
+                touch_id_items(&runtime).as_ref(),
                 new_passphrase.as_bytes(),
             )
         {
@@ -3522,25 +3512,119 @@ fn run_get(
         }
         let result = result?;
         let format = if json { "json" } else { output };
-        let result = if format != "text" && !format.is_empty() && !print {
-            mask_sensitive(result)
-        } else {
-            result
+        let clipboard = symvault_platform::get_clipboard::native_get_clipboard();
+        let clock = symvault_platform::get_clipboard::RealClock::with_termination_signals();
+        let environment = GetEnvironment {
+            stdout_is_terminal: io::IsTerminal::is_terminal(&io::stdout()),
+            clipboard: clipboard.as_ref(),
+            clock: &clock,
         };
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|error| error.to_string())?
-            .as_secs() as i64;
-        vault_commands::write_get_at(
-            &mut io::stdout().lock(),
-            &mut io::stderr().lock(),
-            &result,
+        emit_get_result(
+            &vault,
+            result,
             format,
+            print,
             quiet,
-            now,
+            &environment,
+            &mut io::stdout().lock(),
+            // Not `.lock()`: the guard is not `Send`, and the clipboard flow
+            // writes diagnostics from its own thread.
+            &mut io::stderr(),
         )
     })();
     finish_vault_result(result)
+}
+
+/// What `get` needs from the outside world to choose between printing and
+/// copying. Production passes the TTY state, the native clipboard and the real
+/// clock; tests pass fakes, so the config -> route -> seconds -> copy chain runs
+/// without a terminal, a desktop clipboard or sleeping.
+struct GetEnvironment<'a> {
+    stdout_is_terminal: bool,
+    clipboard: &'a dyn symvault_platform::get_clipboard::TextClipboard,
+    clock: &'a dyn symvault_platform::get_clipboard::Clock,
+}
+
+/// The output half of `run_get`: copy a field to the clipboard when Go would,
+/// otherwise print (masked for structured output without `--print`).
+#[allow(clippy::too_many_arguments)]
+fn emit_get_result(
+    vault: &Path,
+    result: vault_commands::GetResult,
+    format: &str,
+    print: bool,
+    quiet: bool,
+    environment: &GetEnvironment<'_>,
+    stdout: &mut dyn Write,
+    stderr: &mut (dyn Write + Send),
+) -> Result<(), String> {
+    if let vault_commands::GetResult::Field { value, .. } = &result
+        && copy_get_field_to_clipboard(vault, format, print, value, environment, stderr)?
+    {
+        return Ok(());
+    }
+    let result = if format != "text" && !format.is_empty() && !print {
+        mask_sensitive(result)
+    } else {
+        result
+    };
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_secs() as i64;
+    // `&mut dyn Write` is `Sized` and implements `Write`, which the generic
+    // writer parameters need.
+    let (mut out, mut diagnostics) = (stdout, stderr);
+    vault_commands::write_get_at(&mut out, &mut diagnostics, &result, format, quiet, now)
+}
+
+/// Go's default `get <path.field>` on a terminal: copy to the clipboard, count
+/// down, clear and verify (`cmd/crud/get.go`, PLATFORM-001 slice 2). Returns
+/// `false` when the value should be printed instead. Go prints the copy failure
+/// through cobra and again through `ExecuteRoot`; the first line is emitted
+/// here and the caller prints the second.
+fn copy_get_field_to_clipboard(
+    vault: &Path,
+    format: &str,
+    print: bool,
+    value: &serde_json::Value,
+    environment: &GetEnvironment<'_>,
+    stderr: &mut (dyn Write + Send),
+) -> Result<bool, String> {
+    use symvault_platform::get_clipboard as clip;
+
+    // Go reads the vault config for `copyByDefault` and, separately, for the
+    // auto-clear duration; a config that cannot be loaded falls back to the
+    // 30 second default and to copying.
+    let config = symvault_core::config::Config::load(vault.join("config.yaml")).ok();
+    let section = config.as_ref().and_then(|config| config.clipboard.as_ref());
+    let destination = clip::route_get_output(
+        format,
+        print,
+        environment.stdout_is_terminal,
+        section.map(|section| section.copy_by_default),
+    );
+    if destination == clip::GetDestination::Stdout {
+        return Ok(false);
+    }
+    let text = match value {
+        serde_json::Value::String(text) => text.clone(),
+        serde_json::Value::Null => String::new(),
+        other => other.to_string(),
+    };
+    let seconds = clip::auto_clear_seconds(section.map(|section| section.auto_clear_duration));
+    clip::copy_and_auto_clear(
+        environment.clipboard,
+        &text,
+        seconds,
+        environment.clock,
+        stderr,
+    )
+    .map_err(|error| {
+        let _ = writeln!(stderr, "Error: {error}");
+        error.to_string()
+    })?;
+    Ok(true)
 }
 
 /// Replaces sensitive field values with `***` so structured output reveals
@@ -4864,13 +4948,25 @@ fn unlock_passphrase_with_mode(
     if config.effective_auth_method() == symvault_core::config::AuthMethod::Touchid
         && session_commands::gui_session_available()
         && !is_test_or_ci()
-        && let Some(keyring) = runtime.keyring.as_deref()
     {
         let touch_id = symvault_platform::MacOsTouchId;
-        if let Ok(bytes) = session_commands::load_touch_id_passphrase(vault, keyring, &touch_id) {
-            let passphrase = String::from_utf8(bytes.to_vec())
-                .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
-            return Ok(Zeroizing::new(passphrase));
+        match session_commands::load_touch_id_passphrase(
+            vault,
+            touch_id_items(runtime).as_ref(),
+            &touch_id,
+        ) {
+            Ok(bytes) => {
+                let passphrase = String::from_utf8(bytes.to_vec())
+                    .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
+                return Ok(Zeroizing::new(passphrase));
+            }
+            // Every other failure falls through to the passphrase prompt
+            // silently, as in Go; this one would otherwise stay invisible and
+            // the user could not tell why Touch ID never works.
+            Err(error) if error == session_commands::LEGACY_TOUCH_ID_ITEM_ERROR => {
+                eprintln!("Warning: {error}");
+            }
+            Err(_) => {}
         }
     }
     if interactive {
@@ -5209,6 +5305,23 @@ fn runtime_session_manager() -> RuntimeSession {
     }
 }
 
+/// Where the Touch ID passphrase item lives. Normally Go's native Keychain
+/// item, read and written through Security.framework (no subprocess, no value
+/// wrapper). When the session cache has already fallen back to memory (tests,
+/// CI, an unusable keychain) the item follows it, so such runs never reach the
+/// developer's keychain.
+#[cfg(target_os = "macos")]
+fn touch_id_items(
+    runtime: &RuntimeSession,
+) -> Box<dyn symvault_core::keychain_status::BiometricItemStore + '_> {
+    match runtime.keyring.as_deref() {
+        Some(keyring) if keyring.is_fallback_active() => Box::new(
+            symvault_core::keychain_status::KeyringBiometricItems(keyring),
+        ),
+        _ => Box::new(symvault_platform::SecurityBiometricItems::system()),
+    }
+}
+
 fn is_test_or_ci() -> bool {
     ["CI", "GITHUB_ACTIONS", "HEADLESS"]
         .into_iter()
@@ -5309,5 +5422,275 @@ mod mask_sensitive_tests {
             panic!("field expected")
         };
         assert_eq!(value, "***");
+    }
+}
+
+/// `symvault get <path.field>` clipboard wiring: config -> route -> seconds ->
+/// copy, with a fake clipboard, a virtual clock and no terminal.
+#[cfg(test)]
+mod get_clipboard_wiring_tests {
+    use super::*;
+    use std::sync::Mutex;
+    use std::time::Duration;
+    use symvault_platform::get_clipboard::{CancelToken, Clock, TextClipboard, Wake};
+
+    const SECRET: &str = "wiring-secret-VALUE-7";
+
+    #[derive(Default)]
+    struct FakeClipboard {
+        state: Mutex<(String, Vec<String>)>,
+        fail_copy: bool,
+    }
+
+    impl TextClipboard for FakeClipboard {
+        fn copy(&self, text: &str) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.1.push(format!("copy:{text}"));
+            if self.fail_copy && !text.is_empty() {
+                return Err("no clipboard tool".to_owned());
+            }
+            state.0 = text.to_owned();
+            Ok(())
+        }
+
+        fn read(&self) -> Result<String, String> {
+            let mut state = self.state.lock().unwrap();
+            state.1.push("read".to_owned());
+            Ok(state.0.clone())
+        }
+    }
+
+    /// Never sleeps; records the instants it was asked to wait for.
+    #[derive(Default)]
+    struct VirtualClock {
+        now: Mutex<Duration>,
+        waits: Mutex<Vec<Duration>>,
+        armed: Mutex<usize>,
+    }
+
+    impl Clock for VirtualClock {
+        fn elapsed(&self) -> Duration {
+            *self.now.lock().unwrap()
+        }
+
+        fn wait_until(&self, at: Duration, _cancel: &CancelToken, _watch: bool) -> Wake {
+            self.waits.lock().unwrap().push(at);
+            let mut now = self.now.lock().unwrap();
+            *now = (*now).max(at);
+            Wake::Elapsed
+        }
+
+        fn arm_termination_signals(&self) -> Result<(), String> {
+            *self.armed.lock().unwrap() += 1;
+            Ok(())
+        }
+    }
+
+    struct Outcome {
+        result: Result<(), String>,
+        stdout: String,
+        stderr: String,
+        clipboard: FakeClipboard,
+        clock: VirtualClock,
+    }
+
+    fn vault_with_config(config: Option<&str>) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        if let Some(config) = config {
+            std::fs::write(dir.path().join("config.yaml"), config).expect("write config");
+        }
+        dir
+    }
+
+    fn field(name: &str, value: serde_json::Value) -> vault_commands::GetResult {
+        vault_commands::GetResult::Field {
+            path: "work/github".to_owned(),
+            field: name.to_owned(),
+            value,
+        }
+    }
+
+    fn run(
+        vault: &Path,
+        result: vault_commands::GetResult,
+        format: &str,
+        print: bool,
+        terminal: bool,
+        fail_copy: bool,
+    ) -> Outcome {
+        let clipboard = FakeClipboard {
+            fail_copy,
+            ..FakeClipboard::default()
+        };
+        let clock = VirtualClock::default();
+        let (mut stdout, mut stderr) = (Vec::new(), Vec::new());
+        let environment = GetEnvironment {
+            stdout_is_terminal: terminal,
+            clipboard: &clipboard,
+            clock: &clock,
+        };
+        let result = emit_get_result(
+            vault,
+            result,
+            format,
+            print,
+            false,
+            &environment,
+            &mut stdout,
+            &mut stderr,
+        );
+        Outcome {
+            result,
+            stdout: String::from_utf8(stdout).unwrap(),
+            stderr: String::from_utf8(stderr).unwrap(),
+            clipboard,
+            clock,
+        }
+    }
+
+    fn secret_field() -> vault_commands::GetResult {
+        field("password", serde_json::json!(SECRET))
+    }
+
+    fn assert_printed_not_copied(outcome: &Outcome) {
+        assert_eq!(outcome.result, Ok(()));
+        assert!(
+            outcome.clipboard.state.lock().unwrap().1.is_empty(),
+            "the clipboard must not be touched"
+        );
+        assert_eq!(*outcome.clock.armed.lock().unwrap(), 0);
+        assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    }
+
+    #[test]
+    fn copy_by_default_false_prints_the_value() {
+        let vault = vault_with_config(Some("clipboard:\n  copyByDefault: false\n"));
+        let outcome = run(vault.path(), secret_field(), "text", false, true, false);
+        assert_printed_not_copied(&outcome);
+        assert_eq!(outcome.stdout, format!("{SECRET}\n"));
+    }
+
+    #[test]
+    fn print_flag_prints_even_on_a_terminal() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "text", true, true, false);
+        assert_printed_not_copied(&outcome);
+        assert_eq!(outcome.stdout, format!("{SECRET}\n"));
+    }
+
+    #[test]
+    fn non_terminal_stdout_prints_the_value() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "text", false, false, false);
+        assert_printed_not_copied(&outcome);
+        assert_eq!(outcome.stdout, format!("{SECRET}\n"));
+    }
+
+    #[test]
+    fn json_output_prints_masked_and_never_copies() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "json", false, true, false);
+        assert_printed_not_copied(&outcome);
+        assert_eq!(outcome.stdout, "\"***\"\n");
+        assert!(!outcome.stdout.contains(SECRET));
+    }
+
+    #[test]
+    fn json_output_with_print_reveals_the_value() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "json", true, true, false);
+        assert_printed_not_copied(&outcome);
+        assert_eq!(outcome.stdout, format!("\"{SECRET}\"\n"));
+    }
+
+    #[test]
+    fn configured_clear_seconds_drive_the_countdown() {
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 3\n"));
+        let outcome = run(vault.path(), secret_field(), "text", false, true, false);
+        assert_eq!(outcome.result, Ok(()));
+        assert_eq!(
+            outcome.stderr,
+            "[copied to clipboard]\n\r[clearing clipboard in 3s] \r[clearing clipboard in 2s] \r[clearing clipboard in 1s] \r[clearing clipboard in 0s] \r[clipboard cleared]        \n"
+        );
+        let waits = outcome.clock.waits.lock().unwrap().clone();
+        assert_eq!(waits.last(), Some(&Duration::from_secs(3)), "{waits:?}");
+        assert_eq!(*outcome.clock.armed.lock().unwrap(), 1);
+        let state = outcome.clipboard.state.lock().unwrap();
+        assert_eq!(
+            state.1,
+            [
+                format!("copy:{SECRET}"),
+                "copy:".to_owned(),
+                "read".to_owned()
+            ]
+        );
+        assert_eq!(state.0, "");
+    }
+
+    #[test]
+    fn missing_config_copies_with_the_thirty_second_default() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "text", false, true, false);
+        assert_eq!(outcome.result, Ok(()));
+        assert!(
+            outcome
+                .stderr
+                .starts_with("[copied to clipboard]\n\r[clearing clipboard in 30s] ")
+        );
+        assert!(outcome.stderr.contains("\r[clearing clipboard in 0s] "));
+        assert!(outcome.stderr.ends_with("\r[clipboard cleared]        \n"));
+        let waits = outcome.clock.waits.lock().unwrap().clone();
+        assert_eq!(waits.last(), Some(&Duration::from_secs(30)));
+        assert_eq!(outcome.clipboard.state.lock().unwrap().0, "");
+    }
+
+    #[test]
+    fn zero_clear_seconds_copy_without_countdown_or_handler() {
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        let outcome = run(vault.path(), secret_field(), "text", false, true, false);
+        assert_eq!(outcome.result, Ok(()));
+        assert_eq!(outcome.stderr, "[copied to clipboard]\n");
+        assert_eq!(*outcome.clock.armed.lock().unwrap(), 0);
+        assert_eq!(outcome.clipboard.state.lock().unwrap().0, SECRET);
+    }
+
+    #[test]
+    fn copy_mode_never_writes_the_secret_to_stdout_or_stderr() {
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 2\n"));
+        let outcome = run(vault.path(), secret_field(), "text", false, true, false);
+        assert_eq!(outcome.result, Ok(()));
+        assert_eq!(outcome.stdout, "");
+        assert!(!outcome.stderr.contains(SECRET), "{:?}", outcome.stderr);
+        assert!(!outcome.stdout.contains(SECRET));
+    }
+
+    #[test]
+    fn a_failed_copy_reports_once_here_and_leaks_nothing() {
+        let vault = vault_with_config(None);
+        let outcome = run(vault.path(), secret_field(), "text", false, true, true);
+        assert_eq!(
+            outcome.result,
+            Err("copy to clipboard: no clipboard tool".to_owned())
+        );
+        assert_eq!(
+            outcome.stderr,
+            "Error: copy to clipboard: no clipboard tool\n"
+        );
+        assert_eq!(outcome.stdout, "");
+        assert!(!outcome.stderr.contains(SECRET));
+    }
+
+    #[test]
+    fn non_string_values_are_copied_as_json_text() {
+        let vault = vault_with_config(Some("clipboard:\n  auto_clear_duration: 0\n"));
+        let outcome = run(
+            vault.path(),
+            field("port", serde_json::json!(5432)),
+            "text",
+            false,
+            true,
+            false,
+        );
+        assert_eq!(outcome.clipboard.state.lock().unwrap().0, "5432");
     }
 }

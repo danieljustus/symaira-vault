@@ -153,8 +153,13 @@ fn snapshot(root: &Path) -> Vec<Node> {
                     sha256: String::new(),
                     target: String::new(),
                 });
+                // A header mode of 0 restores an unreadable directory; the
+                // restored mode is recorded above, then the walk may enter it.
+                set_mode(&path, perm(&meta) | 0o700);
                 visit(root, &path, out);
             } else {
+                // Likewise a header mode of 0 restores an unreadable file.
+                set_mode(&path, perm(&meta) | 0o600);
                 let data = fs::read(&path).unwrap();
                 out.push(Node {
                     path: rel,
@@ -346,7 +351,7 @@ fn restore_errors_and_side_effects_match_go_corpus() {
         "../../../testdata/port/sync/restore-errors.json"
     ))
     .unwrap();
-    assert_eq!(fixture.cases.len(), 88, "corpus size changed");
+    assert_eq!(fixture.cases.len(), 130, "corpus size changed");
     let mut failures = Vec::new();
     let mut executed = 0;
     for case in &fixture.cases {
@@ -364,8 +369,8 @@ fn restore_errors_and_side_effects_match_go_corpus() {
             failures.push(message);
         }
     }
-    // 88 recorded cases, 14 of them Unix-only: 74 run on Windows, all 88 on Unix.
-    assert!(executed >= 74, "only {executed} cases executed");
+    // 130 recorded cases, 14 of them Unix-only: 116 run on Windows, all 130 on Unix.
+    assert!(executed >= 116, "only {executed} cases executed");
     assert!(
         failures.is_empty(),
         "{} of {} cases diverge from Go:\n{}",

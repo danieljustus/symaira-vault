@@ -114,6 +114,11 @@ pub enum SecureInputError {
     Timeout,
     Read(String),
     Canceled,
+    /// An external SIGINT/SIGTERM canceled the prompt while the process-owned
+    /// stdio shutdown is installed. Go's secure-input helper returns its
+    /// context error here, which the MCP handler wraps as
+    /// `secure input failed: context canceled`.
+    ContextCanceled,
     Empty,
 }
 
@@ -126,6 +131,7 @@ impl std::fmt::Display for SecureInputError {
             Self::Timeout => write!(f, "secure input timed out"),
             Self::Read(message) => write!(f, "failed to read from terminal: {message}"),
             Self::Canceled => write!(f, "secure input canceled by user"),
+            Self::ContextCanceled => write!(f, "context canceled"),
             Self::Empty => write!(f, "secure input canceled: empty value provided"),
         }
     }
@@ -341,7 +347,9 @@ type StdioSignalTerminator = Box<dyn Fn(i32) + Send + Sync>;
 static STDIO_SIGNAL_TERMINATOR: OnceLock<StdioSignalTerminator> = OnceLock::new();
 
 /// Installs the SIGINT/SIGTERM shutdown used by the stdio signal router. The
-/// first installation wins; the callback owns process termination.
+/// first installation wins; the callback owns process termination. It must not
+/// block: a prompt cancellation calls it from the in-flight handler, which
+/// still has to answer its request before the process exits.
 #[cfg(unix)]
 pub fn set_stdio_signal_terminator(terminator: impl Fn(i32) + Send + Sync + 'static) -> bool {
     STDIO_SIGNAL_TERMINATOR.set(Box::new(terminator)).is_ok()
@@ -360,6 +368,35 @@ fn terminate_for_stdio_signal(signal: i32) {
     if signal_hook::low_level::emulate_default_handler(signal).is_err() {
         std::process::abort();
     }
+}
+
+/// Classifies the SIGINT/SIGTERM/SIGHUP that canceled a secure prompt. With the
+/// stdio terminator installed, SIGINT/SIGTERM answer Go's context-canceled
+/// error and request the shutdown; the handler's response is written first.
+/// SIGHUP keeps its default action. Without a terminator (embedders, tests)
+/// the prompt alone is canceled.
+#[cfg(unix)]
+fn signal_cancel_error(signal: Option<i32>) -> SecureInputError {
+    use signal_hook::consts::signal::{SIGHUP, SIGINT, SIGTERM};
+
+    match signal {
+        Some(SIGHUP) => {
+            if signal_hook::low_level::emulate_default_handler(SIGHUP).is_err() {
+                std::process::abort();
+            }
+            SecureInputError::Canceled
+        }
+        Some(signal @ (SIGINT | SIGTERM)) if STDIO_SIGNAL_TERMINATOR.get().is_some() => {
+            terminate_for_stdio_signal(signal);
+            SecureInputError::ContextCanceled
+        }
+        _ => SecureInputError::Canceled,
+    }
+}
+
+#[cfg(not(unix))]
+fn signal_cancel_error(_signal: Option<i32>) -> SecureInputError {
+    SecureInputError::Canceled
 }
 
 #[cfg(unix)]
@@ -585,6 +622,10 @@ impl SecureInputPromptScope {
     fn enter(_secure_input: bool) -> Result<Self, SecureInputError> {
         Ok(Self)
     }
+
+    fn finish(&self) -> Option<i32> {
+        None
+    }
 }
 
 fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> ApprovalResult {
@@ -653,7 +694,9 @@ fn run_approval<T: Terminal>(req: &ApprovalRequest, terminal: Option<T>) -> Appr
             return ApprovalResult {
                 approved: false,
                 remembered: false,
-                error: Some(ApprovalError::Read("terminal input interrupted".into())),
+                // The only cancellation source is an external signal. Go's
+                // approval read fails with its canceled context.
+                error: Some(ApprovalError::Read("context canceled".into())),
             };
         }
     };
@@ -707,9 +750,12 @@ fn run_secure_input<T: Terminal>(
         Err(ReadFailure::TimedOut) => return Err(SecureInputError::Timeout),
         Err(ReadFailure::Io(message)) => return Err(SecureInputError::Read(message)),
         Err(ReadFailure::Canceled) => {
+            // Only an external signal cancels the poll; raw Ctrl-C arrives as
+            // ETX in the response and is handled below.
+            let signal = _prompt_scope.finish();
             terminal.restore();
             let _ = terminal.write_all(b"\nAborted.\n");
-            return Err(SecureInputError::Canceled);
+            return Err(signal_cancel_error(signal));
         }
     };
     let value = match parse_secure_input(&response) {
@@ -722,15 +768,9 @@ fn run_secure_input<T: Terminal>(
         Err(error) => return Err(error),
     };
     terminal.restore();
-    #[cfg(unix)]
     if let Some(signal) = _prompt_scope.finish() {
         let _ = terminal.write_all(b"\nAborted.\n");
-        if signal == signal_hook::consts::signal::SIGHUP
-            && signal_hook::low_level::emulate_default_handler(signal).is_err()
-        {
-            std::process::abort();
-        }
-        return Err(SecureInputError::Canceled);
+        return Err(signal_cancel_error(Some(signal)));
     }
     let _ = terminal.write_all(b"\n");
     if value.is_empty() {
@@ -1927,6 +1967,103 @@ mod tests {
                 )),
                 "child did not prove active {signal_name} clear-and-continue; output={}",
                 String::from_utf8_lossy(&output.stdout)
+            );
+        }
+    }
+
+    /// Terminal whose prompt read is interrupted by an external signal, the way
+    /// the process-owned router cancels a real `/dev/tty` poll.
+    #[cfg(unix)]
+    struct SignalTerminal(i32);
+
+    #[cfg(unix)]
+    impl Terminal for SignalTerminal {
+        fn set_raw_mode(&mut self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn restore(&mut self) {}
+
+        fn write_all(&mut self, _buf: &[u8]) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn read_response(&mut self, _deadline: Instant) -> Result<String, ReadFailure> {
+            signal_hook::low_level::raise(self.0).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(3);
+            while Instant::now() < deadline {
+                if stdio_signal_is_pending() {
+                    return Err(ReadFailure::Canceled);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(ReadFailure::TimedOut)
+        }
+    }
+
+    /// With the stdio terminator installed, an external SIGINT/SIGTERM during a
+    /// prompt answers Go's context-canceled error and requests the shutdown
+    /// exactly once per prompt (#1472). The child owns the process-wide router.
+    #[cfg(unix)]
+    #[test]
+    fn stdio_prompt_signal_cancel_maps_to_go_context_canceled() {
+        use signal_hook::consts::signal::{SIGINT, SIGTERM};
+        use std::{env, process::Command, sync::atomic::AtomicI32};
+
+        static TERMINATED: AtomicUsize = AtomicUsize::new(0);
+        static LAST_SIGNAL: AtomicI32 = AtomicI32::new(0);
+
+        if let Ok(signal_name) = env::var("SYMVAULT_PLATFORM_PROMPT_SIGNAL_CHILD") {
+            let signal = if signal_name == "SIGINT" {
+                SIGINT
+            } else {
+                SIGTERM
+            };
+            install_stdio_secure_input_signal_router().unwrap();
+            assert!(set_stdio_signal_terminator(|signal| {
+                LAST_SIGNAL.store(signal, Ordering::SeqCst);
+                TERMINATED.fetch_add(1, Ordering::SeqCst);
+            }));
+
+            let secure = run_secure_input(&secure_input_request(), Some(SignalTerminal(signal)));
+            assert_eq!(secure, Err(SecureInputError::ContextCanceled));
+            assert_eq!(
+                secure.unwrap_err().to_string(),
+                "context canceled",
+                "the MCP handler prefixes `secure input failed: `"
+            );
+            assert_eq!(TERMINATED.load(Ordering::SeqCst), 1);
+            assert_eq!(LAST_SIGNAL.load(Ordering::SeqCst), signal);
+
+            let approval = run_approval(&approved_request(), Some(SignalTerminal(signal)));
+            assert!(!approval.approved && !approval.remembered);
+            let error = approval.error.expect("signal cancels approval");
+            assert_eq!(error, ApprovalError::Read("context canceled".into()));
+            assert_eq!(
+                error.to_string(),
+                "failed to read from terminal: context canceled"
+            );
+            assert_eq!(TERMINATED.load(Ordering::SeqCst), 2);
+            println!("RUST_PROMPT_SIGNAL_RECEIPT signal={signal_name}");
+            return;
+        }
+
+        for signal_name in ["SIGINT", "SIGTERM"] {
+            let output = Command::new(env::current_exe().unwrap())
+                .arg("--exact")
+                .arg("approval::tests::stdio_prompt_signal_cancel_maps_to_go_context_canceled")
+                .arg("--nocapture")
+                .env("SYMVAULT_PLATFORM_PROMPT_SIGNAL_CHILD", signal_name)
+                .output()
+                .expect("run prompt signal child");
+            assert!(
+                output.status.success(),
+                "{signal_name} child failed: {output:?}"
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout)
+                    .contains(&format!("RUST_PROMPT_SIGNAL_RECEIPT signal={signal_name}")),
+                "{signal_name} child produced no receipt: {output:?}"
             );
         }
     }

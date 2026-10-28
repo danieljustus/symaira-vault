@@ -1634,13 +1634,13 @@ dependencies = [
 
 [[package]]
 name = "getifaddrs"
-version = "0.4.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a42c13dcc0ad1c180689ee935eb88a5545b734cadee1a200785873154e3142dd"
+checksum = "a542e1b7ac1f3d62c5777d430d66eca9cb59e813c46b86e29fa9ce94ff9a4810"
 dependencies = [
  "bitflags",
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4205,9 +4205,11 @@ version = "0.0.0"
 dependencies = [
  "arboard",
  "base64 0.23.1",
+ "ctrlc",
  "keyring",
  "keyring-core",
  "rustix",
+ "security-framework",
  "serde",
  "serde_json",
  "signal-hook 0.4.5",
@@ -5014,15 +5016,6 @@ dependencies = [
 
 [[package]]
 name = "windows-sys"
-version = "0.59.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
-dependencies = [
- "windows-targets",
-]
-
-[[package]]
-name = "windows-sys"
 version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
@@ -5168,9 +5161,9 @@ dependencies = [
 
 [[package]]
 name = "yaml-edit"
-version = "0.3.1"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "482be37565376de9a5502a56f19b68ecf0d4f85298ac89f3a62e03d7e4ecf9e3"
+checksum = "da48bd541c54d6216e92f408fe4a0bdfd6787868cbacd15d7cc764b6abeb5efd"
 dependencies = [
  "rowan",
 ]
