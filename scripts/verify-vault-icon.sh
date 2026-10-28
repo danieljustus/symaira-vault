@@ -32,43 +32,46 @@ verify_dimensions() {
 }
 
 verify_source() {
-  verify_hash a3251f55007fb2c4c1460d4dc79ab0ee346c30a3a5b30cfcd1fe9c0954e14b76 client/AppIcon.icon/icon.json
-  verify_hash 28a132532faa49ac66c896b0df4d304e6e19de9d42da85398f001a50178da50e client/AppIcon.icon/Assets/S.png
-  verify_hash a028c00a8a9b14130fb860e0b458be34291b650311812e50db1a5a090e9faf4e client/AppIcon.icon/Assets/signet.png
-  verify_hash bbecf5fae1efce761d889f88bdc98e4b013fdad5bd46c981bd5710ff0e8da970 assets/branding/symaira-vault.icns
+  verify_hash 64f3e52914a05e1159012df31d9d850d6ac622fadd248134d0ce5b5b2f232ebf client/AppIcon.icon/icon.json
+  verify_hash 4c9382cb89daafbc5abe1daccf5c677cea32de251cd121dca14d3fdd40ff2458 client/AppIcon.icon/Assets/signet.png
+  verify_hash 31acbee4bc3a714885bc0fc0394349f519c6326dad98e65fa7ade28bcd21d279 client/AppIcon.icon/Assets/top.png
+  verify_hash 151c783d1962c20a5140218ddeb7ec92e6ed47a992534abd136dee1a56dabbd3 client/AppIcon.icon/Assets/bot.png
+  verify_hash f6d54660cf5b3620c5084d9d1647f3c9844cbd207d8b948cf46950a14c3689dd client/AppIcon.icon/Assets/lines.png
+  verify_hash c328039e79d2fd68f8f31ddbc8c7ed2aca5b6f9645bc5c15e1d9976f1683b675 client/AppIcon.icon/Assets/index.png
+  verify_hash 4d17dedae2b112cc6a87ba43e942a048dbd96fd658bf16643dad3815fe4598e8 assets/branding/symaira-vault.icns
 
   local mac_hashes=(
-    "16a7955fd92baca978afb01e731d65a712963d58a26902ddc4e1aaad4abfa54b icon_128x128.png"
-    "19beba1b26da1ace4844a6176f90b4320f06be19ddf576499b019fd8d780c841 icon_128x128@2x.png"
-    "0e9a825b71be015b15eb4b30ebfd4221200fcb850476a37b5d767360f14f093f icon_16x16.png"
-    "22a826be8e8cdd68a539062833ecd2ce34c7a59c649e855f7c1c47cdd6f327af icon_16x16@2x.png"
-    "19beba1b26da1ace4844a6176f90b4320f06be19ddf576499b019fd8d780c841 icon_256x256.png"
-    "6340bc5355bac9ddcf58537f6c630e7e652deb3dc269a3e8f44b16015f799f9e icon_256x256@2x.png"
-    "22a826be8e8cdd68a539062833ecd2ce34c7a59c649e855f7c1c47cdd6f327af icon_32x32.png"
-    "1bb587cbdbdb9afeabdc86b520ea5cbacd9df5bd42944be4ef2f716d8b3fd748 icon_32x32@2x.png"
-    "6340bc5355bac9ddcf58537f6c630e7e652deb3dc269a3e8f44b16015f799f9e icon_512x512.png"
-    "663542a83961e166e3ec753cab848c0bd5df732a22d27bdd567199bdb7002904 icon_512x512@2x.png"
+    "628ef31dede35944887ead9ee62716b77314a2bcc62d955076ba04a6cf01d994 icon_128x128.png"
+    "43112677c80b72694042577664a4f868b002bad365d838859a1e8c300cd9201e icon_128x128@2x.png"
+    "e886bc6ab8cf10322eb2885bf6e85caebd7ea521ff1538d764d00bdb58edf0f3 icon_16x16.png"
+    "ee7acf9ad6a499834afa6d7edca8d0b103bb2b587032933cb92ebbbcb5c97eee icon_16x16@2x.png"
+    "43112677c80b72694042577664a4f868b002bad365d838859a1e8c300cd9201e icon_256x256.png"
+    "6d7bd04c5a9e75494470c012beb73b1b27ca0b816848c6e3bcc06a8d2a627e63 icon_256x256@2x.png"
+    "ee7acf9ad6a499834afa6d7edca8d0b103bb2b587032933cb92ebbbcb5c97eee icon_32x32.png"
+    "621be52deab8cab4dd448ef5f3c59937b58346f3a1d896be816c9d3dc1969b80 icon_32x32@2x.png"
+    "6d7bd04c5a9e75494470c012beb73b1b27ca0b816848c6e3bcc06a8d2a627e63 icon_512x512.png"
+    "a8ed9248a7588073eddc301ecb75ac897dc4488fe8615ae60c13b5505381fc49 icon_512x512@2x.png"
   )
   for entry in "${mac_hashes[@]}"; do
     verify_hash "${entry%% *}" "client/Sources/SymvaultApp/Assets.xcassets/LegacyMacAppIcon.appiconset/${entry#* }"
   done
 
   local ios_hashes=(
-    "81cfd61f1e9039ef89123f9c283d380bf20a4d4616feb7e549a4986afddcfef6 icon-1024.png"
-    "54aa639238c134a2b364aab38d94193035ebe69ea199bd6c62f19995e12ee420 icon-20@1x.png"
-    "ab591995a84197e5eb3b6741da593a42aa1360093f5936119e29955c5f5dd144 icon-20@2x.png"
-    "38b74724b205d75a0c3583e10468a84fceffd095e246ed062de4a42cfc82eef7 icon-20@3x.png"
-    "28ed5ddde9457089ce11dcc2d9950911e839e89a145ab4d1bbde853527647074 icon-29@1x.png"
-    "3519c46b4b8bf927a380d5078125a45d18c08957daf1a8c91aaae186ed9d758b icon-29@2x.png"
-    "19138b3d7313bbc9e16dce3013d3c83fae597a5a5d7b79ed2a317a2b97562968 icon-29@3x.png"
-    "ab591995a84197e5eb3b6741da593a42aa1360093f5936119e29955c5f5dd144 icon-40@1x.png"
-    "6d2d0e254ff226a5805f471ce37823ad4bf05902cfc6425c401e25b9fa25c725 icon-40@2x.png"
-    "1dd2a38caa19743200a50ebbe76aeb098ae2f6fbf1a37dc4498f5bfa1796d85e icon-40@3x.png"
-    "1dd2a38caa19743200a50ebbe76aeb098ae2f6fbf1a37dc4498f5bfa1796d85e icon-60@2x.png"
-    "556307e6bce01d14058574a44e5bf9c7d94005c9fa8472fa362a1b22605d86c2 icon-60@3x.png"
-    "1513579d16cb8ada8e5b6b7f8b1f6c8779636c60fe16460dd9d9bb2e3dca9f90 icon-76@1x.png"
-    "bf38001aae833789bbcc7c7464a1d72b85778359737d99bb8244474fffd334d0 icon-76@2x.png"
-    "f8168bde46c4c7bf5567cb3e6c424a8dd58e21ec2633a2eda466305a7238f2f6 icon-83.5@2x.png"
+    "76647508b90db716ce8897e4b162c3a0eb8bb112aeba6d975cea5f29d21f10b1 icon-1024.png"
+    "3b6e5957d8824b5d296671fbdfd56fd33dec43eb422b312bbbbde93993711554 icon-20@1x.png"
+    "3274bb0d896a6fa3c5a1f223672a8349b566b797ce80858a7bfb4a333de1422f icon-20@2x.png"
+    "da267df7cf9e22451754075ab437c232a4c25c9236f6706f574f4a088bd762a7 icon-20@3x.png"
+    "a578d493acdd0b658bd73f8dd946f589286b68da57c2a02eb11947116954d1f6 icon-29@1x.png"
+    "666de27292fa0b19ae2e0be0440d8d0e18b00aefb96228d9ddf39a29973f5377 icon-29@2x.png"
+    "50946ccbe3ecbd8397342a323f3648eb5c77319fa70d18c6a85d0e741f5d52de icon-29@3x.png"
+    "3274bb0d896a6fa3c5a1f223672a8349b566b797ce80858a7bfb4a333de1422f icon-40@1x.png"
+    "5d5925b53552f67f1acd26b2cea1e520cf5b04ec763b1989127b5a8693df7323 icon-40@2x.png"
+    "fcb312e1a70b2ff03f3642a9bf4bafadb812e42bda5a3c33a27aa71a1092c589 icon-40@3x.png"
+    "fcb312e1a70b2ff03f3642a9bf4bafadb812e42bda5a3c33a27aa71a1092c589 icon-60@2x.png"
+    "b9582e954220bf9c59c544f45dfe40244f19e6db9b213079809dde0ed7b0a8b0 icon-60@3x.png"
+    "a1daffae3d50cd1f1d7e91849d019c726e563eb5bdb2809072d15959164684c0 icon-76@1x.png"
+    "f4b8e2a0e129a90ca140f36ed5c3ac2fea33ae2cee93d612b4aa9154fa5b5771 icon-76@2x.png"
+    "0a2e09bd4f969cec82d66c64789c92bc0251394444edd6313b89924d7946e491 icon-83.5@2x.png"
   )
   for entry in "${ios_hashes[@]}"; do
     verify_hash "${entry%% *}" "client/Sources/SymvaultIOS/Assets.xcassets/LegacyIOSAppIcon.appiconset/${entry#* }"
