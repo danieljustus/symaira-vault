@@ -199,13 +199,48 @@ class HarnessTests(unittest.TestCase):
         browser.child.terminate.side_effect = RuntimeError('structural termination failure')
         browser.child.fileobj.close.side_effect = OSError('structural socket failure')
         browser.child._thread.is_alive.return_value = False
-        with patch.object(tui.os, 'name', 'nt'):
+        with patch.object(tui.os, 'name', 'nt'), \
+                patch.object(tui, 'checked', side_effect=RuntimeError('structural tree termination failure')):
             with self.assertRaises(ExceptionGroup) as context: browser.close()
         browser.child._server.close.assert_called_once_with()
         browser.child._thread.join.assert_called_once_with(timeout=5)
-        self.assertEqual(len(context.exception.exceptions), 2)
+        self.assertEqual(len(context.exception.exceptions), 3)
+        self.assertIn('structural tree termination failure', str(context.exception))
         self.assertIn('structural termination failure', str(context.exception))
         self.assertIn('structural socket failure', str(context.exception))
+
+    def test_windows_abort_kills_descendants_before_console_wrapper(self):
+        # Structural ordering control; the native mutation job exercises the
+        # actual ConPTY -> Go wrapper -> Rust CLI process tree on Windows.
+        browser = object.__new__(tui.Browser)
+        browser.child = Mock(pid=12345)
+        browser.alive = lambda: True
+        browser.child._thread.is_alive.return_value = False
+        calls = []
+        def kill_tree(argv, **kwargs):
+            self.assertEqual(argv, ['taskkill.exe', '/PID', '12345', '/T', '/F'])
+            self.assertEqual(kwargs, {'timeout': 10})
+            calls.append('tree')
+        browser.child.terminate.side_effect = lambda **kwargs: calls.append('wrapper') or True
+        with patch.object(tui.os, 'name', 'nt'), patch.object(tui, 'checked', side_effect=kill_tree):
+            browser.close()
+        self.assertEqual(calls, ['tree', 'wrapper'])
+        browser.child.fileobj.close.assert_called_once_with()
+        browser.child._server.close.assert_called_once_with()
+        browser.child._thread.join.assert_called_once_with(timeout=5)
+
+    def test_windows_normal_exit_only_closes_owned_transport(self):
+        browser = object.__new__(tui.Browser)
+        browser.child = Mock()
+        browser.alive = lambda: False
+        browser.child._thread.is_alive.return_value = False
+        with patch.object(tui.os, 'name', 'nt'), patch.object(tui, 'checked') as checked:
+            browser.close()
+        checked.assert_not_called()
+        browser.child.terminate.assert_not_called()
+        browser.child.fileobj.close.assert_called_once_with()
+        browser.child._server.close.assert_called_once_with()
+        browser.child._thread.join.assert_called_once_with(timeout=5)
 
     def test_terminal_artifact_paths_sizes_digests_and_canaries(self):
         with tempfile.TemporaryDirectory() as raw:

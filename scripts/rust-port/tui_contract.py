@@ -443,11 +443,19 @@ class Browser:
         if os.name == 'nt':
             # Close both PtyProcess sockets even after isalive marks it closed.
             errors = []
-            try:
-                if self.alive():
+            if self.alive():
+                try:
+                    # The ConPTY child is the console wrapper, not the CLI.
+                    # Kill its descendants before the wrapper: terminating only
+                    # the wrapper can leave the mutant holding its fixture cwd
+                    # open, masking the expected reveal rejection with WinError 32.
+                    checked(['taskkill.exe', '/PID', str(self.child.pid), '/T', '/F'], timeout=10)
+                except Exception as error:
+                    errors.append(error)
+                try:
                     assert self.child.terminate(force=True), 'native ConPTY child did not terminate'
-            except Exception as error:
-                errors.append(error)
+                except Exception as error:
+                    errors.append(error)
             # terminate() already cancels pending I/O. Repeating cancel_io()
             # after it/natural exit raises WinptyError: Element not found.
             for cleanup in (self.child.fileobj.close, self.child._server.close,
