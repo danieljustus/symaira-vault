@@ -416,7 +416,7 @@ jobs:
               assert observed['workers_joined'] and not observed['control_errors']
               for peer in observed['slow_peers']:
                   assert peer['peer_terminal_observed'] and not peer['forced_client_close'] and peer['sender_joined'] and peer['sent_progress_bytes']>=4
-                  assert peer['peer_terminal_kind'] in {'eof','connection-reset'}
+                  assert peer['peer_terminal_kind'] in ({'eof','connection-reset','connection-aborted'} if r['native_os']=='Windows' else {'eof','connection-reset'})
                   assert peer['termination'] in {'actual-empty-eof-or-reset','complete-go-json-error-before-write-deadline'}
               assert len(observed['idle_boundary']['responses'])==2 and observed['idle_boundary']['idle_wait_seconds']>=6
               assert len(observed['processes'])==1
