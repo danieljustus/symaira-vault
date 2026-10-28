@@ -72,6 +72,7 @@ impl SecureInputSeam for FakeSecureInput {
         match self.error.as_deref() {
             Some("timeout") => Err(SecureInputError::Timeout),
             Some("cancel") => Err(SecureInputError::Canceled),
+            Some("context_canceled") => Err(SecureInputError::ContextCanceled),
             _ => Ok(self.value.clone().unwrap_or_default()),
         }
     }
@@ -298,5 +299,96 @@ fn secure_input_contract_replays_source_bound_go_handlers() {
             "stored value {}",
             case.name
         );
+    }
+}
+
+/// An external SIGINT/SIGTERM during the prompt surfaces as Go's wrapped
+/// context error (JSON-RPC -32603 `secure input failed: context canceled`),
+/// distinct from the user-typed cancel result, and stores nothing (#1472).
+#[test]
+fn secure_input_signal_cancel_maps_to_go_context_canceled_without_storing() {
+    for tool in ["secure_input", "request_credential"] {
+        let root = tempdir().expect("synthetic disposable vault");
+        fs::write(
+            root.path().join("config.yaml"),
+            "vault:\n  format_version: 1\n",
+        )
+        .expect("write synthetic config");
+        fs::write(
+            root.path().join("identity.age"),
+            b"synthetic identity marker",
+        )
+        .expect("write identity marker");
+        fs::create_dir(root.path().join("entries")).expect("create entries");
+        let identity = symvault_crypto::generate_identity();
+        let store = Store::open(root.path(), &identity).expect("open synthetic store");
+        store
+            .write_new_entry(
+                "allowed/service",
+                &Entry {
+                    path: "allowed/service".into(),
+                    data: BTreeMap::from([("existing".into(), json!("synthetic-before"))]),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .expect("seed synthetic entry");
+
+        let order = Arc::new(Mutex::new(Vec::new()));
+        let secure = Arc::new(FakeSecureInput {
+            tty: true,
+            value: Some("must-not-be-stored".into()),
+            error: Some("context_canceled".into()),
+            requests: Mutex::new(Vec::new()),
+            order: Arc::clone(&order),
+        });
+        let approval = Arc::new(FakeApproval {
+            approved: true,
+            error: None,
+            requests: Mutex::new(Vec::new()),
+            order: Arc::clone(&order),
+        });
+        let mut available_tools = read_only_tool_names();
+        available_tools.push(tool.into());
+        let encoded = symvault_crypto::identity_string(&identity);
+        let runtime_identity = symvault_crypto::parse_identity(
+            std::str::from_utf8(encoded.as_bytes()).expect("generated identity is UTF-8"),
+        )
+        .expect("parse synthetic runtime identity");
+        let runtime = StoreReadOnlyRuntime::open(
+            root.path(),
+            runtime_identity,
+            ReadOnlyRuntimeConfig {
+                agent_name: "secure-input-fixture".into(),
+                tier: "admin".into(),
+                approval_mode: "none".into(),
+                can_write: true,
+                allowed_paths: vec!["allowed".into()],
+                available_tools,
+                ..ReadOnlyRuntimeConfig::default()
+            },
+            None,
+            None,
+        )
+        .expect("open secure input runtime")
+        .with_secure_input_seam(Arc::clone(&secure) as Arc<dyn SecureInputSeam>)
+        .with_approval_seam(Arc::clone(&approval) as Arc<dyn ApprovalSeam>);
+
+        let arguments = json!({"path": "allowed/service", "field": "token"});
+        runtime
+            .authorize(tool, &arguments)
+            .expect("tool call is authorized");
+        assert_eq!(
+            runtime.call(tool, &arguments).unwrap_err(),
+            "secure input failed: context canceled",
+            "{tool}"
+        );
+        assert_eq!(secure.requests.lock().unwrap().len(), 1, "{tool}");
+
+        let store = Store::open(root.path(), &identity).expect("reopen synthetic vault");
+        let entry = store
+            .get("allowed/service", &identity)
+            .expect("read synthetic entry");
+        assert!(!entry.data.contains_key("token"), "{tool}");
     }
 }
