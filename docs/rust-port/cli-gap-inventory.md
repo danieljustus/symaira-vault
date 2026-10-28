@@ -94,13 +94,20 @@ parse: `- get x` and `config - get x` now report two arguments for `get`.
 Acceptance is bounded to recorded rejections, not every argument validator's
 whole-binary behavior. cobra `legacyArgs` accepts arbitrary arguments on
 non-root commands with no explicit validator (even when they have subcommands).
-The emulator correctly proceeds; clap still rejects `lock x`, `verify x`,
-`unlock x`, `generate x`, `share list x` and `policy list x`. These CLI-005/006
-acceptance gaps remain open; accepting arity probes test only the emulator.
+The emulator correctly proceeds; clap still rejects extra positionals there.
+Measured examples (not exhaustive): `lock`, `verify`, `unlock`, `generate`,
+`share list`, `policy list`, `agent list`, `agent whoami`, `approval list`,
+`audit`, `audit rotate-key`, `auth rotate-passphrase`, `auth status`,
+`device approval-pair`, `doctor`, `migrate kdf`, `migrate pseudonymize`,
+`migrate session`, `migrate v4` and `recipients list`. Clap likewise still
+rejects the accepting bare-dash shapes `- list`, `share - list` and
+`-- get x`. These CLI-005/006 acceptance gaps remain open; accepting arity
+probes test only the emulator.
 Other command-body diagnostics remain per-command, except that
-`finish_vault_result`/`finish_session_result` render any `vault not initialized`
-message with doubled error lines and the init hint (including approval/file
-commands), not a universal single-line error.
+`finish_vault_result` and the code-3 callers of `finish_session_result` render
+a message starting with `vault not initialized` with doubled error lines and
+the init hint (including approval/file commands). `auth status` (code 1) and
+`finish_vault_result_exit_1` keep a single error line.
 
 ## Historical measurement, 2026-09-27
 
