@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const pin = "314a25a5cdd2e90517bb55a90495d7b97f68c6df"
+const oracleCommit = "314a25a5cdd2e90517bb55a90495d7b97f68c6df"
 const config = "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n"
 
 type observation struct {
@@ -200,7 +200,7 @@ func main() {
 		}
 	}
 	sort.Strings(sources)
-	resolved, err := provenance.Verify(root, pin, sources)
+	resolved, err := provenance.Verify(root, oracleCommit, sources)
 	must(err)
 	must(exec.Command("git", "-C", root, "merge-base", "--is-ancestor", resolved, "HEAD").Run())
 	digest, err := provenance.Digest(root, sources)
