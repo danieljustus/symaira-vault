@@ -97,7 +97,7 @@
       "internal/cli/cli.go",
       "internal/errors/errors.go"
     ],
-    "source_digest": "b80e64331362dd18d52d68550a460b3946e70a6ea77edfb9df546c67a2117177",
+    "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
     "generator_digest": "a30969fd79e1fe3d5e8b98679148d666744058dd3d6cca06fa9cb4dc9346ce44"
   },
   "usage": [
