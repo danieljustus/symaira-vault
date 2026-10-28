@@ -189,7 +189,10 @@ func main() {
 	output := flag.String("output", "testdata/port/config/overrides.json", "fixture path")
 	check := flag.Bool("check", false, "compare without writing")
 	flag.Parse()
-	_, file, _, _ := runtime.Caller(0)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("configoverridesgen: source location unavailable")
+	}
 	root := filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 	sources := []string{"cmd/root.go", "internal/cli/cli.go", "internal/cli/vaultpath.go"}
 	entries, err := os.ReadDir(filepath.Join(root, "internal/config"))
