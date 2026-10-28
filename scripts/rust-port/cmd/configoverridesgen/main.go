@@ -152,7 +152,7 @@ func capture(item vector) (observation, error) {
 	if err != nil {
 		return observation{}, err
 	}
-	child := exec.CommandContext(ctx, exe, "--probe")
+	child := exec.CommandContext(ctx, exe, "--probe") // #nosec G204 -- re-executes this generator
 	child.Stdin = bytes.NewReader(payload)
 	child.Dir = home
 	child.Env = []string{"HOME=" + home, "USERPROFILE=" + home, "XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_DATA_HOME=" + filepath.Join(home, ".local", "share"), "XDG_CACHE_HOME=" + filepath.Join(home, ".cache"), "TMPDIR=" + dir, "TMP=" + dir, "TEMP=" + dir, "LANG=C", "TZ=UTC"}
@@ -209,7 +209,7 @@ func main() {
 	sort.Strings(sources)
 	resolved, err := provenance.Verify(root, oracleCommit, sources)
 	must(err)
-	must(exec.Command("git", "-C", root, "merge-base", "--is-ancestor", resolved, "HEAD").Run())
+	must(exec.Command("git", "-C", root, "merge-base", "--is-ancestor", resolved, "HEAD").Run()) // #nosec G204 -- fixed git subcommand over the verified oracle commit
 	digest, err := provenance.Digest(root, sources)
 	must(err)
 	gen, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/configoverridesgen/main.go"})
