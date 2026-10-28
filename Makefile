@@ -448,6 +448,14 @@ cfg-precedence-fixtures-check:
 		--check --output $(CFG_PRECEDENCE_FIXTURE)
 	$(CARGO) test -p symvault-core --test config_precedence_contract --locked
 
+.PHONY: cfg-overrides-fixtures-generate cfg-overrides-fixtures-check
+cfg-overrides-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configoverridesgen
+
+cfg-overrides-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configoverridesgen --check
+	$(CARGO) test -p symvault-cli --bin symvault config_override_tests::overrides_match_go_oracle --locked -- --exact --nocapture
+
 cfg-sections-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configsectionsgen \
 		--output $(CFG_SECTIONS_FIXTURE) \
@@ -561,7 +569,7 @@ rust-007-fixtures-check: config-profile-fixtures-check
 		--check --session-output $(PORT_SESSION_FIXTURE) \
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
 
-rust-007-differential: rust-007-fixtures-check
+rust-007-differential: rust-007-fixtures-check cfg-overrides-fixtures-check
 	$(CARGO) test -p symvault-core --test config_session_contract --test session_cache_contract --all-features --locked
 	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --test session_cache_fallback_contract --all-features --locked
 
@@ -679,7 +687,7 @@ cli-help-differential: manpages-differential
 store004-isolation-check:
 	PYTHONDONTWRITEBYTECODE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) python3 scripts/rust-port/test_store004_isolation.py
 
-port-contract: mcp-oauth-contract store004-isolation-check update-fixtures-check
+port-contract: cfg-overrides-fixtures-check mcp-oauth-contract store004-isolation-check update-fixtures-check
 
 .PHONY: update-fixtures-check
 update-fixtures-check:

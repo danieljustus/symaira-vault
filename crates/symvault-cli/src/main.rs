@@ -20,6 +20,8 @@ mod cli_artifacts;
 mod completion_commands;
 mod completion_protocol;
 mod config;
+#[cfg(test)]
+mod config_override_tests;
 mod daemon_commands;
 mod deprecated_stubs;
 mod device;
@@ -114,7 +116,8 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     disable_help_subcommand = true
 )]
 struct Cli {
-    #[arg(long, global = true)]
+    // Cobra accepts an explicitly empty string; filepath.Clean then yields '.'.
+    #[arg(long, global = true, value_parser = parse_vault_flag)]
     vault: Option<std::path::PathBuf>,
     #[arg(long, global = true)]
     quiet: bool,
@@ -5111,54 +5114,25 @@ fn require_initialized(vault: &Path) -> Result<(), String> {
     }
 }
 
-fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return expand_vault_path(path);
-    }
-    if let Some(raw) = std::env::var_os("SYMVAULT_VAULT").filter(|value| !value.is_empty()) {
-        let raw = raw
-            .to_str()
-            .ok_or_else(|| "vault path must be UTF-8".to_owned())?
-            .trim()
-            .to_owned();
-        if !raw.is_empty() {
-            return expand_vault_path(Path::new(&raw));
-        }
-    }
+fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
+    Ok(PathBuf::from(value))
+}
 
+fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
+    let vault_env = std::env::var("SYMVAULT_VAULT").ok();
+    let profile_env = std::env::var("SYMVAULT_PROFILE").ok();
     let resolver = PathResolver::new();
-    // Go's VaultPath deliberately ignores a malformed default config while it
-    // falls back to the resolver's data directory. A requested profile is a
-    // different contract: its config error must be surfaced by the caller.
-    let config_result = Config::load(resolver.config_path());
-    let requested_profile = profile
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| value.trim().to_owned())
-        .or_else(|| {
-            std::env::var("SYMVAULT_PROFILE")
-                .ok()
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-        });
-    if let Some(name) = requested_profile.as_deref() {
-        let config = config_result
-            .as_ref()
-            .map_err(|error| format!("cannot load config for profile resolution: {error}"))?;
-        let profile = config
-            .profile_for_name(name)
-            .ok_or_else(|| format!("profile {name:?} not found"))?;
-        return expand_vault_path(Path::new(&profile.vault_path));
+    symvault_core::config_overrides::VaultOverrides {
+        vault_flag: explicit,
+        profile_flag: profile,
+        vault_env: vault_env.as_deref(),
+        profile_env: profile_env.as_deref(),
     }
-    if let Some(config) = config_result.as_ref().ok()
-        && !config.default_profile.is_empty()
-        && let Some(profile) = config.profile_for_name(&config.default_profile)
-    {
-        return expand_vault_path(Path::new(&profile.vault_path));
-    }
-    if !resolver.vault_data_dir().as_os_str().is_empty() {
-        return Ok(resolver.vault_data_dir().to_path_buf());
-    }
-    Err("cannot determine vault path".to_owned())
+    .resolve(
+        &resolver,
+        || Config::load(resolver.config_path()).map_err(|error| error.to_string()),
+        expand_vault_path,
+    )
 }
 
 fn touch_id_available() -> bool {
