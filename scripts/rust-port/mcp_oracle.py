@@ -48,7 +48,12 @@ def tool_environment(env, build=False):
                'WINDIR','COMSPEC','PATHEXT','LANG','LC_ALL','LC_CTYPE'}
     if build:
         allowed |= {'GOTOOLCHAIN','GOCACHE','GOMODCACHE','GOPATH','GOTMPDIR'}
-    return {key:value for key,value in env.items() if key.upper() in allowed}
+    result = {key:value for key,value in env.items() if key.upper() in allowed}
+    if build:
+        # Only the offline sentinel is safe to retain in public build receipts.
+        result.update({key:value for key,value in env.items()
+                       if key.upper() in {'GOPROXY','GOSUMDB'} and value == 'off'})
+    return result
 
 
 def pinned_go(env, cwd):

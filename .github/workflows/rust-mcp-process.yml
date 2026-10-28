@@ -19,6 +19,8 @@ on:
       - 'scripts/rust-port/mcp_oracle.py'
       - 'scripts/rust-port/mcp_fixture_contract.py'
       - 'scripts/rust-port/test_mcp_oracle.py'
+      - 'scripts/rust-port/mcp_deadline*'
+      - 'scripts/rust-port/test_mcp_deadline*'
       - 'scripts/rust-port/cmd/mcpcallgen/**'
       - 'scripts/rust-port/cmd/http001initgen/**'
       - 'scripts/rust-port/cmd/execute_secret_*/*'
@@ -30,6 +32,17 @@ on:
       - 'internal/mcp/server/**'
       - 'docs/adr/0016-mcp-discovery-and-call-authorization.md'
   workflow_dispatch:
+    inputs:
+      deadline_diagnostic:
+        description: 'SOURCE-REVIEWED one-shot x86 deadline observation only'
+        type: boolean
+        required: false
+        default: false
+      deadline_review:
+        description: 'Exact independent staging review text, pinned by repository variable'
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -39,14 +52,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  compiler-capture-preflight:
+    name: Linux compiler capture preflight
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout compiler preflight candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Set up compiler preflight Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install compiler preflight toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+      - name: Probe metadata and default linker capture
+        timeout-minutes: 6
+        env:
+          PREFLIGHT_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 -B scripts/rust-port/mcp_deadline_preflight.py
+      - name: Retain compiler preflight evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: deadline-compiler-preflight
+          path: target/deadline-compiler-preflight/
+          if-no-files-found: error
+          retention-days: 14
   mcp-process:
     name: MCP process (${{ matrix.os }})
     runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
-    timeout-minutes: 40
+    # Diagnostic ceilings: 111 min execution + 31 min preparation + 8 min margin.
+    # Ordinary native acceptance retains its existing 40 min limit.
+    timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 150 || 40 }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest","windows-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && '["ubuntu-latest"]' || (github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]')) }}
     defaults:
       run:
         shell: bash
@@ -54,7 +99,6 @@ jobs:
       GOTOOLCHAIN: go1.26.10
       GOWORK: 'off'
       RUSTUP_TOOLCHAIN: '1.98.0'
-      RUST_TEST_THREADS: '1'
       TZ: UTC
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
@@ -68,24 +112,101 @@ jobs:
           test "$(uname -m)" = arm64
           sw_vers
       - name: Checkout retained Go oracle and candidate
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 5 || 40 }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up pinned Go
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.10'
       - name: Set up pinned Python
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.13'
       - name: Install pinned Rust
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
-      - name: Check narrow diagnostic and receipt evidence boundaries
+      - name: Verify diagnostic preparation authorization
+        timeout-minutes: 1
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        env:
+          DEADLINE_REVIEWED_COMMIT: ${{ vars.DEADLINE_DIAGNOSTIC_COMMIT }}
+          DEADLINE_REVIEW_SHA256: ${{ vars.DEADLINE_DIAGNOSTIC_REVIEW_SHA256 }}
+          DEADLINE_REVIEW: ${{ inputs.deadline_review }}
         run: |
-          python3 scripts/rust-port/test_mcp_oracle.py
-          python3 - <<'PY'
+          python3 -B - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'scripts/rust-port')
+          import mcp_deadline_diagnostic as diagnostic
+          diagnostic.admission(os.environ, diagnostic.git(diagnostic.ROOT, 'rev-parse', 'HEAD').decode().strip(), os.environ['DEADLINE_REVIEW'])
+          PY
+      - name: Prepare diagnostic Python
+        timeout-minutes: 5
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Prepare diagnostic Go
+        timeout-minutes: 5
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: false
+      - name: Prepare diagnostic tools and dependency caches
+        timeout-minutes: 20
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        env:
+          GOTOOLCHAIN: local
+          GOMODCACHE: ${{ runner.temp }}/deadline-prepared-go-mod
+        run: |
+          set -euo pipefail
+          mkdir -p target/deadline-preparation
+          exec > target/deadline-preparation/stdout 2> target/deadline-preparation/stderr
+          rustup toolchain install 1.98.0 --profile minimal --component rustfmt --component clippy
+          export RUSTUP_AUTO_INSTALL=0
+          cargo fetch --locked
+          test "$(go env GOVERSION)" = go1.26.6
+          go mod download
+          deps_dir=$(mktemp -d "$RUNNER_TEMP/deadline-modules.XXXXXX")
+          for ref in d1cd0f97ac550bc3020bc86b0514989f8d28d95c 24acdb08fcc7021262717aa803d72eb8d151c66a; do
+            git archive "$ref" go.mod go.sum | tar -x -C "$deps_dir"
+            (cd "$deps_dir" && go mod download)
+          done
+          # Actual native kernel/filesystem preflight, not a product test run.
+          probe="$RUNNER_TEMP/deadline-capability"
+          mkdir -p "$probe/build" "$probe/compiler-tmp"
+          printf 'capability probe only\n' > "$probe/build/input"
+          timeout --kill-after=10s 60s python3 -B scripts/rust-port/mcp_deadline_capture.py "$probe" target/deadline-preparation/capture -- python3 -B -c 'import ctypes, os, pathlib, sys; assert ctypes.CDLL(None).prctl(36,1,0,0,0)==0; fd=os.pidfd_open(os.getpid()); os.close(fd); assert pathlib.Path(sys.argv[1]).read_bytes()==b"capability probe only\n"' "$probe/build/input"
+          git diff --exit-code -- go.mod go.sum Cargo.lock
+      - name: Admit and stage the reviewed original-target diagnostic
+        # Preparation is explicit and separately authorized, never a fallback
+        # inside installed-only diagnostic discovery or measured execution.
+        timeout-minutes: 10
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        env:
+          DEADLINE_REVIEWED_COMMIT: ${{ vars.DEADLINE_DIAGNOSTIC_COMMIT }}
+          DEADLINE_REVIEW_SHA256: ${{ vars.DEADLINE_DIAGNOSTIC_REVIEW_SHA256 }}
+          DEADLINE_REVIEW: ${{ inputs.deadline_review }}
+        run: |
+          set -euo pipefail
+          mkdir -p target
+          exec > target/deadline-x86-admission.stdout 2> target/deadline-x86-admission.stderr
+          # Use an already installed pinned Python, never an installer fallback.
+          python_path=$(command -v python3)
+          test -x "$python_path"
+          "$python_path" -B scripts/rust-port/mcp_deadline_diagnostic.py stage
+          printf 'DEADLINE_PYTHON=%s\n' "$python_path" >> "$GITHUB_ENV"
+      - name: Check narrow diagnostic and receipt evidence boundaries
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 5 || 40 }}
+        run: |
+          TMPDIR="$RUNNER_TEMP" "${DEADLINE_PYTHON:-python3}" -B scripts/rust-port/test_mcp_deadline_diagnostic.py
+          "${DEADLINE_PYTHON:-python3}" -B scripts/rust-port/test_mcp_oracle.py
+          "${DEADLINE_PYTHON:-python3}" -B - <<'PY'
           import ast, json, os, runpy, subprocess, tempfile
           from pathlib import Path
           from types import SimpleNamespace
@@ -128,30 +249,35 @@ jobs:
                   assert result['passed']==expected_clean and rejected!=expected_clean
           print('PASS narrow diagnostic and post-output receipt unit controls')
           PY
+      - name: Check frozen diagnostic header reader
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
+        # Separate helper regression, never an extra owning-suite execution.
+        run: TMPDIR="$RUNNER_TEMP" python3 -B scripts/rust-port/test_mcp_deadline_headers.py
       - name: Execute corrected approval generator on both references with race regressions
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         env:
           SYMVAULT_TEST_KEYRING: memory
         run: make mcp-ordered-fixtures-check
+      - name: Execute the same corrected generator with private diagnostic state
+        timeout-minutes: 26
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}
+        run: exec "$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py generator > target/deadline-x86-evidence/generator-controller.stdout 2> target/deadline-x86-evidence/generator-controller.stderr
       - name: Test the owning runtime and production CLI assembly
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 55 || 40 }}
         run: |
           set -euo pipefail
+          if [[ "${{ github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic }}" == 'true' ]]; then
+            # Same generator -> fmt -> strict Clippy -> one full suite order.
+            # exec contains later commands on success AND failure; the following
+            # workflow step has its own independent diagnostic exclusion.
+            exec "$DEADLINE_PYTHON" -B scripts/rust-port/mcp_deadline_diagnostic.py owning > target/deadline-x86-evidence/owning-controller.stdout 2> target/deadline-x86-evidence/owning-controller.stderr
+          fi
           cargo fmt --all --check
           cargo clippy -p symvault-cli -p symvault-mcp --all-targets --all-features --locked -- -D warnings
-          # Keep raw stderr separate from libtest's named verdicts.
-          if cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr.txt; then
-            cargo_test_status=0
-          else
-            cargo_test_status=$?
-          fi
-          python3 - <<'PY'
-          import sys
-          from pathlib import Path
-          sys.stdout.write(Path('target/native-mcp-tests.txt').read_text())
-          sys.stderr.write(Path('target/native-mcp-tests.stderr.txt').read_text())
-          PY
-          if [[ "$cargo_test_status" -ne 0 ]]; then
-            exit "$cargo_test_status"
-          fi
+          # Raw server stderr must not interleave with libtest's named verdicts.
+          cargo test -p symvault-mcp --all-targets --locked > target/native-mcp-tests.txt 2> target/native-mcp-tests.stderr
+          cat target/native-mcp-tests.txt
+          cat target/native-mcp-tests.stderr
           python3 - <<'PY'
           import os, re
           from pathlib import Path
@@ -178,6 +304,7 @@ jobs:
           PY
           cargo build -p symvault-cli --bin symvault --locked
       - name: Execute actual Go and Rust native profiles and hostile stdio
+        if: ${{ success() && !(github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) }}
         env:
           GOTOOLCHAIN: go1.26.6
         run: |
@@ -214,6 +341,7 @@ jobs:
           assert sum(len(row['frames']) for name in ['go','rust','go_hostile','rust_hostile'] for row in receipt[name])==1022
           PY
       - name: Upload complete actual native observations
+        timeout-minutes: ${{ (github.event_name == 'workflow_dispatch' && inputs.deadline_diagnostic) && 10 || 40 }}
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -221,7 +349,12 @@ jobs:
           path: |
             target/native-mcp-process.json
             target/native-mcp-tests.txt
-            target/native-mcp-tests.stderr.txt
+            target/native-mcp-tests.stderr
+            target/deadline-x86-suite.exit
+            target/deadline-x86-admission.stdout
+            target/deadline-x86-admission.stderr
+            target/deadline-x86-evidence/
+            target/deadline-preparation/
             target/native-mcp-cli-tests.txt
             target/native-mcp-cli-tests.stderr
             target/mcp-fixture-evidence/

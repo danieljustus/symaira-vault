@@ -1,0 +1,5 @@
+# The reviewed patch is exact bytes; blank unified-diff context lines contain
+# the required single-space prefix, not trailing whitespace in Rust source.
+mcp_deadline_diagnostic.patch text eol=lf whitespace=-blank-at-eol
+mcp_deadline_diagnostic.py text eol=lf
+test_mcp_deadline_diagnostic.py text eol=lf
