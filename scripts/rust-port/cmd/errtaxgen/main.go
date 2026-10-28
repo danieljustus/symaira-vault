@@ -161,6 +161,8 @@ func usageInputs() []usageInput {
 		{"unknown_root_command_prefix_a", "a prefix across the Essentials, Agents and Administration groups", []string{"a"}},
 		{"unknown_root_command_mixed_case", "suggestions compare case-insensitively", []string{"LIST"}},
 		{"unknown_root_command_alias_typo", "a typo of an alias, which cobra does not suggest", []string{"lss"}},
+		{"bare_dash_before_command", "cobra stripFlags skips a lone dash during command resolution; pflag later counts it", []string{"-", "get", "x"}},
+		{"bare_dash_after_group", "a lone dash does not prevent nested command resolution", []string{"config", "-", "get", "x"}},
 		{"unknown_flag_root", "an unknown long flag on the root command", []string{"--bogus"}},
 		{"unknown_flag_root_equals", "an unknown long flag with =value", []string{"--bogus=1"}},
 		{"unknown_shorthand_root", "an unknown shorthand flag on the root command", []string{"-Z"}},
@@ -330,7 +332,8 @@ func isArityRejection(obs observation) bool {
 			return true
 		}
 	}
-	return false
+	// NoArgs and legacyArgs use this family rather than an arg-count message.
+	return strings.HasPrefix(first, "Error: unknown command ") && strings.Contains(first, " for ")
 }
 
 func isGateRefusal(res result) bool {

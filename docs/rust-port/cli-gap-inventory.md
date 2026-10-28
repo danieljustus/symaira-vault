@@ -79,6 +79,29 @@ now assigns the parsed value on every occurrence, and the global `--json`,
 cases (`bool_flag_*`) pin it. Local bool flags other than the existing
 `--flag[=bool]` ones stay `SetTrue` and still reject `--flag=false`.
 
+### Review correction: NoArgs versus legacyArgs and bare dash
+
+The regenerated corpus has 75 usage cases and 236 rejected arity probes across
+116 runnable paths. The generator now records cobra's `unknown command` argument
+validator family, exposing 48 previously misclassified `NoArgs` rejections on
+12 paths. All are byte-replayed through the native binary; the three `update`
+children preserve Go's single error line (`SilenceErrors`), while the other
+NoArgs paths print two lines, without a usage hint. Root resolution errors,
+not NoArgs validation errors, carry the usage hint. Bare `-` is skipped by
+cobra's command-discovery `stripFlags`, but is positional in pflag's later
+parse: `- get x` and `config - get x` now report two arguments for `get`.
+
+Acceptance is bounded to recorded rejections, not every argument validator's
+whole-binary behavior. cobra `legacyArgs` accepts arbitrary arguments on
+non-root commands with no explicit validator (even when they have subcommands).
+The emulator correctly proceeds; clap still rejects `lock x`, `verify x`,
+`unlock x`, `generate x`, `share list x` and `policy list x`. These CLI-005/006
+acceptance gaps remain open; accepting arity probes test only the emulator.
+Other command-body diagnostics remain per-command, except that
+`finish_vault_result`/`finish_session_result` render any `vault not initialized`
+message with doubled error lines and the init hint (including approval/file
+commands), not a universal single-line error.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate

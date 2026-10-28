@@ -33,6 +33,8 @@ func TestArityRejectionClassifier(t *testing.T) {
 		{"at least", observation{ExitCode: 1, Stderr: "Error: requires at least 2 arg(s), only received 0\n"}, true},
 		{"at most", observation{ExitCode: 1, Stderr: "Error: accepts at most 1 arg(s), received 2\n"}, true},
 		{"between", observation{ExitCode: 1, Stderr: "Error: accepts between 1 and 2 arg(s), received 0 \u2014 either\n"}, true},
+		{"NoArgs", observation{ExitCode: 1, Stderr: `Error: unknown command "x" for "symvault config list"` + "\n"}, true},
+		{"legacyArgs", observation{ExitCode: 1, Stderr: `Error: unknown command "x" for "symvault"` + "\n"}, true},
 		{"custom body error", observation{ExitCode: 1, Stderr: "Error: requires exactly 1 argument (agent name)\n"}, false},
 		{"wrong exit", observation{ExitCode: 9, Stderr: "Error: accepts 1 arg(s), received 0\n"}, false},
 		{"stdout present", observation{ExitCode: 1, Stdout: "x", Stderr: "Error: accepts 1 arg(s), received 0\n"}, false},

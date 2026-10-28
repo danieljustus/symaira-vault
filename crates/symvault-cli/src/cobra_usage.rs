@@ -42,6 +42,8 @@ pub enum Verdict {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Rule {
+    /// cobra::NoArgs reports the first positional as an unknown command.
+    NoArgs,
     Exact(usize),
     Min(usize),
     Max(usize),
@@ -126,6 +128,7 @@ const ARITY: &[(&str, Rule)] = &[
     ("approval decide", Rule::Exact(1)),
     ("backup", Rule::Exact(1)),
     ("config get", Rule::Exact(1)),
+    ("config list", Rule::NoArgs),
     ("config set", Rule::Exact(2)),
     ("config validate", Rule::Max(1)),
     ("delete", Rule::Exact(1)),
@@ -134,6 +137,7 @@ const ARITY: &[(&str, Rule)] = &[
     ("device join", Rule::JoinPair),
     ("device revoke", Rule::Exact(1)),
     ("edit", Rule::Exact(1)),
+    ("export", Rule::NoArgs),
     ("file add", Rule::Exact(1)),
     ("file get", Rule::Exact(1)),
     ("file use", Rule::Min(2)),
@@ -142,15 +146,19 @@ const ARITY: &[(&str, Rule)] = &[
     ("get", Rule::Exact(1)),
     ("git", Rule::Range(1, 2)),
     ("import", Rule::Exact(1)),
+    ("import review list", Rule::NoArgs),
     ("import review promote", Rule::Exact(1)),
     ("init", Rule::Max(1)),
     ("intake", Rule::Min(1)),
     ("intake watch", Rule::Exact(1)),
+    ("intake watch disable", Rule::NoArgs),
     ("list", Rule::Max(1)),
+    ("migrate paths", Rule::NoArgs),
     ("policy apply", Rule::Exact(1)),
     ("policy remove", Rule::Exact(1)),
     ("policy validate", Rule::Exact(1)),
     ("profile add", Rule::Exact(1)),
+    ("profile list", Rule::NoArgs),
     ("profile use", Rule::Exact(1)),
     ("recipients add", Rule::Exact(1)),
     ("recipients remove", Rule::Exact(1)),
@@ -159,6 +167,12 @@ const ARITY: &[(&str, Rule)] = &[
     ("run", Rule::Min(1)),
     ("set", Rule::Exact(1)),
     ("share revoke", Rule::Exact(1)),
+    ("sync", Rule::NoArgs),
+    ("ui", Rule::NoArgs),
+    ("update", Rule::NoArgs),
+    ("update apply", Rule::NoArgs),
+    ("update check", Rule::NoArgs),
+    ("update info", Rule::NoArgs),
 ];
 const GROUPS: &[&str] = &[
     "agent",
@@ -498,6 +512,8 @@ fn arity_message(path: &str, count: usize, flags: ValidatorFlags) -> Option<Stri
     let exact = |n: usize| format!("accepts {n} arg(s), received {count}");
     let at_most = |n: usize| format!("accepts at most {n} arg(s), received {count}");
     match rule_for(path)? {
+        // NoArgs needs the actual first positional; evaluate handles it below.
+        Rule::NoArgs => None,
         Rule::Exact(n) => (count != n).then(|| exact(n)),
         Rule::Min(n) => (count < n).then(|| at_least(n)),
         Rule::Max(n) => (count > n).then(|| at_most(n)),
@@ -641,9 +657,6 @@ fn strip_flags(tokens: &[String], flags: Flags<'_>, lenient: bool) -> Vec<String
                 }
             }
         } else if !token.starts_with('-') {
-            positional.push(token.clone());
-        } else {
-            // A lone "-" is positional.
             positional.push(token.clone());
         }
         index += 1;
@@ -875,7 +888,7 @@ fn invalid_argument(value: &str, arg: &Arg, parser: &str, reason: &str) -> Strin
 }
 
 struct Parsed {
-    positionals: usize,
+    positionals: Vec<String>,
     /// The flags an argument validator reads.
     validator: ValidatorFlags,
     json_flag: bool,
@@ -890,7 +903,7 @@ fn parse_flags(
     lenient: bool,
 ) -> Result<Parsed, String> {
     let mut parsed = Parsed {
-        positionals: 0,
+        positionals: Vec::new(),
         validator: ValidatorFlags::default(),
         json_flag: false,
         output: None,
@@ -910,7 +923,7 @@ fn parse_flags(
         let token = &tokens[index];
         index += 1;
         if token == "--" {
-            parsed.positionals += tokens.len() - index;
+            parsed.positionals.extend_from_slice(&tokens[index..]);
             break;
         }
         if let Some(rest) = token.strip_prefix("--") {
@@ -1000,7 +1013,7 @@ fn parse_flags(
                 break;
             }
         } else {
-            parsed.positionals += 1;
+            parsed.positionals.push(token.clone());
         }
     }
     Ok(parsed)
@@ -1108,7 +1121,28 @@ pub fn evaluate(args: &[String], mut root: Command) -> Verdict {
     if GROUPS.contains(&path_text.as_str()) {
         return Verdict::GroupHelp(path_text);
     }
-    if let Some(message) = arity_message(&path_text, parsed.positionals, parsed.validator) {
+    if rule_for(&path_text) == Some(Rule::NoArgs)
+        && let Some(first) = parsed.positionals.first()
+    {
+        let message = format!(
+            "unknown command {} for {}",
+            crate::cli_artifacts::quote_go_string(first),
+            crate::cli_artifacts::quote_go_string(&format!("symvault {path_text}"))
+        );
+        // These Go commands set SilenceErrors: cobra omits its copy, but the
+        // root executor still prints the returned argument-validation error.
+        if matches!(
+            path_text.as_str(),
+            "update apply" | "update check" | "update info"
+        ) {
+            return Verdict::Fail {
+                stderr: format!("Error: {message}\n"),
+                code: 1,
+            };
+        }
+        return fail(&message, 1);
+    }
+    if let Some(message) = arity_message(&path_text, parsed.positionals.len(), parsed.validator) {
         return fail(&message, 1);
     }
     if let Some(format) = refused_format(&path_text, parsed.json_flag, parsed.output.as_deref()) {
@@ -1408,7 +1442,7 @@ mod tests {
                         );
                     }
                     _ => assert!(
-                        !matches!(&got, Verdict::Fail { stderr, .. } if stderr.contains(" arg(s)")),
+                        !matches!(&got, Verdict::Fail { .. }),
                         "{} with {} args must pass the validator, got {got:?}",
                         row.path,
                         probe.count
@@ -1673,6 +1707,36 @@ mod tests {
         assert_eq!(run(&["find", "--url", "x", "q"]), Verdict::Proceed);
         assert!(matches!(run(&["find", "--url", ""]), Verdict::Fail { .. }));
         assert!(matches!(run(&["find", "a", "b"]), Verdict::Fail { .. }));
+    }
+
+    #[test]
+    fn no_args_reports_the_first_pflag_positional() {
+        for args in [
+            vec!["config", "list", "--profile", "unused", "other", "x"],
+            vec!["config", "list", "--", "other", "x"],
+        ] {
+            assert_eq!(
+                verdict(&args),
+                fail("unknown command \"other\" for \"symvault config list\"", 1)
+            );
+        }
+        assert_eq!(verdict(&["get", "-"]), Verdict::Proceed);
+        assert_eq!(
+            verdict(&["-", "get", "x"]),
+            fail("accepts 1 arg(s), received 2", 1)
+        );
+        assert_eq!(
+            verdict(&["config", "-", "get", "x"]),
+            fail("accepts 1 arg(s), received 2", 1)
+        );
+        // Non-root commands with Args == nil use legacyArgs, not NoArgs.
+        for args in [
+            vec!["lock", "x"],
+            vec!["generate", "x"],
+            vec!["share", "list", "x"],
+        ] {
+            assert_eq!(verdict(&args), Verdict::Proceed);
+        }
     }
 
     #[test]

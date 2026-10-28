@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "a30969fd79e1fe3d5e8b98679148d666744058dd3d6cca06fa9cb4dc9346ce44"
+    "generator_digest": "37c60cf0f318c1c08116ba8d863eb66dfe98bf37d0424daaba781b5b33c8bf7e"
   },
   "usage": [
     {
@@ -247,6 +247,35 @@
         "exit_code": 1,
         "stdout": "",
         "stderr": "Error: unknown command \"lss\" for \"symvault\"\n\nDid you mean this?\n\tlist\n\nRun 'symvault --help' for usage.\nError: unknown command \"lss\" for \"symvault\"\n\nDid you mean this?\n\tlist\n\n"
+      }
+    },
+    {
+      "name": "bare_dash_before_command",
+      "description": "cobra stripFlags skips a lone dash during command resolution; pflag later counts it",
+      "observation": {
+        "args": [
+          "-",
+          "get",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n"
+      }
+    },
+    {
+      "name": "bare_dash_after_group",
+      "description": "a lone dash does not prevent nested command resolution",
+      "observation": {
+        "args": [
+          "config",
+          "-",
+          "get",
+          "x"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: accepts 1 arg(s), received 2\nError: accepts 1 arg(s), received 2\n"
       }
     },
     {
@@ -2614,19 +2643,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "config",
+              "list",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault config list\"\nError: unknown command \"x\" for \"symvault config list\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "config",
+              "list",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault config list\"\nError: unknown command \"x\" for \"symvault config list\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "config",
+              "list",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault config list\"\nError: unknown command \"x\" for \"symvault config list\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "config",
+              "list",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault config list\"\nError: unknown command \"x\" for \"symvault config list\"\n"
+          }
         }
       ]
     },
@@ -3355,19 +3430,61 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "export",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault export\"\nError: unknown command \"x\" for \"symvault export\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "export",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault export\"\nError: unknown command \"x\" for \"symvault export\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "export",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault export\"\nError: unknown command \"x\" for \"symvault export\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "export",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault export\"\nError: unknown command \"x\" for \"symvault export\"\n"
+          }
         }
       ]
     },
@@ -3938,19 +4055,69 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "import",
+              "review",
+              "list",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault import review list\"\nError: unknown command \"x\" for \"symvault import review list\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "import",
+              "review",
+              "list",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault import review list\"\nError: unknown command \"x\" for \"symvault import review list\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "import",
+              "review",
+              "list",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault import review list\"\nError: unknown command \"x\" for \"symvault import review list\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "import",
+              "review",
+              "list",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault import review list\"\nError: unknown command \"x\" for \"symvault import review list\"\n"
+          }
         }
       ]
     },
@@ -4198,19 +4365,69 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "intake",
+              "watch",
+              "disable",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault intake watch disable\"\nError: unknown command \"x\" for \"symvault intake watch disable\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "intake",
+              "watch",
+              "disable",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault intake watch disable\"\nError: unknown command \"x\" for \"symvault intake watch disable\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "intake",
+              "watch",
+              "disable",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault intake watch disable\"\nError: unknown command \"x\" for \"symvault intake watch disable\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "intake",
+              "watch",
+              "disable",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault intake watch disable\"\nError: unknown command \"x\" for \"symvault intake watch disable\"\n"
+          }
         }
       ]
     },
@@ -4581,19 +4798,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "migrate",
+              "paths",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault migrate paths\"\nError: unknown command \"x\" for \"symvault migrate paths\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "migrate",
+              "paths",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault migrate paths\"\nError: unknown command \"x\" for \"symvault migrate paths\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "migrate",
+              "paths",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault migrate paths\"\nError: unknown command \"x\" for \"symvault migrate paths\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "migrate",
+              "paths",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault migrate paths\"\nError: unknown command \"x\" for \"symvault migrate paths\"\n"
+          }
         }
       ]
     },
@@ -4986,19 +5249,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "profile",
+              "list",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault profile list\"\nError: unknown command \"x\" for \"symvault profile list\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "profile",
+              "list",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault profile list\"\nError: unknown command \"x\" for \"symvault profile list\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "profile",
+              "list",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault profile list\"\nError: unknown command \"x\" for \"symvault profile list\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "profile",
+              "list",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault profile list\"\nError: unknown command \"x\" for \"symvault profile list\"\n"
+          }
         }
       ]
     },
@@ -5851,19 +6160,61 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "sync",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault sync\"\nError: unknown command \"x\" for \"symvault sync\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "sync",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault sync\"\nError: unknown command \"x\" for \"symvault sync\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "sync",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault sync\"\nError: unknown command \"x\" for \"symvault sync\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "sync",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault sync\"\nError: unknown command \"x\" for \"symvault sync\"\n"
+          }
         }
       ]
     },
@@ -5901,19 +6252,61 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "ui",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault ui\"\nError: unknown command \"x\" for \"symvault ui\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "ui",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault ui\"\nError: unknown command \"x\" for \"symvault ui\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "ui",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault ui\"\nError: unknown command \"x\" for \"symvault ui\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "ui",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault ui\"\nError: unknown command \"x\" for \"symvault ui\"\n"
+          }
         }
       ]
     },
@@ -5951,19 +6344,61 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update\"\nError: unknown command \"x\" for \"symvault update\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update\"\nError: unknown command \"x\" for \"symvault update\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update\"\nError: unknown command \"x\" for \"symvault update\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update\"\nError: unknown command \"x\" for \"symvault update\"\n"
+          }
         }
       ]
     },
@@ -5976,19 +6411,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "apply",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update apply\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "apply",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update apply\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "apply",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update apply\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "apply",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update apply\"\n"
+          }
         }
       ]
     },
@@ -6001,19 +6482,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "check",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update check\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "check",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update check\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "check",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update check\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "check",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update check\"\n"
+          }
         }
       ]
     },
@@ -6026,19 +6553,65 @@
         },
         {
           "count": 1,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "info",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update info\"\n"
+          }
         },
         {
           "count": 2,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "info",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update info\"\n"
+          }
         },
         {
           "count": 3,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "info",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update info\"\n"
+          }
         },
         {
           "count": 4,
-          "rejected": false
+          "rejected": true,
+          "observation": {
+            "args": [
+              "update",
+              "info",
+              "x",
+              "x",
+              "x",
+              "x"
+            ],
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": "Error: unknown command \"x\" for \"symvault update info\"\n"
+          }
         }
       ]
     },
