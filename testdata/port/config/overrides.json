@@ -2,7 +2,7 @@
   "schema_version": 1,
   "oracle": {
     "commit": "314a25a5cdd2e90517bb55a90495d7b97f68c6df",
-    "generator_digest": "09be8d03a575aaa93b59f79608ff423fb232e46efac7be698f78f26bef5cc3a5",
+    "generator_digest": "1984af6487c80816f0cce0fe34c8cd9dd285eba6ecfed03c92be11edc23a91a6",
     "source_digest": "deeacdc600677cfcd68ac356f415c7c6f3a4890d44cfb539dff32a76f435fdbd",
     "source_files": [
       "cmd/root.go",
