@@ -29,6 +29,19 @@ env:
   GOSEC_VERSION: v2.22.0
 
 jobs:
+  decide:
+    name: Select macOS capacity
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/macos-runner.yml
+    with:
+      # Same hosted image main uses; macos-latest ships an older Xcode whose
+      # actool crashes on the Icon Composer assets.
+      hosted: xcode-27
+    secrets:
+      RUNNER_INVENTORY_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
+
   changes:
     name: Changed areas
     runs-on: ubuntu-latest
@@ -370,9 +383,9 @@ jobs:
   # workflow_dispatch of the entire Go/CI matrix.
   rust-native:
     name: Rust native (${{ matrix.os }})
-    needs: [changes]
+    needs: [changes, decide]
     if: needs.changes.outputs.code != 'false'
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    runs-on: ${{ fromJSON(matrix.os == 'macos-latest' && needs.decide.outputs.runs_on || toJSON(matrix.os)) }}
     timeout-minutes: 45
     env:
       CARGO_BUILD_JOBS: '2'
@@ -395,6 +408,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: ${{ runner.environment != 'self-hosted' }}
           persist-credentials: false
           # store004 provenance digests read the pinned oracle commit with
           # `git show`; a shallow checkout does not contain it.
@@ -403,8 +417,8 @@ jobs:
       - name: Set up Go for embedded production-handler tests
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
+          cache: ${{ runner.environment != 'self-hosted' }}
           go-version: '1.26.10'
-          cache: true
 
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
@@ -433,17 +447,53 @@ jobs:
         run: make mcp-call-fixtures-check
 
       - name: Test including doctests
-        run: cargo test --workspace --all-features --locked
+        shell: bash
+        env:
+          # The MacBook runner runs in its own security session (SessionCreate)
+          # and must not create keychains on the operator's machine; the
+          # keychain-native job below runs this test on a hosted runner.
+          SKIP_KEYCHAIN: ${{ runner.environment == 'self-hosted' && '--skip security_framework_items_match_go_layout_on_disposable_keychains' || '' }}
+        run: |
+          # shellcheck disable=SC2086 # intentionally empty or two words
+          cargo test --workspace --all-features --locked -- $SKIP_KEYCHAIN
 
       - name: Verify native Go/Rust CLI and authentication parity
         if: runner.os == 'macOS'
         shell: bash
-        run: make config-cli-differential
+        run: |
+          set -euo pipefail
+          # The trusted-alias auth case needs TMPDIR below the root-owned
+          # /var -> /private/var alias; the self-hosted runner's .env points
+          # TMPDIR at an external volume, so use the per-user macOS temp dir.
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
+            export TMPDIR
+          fi
+          make config-cli-differential
 
       - name: Verify real Unix MCP approval terminal
         if: runner.os != 'Windows'
         shell: bash
         run: make mcp-approval-pty-acceptance
+
+  keychain-native:
+    name: Keychain native (macOS, hosted)
+    needs: [changes, decide]
+    # Runs only when rust-native went to the self-hosted runner, which skips it.
+    if: needs.changes.outputs.code != 'false' && contains(needs.decide.outputs.runs_on, 'self-hosted')
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Disposable keychain parity
+        run: cargo test --locked -p symvault-platform --test native_biometric_item -- --exact security_framework_items_match_go_layout_on_disposable_keychains
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
@@ -516,11 +566,14 @@ jobs:
     if: >-
       github.event_name == 'pull_request' &&
       needs.ubuntu-editors.outputs.client_changed != 'false'
+    # Stays hosted: its Swift tests store Keychain items, which the self-hosted
+    # runner's isolated security session (SessionCreate) cannot do.
     runs-on: xcode-27
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: ${{ runner.environment != 'self-hosted' }}
           persist-credentials: false
           fetch-depth: 0
 
@@ -537,8 +590,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
+          cache: ${{ runner.environment != 'self-hosted' }}
           go-version: '1.26.10'
-          cache: true
 
       - name: Build Vaultcore framework
         run: scripts/build-vaultcore.sh
@@ -681,7 +734,8 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     if: github.event_name != 'pull_request'
-    runs-on: ${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}
+    needs: [decide]
+    runs-on: ${{ fromJSON(matrix.os == 'macos-latest' && needs.decide.outputs.runs_on || toJSON(matrix.os)) }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -700,14 +754,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          clean: ${{ runner.environment != 'self-hosted' }}
           persist-credentials: false
           fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
+          cache: ${{ runner.environment != 'self-hosted' }}
           go-version: ${{ matrix.go-version }}
-          cache: true
 
       - name: Install dependencies
         run: go mod download
@@ -723,6 +778,25 @@ jobs:
         run: |
           echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
           echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
+
+      - name: Remove stale Go sources from the persistent self-hosted target
+        # Checkout keeps ignored files on self-hosted runners (clean: false) so
+        # Cargo reuses target/. Go generators also write evidence packages
+        # (target/migration-run, target/mcp-fixture-evidence) there; a leftover
+        # from an earlier run is enumerated by `go test ./...` and then removed
+        # by the test that regenerates it ("chdir ...: no such file").
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -d target ] || exit 0
+          find target -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            if find "$dir" -name '*.go' -print -quit | grep -q .; then
+              chmod -R u+w "$dir"
+              rm -rf "$dir"
+              echo "removed stale Go sources: $dir"
+            fi
+          done
 
       - name: Run tests
         shell: bash
@@ -948,6 +1022,7 @@ jobs:
     if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
       - changes
+      - decide
       - govulncheck
       - dependency-scan
       - lint
@@ -956,6 +1031,7 @@ jobs:
       - rust
       - rust-miri
       - rust-native
+      - keychain-native
       - test-pr
       - build-pr
       - macos-vaultcore
@@ -991,6 +1067,8 @@ jobs:
           RES_RUST: ${{ needs.rust.result }}
           RES_RUST_MIRI: ${{ needs.rust-miri.result }}
           RES_RUST_NATIVE: ${{ needs.rust-native.result }}
+          RES_KEYCHAIN_NATIVE: ${{ needs.keychain-native.result }}
+          RES_KEYCHAIN_ROUTED: ${{ contains(needs.decide.outputs.runs_on, 'self-hosted') }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_MACOS_VAULTCORE: ${{ needs.macos-vaultcore.result }}
@@ -1068,6 +1146,12 @@ jobs:
           check_code "$RES_CODE_CHANGED" "$RES_RUST" rust
           check_code "$RES_CODE_CHANGED" "$RES_RUST_MIRI" rust-miri
           check_code "$RES_CODE_CHANGED" "$RES_RUST_NATIVE" rust-native
+          # keychain-native covers the one test rust-native skips on the self-hosted runner.
+          if [ "$RES_KEYCHAIN_ROUTED" = true ]; then
+            check_code "$RES_CODE_CHANGED" "$RES_KEYCHAIN_NATIVE" keychain-native
+          else
+            check_path_gated "$RES_KEYCHAIN_NATIVE" keychain-native
+          fi
           check_code "$RES_CODE_CHANGED" "$RES_TEST_PR" test-pr
           check_code "$RES_CODE_CHANGED" "$RES_BUILD_PR" build-pr
           expect_vaultcore() {
