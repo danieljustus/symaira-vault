@@ -329,7 +329,11 @@ pub fn finish(result: Result<(), Error>) -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err((code, message)) => {
-            crate::print_error_like_go(&message);
+            if code == 3 && crate::is_not_initialized(&message) {
+                crate::write_not_initialized(&message);
+            } else {
+                crate::print_error_like_go(&message);
+            }
             ExitCode::from(code)
         }
     }

@@ -45,7 +45,7 @@ CASES = ['browser-navigation-filter-sort-help', 'native-copy-expiry-quit',
          'uninitialized', 'public-keybinding-table']
 # Actual clipboard-free pinned Go and source-equivalent Rust console captures.
 EXIT_CLASSES = {'locked-wrong-passphrase': {'go': 1, 'rust': 1},
-                'uninitialized': {'go': 3, 'rust': 1}}
+                'uninitialized': {'go': 3, 'rust': 3}}
 COMMAND_OUTPUT = None
 COMMAND_NUMBER = 0
 CAPTURE_OUTPUT = None
@@ -443,11 +443,19 @@ class Browser:
         if os.name == 'nt':
             # Close both PtyProcess sockets even after isalive marks it closed.
             errors = []
-            try:
-                if self.alive():
+            if self.alive():
+                try:
+                    # The ConPTY child is the console wrapper, not the CLI.
+                    # Kill its descendants before the wrapper: terminating only
+                    # the wrapper can leave the mutant holding its fixture cwd
+                    # open, masking the expected reveal rejection with WinError 32.
+                    checked(['taskkill.exe', '/PID', str(self.child.pid), '/T', '/F'], timeout=10)
+                except Exception as error:
+                    errors.append(error)
+                try:
                     assert self.child.terminate(force=True), 'native ConPTY child did not terminate'
-            except Exception as error:
-                errors.append(error)
+                except Exception as error:
+                    errors.append(error)
             # terminate() already cancels pending I/O. Repeating cancel_io()
             # after it/natural exit raises WinptyError: Element not found.
             for cleanup in (self.child.fileobj.close, self.child._server.close,
@@ -934,9 +942,8 @@ def execute(args, receipt):
                                                               'go': True, 'rust': False, 'decision': 'ADR-0029'})
                     if case in {'locked-wrong-passphrase', 'uninitialized'}:
                         assert go_row['exit_code'] == EXIT_CLASSES[case]['go'] and rust_row['exit_code'] == EXIT_CLASSES[case]['rust']
-                        if go_row['exit_code'] != rust_row['exit_code']:
-                            receipt['declared_differences'].append({'case': case, 'field': 'exit_code',
-                                                                  'go': go_row['exit_code'], 'rust': rust_row['exit_code'], 'tracking_issue': 1241})
+                        # Exit codes are at parity (#1241); no declared difference remains.
+                        assert go_row['exit_code'] == rust_row['exit_code'], 'undeclared exit-code difference'
                 outputs = []
                 for label, binary in [('go', go), ('rust', rust)]:
                     home = base/('keybindings-'+label)

@@ -214,9 +214,10 @@ failing clipboard observation or an OS-dependent exception.
 
 Clipboard-free actual error processes also disprove the old handwritten Go
 exit-six expectation. The pinned Go CLI exits one for wrong passphrase and
-three for uninitialized vault; the unchanged Rust implementation exits one for
-both. Use those captured classes in a single shared table; uninitialized
-three-versus-one stays a declared #1241 residual, not normalized parity.
+three for uninitialized vault. The Rust implementation originally exited one
+for both; CLI-005 slice 2 (#1241) aligned the uninitialized class to three, so
+the shared table now requires Go and Rust to match for both classes and no
+exit-class difference remains declared.
 
 The native Windows failure retained only the real unlock prompt, with no
 delivered passphrase/browser output. Send the actual ConPTY Enter carriage
@@ -253,5 +254,5 @@ including the source-mutation controls. Native receipts remain pending until
 those operations execute and their downloaded artifacts are verified. Personal
 MacBook runs are limited to pure/injected tests, compilation, source-only binary
 proof and the explicitly clipboard-free real-editor regression. #1239 remains
-in progress; exit taxonomy differences remain tracked by #1241 and this browser
+in progress; the uninitialized exit class is at parity since #1241 slice 2, and this browser
 does not establish all signal or host-provider contracts.

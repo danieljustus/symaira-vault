@@ -82,6 +82,13 @@ class HarnessTests(unittest.TestCase):
     def validate(self, r):
         tui.validate_receipt(r, 'a'*40, 'Darwin', 'arm64', {'fixture': 'b'*64}, STRUCTURAL_SHA)
 
+    def test_exit_classes_are_at_parity_with_go(self):
+        # #1241: Rust returns Go's exit code for an uninitialized vault, so no
+        # exit-code difference may be declared for any case.
+        self.assertEqual(tui.EXIT_CLASSES['uninitialized'], {'go': 3, 'rust': 3})
+        for case, classes in tui.EXIT_CLASSES.items():
+            self.assertEqual(classes['go'], classes['rust'], case)
+
     def test_success_and_clean_flags_reject_missing_false_and_integer_true(self):
         valid = self.valid_structural_receipt()
         self.validate(valid)
@@ -192,13 +199,48 @@ class HarnessTests(unittest.TestCase):
         browser.child.terminate.side_effect = RuntimeError('structural termination failure')
         browser.child.fileobj.close.side_effect = OSError('structural socket failure')
         browser.child._thread.is_alive.return_value = False
-        with patch.object(tui.os, 'name', 'nt'):
+        with patch.object(tui.os, 'name', 'nt'), \
+                patch.object(tui, 'checked', side_effect=RuntimeError('structural tree termination failure')):
             with self.assertRaises(ExceptionGroup) as context: browser.close()
         browser.child._server.close.assert_called_once_with()
         browser.child._thread.join.assert_called_once_with(timeout=5)
-        self.assertEqual(len(context.exception.exceptions), 2)
+        self.assertEqual(len(context.exception.exceptions), 3)
+        self.assertIn('structural tree termination failure', str(context.exception))
         self.assertIn('structural termination failure', str(context.exception))
         self.assertIn('structural socket failure', str(context.exception))
+
+    def test_windows_abort_kills_descendants_before_console_wrapper(self):
+        # Structural ordering control; the native mutation job exercises the
+        # actual ConPTY -> Go wrapper -> Rust CLI process tree on Windows.
+        browser = object.__new__(tui.Browser)
+        browser.child = Mock(pid=12345)
+        browser.alive = lambda: True
+        browser.child._thread.is_alive.return_value = False
+        calls = []
+        def kill_tree(argv, **kwargs):
+            self.assertEqual(argv, ['taskkill.exe', '/PID', '12345', '/T', '/F'])
+            self.assertEqual(kwargs, {'timeout': 10})
+            calls.append('tree')
+        browser.child.terminate.side_effect = lambda **kwargs: calls.append('wrapper') or True
+        with patch.object(tui.os, 'name', 'nt'), patch.object(tui, 'checked', side_effect=kill_tree):
+            browser.close()
+        self.assertEqual(calls, ['tree', 'wrapper'])
+        browser.child.fileobj.close.assert_called_once_with()
+        browser.child._server.close.assert_called_once_with()
+        browser.child._thread.join.assert_called_once_with(timeout=5)
+
+    def test_windows_normal_exit_only_closes_owned_transport(self):
+        browser = object.__new__(tui.Browser)
+        browser.child = Mock()
+        browser.alive = lambda: False
+        browser.child._thread.is_alive.return_value = False
+        with patch.object(tui.os, 'name', 'nt'), patch.object(tui, 'checked') as checked:
+            browser.close()
+        checked.assert_not_called()
+        browser.child.terminate.assert_not_called()
+        browser.child.fileobj.close.assert_called_once_with()
+        browser.child._server.close.assert_called_once_with()
+        browser.child._thread.join.assert_called_once_with(timeout=5)
 
     def test_terminal_artifact_paths_sizes_digests_and_canaries(self):
         with tempfile.TemporaryDirectory() as raw:

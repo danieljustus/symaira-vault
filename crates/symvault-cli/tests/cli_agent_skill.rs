@@ -342,9 +342,14 @@ fn parent_command_exits_zero() {
     let roots = disposable_roots();
     let output = run(&["agent", "skill"], &roots, None);
     assert_eq!(output.status.code(), Some(0));
-    // The oracle prints Cobra's help here; the port documents that help surface
-    // as a non-goal, so the status is matched and stdout stays empty.
-    assert_eq!(stdout_of(&output), "");
+    // The oracle prints Cobra's group help here; `cobra_usage` serves the
+    // frozen help page (byte-compared against the Go bytes by the
+    // `group_help_agent_skill` row of `error_taxonomy.rs`'s argv shapes).
+    assert!(
+        stdout_of(&output).starts_with("Export or refresh embedded skill packages for AI agents."),
+        "stdout={}",
+        stdout_of(&output)
+    );
 }
 
 fn configure_skill_path(roots: &Roots, target: &Path) {

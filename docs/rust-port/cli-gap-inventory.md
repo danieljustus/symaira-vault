@@ -27,6 +27,88 @@ Linux/macOS/Windows acceptance pending. See ADR 0011 and the contract matrix.
 The measurements below are historical snapshots, retained with their original
 candidate and binary identity; their gap counts are not current status.
 
+## CLI-005 / CLI-006 slice 2, 2026-10-22
+
+`crates/symvault-cli/src/cobra_usage.rs` reproduces cobra's command resolution
+(`stripFlags`, `Find`, legacy root-argument check), pflag's flag parse and the
+argument validators before clap parses, so Go's usage errors, arity errors and
+the output-format gate are produced byte for byte; anything it does not reject
+falls through to clap unchanged. Evidence: `testdata/port/cli/error-taxonomy.json`
+(40 usage cases, 116 arity rows, 116 gate rows, 29 not-initialized cases; the
+follow-up below raises this to 63 usage cases and adds 23 argv shapes),
+`make error-taxonomy-cli-differential`.
+
+Measured before the change (28 hand-picked probes of the pinned Go binary against
+the native one): 21 differed, typically clap wording and exit 1 for what Go
+prints as a doubled `Error:` line, exit 9 for the format gate and exit 3 plus a
+hint for an uninitialized vault. Not fixed and recorded: `delete` prompts before
+the vault check; `run`/`file use` need `--` natively; `device approval-pair` and
+`device revoke` word the failure differently; Go's `auth set|status|
+rotate-passphrase` keep exit 1 for the same text (kept, covered by
+`auth_commands.rs`).
+
+### Follow-up: `device join --pairing-file` and flag types
+
+Review of slice 2 found `device join --pairing-file <path> <token>` falsely
+rejected: the emulation treated `--pairing-file` as a boolean (a leftover
+override table), but Go declares it a string flag. With a non-empty value Go
+wants exactly one positional (the token) and prints `with --pairing-file, pass
+only the pairing token: ...` otherwise; without it exactly two, with the
+`accepts between 1 and 2 arg(s)` message. Fixed by deleting the override table
+and making the `device join` rule depend on whether the flag is set; flag types
+now come only from clap, and `flag_types_match_the_command_tree` compares every
+shared flag with `command-tree.json` so the class cannot return. The
+`COMMANDS`/`GROUPS` tables are compared with the tree in both directions, and
+`generate --length` now parses like `strconv.ParseInt(s, 0, 64)` (`0x10`, `0o17`,
+`0b101`, `1_0`, range errors; the clap value parser is the same function).
+`errtaxgen` records the new rows in `testdata/port/cli/error-taxonomy.json` (73
+usage cases, 23 `argv_shapes`) and `device join` now prints its errors twice like Go. `agent skill` (bare) is byte-replayed through the
+`group_help_agent_skill` row. Left open: a pairing file that is not JSON (Go's
+decoder wording vs serde), the success path of `device join` (passphrase prompt),
+and int flags other than `generate --length`.
+
+Review follow-up (repeated booleans): pflag assigns a bool on every occurrence,
+so `--json --json=false` leaves the flag unset and the last value wins. The
+emulation only ever set `json_flag`, so `--json --json=false --output xml
+startup-profile` named `json` instead of `xml` (exit 9 either way) and
+`--json --json=false lock` was refused where Go reaches the command. The gate
+now assigns the parsed value on every occurrence, and the global `--json`,
+`--quiet` and `--no-pipe-warning` clap flags are `--flag[=bool]` with
+`overrides_with` (Go's `ParseBool` forms, last value wins) instead of
+`SetTrue`, which rejected `--quiet=false` and any repeat. Ten Go-recorded usage
+cases (`bool_flag_*`) pin it. Local bool flags other than the existing
+`--flag[=bool]` ones stay `SetTrue` and still reject `--flag=false`.
+
+### Review correction: NoArgs versus legacyArgs and bare dash
+
+The regenerated corpus has 75 usage cases and 236 rejected arity probes across
+116 runnable paths. The generator now records cobra's `unknown command` argument
+validator family, exposing 48 previously misclassified `NoArgs` rejections on
+12 paths. All are byte-replayed through the native binary; the three `update`
+children preserve Go's single error line (`SilenceErrors`), while the other
+NoArgs paths print two lines, without a usage hint. Root resolution errors,
+not NoArgs validation errors, carry the usage hint. Bare `-` is skipped by
+cobra's command-discovery `stripFlags`, but is positional in pflag's later
+parse: `- get x` and `config - get x` now report two arguments for `get`.
+
+Acceptance is bounded to recorded rejections, not every argument validator's
+whole-binary behavior. cobra `legacyArgs` accepts arbitrary arguments on
+non-root commands with no explicit validator (even when they have subcommands).
+The emulator correctly proceeds; clap still rejects extra positionals there.
+Measured examples (not exhaustive): `lock`, `verify`, `unlock`, `generate`,
+`share list`, `policy list`, `agent list`, `agent whoami`, `approval list`,
+`audit`, `audit rotate-key`, `auth rotate-passphrase`, `auth status`,
+`device approval-pair`, `doctor`, `migrate kdf`, `migrate pseudonymize`,
+`migrate session`, `migrate v4` and `recipients list`. Clap likewise still
+rejects the accepting bare-dash shapes `- list`, `share - list` and
+`-- get x`. These CLI-005/006 acceptance gaps remain open; accepting arity
+probes test only the emulator.
+Other command-body diagnostics remain per-command, except that
+`finish_vault_result` and the code-3 callers of `finish_session_result` render
+a message starting with `vault not initialized` with doubled error lines and
+the init hint (including approval/file commands). `auth status` (code 1) and
+`finish_vault_result_exit_1` keep a single error line.
+
 ## Historical measurement, 2026-09-27
 
 Measured on **2026-09-27** against the Rust CLI built from candidate
