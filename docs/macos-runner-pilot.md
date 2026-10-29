@@ -97,4 +97,7 @@ Default CodeQL setup is not configured. Advanced CodeQL Swift analysis remains u
   `LANG`/`LC_ALL=en_US.UTF-8`. The product defect is tracked in #1555.
 - **Persistent workspace.** Checkout keeps ignored files for the Cargo cache, so
   the Go test job removes stale Go evidence packages under `target/` first.
+- **TMPDIR.** The runner `.env` points TMPDIR at the external volume; the macOS
+  auth parity step needs a TMPDIR below `/private/var` and uses
+  `getconf DARWIN_USER_TEMP_DIR` there.
 - **Hosted fallback** stays `xcode-27`, the image `main` used before the pilot.

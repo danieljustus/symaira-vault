@@ -460,7 +460,16 @@ jobs:
       - name: Verify native Go/Rust CLI and authentication parity
         if: runner.os == 'macOS'
         shell: bash
-        run: make config-cli-differential
+        run: |
+          set -euo pipefail
+          # The trusted-alias auth case needs TMPDIR below the root-owned
+          # /var -> /private/var alias; the self-hosted runner's .env points
+          # TMPDIR at an external volume, so use the per-user macOS temp dir.
+          if [ "$RUNNER_ENVIRONMENT" = self-hosted ]; then
+            TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
+            export TMPDIR
+          fi
+          make config-cli-differential
 
       - name: Verify real Unix MCP approval terminal
         if: runner.os != 'Windows'
