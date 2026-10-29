@@ -208,3 +208,8 @@ connection open; its complete Go-matching 400, 401, 403, 415 or 406 must arrive
 within three seconds without the remaining input. Mutation
 tests reject changed real response bytes, missing/
 false/type-substituted success, wrong cases/hashes and out-of-bound times.
+
+
+## Platform scope supersession (2026-10-29)
+
+The native Windows and macOS Intel acceptance expectations referenced in this ADR are no longer required (platform scope decision 2026-10-29, [#1550](https://github.com/danieljustus/symaira-vault/issues/1550)). Supported products target Apple (macOS arm64 and iOS) and Web. Linux remains a CI/server platform and CLI target. This note supersedes platform requirements only; historical decisions and evidence above are unchanged.
