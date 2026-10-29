@@ -1,0 +1,768 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "314a25a5cdd2e90517bb55a90495d7b97f68c6df",
+    "generator_digest": "e13afac840ae79cd746d58cfa899a7623e6a68071091eb6c6db7a87f48266ba8",
+    "source_digest": "deeacdc600677cfcd68ac356f415c7c6f3a4890d44cfb539dff32a76f435fdbd",
+    "source_files": [
+      "cmd/root.go",
+      "internal/cli/cli.go",
+      "internal/cli/vaultpath.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/dottedpath.go",
+      "internal/config/migrate.go",
+      "internal/config/migrate_copy_unix.go",
+      "internal/config/migrate_copy_windows.go",
+      "internal/config/migrate_source_unix.go",
+      "internal/config/migrate_source_windows.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/config/schema.go",
+      "internal/config/warn.go"
+    ]
+  },
+  "root_flags": [
+    "color",
+    "json",
+    "no-pipe-warning",
+    "output",
+    "profile",
+    "quiet",
+    "theme",
+    "vault"
+  ],
+  "cases": [
+    {
+      "name": "defaults_no_file",
+      "args": [],
+      "env": {},
+      "config": null,
+      "result": {
+        "path": "HOME/.local/share/symaira-vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "file_default_profile",
+      "args": [],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "empty_file",
+      "args": [],
+      "env": {},
+      "config": "",
+      "result": {
+        "path": "HOME/.local/share/symaira-vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_VAULT_empty_3",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": ""
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_VAULT_empty_4",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "   "
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_VAULT_empty_5",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "\t\n"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_PROFILE_empty_6",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": ""
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_PROFILE_empty_7",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "   "
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "SYMVAULT_PROFILE_empty_8",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "\t\n"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_env_9",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/env",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_env_10",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": " relative//env/../vault "
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "relative/vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_env_11",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "~other"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "~other",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_env_12",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "false"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "false",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_env_13",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT": "0"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "0",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_env_alternate14",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/alternate",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_env_alternate15",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": " alternate "
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/alternate",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_env_absent16",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "absent"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "profile_env_empty17",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "empty"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "profile_env_false18",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "false"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "env_vault_beats_profile_flag",
+      "args": [
+        "--profile",
+        "absent"
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/env",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "flag_vault_beats_both_envs",
+      "args": [
+        "--vault",
+        "~/flag",
+        "--profile",
+        "absent"
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "absent",
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/flag",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_flag_21",
+      "args": [
+        "--vault="
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": ".",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_flag_22",
+      "args": [
+        "--vault= "
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": " ",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_flag_23",
+      "args": [
+        "--vault=~/flag"
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/flag",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_flag_24",
+      "args": [
+        "--vault=relative//a/../b"
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "relative/b",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "vault_flag_25",
+      "args": [
+        "--vault=~"
+      ],
+      "env": {
+        "SYMVAULT_VAULT": "~/env"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_flag_26",
+      "args": [
+        "--profile="
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/alternate",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_flag_27",
+      "args": [
+        "--profile=   "
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/alternate",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_flag_28",
+      "args": [
+        "--profile=primary"
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_flag_29",
+      "args": [
+        "--profile= primary "
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "profile_flag_30",
+      "args": [
+        "--profile=absent"
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "profile_flag_31",
+      "args": [
+        "--profile=empty"
+      ],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "profile_without_file",
+      "args": [],
+      "env": {
+        "SYMVAULT_PROFILE": "alternate"
+      },
+      "config": null,
+      "result": {
+        "path": "",
+        "error_class": "config"
+      }
+    },
+    {
+      "name": "invalid_default_33",
+      "args": [],
+      "env": {},
+      "config": "defaultProfile: absent\n",
+      "result": {
+        "path": "HOME/.local/share/symaira-vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "invalid_requested_34",
+      "args": [
+        "--profile=primary"
+      ],
+      "env": {},
+      "config": "defaultProfile: absent\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "invalid_default_35",
+      "args": [],
+      "env": {},
+      "config": "defaultProfile: empty\nprofiles:\n  empty: {vault: ''}\n",
+      "result": {
+        "path": "HOME/.local/share/symaira-vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "invalid_requested_36",
+      "args": [
+        "--profile=primary"
+      ],
+      "env": {},
+      "config": "defaultProfile: empty\nprofiles:\n  empty: {vault: ''}\n",
+      "result": {
+        "path": "",
+        "error_class": "profile"
+      }
+    },
+    {
+      "name": "invalid_default_37",
+      "args": [],
+      "env": {},
+      "config": "sessionTimeout: -1s\n",
+      "result": {
+        "path": "HOME/.local/share/symaira-vault",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "invalid_requested_38",
+      "args": [
+        "--profile=primary"
+      ],
+      "env": {},
+      "config": "sessionTimeout: -1s\n",
+      "result": {
+        "path": "",
+        "error_class": "config"
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_CONFIG",
+      "args": [],
+      "env": {
+        "SYMVAULT_CONFIG": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_SESSION_TIMEOUT",
+      "args": [],
+      "env": {
+        "SYMVAULT_SESSION_TIMEOUT": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_USE_TOUCH_ID",
+      "args": [],
+      "env": {
+        "SYMVAULT_USE_TOUCH_ID": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_DEFAULT_PROFILE",
+      "args": [],
+      "env": {
+        "SYMVAULT_DEFAULT_PROFILE": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_VAULT_DIR",
+      "args": [],
+      "env": {
+        "SYMVAULT_VAULT_DIR": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_QUIET",
+      "args": [],
+      "env": {
+        "SYMVAULT_QUIET": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_OUTPUT",
+      "args": [],
+      "env": {
+        "SYMVAULT_OUTPUT": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "unbound_SYMVAULT_THEME",
+      "args": [],
+      "env": {
+        "SYMVAULT_THEME": "invalid-value"
+      },
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_47",
+      "args": [
+        "--config=missing.yaml"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_48",
+      "args": [
+        "--vault"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_49",
+      "args": [
+        "--profile"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_50",
+      "args": [
+        "--quiet=invalid"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_51",
+      "args": [
+        "--json=invalid"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_52",
+      "args": [
+        "--no-pipe-warning=invalid"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "",
+        "error_class": "flags"
+      }
+    },
+    {
+      "name": "root_flags_53",
+      "args": [
+        "--quiet"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_54",
+      "args": [
+        "--json",
+        "--output=text"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_55",
+      "args": [
+        "--output=yaml"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_56",
+      "args": [
+        "--no-pipe-warning"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_57",
+      "args": [
+        "--color=never"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    },
+    {
+      "name": "root_flags_58",
+      "args": [
+        "--theme=highcontrast"
+      ],
+      "env": {},
+      "config": "defaultProfile: primary\nvaultDir: ignored-file-dir\nprofiles:\n  primary:\n    vault: ~/primary\n  alternate:\n    vault: ~/alternate\n  empty:\n    vault: ''\n",
+      "result": {
+        "path": "HOME/primary",
+        "error_class": ""
+      }
+    }
+  ]
+}
