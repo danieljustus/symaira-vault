@@ -2,6 +2,10 @@ name: Select macOS runner
 
 on:
   workflow_call:
+    secrets:
+      RUNNER_INVENTORY_TOKEN:
+        description: Read-only repository runner inventory credential
+        required: false
     inputs:
       hosted:
         type: string
@@ -27,6 +31,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           HOSTED_RUNNER: ${{ inputs.hosted }}
+          GH_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
         with:
           script: |
             const local = ['self-hosted', 'macOS', 'ARM64', 'macbook-symaira'];
@@ -61,14 +66,34 @@ jobs:
             let runners = [];
             const trusted = ['push', 'workflow_dispatch', 'schedule'].includes(context.eventName) ||
               (context.eventName === 'pull_request' && head === repository);
-            if (trusted) {
+            if (trusted && process.env.GH_TOKEN) {
               try {
-                runners = await github.paginate(github.rest.actions.listSelfHostedRunnersForRepo,
-                  {...context.repo, per_page: 100}, response => response.data.runners);
+                // The inventory credential is used only for this read-only API call.
+                // github-script retains GITHUB_TOKEN for its normal client/context.
+                let page = 1;
+                while (true) {
+                  const response = await fetch(`${process.env.GITHUB_API_URL || 'https://api.github.com'}/repos/${repository}/actions/runners?per_page=100&page=${page}`, {
+                    headers: {
+                      Authorization: `Bearer ${process.env.GH_TOKEN}`,
+                      Accept: 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                    },
+                    signal: AbortSignal.timeout(15000),
+                  });
+                  core.info(`Runner inventory HTTP ${response.status}`);
+                  if (!response.ok) throw {status: response.status};
+                  const data = await response.json();
+                  if (!Array.isArray(data.runners)) throw new Error('Invalid runner inventory');
+                  runners.push(...data.runners);
+                  if (data.runners.length < 100) break;
+                  page++;
+                }
               } catch (error) {
-                // No elevated PAT: unavailable runner visibility must fail safely to hosted.
+                runners = [];
                 core.warning(`Runner inventory unavailable (HTTP ${error.status || 'unknown'}); using hosted`);
               }
+            } else if (trusted) {
+              core.info('Runner inventory token missing; using hosted without an API request');
             }
             const target = choose(context.eventName, repository, head, runners, process.env.HOSTED_RUNNER);
             core.setOutput('runs_on', JSON.stringify(target));

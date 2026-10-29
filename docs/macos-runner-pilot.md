@@ -2,8 +2,11 @@
 
 The CI workflow selects a trusted idle `macbook-symaira` ARM64 runner using a small
 Ubuntu decision job, otherwise a GitHub-hosted macOS image. Fork PRs and unknown
-events always stay hosted; API failures also fail safely to hosted. No PAT or new
-secret is exposed to either the decision job or the native jobs.
+events always stay hosted; API failures and an empty inventory secret also fail
+safely to hosted without failing the decision job. `RUNNER_INVENTORY_TOKEN` is
+passed explicitly to the reusable Ubuntu decision job, never to native jobs.
+Its `GH_TOKEN` environment variable is used only for runner-inventory reads;
+all other GitHub operations retain the normal `GITHUB_TOKEN`.
 
 This pilot deliberately changes **CI only**. Job names, test commands, acceptance
 conditions and Intel matrix entries stay unchanged. Release/signing jobs stay on
@@ -27,8 +30,14 @@ native jobs can see the same free runner and then queue locally; a machine that
 disconnects after selection does not live-fail-over. One runner per repository is
 intentional on this 24 GB development machine. The two repository runners can
 still execute concurrently. Start with four Cargo build workers per listener.
-GitHub may deny the runner-inventory endpoint to GITHUB_TOKEN despite actions:read;
-that case routes hosted rather than adding elevated credentials.
+GitHub denies runner inventory to `GITHUB_TOKEN` even with `actions: read`.
+The repository secret `RUNNER_INVENTORY_TOKEN` holds a fine-grained PAT with
+**Administration: Read-only** and **Metadata: Read-only**, restricted to
+`symaira-vault` and `symaira-desktop`. It expires **2027-10-28**. Rotate it before
+expiry, replace the repository secret in both repositories, and verify an
+inventory HTTP 200 in a fresh routing run. During rotation gaps or on HTTP 403,
+the router stays hosted. Fork PRs never query inventory, even with a token.
+Do not print the credential or increase workflow token permissions.
 
 Each runner has its own workspace, Go/Cargo/tool caches, temporary directories,
 regular Xcode DEVELOPER_DIR and 60 GiB external-volume job-start reserve. Checkout

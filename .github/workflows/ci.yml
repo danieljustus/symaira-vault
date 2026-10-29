@@ -35,6 +35,8 @@ jobs:
       contents: read
       actions: read
     uses: ./.github/workflows/macos-runner.yml
+    secrets:
+      RUNNER_INVENTORY_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
 
   changes:
     name: Changed areas
