@@ -92,3 +92,8 @@ More header/body budget combinations, configurable TLS handshake sequencing,
 cumulative writes, shutdown signal routing, identity lifecycle and the remaining
 parser/overhead/HTTP transport cases remain open. HTTP-001..004 and #1249 stay
 in progress until complete applicable-platform acceptance.
+
+
+## Platform scope supersession (2026-10-29)
+
+Native Windows and macOS Intel gates referenced in this ADR are no longer required (platform scope decision 2026-10-29, [#1550](https://github.com/danieljustus/symaira-vault/issues/1550)). Supported products target Apple (macOS arm64 and iOS) and Web. Linux remains a CI/server platform and CLI target. This note supersedes platform requirements only; historical decisions and evidence above are unchanged.
