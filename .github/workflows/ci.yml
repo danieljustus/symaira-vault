@@ -737,6 +737,25 @@ jobs:
           echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
           echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
 
+      - name: Remove stale Go sources from the persistent self-hosted target
+        # Checkout keeps ignored files on self-hosted runners (clean: false) so
+        # Cargo reuses target/. Go generators also write evidence packages
+        # (target/migration-run, target/mcp-fixture-evidence) there; a leftover
+        # from an earlier run is enumerated by `go test ./...` and then removed
+        # by the test that regenerates it ("chdir ...: no such file").
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ -d target ] || exit 0
+          find target -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            if find "$dir" -name '*.go' -print -quit | grep -q .; then
+              chmod -R u+w "$dir"
+              rm -rf "$dir"
+              echo "removed stale Go sources: $dir"
+            fi
+          done
+
       - name: Run tests
         shell: bash
         env:
