@@ -20,7 +20,7 @@ body:
     id: os
     attributes:
       label: Operating system
-      placeholder: "macOS 15.4, Ubuntu 24.04, Windows 11"
+      placeholder: "macOS 15.4, Ubuntu 24.04"
     validations:
       required: true
   - type: input

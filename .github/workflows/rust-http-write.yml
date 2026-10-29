@@ -50,7 +50,7 @@ jobs:
       fail-fast: false
       matrix:
         # macOS runs in rust-http-macos.yml as one consolidated GitHub-hosted job.
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
     defaults:
       run:
         shell: bash

@@ -9,7 +9,7 @@ name: Rust PR macOS satellites
 #                   vault-read-resource-policy, store-observations, sync-observations, audit
 # Each satellite's commands are copied verbatim from its original workflow at
 # 895b1fe7 (scripts/ci_macos_satellites_baseline.json). The original workflows keep their
-# ubuntu/windows legs on pull_request and keep their macOS legs for push, schedule and
+# ubuntu legs on pull_request and keep their macOS legs for push, schedule and
 # workflow_dispatch. The Linux select job decides per satellite; a group runs unless
 # every member is explicitly selected 'false' (fail-closed: missing/failed selector runs all).
 # rust-pairing.yml and rust-tui.yml keep their own macOS jobs.
