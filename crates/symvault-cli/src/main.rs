@@ -20,6 +20,8 @@ mod cli_artifacts;
 mod completion_commands;
 mod completion_protocol;
 mod config;
+#[cfg(test)]
+mod config_override_tests;
 mod daemon_commands;
 mod deprecated_stubs;
 mod device;
@@ -114,7 +116,8 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     disable_help_subcommand = true
 )]
 struct Cli {
-    #[arg(long, global = true)]
+    // Cobra accepts an explicitly empty string; filepath.Clean then yields '.'.
+    #[arg(long, global = true, value_parser = parse_vault_flag)]
     vault: Option<std::path::PathBuf>,
     #[arg(long, global = true)]
     quiet: bool,
@@ -1306,9 +1309,13 @@ fn run_cli() -> ExitCode {
             shell,
             no_descriptions,
         }) => completion_commands::generate(shell.as_deref(), no_descriptions, Cli::command()),
-        Some(Command::Init { vault_dir, auth }) => {
-            run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
-        }
+        Some(Command::Init { vault_dir, auth }) => run_init(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            vault_dir.as_deref(),
+            &auth,
+            cli.quiet,
+        ),
         Some(Command::Add {
             name,
             value,
@@ -3353,6 +3360,7 @@ fn run_file(
 
 fn run_init(
     explicit_vault: Option<&Path>,
+    profile: Option<&str>,
     positional_vault: Option<&Path>,
     auth: &str,
     quiet: bool,
@@ -3367,7 +3375,7 @@ fn run_init(
         let vault = if let Some(path) = positional_vault.or(explicit_vault) {
             expand_vault_path(path)?
         } else {
-            resolve_vault(None, None)?
+            resolve_vault(None, profile)?
         };
         if vault.join("config.yaml").is_file() {
             return Err(format!("vault already initialized at {}", vault.display()));
@@ -4392,9 +4400,14 @@ fn go_io_reason(error: &std::io::Error) -> String {
     }
 }
 
-fn run_mcp_service(explicit_vault: Option<&Path>, quiet: bool, action: McpService) -> ExitCode {
+fn run_mcp_service(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    quiet: bool,
+    action: McpService,
+) -> ExitCode {
     let result = (|| {
-        let vault = resolve_vault(explicit_vault, None).map_err(|error| {
+        let vault = resolve_vault(explicit_vault, profile).map_err(|error| {
             symvault_core::error::CliError::new(symvault_core::error::ExitCode::Config, error, None)
         })?;
         let config = service_config(matches!(action, McpService::Install));
@@ -4450,13 +4463,13 @@ fn run_mcp_action(
 ) -> ExitCode {
     let flags = match action {
         Some(McpAction::Install) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Install);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Install);
         }
         Some(McpAction::Status) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Status);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Status);
         }
         Some(McpAction::Uninstall) => {
-            return run_mcp_service(explicit_vault, quiet, McpService::Uninstall);
+            return run_mcp_service(explicit_vault, profile, quiet, McpService::Uninstall);
         }
         Some(McpAction::Token { args }) => return deprecated_stubs::serve_token(&args),
         Some(McpAction::Serve { flags }) => flags,
@@ -5111,54 +5124,35 @@ fn require_initialized(vault: &Path) -> Result<(), String> {
     }
 }
 
-fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
-    if let Some(path) = explicit {
-        return expand_vault_path(path);
-    }
-    if let Some(raw) = std::env::var_os("SYMVAULT_VAULT").filter(|value| !value.is_empty()) {
-        let raw = raw
-            .to_str()
-            .ok_or_else(|| "vault path must be UTF-8".to_owned())?
-            .trim()
-            .to_owned();
-        if !raw.is_empty() {
-            return expand_vault_path(Path::new(&raw));
-        }
-    }
+fn parse_vault_flag(value: &str) -> Result<PathBuf, std::convert::Infallible> {
+    Ok(PathBuf::from(value))
+}
 
+fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
+    let vault_env = if explicit.is_some() {
+        None
+    } else {
+        match std::env::var("SYMVAULT_VAULT") {
+            Ok(value) => Some(value),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err("vault path must be UTF-8".to_owned());
+            }
+        }
+    };
+    let profile_env = std::env::var("SYMVAULT_PROFILE").ok();
     let resolver = PathResolver::new();
-    // Go's VaultPath deliberately ignores a malformed default config while it
-    // falls back to the resolver's data directory. A requested profile is a
-    // different contract: its config error must be surfaced by the caller.
-    let config_result = Config::load(resolver.config_path());
-    let requested_profile = profile
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| value.trim().to_owned())
-        .or_else(|| {
-            std::env::var("SYMVAULT_PROFILE")
-                .ok()
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-        });
-    if let Some(name) = requested_profile.as_deref() {
-        let config = config_result
-            .as_ref()
-            .map_err(|error| format!("cannot load config for profile resolution: {error}"))?;
-        let profile = config
-            .profile_for_name(name)
-            .ok_or_else(|| format!("profile {name:?} not found"))?;
-        return expand_vault_path(Path::new(&profile.vault_path));
+    symvault_core::config_overrides::VaultOverrides {
+        vault_flag: explicit,
+        profile_flag: profile,
+        vault_env: vault_env.as_deref(),
+        profile_env: profile_env.as_deref(),
     }
-    if let Some(config) = config_result.as_ref().ok()
-        && !config.default_profile.is_empty()
-        && let Some(profile) = config.profile_for_name(&config.default_profile)
-    {
-        return expand_vault_path(Path::new(&profile.vault_path));
-    }
-    if !resolver.vault_data_dir().as_os_str().is_empty() {
-        return Ok(resolver.vault_data_dir().to_path_buf());
-    }
-    Err("cannot determine vault path".to_owned())
+    .resolve(
+        &resolver,
+        || Config::load(resolver.config_path()).map_err(|error| error.to_string()),
+        expand_vault_path,
+    )
 }
 
 fn touch_id_available() -> bool {
