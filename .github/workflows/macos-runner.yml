@@ -1,0 +1,79 @@
+name: Select macOS runner
+
+on:
+  workflow_call:
+    inputs:
+      hosted:
+        type: string
+        default: macos-latest
+    outputs:
+      runs_on:
+        description: JSON runner selector; hosted on forks, API errors, or unavailable local capacity
+        value: ${{ jobs.decide.outputs.runs_on }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      runs_on: ${{ steps.pick.outputs.runs_on }}
+    steps:
+      - name: Select trusted idle capacity or hosted fallback
+        id: pick
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HOSTED_RUNNER: ${{ inputs.hosted }}
+        with:
+          script: |
+            const local = ['self-hosted', 'macOS', 'ARM64', 'macbook-symaira'];
+            function choose(event, repository, headRepository, runners, hosted) {
+              const trusted = ['push', 'workflow_dispatch', 'schedule'].includes(event) ||
+                (event === 'pull_request' && headRepository === repository);
+              return trusted && runners.some(r => r.status === 'online' && r.busy === false &&
+                local.every(label => r.labels.some(l => l.name.toLowerCase() === label.toLowerCase())))
+                ? local : hosted;
+            }
+            // Synthetic policy controls exercise the exact production decision function.
+            const ready = {status: 'online', busy: false, labels: local.map(name => ({name}))};
+            const controls = [
+              ['push', '', [ready], true],
+              ['workflow_dispatch', '', [ready], true],
+              ['schedule', '', [ready], true],
+              ['pull_request', 'owner/repo', [ready], true],
+              ['pull_request', 'fork/repo', [ready], false],
+              ['pull_request_target', 'owner/repo', [ready], false],
+              ['push', '', [{...ready, busy: true}], false],
+              ['push', '', [{...ready, status: 'offline'}], false],
+              ['push', '', [{...ready, labels: []}], false],
+              ['push', '', [], false],
+            ];
+            for (const [event, head, runners, expected] of controls) {
+              const actual = Array.isArray(choose(event, 'owner/repo', head, runners, 'macos-latest'));
+              if (actual !== expected) throw new Error(`Policy control failed: ${event}/${head}`);
+            }
+            core.info(`Policy controls passed: ${controls.length} (including fork, busy, offline and API-empty fallback)`);
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const head = context.payload.pull_request?.head?.repo?.full_name || '';
+            let runners = [];
+            const trusted = ['push', 'workflow_dispatch', 'schedule'].includes(context.eventName) ||
+              (context.eventName === 'pull_request' && head === repository);
+            if (trusted) {
+              try {
+                runners = await github.paginate(github.rest.actions.listSelfHostedRunnersForRepo,
+                  {...context.repo, per_page: 100}, response => response.data.runners);
+              } catch (error) {
+                // No elevated PAT: unavailable runner visibility must fail safely to hosted.
+                core.warning(`Runner inventory unavailable (HTTP ${error.status || 'unknown'}); using hosted`);
+              }
+            }
+            const target = choose(context.eventName, repository, head, runners, process.env.HOSTED_RUNNER);
+            core.setOutput('runs_on', JSON.stringify(target));
+            core.info(`Selected runner: ${JSON.stringify(target)}`);
+            await core.summary.addHeading('macOS capacity routing')
+              .addRaw(`Policy controls: ${controls.length} passed. Selected: ${JSON.stringify(target)}. ` +
+                'Capacity is a snapshot, not a reservation; concurrent decisions can queue locally. ' +
+                'No live migration occurs after a runner is selected.').write();

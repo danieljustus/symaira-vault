@@ -1,6 +1,7 @@
 self-hosted-runner:
   # Labels of self-hosted runner in array of strings.
   labels:
+    - macbook-symaira
     - xcode-27
     - windows-11-arm
 
