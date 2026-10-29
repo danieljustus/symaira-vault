@@ -16,7 +16,6 @@ body:
       options:
         - Quick install script (curl / PowerShell)
         - Homebrew
-        - Scoop
         - Go install
         - Linux package (.deb / .rpm / .apk)
         - Manual download from GitHub Releases
@@ -34,7 +33,7 @@ body:
     id: os
     attributes:
       label: Operating system and architecture
-      placeholder: "macOS 15.4 arm64, Ubuntu 24.04 amd64, Windows 11 amd64"
+      placeholder: "macOS 15.4 arm64, Ubuntu 24.04 amd64"
     validations:
       required: true
   - type: textarea

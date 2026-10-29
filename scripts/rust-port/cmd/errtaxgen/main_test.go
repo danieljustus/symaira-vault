@@ -117,6 +117,7 @@ func TestShapeCorpusIsWellFormed(t *testing.T) {
 }
 
 func TestRunWritesFilesIntoTheSandboxWorkingDirectory(t *testing.T) {
+	skipWithoutPOSIXShell(t)
 	script := filepath.Join(t.TempDir(), "oracle.sh")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\ncat \"$1\"\n"), 0o700); err != nil { // #nosec G306 -- test script
 		t.Fatal(err)

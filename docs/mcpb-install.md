@@ -41,9 +41,6 @@ Download the `.mcpb` file for your platform from the [latest release](https://gi
 # macOS arm64 (Apple Silicon) - recommended for M1/M2/M3 Macs
 curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_darwin_arm64.mcpb
 
-# macOS amd64 (Intel)
-curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_darwin_amd64.mcpb
-
 # Linux amd64
 curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_linux_amd64.mcpb
 
@@ -81,19 +78,7 @@ curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download
 
 3. Restart Claude Desktop.
 
-### Windows
-
-1. Create the MCP bundles directory:
-   ```powershell
-   New-Item -ItemType Directory -Force -Path "$env:APPDATA\Claude\mcp-bundles"
-   ```
-
-2. Copy the `.mcpb` file:
-   ```powershell
-   Copy-Item symvault_*.mcpb "$env:APPDATA\Claude\mcp-bundles\"
-   ```
-
-3. Restart Claude Desktop.
+Windows and Intel Macs are unsupported; no bundles are released for them.
 
 ## Verification
 

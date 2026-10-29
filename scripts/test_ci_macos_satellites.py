@@ -485,13 +485,13 @@ class SelectorTests(unittest.TestCase):
 
 
 class LiveWorkflowTests(unittest.TestCase):
-    def test_satellites_keep_only_ubuntu_and_windows_legs_on_pull_request(self):
+    def test_satellites_keep_only_ubuntu_legs_on_pull_request(self):
         for key in ORDER:
             text = read(f".github/workflows/{FILES[key]}")
             doc = yaml.safe_load(text)
             job = list(doc["jobs"].values())[0]
             self.assertEqual(job["strategy"]["matrix"]["os"], [
-                "ubuntu-latest", "windows-latest"], key)
+                "ubuntu-latest"], key)
             self.assertEqual(job["runs-on"], "${{ matrix.os }}", key)
             self.assertNotIn("macos", text.replace("# macOS runs in rust-http-macos.yml", ""), key)
             self.assertNotIn("xcode-27", text, key)
@@ -508,7 +508,9 @@ class LiveWorkflowTests(unittest.TestCase):
 
     def test_new_originals_changed_only_their_matrix_line(self):
         bl = load_baseline()
-        old, new = bl["matrix_line_original"], bl["matrix_line_consolidated"]
+        old = bl["matrix_line_original"]
+        # The original receipt stays immutable; current support drops Windows.
+        new = bl["matrix_line_consolidated"].replace(',"windows-latest"', "")
         for key, file in NEW_FILES.items():
             with self.subTest(file=file):
                 text = read(f".github/workflows/{file}")
@@ -527,8 +529,8 @@ class LiveWorkflowTests(unittest.TestCase):
                 self.assertEqual(job["runs-on"], "${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}")
                 expr = doc["jobs"][list(doc["jobs"].keys())[0]]["strategy"]["matrix"]["os"]
                 self.assertIn("github.event_name == 'pull_request'", expr)
-                self.assertIn('fromJSON(\'["ubuntu-latest","macos-latest","windows-latest"]\')', expr)
-                self.assertIn('fromJSON(\'["ubuntu-latest","windows-latest"]\')', expr)
+                self.assertIn('fromJSON(\'["ubuntu-latest","macos-latest"]\')', expr)
+                self.assertIn('fromJSON(\'["ubuntu-latest"]\')', expr)
 
     def test_original_macos_only_steps_are_classified_as_expected(self):
         bl = load_baseline()

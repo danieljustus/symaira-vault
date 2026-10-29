@@ -3,7 +3,7 @@ name: Rust HTTP macOS satellites
 # Consolidates the eight HTTP-family macOS legs (HEAD, Host/Origin, OAuth,
 # absolute read deadlines, configured deadlines, absolute write deadlines,
 # request framing, live TLS/mTLS) into ONE GitHub-hosted xcode-27 job.
-# The eight original workflows keep their ubuntu/windows legs unchanged.
+# The eight original workflows keep their ubuntu legs unchanged.
 # A Linux select job decides per satellite; a satellite runs unless the
 # selector explicitly outputs 'false' (fail-closed: missing/failed selector runs all).
 # Each satellite's commands are copied verbatim from its original workflow

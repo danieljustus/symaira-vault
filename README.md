@@ -22,22 +22,28 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 - **Modern Encryption**: [age](https://age-encryption.org/) (X25519 + ChaCha20-Poly1305)
 - **TOTP Support**: Store and generate TOTP codes
 - **Clipboard Auto-Clear**: Automatic clearing after timeout
-- **Autotype**: Cross-platform automatic password entry (macOS, Linux, Windows)
+- **Autotype**: Automatic password entry (macOS arm64, Linux)
 - **Secret Execution**: Run commands with vault secrets injected as environment variables
 - **Session Caching**: OS keyring with 15-minute TTL
 - **Git Integration**: Automatic commits and sync
 - **Multi-User Vaults**: age recipients for shared access
 - **MCP Server**: stdio and HTTP for AI agent integration with scoped token management
 - **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
-- **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
+- **Native Secure-Input Dialog**: popups (macOS osascript, Linux zenity/kdialog) for collecting credentials from agents without exposing them in chat
 - **Review-Gated Credential Intake**: stage loose credential files (`.env` exports, screenshots, certificates) into an encrypted quarantine for human review before anything enters the vault (`symvault intake`, `symvault intake watch`)
 - **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
 - **Egress Credential Broker**: opt-in loopback proxy that attaches vault credentials to an agent's outbound requests server-side, without exposing them to the child process (`symvault broker`, `symvault run --broker`)
 - **MCP API Templates**: shape `execute_api_request` calls with YAML templates and built-in provider catalog (Anthropic, GitHub, OpenAI, Stripe, …), with credentials resolved from the vault at request time
 - **Approval Devices**: pair a phone to approve or deny an agent's write requests in real time (`symvault device approval-pair`), the human-in-the-loop behind `approvalMode: prompt`
-- **Cross-Platform**: macOS, Linux, Windows, FreeBSD
+- **Platforms**: macOS arm64 and Linux CLI; iOS and Web where applicable
 
 ## Installation
+
+Supported native targets are **macOS on Apple Silicon (arm64)** and **Linux CLI/server**.
+iOS and Web are supported where applicable. Windows and Intel Macs are unsupported
+and receive no CI or release artifacts. Existing FreeBSD CLI artifacts remain
+unchanged. Windows source paths remain for now; their removal is a follow-up to
+[#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
 
 ### Quick install
 
@@ -46,21 +52,10 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 ```
 
-**Windows:**
-```powershell
-irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
-```
-
 **Homebrew:**
 ```bash
 brew tap danieljustus/tap
 brew install symvault
-```
-
-**Scoop:**
-```powershell
-scoop bucket add symaira https://github.com/danieljustus/scoop-bucket
-scoop install symaira/symvault
 ```
 
 **Nix (Flake):**
@@ -83,9 +78,9 @@ For manual downloads, Linux packages, release verification (including Cosign sig
 
 | Platform | amd64 | arm64 | Install Methods |
 |----------|-------|-------|-----------------|
-| macOS | ✓ | ✓ | Quick install, Homebrew, Go, Manual |
+| macOS | Unsupported | ✓ | Quick install, Homebrew, Go, Manual |
 | Linux | ✓ | ✓ | Quick install, Homebrew, Go, Manual, deb/rpm/apk |
-| Windows | ✓ | ✓ | Quick install, Scoop, Go, Manual |
+| Windows | Unsupported | Unsupported | None |
 | FreeBSD | ✓ | ✓ | Go, Manual |
 | NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
 
@@ -366,7 +361,7 @@ vault clears the in-memory index; the persisted index remains encrypted.
 | **Git Integration** | Built-in | SSH agent, commit signing | SSH agent, GitHub Actions, GitLab CI | Built-in (automatic commits) | No |
 | **MCP Server** | Built-in (stdio + HTTP) | Community (official: no raw secrets via MCP) | Official (`bitwarden-mcp`) | No | No |
 | **Password Generation** | Built-in | Built-in | Built-in | Built-in | Manual / ad-hoc |
-| **Cross-Platform** | macOS, Linux, Windows, FreeBSD | macOS, Linux, Windows, mobile | macOS, Linux, Windows, mobile, web | Unix-like (Linux, macOS, FreeBSD) | Any chat platform |
+| **Cross-Platform** | macOS arm64, Linux CLI | macOS, Linux, Windows, mobile | macOS, Linux, Windows, mobile, web | Unix-like (Linux, macOS, FreeBSD) | Any chat platform |
 | **Telemetry** | **None** | Opt-in (personal), on-by-default (business) | Administrative data only (vault zero-knowledge) | None | Logged by chat providers |
 | **Entry Format** | Individual encrypted files | Proprietary database (1PUX export documented) | Encrypted JSON / SQLite | Individual encrypted files | Plaintext in chat history |
 
