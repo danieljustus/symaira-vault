@@ -19,7 +19,6 @@ sha() {
   printf '      url "%s/%s"\n      sha256 "%s"\n' "$base" "$file" "$sum"
 }
 
-darwin_amd64="$(sha darwin_amd64)"
 darwin_arm64="$(sha darwin_arm64)"
 linux_amd64="$(sha linux_amd64)"
 linux_arm64="$(sha linux_arm64)"
@@ -36,9 +35,7 @@ class Symvault < Formula
   version_scheme 1
 
   on_macos do
-    on_intel do
-${darwin_amd64}
-    end
+    depends_on arch: :arm64
     on_arm do
 ${darwin_arm64}
     end

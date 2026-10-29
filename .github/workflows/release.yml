@@ -224,7 +224,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
 
       - name: Open Homebrew tap pull request
         # Tap main is PR-protected; publish on branch symvault-<version> and open a PR.
@@ -263,7 +262,7 @@ jobs:
             echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
           fi
           chmod 600 "$RUNNER_TEMP/notary-key.p8"
-          for ARCH in amd64 arm64; do
+          for ARCH in arm64; do
             for f in dist/*_darwin_"${ARCH}"*/*; do
               if [ -f "$f" ] && file "$f" | grep -q "Mach-O"; then
                 echo "Notarizing $f..."
@@ -647,7 +646,7 @@ jobs:
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
-    name: Smoke Test (macOS amd64)
+    name: Smoke Test (macOS arm64)
     runs-on: macos-latest
     needs: [release]
     steps:
@@ -659,7 +658,7 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/symaira-vault_${VERSION}_darwin_amd64.tar.gz"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/symaira-vault_${VERSION}_darwin_arm64.tar.gz"
           curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/symaira-vault_${VERSION}_checksums.txt"
 
       - name: Verify checksum
@@ -682,70 +681,6 @@ jobs:
           TMPDIR=$(mktemp -d)
           SYMVAULT_ALLOW_ENV_PASSPHRASE=1 SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
-
-  smoke-test-windows:
-    name: Smoke Test (Windows amd64)
-    runs-on: windows-latest
-    needs: [release]
-    steps:
-      - name: Get release tag
-        id: tag
-        shell: bash
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
-
-      - name: Download Windows archive
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.tag.outputs.tag }}"
-          $version = $tag -replace '^v',''
-          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${tag}/symaira-vault_${version}_windows_amd64.zip"
-          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${tag}/symaira-vault_${version}_checksums.txt"
-
-      - name: Verify checksum
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.tag.outputs.tag }}"
-          $version = $tag -replace '^v',''
-          $expectedHash = (Get-Content "symaira-vault_${version}_checksums.txt" | Where-Object { $_ -match "windows_amd64\.zip$" } | ForEach-Object { ($_ -split '\s+')[0] })
-          $actualHash = (Get-FileHash -Path "symaira-vault_${version}_windows_amd64.zip" -Algorithm SHA256).Hash.ToLower()
-          if ($expectedHash.ToLower() -ne $actualHash) {
-            Write-Error "Checksum mismatch: expected $expectedHash, got $actualHash"
-            exit 1
-          }
-
-      - name: Extract and run smoke test
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.tag.outputs.tag }}"
-          $version = $tag -replace '^v',''
-          Expand-Archive -Path "symaira-vault_${version}_windows_amd64.zip" -DestinationPath .\symvault-tmp -Force
-          $exe = Get-ChildItem -Path .\symvault-tmp -Recurse -Filter "symvault.exe" | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $exe) {
-            Write-Error "symvault.exe not found after extraction"
-            Get-ChildItem -Path .\symvault-tmp -Recurse | Format-Table FullName
-            exit 1
-          }
-          Write-Host "Found exe at: $exe"
-          & $exe version
-
-      - name: Smoke test - init vault
-        shell: pwsh
-        run: |
-          $tag = "${{ steps.tag.outputs.tag }}"
-          $version = $tag -replace '^v',''
-          $tmpdir = Join-Path $env:TEMP "test-vault-$(Get-Random)"
-          New-Item -ItemType Directory -Path $tmpdir | Out-Null
-          $exe = Get-ChildItem -Path .\symvault-tmp -Recurse -Filter "symvault.exe" | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $exe) {
-            Write-Error "symvault.exe not found after extraction"
-            exit 1
-          }
-          $env:SYMVAULT_PASSPHRASE = "test-passphrase-123"
-          $env:SYMVAULT_ALLOW_ENV_PASSPHRASE = "1"
-          & $exe init --vault "$tmpdir"
-          Remove-Item Env:SYMVAULT_PASSPHRASE
-          Remove-Item Env:SYMVAULT_ALLOW_ENV_PASSPHRASE
-          Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
   smoke-test-homebrew:
     name: Smoke Test (Homebrew tap)

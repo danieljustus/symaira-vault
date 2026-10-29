@@ -1,5 +1,10 @@
 # Go-to-Rust migration record
 
+> Current support policy: macOS arm64 and Linux CLI/server remain acceptance
+> targets. Windows and Intel Macs are unsupported under [#1550](https://github.com/danieljustus/symaira-vault/issues/1550).
+> Historical Windows receipts and source paths below are retained as evidence,
+> not as a current native acceptance or release requirement. Source removal is a follow-up.
+
 > **Status:** accepted for staged implementation
 > **Go oracle:** commit `caadd5e`, release `v0.22.1`
 > **Scope:** the Go backend and mobile bridge; Swift clients and editor plugins stay in their current languages

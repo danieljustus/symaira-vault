@@ -36,7 +36,6 @@ builds:
       - GOWORK=off
     goos:
       - linux
-      - windows
       - freebsd
     goarch:
       - amd64
@@ -65,10 +64,7 @@ builds:
     goos:
       - darwin
     goarch:
-      - amd64
       - arm64
-    goamd64:
-      - v1
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -103,9 +99,6 @@ archives:
   - id: symvault
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
     files:
       - LICENSE
       - README.md
@@ -159,14 +152,9 @@ release:
 
     ### Quick install (recommended)
 
-    **macOS / Linux:**
+    **macOS arm64 / Linux (CLI):**
     ```bash
     curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
-    ```
-
-    **Windows (PowerShell):**
-    ```powershell
-    irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
     ```
 
     ### Download
@@ -179,26 +167,6 @@ release:
 
 # Homebrew: Formula/symvault.rb is rendered by scripts/homebrew-formula.sh and
 # opened as a tap PR from release.yml (GoReleaser's `brews` is deprecated).
-
-scoops:
-  - name: symvault
-    repository:
-      owner: danieljustus
-      name: scoop-bucket
-      # main is PR-protected; publish on a branch and open a pull request.
-      branch: "symvault-{{ .Version }}"
-      token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
-      pull_request:
-        enabled: true
-        base:
-          owner: danieljustus
-          name: scoop-bucket
-          branch: main
-    homepage: "https://github.com/danieljustus/symaira-vault"
-    description: "Modern CLI password manager with age encryption"
-    license: Apache-2.0
-    persist:
-      - config.yaml
 
 nfpms:
   - id: symvault
