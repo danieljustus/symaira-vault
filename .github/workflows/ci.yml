@@ -35,6 +35,10 @@ jobs:
       contents: read
       actions: read
     uses: ./.github/workflows/macos-runner.yml
+    with:
+      # Same hosted image main uses; macos-latest ships an older Xcode whose
+      # actool crashes on the Icon Composer assets.
+      hosted: xcode-27
     secrets:
       RUNNER_INVENTORY_TOKEN: ${{ secrets.RUNNER_INVENTORY_TOKEN }}
 
@@ -468,7 +472,7 @@ jobs:
     needs: [changes, decide]
     # Runs only when rust-native went to the self-hosted runner, which skips it.
     if: needs.changes.outputs.code != 'false' && contains(needs.decide.outputs.runs_on, 'self-hosted')
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - name: Checkout code
@@ -549,11 +553,13 @@ jobs:
 
   macos-vaultcore:
     name: Vaultcore (macOS)
-    needs: [ubuntu-editors, decide]
+    needs: [ubuntu-editors]
     if: >-
       github.event_name == 'pull_request' &&
       needs.ubuntu-editors.outputs.client_changed != 'false'
-    runs-on: ${{ fromJSON(needs.decide.outputs.runs_on) }}
+    # Stays hosted: its Swift tests store Keychain items, which the self-hosted
+    # runner's isolated security session (SessionCreate) cannot do.
+    runs-on: xcode-27
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

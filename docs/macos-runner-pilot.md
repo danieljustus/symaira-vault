@@ -80,3 +80,21 @@ is not VM isolation and must never be trusted with arbitrary external code.
 | `vault-read-resource-policy.yml / policy` | `${{ matrix.os == 'macos-latest' && 'xcode-27' || matrix.os }}` | Unchanged: expand after pilot acceptance |
 
 Default CodeQL setup is not configured. Advanced CodeQL Swift analysis remains unchanged until pilot acceptance.
+
+## Measured constraints (2026-10-29)
+
+- **Throttling.** A runner LaunchAgent with `ProcessType=Background` runs on the
+  efficiency cores with throttled I/O: `Test (macos-latest)` took 45 min and hit
+  30-min package timeouts. With `ProcessType=Standard`, `Nice=5` it took 1:57
+  (hosted `xcode-27`: about 8 min).
+- **Keychain.** The runner runs in its own security session (`SessionCreate`),
+  so tests that create or store Keychain items fail there (status 100000 /
+  -25308). Rust native skips the one disposable-keychain test on the
+  self-hosted runner and the hosted `keychain-native` job runs it; the CI gate
+  requires that job whenever Rust native was routed locally. Vaultcore (Swift
+  Keychain tests) stays on hosted `xcode-27`.
+- **Locale.** Git diagnostics follow the host locale; the runner `.env` sets
+  `LANG`/`LC_ALL=en_US.UTF-8`. The product defect is tracked in #1555.
+- **Persistent workspace.** Checkout keeps ignored files for the Cargo cache, so
+  the Go test job removes stale Go evidence packages under `target/` first.
+- **Hosted fallback** stays `xcode-27`, the image `main` used before the pilot.
