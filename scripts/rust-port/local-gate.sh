@@ -42,6 +42,13 @@ run_macos() {
   ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
   ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
   # Go is the frozen oracle: test it only when this branch changed Go code.
+  # Pin the toolchain CI uses (go.mod `toolchain`, = Makefile
+  # BUILD_GO_TOOLCHAIN): direct `go test` bypasses the Makefile export, and a
+  # newer host Go compresses differently, so restoregen's gzip fixture reads
+  # as stale (go1.27.3, receipt 4bf2978a macos).
+  GOTOOLCHAIN="$(sed -n 's/^toolchain //p' go.mod)"
+  [ -n "$GOTOOLCHAIN" ] || { echo "local-gate: go.mod has no toolchain line" >&2; return 2; }
+  export GOTOOLCHAIN
   # The changed packages always run with -race.
   go_changed="$(git diff --name-only origin/main -- '*.go' go.mod go.sum)"
   [ -n "$go_changed" ] || return 0

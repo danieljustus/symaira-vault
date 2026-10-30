@@ -22,7 +22,8 @@ requests and per-slice hosted CI runs are suspended for the port.
      trusted-alias auth case requires) and `mcp-approval-pty-acceptance`.
      When Go code changed against `origin/main`, the changed packages run
      with `-race`; any change outside `scripts/` (or to `go.mod`/`go.sum`)
-     also runs the full Go suite as ci.yml `test` does on macOS (no
+     also runs the full Go suite as ci.yml `test` does on macOS (go.mod
+     `toolchain` as `GOTOOLCHAIN`, no
      `-race`, `CGO_ENABLED=0`, `-timeout=30m`, same `-skip`, after removing
      stale Go evidence packages under `target/`). The full `-race` suite
      stays with CI's ubuntu job: locally `cmd/crud` alone exceeded go test's
