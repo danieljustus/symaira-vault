@@ -76,7 +76,19 @@ requests and per-slice hosted CI runs are suspended for the port.
 
 ## Baseline
 
-Both gates passed on `98554d82` (2026-10-30): `linux` 58 min including Miri,
-`macos` 8 min. Receipts: `Dev/evidence/symaira-vault/local-rust-port/receipts.jsonl`
-on the MacBook. Fixed on the way: `fuzz/Cargo.lock` lagged the sha2 0.11.1
-pin from #1540 (`4ffada3a`).
+Corrected 2026-10-30: the first version of `local-gate.sh` ran each target
+function under `set +e`, which disabled errexit inside the function, so a
+failed `make` was masked by the status of its last command. Every `macos`
+receipt before the fix reported exit 0 although `config-cli-differential`
+failed on all of them (`4b474490`, `e0dad172`, `4ffada3a`, `98554d82`) and
+`rust-test` failed on `f77c1657`; `make` stopped there, so the remaining
+`port-contract` targets and `mcp-approval-pty-acceptance` did not run on
+macOS. Those receipts are invalidated in the receipts file. The `linux`
+receipts are unaffected (`docker run` is the function's last command).
+The fix runs each target in `(set -e; run_<target>)`; a negative control (a
+fake `make` that fails only `rust-lint`) records exit 0 with the old script
+and 7 with the new one.
+
+Linux passed on `98554d82` (58 min including Miri) and on `f77c1657`.
+Fixed on the way: `fuzz/Cargo.lock` lagged the sha2 0.11.1 pin from #1540
+(`4ffada3a`).

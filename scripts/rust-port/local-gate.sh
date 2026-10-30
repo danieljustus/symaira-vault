@@ -75,8 +75,11 @@ for target in $( [ "$mode" = all ] && echo "macos linux" || echo "$mode" ); do
   log="$log_dir/${target}-${sha:0:8}.log"
   started="$(date -u +%FT%TZ)"
   echo "local-gate: $target @ ${sha:0:8} -> $log"
+  # The subshell re-enables errexit: `set +e` around a bare function call
+  # would disable it inside the function too, and a failed `make` would then
+  # be masked by the exit status of the function's last command.
   set +e
-  "run_$target" > "$log" 2>&1
+  (set -e; "run_$target") > "$log" 2>&1
   ec=$?
   set -e
   receipt "$target" "$ec" "$started" "$log"
