@@ -22,7 +22,8 @@ requests and per-slice hosted CI runs are suspended for the port.
      packages; any other Go, `go.mod` or `go.sum` change runs `make test`.
    - `linux`: native Linux/arm64 container (`scripts/rust-port/local-gate/Dockerfile`,
      pins mirror `.github/workflows/ci.yml`), `rust-gates-core port-contract
-     mcp-approval-pty-acceptance rust-miri`.
+     mcp-approval-pty-acceptance`. Miri (about one hour) is opt-in with
+     `RUN_MIRI=1` and required for slices that change `crates/symvault-core`.
    Each run appends a receipt (SHA, target, exit, log) to
    `target/local-gate/receipts.jsonl` unless `LOCAL_GATE_RECEIPTS` points
    elsewhere.
@@ -56,3 +57,10 @@ requests and per-slice hosted CI runs are suspended for the port.
 | #1537 taiki-e/install-action 2.87.32 | merged |
 | #1540 cargo minor/patch group | merged, subject to the local gate |
 | #1542 Go aws-sdk patch group | **not** taken: it changes `go.sum`, which the frozen oracle fixtures bind (`fixture_binds_go_sources_and_corekit_pin`) and invalidates the flake `vendorHash`; no value while Go is frozen |
+
+## Baseline
+
+Both gates passed on `98554d82` (2026-10-30): `linux` 58 min including Miri,
+`macos` 8 min. Receipts: `Dev/evidence/symaira-vault/local-rust-port/receipts.jsonl`
+on the MacBook. Fixed on the way: `fuzz/Cargo.lock` lagged the sha2 0.11.1
+pin from #1540 (`4ffada3a`).

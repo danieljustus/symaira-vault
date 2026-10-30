@@ -5,7 +5,7 @@
 #
 #   scripts/rust-port/local-gate.sh macos|linux|all
 #
-# Env: LOCAL_GATE_LOG_DIR / LOCAL_GATE_RECEIPTS (defaults below), SKIP_MIRI=1,
+# Env: LOCAL_GATE_LOG_DIR / LOCAL_GATE_RECEIPTS (defaults below), RUN_MIRI=1,
 #      ALLOW_DIRTY=1 (receipt is then marked dirty and is not evidence),
 #      MAKE_PREFIX (e.g. a build launcher such as dev-external).
 set -euo pipefail
@@ -54,17 +54,19 @@ run_linux() {
   docker build -q -t "$image" scripts/rust-port/local-gate >/dev/null
   common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
   targets="rust-gates-core port-contract mcp-approval-pty-acceptance"
-  [ "${SKIP_MIRI:-0}" = 1 ] || targets="$targets rust-miri"
+  # ponytail: Miri takes about an hour; opt in for slices touching
+  # symvault-core. The closing hosted CI run always includes it.
+  [ "${RUN_MIRI:-0}" = 1 ] && targets="$targets rust-miri"
   # shellcheck disable=SC2086 # $targets is a word list
   # Same absolute paths as the host so a worktree's .git file still resolves.
   docker run --rm -v "$root:$root" -v "$common:$common" -w "$root" \
     -v symvault-gate-registry:/home/dev/.cargo/registry \
     -v symvault-gate-go:/home/dev/go \
     -v symvault-gate-target:/home/dev/target \
-    -e CARGO_TARGET_DIR=/home/dev/target -e MIRI_TARGET_DIR=/home/dev/target/miri \
+    -e CARGO_TARGET_DIR=/home/dev/target \
     -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
     -e RUST_TEST_THREADS=1 \
-    "$image" make $targets
+    "$image" make $targets MIRI_TARGET_DIR=/home/dev/target/miri
 }
 
 status=0
