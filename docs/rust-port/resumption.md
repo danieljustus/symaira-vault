@@ -13,6 +13,27 @@ pre-change binary). `doctor --fix=false` is guarded by in-crate tests over the w
 not by a byte replay (host-dependent report). Open: hand-parsed `update apply|check|info` and
 `setup` bool flags still reject `--flag=false`; details in `cli-gap-inventory.md`.
 
+## GIT-002 stable git locale, 2026-10-30 (#1555)
+
+A localized git prints `Schwerwiegend: konnte nicht auf '<url>' zugreifen: ...`, which the English
+offline markers (`couldn't connect`, `unable to access`) do not match, so a German session
+classified an unreachable remote as `pull failed`. Red: `git_io_gaps::
+pull_classifies_offline_under_a_german_locale` (re-executes itself with `LANG/LC_ALL=de_DE.UTF-8`,
+`LANGUAGE=de`; skips when the host has no German git catalog) failed with that text. Fix:
+`run_process_with_timeout` (the single Rust git runner) now runs every child with `LC_ALL=C` and
+`LANGUAGE` removed (`pin_stable_locale`; `git::tests` assert the env deterministically without a
+catalog). Probe on git 2.56: `LANGUAGE=de LC_ALL=C` prints English, so `LC_ALL=C` alone wins; the
+`LANGUAGE` removal is belt-and-braces for gettext builds that honour it. `device.rs` `git clone`
+(inherits stdio, output is not classified) deliberately keeps the user's locale.
+
+Go oracle: the Go classifier has no `unable to access` marker and pulls through go-git, so only
+`pushWithSystemGit` (SSH URLs) parses git text. Pinning its env needs an edit to
+`internal/git/git_push.go`, a pinned source of `gitio` (`oracleCommit` `28fd3531`, which also
+compares the file set): the follow-up is source fix -> merge -> advance `gitio` pin to the
+merged revision -> provenance-only `make` re-freeze of `testdata/port/sync/git-io.json`
+(`git-offline`/`git-winner` are unaffected). Not done on the PR branch because a pin can only
+name a revision that survives the squash merge.
+
 ## IO-003 intake watch mtime zone, 2026-10-25 (#1510)
 
 Go formats `fi.ModTime()` in `time.Local`, so `intake <file> --json` provenance `mtime` carries the host offset (`2023-11-14T23:13:20+01:00` under `TZ=Europe/Berlin`); Rust printed `Z`. The contract was previously only exercised in UTC. Red: `TZ=Europe/Berlin intake_watch_contract.py` failed on `file-env` against the pinned Go oracle. Fix: `intake_commands.rs` converts the mtime with a `localtime_r` offset (the `time` crate's `local_offset_at` refuses in the CLI's worker thread). The contract gains a `file-env-local-zone` case (`TZ=Europe/Berlin`, non-Windows; asserts `+01:00`). No Go source or fixture changed, so no pin advance was needed.

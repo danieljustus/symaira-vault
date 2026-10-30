@@ -987,6 +987,20 @@ fn is_offline_transport_error(message: &str) -> bool {
     lowered.contains("couldn't connect") || lowered.contains("unable to access")
 }
 
+/// Pins a spawned `git` to the C locale (#1555).
+///
+/// Git and libcurl localize their errors (`Schwerwiegend: konnte nicht auf ...
+/// zugreifen`), and `classify_pull_error`/`classify_push_error` match English
+/// text, so a German or French session would stop recognising an unreachable
+/// remote as offline. `LC_ALL=C` overrides every `LC_*`/`LANG` value, and
+/// `LANGUAGE` is cleared because GNU gettext consults it ahead of the locale
+/// name for any non-C locale. Every git call goes through this runner: commit
+/// messages, porcelain output and object data do not depend on the locale, so
+/// the only visible effect is that diagnostic text is English.
+fn pin_stable_locale(command: &mut Command) {
+    command.env("LC_ALL", "C").env_remove("LANGUAGE");
+}
+
 fn run_process_with_timeout(
     program: &str,
     args: &[&str],
@@ -1003,6 +1017,7 @@ fn run_process_with_timeout(
     };
 
     let mut command = Command::new(program);
+    pin_stable_locale(&mut command);
     command
         .args(args)
         .env_remove("SYMVAULT_PASSPHRASE")
@@ -1410,6 +1425,39 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn git_runner_pins_a_stable_c_locale() {
+        let mut command = Command::new("git");
+        command
+            .env("LC_ALL", "de_DE.UTF-8")
+            .env("LANGUAGE", "de")
+            .env("LANG", "de_DE.UTF-8");
+        pin_stable_locale(&mut command);
+        let envs: std::collections::BTreeMap<_, _> = command
+            .get_envs()
+            .map(|(key, value)| (key.to_owned(), value.map(|v| v.to_owned())))
+            .collect();
+        assert_eq!(
+            envs.get(std::ffi::OsStr::new("LC_ALL")),
+            Some(&Some("C".into()))
+        );
+        // `None` is an explicit removal; the key must not be inherited.
+        assert_eq!(envs.get(std::ffi::OsStr::new("LANGUAGE")), Some(&None));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_runner_hands_children_the_c_locale() {
+        let output = run_process_with_timeout(
+            "sh",
+            &["-c", "printf '%s|%s' \"$LC_ALL\" \"${LANGUAGE-unset}\""],
+            None,
+            Duration::from_secs(10),
+        )
+        .expect("run sh through the git runner");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "C|unset");
+    }
 
     #[test]
     fn init_retry_finishes_configuration_after_git_directory_exists() {
