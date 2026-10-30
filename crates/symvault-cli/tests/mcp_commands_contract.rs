@@ -778,7 +778,10 @@ fn run_source_bound_api_template_fixture(before_setup: impl FnOnce()) {
     let server_hits = Arc::clone(&hits);
     let observed_server_requests = Arc::clone(&observed_requests);
     let serve = move || {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        // The server exits after its seventh request; the deadline only bounds a
+        // broken run. 10 s closed the listener before the last case on a loaded
+        // host (6 of 7 hits, `upstream request failed`, #1565).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         while server_hits.load(Ordering::SeqCst) < 7 && std::time::Instant::now() < deadline {
             let (mut stream, _) = match listener.accept() {
                 Ok(pair) => pair,
