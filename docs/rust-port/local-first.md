@@ -19,9 +19,14 @@ requests and per-slice hosted CI runs are suspended for the port.
    - `macos`: native Darwin/arm64, mirroring ci.yml `rust-native`:
      `rust-lint rust-check mcp-call-fixtures-check rust-test`,
      `config-cli-differential` (with `TMPDIR` below `/private/var`, which the
-     trusted-alias auth case requires) and `mcp-approval-pty-acceptance`. When Go code changed against
-     `origin/main`: changes only under `scripts/` race-test just those
-     packages; any other Go, `go.mod` or `go.sum` change runs `make test`.
+     trusted-alias auth case requires) and `mcp-approval-pty-acceptance`.
+     When Go code changed against `origin/main`, the changed packages run
+     with `-race`; any change outside `scripts/` (or to `go.mod`/`go.sum`)
+     also runs the full Go suite as ci.yml `test` does on macOS (no
+     `-race`, `CGO_ENABLED=0`, `-timeout=30m`, same `-skip`, after removing
+     stale Go evidence packages under `target/`). The full `-race` suite
+     stays with CI's ubuntu job: locally `cmd/crud` alone exceeded go test's
+     default 10m timeout under `-race` (receipt `7faf3b57` macos exit 2).
    - `linux`: native Linux/arm64 container (`scripts/rust-port/local-gate/Dockerfile`,
      pins mirror `.github/workflows/ci.yml`), `rust-gates-core port-contract
      mcp-approval-pty-acceptance`. Miri (about one hour) is opt-in with
