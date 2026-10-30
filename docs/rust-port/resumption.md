@@ -1,5 +1,16 @@
 # Rust migration handover — 2026-09-09
 
+## IO-002 numeric tar header fields, 2026-10-30
+
+Rust checked only the mode field; Go's `readHeader` rejects any malformed size, uid,
+gid, mtime, USTAR devmajor/devminor or STAR atime/ctime with `archive/tar: invalid tar
+header`, and a bad GNU atime/ctime silently demotes the header and prepends the USTAR
+prefix field (which overlaps those bytes) to the name. `restoregen` records 19 new
+`header-field/*` cases (149 total; oracle `861ad938` unchanged, only `generator_digest`
+and the appended cases differ). Red before: 11 error mismatches plus the GNU-prefix tree.
+`go_header` in `symvault-sync/src/archive.rs` now mirrors both; four branch mutations each
+fail the corpus. Residuals in the IO-002 matrix row. Local gate only (local-first mode).
+
 ## CLI-005/006 hand-parsed `update` bool flags, 2026-10-30 (#1558)
 
 `update apply|check|info` accept `--flag[=<ParseBool form>]`, last value wins, for

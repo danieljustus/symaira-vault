@@ -351,7 +351,7 @@ fn restore_errors_and_side_effects_match_go_corpus() {
         "../../../testdata/port/sync/restore-errors.json"
     ))
     .unwrap();
-    assert_eq!(fixture.cases.len(), 130, "corpus size changed");
+    assert_eq!(fixture.cases.len(), 149, "corpus size changed");
     let mut failures = Vec::new();
     let mut executed = 0;
     for case in &fixture.cases {
@@ -369,8 +369,8 @@ fn restore_errors_and_side_effects_match_go_corpus() {
             failures.push(message);
         }
     }
-    // 130 recorded cases, 14 of them Unix-only: 116 run on Windows, all 130 on Unix.
-    assert!(executed >= 116, "only {executed} cases executed");
+    // 149 recorded cases, 14 of them Unix-only: 135 run on Windows, all 149 on Unix.
+    assert!(executed >= 135, "only {executed} cases executed");
     assert!(
         failures.is_empty(),
         "{} of {} cases diverge from Go:\n{}",

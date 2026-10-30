@@ -411,10 +411,63 @@ fn make_dir(path: &Path, mode: u32) -> io::Result<()> {
     }
 }
 
-/// Reads the tar mode field like Go's `parseNumeric`: octal, or base-256
-/// where the sign bit makes the value negative (which Go then rejects).
-fn go_header_mode(header: &Header) -> Result<i64, ()> {
-    let field = &header.as_bytes()[100..108];
+/// What Go's `Reader.readHeader` derives from one header block beyond what
+/// the tar crate exposes.
+struct GoHeader {
+    mode: i64,
+    /// USTAR prefix Go prepends to a GNU header whose atime/ctime does not
+    /// parse (the format is demoted and the prefix field, which overlaps
+    /// those GNU fields, is read). Empty otherwise.
+    gnu_demoted_prefix: Vec<u8>,
+}
+
+/// Go's `Reader.readHeader` numeric parsing: size, mode, uid, gid and mtime
+/// always; devmajor/devminor from USTAR on; STAR atime/ctime. Any failure is
+/// the one sticky `ErrHeader`. A bad GNU atime/ctime is not an error: Go
+/// drops the times, demotes the format and joins the ASCII USTAR prefix.
+fn go_header(header: &Header) -> Result<GoHeader, ()> {
+    let block = header.as_bytes();
+    let field = |start: usize, len: usize| &block[start..start + len];
+    let magic = field(257, 6);
+    let star = magic == b"ustar\0" && field(508, 4) == b"tar\0";
+    let ustar = magic == b"ustar\0";
+    let gnu = magic == b"ustar " && field(263, 2) == b" \0";
+    let mut numeric = vec![(124, 12), (100, 8), (108, 8), (116, 8), (136, 12)];
+    if ustar || gnu {
+        numeric.extend([(329, 8), (337, 8)]);
+    }
+    if star {
+        numeric.extend([(476, 12), (488, 12)]);
+    }
+    for (start, len) in numeric {
+        go_parse_numeric(field(start, len))?;
+    }
+    let mut gnu_demoted_prefix = Vec::new();
+    if gnu && !star {
+        let demoted = [345, 357].into_iter().any(|start| {
+            let time = field(start, 12);
+            time[0] != 0 && go_parse_numeric(time).is_err()
+        });
+        if demoted {
+            let prefix = field(345, 155);
+            let prefix = prefix
+                .iter()
+                .position(|byte| *byte == 0)
+                .map_or(prefix, |nul| &prefix[..nul]);
+            if prefix.is_ascii() {
+                gnu_demoted_prefix = prefix.to_vec();
+            }
+        }
+    }
+    Ok(GoHeader {
+        mode: go_parse_numeric(field(100, 8))?,
+        gnu_demoted_prefix,
+    })
+}
+
+/// Go's `parser.parseNumeric`: base-256 when the high bit is set (the sign
+/// bit makes the value negative), otherwise `parseOctal`.
+fn go_parse_numeric(field: &[u8]) -> Result<i64, ()> {
     if field[0] & 0x80 != 0 {
         let inverted: u8 = if field[0] & 0x40 != 0 { 0xff } else { 0x00 };
         let mut value: u64 = 0;
@@ -719,9 +772,21 @@ pub fn restore(
         let mut entry = item.map_err(|error| read_error(&error))?;
         // Go parses the numeric header fields while reading the header, so a
         // malformed mode wins over any name error.
-        let header_mode = go_header_mode(entry.header())
+        let go_header = go_header(entry.header())
             .map_err(|()| restore_error("read archive: archive/tar: invalid tar header"))?;
-        let raw_name = entry.path_bytes().into_owned();
+        let header_mode = go_header.mode;
+        let mut raw_name = entry.path_bytes().into_owned();
+        // ponytail: a GNU long name or PAX path replaces the header name in
+        // Go, prefix included; treat "differs from the header's own name" as
+        // that override (a long name equal to the header name is misread).
+        if !go_header.gnu_demoted_prefix.is_empty()
+            && raw_name.as_slice() == entry.header().path_bytes().as_ref()
+        {
+            let mut joined = go_header.gnu_demoted_prefix;
+            joined.push(b'/');
+            joined.extend_from_slice(&raw_name);
+            raw_name = joined;
+        }
         let name = String::from_utf8_lossy(&raw_name).into_owned();
         let clean_bytes = go_clean_member_name(&raw_name).map_err(restore_error)?;
         let clean = String::from_utf8_lossy(&clean_bytes).into_owned();

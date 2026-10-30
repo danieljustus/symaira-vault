@@ -412,9 +412,15 @@ func makeWritable(root string) {
 // patchHeaderMode overwrites the mode field of the tar header at block index
 // and recomputes its checksum, so only the numeric field is malformed.
 func patchHeaderMode(data []byte, index int, field string) []byte {
+	return patchHeader(data, index, 100, field)
+}
+
+// patchHeader overwrites header bytes at offset (one or more fields) of the
+// tar header at block index and recomputes its checksum.
+func patchHeader(data []byte, index, offset int, field string) []byte {
 	out := append([]byte{}, data...)
 	block := out[index*512 : (index+1)*512]
-	copy(block[100:108], field)
+	copy(block[offset:offset+len(field)], field)
 	for i := 148; i < 156; i++ {
 		block[i] = ' '
 	}
@@ -637,6 +643,60 @@ func buildCases() []restoreCase {
 		cases = append(cases, runAt("mode-field/dir/"+mf.label, "gzip", tar.FormatUnknown,
 			with(member{Name: "entries/modedir", Type: "dir", Mode: 0o700}), true, nil, "", "vault", false,
 			func(data []byte) []byte { return patchHeaderMode(data, 5, field) }))
+	}
+
+	// The other numeric header fields (IO-002 residual 7): Go's readHeader
+	// parses size, uid, gid and mtime for every format, devmajor/devminor
+	// from USTAR on, and STAR atime/ctime, all into one sticky ErrHeader. A
+	// bad GNU atime/ctime only demotes the format and is not an error. The
+	// patched header is block 5 (first member after the fixed prelude), a
+	// USTAR header as archive/tar writes it; the format cases rewrite its
+	// magic/version (offset 257) and STAR trailer (offset 508) first.
+	const (
+		ustarMagic = "ustar\x0000"
+		gnuMagic   = "ustar  \x00"
+		v7Magic    = "\x00\x00\x00\x00\x00\x00\x00\x00"
+	)
+	headerFields := []struct {
+		label  string
+		magic  string // "" keeps the USTAR header
+		star   bool
+		offset int
+		field  string
+	}{
+		{"uid-invalid", "", false, 108, "zzzzzzz\x00"},
+		{"uid-space-padded", "", false, 108, "  1750  "},
+		{"uid-base256", "", false, 108, "\x80\x00\x00\x00\x00\x00\x03\xe8"},
+		{"gid-invalid", "", false, 116, "0000z00\x00"},
+		{"gid-minus", "", false, 116, "-000001\x00"},
+		{"size-invalid", "", false, 124, "0000000000z\x00"},
+		{"mtime-invalid", "", false, 136, "1234567890z\x00"},
+		{"mtime-base256-overflow", "", false, 136, "\x80\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"},
+		{"mtime-base256-negative", "", false, 136, "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff"},
+		{"devmajor-invalid", "", false, 329, "0000008\x00"},
+		{"devminor-invalid", "", false, 337, "zz\x00\x00\x00\x00\x00\x00"},
+		{"v7-devmajor-invalid-ignored", v7Magic, false, 329, "0000008\x00"},
+		{"v7-uid-invalid", v7Magic, false, 108, "zzzzzzz\x00"},
+		{"gnu-devminor-invalid", gnuMagic, false, 337, "zz\x00\x00\x00\x00\x00\x00"},
+		{"gnu-atime-invalid-ignored", gnuMagic, false, 345, "zzzzzzzzzzz\x00"},
+		{"gnu-ctime-invalid-ignored", gnuMagic, false, 357, "zzzzzzzzzzz\x00"},
+		{"star-atime-invalid", ustarMagic, true, 476, "zzzzzzzzzzz\x00"},
+		{"star-ctime-invalid", ustarMagic, true, 488, "zzzzzzzzzzz\x00"},
+		{"star-atime-valid", ustarMagic, true, 476, "00000000001\x00"},
+	}
+	for _, hf := range headerFields {
+		hf := hf
+		cases = append(cases, runAt("header-field/"+hf.label, "gzip", tar.FormatUnknown,
+			with(regm("entries/fieldcase", "x")), true, nil, "", "vault", false,
+			func(data []byte) []byte {
+				if hf.magic != "" {
+					data = patchHeader(data, 5, 257, hf.magic)
+				}
+				if hf.star {
+					data = patchHeader(data, 5, 508, "tar\x00")
+				}
+				return patchHeader(data, 5, hf.offset, hf.field)
+			}))
 	}
 	return cases
 }
