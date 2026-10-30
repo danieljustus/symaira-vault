@@ -16,8 +16,10 @@ requests and per-slice hosted CI runs are suspended for the port.
    `main`, `migration/**` or `feat/1239-tui`; those names trigger workflows.
 3. **Gate.** A slice is integrated only after
    `scripts/rust-port/local-gate.sh all` exits 0 on a clean tree:
-   - `macos`: native Darwin/arm64, `rust-lint rust-check rust-test
-     port-contract mcp-approval-pty-acceptance`. When Go code changed against
+   - `macos`: native Darwin/arm64, mirroring ci.yml `rust-native`:
+     `rust-lint rust-check mcp-call-fixtures-check rust-test`,
+     `config-cli-differential` (with `TMPDIR` below `/private/var`, which the
+     trusted-alias auth case requires) and `mcp-approval-pty-acceptance`. When Go code changed against
      `origin/main`: changes only under `scripts/` race-test just those
      packages; any other Go, `go.mod` or `go.sum` change runs `make test`.
    - `linux`: native Linux/arm64 container (`scripts/rust-port/local-gate/Dockerfile`,

@@ -32,9 +32,15 @@ receipt() { # target exit started log
 # shellcheck disable=SC2329 # invoked as "run_$target"
 run_macos() {
   [ "$(uname -s)/$(uname -m)" = Darwin/arm64 ] || { echo "local-gate: macos needs native Darwin/arm64" >&2; return 2; }
-  # Same TMPDIR rule as the self-hosted CI runner (trusted /var alias case).
-  TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)" ${MAKE_PREFIX:-} make \
-    rust-lint rust-check rust-test port-contract mcp-approval-pty-acceptance
+  # Mirrors ci.yml `rust-native` (macos-latest); `port-contract` runs on Linux,
+  # as in CI.
+  ${MAKE_PREFIX:-} make rust-lint rust-check mcp-call-fixtures-check rust-test
+  # The trusted-alias auth case needs TMPDIR below the root-owned /var ->
+  # /private/var alias (same rule as the self-hosted CI runner). A make
+  # command-line variable overrides the external TMPDIR a build launcher sets.
+  # ponytail: only this target uses the internal per-user temp dir.
+  ${MAKE_PREFIX:-} make config-cli-differential TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)"
+  ${MAKE_PREFIX:-} make mcp-approval-pty-acceptance
   # Go is the frozen oracle: test it only when this branch changed Go code.
   # ponytail: changes confined to scripts/ (leaf generator mains) test just
   # those packages; anything else runs the full race suite.
