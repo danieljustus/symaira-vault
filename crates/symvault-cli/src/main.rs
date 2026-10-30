@@ -149,10 +149,10 @@ enum Command {
     /// Launch the interactive terminal UI.
     Ui {
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "print_keybindings")]
         print_keybindings: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "experimental")]
         experimental: bool,
     },
     /// Review-gated credential intake from loose files.
@@ -167,7 +167,7 @@ enum Command {
         #[arg(value_name = "SHELL", value_parser = ["bash", "zsh", "fish", "powershell"])]
         shell: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_descriptions")]
         no_descriptions: bool,
     },
     /// Run a command with secrets injected as environment variables.
@@ -184,10 +184,10 @@ enum Command {
         #[arg(short = 't', long)]
         timeout: Option<String>,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker")]
         broker: bool,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "broker_strict")]
         broker_strict: bool,
         #[arg(long)]
         broker_passthrough: Vec<String>,
@@ -200,7 +200,7 @@ enum Command {
         #[arg(long, default_value = "127.0.0.1:0")]
         addr: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
         #[arg(long)]
         passthrough: Vec<String>,
@@ -241,11 +241,11 @@ enum Command {
         name: String,
         #[arg(long, value_name = "VALUE")]
         value: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_value")]
         stdin_value: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_totp_secret")]
         stdin_totp_secret: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "generate")]
         generate: bool,
         #[arg(long, default_value_t = 20)]
         length: i64,
@@ -261,15 +261,15 @@ enum Command {
         totp_issuer: Option<String>,
         #[arg(long)]
         totp_account: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_empty")]
         allow_empty: bool,
         #[arg(long = "type")]
         secret_type: Option<String>,
         #[arg(long)]
         usage_hint: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "auto_rotate")]
         auto_rotate: bool,
         #[arg(long)]
         expires_at: Option<String>,
@@ -297,13 +297,13 @@ enum Command {
         query: String,
         #[arg(value_name = "EXTRA")]
         extra: Vec<String>,
-        #[arg(short, long)]
+        #[arg(short, long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "_print")]
         _print: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "length")]
         length: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "digest")]
         digest: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "metadata")]
         metadata: bool,
     },
     /// Search entry paths and contents.
@@ -320,13 +320,13 @@ enum Command {
         #[arg(short = 'l', long, default_value_t = 20, allow_hyphen_values = true,
             value_parser = cobra_usage::parse_go_int)]
         length: i64,
-        #[arg(short = 's', long)]
+        #[arg(short = 's', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "symbols")]
         symbols: bool,
         #[arg(long)]
         store: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "reveal")]
         reveal: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
         quiet: bool,
         #[command(subcommand)]
         subcommand: Option<GenerateCommand>,
@@ -334,10 +334,10 @@ enum Command {
     /// Check vault health and configuration
     Doctor {
         /// Skip checks that require network access
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_network")]
         no_network: bool,
         /// Return non-zero exit code for warnings (7) or failures (8)
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "strict")]
         strict: bool,
         /// Only run checks matching these glob patterns (comma-separated, e.g. vault.*)
         #[arg(long, value_delimiter = ',')]
@@ -346,13 +346,13 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         exclude: Option<Vec<String>>,
         /// Auto-repair safe issues (permissions, gitignore, git init)
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix")]
         fix: bool,
         /// Log what --fix would do without modifying anything
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix_dry_run")]
         fix_dry_run: bool,
         /// Skip slow checks
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quick")]
         quick: bool,
     },
     /// Run a read-only Git history operation.
@@ -379,7 +379,7 @@ enum Command {
     Backup {
         #[arg(value_name = "ARCHIVE_PATH")]
         archive: PathBuf,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "exclude_git")]
         exclude_git: bool,
     },
     /// Restore a vault from a backup archive.
@@ -394,16 +394,16 @@ enum Command {
     },
     /// Verify or rebuild the vault entry manifest.
     Verify {
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rebuild")]
         rebuild: bool,
-        #[arg(long = "rebuild-only")]
+        #[arg(long = "rebuild-only", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rebuild_only")]
         rebuild_only: bool,
     },
     /// Synchronize encrypted vault files with the Git remote.
     Sync {
-        #[arg(long, short = 'p')]
+        #[arg(long, short = 'p', action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "push")]
         push: bool,
-        #[arg(long, short = 'f')]
+        #[arg(long, short = 'f', action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
     },
     /// Inspect the vault Git remote.
@@ -422,13 +422,13 @@ enum Command {
         command: Option<AuditCommand>,
         #[arg(short = 'n', long, default_value_t = 20)]
         tail: i64,
-        #[arg(short = 'j', long)]
+        #[arg(short = 'j', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "audit_json")]
         audit_json: bool,
         #[arg(short = 'a', long, default_value = "default")]
         agent: String,
         #[arg(short = 's', long, default_value = "")]
         since: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "failed")]
         failed: bool,
     },
     /// Export vault entries to CSV or JSON.
@@ -437,7 +437,7 @@ enum Command {
         format: String,
         #[arg(long, default_value = "")]
         mapping: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Measure and report CLI startup time.
@@ -497,11 +497,11 @@ enum Command {
         query: String,
         #[arg(long, value_name = "VALUE")]
         value: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "stdin_value")]
         stdin_value: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_empty")]
         allow_empty: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
         #[arg(long)]
         totp_secret: Option<String>,
@@ -515,7 +515,7 @@ enum Command {
     Delete {
         #[arg(value_name = "PATH")]
         path: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Import entries from another password manager.
@@ -526,20 +526,19 @@ enum Command {
         args: Vec<OsString>,
         #[arg(long)]
         format: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         #[arg(long, default_value = "")]
         prefix: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "skip_existing")]
         skip_existing: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "overwrite")]
         overwrite: bool,
         #[arg(long, default_value = "")]
         mapping: String,
         #[arg(
             long,
-            help = "Import entries into quarantine/<import-id>/ for human review before agent access"
-        )]
+            help = "Import entries into quarantine/<import-id>/ for human review before agent access", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quarantine")]
         quarantine: bool,
     },
     /// Print the version of Symaira Vault.
@@ -563,7 +562,7 @@ enum Command {
     Lock,
     /// Unlock the vault or check whether a cached session is active.
     Unlock {
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "check")]
         check: bool,
         /// Session duration override (for example, 30m or 1h).
         #[arg(long, value_name = "DURATION")]
@@ -595,7 +594,7 @@ enum IntakeCommand {
         #[arg(long, default_value = "5s", allow_hyphen_values = true)]
         debounce: String,
         #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool)]
+            default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "once")]
         once: bool,
         #[command(subcommand)]
         command: Option<IntakeWatchCommand>,
@@ -655,7 +654,7 @@ struct McpFlags {
     #[arg(long)]
     agent: Option<String>,
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool, overrides_with = "stdio")]
     stdio: bool,
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
@@ -668,7 +667,7 @@ struct McpFlags {
     #[arg(long, default_value = "")]
     tls_ca: String,
     #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true,
-        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool)]
+        default_missing_value = "true", default_value = "false", value_parser = parse_mcp_bool, overrides_with = "allow_locked")]
     allow_locked: bool,
 }
 
@@ -712,9 +711,9 @@ enum ApprovalCommand {
     /// Approve or deny a pending request.
     Decide {
         request_id: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "approve")]
         approve: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "deny")]
         deny: bool,
     },
 }
@@ -760,13 +759,13 @@ enum AgentCommand {
     Uninstall {
         name: String,
         /// Don't remove the skill file.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_skill")]
         keep_skill: bool,
         /// Don't modify the agent config file.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "keep_config")]
         keep_config: bool,
         /// Skip confirmation prompt.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Upgrade an agent's security tier with interactive confirmation.
@@ -778,19 +777,19 @@ enum AgentCommand {
         #[arg(long, default_value = "")]
         tier: String,
         /// Show diff without applying changes.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         /// Non-interactive mode (requires --reason).
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         /// Audit reason for the upgrade (required with --yes).
         #[arg(long, default_value = "")]
         reason: String,
         /// Rotate the agent's MCP token on upgrade.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "rotate_token")]
         rotate_token: bool,
         /// Skip biometric verification (not recommended).
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_biometric")]
         no_biometric: bool,
     },
     /// Export or refresh embedded skill packages for AI agents.
@@ -807,28 +806,28 @@ enum AgentCommand {
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
         /// Install every supported agent that is detected on this machine.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "auto_detect")]
         auto_detect: bool,
         /// Permission tier: safe, standard or admin (default safe).
         #[arg(long, default_value = "safe")]
         tier: String,
         /// Use HTTP transport instead of stdio.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "http")]
         http: bool,
         /// Validate and render, but do not write anything.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         /// Skip the agent's MCP config file and only install the skill.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "skill_only")]
         skill_only: bool,
         /// Skip the skill file and only update the agent's MCP config.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "config_only")]
         config_only: bool,
         /// Overwrite an existing agent profile in the vault config.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "force")]
         force: bool,
         /// Suppress the success line.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "quiet")]
         quiet: bool,
         /// Output format: text, json or yaml (default text).
         #[arg(long, default_value = "text")]
@@ -922,15 +921,15 @@ enum AuditCommand {
         action: String,
         #[arg(long, default_value = "")]
         since: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "failed")]
         failed: bool,
         #[arg(short = 'o', long)]
         output: Option<String>,
         #[arg(long, default_value = "json")]
         format: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "verify_hmac")]
         verify_hmac: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "redact_paths")]
         redact_paths: bool,
     },
 }
@@ -943,7 +942,7 @@ enum RemoteCommand {
         name: String,
         #[arg(short = 'p', long)]
         path: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "push")]
         push: bool,
     },
     Status,
@@ -963,16 +962,16 @@ enum RecipientsCommand {
     /// Add a recipient public key.
     Add {
         recipient: String,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "reencrypt")]
         reencrypt: bool,
     },
     /// Remove a recipient public key.
     #[command(alias = "rm")]
     Remove {
         recipient: String,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "no_reencrypt")]
         no_reencrypt: bool,
     },
 }
@@ -991,7 +990,7 @@ enum FileCommand {
         secret_type: String,
         #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE)]
         max_size: u64,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "shred")]
         shred: bool,
     },
     /// Export a stored file attachment.
@@ -1024,7 +1023,7 @@ enum ConfigCommand {
     Validate {
         #[arg(value_name = "PATH")]
         path: Option<PathBuf>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "fix")]
         fix: bool,
     },
     /// Get a value using dotted path notation.
@@ -1067,10 +1066,12 @@ enum AuthCommand {
             num_args = 0..=1,
             require_equals = true,
             action = clap::ArgAction::Set,
-            default_missing_value = "true"
+            default_missing_value = "true",
+            value_parser = intake_commands::parse_bool,
+            overrides_with = "reencrypt"
         )]
         reencrypt: bool,
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
 }
@@ -1107,7 +1108,7 @@ enum DeviceCommand {
     /// Add this device to an existing multi-device vault.
     Add {
         /// Pair with an existing device using QR data.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "pair")]
         pair: bool,
         /// Name for this device (defaults to hostname).
         #[arg(long)]
@@ -1118,7 +1119,7 @@ enum DeviceCommand {
     /// Revoke a device and re-encrypt all entries.
     Revoke {
         /// Skip confirmation prompt.
-        #[arg(short = 'y', long = "yes")]
+        #[arg(short = 'y', long = "yes", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
@@ -1137,7 +1138,7 @@ enum DeviceCommand {
     /// Revoke an approval device's ability to approve/deny requests.
     ApprovalRevoke {
         /// Skip confirmation prompt.
-        #[arg(short = 'y', long = "yes")]
+        #[arg(short = 'y', long = "yes", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
@@ -1151,27 +1152,27 @@ enum MigrateCommand {
     Paths,
     /// Migrate vault entries to pseudonymized storage paths.
     Pseudonymize {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
     },
     /// Re-encrypt a legacy scrypt identity using Argon2id.
     Kdf {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
         /// Allow one exclusive historical-budget read for local policy migration.
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "allow_legacy_kdf")]
         allow_legacy_kdf: bool,
     },
     /// Migrate agent profiles and config to the v4.0 tier format.
     V4 {
-        #[arg(short = 'y', long)]
+        #[arg(short = 'y', long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "yes")]
         yes: bool,
-        #[arg(long = "dry-run")]
+        #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
     },
     /// Upgrade a cached session from the legacy plaintext format.
     Session {
-        #[arg(long = "dry-run")]
+        #[arg(long = "dry-run", action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
     },
 }
@@ -1183,7 +1184,7 @@ enum TemplateCommand {
         kind: String,
         #[arg(long)]
         output: Option<String>,
-        #[arg(long)]
+        #[arg(long, action = clap::ArgAction::Set, num_args = 0..=1, require_equals = true, default_missing_value = "true", default_value = "false", value_parser = intake_commands::parse_bool, overrides_with = "dry_run")]
         dry_run: bool,
         #[arg(long, default_value = "app")]
         name: String,

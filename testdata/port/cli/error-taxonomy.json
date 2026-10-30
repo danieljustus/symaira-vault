@@ -98,7 +98,7 @@
       "internal/errors/errors.go"
     ],
     "source_digest": "5546f3a5778bd6f49696d54f2418a627dc0add42fce9817389f57dcc360a5ca1",
-    "generator_digest": "37c60cf0f318c1c08116ba8d863eb66dfe98bf37d0424daaba781b5b33c8bf7e"
+    "generator_digest": "5b6791c5dfc05523818917cb0dc912925466350078611c371f964e74978d6f2b"
   },
   "usage": [
     {
@@ -1112,6 +1112,279 @@
         ],
         "exit_code": 0,
         "stdout": "symvault dev\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "bool_flag_local_false",
+      "description": "a command-local bool flag accepts --flag=false: the vault check then fails",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_true",
+      "description": "a command-local bool flag accepts --flag=true",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=true"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_reset",
+      "description": "a repeated local bool flag is last-value-wins: --rebuild --rebuild=false",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild",
+          "--rebuild=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_set_after_reset",
+      "description": "--rebuild=false --rebuild turns the local flag on again",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=false",
+          "--rebuild"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_reset_after_arg",
+      "description": "the reset also applies after a positional argument",
+      "observation": {
+        "args": [
+          "get",
+          "x",
+          "--print",
+          "--print=0"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_noncanonical_false",
+      "description": "ParseBool accepts F as false on a local flag",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=F"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_noncanonical_true",
+      "description": "ParseBool accepts t as true on a local flag",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=t"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_invalid_value",
+      "description": "an invalid boolean value on a local flag",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild=maybe"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"--rebuild\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\nError: invalid argument \"maybe\" for \"--rebuild\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_empty_value",
+      "description": "an empty boolean value on a local flag is a ParseBool syntax error",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"\" for \"--rebuild\" flag: strconv.ParseBool: parsing \"\": invalid syntax\nError: invalid argument \"\" for \"--rebuild\" flag: strconv.ParseBool: parsing \"\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_rebuild_only_false",
+      "description": "verify --rebuild-only=false is accepted too",
+      "observation": {
+        "args": [
+          "verify",
+          "--rebuild-only=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_shorthand_false",
+      "description": "a shorthand bool flag accepts -f=false",
+      "observation": {
+        "args": [
+          "sync",
+          "-f=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_shorthand_reset",
+      "description": "a shorthand bool flag is last-value-wins: -p -p=false",
+      "observation": {
+        "args": [
+          "get",
+          "-p",
+          "-p=false",
+          "x"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_shorthand_invalid_value",
+      "description": "an invalid boolean value on a shorthand bool flag",
+      "observation": {
+        "args": [
+          "sync",
+          "-f=maybe"
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: invalid argument \"maybe\" for \"-f, --force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\nError: invalid argument \"maybe\" for \"-f, --force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_shorthand_bare_equals",
+      "description": "-f= leaves = as the next shorthand, which is unknown",
+      "observation": {
+        "args": [
+          "sync",
+          "-f="
+        ],
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "Error: unknown shorthand flag: '=' in -=\nError: unknown shorthand flag: '=' in -=\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_sync_force_false",
+      "description": "sync --force=false reaches the vault check",
+      "observation": {
+        "args": [
+          "sync",
+          "--force=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_unlock_check_false",
+      "description": "unlock --check=false reaches the vault check",
+      "observation": {
+        "args": [
+          "unlock",
+          "--check=false"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_get_metadata_false",
+      "description": "get --metadata=false reaches the vault check",
+      "observation": {
+        "args": [
+          "get",
+          "--metadata=false",
+          "x"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_recipients_remove_false",
+      "description": "recipients remove --yes=false --no-reencrypt=false reaches the vault check",
+      "observation": {
+        "args": [
+          "recipients",
+          "remove",
+          "--yes=false",
+          "--no-reencrypt=false",
+          "x"
+        ],
+        "exit_code": 3,
+        "stdout": "",
+        "stderr": "Error: vault not initialized. Run 'symvault init' first\nError: vault not initialized. Run 'symvault init' first\nRun 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.\n"
+      }
+    },
+    {
+      "name": "bool_flag_local_doctor_fix_false_help",
+      "description": "doctor --fix=false: the report of the command itself depends on the host, so the case ends at --help (decided before clap parses the value; the structural guard and the parse test cover doctor)",
+      "observation": {
+        "args": [
+          "doctor",
+          "--fix=false",
+          "--help"
+        ],
+        "exit_code": 0,
+        "stdout": "Run a series of health checks on the current vault and report their status.\n\nOutput modes:\n  --text (default): colored output, one line per check\n  --json:           machine-readable JSON (suitable for CI/monitoring)\n\nUse --no-network to skip checks that require network access (git remote reachability, update check).\n\nUsage:\n  symvault doctor [flags]\n\nExamples:\n  # Full health check\n  symvault doctor\n\n  # JSON output, no network\n  symvault doctor --output json --no-network\n\n  # Run only config checks\n  symvault doctor --only 'config.*'\n\n  # Auto-fix what's safe to fix (with dry-run first)\n  symvault doctor --fix-dry-run\n  symvault doctor --fix\n\nFlags:\n      --exclude strings   Skip checks matching these glob patterns (comma-separated)\n      --fix               auto-repair safe issues (permissions, gitignore, git init)\n      --fix-dry-run       Log what --fix would do without modifying anything\n  -h, --help              help for doctor\n      --json              Output in JSON format (deprecated: use --output=json)\n      --no-network        Skip network-dependent checks\n      --only strings      Only run checks matching these glob patterns (comma-separated, e.g. vault.*)\n      --quick             Skip slow checks (scrypt benchmark, update check)\n      --strict            Return non-zero exit code for warnings (7) or failures (8)\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "bool_flag_local_agent_install_global_quiet",
+      "description": "agent install has no local --quiet: --quiet=false is the persistent flag and is accepted",
+      "observation": {
+        "args": [
+          "agent",
+          "install",
+          "--quiet=false",
+          "--help"
+        ],
+        "exit_code": 0,
+        "stdout": "Unified install command that detects an AI agent, creates a security\nprofile in config.yaml, generates a scoped access token, injects the\nMCP server configuration into the agent's config file, and installs the\nembedded skill package — all in one step.\n\nThis replaces the older mcp install, mcp-config, and agent setup commands.\n\nThe default security tier is \"safe\" (read-only capabilities). For \"standard\"\nor \"admin\" tiers, an interactive terminal is required to confirm the\nsecurity implications.\n\nSupported agents: openclaw, claude-code, hermes, codex, opencode\n\nUsage:\n  symvault agent install [name] [flags]\n\nExamples:\n  # Install and configure Claude Code (auto-detect)\n  symvault agent install claude-code\n\n  # Detect all installed agents and configure each\n  symvault agent install --auto-detect\n\n  # HTTP transport with auto-generated bearer token\n  symvault agent install hermes --http\n\n  # Standard tier with explicit confirmation\n  symvault agent install codex --tier standard\n\n  # Preview what would happen without writing anything\n  symvault agent install openclaw --dry-run\n\n  # Only install the skill package, skip MCP config\n  symvault agent install opencode --skill-only\n\n  # Only inject MCP config, skip the skill\n  symvault agent install claude-code --config-only\n\n  # Force overwrite existing profile and MCP config entries\n  symvault agent install hermes --force\n\n  # Structured JSON output for scripting\n  symvault agent install opencode --output json\n\nFlags:\n      --auto-detect   Detect all installed agents and configure each\n      --config-only   Only inject MCP config, skip the skill\n      --dry-run       Preview changes without applying them\n      --force         Overwrite existing agent profile and MCP config entries\n  -h, --help          help for install\n      --http          Use HTTP transport with auto-generated bearer token\n      --skill-only    Only install the skill package, skip MCP config\n      --tier string   Security tier: safe (default), standard, or admin (default \"safe\")\n\nGlobal Flags:\n      --color string      When to emit ANSI color: auto, always, never (default \"auto\")\n      --json              Output format shorthand for --output json; overrides --output when both are specified\n      --no-pipe-warning   suppress 'reading from non-TTY' warning when piping secrets\n      --output string     Output format (text, json, yaml) (default \"text\")\n      --profile string    use a named vault profile\n      --quiet             suppress non-error output\n      --theme string      Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)\n      --vault string      path to the password vault (default \"~/.symvault\")\n",
         "stderr": ""
       }
     }

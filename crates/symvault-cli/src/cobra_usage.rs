@@ -987,6 +987,20 @@ fn parse_flags(
                 };
                 at += 1;
                 if is_help_arg(arg) || is_bool_arg(arg) {
+                    // pflag: `-y=value` hands everything after the `=` to the flag, but only
+                    // when something follows it; a bare `-y=` leaves `=` as the next shorthand.
+                    if at + 1 < cluster.len() && cluster[at] == '=' {
+                        let value: String = cluster[at + 1..].iter().collect();
+                        if !go_parse_bool(&value) {
+                            return Err(invalid_argument(
+                                &value,
+                                arg,
+                                "ParseBool",
+                                "invalid syntax",
+                            ));
+                        }
+                        break;
+                    }
                     continue;
                 }
                 let value: String = if at < cluster.len() {
@@ -1626,6 +1640,144 @@ mod tests {
         let (mismatches, compared) = flag_type_mismatches(&root());
         assert!(compared > 150, "only {compared} flags compared");
         assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+    }
+
+    /// Every Go bool flag (local and persistent) is a pflag `BoolVar`, which accepts
+    /// `--flag`, `--flag=<ParseBool form>` and repeats with the last value winning.
+    /// A clap `SetTrue` flag rejects `--flag=false`, so each one must be the
+    /// `--flag[=bool]` spelling (`ArgAction::Set`, optional `require_equals` value).
+    /// Returns the bool flags that are not, plus the number of bool flags compared.
+    fn bool_flags_without_explicit_value(root: &Command) -> (Vec<String>, usize) {
+        let tree = tree();
+        let mut offenders = Vec::new();
+        let mut compared = 0;
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            let Some(command) = clap_command(root, &path) else {
+                continue;
+            };
+            let flags = Flags { command, root };
+            for key in ["local_flags", "persistent_flags"] {
+                for flag in entry[key].as_array().into_iter().flatten() {
+                    let name = flag["name"].as_str().expect("flag name");
+                    if flag["type"] != "bool" || name == "help" {
+                        continue;
+                    }
+                    let mut check = |label: String, arg: Option<&Arg>| {
+                        let Some(arg) = arg else {
+                            return;
+                        };
+                        compared += 1;
+                        let explicit = arg.get_action().takes_values()
+                            && arg.is_require_equals_set()
+                            && arg
+                                .get_num_args()
+                                .is_some_and(|range| range.min_values() == 0);
+                        if !explicit {
+                            offenders.push(format!("{path} {label}"));
+                        }
+                    };
+                    check(format!("--{name}"), flags.long(name));
+                    if let Some(short) = flag["shorthand"].as_str().and_then(|s| s.chars().next()) {
+                        check(format!("-{short}"), flags.short(short));
+                    }
+                }
+            }
+        }
+        (offenders, compared)
+    }
+
+    #[test]
+    fn go_bool_flags_accept_an_explicit_value() {
+        let (offenders, compared) = bool_flags_without_explicit_value(&root());
+        assert!(compared > 80, "only {compared} bool flags compared");
+        assert!(
+            offenders.is_empty(),
+            "{} of {compared} bool flags reject --flag=<bool>:\n{}",
+            offenders.len(),
+            offenders.join("\n")
+        );
+    }
+
+    /// pflag hands everything after `-f=` to the shorthand's flag; only a bare `-f=` leaves
+    /// `=` behind as the next (unknown) shorthand.
+    #[test]
+    fn shorthand_bool_takes_an_equals_value() {
+        assert_eq!(verdict(&["sync", "-f=false"]), Verdict::Proceed);
+        assert_eq!(verdict(&["sync", "-f", "-f=0"]), Verdict::Proceed);
+        let Verdict::Fail { stderr, code } = verdict(&["sync", "-f=maybe"]) else {
+            panic!("-f=maybe must be refused");
+        };
+        assert_eq!(code, 1);
+        assert!(
+            stderr.starts_with(
+                "Error: invalid argument \"maybe\" for \"-f, --force\" flag: strconv.ParseBool: parsing \"maybe\": invalid syntax\n"
+            ),
+            "{stderr}"
+        );
+        let Verdict::Fail { stderr, .. } = verdict(&["sync", "-f="]) else {
+            panic!("-f= must be refused");
+        };
+        assert!(
+            stderr.starts_with("Error: unknown shorthand flag: '=' in -=\n"),
+            "{stderr}"
+        );
+    }
+
+    /// clap itself must take `--flag=false`, `-x=false` and a repeat in either order for
+    /// every Go bool flag (the emulation above runs first, but only clap decides the
+    /// accepting cases, e.g. `doctor --fix=false`, whose report is host dependent and so
+    /// cannot be replayed from the corpus). Errors about *missing* required arguments are
+    /// fine: the flag syntax was already accepted when clap reached them.
+    #[test]
+    fn clap_parses_explicit_values_of_every_go_bool_flag() {
+        use clap::error::ErrorKind;
+        let root = root();
+        let tree = tree();
+        let mut parsed = 0;
+        for entry in tree["commands"].as_array().expect("commands") {
+            let path = go_path(entry);
+            if path.is_empty() || clap_command(&root, &path).is_none() {
+                continue;
+            }
+            for flag in entry["local_flags"].as_array().into_iter().flatten() {
+                let name = flag["name"].as_str().expect("flag name");
+                if flag["type"] != "bool" || name == "help" {
+                    continue;
+                }
+                let long = format!("--{name}");
+                let mut forms = vec![
+                    vec![format!("{long}=false")],
+                    vec![long.clone(), format!("{long}=false")],
+                    vec![format!("{long}=false"), long.clone()],
+                    vec![format!("{long}=F"), format!("{long}=1")],
+                ];
+                if let Some(short) = flag["shorthand"].as_str() {
+                    forms.push(vec![format!("-{short}=false")]);
+                }
+                for form in forms {
+                    let mut argv = vec!["symvault".to_owned()];
+                    argv.extend(path.split(' ').map(str::to_owned));
+                    argv.extend(form);
+                    parsed += 1;
+                    if let Err(error) = root.clone().try_get_matches_from(&argv) {
+                        assert!(
+                            matches!(
+                                error.kind(),
+                                ErrorKind::MissingRequiredArgument
+                                    | ErrorKind::MissingSubcommand
+                                    | ErrorKind::DisplayHelp
+                                    | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+                            ),
+                            "{}: {:?}: {error}",
+                            argv.join(" "),
+                            error.kind()
+                        );
+                    }
+                }
+            }
+        }
+        assert!(parsed > 300, "only {parsed} argument vectors parsed");
     }
 
     #[test]

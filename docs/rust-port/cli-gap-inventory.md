@@ -76,8 +76,64 @@ now assigns the parsed value on every occurrence, and the global `--json`,
 `--quiet` and `--no-pipe-warning` clap flags are `--flag[=bool]` with
 `overrides_with` (Go's `ParseBool` forms, last value wins) instead of
 `SetTrue`, which rejected `--quiet=false` and any repeat. Ten Go-recorded usage
-cases (`bool_flag_*`) pin it. Local bool flags other than the existing
-`--flag[=bool]` ones stay `SetTrue` and still reject `--flag=false`.
+cases (`bool_flag_*`) pin it. The command-local bool flags were left as
+`SetTrue` at that point; #1529 below closes them.
+
+### Local bool flags accept `--flag[=bool]` (#1529)
+
+Every Go bool flag is a pflag `BoolVar`: `--flag`, `--flag=<ParseBool form>`,
+`-x=<form>` and repeats (last value wins) are all valid. The Rust CLI still
+declared the command-local ones as clap `SetTrue`, so `symvault doctor
+--fix=false` and `symvault verify --rebuild=false` failed with `unexpected value
+'false'` where Go succeeds. The enumeration is scripted from the recorded Go
+command tree (`testdata/port/cli/command-tree.json`): 98 non-help bool flags on
+runnable non-root commands (plus 14 shorthand forms). 82 have a clap arg at the
+same path and 69 of those were `SetTrue` (`add`, `set`, `get`, `delete`,
+`doctor`, `verify`, `sync`, `unlock`, `backup`, `import`, `export`, `generate`,
+`file add`, `recipients add|remove`, `remote init`, `device
+add|revoke|approval-revoke`, `approval decide`, `audit`, `audit export`, `agent
+install|uninstall|upgrade`, `auth rotate-passphrase`, `config validate`,
+`migrate kdf|pseudonymize|session|v4`, `template generate`). All 69, plus the
+`audit -j` shorthand and the Rust-only local `agent install --quiet` (Go has
+only the persistent flag, which accepts `=false`), now use the global flags'
+`--flag[=bool]` spelling (`ArgAction::Set`, optional `require_equals` value,
+`intake_commands::parse_bool`) with `overrides_with` on themselves, so a repeat
+is last-value-wins. Of the other 16 Go flags, six are `--json` locals served by
+the global flag (`audit`, `auth status`, `config validate`, `doctor`, `intake`,
+`intake watch`), `import review promote --overwrite` is `import`'s clap
+`--overwrite`, and nine belong to hand-parsed commands (below). Already-converted local
+flags (`ui`, `completion`, `mcp`, `broker`, `run`, `recipients`/`auth`
+`--reencrypt`) gained the missing `overrides_with` (a repeat such as
+`--reencrypt --reencrypt=false` was rejected as "cannot be used multiple
+times") and `auth rotate-passphrase --reencrypt` now takes Go's ParseBool forms
+instead of only `true|false`. The cobra emulation also accepts `-y=value` for a
+bool shorthand like pflag (previously it read `=` as an unknown shorthand: `sync
+-f=false` printed `unknown shorthand flag: '=' in -=false`); `-y=maybe` is Go's
+`invalid argument "maybe" for "-y, --yes" flag` and a bare `-y=` still reports
+the `=` as unknown.
+
+Evidence: 20 Go-recorded `bool_flag_local_*` usage cases in
+`testdata/port/cli/error-taxonomy.json` (now 95 usage cases; `errtaxgen`
+regenerated at the unchanged oracle `0cc78062`, only `generator_digest` and the
+appended cases differ) cover `verify --rebuild=false|true|F|t|maybe|`, repeated
+forms, `--rebuild-only=false`, `get -p -p=false`, `sync -f=false|maybe|`,
+`sync --force=false`, `unlock --check=false`, `get --metadata=false` and
+`recipients remove --yes=false --no-reencrypt=false`. 15 of them failed on the
+pre-change binary. `doctor --fix=false` cannot be byte-replayed (its report
+depends on keyring and host state), so its corpus case ends at `--help`, which
+Rust decides before clap parses the value and therefore does not guard clap;
+that is covered instead by two in-crate tests that run on every Go bool flag
+of the tree: `go_bool_flags_accept_an_explicit_value` (structural: the clap arg
+is the `--flag[=bool]` spelling, long and short) and
+`clap_parses_explicit_values_of_every_go_bool_flag` (behavioral: `--f=false`,
+`--f --f=false`, `--f=false --f`, `--f=F --f=1`, `-x=false` parse). Not
+covered: the nine bool flags of the hand-parsed commands `update
+apply|check|info` (7) and `setup` (2, not probed: interactive wizard); they are
+not clap `SetTrue` and their parsers reject the `=value` form (measured: `update
+check --force=false` exits 1 with `unknown command "--force=false"` where Go
+exits 0). Also uncovered: the `delete` prompt-before-vault-check gap (`delete -y=false x` prompts), and
+clap still rejecting `--flag false`-style extra positionals that cobra's
+`legacyArgs` accepts (listed above).
 
 ### Review correction: NoArgs versus legacyArgs and bare dash
 
