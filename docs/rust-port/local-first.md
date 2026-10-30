@@ -34,7 +34,11 @@ requests and per-slice hosted CI runs are suspended for the port.
      `RUN_MIRI=1` and required for slices that change `crates/symvault-core`.
    Each run appends a receipt (SHA, target, exit, log) to
    `target/local-gate/receipts.jsonl` unless `LOCAL_GATE_RECEIPTS` points
-   elsewhere.
+   elsewhere. The gate runs in the live working tree (only the clean check
+   happens at start): do not edit, stash-pop or generate fixtures in this
+   worktree until it finishes; park unfinished work with `git stash` first.
+   A receipt's `exit` is evidence only together with its log (`Summary` line,
+   no `make: ***`/`FAILED` lines).
 4. **Matrix wording.** A row may be promoted with the label
    `PASS (local)`: name the SHA and both receipts (`macos`, `linux`). Never
    write that a row ran in hosted CI when it did not. `PASS (local)` rows are
