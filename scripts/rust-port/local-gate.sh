@@ -62,6 +62,7 @@ run_linux() {
     -v symvault-gate-go:/home/dev/go \
     -v symvault-gate-target:/home/dev/target \
     -e CARGO_TARGET_DIR=/home/dev/target -e MIRI_TARGET_DIR=/home/dev/target/miri \
+    -e CARGO_INCREMENTAL=0 -e GOCACHE=/home/dev/go/cache \
     -e RUST_TEST_THREADS=1 \
     "$image" make $targets
 }
