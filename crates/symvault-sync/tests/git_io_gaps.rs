@@ -470,6 +470,86 @@ fn pull_projects_connection_failure_as_offline_from_a_real_remote() {
     assert!(error.contains(NETWORK_MESSAGE), "{error}");
 }
 
+const GERMAN_CHILD_MARKER: &str = "SYMVAULT_TEST_GERMAN_LOCALE_CHILD";
+
+// #1555: git localizes its transport errors (`Schwerwiegend: konnte nicht auf
+// '...' zugreifen: ...`). The offline classifier matches English text, so the
+// sync runner must pin git to a stable C locale whatever the caller's locale
+// is. The parent process cannot change its own environment safely, so this
+// test re-executes itself with a German locale; the child performs the pull.
+#[test]
+fn pull_classifies_offline_under_a_german_locale() {
+    if std::env::var_os(GERMAN_CHILD_MARKER).is_some() {
+        let (_root, repo, _remote) = pair();
+        git(
+            repo.root(),
+            &[
+                "remote",
+                "set-url",
+                "origin",
+                "http://127.0.0.1:1/unreachable.git",
+            ],
+        );
+        let localized = Command::new("git")
+            .args(["ls-remote", "http://127.0.0.1:1/unreachable.git"])
+            .output()
+            .expect("probe git");
+        assert!(
+            String::from_utf8_lossy(&localized.stderr).contains("Schwerwiegend"),
+            "the child must observe German git messages: {}",
+            String::from_utf8_lossy(&localized.stderr)
+        );
+        let result = repo.pull("origin");
+        let error = result.error.as_ref().expect("offline error").to_string();
+        assert!(error.contains(NETWORK_MESSAGE), "{error}");
+        return;
+    }
+
+    let german = |command: &mut Command| {
+        command
+            .env("LANG", "de_DE.UTF-8")
+            .env("LC_ALL", "de_DE.UTF-8")
+            .env("LANGUAGE", "de")
+            .env("GIT_TERMINAL_PROMPT", "0");
+    };
+    let mut probe = Command::new("git");
+    german(&mut probe);
+    let probe = probe
+        .args(["ls-remote", "http://127.0.0.1:1/unreachable.git"])
+        .output()
+        .expect("probe git");
+    if !String::from_utf8_lossy(&probe.stderr).contains("Schwerwiegend") {
+        eprintln!(
+            "SKIP no German git catalog/locale on this host; the env contract is asserted by git::tests::git_runner_pins_a_stable_c_locale"
+        );
+        return;
+    }
+
+    let mut child = Command::new(std::env::current_exe().expect("test executable"));
+    german(&mut child);
+    let output = child
+        .env(GERMAN_CHILD_MARKER, "1")
+        .args([
+            "pull_classifies_offline_under_a_german_locale",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .output()
+        .expect("re-run under a German locale");
+    assert!(
+        output.status.success(),
+        "stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("1 passed"),
+        "the German-locale child must have run: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
 // Compile a dependency-free native helper once per test process. This keeps
 // frozen Rust replay independent of Go and avoids shell emulation on Windows.
 fn native_git_helper() -> &'static Path {
