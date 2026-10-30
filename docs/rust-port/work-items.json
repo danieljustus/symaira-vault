@@ -111,7 +111,7 @@
     },
     {
       "id": "RUST-013",
-      "title": "Run value gate and ship dual-binary prerelease",
+      "title": "Run value gate and ship Rust-only prerelease",
       "status": "blocked",
       "depends_on": ["RUST-009", "RUST-011", "RUST-012"],
       "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005", "VALUE-001"],
@@ -119,19 +119,20 @@
     },
     {
       "id": "RUST-014",
-      "title": "Stable Rust cutover with Go fallback",
+      "title": "Stable Rust-only cutover",
       "status": "blocked",
       "depends_on": ["RUST-013"],
       "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005"],
-      "acceptance": ["all contract matrix rows PASS", "native release smoke green", "public artifact readback green", "rollback exercise green"]
+      "acceptance": ["all contract matrix rows PASS", "native release smoke green", "public artifact readback green", "Rust opens existing Go-created vault state unchanged", "automatic pre-migration backup created and restore exercise green"],
+      "decision": "Rust-only cutover per maintainer decision 2026-10-30: no Go fallback binary, no Go rollback, no observation window; data safety via automatic backup before first Rust migration plus verified restore."
     },
     {
       "id": "RUST-015",
-      "title": "Remove Go backend after one stable Rust release",
+      "title": "Remove Go backend at the Rust-only cutover",
       "status": "blocked",
       "depends_on": ["RUST-014"],
       "contract_rows": [],
-      "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green", "immutable dual-binary rollback release verified"]
+      "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green"]
     }
   ]
 }

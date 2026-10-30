@@ -5,6 +5,16 @@
 > Historical Windows receipts and source paths below are retained as evidence,
 > not as a current native acceptance or release requirement. Source removal is a follow-up.
 
+## Cutover decision (2026-10-30)
+
+The maintainer replaced the dual-binary cutover with the EraseMe model. The
+stable release ships Rust only: no Go fallback binary, no Go-to-Rust-to-Go
+rollback exercise and no seven-day observation window. Go sources are removed
+at the cutover. Data safety is kept and becomes a cutover gate instead: Rust
+must open existing Go-created state unchanged, and the first Rust run creates
+an automatic backup whose restore is verified. Windows is out of scope.
+Remaining work is completed locally on the MacBook and pushed once complete.
+
 > **Status:** accepted for staged implementation
 > **Go oracle:** commit `caadd5e`, release `v0.22.1`
 > **Scope:** the Go backend and mobile bridge; Swift clients and editor plugins stay in their current languages
