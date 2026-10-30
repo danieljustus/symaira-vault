@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/importer"
@@ -41,6 +42,8 @@ type importCase struct {
 	Expected      []entry    `json:"expected"`
 	Failed        bool       `json:"failed"`
 	ErrorContains string     `json:"error_contains,omitempty"`
+	// Error is Go's complete error text (mutation cases).
+	Error string `json:"error,omitempty"`
 }
 
 func main() {
@@ -78,6 +81,7 @@ func main() {
 		onePuxSuffixBoundaryCase(),
 		onePuxTrailingJSONCase(),
 	}
+	cases = append(cases, onePuxMutations()...)
 
 	fixture := struct {
 		Commit          string       `json:"commit"`
@@ -105,17 +109,7 @@ func main() {
 func onePuxCase() importCase {
 	// This exercises duplicate credential fields, title-based TOTP detection,
 	// first-value selection, skipped categories, and skipped trashed items.
-	payload := []byte(`{"accounts":[{"vaults":[{"items":[
-{"categoryUuid":"001","title":"Work Login","details":{"loginFields":[
-{"designation":"username","value":"old-user"},{"designation":"Username","value":"new-user"},
-{"designation":"password","value":"old-pass"},{"designation":"PASSWORD","value":"new-pass"}],
-"notesPlain":"notes","sections":[{"fields":[
-{"t":"custom","title":"One-Time Password","v":{"otp":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}},
-{"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]},
-"overview":{"urls":[{"url":"https://example.test"}],"tags":["work"]}},
-{"categoryUuid":"001","title":"Trash","trashed":true},
-{"categoryUuid":"webforms.generic","title":"Ignored"}
-]}]}]}`)
+	payload := onePuxPayload()
 	input := zipBytes("nested/export.json", payload)
 	parser, err := importer.New(importer.Format1Password)
 	must(err)
@@ -318,4 +312,158 @@ func must(err error) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// onePuxPayload is the reference export behind onePuxCase and the sweep.
+func onePuxPayload() []byte {
+	return []byte(`{"accounts":[{"vaults":[{"items":[
+{"categoryUuid":"001","title":"Work Login","details":{"loginFields":[
+{"designation":"username","value":"old-user"},{"designation":"Username","value":"new-user"},
+{"designation":"password","value":"old-pass"},{"designation":"PASSWORD","value":"new-pass"}],
+"notesPlain":"notes","sections":[{"fields":[
+{"t":"custom","title":"One-Time Password","v":{"otp":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}},
+{"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]},
+"overview":{"urls":[{"url":"https://example.test"}],"tags":["work"]}},
+{"categoryUuid":"001","title":"Trash","trashed":true},
+{"categoryUuid":"webforms.generic","title":"Ignored"}
+]}]}]}`)
+}
+
+// Mutation sweep over onePuxPayload: every JSON path gets null, a wrong
+// scalar, a wrong array and a wrong object (skipping its own kind), and every
+// object key an upper-cased spelling. Keys are visited in sorted order.
+type step struct {
+	key   string
+	index int
+}
+
+func pathID(path []step) string {
+	var b strings.Builder
+	for _, s := range path {
+		if s.key != "" {
+			b.WriteString("." + s.key)
+		} else {
+			fmt.Fprintf(&b, "[%d]", s.index)
+		}
+	}
+	return b.String()
+}
+
+func walk(v any, path []step, visit func([]step, any)) {
+	visit(path, v)
+	switch t := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(t))
+		for k := range t {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			walk(t[k], append(append([]step{}, path...), step{key: k}), visit)
+		}
+	case []any:
+		for i, e := range t {
+			walk(e, append(append([]step{}, path...), step{index: i}), visit)
+		}
+	}
+}
+
+func deepCopy(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(t))
+		for k, e := range t {
+			m[k] = deepCopy(e)
+		}
+		return m
+	case []any:
+		a := make([]any, len(t))
+		for i, e := range t {
+			a[i] = deepCopy(e)
+		}
+		return a
+	}
+	return v
+}
+
+func edit(root any, path []step, f func(parent any, last step)) any {
+	out := deepCopy(root)
+	cur := out
+	for _, s := range path[:len(path)-1] {
+		if s.key != "" {
+			cur = cur.(map[string]any)[s.key]
+		} else {
+			cur = cur.([]any)[s.index]
+		}
+	}
+	f(cur, path[len(path)-1])
+	return out
+}
+
+func kind(v any) string {
+	switch v.(type) {
+	case nil:
+		return "null"
+	case bool:
+		return "bool"
+	case float64:
+		return "number"
+	case string:
+		return "string"
+	case []any:
+		return "array"
+	}
+	return "object"
+}
+
+func onePuxMutations() []importCase {
+	var doc any
+	must(json.Unmarshal(onePuxPayload(), &doc))
+	variants := []struct {
+		name  string
+		value any
+	}{{"null", nil}, {"number", 7}, {"string", "x"}, {"array", []any{}}, {"object", map[string]any{}}}
+	var cases []importCase
+	add := func(name string, mutated any) {
+		payload, err := json.Marshal(mutated)
+		must(err)
+		input := zipBytes("export.json", payload)
+		parser, err := importer.New(importer.Format1Password)
+		must(err)
+		entries, err := parser.Parse(bytes.NewReader(input))
+		c := importCase{Name: name, Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: []entry{}}
+		if err != nil {
+			c.Failed, c.ErrorContains, c.Error = true, err.Error(), err.Error()
+		} else {
+			c.Expected = convert(entries)
+		}
+		cases = append(cases, c)
+	}
+	walk(doc, nil, func(path []step, v any) {
+		if len(path) == 0 {
+			return
+		}
+		id := "onepux_mut" + pathID(path)
+		for _, variant := range variants {
+			if variant.name == kind(v) || (variant.name == "string" && kind(v) != "number") || (variant.name == "number" && kind(v) == "number") {
+				continue
+			}
+			value := variant.value
+			add(id+"="+variant.name, edit(doc, path, func(parent any, last step) {
+				if last.key != "" {
+					parent.(map[string]any)[last.key] = value
+				} else {
+					parent.([]any)[last.index] = value
+				}
+			}))
+		}
+		if last := path[len(path)-1]; last.key != "" && strings.ToUpper(last.key) != last.key {
+			add(id+"=upper-key", edit(doc, path, func(parent any, last step) {
+				m := parent.(map[string]any)
+				m[strings.ToUpper(last.key)] = m[last.key]
+				delete(m, last.key)
+			}))
+		}
+	})
+	return cases
 }

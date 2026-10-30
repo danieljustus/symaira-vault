@@ -1,5 +1,16 @@
 # Rust migration handover — 2026-09-09
 
+## IO-001 1PUX on gojson, 2026-10-30
+
+`import1passgen` adds the same mutation sweep as `cxfgen` (197 `onepux_mut*` cases, complete
+Go error text; oracle `fca3f894` unchanged). 128 differed (15 accepted where Go rejects, 19
+upper-cased keys ignored, 94 error texts). `onepux.rs` now decodes through `gojson` (new
+`GoDecode for bool`); size, zip-open, read and missing-export errors use Go's text via
+`ImportError::Decode`, so `symvault import` prints Go's `parse import source: <err>`.
+Negative control: disabling case-insensitive key lookup fails 19 cases. Also fixed the
+load-sensitive `command_runner_times_out_and_reaps_the_process_group` (#1564).
+Local gate only (local-first mode).
+
 ## IO-001 CXF on gojson, 2026-10-30
 
 `cxfgen` now records Go's complete `err.Error()` and a mutation sweep over the reference

@@ -19,6 +19,8 @@ struct Case {
     expected: Vec<Value>,
     failed: bool,
     error_contains: Option<String>,
+    /// Go's complete error text (mutation cases).
+    error: Option<String>,
 }
 
 #[test]
@@ -29,32 +31,61 @@ fn onepux_matches_source_bound_go_fixture() {
     )))
     .expect("parse source-bound fixture");
 
-    for case in fixture
+    let cases: Vec<Case> = fixture
         .cases
         .into_iter()
         .filter(|case| case.kind == "onepux")
-    {
+        .collect();
+    // 9 named cases plus the generated mutation sweep over the reference export.
+    assert_eq!(cases.len(), 206, "fixture cardinality is part of the gate");
+    let mut failures = Vec::new();
+    for case in cases {
+        let name = &case.name;
         let input = base64::engine::general_purpose::STANDARD
-            .decode(case.input_base64.expect("onepux input"))
+            .decode(case.input_base64.as_deref().expect("onepux input"))
             .expect("decode onepux input");
         let result = parse_1pux(&input);
         if case.failed {
-            let error = result.expect_err(&case.name);
-            if let Some(expected) = case.error_contains {
-                assert!(
-                    error.to_string().contains(&expected),
-                    "{}: error {:?} did not contain {:?}",
-                    case.name,
-                    error,
-                    expected
-                );
+            match result {
+                Ok(entries) => {
+                    failures.push(format!("{name}: rust accepted {} entries", entries.len()))
+                }
+                Err(error) => {
+                    let text = error.to_string();
+                    if let Some(go) = &case.error {
+                        if &text != go {
+                            failures.push(format!(
+                                "{name}: error differs\n  go:   {go}\n  rust: {text}"
+                            ));
+                        }
+                    } else if let Some(expected) = &case.error_contains
+                        && !text.contains(expected)
+                    {
+                        failures.push(format!("{name}: error {text:?} lacks {expected:?}"));
+                    }
+                }
             }
         } else {
-            let entries = result.expect(&case.name);
-            let actual = serde_json::to_value(entries).expect("serialize onepux entries");
-            assert_eq!(actual, Value::Array(case.expected), "{}", case.name);
+            match result {
+                Ok(entries) => {
+                    let actual = serde_json::to_value(entries).expect("serialize onepux entries");
+                    if actual != Value::Array(case.expected.clone()) {
+                        failures.push(format!(
+                            "{name}: entries differ\n  go:   {}\n  rust: {actual}",
+                            Value::Array(case.expected)
+                        ));
+                    }
+                }
+                Err(error) => failures.push(format!("{name}: rust error {error}")),
+            }
         }
     }
+    assert!(
+        failures.is_empty(),
+        "{} 1PUX cases differ from Go:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
 }
 
 #[cfg(unix)]

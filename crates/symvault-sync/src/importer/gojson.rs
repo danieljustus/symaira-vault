@@ -773,6 +773,26 @@ impl GoDecode for String {
     }
 }
 
+impl GoDecode for bool {
+    fn go_type(&self) -> String {
+        "bool".into()
+    }
+
+    fn decode(&mut self, reader: &mut Reader<'_>, context: &mut Context) {
+        match reader.kind() {
+            Kind::Null => reader.skip_value(),
+            Kind::Bool => {
+                *self = reader.bytes[reader.index] == b't';
+                reader.skip_value();
+            }
+            other => {
+                context.type_error(other.name(), || "bool".into());
+                reader.skip_value();
+            }
+        }
+    }
+}
+
 impl GoDecode for i64 {
     fn go_type(&self) -> String {
         "int".into()
@@ -965,7 +985,7 @@ pub(super) fn decode_document<S: GoStruct>(bytes: &[u8], target: &mut S) -> Resu
 
 /// `json.Unmarshal(bytes, target)`: [`parse_unmarshal`], then the typed
 /// decode, returning the first error with Go's wording.
-pub(super) fn unmarshal_document<S: GoStruct>(bytes: &[u8], target: &mut S) -> Result<(), String> {
+pub(super) fn unmarshal_document<S: GoDecode>(bytes: &[u8], target: &mut S) -> Result<(), String> {
     let mut reader = parse_unmarshal(bytes)?;
     let mut context = Context::default();
     target.decode(&mut reader, &mut context);

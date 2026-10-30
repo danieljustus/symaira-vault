@@ -4,8 +4,10 @@
 // `internal/importer/onepux.go`.  The parent importer wires this module into
 // the public format dispatcher.
 
+use super::gojson::{
+    self, Context, GoDecode, GoStruct, RawMessage, Reader, decode_struct, go_struct,
+};
 use super::{ImportError, ImportedEntry, insert_totp};
-use serde::Deserialize;
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
@@ -16,107 +18,101 @@ const LOGIN_CATEGORY: &str = "001";
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
 const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
-#[derive(Default, Deserialize)]
+// `export.json` is decoded like Go's `json.Unmarshal` into the typed structs of
+// `internal/importer/onepux.go`: `null` is a no-op, keys match
+// case-insensitively (exact match first), a value of the wrong JSON kind is a
+// Go `UnmarshalTypeError` with Go's struct/field context, and a field value
+// stays raw (`json.RawMessage`) until the OTP lookup decodes it.
+
+#[derive(Default)]
 struct Export {
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     accounts: Vec<Account>,
 }
+go_struct!(Export, "onePUXExport", { "accounts" => accounts });
 
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct Account {
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     vaults: Vec<Vault>,
 }
+go_struct!(Account, "onePUXAccount", { "vaults" => vaults });
 
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct Vault {
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<Item>,
 }
+go_struct!(Vault, "onePUXVault", { "items" => items });
 
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct Item {
-    #[serde(
-        rename = "categoryUuid",
-        default,
-        deserialize_with = "super::null_default"
-    )]
     category: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     trashed: bool,
-    #[serde(default, deserialize_with = "super::null_default")]
     details: Details,
-    #[serde(default, deserialize_with = "super::null_default")]
     overview: Overview,
 }
+go_struct!(Item, "onePUXItem", {
+    "categoryUuid" => category, "title" => title, "trashed" => trashed,
+    "details" => details, "overview" => overview,
+});
 
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct Details {
-    #[serde(
-        rename = "loginFields",
-        default,
-        deserialize_with = "super::null_default_vec"
-    )]
     login: Vec<LoginField>,
-    #[serde(
-        rename = "notesPlain",
-        default,
-        deserialize_with = "super::null_default"
-    )]
-    notes: String,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
     sections: Vec<Section>,
+    notes: String,
 }
+go_struct!(Details, "onePUXDetails", {
+    "loginFields" => login, "sections" => sections, "notesPlain" => notes,
+});
 
-#[derive(Default, Deserialize)]
+#[allow(dead_code)]
+#[derive(Default)]
 struct LoginField {
-    #[serde(
-        rename = "fieldType",
-        default,
-        deserialize_with = "super::null_default"
-    )]
-    _field_type: String,
-    #[serde(default, deserialize_with = "super::null_default")]
+    field_type: String,
     designation: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     value: String,
 }
+go_struct!(LoginField, "onePUXLoginField", {
+    "fieldType" => field_type, "designation" => designation, "value" => value,
+});
 
-#[derive(Default, Deserialize)]
-struct Overview {
-    #[serde(default, deserialize_with = "super::null_default_vec")]
-    urls: Vec<Url>,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
-    tags: Vec<String>,
-}
-
-#[derive(Default, Deserialize)]
-struct Url {
-    #[serde(default, deserialize_with = "super::null_default")]
-    url: String,
-}
-
-#[derive(Default, Deserialize)]
+#[allow(dead_code)]
+#[derive(Default)]
 struct Section {
-    #[serde(rename = "title", default, deserialize_with = "super::null_default")]
-    _title: String,
-    #[serde(default, deserialize_with = "super::null_default_vec")]
+    title: String,
     fields: Vec<Field>,
 }
+go_struct!(Section, "onePUXSection", { "title" => title, "fields" => fields });
 
-#[derive(Default, Deserialize)]
+#[derive(Default)]
 struct Field {
-    #[serde(default, deserialize_with = "super::null_default")]
-    n: String,
-    #[serde(default, deserialize_with = "super::null_default")]
-    t: String,
-    #[serde(default, deserialize_with = "super::null_default")]
     title: String,
-    #[serde(default)]
-    v: Value,
+    n: String,
+    t: String,
+    v: RawMessage,
 }
+go_struct!(Field, "onePUXField", { "title" => title, "n" => n, "t" => t, "v" => v });
+
+#[derive(Default)]
+struct Overview {
+    urls: Vec<Url>,
+    tags: Vec<String>,
+}
+go_struct!(Overview, "onePUXOverview", { "urls" => urls, "tags" => tags });
+
+#[derive(Default)]
+struct Url {
+    url: String,
+}
+go_struct!(Url, "onePUXURL", { "url" => url });
+
+/// The anonymous `struct { OTP string `json:"otp"` }` Go decodes a field value
+/// into first.
+#[derive(Default)]
+struct OtpObject {
+    otp: String,
+}
+go_struct!(OtpObject, "", { "otp" => otp });
 
 /// Parse a 1Password export with the same total-input and entry limits as Go.
 pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
@@ -129,10 +125,13 @@ fn parse_1pux_with_limits(
     max_zip_entry: u64,
 ) -> Result<Vec<ImportedEntry>, ImportError> {
     if bytes.len() >= max_import_bytes {
-        return Err(ImportError::Limit(max_import_bytes));
+        return Err(ImportError::Decode(format!(
+            "import source exceeds maximum size of {max_import_bytes} bytes"
+        )));
     }
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes))
-        .map_err(|e| ImportError::Parse(format!("open 1pux zip: {e}")))?;
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| {
+        ImportError::Decode(format!("open 1pux zip: {}", super::cxf::zip_open_error(&e)))
+    })?;
     let mut raw = None;
     for index in 0..zip.len() {
         let file = zip
@@ -143,21 +142,21 @@ fn parse_1pux_with_limits(
             continue;
         }
         let mut data = Vec::new();
-        file.take(max_zip_entry).read_to_end(&mut data)?;
+        file.take(max_zip_entry)
+            .read_to_end(&mut data)
+            .map_err(|e| ImportError::Decode(format!("read export.json: {e}")))?;
         if data.len() as u64 >= max_zip_entry {
-            return Err(ImportError::Limit(max_zip_entry as usize));
+            return Err(ImportError::Decode(format!(
+                "zip entry exceeds maximum size of {max_zip_entry} bytes"
+            )));
         }
         raw = Some(data);
         break;
     }
-    let raw = raw.ok_or_else(|| ImportError::Parse("export.json not found in 1pux zip".into()))?;
-    let mut decoder = serde_json::Deserializer::from_slice(&raw);
-    let export = Option::<Export>::deserialize(&mut decoder)
-        .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?
-        .unwrap_or_default();
-    decoder
-        .end()
-        .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?;
+    let raw = raw.ok_or_else(|| ImportError::Decode("export.json not found in 1pux zip".into()))?;
+    let mut export = Export::default();
+    gojson::unmarshal_document(&raw, &mut export)
+        .map_err(|error| ImportError::Decode(format!("parse export.json: {error}")))?;
 
     let mut entries = Vec::new();
     for account in export.accounts {
@@ -221,18 +220,28 @@ fn first_totp(sections: &[Section]) -> Option<String> {
             if !name.contains("one-time password") && !name.contains("totp") {
                 continue;
             }
-            let value = field
-                .v
-                .get("otp")
-                .and_then(Value::as_str)
-                .or_else(|| field.v.as_str())
-                .unwrap_or_default();
+            let value = otp_value(&field.v.0);
             if !value.is_empty() {
-                return Some(value.to_owned());
+                return Some(value);
             }
         }
     }
     None
+}
+
+/// Go's `onePUXOTPValue`: the `otp` of an object value, else a bare string
+/// value; anything `json.Unmarshal` rejects (including an empty or absent
+/// value) yields the empty string.
+fn otp_value(raw: &[u8]) -> String {
+    let mut object = OtpObject::default();
+    if gojson::unmarshal_document(raw, &mut object).is_ok() && !object.otp.is_empty() {
+        return object.otp;
+    }
+    let mut text = String::new();
+    if gojson::unmarshal_document(raw, &mut text).is_ok() {
+        return text;
+    }
+    String::new()
 }
 
 #[cfg(test)]
@@ -275,11 +284,11 @@ mod tests {
     fn recognizes_empty_export_and_rejects_missing_export() {
         let empty = zip_with("export.json", b"");
         assert!(
-            matches!(parse_1pux(&empty), Err(ImportError::Parse(message)) if message.contains("parse export.json"))
+            matches!(parse_1pux(&empty), Err(ImportError::Decode(message)) if message == "parse export.json: unexpected end of JSON input")
         );
         let missing = zip_with("other.json", b"{}");
         assert!(
-            matches!(parse_1pux(&missing), Err(ImportError::Parse(message)) if message.contains("not found"))
+            matches!(parse_1pux(&missing), Err(ImportError::Decode(message)) if message == "export.json not found in 1pux zip")
         );
     }
 
@@ -288,11 +297,13 @@ mod tests {
         let zip = zip_with("export.json", br#"{}"#);
         assert!(matches!(
             parse_1pux_with_limits(&zip, usize::MAX, 2),
-            Err(ImportError::Limit(2))
+            Err(ImportError::Decode(message)) if message == "zip entry exceeds maximum size of 2 bytes"
         ));
+        let limit = zip.len();
         assert!(matches!(
-            parse_1pux_with_limits(&zip, zip.len(), MAX_ZIP_ENTRY),
-            Err(ImportError::Limit(limit)) if limit == zip.len()
+            parse_1pux_with_limits(&zip, limit, MAX_ZIP_ENTRY),
+            Err(ImportError::Decode(message))
+                if message == format!("import source exceeds maximum size of {limit} bytes")
         ));
     }
 

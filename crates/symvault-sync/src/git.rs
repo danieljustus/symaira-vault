@@ -1880,16 +1880,16 @@ mod tests {
                 .expect("make timeout helper executable");
         }
 
+        // The helper must record its descendant's pid before the deadline; a
+        // 1 s deadline lost that race on a loaded host (no marker file). The
+        // bound still proves the timeout fired long before `sleep 30` ended.
+        let deadline = Duration::from_secs(5);
         let started = Instant::now();
-        let error = run_process_with_timeout(
-            script.to_str().expect("script path"),
-            &[],
-            None,
-            Duration::from_secs(1),
-        )
-        .expect_err("helper must exceed the deadline");
+        let error =
+            run_process_with_timeout(script.to_str().expect("script path"), &[], None, deadline)
+                .expect_err("helper must exceed the deadline");
         assert!(matches!(error, GitError::Timeout { .. }));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(started.elapsed() < deadline + Duration::from_secs(5));
 
         let pid = fs::read_to_string(&marker)
             .expect("helper recorded descendant pid")

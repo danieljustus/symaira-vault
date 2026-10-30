@@ -151,7 +151,7 @@ go_struct!(CxfCreditCard, "cxfCreditCard", {
 });
 
 /// Go's text for a failure of `zip.NewReader`.
-fn zip_open_error(error: &ZipError) -> String {
+pub(super) fn zip_open_error(error: &ZipError) -> String {
     match error {
         ZipError::InvalidArchive(_) | ZipError::UnsupportedArchive(_) => {
             "zip: not a valid zip file".into()

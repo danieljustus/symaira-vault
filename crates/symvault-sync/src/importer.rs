@@ -615,14 +615,6 @@ mod xhash {
     pub type HashMap<K, V> = std::collections::HashMap<K, V>;
 }
 
-fn null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
-}
-
 fn default_csv_mapping(format: Format) -> BTreeMap<String, String> {
     let defaults: &[(&str, &str)] = match format {
         Format::Csv => &[
@@ -684,17 +676,4 @@ pub fn detect_csv_profile(header: &[String]) -> Format {
         }
     }
     Format::Csv
-}
-
-// Go unmarshals JSON null array elements into the element type's zero value.
-fn null_default_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Deserialize<'de> + Default,
-{
-    Ok(Option::<Vec<Option<T>>>::deserialize(deserializer)?
-        .unwrap_or_default()
-        .into_iter()
-        .map(Option::unwrap_or_default)
-        .collect())
 }
