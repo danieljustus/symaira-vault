@@ -35,7 +35,16 @@ run_macos() {
   # Same TMPDIR rule as the self-hosted CI runner (trusted /var alias case).
   TMPDIR="$(getconf DARWIN_USER_TEMP_DIR)" ${MAKE_PREFIX:-} make \
     rust-lint rust-check rust-test port-contract mcp-approval-pty-acceptance
-  if ! git diff --quiet origin/main -- '*.go' go.mod go.sum; then
+  # Go is the frozen oracle: test it only when this branch changed Go code.
+  # ponytail: changes confined to scripts/ (leaf generator mains) test just
+  # those packages; anything else runs the full race suite.
+  go_changed="$(git diff --name-only origin/main -- '*.go' go.mod go.sum)"
+  if [ -z "$go_changed" ]; then
+    :
+  elif ! grep -qv '^scripts/' <<<"$go_changed"; then
+    # shellcheck disable=SC2046 # one ./dir argument per changed package
+    go test -race -count=1 $(xargs -n1 dirname <<<"$go_changed" | sort -u | sed 's|^|./|')
+  else
     ${MAKE_PREFIX:-} make test
   fi
 }

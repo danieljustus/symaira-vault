@@ -17,8 +17,9 @@ requests and per-slice hosted CI runs are suspended for the port.
 3. **Gate.** A slice is integrated only after
    `scripts/rust-port/local-gate.sh all` exits 0 on a clean tree:
    - `macos`: native Darwin/arm64, `rust-lint rust-check rust-test
-     port-contract mcp-approval-pty-acceptance`, plus `make test` when Go
-     sources changed against `origin/main`.
+     port-contract mcp-approval-pty-acceptance`. When Go code changed against
+     `origin/main`: changes only under `scripts/` race-test just those
+     packages; any other Go, `go.mod` or `go.sum` change runs `make test`.
    - `linux`: native Linux/arm64 container (`scripts/rust-port/local-gate/Dockerfile`,
      pins mirror `.github/workflows/ci.yml`), `rust-gates-core port-contract
      mcp-approval-pty-acceptance rust-miri`.
@@ -41,8 +42,8 @@ requests and per-slice hosted CI runs are suspended for the port.
   in the closing CI run.
 - Hosted macOS keychain tests (`keychain-native`) and the Go matrix jobs
   (`test`, `build`, `integration-test`, `smoke-test`) are not part of the local
-  gate. Go is the frozen oracle; it changes only when a slice edits Go
-  sources, and then `make test` runs.
+  gate. Go is the frozen oracle; it is tested only when a slice edits Go
+  code (see rule 3).
 - Findings accumulate until the closing PR instead of surfacing per slice.
 
 ## Pull requests folded in at the start
