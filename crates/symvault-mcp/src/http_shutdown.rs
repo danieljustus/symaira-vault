@@ -179,6 +179,11 @@ mod tests {
         time::Instant,
     };
 
+    // Upper bound for waits that succeed immediately when the code works; it
+    // only turns a hang into a failure. 2 s failed under a loaded local gate
+    // (process-spawning differential tests in parallel), so keep it generous.
+    const HANG_BOUND: Duration = Duration::from_secs(30);
+
     struct ServerProbe {
         shutdown: HttpShutdown,
         worker: Option<thread::JoinHandle<io::Result<()>>>,
@@ -194,14 +199,26 @@ mod tests {
     }
 
     fn start(listener: TcpListener, registry: std::path::PathBuf) -> ServerProbe {
+        start_with(listener, registry, super::super::HttpTimeouts::default())
+    }
+
+    fn start_with(
+        listener: TcpListener,
+        registry: std::path::PathBuf,
+        timeouts: super::super::HttpTimeouts,
+    ) -> ServerProbe {
         let shutdown = HttpShutdown::default();
         let worker_shutdown = shutdown.clone();
         let worker = thread::spawn(move || {
-            super::super::serve_loopback_until_cancelled(
+            super::super::serve_loopback_inner_with_shutdown(
                 listener,
-                registry,
+                &registry,
                 |_| panic!("unauthenticated discovery must not create an agent runtime"),
-                worker_shutdown,
+                None,
+                None,
+                None,
+                Some(worker_shutdown),
+                timeouts,
             )
         });
         ServerProbe {
@@ -212,7 +229,7 @@ mod tests {
 
     fn discovery(stream: &mut TcpStream) {
         stream
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(HANG_BOUND))
             .expect("bounded response read");
         let address = stream.peer_addr().expect("server address");
         write!(
@@ -254,7 +271,7 @@ mod tests {
         let mut server = start(listener, registry.clone());
         let mut client = TcpStream::connect(address).expect("connect client");
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(HANG_BOUND))
             .expect("bound reads before peer can reset the socket");
         if keep_alive {
             discovery(&mut client);
@@ -263,7 +280,7 @@ mod tests {
                 .write_all(b"GET /mcp HTTP/1.1\r\nHost: ")
                 .expect("incomplete request");
         }
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + HANG_BOUND;
         while server
             .shutdown
             .state
@@ -280,7 +297,7 @@ mod tests {
             thread::yield_now();
         }
         server.shutdown.cancel().expect("cancel transports");
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + HANG_BOUND;
         while !server.worker.as_ref().expect("worker").is_finished() {
             assert!(
                 Instant::now() < deadline,
@@ -375,7 +392,7 @@ mod tests {
                 .is_none()
         );
         client
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(HANG_BOUND))
             .expect("read bound");
         match client.read(&mut [0]) {
             Ok(0) => {}
@@ -461,14 +478,12 @@ mod tests {
             });
             done_tx.send(result).expect("notify completed I/O");
         });
-        ready_rx
-            .recv_timeout(Duration::from_secs(2))
-            .expect("I/O started");
+        ready_rx.recv_timeout(HANG_BOUND).expect("I/O started");
         // No registered socket: cancellation must wake the retry wait itself,
         // independent of whether the native shutdown syscall wakes recv/send.
         shutdown.cancel().expect("cancel pending I/O");
         let result = done_rx
-            .recv_timeout(Duration::from_secs(2))
+            .recv_timeout(HANG_BOUND)
             .expect("bounded cancellation");
         worker.join().expect("join completed I/O");
         assert_eq!(
@@ -484,11 +499,21 @@ mod tests {
         std::fs::write(&registry, br#"{"tokens":{}}"#).expect("registry");
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let address = listener.local_addr().expect("address");
-        let mut server = start(listener, registry);
+        // The occupying clients never send a request. With the default 5 s
+        // initial read they expire mid-test on a loaded host, freeing slots,
+        // so a later "excess" peer is admitted instead of answered busy.
+        let mut server = start_with(
+            listener,
+            registry,
+            super::super::HttpTimeouts {
+                initial_read: HANG_BOUND,
+                ..Default::default()
+            },
+        );
         let clients: Vec<_> = (0..super::super::MAX_HTTP_CONNECTIONS)
             .map(|_| TcpStream::connect(address).expect("occupy connection"))
             .collect();
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + HANG_BOUND;
         while server.shutdown.state.0.lock().expect("state").sockets.len() != clients.len() {
             assert!(
                 Instant::now() < deadline,
@@ -501,7 +526,7 @@ mod tests {
             // may still be pending. Every following peer must still be served.
             for _ in 0..64 {
                 let mut peer = TcpStream::connect(address).expect("aborting excess peer");
-                peer.set_read_timeout(Some(Duration::from_secs(2)))
+                peer.set_read_timeout(Some(HANG_BOUND))
                     .expect("aborting peer bound");
                 peer.read_exact(&mut [0]).expect("busy reply started");
             }
@@ -512,7 +537,7 @@ mod tests {
         }
         let excess = TcpStream::connect(address).expect("excess connection");
         excess
-            .set_read_timeout(Some(Duration::from_secs(2)))
+            .set_read_timeout(Some(HANG_BOUND))
             .expect("response bound");
         // Consume the complete reply before closing the peer. Dropping after
         // only the status line can reset the socket during the remaining
@@ -531,7 +556,7 @@ mod tests {
             .shutdown
             .cancel()
             .expect("cancel saturated transports");
-        let deadline = Instant::now() + Duration::from_secs(2);
+        let deadline = Instant::now() + HANG_BOUND;
         while !server.worker.as_ref().expect("worker").is_finished() {
             assert!(Instant::now() < deadline, "saturated server did not finish");
             thread::yield_now();
@@ -562,7 +587,7 @@ mod tests {
         let peer = thread::spawn(move || {
             let (mut socket, _) = listener.accept().expect("accept");
             socket
-                .set_read_timeout(Some(Duration::from_secs(2)))
+                .set_read_timeout(Some(HANG_BOUND))
                 .expect("read bound");
             let mut reader = BufReader::new(socket.try_clone().expect("clone"));
             loop {
