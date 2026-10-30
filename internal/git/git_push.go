@@ -44,6 +44,7 @@ func systemGitAvailable() bool {
 func pushWithSystemGit(ctx context.Context, vaultDir string) error {
 	var stderr strings.Builder
 	cmd := exec.CommandContext(ctx, "git", "-C", vaultDir, "push", "origin", "HEAD")
+	cmd.Env = stableLocaleEnv(os.Environ())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderr
 	cmd.Stdin = os.Stdin
